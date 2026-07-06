@@ -35,6 +35,15 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(1.0)
                     return
 
+                # 2. 彈窗內的 OK 按鈕 (同樣代表確認)
+                pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
+                if pos_ok:
+                    logging.info(f"🍞 領體力：偵測到體力 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
+                    self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
+                    self.machine.bread_collected_this_run = True  # 標記本次已確認領取
+                    time.sleep(1.0)
+                    return
+
                 # 3. 領體力按鈕 (bread collection)
                 pos_coll, conf_coll = self.matcher.match(screen_img, "common/bread_collection.png", threshold=0.8)
                 if pos_coll:

@@ -29,15 +29,16 @@ GAME_CONFIGS = {
             # === 第一階段：彈窗與對話框處理 (高優先級，必須先解決，否則會卡在畫面上) ===
             "dungeons/dungeons_complete.png",       # 1. 地下城通關結束
             "common/confirm.png",                   # 2. 通用確認彈窗 (如：下樓確認、獲得寶物確認等)
-            "dungeons/Get_tresure.png",             # 3. 獲得寶物
-            "dungeons/choice_bless.png",            # 4. 選擇祝福 (準備進入戰鬥或接受祝福後的彈窗選項)
-            "dungeons/dungeon_fight.png",           # 5. 戰鬥房入口 (優先級調高，避免在入口彈窗誤點 quit 關閉)
-            "dungeons/quit.png",                    # 6. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
+            "common/ok.png",                        # 3. 通用 OK 按鈕 (如：選完祝福後的確認等)
+            "dungeons/Get_tresure.png",             # 4. 獲得寶物
+            "dungeons/choice_bless.png",            # 5. 選擇祝福 (準備進入戰鬥或接受祝福後的彈窗選項)
+            "dungeons/dungeon_fight.png",           # 6. 戰鬥房入口 (優先級調高，避免在入口彈窗誤點 quit 關閉)
+            "dungeons/quit.png",                    # 7. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
 
             # === 第二階段：地圖格與背景動作 (低優先級，沒有彈窗時才處理) ===
-            "dungeons/gungeon_godown.png",           # 7. 前進下一層
-            "dungeons/Treasure.png",                # 8. 寶箱房開箱
-            "dungeons/dungeon_bless.png"            # 9. 接受祝福
+            "dungeons/gungeon_godown.png",           # 8. 前進下一層
+            "dungeons/Treasure.png",                # 9. 寶箱房開箱
+            "dungeons/dungeon_bless.png"            # 10. 接受祝福
         ]
     }
 }
