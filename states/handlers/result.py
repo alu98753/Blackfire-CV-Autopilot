@@ -16,24 +16,15 @@ class ResultHandler(BaseStateHandler):
             time.sleep(1.0)
             return
 
-        # B. 比對並點選相似度最高的「繼續」按鈕
-        best_match_pos = None
-        best_match_conf = 0.8
-        best_match_temp = None
-
-        # 這裡會檢查所有的 continue 圖片 (包括 continue3.png)
-        for c_temp in self.machine.continue_templates:
-            pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=best_match_conf)
-            if pos_c and conf_c > best_match_conf:
-                best_match_conf = conf_c
-                best_match_pos = pos_c
-                best_match_temp = c_temp
-
-        if best_match_pos:
-            logging.info(f"👉 點擊相似度最高的關卡「繼續」按鈕 ({best_match_temp})，信心度: {best_match_conf:.4f}")
-            self.mouse.click(rect["left"] + best_match_pos[0], rect["top"] + best_match_pos[1])
-            time.sleep(0.8)
-            return
+        # B. 依照優先級由高到低 (continue3 -> continue2 -> continue1) 檢查繼續按鈕
+        # 只要高優先級的比對成功 (>= 0.8)，就直接點擊並結束，避免背景低優先級按鈕的干擾
+        for c_temp in reversed(self.machine.continue_templates):
+            pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=0.8)
+            if pos_c:
+                logging.info(f"👉 點擊優先級最高的關卡「繼續」按鈕 ({c_temp})，信心度: {conf_c:.4f}")
+                self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                time.sleep(0.8)
+                return
 
         # C. 檢查是否已經默默回到準備大廳
         lobby_btn = self.machine.config["lobby_start_btn"]
