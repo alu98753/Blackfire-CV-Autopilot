@@ -21,7 +21,7 @@ class NavigationHandler(BaseStateHandler):
                             self.machine.need_diamond_collection = False
                             self.machine.diamond_collected_this_run = False
                             self.machine.last_diamond_collection_time = time.time()
-                            time.sleep(0.08)
+                            time.sleep(0.03)
                             return
             else:
                 # 情況二：尚未領取或確認，進行領取步驟
@@ -31,7 +31,7 @@ class NavigationHandler(BaseStateHandler):
                     logging.info(f"💎 領鑽石：偵測到確認按鈕 [{conf_conf:.4f}]，點擊確認。")
                     self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
                     self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
                 
                 pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
@@ -39,7 +39,7 @@ class NavigationHandler(BaseStateHandler):
                     logging.info(f"💎 領鑽石：偵測到 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
                     self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
                     self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
 
                 # 檢查是否在領鑽石彈窗內 (尋找退出/關閉按鈕)
@@ -64,7 +64,7 @@ class NavigationHandler(BaseStateHandler):
                         if pos_free:
                             logging.info(f"💎 領鑽石：在視窗內偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
                             self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
-                            time.sleep(0.08)
+                            time.sleep(0.03)
                             return
 
                     # 3. 如果在彈窗內但沒有免費鑽石按鈕，說明鑽石正處於冷卻，點點退出按鈕關閉
@@ -83,7 +83,7 @@ class NavigationHandler(BaseStateHandler):
                     if pos_dia:
                         logging.info(f"💎 領鑽石：在畫面偵測到鑽石按鈕 [{conf_dia:.4f}]，點擊打開領取畫面。")
                         self.mouse.click(rect["left"] + pos_dia[0], rect["top"] + pos_dia[1])
-                        time.sleep(0.08)
+                        time.sleep(0.03)
                         return
 
                 # 4. 返回城鎮按鈕 (goback_town.png)
@@ -92,11 +92,11 @@ class NavigationHandler(BaseStateHandler):
                     if pos_town:
                         logging.info(f"💎 領鑽石：在畫面中偵測到返回城鎮按鈕 [{conf_town:.4f}]，點擊返回。")
                         self.mouse.click(rect["left"] + pos_town[0], rect["top"] + pos_town[1])
-                        time.sleep(0.08)
+                        time.sleep(0.03)
                         return
 
             logging.info("⌛ 領鑽石流程中，正在等待鑽石畫面或按鈕載入...")
-            time.sleep(0.02)
+            time.sleep(0.01)
             return
 
         # A. 如果啟用且需要領體力，執行領體力分支流程
@@ -113,7 +113,7 @@ class NavigationHandler(BaseStateHandler):
                     self.machine.need_bread_collection = False
                     self.machine.bread_collected_this_run = False  # 重設狀態
                     self.machine.last_bread_collection_time = time.time()
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
             else:
                 # 情況二：尚未領取或尚未點擊確認，正常進行領取步驟
@@ -123,7 +123,7 @@ class NavigationHandler(BaseStateHandler):
                     logging.info(f"🍞 領體力：偵測到體力確認按鈕 [{conf_conf:.4f}]，點擊確認。")
                     self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
                     self.machine.bread_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
 
                 # 2. 彈窗內的 OK 按鈕 (同樣代表確認)
@@ -132,7 +132,7 @@ class NavigationHandler(BaseStateHandler):
                     logging.info(f"🍞 領體力：偵測到體力 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
                     self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
                     self.machine.bread_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
 
                 # 3. 領體力按鈕 (bread collection)
@@ -140,7 +140,7 @@ class NavigationHandler(BaseStateHandler):
                 if pos_coll:
                     logging.info(f"🍞 領體力：偵測到領體力按鈕 [{conf_coll:.4f}]，進行點擊領取。")
                     self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
 
                 # 5. 打開體力視窗按鈕 (bread)
@@ -148,7 +148,7 @@ class NavigationHandler(BaseStateHandler):
                 if pos_bread:
                     logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
                     self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
 
                 # 6. 入口按鈕 (door)
@@ -156,11 +156,11 @@ class NavigationHandler(BaseStateHandler):
                 if pos_door:
                     logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
                     self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
-                    time.sleep(0.08)
+                    time.sleep(0.03)
                     return
 
             logging.info("⌛ 領體力流程中，正在等待體力畫面或按鈕載入...")
-            time.sleep(0.02)
+            time.sleep(0.01)
             return
 
         # B. 原本的尋路導航邏輯
@@ -188,7 +188,7 @@ class NavigationHandler(BaseStateHandler):
                 logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
                 self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                 clicked_any = True
-                time.sleep(0.08) # 等待跳轉動畫
+                time.sleep(0.03) # 等待跳轉動畫
                 break
 
         if not clicked_any:

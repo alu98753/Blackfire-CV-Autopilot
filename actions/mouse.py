@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # 啟用 PyAutoGUI 的安全機制 (滑鼠移到左上角 (0, 0) 會引發 FailSafeException 終止程式)
 pyautogui.FAILSAFE = True
 # 每次呼叫 pyautogui 後暫停微小的時間
-pyautogui.PAUSE = 0.1
+pyautogui.PAUSE = 0.002
 
 class MouseController:
     def __init__(self, human_like=False):
