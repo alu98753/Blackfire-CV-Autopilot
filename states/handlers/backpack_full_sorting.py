@@ -25,7 +25,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # 計算關閉 X 按鈕絕對座標
         close_x = rect["left"] + pos_full[0] + 580
-        close_y = rect["top"] + pos_full[1] - 300
+        close_y = rect["top"] + pos_full[1] + 12
 
         # B. 定義網格座標參數 (相對於截圖)
         left_x0, left_y0 = 27, 180

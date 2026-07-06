@@ -391,14 +391,14 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 全域偵測到 backpack_full.png
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 540), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
         
         # 2. 執行 BackpackFullSortingHandler，由於為空畫面 (無貴重物品)，應直接點擊關閉並回到 STATE_UNKNOWN
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 540), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1540, 240)
@@ -424,7 +424,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 偵測到 backpack_full.png 進入狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 540), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         
