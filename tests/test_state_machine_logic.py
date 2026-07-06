@@ -388,6 +388,8 @@ class TestStateMachineLogic(unittest.TestCase):
         
         mock_exists.return_value = True
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
         # 1. 全域偵測到 backpack_full.png
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
@@ -427,22 +429,21 @@ class TestStateMachineLogic(unittest.TestCase):
             ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
-        
         # 2. 準備實體 numpy 圖像，畫上指定邊框顏色以供分選
         test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        # 左側 Col 0, Row 0: 黃金邊框 (BGR = [0, 200, 200]) (位於 win_y + left_y0 = 371, win_x + left_x0 = 357)
-        test_img[371+10:371+20, 357+10:357+98] = [0, 200, 200]
-        test_img[371+88:371+98, 357+10:357+98] = [0, 200, 200]
-        test_img[371+10:371+98, 357+10:357+20] = [0, 200, 200]
-        test_img[371+10:371+98, 357+88:357+98] = [0, 200, 200]
+        # 左側 Col 0, Row 0: 黃金邊框 (BGR = [0, 200, 200]) (位於 win_y + left_y0 = 381, win_x + left_x0 = 407)
+        test_img[381+10:381+20, 407+10:407+98] = [0, 200, 200]
+        test_img[381+88:381+98, 407+10:407+98] = [0, 200, 200]
+        test_img[381+10:381+98, 407+10:407+20] = [0, 200, 200]
+        test_img[381+10:381+98, 407+88:407+98] = [0, 200, 200]
         
-        # 右側 Col 0, Row 0: 綠色邊框 (BGR = [0, 200, 0]) (位於 win_y + right_y0 = 371, win_x + right_x0 = 957)
+        # 右側 Col 0, Row 0: 綠色邊框 (BGR = [0, 200, 0]) (位於 win_y + right_y0 = 381, win_x + right_x0 = 1007)
         # 我們也在中間給一些起伏，使 std 較大，避免被當成純黑空格
-        test_img[371+10:371+20, 957+10:957+98] = [0, 200, 0]
-        test_img[371+88:371+98, 957+10:957+98] = [0, 200, 0]
-        test_img[371+10:371+98, 957+10:957+20] = [0, 200, 0]
-        test_img[371+10:371+98, 957+88:957+98] = [0, 200, 0]
-        test_img[371+50:371+60, 957+50:957+60] = [50, 50, 50]
+        test_img[381+10:381+20, 1007+10:1007+98] = [0, 200, 0]
+        test_img[381+88:381+98, 1007+10:1007+98] = [0, 200, 0]
+        test_img[381+10:381+98, 1007+10:1007+20] = [0, 200, 0]
+        test_img[381+10:381+98, 1007+88:1007+98] = [0, 200, 0]
+        test_img[381+50:381+60, 1007+50:1007+60] = [50, 50, 50]
         
         self.mock_capturer.capture.return_value = test_img
         

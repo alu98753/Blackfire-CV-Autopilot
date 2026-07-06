@@ -32,8 +32,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         close_y = rect["top"] + win_y + 49
 
         # B. 定義網格座標參數 (相對於截圖)
-        left_x0, left_y0 = 27, 180
-        right_x0, right_y0 = 627, 180
+        left_x0, left_y0 = 77, 190
+        right_x0, right_y0 = 677, 190
         cell_size = 108
         step = 134
 
@@ -89,9 +89,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 cx = win_x + left_x0 + c * step
                 cy = win_y + left_y0 + r * step
                 crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
-                color = classify_slot(crop)
-                if is_high_rarity(color):
-                    high_rarity_left.append((r, c, color))
+                if np.std(crop) > 40.0:
+                    color = classify_slot(crop)
+                    if is_high_rarity(color):
+                        high_rarity_left.append((r, c, color))
 
         logging.info(f"🎒 [背包分選] 左側溢出區掃描完畢，發現貴重物品數量: {len(high_rarity_left)}")
         
@@ -119,11 +120,9 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 color = classify_slot(crop)
                 # 只有含有物品的格子才能銷毀，且必須是低稀有度 (green 或 gray_or_empty)
                 # 為防空置格子誤判，我們確保該區域有一定圖案起伏 (非純色背景)
-                if color in ["green", "gray_or_empty"]:
-                    # 計算圖片標準差以排除純空置的棕黑色格子
-                    if np.std(crop) > 8.0:
-                        target_right_slot = (r, c, color)
-                        break
+                if color in ["green", "gray_or_empty"] and np.std(crop) > 20.0:
+                    target_right_slot = (r, c, color)
+                    break
             if target_right_slot:
                 break
 
@@ -147,7 +146,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                         cy = win_y + right_y0 + r * step
                         crop = new_screen[cy:cy+cell_size, cx:cx+cell_size]
                         color = classify_slot(crop)
-                        if color in ["green", "gray_or_empty"] and np.std(crop) > 8.0:
+                        if color in ["green", "gray_or_empty"] and np.std(crop) > 20.0:
                             target_right_slot = (r, c, color)
                             # 更新 screen_img 為當前滾動後的截圖，以便後面點擊
                             screen_img = new_screen
