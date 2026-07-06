@@ -35,13 +35,13 @@ GAME_CONFIGS = {
             "dungeons/Get_tresure.png",             # 6. 獲得寶物
             "dungeons/choice_bless.png",            # 7. 選擇祝福 (準備進入戰鬥或接受祝福後的彈窗選項)
             "dungeons/choose.png",                  # 8. 通用選擇按鈕 (如技能事件的選擇等)
-            "dungeons/skill_event.png",             # 9. 技能事件卡片/選項
-            "dungeons/dungeon_fight.png",           # 10. 戰鬥房入口 (優先級調高，避免在入口彈窗誤點 quit 關閉)
-            "dungeons/quit.png",                    # 11. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
+            "dungeons/dungeon_fight.png",           # 9. 戰鬥房入口 (優先級調高，避免在入口彈窗誤點 quit 關閉)
+            "dungeons/quit.png",                    # 10. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
 
             # === 第二階段：地圖格與背景動作 (低優先級，沒有彈窗時才處理) ===
-            "dungeons/gungeon_godown.png",           # 12. 前進下一層
-            "dungeons/Treasure.png",                # 13. 寶箱房開箱
+            "dungeons/gungeon_godown.png",           # 11. 前進下一層
+            "dungeons/Treasure.png",                # 12. 寶箱房開箱
+            "dungeons/skill_event.png",             # 13. 技能事件卡片/選項 (放置於下樓之後，避免完成後在畫面上重複點擊)
             "dungeons/dungeon_bless.png"            # 14. 接受祝福
         ]
     }
