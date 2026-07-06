@@ -47,6 +47,7 @@ class GameStateMachine:
         # 背包清理相關屬性
         self.need_bag_cleaning = False
         self.bag_tidied = False
+        self.bag_disassembled = False
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
@@ -148,8 +149,8 @@ class GameStateMachine:
                 time.sleep(0.4)
                 return
 
-        # 3.3 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認)
-        if self.current_state == self.STATE_LOBBY or self.need_bag_cleaning:
+        # 3.3 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認，排除背包清理狀態自身處理)
+        if (self.current_state == self.STATE_LOBBY or self.need_bag_cleaning) and self.current_state != self.STATE_BAG_CLEANING:
             for conf_btn in ["common/confirm.png", "common/ok.png"]:
                 if os.path.exists(os.path.join("templates", conf_btn)):
                     pos, conf = self.matcher.match(screen_img, conf_btn, threshold=0.8)
