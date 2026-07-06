@@ -32,8 +32,9 @@ GAME_CONFIGS = {
             "Get_tresure_comfirm.png",     # 5. 獲得寶物確認 (注意拼寫：Get_tresure_comfirm.png)
             "Get_tresure.png",             # 6. 獲得寶物 (注意拼寫：Get_tresure.png)
             "Treasure.png",                # 7. 寶箱房開箱 (注意拼寫：Treasure.png)
-            "choice_bless.png",            # 8. 選擇祝福
-            "dungeon_bless.png"            # 9. 接受祝福
+            "quit.png",                    # 8. 結束/關閉事件 (例如選擇祝福後的退出按鈕)
+            "choice_bless.png",            # 9. 選擇祝福
+            "dungeon_bless.png"            # 10. 接受祝福
         ]
     }
 }
