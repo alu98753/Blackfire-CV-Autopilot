@@ -204,9 +204,11 @@ class NavigationHandler(BaseStateHandler):
                 break
 
         if not clicked_any:
-            # 如果畫面上任何尋路按鈕都找不到了，代表我們已經跳轉進去
-            logging.info("🧭 尋路按鈕已不在畫面上，判斷已成功抵達副本內部。")
+            # 如果是地下城模式，我們不應該僅因「找不到尋路按鈕」就判定已進入副本，因為可能正處於通關退出的加載黑屏中。
+            # 我們應該完全依賴上方的主動判定 (偵測到地下城物件才轉入 EXPLORING)。
             if self.machine.config["type"] == "dungeon":
-                self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
+                logging.info("⌛ 尋路按鈕已不在畫面上，正在等待地下城畫面載入或尋路按鈕出現...")
+                time.sleep(0.05)
             else:
+                logging.info("🧭 尋路按鈕已不在畫面上，判斷已成功抵達關卡大廳。")
                 self.machine.transition_to(self.machine.STATE_LOBBY)
