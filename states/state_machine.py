@@ -132,7 +132,7 @@ class GameStateMachine:
                 btn_y = rect["top"] + pos[1] + 281
                 logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，點擊「領取獎勵」按鈕座標: ({btn_x}, {btn_y})。")
                 self.mouse.click(btn_x, btn_y)
-                time.sleep(1.0)
+                time.sleep(0.4)
                 return
 
         # 3.2 在大廳狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵後的確認)
@@ -143,7 +143,7 @@ class GameStateMachine:
                     if pos:
                         logging.info(f"👉 在大廳狀態下偵測到通用確認按鈕 [{conf_btn}] (信心度: {conf:.4f})，點擊關閉。")
                         self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                        time.sleep(1.0)
+                        time.sleep(0.3)
                         return
 
         # 4. 分發處理至當前狀態的 Handler
