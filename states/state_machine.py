@@ -40,6 +40,7 @@ class GameStateMachine:
         self.enable_bread = False
         self.need_bread_collection = True  # 啟動時預設需要領一次體力
         self.last_bread_collection_time = time.time()
+        self.bread_collected_this_run = False
         
         # 動態尋找所有 continue*.png 模板
         self.continue_templates = self._discover_continue_templates()

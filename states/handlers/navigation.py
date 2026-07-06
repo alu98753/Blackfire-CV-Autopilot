@@ -11,47 +11,53 @@ class NavigationHandler(BaseStateHandler):
         # A. 如果啟用且需要領體力，執行領體力分支流程
         if self.machine.enable_bread and self.machine.need_bread_collection:
             # 依優先級檢查領體力相關按鈕
-            # 1. 彈窗內的確認按鈕 (獲得體力確認或體力已滿提示確認)
-            pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
-            if pos_conf:
-                logging.info(f"🍞 領體力：偵測到體力確認按鈕 [{conf_conf:.4f}]，點擊確認。")
-                self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-                time.sleep(1.0)
-                return
+            
+            # 情況一：如果已經確認領過體力（或體力已滿確認了），我們只專心尋找退出按鈕，不要重複按領取或體力按鈕
+            if self.machine.bread_collected_this_run:
+                # 4. 關閉體力視窗按鈕 (quit bread)
+                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit_bread.png", threshold=0.8)
+                if pos_quit:
+                    logging.info(f"🍞 領體力：偵測到退出體力按鈕 [{conf_quit:.4f}]，點擊關閉，領取體力流程結束。")
+                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                    self.machine.need_bread_collection = False
+                    self.machine.bread_collected_this_run = False  # 重設狀態
+                    self.machine.last_bread_collection_time = time.time()
+                    time.sleep(1.5)
+                    return
+            else:
+                # 情況二：尚未領取或尚未點擊確認，正常進行領取步驟
+                # 1. 彈窗內的確認按鈕 (獲得體力確認或體力已滿提示確認)
+                pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
+                if pos_conf:
+                    logging.info(f"🍞 領體力：偵測到體力確認按鈕 [{conf_conf:.4f}]，點擊確認。")
+                    self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
+                    self.machine.bread_collected_this_run = True  # 標記本次已確認領取
+                    time.sleep(1.0)
+                    return
 
-            # 3. 領體力按鈕 (bread collection)
-            pos_coll, conf_coll = self.matcher.match(screen_img, "common/bread_collection.png", threshold=0.8)
-            if pos_coll:
-                logging.info(f"🍞 領體力：偵測到領體力按鈕 [{conf_coll:.4f}]，進行點擊領取。")
-                self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
-                time.sleep(1.0)
-                return
+                # 3. 領體力按鈕 (bread collection)
+                pos_coll, conf_coll = self.matcher.match(screen_img, "common/bread_collection.png", threshold=0.8)
+                if pos_coll:
+                    logging.info(f"🍞 領體力：偵測到領體力按鈕 [{conf_coll:.4f}]，進行點擊領取。")
+                    self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
+                    time.sleep(1.0)
+                    return
 
-            # 4. 關閉體力視窗按鈕 (quit bread)
-            pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit_bread.png", threshold=0.8)
-            if pos_quit:
-                logging.info(f"🍞 領體力：偵測到退出體力按鈕 [{conf_quit:.4f}]，點擊關閉，領取體力流程結束。")
-                self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                self.machine.need_bread_collection = False
-                self.machine.last_bread_collection_time = time.time()
-                time.sleep(1.5)
-                return
+                # 5. 打開體力視窗按鈕 (bread)
+                pos_bread, conf_bread = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
+                if pos_bread:
+                    logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
+                    self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
+                    time.sleep(1.5)
+                    return
 
-            # 5. 打開體力視窗按鈕 (bread)
-            pos_bread, conf_bread = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
-            if pos_bread:
-                logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
-                self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
-                time.sleep(1.5)
-                return
-
-            # 6. 入口按鈕 (door)
-            pos_door, conf_door = self.matcher.match(screen_img, "dungeons/door.png", threshold=0.8)
-            if pos_door:
-                logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
-                self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
-                time.sleep(1.5)
-                return
+                # 6. 入口按鈕 (door)
+                pos_door, conf_door = self.matcher.match(screen_img, "dungeons/door.png", threshold=0.8)
+                if pos_door:
+                    logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
+                    self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
+                    time.sleep(1.5)
+                    return
 
             logging.info("⌛ 領體力流程中，正在等待體力畫面或按鈕載入...")
             time.sleep(0.5)
