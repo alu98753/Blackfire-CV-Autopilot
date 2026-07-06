@@ -24,23 +24,26 @@ class MouseController:
         if self.state_machine is None:
             return False
             
+        if self.state_machine.user_operating:
+            return True
+
         cur_pos = pyautogui.position()
         if self.last_target_pos is not None:
-            dx = abs(cur_pos[0] - self.last_target_pos[0])
-            dy = abs(cur_pos[1] - self.last_target_pos[1])
-            if dx > 5 or dy > 5:
-                # 只有當距離上次腳本動作有一定時間間隔時才判定為手動介入，防自點誤判
-                last_action_diff = time.time() - self.last_action_time
-                if last_action_diff > 1.2 or self.state_machine.user_operating:
-                    if not self.state_machine.user_operating:
-                        logging.warning(f"⚠️ [MouseController] 偵測到使用者手動操作 (滑鼠移動至 {cur_pos})，禁止腳本移動滑鼠。")
-                        self.state_machine.user_operating = True
+            # 只有當距離上次腳本動作時間極短（如 0.5 秒內，通常為 Handler 內連續點擊的 sleep 期間）
+            # 才需要在 click 呼叫前比對位移，防範在連點間隙中使用者動了滑鼠
+            last_action_diff = time.time() - self.last_action_time
+            if last_action_diff < 0.5:
+                dx = abs(cur_pos[0] - self.last_target_pos[0])
+                dy = abs(cur_pos[1] - self.last_target_pos[1])
+                if dx > 5 or dy > 5:
+                    logging.warning(f"⚠️ [MouseController] 偵測到使用者在連點間隙中操作滑鼠 (移至 {cur_pos})，禁止腳本移動滑鼠。")
+                    self.state_machine.user_operating = True
                     self.state_machine.last_user_operation_time = time.time()
                     return True
         else:
             # 首次運行，初始化
             self.last_target_pos = cur_pos
-        return self.state_machine.user_operating
+        return False
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(0.03, 0.07)):
         """

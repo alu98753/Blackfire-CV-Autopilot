@@ -515,8 +515,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         controller.last_target_pos = (100, 100)
         controller.last_action_time = 1000.0
         
-        # 當前時間為 1002s，且手動移到 (200, 200)
-        mock_time.return_value = 1002.0
+        # 當前時間為 1000.2s (間隔 0.2s < 0.5s)，且手動移到 (200, 200)
+        mock_time.return_value = 1000.2
         mock_pyautogui_pos.return_value = (200, 200)
         
         # 呼叫 click
