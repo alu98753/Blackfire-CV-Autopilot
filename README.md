@@ -14,12 +14,15 @@
 2. **閉環反饋與 CD 重試控制 (Auto Toggle)**：
    * 透過比對未啟用的「自動戰鬥」模板，並配合 3 秒冷卻時間，可確保遊戲在延遲或漏點時自動重試，同時絕不會發生「重複點擊而將已啟用的自動戰鬥關閉」的問題。
 3. **動態多段結算處理 (Multi-Continue Winner)**：
-   * 自動搜尋並快取 `templates/continue*.png` 等所有繼續按鈕。
+   * 自動搜尋並快取 `templates/common/continue*.png` 等所有繼續按鈕。
    * 比對時採取「相似度 PK 機制」，僅會點選畫面中相似度最高的有效前台按鈕，完全無視背景殘留變暗按鈕的干擾，順暢通過多重結算頁面。
-4. **防作弊模擬點擊**：
+4. **自動定時領體力 (Stamina / Bread)**：
+   * 支援啟動時與每隔 30 分鐘自動進行體力領取（透過 `door` ➔ `bread` ➔ `bread_collection` ➔ `confirm` ➔ `quit_bread` 系列按鈕）。
+   * 具備體力已滿提示自動跳過容錯處理，絕不卡死。
+5. **模組化狀態機設計**：
+   * 採用**狀態模式 (State Pattern)** 重構，狀態處理邏輯完全與主調度器解耦，易於擴充新狀態。
+6. **防作弊模擬點擊**：
    * 滑鼠移動模擬人類平滑曲線軌跡，並加入微幅的隨機像素偏移與點擊冷卻，保護遊戲帳號。
-5. **Windows 編碼修復**：
-   * 全面修復傳統中文系統（`cp950`）在終端機輸出 Emoji 與 UTF-8 日誌時的 Unicode 報錯問題。
 
 ---
 
@@ -28,11 +31,14 @@
 ```
 BlackfireCrusade_tool/
 │
-├── .venv/                  # Python 虛擬環境
 ├── requirements.txt        # 依賴套件清單 (OpenCV, PyAutoGUI, mss 等)
 │
 ├── list_windows.py         # [工具] 列出所有活動中的 Windows 視窗與大小
 ├── crop_tool.py            # [工具] 互動式滑鼠拖曳模板裁剪工具
+│
+├── docs/
+│   ├── dungeon_flow.md     # [文件] 領體力與地下城事件優先級決策樹流程圖
+│   └── future_work.md      # [文件] 未來工作規劃與 iPad 控制方案
 │
 ├── capture/
 │   └── screen.py           # 視窗擷取模組
@@ -40,16 +46,25 @@ BlackfireCrusade_tool/
 │   └── matcher.py          # 模板匹配定位模組
 ├── actions/
 │   └── mouse.py            # 模擬人類滑鼠點擊模組
+│
+├── config.py               # 遊戲模式與圖片優先級配置檔
+├── main.py                 # 主程式掛機入口 (支援 --mode 參數)
+│
 ├── states/
-│   └── state_machine.py    # 掛機狀態機模組
+│   ├── __init__.py         # 匯出 GameStateMachine
+│   ├── state_machine.py    # 狀態機主調度器與全域掃描
+│   └── handlers/           # [模組化處理器]
+│       ├── base.py         # 處理器基類
+│       ├── navigation.py   # 處理尋路與領體力
+│       ├── lobby.py        # 處理普通關卡準備大廳
+│       ├── battle.py       # 處理自動戰鬥監控
+│       ├── result.py       # 處理關卡多段結算
+│       └── explore.py      # 處理地下城隨機探險事件
 │
-├── templates/              # 存放您裁剪的按鈕模板小圖
-│   ├── start.png           # 「去戰鬥！」按鈕
-│   ├── retry.png           # 「再戰」按鈕
-│   ├── auto.png            # 未啟用的「自動戰鬥」圖示
-│   └── continue1/2/3.png   # 關卡結算的「繼續」按鈕們
-│
-└── main.py                 # 主程式掛機入口
+└── templates/              # 分類存放裁剪的按鈕模板小圖
+    ├── common/             # 通用圖示 (auto, continue1/2, bread 系列)
+    ├── stages/             # 普通關卡專用 (start, retry, continue3)
+    └── dungeons/           # 地下城專用 (door, dungeon, Slime_entry, 隨機事件系列)
 ```
 
 ---
@@ -78,25 +93,19 @@ BlackfireCrusade_tool/
 ```powershell
 .\.venv\Scripts\python list_windows.py
 ```
-它會列出您當前螢幕上所有可見的視窗標題與解析度。確認您的遊戲視窗標題為 `Blackfire Crusade`（預設），若不同，請在步驟 3 中加入參數。
+確認您的遊戲視窗標題為 `Blackfire Crusade`（預設），若不同，請在步驟 3 中加入參數。
 
 ---
 
 ### 步驟 2：✂️ 裁剪您的遊戲專屬按鈕模板
-由於程式在執行時需要識別您遊戲畫面上的按鈕，我們需要使用互動式工具對您的遊戲畫面進行裁剪：
-
 執行以下命令啟動裁剪工具：
 ```powershell
 .\.venv\Scripts\python crop_tool.py
 ```
 1. 終端機將開始 **5 秒倒數**，請立即點擊切換到遊戲視窗，將畫面停留在含有目標按鈕的畫面上。
 2. 5 秒後，程式會自動擷取遊戲視窗並彈出裁剪視窗。
-3. **操作方式**：在彈出的視窗中，用滑鼠**左鍵拖曳**拉出一個矩形，選中按鈕後，按下 `Enter` 或 `Space` 鍵確認選取。（按 `ESC` 鍵可取消並退出）
-4. 在終端機中輸入對應的檔名保存，請依序裁剪並儲存為以下檔案：
-   * **`start.png`** ➔ 大廳的「去戰鬥！」按鈕。
-   * **`retry.png`** ➔ 結算頁面的「再戰」按鈕。
-   * **`auto.png`** ➔ 戰鬥開始時，**尚未啟用（未亮起、灰色）**的「自動戰鬥」雙劍圖案。
-   * **`continue1.png`, `continue2.png`...** ➔ 結算過程中出現的「繼續」按鈕（建議只裁剪「繼續」兩個字以避免背景干擾）。
+3. **操作方式**：左鍵拖曳拉出一個矩形，選中按鈕後按下 `Enter` 或 `Space` 鍵確認選取。（按 `ESC` 鍵可取消並退出）
+4. 在終端機中輸入對應的檔名保存，並將產生的圖片放入 `templates/` 下對應的子資料夾。
 
 > 💡 **模板裁剪最佳實踐（避開背景變動）**：
 > 裁剪時，請**儘可能縮小範圍，僅框選按鈕內固定的文字（例如只框「繼續」或「再戰」這兩個字）**，避免將按鈕周圍的發光特效、動態背景或陰影剪進去。這樣即使遊戲背景如何變化，程式都能 100% 辨識成功。
@@ -104,15 +113,32 @@ BlackfireCrusade_tool/
 ---
 
 ### 步驟 3：🚀 啟動自動掛機
-當您的 `templates/` 目錄中準備好相關模板後，執行以下指令開始掛機：
+執行以下指令開始掛機：
 
-```powershell
-.\.venv\Scripts\python main.py
-```
+* **普通關卡模式**：
+  ```powershell
+  .\.venv\Scripts\python main.py --mode stage
+  ```
+* **史萊姆地下城模式**：
+  ```powershell
+  .\.venv\Scripts\python main.py --mode dungeon_slime
+  ```
 
 * **可用自訂參數**：
   * `--title "視窗標題"`：如果您的遊戲視窗名稱不叫 `Blackfire Crusade`。
-  * `--interval 秒數`：調整畫面偵測頻率。預設為 `0.5` 秒（每秒偵測 2 次）。如需更快可設為 `0.3`。
-  * *範例*：`.\.venv\Scripts\python main.py --title "Blackfire Crusade" --interval 0.5`
+  * `--interval 秒數`：調整畫面偵測頻率。預設為 `0.5` 秒。
+  * *範例*：`.\.venv\Scripts\python main.py --mode dungeon_slime --interval 0.5`
 
-* **終止程式**：在終端機隨時按下 `Ctrl + C`，程式會安全退出，並為您統計本次掛機一共啟動了幾場戰鬥。
+* **終止程式**：在終端機隨時按下 `Ctrl + C`，程式會安全退出，並為您統計本次掛機一共完成的場次。
+
+---
+
+## 🤖 AI 開發者指南 (AI Developer Guide)
+
+如果您是協同開發的 AI Coding Agent：
+1. **工作規範**：在進行任何代碼修改前，請務必先閱讀工作區自訂技能規範檔案：[.agents/skills/state_machine_development/SKILL.md (開發規範)](file:///e:/Side_Project/.agents/skills/state_machine_development/SKILL.md)。
+2. **決策樹文件**：可透過讀取 [docs/dungeon_flow.md (流程圖)](file:///e:/Side_Project/BlackfireCrusade_tool/docs/dungeon_flow.md) 來快速了解地下城探索與體力領取的比對決策邏輯。
+3. **迴歸測試**：重構或修改狀態機代碼後，請**必須執行**以下測試以確保邏輯無損：
+   ```powershell
+   .\.venv\Scripts\python tests/test_state_machine_logic.py
+   ```

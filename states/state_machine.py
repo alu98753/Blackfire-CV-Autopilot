@@ -1,6 +1,13 @@
 import time
 import os
 import logging
+from states.handlers import (
+    NavigationHandler,
+    LobbyHandler,
+    BattleHandler,
+    ResultHandler,
+    ExploreHandler
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -36,6 +43,15 @@ class GameStateMachine:
         
         # 動態尋找所有 continue*.png 模板
         self.continue_templates = self._discover_continue_templates()
+        
+        # 初始化註冊所有狀態處理器
+        self.handlers = {
+            self.STATE_NAVIGATING: NavigationHandler(self),
+            self.STATE_LOBBY: LobbyHandler(self),
+            self.STATE_BATTLE: BattleHandler(self),
+            self.STATE_RESULT: ResultHandler(self),
+            self.STATE_DUNGEON_EXPLORING: ExploreHandler(self),
+        }
 
     def _discover_continue_templates(self):
         templates = []
@@ -61,7 +77,7 @@ class GameStateMachine:
 
     def step(self):
         """
-        執行單步狀態檢索與決策。
+        執行單步狀態檢索與決策（主調度器）。
         """
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
@@ -74,7 +90,7 @@ class GameStateMachine:
                 logging.info("⏰ 距離上次領體力已滿 30 分鐘，排程在下一輪準備階段執行自動領體力。")
                 self.need_bread_collection = True
 
-        # 1. 取得遊戲視窗邊界與擷取畫面
+        # 2. 取得遊戲視窗邊界與擷取畫面
         rect = self.capturer.get_window_rect()
         if rect is None:
             logging.warning("⚠️ 找不到遊戲視窗，請確認遊戲未縮小且視窗名稱符合設定。")
@@ -87,288 +103,13 @@ class GameStateMachine:
             time.sleep(1)
             return
 
-        # 2. 依據目前狀態執行決策
-        if self.current_state == self.STATE_UNKNOWN:
-            # 初始未知狀態下，進行全域掃描定位當前狀態
-            self.detect_current_state(screen_img, rect)
-            
-        elif self.current_state == self.STATE_NAVIGATING:
-            # 尋路/跳轉進入副本狀態
-            self.handle_navigation(screen_img, rect)
-            
-        elif self.current_state == self.STATE_LOBBY:
-            # [關卡專屬] 大廳狀態下：尋找大廳開始按鈕
-            lobby_btn = self.config["lobby_start_btn"]
-            pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-            if pos:
-                logging.info(f"👉 偵測到大廳開始按鈕 [{lobby_btn}] (信心度: {conf:.4f})，進行點擊。")
-                self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                self.run_count += 1
-                logging.info(f"🚀 開始第 {self.run_count} 次關卡戰鬥！")
-                self.battle_start_time = time.time()
-                self.transition_to(self.STATE_BATTLE)
-                time.sleep(2.0) # 等待戰鬥載入
-            else:
-                self.detect_current_state(screen_img, rect)
-
-        elif self.current_state == self.STATE_BATTLE:
-            # [雙模式通用] 戰鬥狀態下：
-            self.handle_battle(screen_img, rect)
-
-        elif self.current_state == self.STATE_RESULT:
-            # [關卡專屬] 關卡結算狀態下：
-            self.handle_stage_results(screen_img, rect)
-
-        elif self.current_state == self.STATE_DUNGEON_EXPLORING:
-            # [地下城專屬] 地下城探索狀態下：
-            self.handle_dungeon_exploring(screen_img, rect)
-
-    def handle_navigation(self, screen_img, rect):
-        """
-        尋路導航處理邏輯。
-        """
-        # A. 如果啟用且需要領體力，執行領體力分支流程
-        if self.enable_bread and self.need_bread_collection:
-            # 依優先級檢查領體力相關按鈕
-            # 1. 彈窗內的確認按鈕 (Cannot get more bread confirm)
-            pos_cannot, conf_cannot = self.matcher.match(screen_img, "common/cannor_get_more_bread_confirm.png", threshold=0.8)
-            if pos_cannot:
-                logging.info(f"🍞 領體力：偵測到體力已滿提示 [{conf_cannot:.4f}]，點擊確認。")
-                self.mouse.click(rect["left"] + pos_cannot[0], rect["top"] + pos_cannot[1])
-                time.sleep(1.0)
-                return
-                
-            # 2. 領完體力的確認按鈕 (bread confirm)
-            pos_conf, conf_conf = self.matcher.match(screen_img, "common/bread_confirm.png", threshold=0.8)
-            if pos_conf:
-                logging.info(f"🍞 領體力：偵測到獲得體力確認 [{conf_conf:.4f}]，點擊確認。")
-                self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-                time.sleep(1.0)
-                return
-
-            # 3. 領體力按鈕 (bread collection)
-            pos_coll, conf_coll = self.matcher.match(screen_img, "common/bread_collection.png", threshold=0.8)
-            if pos_coll:
-                logging.info(f"🍞 領體力：偵測到領體力按鈕 [{conf_coll:.4f}]，進行點擊領取。")
-                self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
-                time.sleep(1.0)
-                return
-
-            # 4. 關閉體力視窗按鈕 (quit bread)
-            pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit_bread.png", threshold=0.8)
-            if pos_quit:
-                logging.info(f"🍞 領體力：偵測到退出體力按鈕 [{conf_quit:.4f}]，點擊關閉，領取體力流程結束。")
-                self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                self.need_bread_collection = False
-                self.last_bread_collection_time = time.time()
-                time.sleep(1.5)
-                return
-
-            # 5. 打開體力視窗按鈕 (bread)
-            pos_bread, conf_bread = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
-            if pos_bread:
-                logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
-                self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
-                time.sleep(1.5)
-                return
-
-            # 6. 入口按鈕 (door)
-            pos_door, conf_door = self.matcher.match(screen_img, "dungeons/door.png", threshold=0.8)
-            if pos_door:
-                logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
-                self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
-                time.sleep(1.5)
-                return
-
-            logging.info("⌛ 領體力流程中，正在等待體力畫面或按鈕載入...")
-            time.sleep(0.5)
-            return
-
-        # B. 原本的尋路導航邏輯...
-        nav_path = self.config.get("navigation_path", [])
-        if not nav_path:
-            # 如果沒有設定尋路路徑 (例如普通關卡)，直接進入大廳狀態
-            self.transition_to(self.STATE_LOBBY)
-            return
-
-        # 主動判定：如果我們已經看到任何地下城探索或結束按鈕，說明點擊已經成功並進入內部，直接轉移狀態！
-        if self.config["type"] == "dungeon":
-            for check_btn in ["dungeons/dungeon_fight.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png", "dungeons/dungeons_complete.png"]:
-                if os.path.exists(os.path.join("templates", check_btn)):
-                    pos, conf = self.matcher.match(screen_img, check_btn, threshold=0.8)
-                    if pos:
-                        logging.info(f"🧭 尋路中偵測到地下城專屬按鈕 [{check_btn}] (信心度: {conf:.4f})，判定已進入地下城。")
-                        self.transition_to(self.STATE_DUNGEON_EXPLORING)
-                        return
-
-        # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
-        clicked_any = False
-        for btn in reversed(nav_path):
-            pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
-            if pos:
-                logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
-                self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                clicked_any = True
-                time.sleep(1.5) # 等待跳轉動畫
-                break
-
-        if not clicked_any:
-            # 如果畫面上任何尋路按鈕都找不到了，代表我們已經跳轉進去
-            logging.info("🧭 尋路按鈕已不在畫面上，判斷已成功抵達副本內部。")
-            if self.config["type"] == "dungeon":
-                self.transition_to(self.STATE_DUNGEON_EXPLORING)
-            else:
-                self.transition_to(self.STATE_LOBBY)
-
-    def handle_battle(self, screen_img, rect):
-        """
-        戰鬥狀態處理：啟用自動戰鬥與監控戰鬥結算。
-        """
-        # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
-        if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.last_auto_click_time > 3.0):
-            pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
-            logging.info(f"🔍 檢查自動戰鬥按鈕... 最大相似度: {conf_auto:.4f} (閥值: 0.7)")
-            if pos_auto:
-                logging.info(f"👉 偵測到「自動戰鬥」按鈕（目前為未啟用狀態），進行點擊啟用！")
-                self.mouse.click(rect["left"] + pos_auto[0], rect["top"] + pos_auto[1])
-                self.last_auto_click_time = time.time()
-                time.sleep(0.5)
-
-        # B. 監控戰鬥結算
-        if self.config["type"] == "stage":
-            # 關卡模式：檢查 retry.png 與所有 continue*.png
-            found_result_trigger = False
-            for btn in self.config["result_buttons"]:
-                pos, _ = self.matcher.match(screen_img, btn, threshold=0.8)
-                if pos:
-                    logging.info(f"🏆 偵測到結算按鈕 [{btn}]，戰鬥結束！")
-                    found_result_trigger = True
-                    break
-            if found_result_trigger:
-                self.transition_to(self.STATE_RESULT)
-            else:
-                self.log_battle_duration()
-                time.sleep(1.0)
-                
-        elif self.config["type"] == "dungeon":
-            # 地下城模式：檢查 dungeon_battle_results 結算按鈕 (排除 continue3.png)
-            best_match_pos = None
-            best_match_conf = 0.8
-            best_match_temp = None
-            
-            for btn in self.config["dungeon_battle_results"]:
-                pos, conf = self.matcher.match(screen_img, btn, threshold=best_match_conf)
-                if pos and conf > best_match_conf:
-                    best_match_conf = conf
-                    best_match_pos = pos
-                    best_match_temp = btn
-                    
-            if best_match_pos:
-                logging.info(f"🏆 戰鬥結束！點擊相似度最高的地下城結算按鈕 [{best_match_temp}]，信心度: {best_match_conf:.4f}")
-                self.mouse.click(rect["left"] + best_match_pos[0], rect["top"] + best_match_pos[1])
-                # 點擊完結算後，會回到地下城層與層之間，轉移回探索狀態
-                self.transition_to(self.STATE_DUNGEON_EXPLORING)
-                time.sleep(1.5)
-            else:
-                self.log_battle_duration()
-                time.sleep(1.0)
-
-    def log_battle_duration(self):
-        if self.battle_start_time:
-            duration = time.time() - self.battle_start_time
-            logging.info(f"⚔️ 戰鬥進行中... 已持續 {int(duration)} 秒")
+        # 3. 分發處理至當前狀態的 Handler
+        handler = self.handlers.get(self.current_state)
+        if handler:
+            handler.handle(screen_img, rect)
         else:
-            logging.info(f"⚔️ 戰鬥進行中...")
-
-    def handle_stage_results(self, screen_img, rect):
-        """
-        [關卡專屬] 處理關卡多段結算點擊。
-        """
-        # A. 檢查「再戰」
-        pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8)
-        if pos_retry:
-            logging.info("👉 點擊「再戰」！")
-            self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
-            self.transition_to(self.STATE_LOBBY)
-            time.sleep(1.0)
-            return
-
-        # B. 比對並點選相似度最高的「繼續」按鈕
-        best_match_pos = None
-        best_match_conf = 0.8
-        best_match_temp = None
-
-        # 這裡會檢查所有的 continue 圖片 (包括 continue3.png)
-        for c_temp in self.continue_templates:
-            pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=best_match_conf)
-            if pos_c and conf_c > best_match_conf:
-                best_match_conf = conf_c
-                best_match_pos = pos_c
-                best_match_temp = c_temp
-
-        if best_match_pos:
-            logging.info(f"👉 點擊相似度最高的關卡「繼續」按鈕 ({best_match_temp})，信心度: {best_match_conf:.4f}")
-            self.mouse.click(rect["left"] + best_match_pos[0], rect["top"] + best_match_pos[1])
-            time.sleep(0.8)
-            return
-
-        # C. 檢查是否已經默默回到準備大廳
-        lobby_btn = self.config["lobby_start_btn"]
-        pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-        if pos_start:
-            logging.info(f"👉 偵測到已回到大廳 ({lobby_btn})，將狀態轉回 LOBBY。")
-            self.transition_to(self.STATE_LOBBY)
-            return
-            
-        logging.info("⌛ 結算畫面的按鈕尚未出現或正在過場，維持結算狀態等待中...")
-        time.sleep(0.3)
-
-    def handle_dungeon_exploring(self, screen_img, rect):
-        """
-        [地下城專屬] 依照優先級掃描探險事件。
-        """
-        # 1. 優先判定是否已經進入真實戰鬥中 (看見 common/auto.png)
-        if os.path.exists(os.path.join("templates", "common/auto.png")):
-            pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
-            if pos_auto:
-                logging.info(f"⚔️ 偵測到戰鬥已真正開始（出現 auto 按鈕，相似度: {conf_auto:.4f}），進入戰鬥狀態！")
-                self.battle_start_time = time.time()
-                self.transition_to(self.STATE_BATTLE)
-                return
-
-        # 2. 依優先級處理探險事件
-        for btn_name in self.config["explore_priorities"]:
-            # 檢查模板檔案是否存在
-            if not os.path.exists(os.path.join("templates", btn_name)):
-                continue
-                
-            pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
-            if pos:
-                if btn_name == "dungeons/dungeons_complete.png":
-                    logging.info(f"🎉 偵測到【地下城通關結束】({btn_name})，信心度: {conf:.4f}，點擊退出。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.run_count += 1
-                    logging.info(f"📊 已完成第 {self.run_count} 次地下城通關！")
-                    # 通關後回到最外層大廳，轉移至尋路導航狀態重新進副本
-                    self.transition_to(self.STATE_NAVIGATING)
-                    time.sleep(2.0)
-                    
-                elif btn_name == "dungeons/dungeon_fight.png":
-                    logging.info(f"⚔️ 偵測到【戰鬥房入口】({btn_name})，信心度: {conf:.4f}，點擊進入。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    # 注意：此處不轉移至 STATE_BATTLE，因為進入後需要先選擇祝福 (bless)。
-                    # 我們將等待畫面出現 auto.png 後，由本方法最上方的判定自動轉入戰鬥狀態。
-                    time.sleep(1.0)
-                    
-                else:
-                    logging.info(f"👉 偵測到探險事件 [{btn_name}]，信心度: {conf:.4f}，點擊處理。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    time.sleep(0.8) # 點擊後等待短暫動畫
-                    
-                return # 成功處理一個優先級最高的事項後即結束該步，等待下一次截圖
-                
-        logging.info("⌛ 地下城探索中，正在等待下一層載入或新的隨機事件按鈕出現...")
-        time.sleep(0.5)
+            # 預設未知狀態下，進行全域掃描定位當前狀態
+            self.detect_current_state(screen_img, rect)
 
     def detect_current_state(self, screen_img, rect):
         """
