@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs and temporary screenshots
+test_captured_*.png
+test_captured.png
+test_full_screen.png
+test_start_btn_mock.png
+raw_screenshot.png
+
+# Optional: If you don't want to track your custom template images, uncomment the line below:
+# templates/*.png
