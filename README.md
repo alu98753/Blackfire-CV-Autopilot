@@ -84,9 +84,21 @@
 
 ---
 
-## 🧪 單體與迴歸測試
+## 🤖 AI 開發者指南 (AI Developer Guide)
 
-在修改或重構代碼後，請執行以下命令執行全部狀態機邏輯的自動化單體測試：
+如果您是協同開發的 AI Coding Agent：
+1. **工作規範**：在進行任何代碼修改前，請務必先閱讀工作區自訂技能規範檔案：[.agents/skills/state_machine_development/SKILL.md (開發規範)](file:///e:/Side_Project/.agents/skills/state_machine_development/SKILL.md)。
+2. **決策樹文件**：可透過讀取 [docs/dungeon_flow.md (流程圖)](file:///e:/Side_Project/BlackfireCrusade_tool/docs/dungeon_flow.md) 來快速了解地下城探索與體力領取的比對決策邏輯。
+3. **迴歸測試**：重構或修改狀態機代碼後，請**必須執行**以下測試以確保邏輯無損：
 ```powershell
 .\.venv\Scripts\python tests/test_state_machine_logic.py
 ```
+
+
+## 開發中與待辦功能 (TODOs)
+
+- **背包滿清理自適應保留與篩選過濾** (規劃中)
+  - **自適應保留等級**：目前偵測到背包滿時一律點擊 `bagfull_quit.png` 並進行全部分解。未來需實作自適應保留特定等級的裝備。
+  - **篩選高稀有度裝備**：大量分解時應保留藍色以上的裝備（紫色、黃色、橙色、紅色），僅分解藍色、綠色、土色的裝備。
+    - **預期流程**：點擊「全選」後，需要將畫面上藍色以上（紫色、黃色、橙色、紅色）的裝備取消勾選，再進行分解。
+    - **技術難點備忘**：由於不同裝備內容物不同，無法直接用固定的裝備模板進行模板比對。未來實作時，需改用**色彩範圍偵測**或**邊框顏色裁剪分析**（偵測物品欄格子的邊框 HSL/RGB 顏色範圍）來定位高稀有度裝備，並點擊其坐標以取消選取。
