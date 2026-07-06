@@ -12,7 +12,7 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.need_diamond_collection:
             # 情況一：如果已經點過免費鑽石並確認了，我們尋找退出按鈕關閉彈窗
             if self.machine.diamond_collected_this_run:
-                for quit_btn in ["dungeons/quit.png", "common/quit_bread.png"]:
+                for quit_btn in ["common/quit.png"]:
                     if os.path.exists(os.path.join("templates", quit_btn)):
                         pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
                         if pos_quit:
@@ -46,7 +46,7 @@ class NavigationHandler(BaseStateHandler):
                 in_diamond_window = False
                 active_quit_btn = None
                 quit_pos = None
-                for quit_btn in ["common/quit_bread.png", "dungeons/quit.png"]:
+                for quit_btn in ["common/quit.png"]:
                     if os.path.exists(os.path.join("templates", quit_btn)):
                         pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
                         if pos_quit:
@@ -106,7 +106,7 @@ class NavigationHandler(BaseStateHandler):
             # 情況一：如果已經確認領過體力（或體力已滿確認了），我們只專心尋找退出按鈕，不要重複按領取或體力按鈕
             if self.machine.bread_collected_this_run:
                 # 4. 關閉體力視窗按鈕 (quit bread)
-                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit_bread.png", threshold=0.8)
+                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
                 if pos_quit:
                     logging.info(f"🍞 領體力：偵測到退出體力按鈕 [{conf_quit:.4f}]，點擊關閉，領取體力流程結束。")
                     self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
@@ -145,7 +145,7 @@ class NavigationHandler(BaseStateHandler):
 
                 # 如果體力視窗已經打開 (看見退出按鈕) 但找不到領取按鈕 (說明體力已領取過，處於冷卻或已滿)
                 # 則自動點點退出關閉視窗，重置定時器與標記，避免無限重試。
-                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit_bread.png", threshold=0.8)
+                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
                 if pos_quit:
                     logging.info(f"🍞 領體力：體力視窗已開啟但無領取按鈕 (處於冷卻或已領完)，點擊退出體力按鈕 [{conf_quit:.4f}] 退出。")
                     self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])

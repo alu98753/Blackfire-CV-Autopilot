@@ -83,7 +83,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # - 看到 quit_bread.png ➔ 點擊退出，結束領取體力流程
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((400, 400), 0.9) if name == "common/quit_bread.png" else (None, 0.0)
+            ((400, 400), 0.9) if name == "common/quit.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(400, 400)
@@ -198,7 +198,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 4. 看到 quit.png ➔ 點擊退出
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((450, 450), 0.9) if name == "dungeons/quit.png" else (None, 0.0)
+            ((450, 450), 0.9) if name == "common/quit.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(450, 450)
@@ -240,7 +240,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 1. 在結算畫面看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((960, 228), 0.9) if name == "backpack_full.png" else (
-            ((100, 100), 0.9) if name == "common/quit_bread.png" else (None, 0.0))
+            ((100, 100), 0.9) if name == "common/quit.png" else (None, 0.0))
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(100, 100)
@@ -307,7 +307,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # - 當 bag_tidied 為 True 時，偵測 quit 按鈕 (dungeons/quit.png) ➔ 點擊退出，結束清理並恢復 LOBBY 狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((1000, 1000), 0.9) if name == "dungeons/quit.png" else (None, 0.0)
+            ((1000, 1000), 0.9) if name == "common/quit.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1000, 1000)
@@ -331,7 +331,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning，並轉移至 EXPLORING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((960, 228), 0.9) if name == "backpack_full.png" else (
-            ((150, 150), 0.9) if name == "common/quit_bread.png" else (None, 0.0))
+            ((150, 150), 0.9) if name == "common/quit.png" else (None, 0.0))
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(150, 150)
@@ -511,11 +511,11 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(200, 200)
         
-        # 4. 看到 diamond_free.png ➔ 點擊 (此時需模擬 common/quit_bread.png 也存在，代表處於視窗內)
+        # 4. 看到 diamond_free.png ➔ 點擊 (此時需模擬 common/quit.png 也存在，代表處於視窗內)
         def match_side_effect_4(img, name, threshold):
             if name == "diamond_free.png":
                 return ((300, 300), 0.9)
-            if name == "common/quit_bread.png":
+            if name == "common/quit.png":
                 return ((500, 500), 0.9)
             return (None, 0.0)
         self.mock_matcher.match.side_effect = match_side_effect_4
@@ -532,7 +532,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 6. 看到退出按鈕 ➔ 關閉鑽石，重置 need_diamond_collection 為 False，開始體力流程
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((500, 500), 0.9) if name == "common/quit_bread.png" else (None, 0.0)
+            ((500, 500), 0.9) if name == "common/quit.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
@@ -552,7 +552,7 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         測試領鑽石冷卻退出流程：
         1. need_diamond_collection = True，已在大廳打開鑽石視窗。
-        2. 畫面上沒有免費鑽石 (diamond_free.png 傳回 None)，但有退出按鈕 (common/quit_bread.png) 且大廳入口 (diamond.png) 不在畫面上。
+        2. 畫面上沒有免費鑽石 (diamond_free.png 傳回 None)，但有退出按鈕 (common/quit.png) 且大廳入口 (diamond.png) 不在畫面上。
         3. 預期：應自動點擊退出按鈕，並關閉領鑽石流程 (need_diamond_collection 設為 False)。
         """
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
@@ -566,10 +566,10 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 模擬比對：
         # - 尋找 diamond_free.png ➔ None (冷卻中)
-        # - 尋找 common/quit_bread.png ➔ (500, 500)
+        # - 尋找 common/quit.png ➔ (500, 500)
         # - 尋找 diamond.png ➔ None (不在大廳)
         def match_side_effect(img, name, threshold):
-            if name == "common/quit_bread.png":
+            if name == "common/quit.png":
                 return ((500, 500), 0.9)
             return (None, 0.0)
             

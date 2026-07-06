@@ -36,7 +36,7 @@ GAME_CONFIGS = {
             "dungeons/choice_bless.png",            # 7. 選擇祝福 (準備進入戰鬥或接受祝福後的彈窗選項)
             "dungeons/choose.png",                  # 8. 通用選擇按鈕 (如技能事件的選擇等)
             "dungeons/dungeon_fight.png",           # 9. 戰鬥房入口 (優先級調高，避免在入口彈窗誤點 quit 關閉)
-            "dungeons/quit.png",                    # 10. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
+            "common/quit.png",                      # 10. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
 
             # === 第二階段：地圖格與背景動作 (低優先級，沒有彈窗時才處理) ===
             "dungeons/Treasure.png",                # 11. 寶箱房開箱 (優先於下樓)

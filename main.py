@@ -96,7 +96,7 @@ def main():
         "common/bread_collection.png",
         "common/confirm.png",
         "common/ok.png",
-        "common/quit_bread.png"
+        "common/quit.png"
     ]
     enable_bread = True
     for bf in bread_files:

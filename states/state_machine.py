@@ -200,7 +200,7 @@ class GameStateMachine:
         if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
             nav_buttons = [
                 "common/door.png", "goback_town.png", "diamond.png", "diamond_free.png",
-                "common/bread.png", "common/bread_collection.png", "common/quit_bread.png"
+                "common/bread.png", "common/bread_collection.png", "common/quit.png"
             ]
             for bf in nav_buttons:
                 if os.path.exists(os.path.join("templates", bf)):

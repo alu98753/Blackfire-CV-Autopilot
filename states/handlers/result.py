@@ -13,7 +13,7 @@ class ResultHandler(BaseStateHandler):
             pos_full, conf_full = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
             if pos_full:
                 # 尋找退出按鈕進行點擊
-                for q_btn in ["common/quit_bread.png", "dungeons/quit.png"]:
+                for q_btn in ["common/quit.png"]:
                     if os.path.exists(os.path.join("templates", q_btn)):
                         pos_bag, conf_bag = self.matcher.match(screen_img, q_btn, threshold=0.8)
                         if pos_bag:

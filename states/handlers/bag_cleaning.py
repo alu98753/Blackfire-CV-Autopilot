@@ -34,8 +34,8 @@ class BagCleaningHandler(BaseStateHandler):
 
         # 2. 如果已經整理過，尋找退出按鈕關閉背包
         if getattr(self.machine, "bag_tidied", False):
-            # 優先嘗試 dungeons/quit.png 或 common/quit_bread.png 作為關閉按鈕
-            for quit_btn in ["dungeons/quit.png", "common/quit_bread.png"]:
+            # 優先嘗試 common/quit.png 作為關閉按鈕
+            for quit_btn in ["common/quit.png"]:
                 if os.path.exists(os.path.join("templates", quit_btn)):
                     pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
                     if pos_quit:
