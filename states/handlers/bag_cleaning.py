@@ -16,6 +16,7 @@ class BagCleaningHandler(BaseStateHandler):
             self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
+                self.machine.bag_select_all_clicked = False  # 重設全選狀態
                 logging.info("🎒 背包清理：已完成分解確認，標記 bag_disassembled = True。")
             time.sleep(0.4)
             return
@@ -26,6 +27,7 @@ class BagCleaningHandler(BaseStateHandler):
             self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
+                self.machine.bag_select_all_clicked = False  # 重設全選狀態
                 logging.info("🎒 背包清理：已完成分解確認，標記 bag_disassembled = True。")
             time.sleep(0.4)
             return
@@ -42,6 +44,7 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.need_bag_cleaning = False
                         self.machine.bag_tidied = False
                         self.machine.bag_disassembled = False  # 重設分解狀態
+                        self.machine.bag_select_all_clicked = False  # 重設全選狀態
                         time.sleep(0.5)
                         
                         # 回歸原本的掛機狀態
@@ -64,23 +67,26 @@ class BagCleaningHandler(BaseStateHandler):
 
         # 4. 如果尚未分解，則執行分解流程：大量分解 -> 全選 -> 分解
         else:
-            # 4.1 檢查分解按鈕 (全選後點擊分解)
-            if os.path.exists(os.path.join("templates", "common/Disassembly.png")):
-                pos_dis, conf_dis = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.8)
-                if pos_dis:
-                    logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
-                    self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
-                    time.sleep(0.4)
-                    return
+            # 4.1 如果尚未點擊過「全選」，優先檢查與點擊「全選」
+            if not getattr(self.machine, "bag_select_all_clicked", False):
+                if os.path.exists(os.path.join("templates", "common/select_all.png")):
+                    pos_all, conf_all = self.matcher.match(screen_img, "common/select_all.png", threshold=0.8)
+                    if pos_all:
+                        logging.info(f"🎒 背包清理：偵測到全選按鈕 [{conf_all:.4f}]，點擊全選。")
+                        self.mouse.click(rect["left"] + pos_all[0], rect["top"] + pos_all[1])
+                        self.machine.bag_select_all_clicked = True
+                        time.sleep(0.4)
+                        return
 
-            # 4.2 檢查全選按鈕 (點擊大量分解後會出現)
-            if os.path.exists(os.path.join("templates", "common/select_all.png")):
-                pos_all, conf_all = self.matcher.match(screen_img, "common/select_all.png", threshold=0.8)
-                if pos_all:
-                    logging.info(f"🎒 背包清理：偵測到全選按鈕 [{conf_all:.4f}]，點擊全選。")
-                    self.mouse.click(rect["left"] + pos_all[0], rect["top"] + pos_all[1])
-                    time.sleep(0.4)
-                    return
+            # 4.2 如果已經點擊過「全選」，則檢查與點擊「分解」
+            else:
+                if os.path.exists(os.path.join("templates", "common/Disassembly.png")):
+                    pos_dis, conf_dis = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.8)
+                    if pos_dis:
+                        logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
+                        self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
+                        time.sleep(0.4)
+                        return
 
             # 4.3 檢查大量分解按鈕 (打開背包後會看見)
             if os.path.exists(os.path.join("templates", "common/Backpack_Disassembly.png")):

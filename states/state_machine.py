@@ -53,6 +53,7 @@ class GameStateMachine:
         self.need_bag_cleaning = False
         self.bag_tidied = False
         self.bag_disassembled = False
+        self.bag_select_all_clicked = False
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
