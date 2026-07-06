@@ -28,6 +28,14 @@ class ExploreHandler(BaseStateHandler):
             # 檢查模板檔案是否存在
             if not os.path.exists(os.path.join("templates", btn_name)):
                 continue
+
+            # 根據本層探索記憶，跳過已完成的重複地圖事件點選
+            if btn_name == "dungeons/Treasure.png" and self.machine.chest_opened_this_floor:
+                continue
+            if btn_name == "dungeons/skill_event.png" and self.machine.skill_selected_this_floor:
+                continue
+            if btn_name == "dungeons/dungeon_bless.png" and self.machine.bless_received_this_floor:
+                continue
                 
             pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
             if pos:
@@ -45,6 +53,33 @@ class ExploreHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.need_bag_cleaning = True
                     time.sleep(1.2)
+                    
+                elif btn_name == "dungeons/Get_tresure.png" or btn_name == "dungeons/Get_tresure_comfirm.png":
+                    logging.info(f"👉 偵測到獲得寶物 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層寶箱已開。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    self.machine.chest_opened_this_floor = True
+                    time.sleep(1.0)
+                    
+                elif btn_name == "dungeons/choose.png":
+                    logging.info(f"👉 偵測到選擇技能 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層技能已選。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    self.machine.skill_selected_this_floor = True
+                    time.sleep(1.0)
+                    
+                elif btn_name == "dungeons/choice_bless.png":
+                    logging.info(f"👉 偵測到選擇祝福 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層祝福已領。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    self.machine.bless_received_this_floor = True
+                    time.sleep(1.0)
+                    
+                elif btn_name in ["dungeons/gungeon_godown.png", "dungeons/gungeon_godown_confirm.png"]:
+                    logging.info(f"🧭 偵測到下樓按鈕 [{btn_name}]，信心度: {conf:.4f}，點擊下樓並重設本層探索記憶。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    # 重設本層探索記憶，準備迎接收新的一層
+                    self.machine.chest_opened_this_floor = False
+                    self.machine.skill_selected_this_floor = False
+                    self.machine.bless_received_this_floor = False
+                    time.sleep(1.5)
                     
                 elif btn_name == "dungeons/dungeon_fight.png":
                     logging.info(f"⚔️ 偵測到【戰鬥房入口】({btn_name})，信心度: {conf:.4f}，點擊進入。")

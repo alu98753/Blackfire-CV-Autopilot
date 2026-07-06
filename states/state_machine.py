@@ -48,6 +48,11 @@ class GameStateMachine:
         self.need_bag_cleaning = False
         self.bag_tidied = False
         
+        # 地下城本層探索記憶 (防止已完成的事件重複點選)
+        self.chest_opened_this_floor = False
+        self.skill_selected_this_floor = False
+        self.bless_received_this_floor = False
+        
         # 動態尋找所有 continue*.png 模板
         self.continue_templates = self._discover_continue_templates()
         
