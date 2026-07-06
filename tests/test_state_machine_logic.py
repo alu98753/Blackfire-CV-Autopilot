@@ -430,26 +430,26 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 2. 準備實體 numpy 圖像，畫上指定邊框顏色以供分選
         test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        # 左側 Col 0, Row 0: 黃金邊框 (BGR = [0, 200, 200])
-        test_img[180+10:180+20, 27+10:27+98] = [0, 200, 200]
-        test_img[180+88:180+98, 27+10:27+98] = [0, 200, 200]
-        test_img[180+10:180+98, 27+10:27+20] = [0, 200, 200]
-        test_img[180+10:180+98, 27+88:27+98] = [0, 200, 200]
+        # 左側 Col 0, Row 0: 黃金邊框 (BGR = [0, 200, 200]) (位於 win_y + left_y0 = 371, win_x + left_x0 = 357)
+        test_img[371+10:371+20, 357+10:357+98] = [0, 200, 200]
+        test_img[371+88:371+98, 357+10:357+98] = [0, 200, 200]
+        test_img[371+10:371+98, 357+10:357+20] = [0, 200, 200]
+        test_img[371+10:371+98, 357+88:357+98] = [0, 200, 200]
         
-        # 右側 Col 0, Row 0: 綠色邊框 (BGR = [0, 200, 0])
+        # 右側 Col 0, Row 0: 綠色邊框 (BGR = [0, 200, 0]) (位於 win_y + right_y0 = 371, win_x + right_x0 = 957)
         # 我們也在中間給一些起伏，使 std 較大，避免被當成純黑空格
-        test_img[180+10:180+20, 627+10:627+98] = [0, 200, 0]
-        test_img[180+88:180+98, 627+10:627+98] = [0, 200, 0]
-        test_img[180+10:180+98, 627+10:627+20] = [0, 200, 0]
-        test_img[180+10:180+98, 627+88:627+98] = [0, 200, 0]
-        test_img[180+50:180+60, 627+50:627+60] = [50, 50, 50]
+        test_img[371+10:371+20, 957+10:957+98] = [0, 200, 0]
+        test_img[371+88:371+98, 957+10:957+98] = [0, 200, 0]
+        test_img[371+10:371+98, 957+10:957+20] = [0, 200, 0]
+        test_img[371+10:371+98, 957+88:957+98] = [0, 200, 0]
+        test_img[371+50:371+60, 957+50:957+60] = [50, 50, 50]
         
         self.mock_capturer.capture.return_value = test_img
         
         # 模擬 match 結果
         def match_side_effect(img, name, threshold):
             if name == "backpack_full.png":
-                return ((960, 540), 0.9)
+                return ((960, 228), 0.9)
             elif name == "common/destroy.png":
                 return ((500, 500), 0.9) # 銷毀按鈕
             elif name == "common/confirm.png":
@@ -462,7 +462,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         
         # 驗證最後一個被點選的是左側貴重物品，證明整個鏈式分選流程成功執行
-        self.mock_mouse.click.assert_called_with(81, 234)
+        self.mock_mouse.click.assert_called_with(411, 425)
 
     @patch('os.path.exists')
     def test_global_diamond_collection_flow(self, mock_exists):

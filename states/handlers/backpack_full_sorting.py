@@ -23,9 +23,13 @@ class BackpackFullSortingHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
 
+        # 計算彈窗相對於截圖的左上角頂點座標
+        win_x = pos_full[0] - 630
+        win_y = pos_full[1] - 37
+
         # 計算關閉 X 按鈕絕對座標
-        close_x = rect["left"] + pos_full[0] + 580
-        close_y = rect["top"] + pos_full[1] + 12
+        close_x = rect["left"] + win_x + 1210
+        close_y = rect["top"] + win_y + 49
 
         # B. 定義網格座標參數 (相對於截圖)
         left_x0, left_y0 = 27, 180
@@ -82,8 +86,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         high_rarity_left = [] # 儲存 (row, col, color)
         for r in range(4):
             for c in range(4):
-                cx = left_x0 + c * step
-                cy = left_y0 + r * step
+                cx = win_x + left_x0 + c * step
+                cy = win_y + left_y0 + r * step
                 crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
                 color = classify_slot(crop)
                 if is_high_rarity(color):
@@ -103,14 +107,14 @@ class BackpackFullSortingHandler(BaseStateHandler):
         # 由於可能需要滾動，我們將此尋找封裝為一個支持滾動的流程
         target_right_slot = None # (row, col)
         scroll_count = 0
-        right_center_x = rect["left"] + right_x0 + 2 * step
-        right_center_y = rect["top"] + right_y0 + 2 * step
+        right_center_x = rect["left"] + win_x + right_x0 + 2 * step
+        right_center_y = rect["top"] + win_y + right_y0 + 2 * step
 
         # 先掃描當前頁面
         for r in range(4):
             for c in range(4):
-                cx = right_x0 + c * step
-                cy = right_y0 + r * step
+                cx = win_x + right_x0 + c * step
+                cy = win_y + right_y0 + r * step
                 crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
                 color = classify_slot(crop)
                 # 只有含有物品的格子才能銷毀，且必須是低稀有度 (green 或 gray_or_empty)
@@ -139,8 +143,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 
                 for r in range(4):
                     for c in range(4):
-                        cx = right_x0 + c * step
-                        cy = right_y0 + r * step
+                        cx = win_x + right_x0 + c * step
+                        cy = win_y + right_y0 + r * step
                         crop = new_screen[cy:cy+cell_size, cx:cx+cell_size]
                         color = classify_slot(crop)
                         if color in ["green", "gray_or_empty"] and np.std(crop) > 8.0:
@@ -169,8 +173,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # F. 步驟 4: 執行銷毀與拾取流程
         r_row, r_col, r_color = target_right_slot
-        rx_click = rect["left"] + right_x0 + r_col * step + cell_size // 2
-        ry_click = rect["top"] + right_y0 + r_row * step + cell_size // 2
+        rx_click = rect["left"] + win_x + right_x0 + r_col * step + cell_size // 2
+        ry_click = rect["top"] + win_y + right_y0 + r_row * step + cell_size // 2
 
         logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
         self.mouse.click(rx_click, ry_click)
@@ -216,8 +220,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # 點選左側排在最前的貴重物品放入空位
         l_row, l_col, l_color = high_rarity_left[0]
-        lx_click = rect["left"] + left_x0 + l_col * step + cell_size // 2
-        ly_click = rect["top"] + left_y0 + l_row * step + cell_size // 2
+        lx_click = rect["left"] + win_x + left_x0 + l_col * step + cell_size // 2
+        ly_click = rect["top"] + win_y + left_y0 + l_row * step + cell_size // 2
         logging.info(f"🎒 [背包分選] 點擊左側溢出貴重物品 [{l_color}] 座標: ({lx_click}, {ly_click}) 收入背包。")
         self.mouse.click(lx_click, ly_click)
         time.sleep(0.6) # 等待飛入背包動畫完成
