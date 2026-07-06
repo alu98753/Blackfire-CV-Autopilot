@@ -215,6 +215,13 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(650, 650)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+        
+        # 7. 手動將下樓點擊時間推前 7 秒，模擬冷卻時間屆滿後，重設本層記憶
+        self.assertTrue(self.state_machine.skill_selected_this_floor)
+        self.state_machine.last_godown_click_time -= 7.0
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
+        self.assertFalse(self.state_machine.skill_selected_this_floor)
 
     @patch('os.path.exists')
     def test_backpack_full_cleaning_flow(self, mock_exists):

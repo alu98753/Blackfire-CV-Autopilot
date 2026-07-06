@@ -52,6 +52,7 @@ class GameStateMachine:
         self.chest_opened_this_floor = False
         self.skill_selected_this_floor = False
         self.bless_received_this_floor = False
+        self.last_godown_click_time = None
         
         # 動態尋找所有 continue*.png 模板
         self.continue_templates = self._discover_continue_templates()
