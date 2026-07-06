@@ -44,6 +44,11 @@ class GameStateMachine:
         self.last_bread_collection_time = time.time()
         self.bread_collected_this_run = False
         
+        # 領鑽石相關屬性
+        self.need_diamond_collection = True  # 啟動時預設領一次鑽石
+        self.last_diamond_collection_time = 0.0
+        self.diamond_collected_this_run = False
+        
         # 背包清理相關屬性
         self.need_bag_cleaning = False
         self.bag_tidied = False
@@ -104,7 +109,14 @@ class GameStateMachine:
             time.sleep(1)
             return
 
-        # 1. 檢查體力定時領取計時器 (30分鐘 = 1800秒)
+        # 1. 檢查領體力與領鑽石定時器
+        # 1.1 鑽石定時器 (2小時 = 7200秒)
+        if time.time() - self.last_diamond_collection_time > 7200.0:
+            if not self.need_diamond_collection:
+                logging.info("⏰ 距離上次領鑽石已滿 2 小時，排程在下一輪準備階段執行自動領鑽石。")
+                self.need_diamond_collection = True
+
+        # 1.2 體力定時器 (30分鐘 = 1800秒)
         if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
             if not self.need_bread_collection:
                 logging.info("⏰ 距離上次領體力已滿 30 分鐘，排程在下一輪準備階段執行自動領體力。")
@@ -174,9 +186,13 @@ class GameStateMachine:
         """
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
-        # 0. 如果需要領體力，且畫面上看見 door.png 或體力相關按鈕，進入導航/領體力狀態
-        if self.enable_bread and self.need_bread_collection:
-            for bf in ["common/door.png", "common/bread.png", "common/bread_collection.png", "common/quit_bread.png"]:
+        # 0. 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
+        if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
+            nav_buttons = [
+                "common/door.png", "goback_town.png", "diamond.png", "diamond_free.png",
+                "common/bread.png", "common/bread_collection.png", "common/quit_bread.png"
+            ]
+            for bf in nav_buttons:
                 if os.path.exists(os.path.join("templates", bf)):
                     pos, _ = self.matcher.match(screen_img, bf, threshold=0.8)
                     if pos:

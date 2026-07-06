@@ -27,6 +27,8 @@ class TestStateMachineLogic(unittest.TestCase):
             matcher=self.mock_matcher,
             mouse=self.mock_mouse
         )
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.last_diamond_collection_time = time.time()
 
     @patch('os.path.exists')
     def test_stage_mode_bread_collection_flow(self, mock_exists):
@@ -405,6 +407,80 @@ class TestStateMachineLogic(unittest.TestCase):
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(960, 600)
+
+    @patch('os.path.exists')
+    def test_global_diamond_collection_flow(self, mock_exists):
+        """
+        測試自動領取鑽石流程以及當體力與鑽石計時器同時到期時的優先順序 (先領鑽石，再領體力)：
+        1. 看到 goback_town.png ➔ 狀態轉移至 NAVIGATING
+        2. 在 NAVIGATING 狀態下看到 goback_town.png ➔ 點點返回大廳
+        3. 看到 diamond.png ➔ 點點打開鑽石領取畫面
+        4. 看到 diamond_free.png ➔ 點點領取免費鑽石
+        5. 看到 confirm.png ➔ 點點確認並標記 diamond_collected_this_run
+        6. 看到 quit_bread.png ➔ 關閉鑽石畫面，結束鑽石流程，並開始體力流程
+        7. 看到 common/bread.png ➔ 開始點點進入領體力
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = True
+        self.state_machine.need_bread_collection = True
+        self.state_machine.need_diamond_collection = True
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 1. 偵測 goback_town.png ➔ 轉移狀態 (不點擊)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 800), 0.9) if name == "goback_town.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 2. 進入 NAVIGATING 後 ➔ 點擊 goback_town.png
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 800), 0.9) if name == "goback_town.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(100, 800)
+        
+        # 3. 看到 diamond.png ➔ 點擊
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "diamond.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(200, 200)
+        
+        # 4. 看到 diamond_free.png ➔ 點擊
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((300, 300), 0.9) if name == "diamond_free.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(300, 300)
+        
+        # 5. 看到 confirm.png ➔ 點擊確認，並標記 diamond_collected_this_run
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/confirm.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(400, 400)
+        self.assertTrue(self.state_machine.diamond_collected_this_run)
+        
+        # 6. 看到退出按鈕 ➔ 關閉鑽石，重置 need_diamond_collection 為 False，開始體力流程
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((500, 500), 0.9) if name == "common/quit_bread.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertFalse(self.state_machine.need_diamond_collection)
+        self.assertFalse(self.state_machine.diamond_collected_this_run)
+        
+        # 7. 下一幀應自動啟動體力領取流程 (尋找 bread.png 並點擊)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((600, 600), 0.9) if name == "common/bread.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(600, 600)
+        self.assertTrue(self.state_machine.need_bread_collection)
 
 if __name__ == "__main__":
     unittest.main()

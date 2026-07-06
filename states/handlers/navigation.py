@@ -8,6 +8,71 @@ class NavigationHandler(BaseStateHandler):
         """
         尋路導航與自動領體力邏輯。
         """
+        # A1. 如果需要領鑽石，執行領鑽石分支流程 (優先於領體力)
+        if self.machine.need_diamond_collection:
+            # 情況一：如果已經點過免費鑽石並確認了，我們尋找退出按鈕關閉彈窗
+            if self.machine.diamond_collected_this_run:
+                for quit_btn in ["dungeons/quit.png", "common/quit_bread.png"]:
+                    if os.path.exists(os.path.join("templates", quit_btn)):
+                        pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
+                        if pos_quit:
+                            logging.info(f"💎 領鑽石：偵測到退出按鈕 [{quit_btn}] ({conf_quit:.4f})，點擊關閉，領鑽石流程結束。")
+                            self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                            self.machine.need_diamond_collection = False
+                            self.machine.diamond_collected_this_run = False
+                            self.machine.last_diamond_collection_time = time.time()
+                            time.sleep(0.3)
+                            return
+            else:
+                # 情況二：尚未領取或確認，進行領取步驟
+                # 1. 彈窗內的確認按鈕 (獲得鑽石確認)
+                pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
+                if pos_conf:
+                    logging.info(f"💎 領鑽石：偵測到確認按鈕 [{conf_conf:.4f}]，點擊確認。")
+                    self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
+                    self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
+                    time.sleep(0.2)
+                    return
+                
+                pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
+                if pos_ok:
+                    logging.info(f"💎 領鑽石：偵測到 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
+                    self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
+                    self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
+                    time.sleep(0.2)
+                    return
+
+                # 2. 免費領取鑽石按鈕 (diamond_free.png)
+                if os.path.exists(os.path.join("templates", "diamond_free.png")):
+                    pos_free, conf_free = self.matcher.match(screen_img, "diamond_free.png", threshold=0.8)
+                    if pos_free:
+                        logging.info(f"💎 領鑽石：偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
+                        self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
+                        time.sleep(0.2)
+                        return
+
+                # 3. 鑽石按鈕 (diamond.png)
+                if os.path.exists(os.path.join("templates", "diamond.png")):
+                    pos_dia, conf_dia = self.matcher.match(screen_img, "diamond.png", threshold=0.8)
+                    if pos_dia:
+                        logging.info(f"💎 領鑽石：在畫面偵測到鑽石按鈕 [{conf_dia:.4f}]，點擊打開領取畫面。")
+                        self.mouse.click(rect["left"] + pos_dia[0], rect["top"] + pos_dia[1])
+                        time.sleep(0.3)
+                        return
+
+                # 4. 返回城鎮按鈕 (goback_town.png)
+                if os.path.exists(os.path.join("templates", "goback_town.png")):
+                    pos_town, conf_town = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
+                    if pos_town:
+                        logging.info(f"💎 領鑽石：在畫面中偵測到返回城鎮按鈕 [{conf_town:.4f}]，點擊返回。")
+                        self.mouse.click(rect["left"] + pos_town[0], rect["top"] + pos_town[1])
+                        time.sleep(0.3)
+                        return
+
+            logging.info("⌛ 領鑽石流程中，正在等待鑽石畫面或按鈕載入...")
+            time.sleep(0.1)
+            return
+
         # A. 如果啟用且需要領體力，執行領體力分支流程
         if self.machine.enable_bread and self.machine.need_bread_collection:
             # 依優先級檢查領體力相關按鈕

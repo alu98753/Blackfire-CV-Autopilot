@@ -13,6 +13,12 @@ class LobbyHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
             return
 
+        # 如果需要領鑽石或體力，優先轉移至 NAVIGATING 狀態進行領取
+        if self.machine.need_diamond_collection or (self.machine.enable_bread and self.machine.need_bread_collection):
+            logging.info("💎/🍞 大廳：偵測到需要領取鑽石或體力，優先轉移至 NAVIGATING 狀態。")
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return
+
         lobby_btn = self.machine.config["lobby_start_btn"]
         pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
         if pos:
