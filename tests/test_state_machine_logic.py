@@ -377,9 +377,9 @@ class TestStateMachineLogic(unittest.TestCase):
     @patch('os.path.exists')
     def test_global_backpack_full_interception(self, mock_exists):
         """
-        測試全域背包滿攔截器：
-        1. 看到 backpack_full.png ➔ 點擊右上角關閉 (相對 X+580, Y-300) 且設定 need_bag_cleaning
-        2. 隨後看到 confirm.png ➔ 自動點選確認關閉
+        測試全域背包滿攔截器新邏輯：
+        1. 看到 backpack_full.png ➔ 狀態切換至 STATE_BACKPACK_FULL_SORTING
+        2. 在 STATE_BACKPACK_FULL_SORTING 狀態下，若左側無貴重物品 ➔ 點擊右上角關閉 (1540, 240) 且返回 STATE_UNKNOWN
         """
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.enable_bread = False
@@ -387,26 +387,82 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_BATTLE
         
         mock_exists.return_value = True
-        
-        # 模擬擷取視窗大小 (1920x1080)
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
-        # 1. 偵測到 backpack_full.png 位於中心 (960, 540)
-        # 預計點擊右上角關閉: X=960+580=1540, Y=540-300=240
+        # 1. 全域偵測到 backpack_full.png
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((960, 540), 0.9) if name == "backpack_full.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
+        
+        # 2. 執行 BackpackFullSortingHandler，由於為空畫面 (無貴重物品)，應直接點擊關閉並回到 STATE_UNKNOWN
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((960, 540), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1540, 240)
-        self.assertTrue(self.state_machine.need_bag_cleaning)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+    @patch('os.path.exists')
+    def test_backpack_full_sorting_and_destroy_flow(self, mock_exists):
+        """
+        測試背包滿自適應分選與銷毀流：
+        左側 Col 0, Row 0 有一個黃金/橘黃物品。
+        右側 Col 0, Row 0 有一個綠色物品。
+        1. 看到 backpack_full.png ➔ 狀態切換至 STATE_BACKPACK_FULL_SORTING
+        2. 執行 BackpackFullSortingHandler，應定位到綠色物品並點擊 ➔ 點擊 destroy.png ➔ 點擊 confirm.png ➔ 點擊左側貴重物品 ➔ 完成本次分選。
+        """
+        import numpy as np
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = False
+        self.state_machine.need_bread_collection = False
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
         
-        # 2. 關閉彈窗後彈出 confirm.png
-        # 通用確認攔截器應點選確認關閉
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 1. 偵測到 backpack_full.png 進入狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 600), 0.9) if name == "common/confirm.png" else (None, 0.0)
+            ((960, 540), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(960, 600)
+        
+        # 2. 準備實體 numpy 圖像，畫上指定邊框顏色以供分選
+        test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        # 左側 Col 0, Row 0: 黃金邊框 (BGR = [0, 200, 200])
+        test_img[180+10:180+20, 27+10:27+98] = [0, 200, 200]
+        test_img[180+88:180+98, 27+10:27+98] = [0, 200, 200]
+        test_img[180+10:180+98, 27+10:27+20] = [0, 200, 200]
+        test_img[180+10:180+98, 27+88:27+98] = [0, 200, 200]
+        
+        # 右側 Col 0, Row 0: 綠色邊框 (BGR = [0, 200, 0])
+        # 我們也在中間給一些起伏，使 std 較大，避免被當成純黑空格
+        test_img[180+10:180+20, 627+10:627+98] = [0, 200, 0]
+        test_img[180+88:180+98, 627+10:627+98] = [0, 200, 0]
+        test_img[180+10:180+98, 627+10:627+20] = [0, 200, 0]
+        test_img[180+10:180+98, 627+88:627+98] = [0, 200, 0]
+        test_img[180+50:180+60, 627+50:627+60] = [50, 50, 50]
+        
+        self.mock_capturer.capture.return_value = test_img
+        
+        # 模擬 match 結果
+        def match_side_effect(img, name, threshold):
+            if name == "backpack_full.png":
+                return ((960, 540), 0.9)
+            elif name == "common/destroy.png":
+                return ((500, 500), 0.9) # 銷毀按鈕
+            elif name == "common/confirm.png":
+                return ((600, 600), 0.9) # 銷毀確認按鈕
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        
+        # 執行 step，觸發 BackpackFullSortingHandler
+        self.state_machine.step()
+        
+        # 驗證最後一個被點選的是左側貴重物品，證明整個鏈式分選流程成功執行
+        self.mock_mouse.click.assert_called_with(81, 234)
 
     @patch('os.path.exists')
     def test_global_diamond_collection_flow(self, mock_exists):

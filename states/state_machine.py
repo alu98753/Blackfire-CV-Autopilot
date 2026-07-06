@@ -7,7 +7,8 @@ from states.handlers import (
     BattleHandler,
     ResultHandler,
     ExploreHandler,
-    BagCleaningHandler
+    BagCleaningHandler,
+    BackpackFullSortingHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -21,6 +22,7 @@ class GameStateMachine:
     STATE_RESULT = "RESULT"                  # [關卡專屬] 戰鬥結束結算，點擊繼續/再戰
     STATE_DUNGEON_EXPLORING = "EXPLORING"    # [地下城專屬] 地下城探索中，處理隨機事件與前進下一層
     STATE_BAG_CLEANING = "BAG_CLEANING"      # 背包滿了時，自動打開背包進行分解與整理
+    STATE_BACKPACK_FULL_SORTING = "BACKPACK_FULL_SORTING" # 背包滿時自適應裝備分選與銷毀
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -77,6 +79,7 @@ class GameStateMachine:
             self.STATE_RESULT: ResultHandler(self),
             self.STATE_DUNGEON_EXPLORING: ExploreHandler(self),
             self.STATE_BAG_CLEANING: BagCleaningHandler(self),
+            self.STATE_BACKPACK_FULL_SORTING: BackpackFullSortingHandler(self),
         }
 
     def _discover_continue_templates(self):
@@ -154,14 +157,10 @@ class GameStateMachine:
             # 調低門檻至 0.7 以應對可能的光影或微幅變動，確保 100% 偵測成功
             pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
             if pos:
-                # 計算右上角 X 關閉按鈕相對座標並點擊 (dx=580, dy=-300)
-                btn_x = rect["left"] + pos[0] + 580
-                btn_y = rect["top"] + pos[1] - 300
-                logging.warning(f"🎒 偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，點擊右上角關閉按鈕座標: ({btn_x}, {btn_y})，並標記需要清理背包。")
-                self.mouse.click(btn_x, btn_y)
-                self.need_bag_cleaning = True
-                time.sleep(0.4)
-                return
+                if self.current_state != self.STATE_BACKPACK_FULL_SORTING:
+                    logging.warning(f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。")
+                    self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
+                    return
 
         # 3.3 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認，排除背包清理狀態自身處理)
         if (self.current_state == self.STATE_LOBBY or self.need_bag_cleaning) and self.current_state != self.STATE_BAG_CLEANING:
@@ -188,7 +187,14 @@ class GameStateMachine:
         """
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
-        # 0. 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
+        # 0.0 如果看見「無法容納的物品 (背包滿)」彈窗，進入分選狀態
+        if os.path.exists(os.path.join("templates", "backpack_full.png")):
+            pos, _ = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
+            if pos:
+                self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
+                return
+
+        # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
         if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
             nav_buttons = [
                 "common/door.png", "goback_town.png", "diamond.png", "diamond_free.png",

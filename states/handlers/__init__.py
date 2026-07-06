@@ -5,3 +5,4 @@ from states.handlers.battle import BattleHandler
 from states.handlers.result import ResultHandler
 from states.handlers.explore import ExploreHandler
 from states.handlers.bag_cleaning import BagCleaningHandler
+from states.handlers.backpack_full_sorting import BackpackFullSortingHandler

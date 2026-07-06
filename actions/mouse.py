@@ -75,6 +75,25 @@ class MouseController:
         abs_y = rect["top"] + rel_y
         return self.click(abs_x, abs_y, offset_range, move_duration)
 
+    def scroll(self, clicks, x=None, y=None):
+        """
+        滾動滑鼠滾輪。
+        
+        :param clicks: 滾動格數，正數向上滾動，負數向下滾動。
+        :param x: 滾動目標的絕對 X 座標（可選，若指定則先移動至該處）。
+        :param y: 滾動目標的絕對 Y 座標（可選，若指定則先移動至該處）。
+        """
+        try:
+            self.last_action_time = time.time()
+            if x is not None and y is not None:
+                pyautogui.moveTo(x, y)
+            pyautogui.scroll(clicks)
+            time.sleep(0.3)
+            return True
+        except Exception as e:
+            logging.error(f"滾動操作失敗: {e}")
+            return False
+
 if __name__ == "__main__":
     # 簡單單體測試
     controller = MouseController()
