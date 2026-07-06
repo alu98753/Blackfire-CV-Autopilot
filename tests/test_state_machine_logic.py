@@ -509,10 +509,14 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(200, 200)
         
-        # 4. 看到 diamond_free.png ➔ 點擊
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name == "diamond_free.png" else (None, 0.0)
-        )
+        # 4. 看到 diamond_free.png ➔ 點擊 (此時需模擬 common/quit_bread.png 也存在，代表處於視窗內)
+        def match_side_effect_4(img, name, threshold):
+            if name == "diamond_free.png":
+                return ((300, 300), 0.9)
+            if name == "common/quit_bread.png":
+                return ((500, 500), 0.9)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_side_effect_4
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(300, 300)
         

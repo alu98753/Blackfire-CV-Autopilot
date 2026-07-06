@@ -103,6 +103,8 @@ class GameStateMachine:
             self.last_state_change = time.time()
             if new_state == self.STATE_BATTLE:
                 self.last_auto_click_time = 0
+            elif new_state == self.STATE_BACKPACK_FULL_SORTING:
+                self.need_bag_cleaning = True
 
     def step(self):
         """
