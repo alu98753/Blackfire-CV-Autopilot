@@ -18,7 +18,7 @@ class BagCleaningHandler(BaseStateHandler):
                 self.machine.bag_disassembled = True
                 self.machine.bag_select_all_clicked = False  # 重設全選狀態
                 logging.info("🎒 背包清理：已完成分解確認，標記 bag_disassembled = True。")
-            time.sleep(0.4)
+            time.sleep(0.1)
             return
 
         pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
@@ -29,7 +29,7 @@ class BagCleaningHandler(BaseStateHandler):
                 self.machine.bag_disassembled = True
                 self.machine.bag_select_all_clicked = False  # 重設全選狀態
                 logging.info("🎒 背包清理：已完成分解確認，標記 bag_disassembled = True。")
-            time.sleep(0.4)
+            time.sleep(0.1)
             return
 
         # 2. 如果已經整理過，尋找退出按鈕關閉背包
@@ -45,7 +45,7 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_tidied = False
                         self.machine.bag_disassembled = False  # 重設分解狀態
                         self.machine.bag_select_all_clicked = False  # 重設全選狀態
-                        time.sleep(0.5)
+                        time.sleep(0.1)
                         
                         # 回歸原本的掛機狀態
                         if self.machine.config["type"] == "dungeon":
@@ -62,7 +62,7 @@ class BagCleaningHandler(BaseStateHandler):
                     logging.info(f"🎒 背包清理：偵測到整理按鈕 [{conf_tidy:.4f}]，點擊整理。")
                     self.mouse.click(rect["left"] + pos_tidy[0], rect["top"] + pos_tidy[1])
                     self.machine.bag_tidied = True
-                    time.sleep(0.4)
+                    time.sleep(0.1)
                     return
 
         # 4. 如果尚未分解，則執行分解流程：大量分解 -> 全選 -> 分解
@@ -75,7 +75,7 @@ class BagCleaningHandler(BaseStateHandler):
                         logging.info(f"🎒 背包清理：偵測到全選按鈕 [{conf_all:.4f}]，點擊全選。")
                         self.mouse.click(rect["left"] + pos_all[0], rect["top"] + pos_all[1])
                         self.machine.bag_select_all_clicked = True
-                        time.sleep(0.4)
+                        time.sleep(0.1)
                         return
 
             # 4.2 如果已經點擊過「全選」，則檢查與點擊「分解」
@@ -85,7 +85,7 @@ class BagCleaningHandler(BaseStateHandler):
                     if pos_dis:
                         logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
                         self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
-                        time.sleep(0.4)
+                        time.sleep(0.1)
                         return
 
             # 4.3 檢查大量分解按鈕 (打開背包後會看見)
@@ -94,7 +94,7 @@ class BagCleaningHandler(BaseStateHandler):
                 if pos_mass:
                     logging.info(f"🎒 背包清理：偵測到大量分解按鈕 [{conf_mass:.4f}]，點擊進入大量分解。")
                     self.mouse.click(rect["left"] + pos_mass[0], rect["top"] + pos_mass[1])
-                    time.sleep(0.4)
+                    time.sleep(0.1)
                     return
 
         # 5. 檢查背包按鈕 (若背包尚未打開，在大廳或探索畫面點擊打開)
@@ -103,8 +103,8 @@ class BagCleaningHandler(BaseStateHandler):
             if pos_bag:
                 logging.info(f"🎒 背包清理：偵測到背包入口按鈕 [{conf_bag:.4f}]，點擊打開背包。")
                 self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
-                time.sleep(0.5)
+                time.sleep(0.1)
                 return
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
-        time.sleep(0.2)
+        time.sleep(0.05)

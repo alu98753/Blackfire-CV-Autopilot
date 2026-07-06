@@ -15,7 +15,7 @@ class ResultHandler(BaseStateHandler):
                 logging.warning(f"🧭 偵測到「背包已滿」！出現 'common/bagfull_quit.png'，點擊退出結算。")
                 self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                 self.machine.need_bag_cleaning = True  # 標記需要清理背包
-                time.sleep(0.5)
+                time.sleep(0.1)
                 return
 
         # A2. 檢查結算通用確認彈窗 (例如關卡結算確認)
@@ -23,7 +23,7 @@ class ResultHandler(BaseStateHandler):
         if pos_conf:
             logging.info(f"👉 偵測到結算通用確認按鈕，進行點擊。信心度: {conf_conf:.4f}")
             self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-            time.sleep(0.5)
+            time.sleep(0.1)
             return
 
         # A3. 檢查「再戰」
@@ -32,7 +32,7 @@ class ResultHandler(BaseStateHandler):
             logging.info("👉 點擊「再戰」！")
             self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
             self.machine.transition_to(self.machine.STATE_LOBBY)
-            time.sleep(0.5)
+            time.sleep(0.1)
             return
 
         # B. 依照優先級由高到低 (continue3 -> continue2 -> continue1) 檢查繼續按鈕
@@ -42,7 +42,7 @@ class ResultHandler(BaseStateHandler):
             if pos_c:
                 logging.info(f"👉 點擊優先級最高的關卡「繼續」按鈕 ({c_temp})，信心度: {conf_c:.4f}")
                 self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
-                time.sleep(0.4)
+                time.sleep(0.1)
                 return
 
         # C. 檢查是否已經默默回到準備大廳
@@ -54,4 +54,4 @@ class ResultHandler(BaseStateHandler):
             return
             
         logging.info("⌛ 結算畫面的按鈕尚未出現或正在過場，維持結算狀態等待中...")
-        time.sleep(0.2)
+        time.sleep(0.05)

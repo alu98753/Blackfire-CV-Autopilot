@@ -100,7 +100,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         if not high_rarity_left:
             logging.info("🎒 [背包分選] 左側溢出區無貴重物品（藍色以上），點擊關閉退出。")
             self.mouse.click(close_x, close_y)
-            time.sleep(0.5)
+            time.sleep(0.1)
             # 檢查是否出現退出確認彈窗
             new_screen = self.machine.capturer.capture(rect)
             if new_screen is not None:
@@ -110,7 +110,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                     conf_y = rect["top"] + pos_conf[1]
                     logging.info(f"🎒 [背包分選] 偵測到關閉確認彈窗 [{conf_conf:.4f}]，點擊確認以關閉溢出區。")
                     self.mouse.click(conf_x, conf_y)
-                    time.sleep(0.5)
+                    time.sleep(0.1)
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
 
@@ -143,7 +143,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 # 向下滾動
                 self.mouse.scroll(-300, right_center_x, right_center_y)
                 scroll_count += 1
-                time.sleep(0.4)
+                time.sleep(0.1)
                 
                 # 重新截圖並分析
                 new_screen = self.machine.capturer.capture(rect)
@@ -173,10 +173,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
             # 滾動回頂端以防下次錯位
             if scroll_count > 0:
                 self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
-                time.sleep(0.3)
+                time.sleep(0.08)
             logging.info("🎒 [背包分選] 點擊關閉退出，避免卡死。")
             self.mouse.click(close_x, close_y)
-            time.sleep(0.5)
+            time.sleep(0.1)
             # 檢查是否出現退出確認彈窗
             new_screen = self.machine.capturer.capture(rect)
             if new_screen is not None:
@@ -186,7 +186,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                     conf_y = rect["top"] + pos_conf[1]
                     logging.info(f"🎒 [背包分選] 偵測到關閉確認彈窗 [{conf_conf:.4f}]，點擊確認以關閉溢出區。")
                     self.mouse.click(conf_x, conf_y)
-                    time.sleep(0.5)
+                    time.sleep(0.1)
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
 
@@ -197,7 +197,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
         self.mouse.click(rx_click, ry_click)
-        time.sleep(0.4) # 等待詳情面板彈出
+        time.sleep(0.1) # 等待詳情面板彈出
 
         # 匹配 templates/destroy.png 銷毀按鈕
         # 由於詳情可能在不同位置彈出，我們進行全畫面匹配
@@ -211,7 +211,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
             dest_y = rect["top"] + pos_dest[1]
             logging.info(f"🎒 [背包分選] 偵測到銷毀按鈕 [{conf_dest:.4f}]，進行點擊座標: ({dest_x}, {dest_y})。")
             self.mouse.click(dest_x, dest_y)
-            time.sleep(0.4) # 等待確認彈窗
+            time.sleep(0.1) # 等待確認彈窗
 
             # 檢查並點選通用 confirm.png
             new_screen = self.machine.capturer.capture(rect)
@@ -222,20 +222,20 @@ class BackpackFullSortingHandler(BaseStateHandler):
                     conf_y = rect["top"] + pos_conf[1]
                     logging.info(f"🎒 [背包分選] 偵測到銷毀確認按鈕 [{conf_conf:.4f}]，點擊確認。")
                     self.mouse.click(conf_x, conf_y)
-                    time.sleep(0.5) # 等待動畫與空位釋放
+                    time.sleep(0.1) # 等待動畫與空位釋放
         else:
             logging.warning("🎒 [背包分選] ⚠️ 未能匹配到銷毀按鈕 'destroy.png'，中斷分選。")
             # 滾動回頂端
             if scroll_count > 0:
                 self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
-                time.sleep(0.3)
+                time.sleep(0.08)
             return
 
         # 滾動回頂端以恢復初始網格位置，以便點擊左側貴重物品與下一輪掃描
         if scroll_count > 0:
             logging.info("🎒 [背包分選] 正在滾動回背包頂端...")
             self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
-            time.sleep(0.4)
+            time.sleep(0.1)
 
         # 點選左側排在最前的貴重物品
         l_row, l_col, l_color = high_rarity_left[0]
@@ -243,7 +243,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         ly_click = rect["top"] + win_y + left_y0 + l_row * step + cell_size // 2
         logging.info(f"🎒 [背包分選] 點擊左側溢出貴重物品 [{l_color}] 座標: ({lx_click}, {ly_click}) 以彈出詳情。")
         self.mouse.click(lx_click, ly_click)
-        time.sleep(0.4) # 等待詳情面板彈出
+        time.sleep(0.1) # 等待詳情面板彈出
 
         # 匹配並點選 common/collect.png 領取按鈕
         new_screen = self.machine.capturer.capture(rect)
@@ -254,10 +254,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 coll_y = rect["top"] + pos_coll[1]
                 logging.info(f"🎒 [背包分選] 偵測到領取按鈕 [{conf_coll:.4f}]，點擊領取座標: ({coll_x}, {coll_y})。")
                 self.mouse.click(coll_x, coll_y)
-                time.sleep(0.6) # 等待飛入背包動畫與介面更新
+                time.sleep(0.15) # 等待飛入背包動畫與介面更新
             else:
                 logging.warning("🎒 [背包分選] ⚠️ 未能匹配到領取按鈕 'common/collect.png'。")
-                time.sleep(0.6)
+                time.sleep(0.15)
 
         # 結束本次 handle，下一幀會重新截圖並自動重複執行本 Handler，直到左側沒有貴重物品為止。
         return

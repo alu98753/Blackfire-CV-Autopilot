@@ -344,9 +344,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         When:
           1. 比對到 Treasure.png ➔ 點點開箱，標記 chest_opened_this_floor = True。
           2. 下一幀比對到 Treasure.png ➔ 應跳過開箱（避免重複點擊同一個箱子）。
-          3. 比對到下樓按鈕 ➔ 點擊下樓並開始 6 秒冷卻。
+          3. 比對到下樓按鈕 ➔ 點擊下樓並開始 4 秒冷卻。
           4. 3 秒後 (冷卻未完) ➔ 不重置探索記憶。
-          5. 7 秒後 (冷卻結束) ➔ 應重置探索記憶 (`chest_opened_this_floor = False`)。
+          5. 5 秒後 (冷卻結束) ➔ 應重置探索記憶 (`chest_opened_this_floor = False`)。
         """
         # Arrange
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
@@ -380,8 +380,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.assertTrue(self.state_machine.chest_opened_this_floor)
         
-        # Step 5: 模擬 7 秒過後，冷卻完成，重設記憶
-        self.state_machine.last_godown_click_time = time.time() - 7.0
+        # Step 5: 模擬 5 秒過後，冷卻完成，重設記憶
+        self.state_machine.last_godown_click_time = time.time() - 5.0
         self.state_machine.step()
         self.assertFalse(self.state_machine.chest_opened_this_floor)
         self.assertIsNone(self.state_machine.last_godown_click_time)

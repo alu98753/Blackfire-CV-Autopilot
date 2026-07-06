@@ -132,13 +132,13 @@ class GameStateMachine:
         rect = self.capturer.get_window_rect()
         if rect is None:
             logging.warning("⚠️ 找不到遊戲視窗，請確認遊戲未縮小且視窗名稱符合設定。")
-            time.sleep(2)
+            time.sleep(0.5)
             return
             
         screen_img = self.capturer.capture(rect)
         if screen_img is None:
             logging.warning("⚠️ 無法擷取畫面")
-            time.sleep(1)
+            time.sleep(0.2)
             return
 
         # 3. 全域彈窗與任務完成處理
@@ -151,7 +151,7 @@ class GameStateMachine:
                 btn_y = rect["top"] + pos[1] + 281
                 logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，點擊「領取獎勵」按鈕座標: ({btn_x}, {btn_y})。")
                 self.mouse.click(btn_x, btn_y)
-                time.sleep(0.4)
+                time.sleep(0.1)
                 return
 
         # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
@@ -172,7 +172,7 @@ class GameStateMachine:
                     if pos:
                         logging.info(f"👉 偵測到通用確認按鈕 [{conf_btn}] (信心度: {conf:.4f})，點擊關閉。")
                         self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                        time.sleep(0.3)
+                        time.sleep(0.08)
                         return
 
         # 4. 分發處理至當前狀態的 Handler

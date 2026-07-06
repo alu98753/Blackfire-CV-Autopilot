@@ -11,7 +11,7 @@ pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.1
 
 class MouseController:
-    def __init__(self, human_like=True):
+    def __init__(self, human_like=False):
         self.human_like = human_like
         self.last_action_time = 0.0
         self.last_target_pos = None
@@ -75,11 +75,11 @@ class MouseController:
 
             # 按下滑鼠、微小間隔、放開滑鼠，模擬真實點擊
             pyautogui.mouseDown()
-            time.sleep(random.uniform(0.01, 0.03))
+            time.sleep(0.005)
             pyautogui.mouseUp()
 
             # 點擊後稍微冷卻，提升連擊速度
-            time.sleep(random.uniform(0.03, 0.06))
+            time.sleep(0.005)
 
             # 記錄腳本最後操作滑鼠的位置與時間
             self.last_target_pos = (target_x, target_y)

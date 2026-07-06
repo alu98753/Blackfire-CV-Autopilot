@@ -61,7 +61,7 @@ def main():
             
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
-    parser.add_argument("--interval", type=float, default=0.3, help="畫面偵測間隔秒數 (預設: 0.3)")
+    parser.add_argument("--interval", type=float, default=0.05, help="畫面偵測間隔秒數 (預設: 0.05)")
     parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
                         help="掛機模式：stage (普通關卡) 或 dungeon_slime (史萊姆地下城)")
     args = parser.parse_args()
@@ -164,8 +164,8 @@ def main():
                     state_machine.user_operating = False
                     state_machine.prev_mouse_pos = pyautogui.position() # 防止瞬間重新觸發
                 else:
-                    # 暫停單步決策，等待 0.5 秒重新檢查
-                    time.sleep(0.5)
+                    # 暫停單步決策，等待 0.05 秒重新檢查
+                    time.sleep(0.05)
                     continue
                     
             # 3. 執行自動掛機單步決策
