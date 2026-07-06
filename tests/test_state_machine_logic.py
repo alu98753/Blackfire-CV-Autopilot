@@ -237,9 +237,10 @@ class TestStateMachineLogic(unittest.TestCase):
         
         mock_exists.return_value = True
         
-        # 1. 在結算畫面看到背包已滿 bagfull_quit.png ➔ 點擊並標記 need_bag_cleaning
+        # 1. 在結算畫面看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((100, 100), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0)
+            ((960, 228), 0.9) if name == "backpack_full.png" else (
+            ((100, 100), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0))
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(100, 100)
@@ -327,16 +328,18 @@ class TestStateMachineLogic(unittest.TestCase):
         
         mock_exists.return_value = True
         
-        # 1. 戰鬥中/結算時看到背包已滿 bagfull_quit.png ➔ 點擊並標記 need_bag_cleaning，並轉移至 EXPLORING
+        # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning，並轉移至 EXPLORING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((150, 150), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0)
+            ((960, 228), 0.9) if name == "backpack_full.png" else (
+            ((150, 150), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0))
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(150, 150)
         self.assertTrue(self.state_machine.need_bag_cleaning)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
         
-        # 2. 進入 EXPLORING 後，在下一幀因為 need_bag_cleaning 標記，應被 ExploreHandler 攔截轉移至 BAG_CLEANING
+        # 2. 進入 EXPLORING 後，此時彈窗已關閉，清除 mock 以防 global check 誤匹配，此時因 need_bag_cleaning 標記，應被 ExploreHandler 攔截轉移至 BAG_CLEANING
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
 
@@ -384,7 +387,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
-        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.current_state = self.state_machine.STATE_LOBBY
         
         mock_exists.return_value = True
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -419,7 +422,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
-        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         
         mock_exists.return_value = True
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -463,7 +466,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 執行 step，觸發 BackpackFullSortingHandler
         self.state_machine.step()
-        
+        print("MOCK CLICK CALLS:", self.mock_mouse.click.call_args_list)
         # 驗證最後一個被點選的是領取按鈕，證明整個鏈式分選流程成功執行
         self.mock_mouse.click.assert_called_with(700, 700)
 

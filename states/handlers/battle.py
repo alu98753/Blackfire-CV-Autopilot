@@ -8,20 +8,25 @@ class BattleHandler(BaseStateHandler):
         """
         戰鬥狀態處理：啟用自動戰鬥與監控戰鬥結算。
         """
-        # 0. 檢查戰鬥結算是否因為背包已滿而彈出提示 (common/bagfull_quit.png)
-        if os.path.exists(os.path.join("templates", "common/bagfull_quit.png")):
-            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bagfull_quit.png", threshold=0.8)
-            if pos_bag:
-                logging.warning(f"🧭 戰鬥中/結算時偵測到「背包已滿」！出現 'common/bagfull_quit.png'，點擊退出結算。")
-                self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
-                self.machine.need_bag_cleaning = True
-                time.sleep(0.15)
-                
-                if self.machine.config["type"] == "dungeon":
-                    self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
-                else:
-                    self.machine.transition_to(self.machine.STATE_RESULT)
-                return
+        # 0. 檢查戰鬥結算是否因為背包已滿而彈出提示 (需要同時看見 backpack_full.png 且能匹配到關閉按鈕)
+        if os.path.exists(os.path.join("templates", "backpack_full.png")):
+            pos_full, conf_full = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
+            if pos_full:
+                # 尋找退出按鈕進行點擊
+                for q_btn in ["common/bagfull_quit.png", "common/quit_bread.png", "dungeons/quit.png"]:
+                    if os.path.exists(os.path.join("templates", q_btn)):
+                        pos_bag, conf_bag = self.matcher.match(screen_img, q_btn, threshold=0.8)
+                        if pos_bag:
+                            logging.warning(f"🧭 戰鬥中/結算時偵測到「背包已滿」！出現 'backpack_full.png'，點擊退出按鈕 [{q_btn}]。")
+                            self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
+                            self.machine.need_bag_cleaning = True
+                            time.sleep(0.15)
+                            
+                            if self.machine.config["type"] == "dungeon":
+                                self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
+                            else:
+                                self.machine.transition_to(self.machine.STATE_RESULT)
+                            return
 
         # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 3.0):

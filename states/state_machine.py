@@ -159,7 +159,7 @@ class GameStateMachine:
             # 調低門檻至 0.7 以應對可能的光影或微幅變動，確保 100% 偵測成功
             pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
             if pos:
-                if self.current_state != self.STATE_BACKPACK_FULL_SORTING:
+                if self.current_state != self.STATE_BACKPACK_FULL_SORTING and self.current_state not in [self.STATE_BATTLE, self.STATE_RESULT]:
                     logging.warning(f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。")
                     self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
                     return

@@ -8,15 +8,20 @@ class ResultHandler(BaseStateHandler):
         """
         [關卡專屬] 處理關卡多段結算點擊。
         """
-        # A1. 檢查是否背包已滿 (common/bagfull_quit.png)
-        if os.path.exists(os.path.join("templates", "common/bagfull_quit.png")):
-            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bagfull_quit.png", threshold=0.8)
-            if pos_bag:
-                logging.warning(f"🧭 偵測到「背包已滿」！出現 'common/bagfull_quit.png'，點擊退出結算。")
-                self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
-                self.machine.need_bag_cleaning = True  # 標記需要清理背包
-                time.sleep(0.1)
-                return
+        # A1. 檢查是否背包已滿 (需要同時看見 backpack_full.png 且能匹配到關閉按鈕)
+        if os.path.exists(os.path.join("templates", "backpack_full.png")):
+            pos_full, conf_full = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
+            if pos_full:
+                # 尋找退出按鈕進行點擊
+                for q_btn in ["common/bagfull_quit.png", "common/quit_bread.png", "dungeons/quit.png"]:
+                    if os.path.exists(os.path.join("templates", q_btn)):
+                        pos_bag, conf_bag = self.matcher.match(screen_img, q_btn, threshold=0.8)
+                        if pos_bag:
+                            logging.warning(f"🧭 偵測到「背包已滿」！出現 'backpack_full.png'，點擊退出按鈕 [{q_btn}]。")
+                            self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
+                            self.machine.need_bag_cleaning = True  # 標記需要清理背包
+                            time.sleep(0.1)
+                            return
 
         # A2. 檢查結算通用確認彈窗 (例如關卡結算確認)
         pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
