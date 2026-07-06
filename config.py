@@ -39,10 +39,10 @@ GAME_CONFIGS = {
             "dungeons/quit.png",                    # 10. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
 
             # === 第二階段：地圖格與背景動作 (低優先級，沒有彈窗時才處理) ===
-            "dungeons/gungeon_godown.png",           # 11. 前進下一層
-            "dungeons/Treasure.png",                # 12. 寶箱房開箱
-            "dungeons/skill_event.png",             # 13. 技能事件卡片/選項 (放置於下樓之後，避免完成後在畫面上重複點擊)
-            "dungeons/dungeon_bless.png"            # 14. 接受祝福
+            "dungeons/Treasure.png",                # 11. 寶箱房開箱 (優先於下樓)
+            "dungeons/skill_event.png",             # 12. 技能事件卡片/選項 (優先於下樓)
+            "dungeons/dungeon_bless.png",           # 13. 接受祝福 (優先於下樓)
+            "dungeons/gungeon_godown.png"           # 14. 前進下一層 (下樓放到最後，確保本層事件做完後才下樓)
         ]
     }
 }

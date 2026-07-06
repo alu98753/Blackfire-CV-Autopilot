@@ -75,17 +75,17 @@ graph TD
     P9 -- No --> P10{10. dungeons/quit.png<br>關閉彈窗?}
     P10 -- Yes --> ClickP10[點擊退出彈窗] --> EndStep
     
-    P10 -- No --> P11{11. dungeons/gungeon_godown.png<br>前進下一層按鈕?}
-    P11 -- Yes --> ClickP11[點擊下樓] --> EndStep
+    P10 -- No --> P11{11. dungeons/Treasure.png<br>寶箱房箱子?}
+    P11 -- Yes --> ClickP11[點擊開箱] --> EndStep
     
-    P11 -- No --> P12{12. dungeons/Treasure.png<br>寶箱房箱子?}
-    P12 -- Yes --> ClickP12[點擊開箱] --> EndStep
+    P11 -- No --> P12{12. dungeons/skill_event.png<br>技能事件?}
+    P12 -- Yes --> ClickP12[點擊技能卡片/選項] --> EndStep
     
-    P12 -- No --> P13{13. dungeons/skill_event.png<br>技能事件?}
-    P13 -- Yes --> ClickP13[點擊技能卡片/選項] --> EndStep
+    P12 -- No --> P13{13. dungeons/dungeon_bless.png<br>接受祝福按鈕?}
+    P13 -- Yes --> ClickP13[點擊接受祝福] --> EndStep
     
-    P13 -- No --> P14{14. dungeons/dungeon_bless.png<br>接受祝福按鈕?}
-    P14 -- Yes --> ClickP14[點擊接受祝福] --> EndStep
+    P13 -- No --> P14{14. dungeons/gungeon_godown.png<br>前進下一層按鈕?}
+    P14 -- Yes --> ClickP14[點擊下樓] --> EndStep
     
     P14 -- No --> WaitLoad[等待下一層載入或事件出現] --> Sleep[等待 0.5 秒] --> EndStep
 ```
