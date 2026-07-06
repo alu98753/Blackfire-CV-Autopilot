@@ -235,7 +235,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_RESULT
         
-        mock_exists.return_value = True
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
         # 1. 在結算畫面看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
@@ -283,6 +285,12 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(600, 600)
         
+        # - 反選貴重物品階段：大掃描 (此時仍需比對 common/select_all.png 以便定位)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((600, 600), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        
         # - 看到 common/Disassembly.png ➔ 點擊分解
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((700, 700), 0.9) if name == "common/Disassembly.png" else (None, 0.0)
@@ -315,6 +323,45 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+
+    @patch('os.path.exists')
+    def test_backpack_cleaning_deselect_rare_items(self, mock_exists):
+        """
+        測試背包自動清理中的反選貴重物品邏輯：
+        當全選被點擊後，掃描 6x3 網格，若發現貴重物品 (例如藍色裝備)，點擊它以取消選取，隨後才進行分解。
+        """
+        import numpy as np
+        import cv2
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_select_all_clicked = True
+        self.state_machine.bag_deselected = False
+        
+        mock_exists.return_value = True
+        
+        # 建立假的 1080x1920 遊戲截圖
+        screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        # 定位 全選按鈕 在 (121, 628)
+        # 第一個 slot 的 center 在 (98, 203)，範圍為 (38, 143) 到 (158, 263)
+        # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品
+        cv2.rectangle(screen, (38, 143), (158, 263), (255, 0, 0), 5)
+        
+        self.mock_capturer.capture.return_value = screen
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 點擊過全選後，步進會執行反選掃描。此時 matcher 需要匹配 select_all.png 作為定位點
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((121, 628), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        )
+        
+        # 清除之前的點擊紀錄
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 應偵測到貴重物品，並對該 slot 中心點 (98, 203) 進行反向點擊
+        self.mock_mouse.click.assert_any_call(98, 203)
+        self.assertTrue(self.state_machine.bag_deselected)
 
     @patch('os.path.exists')
     def test_dungeon_battle_backpack_full_cleaning_flow(self, mock_exists):

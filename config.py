@@ -44,5 +44,12 @@ GAME_CONFIGS = {
             "dungeons/dungeon_bless.png",           # 13. 接受祝福 (優先於下樓)
             "dungeons/gungeon_godown.png"           # 14. 前進下一層 (下樓放到最後，確保本層事件做完後才下樓)
         ]
+    },
+    
+    # ------------------ 背包整理模式 ------------------
+    "bag_clean": {
+        "name": "背包整理",
+        "type": "bag_clean",
+        "navigation_path": [],
     }
 }

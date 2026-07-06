@@ -49,6 +49,21 @@ def check_mode_templates(config):
             if not os.path.exists(os.path.join("templates", btn)):
                 missing.append(btn)
                 
+    elif config["type"] == "bag_clean":
+        # 背包整理需要相關按鈕
+        bag_files = [
+            "common/bag.png",
+            "common/Backpack_Disassembly.png",
+            "common/select_all.png",
+            "common/Disassembly.png",
+            "common/confirm.png",
+            "common/tidy.png",
+            "common/quit.png"
+        ]
+        for btn in bag_files:
+            if not os.path.exists(os.path.join("templates", btn)):
+                missing.append(btn)
+                
     return missing
 
 def main():

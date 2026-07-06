@@ -272,6 +272,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_LOBBY
         self.state_machine.need_bag_cleaning = True
         mock_exists.return_value = True
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
         # 1. 偵測大廳 stages/start.png ➔ 攔截跳轉 BAG_CLEANING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
@@ -301,6 +304,12 @@ class TestBehavioralScenarios(unittest.TestCase):
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(600, 600)
+        
+        # - 反選貴重物品階段：大掃描 (此時仍需比對 common/select_all.png 以便定位)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((600, 600), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        )
+        self.state_machine.step()
         
         # - 分解
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (

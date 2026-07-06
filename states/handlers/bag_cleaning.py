@@ -1,14 +1,57 @@
 import os
 import time
 import logging
+import cv2
+import numpy as np
 from states.handlers.base import BaseStateHandler
 
 class BagCleaningHandler(BaseStateHandler):
     def handle(self, screen_img, rect):
         """
         背包清理狀態處理邏輯。
-        依序執行：打開背包 -> 大量分解 -> 全選 -> 分解 -> 確認 -> 整理 -> 退出背包。
+        依序執行：打開背包 -> 大量分解 -> 全選 -> 反選貴重物品 -> 分解 -> 確認 -> 整理 -> 退出背包。
         """
+        # 稀有度色彩分類函式 (與 BackpackFullSortingHandler 保持一致且更正為 120x120 邊界)
+        def classify_slot(crop):
+            mask = np.zeros(crop.shape[:2], dtype=np.uint8)
+            cv2.rectangle(mask, (0, 0), (120, 120), 255, -1)
+            cv2.rectangle(mask, (8, 8), (112, 112), 0, -1)
+            
+            ring_pixels = crop[mask == 255]
+            if len(ring_pixels) == 0:
+                return "gray_or_empty"
+                
+            hsv_pixels = cv2.cvtColor(np.expand_dims(ring_pixels, axis=0), cv2.COLOR_BGR2HSV)[0]
+            
+            counts = {
+                "red": 0,
+                "orange_yellow": 0,
+                "green": 0,
+                "blue": 0,
+                "purple": 0
+            }
+            
+            for h, s, v in hsv_pixels:
+                if s > 75 and v > 75:
+                    if h <= 9 or h >= 165:
+                        counts["red"] += 1
+                    elif 10 <= h <= 34:
+                        counts["orange_yellow"] += 1
+                    elif 35 <= h <= 85:
+                        counts["green"] += 1
+                    elif 90 <= h <= 130:
+                        counts["blue"] += 1
+                    elif 130 < h < 165:
+                        counts["purple"] += 1
+                        
+            max_color = "gray_or_empty"
+            max_count = 25
+            for color, count in counts.items():
+                if count > max_count:
+                    max_count = count
+                    max_color = color
+            return max_color
+
         # 1. 優先處理確認與 OK 彈窗 (例如大量分解確認、整理確認等)
         pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
         if pos_conf:
@@ -17,6 +60,7 @@ class BagCleaningHandler(BaseStateHandler):
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
                 self.machine.bag_select_all_clicked = False  # 重設全選狀態
+                self.machine.bag_deselected = False # 重設反選狀態
                 logging.info("🎒 背包清理：已完成分解確認，標記 bag_disassembled = True。")
             time.sleep(0.1)
             return
@@ -28,6 +72,7 @@ class BagCleaningHandler(BaseStateHandler):
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
                 self.machine.bag_select_all_clicked = False  # 重設全選狀態
+                self.machine.bag_deselected = False # 重設反選狀態
                 logging.info("🎒 背包清理：已完成分解確認，標記 bag_disassembled = True。")
             time.sleep(0.1)
             return
@@ -45,8 +90,15 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_tidied = False
                         self.machine.bag_disassembled = False  # 重設分解狀態
                         self.machine.bag_select_all_clicked = False  # 重設全選狀態
+                        self.machine.bag_deselected = False # 重設反選狀態
                         time.sleep(0.1)
                         
+                        # 如果是單獨的背包整理模式，在此完成後直接結束腳本
+                        if self.machine.config["type"] == "bag_clean":
+                            logging.info("🎒 [背包整理] 整理分解流程已全部完成！退出程式。")
+                            import sys
+                            sys.exit(0)
+                            
                         # 回歸原本的掛機狀態
                         if self.machine.config["type"] == "dungeon":
                             self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
@@ -65,7 +117,7 @@ class BagCleaningHandler(BaseStateHandler):
                     time.sleep(0.1)
                     return
 
-        # 4. 如果尚未分解，則執行分解流程：大量分解 -> 全選 -> 分解
+        # 4. 如果尚未分解，則執行分解流程：大量分解 -> 全選 -> 反選 -> 分解
         else:
             # 4.1 如果尚未點擊過「全選」，優先檢查與點擊「全選」
             if not getattr(self.machine, "bag_select_all_clicked", False):
@@ -75,10 +127,43 @@ class BagCleaningHandler(BaseStateHandler):
                         logging.info(f"🎒 背包清理：偵測到全選按鈕 [{conf_all:.4f}]，點擊全選。")
                         self.mouse.click(rect["left"] + pos_all[0], rect["top"] + pos_all[1])
                         self.machine.bag_select_all_clicked = True
+                        self.machine.bag_deselected = False  # 初始化反選標記
                         time.sleep(0.1)
                         return
 
-            # 4.2 如果已經點擊過「全選」，則檢查與點擊「分解」
+            # 4.2 如果已經點擊過「全選」，但尚未進行反向選擇，則掃描並反選稀有物品
+            elif not getattr(self.machine, "bag_deselected", False):
+                if os.path.exists(os.path.join("templates", "common/select_all.png")):
+                    pos_all, conf_all = self.matcher.match(screen_img, "common/select_all.png", threshold=0.8)
+                    if pos_all:
+                        logging.info("🎒 背包清理：開始掃描大量分解網格以反選貴重物品 (藍色及以上)...")
+                        
+                        # 6x3 網格掃描
+                        for r in range(3):
+                            for c in range(6):
+                                cx = pos_all[0] - 23 + c * 135
+                                cy = pos_all[1] - 425 + r * 135
+                                
+                                crop_x = cx - 60
+                                crop_y = cy - 60
+                                
+                                # 安全邊界檢查
+                                h_limit, w_limit = screen_img.shape[:2]
+                                if 0 <= crop_x and crop_x + 120 <= w_limit and 0 <= crop_y and crop_y + 120 <= h_limit:
+                                    crop = screen_img[crop_y:crop_y+120, crop_x:crop_x+120]
+                                    if np.std(crop) > 20.0:
+                                        color = classify_slot(crop)
+                                        # 藍、紫、橙黃、紅稀有度物品需要反向點擊取消選取
+                                        if color in ["blue", "purple", "orange_yellow", "red"]:
+                                            logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，進行點擊以取消選取！")
+                                            self.mouse.click(rect["left"] + cx, rect["top"] + cy)
+                                            time.sleep(0.08)
+                        
+                        self.machine.bag_deselected = True
+                        time.sleep(0.1)
+                        return
+
+            # 4.3 如果已經全選且反選完畢，則點擊「分解」
             else:
                 if os.path.exists(os.path.join("templates", "common/Disassembly.png")):
                     pos_dis, conf_dis = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.8)
@@ -88,7 +173,7 @@ class BagCleaningHandler(BaseStateHandler):
                         time.sleep(0.1)
                         return
 
-            # 4.3 檢查大量分解按鈕 (打開背包後會看見)
+            # 4.4 檢查大量分解按鈕 (打開背包後會看見)
             if os.path.exists(os.path.join("templates", "common/Backpack_Disassembly.png")):
                 pos_mass, conf_mass = self.matcher.match(screen_img, "common/Backpack_Disassembly.png", threshold=0.8)
                 if pos_mass:

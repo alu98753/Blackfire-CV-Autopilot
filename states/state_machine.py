@@ -56,6 +56,7 @@ class GameStateMachine:
         self.bag_tidied = False
         self.bag_disassembled = False
         self.bag_select_all_clicked = False
+        self.bag_deselected = False
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
@@ -241,7 +242,12 @@ class GameStateMachine:
                         self.transition_to(self.STATE_DUNGEON_EXPLORING)
                         return
                         
-        # 5. 如果以上皆非，依模式給予最安全的預設落點
+        # 5. 如果是背包整理模式，強制跳轉至 BAG_CLEANING
+        if self.config["type"] == "bag_clean":
+            self.transition_to(self.STATE_BAG_CLEANING)
+            return
+
+        # 6. 如果以上皆非，依模式給予最安全的預設落點
         if self.config["type"] == "dungeon":
             # 地下城模式下，大部份時間都在走格探索，預設回到 EXPLORING 狀態最為安全
             logging.info("❓ 未能辨識出特定探索按鈕，預設進入 EXPLORING 狀態。")
