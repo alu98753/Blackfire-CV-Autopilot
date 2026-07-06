@@ -30,7 +30,7 @@ def check_mode_templates(config):
         if not os.path.exists(os.path.join("templates", lobby_btn)):
             missing.append(lobby_btn)
             
-        retry_btn = "retry.png"
+        retry_btn = "stages/retry.png"
         if not os.path.exists(os.path.join("templates", retry_btn)):
             missing.append(retry_btn)
             
@@ -40,7 +40,7 @@ def check_mode_templates(config):
         if not os.path.exists(os.path.join("templates", fight_btn)):
             missing.append(fight_btn)
             
-        complete_btn = "dungeons_complete.png"
+        complete_btn = "dungeons/dungeons_complete.png"
         if not os.path.exists(os.path.join("templates", complete_btn)):
             missing.append(complete_btn)
             

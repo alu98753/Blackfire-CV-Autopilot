@@ -36,9 +36,12 @@ class GameStateMachine:
         templates = []
         templates_dir = "templates"
         if os.path.exists(templates_dir):
-            for f in os.listdir(templates_dir):
-                if f.startswith("continue") and f.endswith(".png"):
-                    templates.append(f)
+            for root, dirs, files in os.walk(templates_dir):
+                for f in files:
+                    if f.startswith("continue") and f.endswith(".png"):
+                        # 計算相對於 templates_dir 的相對路徑，並將 Windows 斜線替換為正斜線
+                        rel_path = os.path.relpath(os.path.join(root, f), templates_dir)
+                        templates.append(rel_path.replace("\\", "/"))
         templates.sort()
         logging.info(f"🔍 偵測到之「繼續」按鈕模板清單: {templates}")
         return templates
@@ -121,7 +124,7 @@ class GameStateMachine:
 
         # 主動判定：如果我們已經看到任何地下城探索或結束按鈕，說明點擊已經成功並進入內部，直接轉移狀態！
         if self.config["type"] == "dungeon":
-            for check_btn in ["dungeon_fight.png", "dungeon_bless.png", "Treasure.png", "gungeon_godown.png", "dungeons_complete.png"]:
+            for check_btn in ["dungeons/dungeon_fight.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png", "dungeons/dungeons_complete.png"]:
                 if os.path.exists(os.path.join("templates", check_btn)):
                     pos, conf = self.matcher.match(screen_img, check_btn, threshold=0.8)
                     if pos:
@@ -152,9 +155,9 @@ class GameStateMachine:
         """
         戰鬥狀態處理：啟用自動戰鬥與監控戰鬥結算。
         """
-        # A. 檢查是否需要啟動自動戰鬥 (auto.png)
-        if os.path.exists(os.path.join("templates", "auto.png")) and (time.time() - self.last_auto_click_time > 3.0):
-            pos_auto, conf_auto = self.matcher.match(screen_img, "auto.png", threshold=0.7)
+        # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
+        if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.last_auto_click_time > 3.0):
+            pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
             logging.info(f"🔍 檢查自動戰鬥按鈕... 最大相似度: {conf_auto:.4f} (閥值: 0.7)")
             if pos_auto:
                 logging.info(f"👉 偵測到「自動戰鬥」按鈕（目前為未啟用狀態），進行點擊啟用！")
@@ -213,7 +216,7 @@ class GameStateMachine:
         [關卡專屬] 處理關卡多段結算點擊。
         """
         # A. 檢查「再戰」
-        pos_retry, conf_retry = self.matcher.match(screen_img, "retry.png", threshold=0.8)
+        pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8)
         if pos_retry:
             logging.info("👉 點擊「再戰」！")
             self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
@@ -255,9 +258,9 @@ class GameStateMachine:
         """
         [地下城專屬] 依照優先級掃描探險事件。
         """
-        # 1. 優先判定是否已經進入真實戰鬥中 (看見 auto.png)
-        if os.path.exists(os.path.join("templates", "auto.png")):
-            pos_auto, conf_auto = self.matcher.match(screen_img, "auto.png", threshold=0.7)
+        # 1. 優先判定是否已經進入真實戰鬥中 (看見 common/auto.png)
+        if os.path.exists(os.path.join("templates", "common/auto.png")):
+            pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
             if pos_auto:
                 logging.info(f"⚔️ 偵測到戰鬥已真正開始（出現 auto 按鈕，相似度: {conf_auto:.4f}），進入戰鬥狀態！")
                 self.battle_start_time = time.time()
@@ -272,7 +275,7 @@ class GameStateMachine:
                 
             pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
             if pos:
-                if btn_name == "dungeons_complete.png":
+                if btn_name == "dungeons/dungeons_complete.png":
                     logging.info(f"🎉 偵測到【地下城通關結束】({btn_name})，信心度: {conf:.4f}，點擊退出。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.run_count += 1
@@ -281,7 +284,7 @@ class GameStateMachine:
                     self.transition_to(self.STATE_NAVIGATING)
                     time.sleep(2.0)
                     
-                elif btn_name == "dungeon_fight.png":
+                elif btn_name == "dungeons/dungeon_fight.png":
                     logging.info(f"⚔️ 偵測到【戰鬥房入口】({btn_name})，信心度: {conf:.4f}，點擊進入。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     # 注意：此處不轉移至 STATE_BATTLE，因為進入後需要先選擇祝福 (bless)。
@@ -304,9 +307,9 @@ class GameStateMachine:
         """
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
-        # 1. 檢查是否在戰鬥中 (看到 auto.png 必定在戰鬥)
-        if os.path.exists(os.path.join("templates", "auto.png")):
-            pos, _ = self.matcher.match(screen_img, "auto.png", threshold=0.7)
+        # 1. 檢查是否在戰鬥中 (看到 common/auto.png 必定在戰鬥)
+        if os.path.exists(os.path.join("templates", "common/auto.png")):
+            pos, _ = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
             if pos:
                 self.transition_to(self.STATE_BATTLE)
                 return
@@ -330,7 +333,7 @@ class GameStateMachine:
         if self.config["type"] == "dungeon":
             for btn_name in self.config["explore_priorities"]:
                 # 如果看見任何探索或通關完成按鈕，說明處於探索狀態
-                if btn_name in ["dungeons_complete.png", "gungeon_godown.png", "Treasure.png", "dungeon_bless.png"]:
+                if btn_name in ["dungeons/dungeons_complete.png", "dungeons/gungeon_godown.png", "dungeons/Treasure.png", "dungeons/dungeon_bless.png"]:
                     pos, _ = self.matcher.match(screen_img, btn_name, threshold=0.8)
                     if pos:
                         self.transition_to(self.STATE_DUNGEON_EXPLORING)
