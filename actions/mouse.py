@@ -14,6 +14,33 @@ class MouseController:
     def __init__(self, human_like=True):
         self.human_like = human_like
         self.last_action_time = 0.0
+        self.last_target_pos = None
+        self.state_machine = None
+
+    def check_user_intervention(self):
+        """
+        檢查使用者是否手動移動了滑鼠。如果是，則更新狀態機為暫停狀態並回傳 True。
+        """
+        if self.state_machine is None:
+            return False
+            
+        cur_pos = pyautogui.position()
+        if self.last_target_pos is not None:
+            dx = abs(cur_pos[0] - self.last_target_pos[0])
+            dy = abs(cur_pos[1] - self.last_target_pos[1])
+            if dx > 5 or dy > 5:
+                # 只有當距離上次腳本動作有一定時間間隔時才判定為手動介入，防自點誤判
+                last_action_diff = time.time() - self.last_action_time
+                if last_action_diff > 1.2 or self.state_machine.user_operating:
+                    if not self.state_machine.user_operating:
+                        logging.warning(f"⚠️ [MouseController] 偵測到使用者手動操作 (滑鼠移動至 {cur_pos})，禁止腳本移動滑鼠。")
+                        self.state_machine.user_operating = True
+                    self.state_machine.last_user_operation_time = time.time()
+                    return True
+        else:
+            # 首次運行，初始化
+            self.last_target_pos = cur_pos
+        return self.state_machine.user_operating
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(0.03, 0.07)):
         """
@@ -24,10 +51,11 @@ class MouseController:
         :param offset_range: (min_offset, max_offset) 的隨機偏移範圍
         :param move_duration: (min_sec, max_sec) 的滑鼠移動時間範圍
         """
+        if self.check_user_intervention():
+            logging.info("🚫 使用者介入中，取消點擊動作。")
+            return False
+
         try:
-            # 記錄腳本最後操作滑鼠的時間
-            self.last_action_time = time.time()
-            
             # 計算偏移後的目標座標
             dx = random.randint(offset_range[0], offset_range[1])
             dy = random.randint(offset_range[0], offset_range[1])
@@ -52,6 +80,10 @@ class MouseController:
 
             # 點擊後稍微冷卻，提升連擊速度
             time.sleep(random.uniform(0.03, 0.06))
+
+            # 記錄腳本最後操作滑鼠的位置與時間
+            self.last_target_pos = (target_x, target_y)
+            self.last_action_time = time.time()
             return True
         except pyautogui.FailSafeException:
             logging.error("🔴 觸發 PyAutoGUI 安全終止 (FailSafe) 機制！滑鼠已移至螢幕角落。")
@@ -83,11 +115,18 @@ class MouseController:
         :param x: 滾動目標的絕對 X 座標（可選，若指定則先移動至該處）。
         :param y: 滾動目標的絕對 Y 座標（可選，若指定則先移動至該處）。
         """
+        if self.check_user_intervention():
+            logging.info("🚫 使用者介入中，取消滾動動作。")
+            return False
+
         try:
-            self.last_action_time = time.time()
             if x is not None and y is not None:
                 pyautogui.moveTo(x, y)
+                self.last_target_pos = (x, y)
+            else:
+                self.last_target_pos = pyautogui.position()
             pyautogui.scroll(clicks)
+            self.last_action_time = time.time()
             time.sleep(0.3)
             return True
         except Exception as e:

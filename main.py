@@ -117,6 +117,8 @@ def main():
     
     # 初始化狀態機 (傳入模式配置)
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+    # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
+    mouse.state_machine = state_machine
     # 將當前配置與體力啟用狀態設定至狀態機中
     state_machine.config = config
     state_machine.enable_bread = enable_bread

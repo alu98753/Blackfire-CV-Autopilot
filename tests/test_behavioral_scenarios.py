@@ -463,5 +463,69 @@ class TestBehavioralScenarios(unittest.TestCase):
             mock_step.assert_called_once()
             self.assertFalse(self.state_machine.user_operating)
 
+    @patch('pyautogui.position')
+    @patch('time.time')
+    @patch('pyautogui.moveTo')
+    def test_mouse_controller_prohibits_movement_on_user_operating(self, mock_move_to, mock_time, mock_pyautogui_pos):
+        """
+        [行為場景 8] 腳本防搶滑鼠控制行為：
+        Given: 腳本已與狀態機建立關聯，且狀態機中 user_operating 為 True。
+        When: 腳本調用 mouse.click() 或 mouse.scroll()。
+        Then:
+          1. 應拒絕執行動作（立即回傳 False），且不呼叫 pyautogui.moveTo。
+        """
+        from actions.mouse import MouseController
+        controller = MouseController(human_like=False)
+        controller.state_machine = self.state_machine
+        
+        # 模擬狀態為使用者介入中
+        self.state_machine.user_operating = True
+        mock_pyautogui_pos.return_value = (100, 100)
+        
+        # 呼叫 click 應拒絕並回傳 False
+        res = controller.click(500, 500)
+        self.assertFalse(res)
+        mock_move_to.assert_not_called()
+        
+        # 呼叫 scroll 應拒絕並回傳 False
+        res_scroll = controller.scroll(-5, 500, 500)
+        self.assertFalse(res_scroll)
+        mock_move_to.assert_not_called()
+
+    @patch('pyautogui.position')
+    @patch('time.time')
+    @patch('pyautogui.moveTo')
+    def test_mouse_controller_detects_shift_and_prohibits_movement(self, mock_move_to, mock_time, mock_pyautogui_pos):
+        """
+        [行為場景 9] 腳本執行點擊前，主動檢查滑鼠是否已被使用者移動：
+        Given: 狀態機中 user_operating 為 False，但實際滑鼠游標位置已被手動移開。
+        When: 腳本調用 mouse.click()。
+        Then:
+          1. 偵測到滑鼠游標從上次操作點 (100, 100) 移到了 (200, 200)，時間間隔大於 1.2 秒。
+          2. 點擊被拒絕（回傳 False）。
+          3. 狀態機的 user_operating 標記被強制更新為 True。
+        """
+        from actions.mouse import MouseController
+        controller = MouseController(human_like=False)
+        controller.state_machine = self.state_machine
+        
+        self.state_machine.user_operating = False
+        
+        # 模擬上一次點擊位置為 (100, 100)，操作時間為 1000s
+        controller.last_target_pos = (100, 100)
+        controller.last_action_time = 1000.0
+        
+        # 當前時間為 1002s，且手動移到 (200, 200)
+        mock_time.return_value = 1002.0
+        mock_pyautogui_pos.return_value = (200, 200)
+        
+        # 呼叫 click
+        res = controller.click(500, 500)
+        
+        # 應點擊失敗並更新狀態為 True
+        self.assertFalse(res)
+        self.assertTrue(self.state_machine.user_operating)
+        mock_move_to.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
