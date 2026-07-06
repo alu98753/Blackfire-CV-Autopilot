@@ -372,5 +372,39 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(960, 600)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
 
+    @patch('os.path.exists')
+    def test_global_backpack_full_interception(self, mock_exists):
+        """
+        測試全域背包滿攔截器：
+        1. 看到 backpack_full.png ➔ 點擊右上角關閉 (相對 X+580, Y-300) 且設定 need_bag_cleaning
+        2. 隨後看到 confirm.png ➔ 自動點選確認關閉
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = False
+        self.state_machine.need_bread_collection = False
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        
+        mock_exists.return_value = True
+        
+        # 模擬擷取視窗大小 (1920x1080)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 1. 偵測到 backpack_full.png 位於中心 (960, 540)
+        # 預計點擊右上角關閉: X=960+580=1540, Y=540-300=240
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((960, 540), 0.9) if name == "backpack_full.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(1540, 240)
+        self.assertTrue(self.state_machine.need_bag_cleaning)
+        
+        # 2. 關閉彈窗後彈出 confirm.png
+        # 通用確認攔截器應點選確認關閉
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((960, 600), 0.9) if name == "common/confirm.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(960, 600)
+
 if __name__ == "__main__":
     unittest.main()

@@ -135,13 +135,26 @@ class GameStateMachine:
                 time.sleep(0.4)
                 return
 
-        # 3.2 在大廳狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵後的確認)
-        if self.current_state == self.STATE_LOBBY:
+        # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
+        if os.path.exists(os.path.join("templates", "backpack_full.png")):
+            pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.8)
+            if pos:
+                # 計算右上角 X 關閉按鈕相對座標並點擊 (dx=580, dy=-300)
+                btn_x = rect["left"] + pos[0] + 580
+                btn_y = rect["top"] + pos[1] - 300
+                logging.warning(f"🎒 偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，點擊右上角關閉按鈕座標: ({btn_x}, {btn_y})，並標記需要清理背包。")
+                self.mouse.click(btn_x, btn_y)
+                self.need_bag_cleaning = True
+                time.sleep(0.4)
+                return
+
+        # 3.3 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認)
+        if self.current_state == self.STATE_LOBBY or self.need_bag_cleaning:
             for conf_btn in ["common/confirm.png", "common/ok.png"]:
                 if os.path.exists(os.path.join("templates", conf_btn)):
                     pos, conf = self.matcher.match(screen_img, conf_btn, threshold=0.8)
                     if pos:
-                        logging.info(f"👉 在大廳狀態下偵測到通用確認按鈕 [{conf_btn}] (信心度: {conf:.4f})，點擊關閉。")
+                        logging.info(f"👉 偵測到通用確認按鈕 [{conf_btn}] (信心度: {conf:.4f})，點擊關閉。")
                         self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                         time.sleep(0.3)
                         return
