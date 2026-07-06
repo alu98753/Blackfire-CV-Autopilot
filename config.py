@@ -26,15 +26,18 @@ GAME_CONFIGS = {
         # 地下城探險中 (層與層之間) 畫面所有事件按鈕的優先級 (由高到低比對)
         # 注意：choice_bless.png 必須在 quit.png 之前，確保先點選取祝福，才點擊退出關閉事件！
         "explore_priorities": [
+            # === 第一階段：彈窗與對話框處理 (高優先級，必須先解決，否則會卡在畫面上) ===
             "dungeons/dungeons_complete.png",       # 1. 地下城通關結束
-            "dungeons/gungeon_godown_confirm.png",   # 2. 確認前進下一層
-            "dungeons/gungeon_godown.png",           # 3. 前進下一層
-            "dungeons/dungeon_fight.png",           # 4. 戰鬥房入口
-            "dungeons/Get_tresure_comfirm.png",     # 5. 獲得寶物確認
-            "dungeons/Get_tresure.png",             # 6. 獲得寶物
-            "dungeons/Treasure.png",                # 7. 寶箱房開箱
-            "dungeons/choice_bless.png",            # 8. 選擇祝福 (必須優先於 quit.png 處理)
-            "dungeons/quit.png",                    # 9. 結束/關閉事件 (例如選擇祝福後的退出按鈕)
+            "dungeons/gungeon_godown_confirm.png",   # 2. 確認前進下一層 (下樓彈窗)
+            "dungeons/Get_tresure_comfirm.png",     # 3. 獲得寶物確認
+            "dungeons/Get_tresure.png",             # 4. 獲得寶物
+            "dungeons/choice_bless.png",            # 5. 選擇祝福 (準備進入戰鬥或接受祝福後的彈窗選項)
+            "dungeons/quit.png",                    # 6. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
+
+            # === 第二階段：地圖格與背景動作 (低優先級，沒有彈窗時才處理) ===
+            "dungeons/gungeon_godown.png",           # 7. 前進下一層
+            "dungeons/dungeon_fight.png",           # 8. 戰鬥房入口
+            "dungeons/Treasure.png",                # 9. 寶箱房開箱
             "dungeons/dungeon_bless.png"            # 10. 接受祝福
         ]
     }
