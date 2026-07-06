@@ -161,6 +161,62 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
 
     @patch('os.path.exists')
+    def test_dungeon_skill_event_and_descend_flow(self, mock_exists):
+        """
+        測試地下城模式技能事件與下樓流程：
+        點擊技能事件 ➔ 點擊選擇 ➔ 點擊確認/OK ➔ 點擊退出 ➔ 點擊下樓 ➔ 點擊下樓確認。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = False
+        self.state_machine.need_bread_collection = False
+        self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
+        
+        mock_exists.return_value = True
+        
+        # 1. 看到 skill_event.png ➔ 點擊
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((150, 150), 0.9) if name == "dungeons/skill_event.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(150, 150)
+        
+        # 2. 看到 choose.png ➔ 點擊
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((250, 250), 0.9) if name == "dungeons/choose.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(250, 250)
+        
+        # 3. 看到 common/ok.png ➔ 點擊確認
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((350, 350), 0.9) if name == "common/ok.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(350, 350)
+        
+        # 4. 看到 quit.png ➔ 點擊退出
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((450, 450), 0.9) if name == "dungeons/quit.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(450, 450)
+        
+        # 5. 看到 gungeon_godown.png ➔ 點擊下樓
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((550, 550), 0.9) if name == "dungeons/gungeon_godown.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(550, 550)
+        
+        # 6. 看到 gungeon_godown_confirm.png ➔ 點擊確認下樓
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((650, 650), 0.9) if name == "dungeons/gungeon_godown_confirm.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(650, 650)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
+    @patch('os.path.exists')
     def test_backpack_full_cleaning_flow(self, mock_exists):
         """
         測試背包已滿自動清理流程：戰鬥結算偵測到背包滿 ➔ 設定標記 ➔ 回大廳進入 BAG_CLEANING ➔ 執行清理步驟 ➔ 回大廳。
