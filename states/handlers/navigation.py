@@ -42,37 +42,41 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(0.2)
                     return
 
-                # 2. 免費領取鑽石按鈕 (diamond_free.png)
-                # 使用較高閥值 (0.90) 以避免誤判到付費的 $4.99 按鈕
-                has_free_diamond = False
-                if os.path.exists(os.path.join("templates", "diamond_free.png")):
-                    pos_free, conf_free = self.matcher.match(screen_img, "diamond_free.png", threshold=0.90)
-                    if pos_free:
-                        has_free_diamond = True
-                        logging.info(f"💎 領鑽石：偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
-                        self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
-                        time.sleep(0.2)
-                        return
+                # 檢查是否在領鑽石彈窗內 (尋找退出/關閉按鈕)
+                in_diamond_window = False
+                active_quit_btn = None
+                quit_pos = None
+                for quit_btn in ["common/quit_bread.png", "dungeons/quit.png"]:
+                    if os.path.exists(os.path.join("templates", quit_btn)):
+                        pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
+                        if pos_quit:
+                            # 有退出按鈕在畫面上，高機率已經在彈窗內
+                            in_diamond_window = True
+                            active_quit_btn = quit_btn
+                            quit_pos = pos_quit
+                            break
 
-                # 如果進入了鑽石視窗 (大廳鑽石入口 diamond.png 不在畫面上且有 quit_bread.png 或 quit.png 退出按鈕)
-                # 但卻沒有偵測到「免費」鑽石領取按鈕，代表免費鑽石包正處於冷卻計時狀態。
-                # 為防點擊到付費按鈕，我們應在此時點點退出按鈕直接退出，結束本次領鑽石流程。
-                if not has_free_diamond:
-                    for quit_btn in ["common/quit_bread.png", "dungeons/quit.png"]:
-                        if os.path.exists(os.path.join("templates", quit_btn)):
-                            pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
-                            if pos_quit:
-                                # 再次比對大廳的鑽石按鈕 diamond.png，確認真的不在畫面上 (以防此時其實是在大廳)
-                                pos_dia, conf_dia = self.matcher.match(screen_img, "diamond.png", threshold=0.8)
-                                if not pos_dia:
-                                    logging.info(f"💎 領鑽石：畫面無免費鑽石領取按鈕 (處於冷卻)，偵測到退出按鈕 [{quit_btn}]，點擊退出。")
-                                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                                    self.machine.need_diamond_collection = False
-                                    self.machine.diamond_collected_this_run = False
-                                    self.machine.last_diamond_collection_time = time.time()
-                                    time.sleep(0.3)
-                                    return
+                if in_diamond_window:
+                    # 2. 如果在彈窗內，只嘗試領取免費鑽石 (diamond_free.png)
+                    # 使用較高閥值 (0.90) 以避免誤判到付費的 $4.99 按鈕
+                    if os.path.exists(os.path.join("templates", "diamond_free.png")):
+                        pos_free, conf_free = self.matcher.match(screen_img, "diamond_free.png", threshold=0.90)
+                        if pos_free:
+                            logging.info(f"💎 領鑽石：在視窗內偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
+                            self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
+                            time.sleep(0.2)
+                            return
 
+                    # 3. 如果在彈窗內但沒有免費鑽石按鈕，說明鑽石正處於冷卻，點點退出按鈕關閉
+                    logging.info(f"💎 領鑽石：鑽石視窗已開啟但無免費按鈕 (處於冷卻)，點擊退出按鈕 [{active_quit_btn}] 退出。")
+                    self.mouse.click(rect["left"] + quit_pos[0], rect["top"] + quit_pos[1])
+                    self.machine.need_diamond_collection = False
+                    self.machine.diamond_collected_this_run = False
+                    self.machine.last_diamond_collection_time = time.time()
+                    time.sleep(0.3)
+                    return
+
+                # 4. 如果不在彈窗內，再嘗試點擊鑽石入口或返回城鎮
                 # 3. 鑽石按鈕 (diamond.png)
                 if os.path.exists(os.path.join("templates", "diamond.png")):
                     pos_dia, conf_dia = self.matcher.match(screen_img, "diamond.png", threshold=0.8)
