@@ -403,7 +403,7 @@ class TestStateMachineLogic(unittest.TestCase):
             ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(1540, 240)
+        self.mock_mouse.click.assert_called_with(1558, 241)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
 
     @patch('os.path.exists')
