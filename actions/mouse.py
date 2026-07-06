@@ -13,6 +13,7 @@ pyautogui.PAUSE = 0.1
 class MouseController:
     def __init__(self, human_like=True):
         self.human_like = human_like
+        self.last_action_time = 0.0
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(0.05, 0.12)):
         """
@@ -24,6 +25,9 @@ class MouseController:
         :param move_duration: (min_sec, max_sec) 的滑鼠移動時間範圍
         """
         try:
+            # 記錄腳本最後操作滑鼠的時間
+            self.last_action_time = time.time()
+            
             # 計算偏移後的目標座標
             dx = random.randint(offset_range[0], offset_range[1])
             dy = random.randint(offset_range[0], offset_range[1])

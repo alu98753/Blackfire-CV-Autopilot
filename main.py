@@ -127,10 +127,46 @@ def main():
     time.sleep(3)
 
     try:
+        import pyautogui  # 導入 pyautogui 用於滑鼠座標位置監控
+        
+        # 初始記錄一次滑鼠座標
+        state_machine.prev_mouse_pos = pyautogui.position()
+        
         while True:
             start_time = time.time()
             
-            # 執行單步決策
+            # 1. 偵測使用者手動介入操作 (滑鼠移動檢測)
+            cur_pos = pyautogui.position()
+            
+            if state_machine.prev_mouse_pos is not None:
+                dx = abs(cur_pos[0] - state_machine.prev_mouse_pos[0])
+                dy = abs(cur_pos[1] - state_machine.prev_mouse_pos[1])
+                
+                # 若滑鼠偏移大於 5 像素且腳本在 1.2 秒內無動作，視為手動介入
+                if dx > 5 or dy > 5:
+                    last_action_diff = time.time() - state_machine.mouse.last_action_time
+                    if last_action_diff > 1.2:
+                        if not state_machine.user_operating:
+                            logging.warning(f"⚠️ 偵測到使用者手動操作 (滑鼠移動至 {cur_pos})，自動暫停掛機，鎖定目前狀態: [{state_machine.current_state}]。")
+                            state_machine.user_operating = True
+                        state_machine.last_user_operation_time = time.time()
+            
+            # 更新滑鼠座標快照
+            state_machine.prev_mouse_pos = cur_pos
+            
+            # 2. 處理手動操作暫停期
+            if state_machine.user_operating:
+                # 使用者停止操作 3.0 秒後恢復自動掛機
+                if time.time() - state_machine.last_user_operation_time > 3.0:
+                    logging.info(f"🟢 偵測到使用者已停止手動操作達 3 秒，恢復自動掛機。鎖定狀態: [{state_machine.current_state}]。")
+                    state_machine.user_operating = False
+                    state_machine.prev_mouse_pos = pyautogui.position() # 防止瞬間重新觸發
+                else:
+                    # 暫停單步決策，等待 0.5 秒重新檢查
+                    time.sleep(0.5)
+                    continue
+                    
+            # 3. 執行自動掛機單步決策
             state_machine.step()
             
             # 計算該步所花費時間，若低於設定的偵測間隔，則補足間隔時間

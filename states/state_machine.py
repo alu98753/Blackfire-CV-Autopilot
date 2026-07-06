@@ -54,6 +54,11 @@ class GameStateMachine:
         self.bless_received_this_floor = False
         self.last_godown_click_time = None
         
+        # 使用者手動介入偵測相關屬性
+        self.user_operating = False
+        self.last_user_operation_time = 0.0
+        self.prev_mouse_pos = None
+        
         # 動態尋找所有 continue*.png 模板
         self.continue_templates = self._discover_continue_templates()
         
@@ -117,7 +122,31 @@ class GameStateMachine:
             time.sleep(1)
             return
 
-        # 3. 分發處理至當前狀態的 Handler
+        # 3. 全域彈窗與任務完成處理
+        # 3.1 檢查「任務完成」彈窗 (task_complete.png)
+        if os.path.exists(os.path.join("templates", "task_complete.png")):
+            pos, conf = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
+            if pos:
+                # 計算「領取獎勵」按鈕的相對位置並點擊
+                btn_x = rect["left"] + pos[0]
+                btn_y = rect["top"] + pos[1] + 281
+                logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，點擊「領取獎勵」按鈕座標: ({btn_x}, {btn_y})。")
+                self.mouse.click(btn_x, btn_y)
+                time.sleep(1.0)
+                return
+
+        # 3.2 在大廳狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵後的確認)
+        if self.current_state == self.STATE_LOBBY:
+            for conf_btn in ["common/confirm.png", "common/ok.png"]:
+                if os.path.exists(os.path.join("templates", conf_btn)):
+                    pos, conf = self.matcher.match(screen_img, conf_btn, threshold=0.8)
+                    if pos:
+                        logging.info(f"👉 在大廳狀態下偵測到通用確認按鈕 [{conf_btn}] (信心度: {conf:.4f})，點擊關閉。")
+                        self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                        time.sleep(1.0)
+                        return
+
+        # 4. 分發處理至當前狀態的 Handler
         handler = self.handlers.get(self.current_state)
         if handler:
             handler.handle(screen_img, rect)
