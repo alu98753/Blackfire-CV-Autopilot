@@ -77,3 +77,38 @@ graph TD
     
     P10 -- No --> WaitLoad[等待下一層載入或事件出現] --> Sleep[等待 0.5 秒] --> EndStep
 ```
+
+---
+
+## 3. 🎒 自動清理背包決策樹 (Backpack Cleaning Flow)
+
+當戰鬥結算偵測到 `common/bagfull_quit.png`（背包已滿）時，程式會點選退出結算並設定清理標記。一旦程式回到準備大廳（普通關卡）或地圖探索畫面（地下城），會**優先攔截並進入 `STATE_BAG_CLEANING` 狀態**，依以下流程進行全自動大量分解與整理：
+
+```mermaid
+graph TD
+    StartClean([進入背包清理狀態]) --> CheckDialog{畫面上是否有 confirm.png<br>或 ok.png 彈窗?}
+    
+    CheckDialog -- Yes --> ClickDialog[點擊確認/OK] --> Sleep1[等待 1.2 秒] --> EndStep[結束本步]
+    CheckDialog -- No --> CheckTidied{狀態是否已標記為 bag_tidied?}
+    
+    CheckTidied -- Yes --> FindQuit{尋找 quit.png<br>或 quit_bread.png?}
+    FindQuit -- Yes --> ClickQuit[點擊關閉背包] --> ResetFlags[重設清理標記與 bag_tidied] --> TransBack[轉移回 LOBBY<br>或 EXPLORING] --> Done([清理結束])
+    FindQuit -- No --> WaitQuit[等待退出按鈕出現] --> SleepQuit[等待 0.5 秒] --> EndStep
+    
+    CheckTidied -- No --> CheckTidy{畫面上是否有 tidy.png?}
+    CheckTidy -- Yes --> ClickTidy[點擊整理按鈕] --> MarkTidied[設定標記 bag_tidied = True] --> SleepTidy[等待 1.2 秒] --> EndStep
+    CheckTidy -- No --> CheckDis{畫面上是否有 Disassembly.png?}
+    
+    CheckDis -- Yes --> ClickDis[點擊分解按鈕] --> SleepDis[等待 1.2 秒] --> EndStep
+    CheckDis -- No --> CheckSelect{畫面上是否有 select_all.png?}
+    
+    CheckSelect -- Yes --> ClickSelect[點擊全選按鈕] --> SleepSelect[等待 1.2 秒] --> EndStep
+    CheckSelect -- No --> CheckMass{畫面上是否有 Backpack_Disassembly.png?}
+    
+    CheckMass -- Yes --> ClickMass[點擊大量分解按鈕] --> SleepMass[等待 1.2 秒] --> EndStep
+    CheckMass -- No --> CheckBag{畫面上是否有 bag.png?}
+    
+    CheckBag -- Yes --> ClickBag[點擊打開背包] --> SleepBag[等待 1.5 秒] --> EndStep
+    CheckBag -- No --> WaitBag[等待背包載入或按鈕出現] --> SleepWait[等待 0.5 秒] --> EndStep
+```
+
