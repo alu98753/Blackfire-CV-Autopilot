@@ -31,11 +31,11 @@ GAME_CONFIGS = {
             "common/confirm.png",                   # 2. 通用確認彈窗 (如：下樓確認、獲得寶物確認等)
             "dungeons/Get_tresure.png",             # 3. 獲得寶物
             "dungeons/choice_bless.png",            # 4. 選擇祝福 (準備進入戰鬥或接受祝福後的彈窗選項)
-            "dungeons/quit.png",                    # 5. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
+            "dungeons/dungeon_fight.png",           # 5. 戰鬥房入口 (優先級調高，避免在入口彈窗誤點 quit 關閉)
+            "dungeons/quit.png",                    # 6. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
 
             # === 第二階段：地圖格與背景動作 (低優先級，沒有彈窗時才處理) ===
-            "dungeons/gungeon_godown.png",           # 6. 前進下一層
-            "dungeons/dungeon_fight.png",           # 7. 戰鬥房入口
+            "dungeons/gungeon_godown.png",           # 7. 前進下一層
             "dungeons/Treasure.png",                # 8. 寶箱房開箱
             "dungeons/dungeon_bless.png"            # 9. 接受祝福
         ]
