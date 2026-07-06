@@ -91,7 +91,7 @@ def main():
 
     # 檢查是否啟用自動領體力
     bread_files = [
-        "dungeons/door.png",
+        "common/door.png",
         "common/bread.png",
         "common/bread_collection.png",
         "common/confirm.png",

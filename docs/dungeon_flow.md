@@ -60,22 +60,28 @@ graph TD
     P4 -- No --> P5{5. dungeons/choice_bless.png<br>選擇祝福選項?}
     P5 -- Yes --> ClickP5[點擊選取祝福] --> EndStep
     
-    P5 -- No --> P6{6. dungeons/dungeon_fight.png<br>戰鬥房入口?}
-    P6 -- Yes --> ClickP6[點擊進入戰鬥準備] --> EndStep
+    P5 -- No --> P6{6. dungeons/choose.png<br>選擇按鈕?}
+    P6 -- Yes --> ClickP6[點擊選擇] --> EndStep
     
-    P6 -- No --> P7{7. dungeons/quit.png<br>關閉彈窗?}
-    P7 -- Yes --> ClickP7[點擊退出彈窗] --> EndStep
+    P6 -- No --> P7{7. dungeons/skill_event.png<br>技能事件?}
+    P7 -- Yes --> ClickP7[點擊技能卡片/選項] --> EndStep
     
-    P7 -- No --> P8{8. dungeons/gungeon_godown.png<br>前進下一層按鈕?}
-    P8 -- Yes --> ClickP8[點擊下樓] --> EndStep
+    P7 -- No --> P8{8. dungeons/dungeon_fight.png<br>戰鬥房入口?}
+    P8 -- Yes --> ClickP8[點擊進入戰鬥準備] --> EndStep
     
-    P8 -- No --> P9{9. dungeons/Treasure.png<br>寶箱房箱子?}
-    P9 -- Yes --> ClickP9[點擊開箱] --> EndStep
+    P8 -- No --> P9{9. dungeons/quit.png<br>關閉彈窗?}
+    P9 -- Yes --> ClickP9[點擊退出彈窗] --> EndStep
     
-    P9 -- No --> P10{10. dungeons/dungeon_bless.png<br>接受祝福按鈕?}
-    P10 -- Yes --> ClickP10[點擊接受祝福] --> EndStep
+    P9 -- No --> P10{10. dungeons/gungeon_godown.png<br>前進下一層按鈕?}
+    P10 -- Yes --> ClickP10[點擊下樓] --> EndStep
     
-    P10 -- No --> WaitLoad[等待下一層載入或事件出現] --> Sleep[等待 0.5 秒] --> EndStep
+    P10 -- No --> P11{11. dungeons/Treasure.png<br>寶箱房箱子?}
+    P11 -- Yes --> ClickP11[點擊開箱] --> EndStep
+    
+    P11 -- No --> P12{12. dungeons/dungeon_bless.png<br>接受祝福按鈕?}
+    P12 -- Yes --> ClickP12[點擊接受祝福] --> EndStep
+    
+    P12 -- No --> WaitLoad[等待下一層載入或事件出現] --> Sleep[等待 0.5 秒] --> EndStep
 ```
 
 ---

@@ -44,7 +44,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 初始狀態為 UNKNOWN。全域掃描看到 door.png ➔ 應轉移至 NAVIGATING 領體力
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((100, 100), 0.9) if name == "dungeons/door.png" else (None, 0.0)
+            ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
@@ -52,7 +52,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 2. NAVIGATING 狀態下：
         # - 看到 door.png ➔ 點擊
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((100, 100), 0.9) if name == "dungeons/door.png" else (None, 0.0)
+            ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(100, 100)

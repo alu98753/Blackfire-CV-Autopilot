@@ -61,7 +61,7 @@ class NavigationHandler(BaseStateHandler):
                     return
 
                 # 6. 入口按鈕 (door)
-                pos_door, conf_door = self.matcher.match(screen_img, "dungeons/door.png", threshold=0.8)
+                pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
                 if pos_door:
                     logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
                     self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])

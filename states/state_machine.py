@@ -127,7 +127,7 @@ class GameStateMachine:
         
         # 0. 如果需要領體力，且畫面上看見 door.png 或體力相關按鈕，進入導航/領體力狀態
         if self.enable_bread and self.need_bread_collection:
-            for bf in ["dungeons/door.png", "common/bread.png", "common/bread_collection.png", "common/quit_bread.png"]:
+            for bf in ["common/door.png", "common/bread.png", "common/bread_collection.png", "common/quit_bread.png"]:
                 if os.path.exists(os.path.join("templates", bf)):
                     pos, _ = self.matcher.match(screen_img, bf, threshold=0.8)
                     if pos:

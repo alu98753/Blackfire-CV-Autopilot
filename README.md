@@ -119,10 +119,14 @@ BlackfireCrusade_tool/
   ```powershell
   .\.venv\Scripts\python main.py --mode stage
   ```
+  > ⚠️ **注意事項**：啟動前請**先手動選好關卡**，並將遊戲畫面停留在**進入戰鬥之前的畫面（即能看見"去戰鬥" `stages/start.png` 按鈕的畫面）**，腳本才能正常開始掛機。
+
 * **史萊姆地下城模式**：
   ```powershell
   .\.venv\Scripts\python main.py --mode dungeon_slime
   ```
+  > 💡 **注意事項**：地下城模式支援自動尋路導航。啟動前只需確保遊戲畫面在**最外層的主畫面（能看到 `common/door.png` 入口按鈕的畫面）**即可，腳本會自動點擊入口並一路尋路進入副本。
+
 
 * **可用自訂參數**：
   * `--title "視窗標題"`：如果您的遊戲視窗名稱不叫 `Blackfire Crusade`。
