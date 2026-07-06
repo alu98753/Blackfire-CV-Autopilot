@@ -255,6 +255,16 @@ class GameStateMachine:
         """
         [地下城專屬] 依照優先級掃描探險事件。
         """
+        # 1. 優先判定是否已經進入真實戰鬥中 (看見 auto.png)
+        if os.path.exists(os.path.join("templates", "auto.png")):
+            pos_auto, conf_auto = self.matcher.match(screen_img, "auto.png", threshold=0.7)
+            if pos_auto:
+                logging.info(f"⚔️ 偵測到戰鬥已真正開始（出現 auto 按鈕，相似度: {conf_auto:.4f}），進入戰鬥狀態！")
+                self.battle_start_time = time.time()
+                self.transition_to(self.STATE_BATTLE)
+                return
+
+        # 2. 依優先級處理探險事件
         for btn_name in self.config["explore_priorities"]:
             # 檢查模板檔案是否存在
             if not os.path.exists(os.path.join("templates", btn_name)):
@@ -272,11 +282,11 @@ class GameStateMachine:
                     time.sleep(2.0)
                     
                 elif btn_name == "dungeon_fight.png":
-                    logging.info(f"⚔️ 偵測到【戰鬥房入口】({btn_name})，信心度: {conf:.4f}，點擊進入戰鬥。")
+                    logging.info(f"⚔️ 偵測到【戰鬥房入口】({btn_name})，信心度: {conf:.4f}，點擊進入。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.battle_start_time = time.time()
-                    self.transition_to(self.STATE_BATTLE)
-                    time.sleep(2.0)
+                    # 注意：此處不轉移至 STATE_BATTLE，因為進入後需要先選擇祝福 (bless)。
+                    # 我們將等待畫面出現 auto.png 後，由本方法最上方的判定自動轉入戰鬥狀態。
+                    time.sleep(1.0)
                     
                 else:
                     logging.info(f"👉 偵測到探險事件 [{btn_name}]，信心度: {conf:.4f}，點擊處理。")
