@@ -89,6 +89,27 @@ def main():
         print("=" * 60)
         sys.exit(1)
 
+    # 檢查是否啟用自動領體力
+    bread_files = [
+        "dungeons/door.png",
+        "common/bread.png",
+        "common/bread_collection.png",
+        "common/bread_confirm.png",
+        "common/cannor_get_more_bread_confirm.png",
+        "common/quit_bread.png"
+    ]
+    enable_bread = True
+    for bf in bread_files:
+        if not os.path.exists(os.path.join("templates", bf)):
+            enable_bread = False
+            break
+
+    if enable_bread:
+        print("[*] 自動領體力功能: 啟用 (啟動時與每 30 分鐘執行一次)")
+    else:
+        print("[*] 自動領體力功能: 停用 (缺少部分體力相關模板，已自動忽略)")
+    print("=" * 60)
+
     # 初始化模組
     capturer = ScreenCapturer(window_title=args.title)
     matcher = TemplateMatcher(templates_dir="templates")
@@ -96,8 +117,9 @@ def main():
     
     # 初始化狀態機 (傳入模式配置)
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
-    # 將當前配置設定至狀態機中
+    # 將當前配置與體力啟用狀態設定至狀態機中
     state_machine.config = config
+    state_machine.enable_bread = enable_bread
 
     print("[+] 初始化成功！請確認您的遊戲視窗非最小化，且維持在畫面上。")
     print("[+] 按 [Ctrl + C] 可以隨時終止本程式。")

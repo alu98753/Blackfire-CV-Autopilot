@@ -29,6 +29,11 @@ class GameStateMachine:
         # 當前模式配置，由外部 main.py 初始化設定
         self.config = None
         
+        # 領體力相關屬性 (由外部 main.py 初始化與設定)
+        self.enable_bread = False
+        self.need_bread_collection = True  # 啟動時預設需要領一次體力
+        self.last_bread_collection_time = time.time()
+        
         # 動態尋找所有 continue*.png 模板
         self.continue_templates = self._discover_continue_templates()
 
@@ -62,6 +67,12 @@ class GameStateMachine:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
             time.sleep(1)
             return
+
+        # 1. 檢查體力定時領取計時器 (30分鐘 = 1800秒)
+        if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
+            if not self.need_bread_collection:
+                logging.info("⏰ 距離上次領體力已滿 30 分鐘，排程在下一輪準備階段執行自動領體力。")
+                self.need_bread_collection = True
 
         # 1. 取得遊戲視窗邊界與擷取畫面
         rect = self.capturer.get_window_rect()
@@ -116,6 +127,64 @@ class GameStateMachine:
         """
         尋路導航處理邏輯。
         """
+        # A. 如果啟用且需要領體力，執行領體力分支流程
+        if self.enable_bread and self.need_bread_collection:
+            # 依優先級檢查領體力相關按鈕
+            # 1. 彈窗內的確認按鈕 (Cannot get more bread confirm)
+            pos_cannot, conf_cannot = self.matcher.match(screen_img, "common/cannor_get_more_bread_confirm.png", threshold=0.8)
+            if pos_cannot:
+                logging.info(f"🍞 領體力：偵測到體力已滿提示 [{conf_cannot:.4f}]，點擊確認。")
+                self.mouse.click(rect["left"] + pos_cannot[0], rect["top"] + pos_cannot[1])
+                time.sleep(1.0)
+                return
+                
+            # 2. 領完體力的確認按鈕 (bread confirm)
+            pos_conf, conf_conf = self.matcher.match(screen_img, "common/bread_confirm.png", threshold=0.8)
+            if pos_conf:
+                logging.info(f"🍞 領體力：偵測到獲得體力確認 [{conf_conf:.4f}]，點擊確認。")
+                self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
+                time.sleep(1.0)
+                return
+
+            # 3. 領體力按鈕 (bread collection)
+            pos_coll, conf_coll = self.matcher.match(screen_img, "common/bread_collection.png", threshold=0.8)
+            if pos_coll:
+                logging.info(f"🍞 領體力：偵測到領體力按鈕 [{conf_coll:.4f}]，進行點擊領取。")
+                self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
+                time.sleep(1.0)
+                return
+
+            # 4. 關閉體力視窗按鈕 (quit bread)
+            pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit_bread.png", threshold=0.8)
+            if pos_quit:
+                logging.info(f"🍞 領體力：偵測到退出體力按鈕 [{conf_quit:.4f}]，點擊關閉，領取體力流程結束。")
+                self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                self.need_bread_collection = False
+                self.last_bread_collection_time = time.time()
+                time.sleep(1.5)
+                return
+
+            # 5. 打開體力視窗按鈕 (bread)
+            pos_bread, conf_bread = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
+            if pos_bread:
+                logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
+                self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
+                time.sleep(1.5)
+                return
+
+            # 6. 入口按鈕 (door)
+            pos_door, conf_door = self.matcher.match(screen_img, "dungeons/door.png", threshold=0.8)
+            if pos_door:
+                logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
+                self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
+                time.sleep(1.5)
+                return
+
+            logging.info("⌛ 領體力流程中，正在等待體力畫面或按鈕載入...")
+            time.sleep(0.5)
+            return
+
+        # B. 原本的尋路導航邏輯...
         nav_path = self.config.get("navigation_path", [])
         if not nav_path:
             # 如果沒有設定尋路路徑 (例如普通關卡)，直接進入大廳狀態
@@ -307,6 +376,15 @@ class GameStateMachine:
         """
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
+        # 0. 如果需要領體力，且畫面上看見 door.png 或體力相關按鈕，進入導航/領體力狀態
+        if self.enable_bread and self.need_bread_collection:
+            for bf in ["dungeons/door.png", "common/bread.png", "common/bread_collection.png", "common/quit_bread.png"]:
+                if os.path.exists(os.path.join("templates", bf)):
+                    pos, _ = self.matcher.match(screen_img, bf, threshold=0.8)
+                    if pos:
+                        self.transition_to(self.STATE_NAVIGATING)
+                        return
+
         # 1. 檢查是否在戰鬥中 (看到 common/auto.png 必定在戰鬥)
         if os.path.exists(os.path.join("templates", "common/auto.png")):
             pos, _ = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
