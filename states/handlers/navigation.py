@@ -143,6 +143,18 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(0.03)
                     return
 
+                # 如果體力視窗已經打開 (看見退出按鈕) 但找不到領取按鈕 (說明體力已領取過，處於冷卻或已滿)
+                # 則自動點點退出關閉視窗，重置定時器與標記，避免無限重試。
+                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit_bread.png", threshold=0.8)
+                if pos_quit:
+                    logging.info(f"🍞 領體力：體力視窗已開啟但無領取按鈕 (處於冷卻或已領完)，點擊退出體力按鈕 [{conf_quit:.4f}] 退出。")
+                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                    self.machine.need_bread_collection = False
+                    self.machine.bread_collected_this_run = False
+                    self.machine.last_bread_collection_time = time.time()
+                    time.sleep(0.03)
+                    return
+
                 # 5. 打開體力視窗按鈕 (bread)
                 pos_bread, conf_bread = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
                 if pos_bread:

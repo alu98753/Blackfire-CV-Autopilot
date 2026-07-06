@@ -78,11 +78,11 @@ class MouseController:
 
             # 按下滑鼠、微小間隔、放開滑鼠，模擬真實點擊
             pyautogui.mouseDown()
-            time.sleep(0.005)
+            time.sleep(0.04)
             pyautogui.mouseUp()
 
             # 點擊後稍微冷卻，提升連擊速度
-            time.sleep(0.005)
+            time.sleep(0.04)
 
             # 記錄腳本最後操作滑鼠的位置與時間
             self.last_target_pos = (target_x, target_y)
