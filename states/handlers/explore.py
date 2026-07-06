@@ -8,6 +8,12 @@ class ExploreHandler(BaseStateHandler):
         """
         [地下城專屬] 依照優先級掃描探險事件。
         """
+        # 0. 如果背包滿了，優先轉移至 BAG_CLEANING 狀態進行清理，暫停探索
+        if self.machine.need_bag_cleaning:
+            logging.info("🎒 地下城：偵測到需要清理背包，優先轉移至 BAG_CLEANING 狀態。")
+            self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
+            return
+
         # 1. 優先判定是否已經進入真實戰鬥中 (看見 common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
@@ -33,6 +39,12 @@ class ExploreHandler(BaseStateHandler):
                     # 通關後回到最外層大廳，轉移至尋路導航狀態重新進副本
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     time.sleep(2.0)
+                    
+                elif btn_name == "common/bagfull_quit.png":
+                    logging.warning(f"🧭 偵測到【背包已滿】({btn_name})，信心度: {conf:.4f}，點擊退出彈窗並標記清理背包。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    self.machine.need_bag_cleaning = True
+                    time.sleep(1.2)
                     
                 elif btn_name == "dungeons/dungeon_fight.png":
                     logging.info(f"⚔️ 偵測到【戰鬥房入口】({btn_name})，信心度: {conf:.4f}，點擊進入。")

@@ -7,6 +7,12 @@ class LobbyHandler(BaseStateHandler):
         """
         普通關卡大廳狀態下的開始按鈕點擊處理。
         """
+        # 如果背包滿了，優先轉移至 BAG_CLEANING 狀態進行清理，暫不開啟戰鬥
+        if self.machine.need_bag_cleaning:
+            logging.info("🎒 大廳：偵測到需要清理背包，優先轉移至 BAG_CLEANING 狀態。")
+            self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
+            return
+
         lobby_btn = self.machine.config["lobby_start_btn"]
         pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
         if pos:

@@ -160,5 +160,95 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(900, 500)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
 
+    @patch('os.path.exists')
+    def test_backpack_full_cleaning_flow(self, mock_exists):
+        """
+        測試背包已滿自動清理流程：戰鬥結算偵測到背包滿 ➔ 設定標記 ➔ 回大廳進入 BAG_CLEANING ➔ 執行清理步驟 ➔ 回大廳。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.enable_bread = False
+        self.state_machine.need_bread_collection = False
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        
+        mock_exists.return_value = True
+        
+        # 1. 在結算畫面看到背包已滿 bagfull_quit.png ➔ 點擊並標記 need_bag_cleaning
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 100), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(100, 100)
+        self.assertTrue(self.state_machine.need_bag_cleaning)
+        
+        # 2. 隨後看到結算確認 confirm.png ➔ 點擊
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "common/confirm.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(200, 200)
+        
+        # 3. 畫面回到大廳，看到 stages/start.png。此時因為 need_bag_cleaning 標記，大廳處理器應轉移至 LOBBY 再轉至 BAG_CLEANING 狀態
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((300, 300), 0.9) if name == "stages/start.png" else (None, 0.0)
+        )
+        self.state_machine.step()  # 轉移 RESULT -> LOBBY
+        self.state_machine.step()  # LobbyHandler 攔截轉移 LOBBY -> BAG_CLEANING
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+        
+        # 4. BAG_CLEANING 狀態下順序點擊：
+        # - 看到 common/bag.png ➔ 點擊打開背包
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/bag.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(400, 400)
+        
+        # - 看到 common/Backpack_Disassembly.png ➔ 點擊進入大量分解
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((500, 500), 0.9) if name == "common/Backpack_Disassembly.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(500, 500)
+        
+        # - 看到 common/select_all.png ➔ 點擊全選
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((600, 600), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(600, 600)
+        
+        # - 看到 common/Disassembly.png ➔ 點擊分解
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((700, 700), 0.9) if name == "common/Disassembly.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(700, 700)
+        
+        # - 看到確認彈窗 common/confirm.png ➔ 點擊確認
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((800, 800), 0.9) if name == "common/confirm.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(800, 800)
+        
+        # - 看到整理按鈕 common/tidy.png ➔ 點擊整理並設定標記 bag_tidied
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((900, 900), 0.9) if name == "common/tidy.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(900, 900)
+        self.assertTrue(self.state_machine.bag_tidied)
+        
+        # - 當 bag_tidied 為 True 時，偵測 quit 按鈕 (dungeons/quit.png) ➔ 點擊退出，結束清理並恢復 LOBBY 狀態
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((1000, 1000), 0.9) if name == "dungeons/quit.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(1000, 1000)
+        
+        self.assertFalse(self.state_machine.need_bag_cleaning)
+        self.assertFalse(self.state_machine.bag_tidied)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+
 if __name__ == "__main__":
     unittest.main()

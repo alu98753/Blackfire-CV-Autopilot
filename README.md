@@ -142,3 +142,24 @@ BlackfireCrusade_tool/
    ```powershell
    .\.venv\Scripts\python tests/test_state_machine_logic.py
    ```
+
+
+## 開發中功能
+
+- 每兩小時去按下領取鑽石
+
+
+
+1
+在戰鬥後背包滿了要清空背包的情況(continue2 後)
+按下bagfull_quit.png 以離開結算 ( 這邊在readme加個todo 以便之後自適應看要保留那些等級的東西 但這邊先一律quit)
+confirm結算
+
+
+
+我們通常會全部按下大量分解
+但是我要保留 藍色以上的東西(分別是紫色 黃色 橙色 紅色) 僅把藍色 綠色 土色的 刪除
+
+通常是按下全選後 把藍色以上的東西(分別是紫色 黃色 橙色 紅色) 取消選擇
+
+

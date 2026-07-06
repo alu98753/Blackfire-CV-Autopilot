@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
@@ -7,7 +8,25 @@ class ResultHandler(BaseStateHandler):
         """
         [關卡專屬] 處理關卡多段結算點擊。
         """
-        # A. 檢查「再戰」
+        # A1. 檢查是否背包已滿 (common/bagfull_quit.png)
+        if os.path.exists(os.path.join("templates", "common/bagfull_quit.png")):
+            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bagfull_quit.png", threshold=0.8)
+            if pos_bag:
+                logging.warning(f"🧭 偵測到「背包已滿」！出現 'common/bagfull_quit.png'，點擊退出結算。")
+                self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
+                self.machine.need_bag_cleaning = True  # 標記需要清理背包
+                time.sleep(1.0)
+                return
+
+        # A2. 檢查結算通用確認彈窗 (例如關卡結算確認)
+        pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
+        if pos_conf:
+            logging.info(f"👉 偵測到結算通用確認按鈕，進行點擊。信心度: {conf_conf:.4f}")
+            self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
+            time.sleep(1.0)
+            return
+
+        # A3. 檢查「再戰」
         pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8)
         if pos_retry:
             logging.info("👉 點擊「再戰」！")

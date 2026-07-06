@@ -6,7 +6,8 @@ from states.handlers import (
     LobbyHandler,
     BattleHandler,
     ResultHandler,
-    ExploreHandler
+    ExploreHandler,
+    BagCleaningHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -19,6 +20,7 @@ class GameStateMachine:
     STATE_BATTLE = "BATTLE"                  # 戰鬥進行中，點選自動戰鬥並監控結算
     STATE_RESULT = "RESULT"                  # [關卡專屬] 戰鬥結束結算，點擊繼續/再戰
     STATE_DUNGEON_EXPLORING = "EXPLORING"    # [地下城專屬] 地下城探索中，處理隨機事件與前進下一層
+    STATE_BAG_CLEANING = "BAG_CLEANING"      # 背包滿了時，自動打開背包進行分解與整理
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -42,6 +44,10 @@ class GameStateMachine:
         self.last_bread_collection_time = time.time()
         self.bread_collected_this_run = False
         
+        # 背包清理相關屬性
+        self.need_bag_cleaning = False
+        self.bag_tidied = False
+        
         # 動態尋找所有 continue*.png 模板
         self.continue_templates = self._discover_continue_templates()
         
@@ -52,6 +58,7 @@ class GameStateMachine:
             self.STATE_BATTLE: BattleHandler(self),
             self.STATE_RESULT: ResultHandler(self),
             self.STATE_DUNGEON_EXPLORING: ExploreHandler(self),
+            self.STATE_BAG_CLEANING: BagCleaningHandler(self),
         }
 
     def _discover_continue_templates(self):
