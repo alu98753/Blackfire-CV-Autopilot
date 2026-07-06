@@ -119,6 +119,16 @@ class GameStateMachine:
             self.transition_to(self.STATE_LOBBY)
             return
 
+        # 主動判定：如果我們已經看到任何地下城探索或結束按鈕，說明點擊已經成功並進入內部，直接轉移狀態！
+        if self.config["type"] == "dungeon":
+            for check_btn in ["dungeon_fight.png", "dungeon_bless.png", "Treasure.png", "gungeon_godown.png", "dungeons_complete.png"]:
+                if os.path.exists(os.path.join("templates", check_btn)):
+                    pos, conf = self.matcher.match(screen_img, check_btn, threshold=0.8)
+                    if pos:
+                        logging.info(f"🧭 尋路中偵測到地下城專屬按鈕 [{check_btn}] (信心度: {conf:.4f})，判定已進入地下城。")
+                        self.transition_to(self.STATE_DUNGEON_EXPLORING)
+                        return
+
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
         clicked_any = False
         for btn in reversed(nav_path):
@@ -284,7 +294,14 @@ class GameStateMachine:
         """
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
-        # 1. 檢查是否在普通關卡大廳
+        # 1. 檢查是否在戰鬥中 (看到 auto.png 必定在戰鬥)
+        if os.path.exists(os.path.join("templates", "auto.png")):
+            pos, _ = self.matcher.match(screen_img, "auto.png", threshold=0.7)
+            if pos:
+                self.transition_to(self.STATE_BATTLE)
+                return
+
+        # 2. 檢查是否在普通關卡大廳
         if self.config["type"] == "stage":
             lobby_btn = self.config["lobby_start_btn"]
             pos, _ = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
@@ -292,14 +309,14 @@ class GameStateMachine:
                 self.transition_to(self.STATE_LOBBY)
                 return
                 
-        # 2. 檢查是否在大廳的尋路路徑上
+        # 3. 檢查是否在大廳的尋路路徑上
         for btn in self.config.get("navigation_path", []):
             pos, _ = self.matcher.match(screen_img, btn, threshold=0.8)
             if pos:
                 self.transition_to(self.STATE_NAVIGATING)
                 return
                 
-        # 3. 檢查是否在地下城探險中
+        # 4. 檢查是否在地下城探險中
         if self.config["type"] == "dungeon":
             for btn_name in self.config["explore_priorities"]:
                 # 如果看見任何探索或通關完成按鈕，說明處於探索狀態
@@ -309,10 +326,11 @@ class GameStateMachine:
                         self.transition_to(self.STATE_DUNGEON_EXPLORING)
                         return
                         
-        # 4. 如果以上皆非，預設轉為戰鬥或尋路狀態
+        # 5. 如果以上皆非，依模式給予最安全的預設落點
         if self.config["type"] == "dungeon":
-            logging.info("❓ 未能辨識出特定探索按鈕，預設為 BATTLE 狀態。")
-            self.transition_to(self.STATE_BATTLE)
+            # 地下城模式下，大部份時間都在走格探索，預設回到 EXPLORING 狀態最為安全
+            logging.info("❓ 未能辨識出特定探索按鈕，預設進入 EXPLORING 狀態。")
+            self.transition_to(self.STATE_DUNGEON_EXPLORING)
         else:
-            logging.info("❓ 未能辨識出大廳按鈕，預設為 BATTLE 狀態。")
+            logging.info("❓ 未能辨識出大廳按鈕，預設進入 BATTLE 狀態。")
             self.transition_to(self.STATE_BATTLE)
