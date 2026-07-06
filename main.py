@@ -7,17 +7,48 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
+from config import GAME_CONFIGS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-def check_templates_exist():
-    # 最基本的兩個必要模板：開始戰鬥與再戰
-    required = ["start.png", "retry.png"]
+def check_mode_templates(config):
+    """
+    依據選定的模式配置，動態檢查必要的模板圖片是否存在。
+    """
     missing = []
-    for r in required:
-        path = os.path.join("templates", r)
+    
+    # 1. 檢查尋路導航的按鈕
+    for btn in config.get("navigation_path", []):
+        path = os.path.join("templates", btn)
         if not os.path.exists(path):
-            missing.append(r)
+            missing.append(btn)
+            
+    # 2. 檢查類型專屬按鈕
+    if config["type"] == "stage":
+        # 關卡需要大廳開始按鈕與再戰按鈕
+        lobby_btn = config["lobby_start_btn"]
+        if not os.path.exists(os.path.join("templates", lobby_btn)):
+            missing.append(lobby_btn)
+            
+        retry_btn = "retry.png"
+        if not os.path.exists(os.path.join("templates", retry_btn)):
+            missing.append(retry_btn)
+            
+    elif config["type"] == "dungeon":
+        # 地下城需要戰鬥入口按鈕與結束按鈕
+        fight_btn = config["dungeon_fight_btn"]
+        if not os.path.exists(os.path.join("templates", fight_btn)):
+            missing.append(fight_btn)
+            
+        complete_btn = "dungeons_complete.png"
+        if not os.path.exists(os.path.join("templates", complete_btn)):
+            missing.append(complete_btn)
+            
+        # 檢查基本通用的戰鬥結算
+        for btn in config["dungeon_battle_results"]:
+            if not os.path.exists(os.path.join("templates", btn)):
+                missing.append(btn)
+                
     return missing
 
 def main():
@@ -27,28 +58,34 @@ def main():
             sys.stderr.reconfigure(encoding='utf-8')
         except AttributeError:
             pass
-    parser = argparse.ArgumentParser(description="Blackfire Crusade 自動刷副本腳本")
+            
+    parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
+    parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
+                        help="掛機模式：stage (普通關卡) 或 dungeon_slime (史萊姆地下城)")
     args = parser.parse_args()
 
+    # 取得當前模式的配置
+    config = GAME_CONFIGS[args.mode]
+
     print("=" * 60)
-    print(" 🚀 Blackfire Crusade 自動刷副本輔助腳本啟動 🚀")
+    print(" 🚀 Blackfire Crusade 自動掛機輔助腳本啟動 🚀")
     print("=" * 60)
     print(f"[*] 目標視窗標題: {args.title}")
     print(f"[*] 畫面偵測間隔: {args.interval} 秒")
+    print(f"[*] 當前掛機模式: {config['name']} ({args.mode})")
     print("=" * 60)
 
     # 檢查 templates 資料夾與圖片是否存在
     os.makedirs("templates", exist_ok=True)
-    missing = check_templates_exist()
+    missing = check_mode_templates(config)
     if missing:
-        print("[!] 偵測到以下必要的模板圖片缺失：")
+        print(f"[!] 偵測到當前模式 '{config['name']}' 的必要模板圖片缺失：")
         for m in missing:
             print(f"    - templates/{m}")
-        print("\n[!] 請先執行以下命令使用裁剪工具建立模板圖片：")
+        print("\n[!] 請先執行以下命令使用裁剪工具建立對應的模板圖片：")
         print("    python crop_tool.py")
-        print("    依序裁剪儲存為 start.png、retry.png、ok.png。")
         print("=" * 60)
         sys.exit(1)
 
@@ -57,8 +94,10 @@ def main():
     matcher = TemplateMatcher(templates_dir="templates")
     mouse = MouseController(human_like=True)
     
-    # 初始化狀態機
+    # 初始化狀態機 (傳入模式配置)
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+    # 將當前配置設定至狀態機中
+    state_machine.config = config
 
     print("[+] 初始化成功！請確認您的遊戲視窗非最小化，且維持在畫面上。")
     print("[+] 按 [Ctrl + C] 可以隨時終止本程式。")
