@@ -8,6 +8,21 @@ class BattleHandler(BaseStateHandler):
         """
         戰鬥狀態處理：啟用自動戰鬥與監控戰鬥結算。
         """
+        # 0. 檢查戰鬥結算是否因為背包已滿而彈出提示 (common/bagfull_quit.png)
+        if os.path.exists(os.path.join("templates", "common/bagfull_quit.png")):
+            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bagfull_quit.png", threshold=0.8)
+            if pos_bag:
+                logging.warning(f"🧭 戰鬥中/結算時偵測到「背包已滿」！出現 'common/bagfull_quit.png'，點擊退出結算。")
+                self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
+                self.machine.need_bag_cleaning = True
+                time.sleep(1.0)
+                
+                if self.machine.config["type"] == "dungeon":
+                    self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
+                else:
+                    self.machine.transition_to(self.machine.STATE_RESULT)
+                return
+
         # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 3.0):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)

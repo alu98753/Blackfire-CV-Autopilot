@@ -250,5 +250,30 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertFalse(self.state_machine.bag_tidied)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
 
+    @patch('os.path.exists')
+    def test_dungeon_battle_backpack_full_cleaning_flow(self, mock_exists):
+        """
+        測試地下城模式下，在 BATTLE 戰鬥結束/結算時偵測到背包滿 ➔ 轉移至 EXPLORING ➔ 攔截進入 BAG_CLEANING。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = False
+        self.state_machine.need_bread_collection = False
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        
+        mock_exists.return_value = True
+        
+        # 1. 戰鬥中/結算時看到背包已滿 bagfull_quit.png ➔ 點擊並標記 need_bag_cleaning，並轉移至 EXPLORING
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((150, 150), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(150, 150)
+        self.assertTrue(self.state_machine.need_bag_cleaning)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+        
+        # 2. 進入 EXPLORING 後，在下一幀因為 need_bag_cleaning 標記，應被 ExploreHandler 攔截轉移至 BAG_CLEANING
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+
 if __name__ == "__main__":
     unittest.main()
