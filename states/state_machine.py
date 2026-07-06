@@ -150,7 +150,8 @@ class GameStateMachine:
 
         # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
         if os.path.exists(os.path.join("templates", "backpack_full.png")):
-            pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.8)
+            # 調低門檻至 0.7 以應對可能的光影或微幅變動，確保 100% 偵測成功
+            pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
             if pos:
                 # 計算右上角 X 關閉按鈕相對座標並點擊 (dx=580, dy=-300)
                 btn_x = rect["left"] + pos[0] + 580
