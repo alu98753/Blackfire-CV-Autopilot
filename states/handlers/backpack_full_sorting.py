@@ -218,13 +218,27 @@ class BackpackFullSortingHandler(BaseStateHandler):
             self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
             time.sleep(0.4)
 
-        # 點選左側排在最前的貴重物品放入空位
+        # 點選左側排在最前的貴重物品
         l_row, l_col, l_color = high_rarity_left[0]
         lx_click = rect["left"] + win_x + left_x0 + l_col * step + cell_size // 2
         ly_click = rect["top"] + win_y + left_y0 + l_row * step + cell_size // 2
-        logging.info(f"🎒 [背包分選] 點擊左側溢出貴重物品 [{l_color}] 座標: ({lx_click}, {ly_click}) 收入背包。")
+        logging.info(f"🎒 [背包分選] 點擊左側溢出貴重物品 [{l_color}] 座標: ({lx_click}, {ly_click}) 以彈出詳情。")
         self.mouse.click(lx_click, ly_click)
-        time.sleep(0.6) # 等待飛入背包動畫完成
+        time.sleep(0.4) # 等待詳情面板彈出
+
+        # 匹配並點選 common/collect.png 領取按鈕
+        new_screen = self.machine.capturer.capture(rect)
+        if new_screen is not None:
+            pos_coll, conf_coll = self.matcher.match(new_screen, "common/collect.png", threshold=0.8)
+            if pos_coll:
+                coll_x = rect["left"] + pos_coll[0]
+                coll_y = rect["top"] + pos_coll[1]
+                logging.info(f"🎒 [背包分選] 偵測到領取按鈕 [{conf_coll:.4f}]，點擊領取座標: ({coll_x}, {coll_y})。")
+                self.mouse.click(coll_x, coll_y)
+                time.sleep(0.6) # 等待飛入背包動畫與介面更新
+            else:
+                logging.warning("🎒 [背包分選] ⚠️ 未能匹配到領取按鈕 'common/collect.png'。")
+                time.sleep(0.6)
 
         # 結束本次 handle，下一幀會重新截圖並自動重複執行本 Handler，直到左側沒有貴重物品為止。
         return

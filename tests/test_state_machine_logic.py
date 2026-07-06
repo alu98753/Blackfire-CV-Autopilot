@@ -454,6 +454,8 @@ class TestStateMachineLogic(unittest.TestCase):
                 return ((500, 500), 0.9) # 銷毀按鈕
             elif name == "common/confirm.png":
                 return ((600, 600), 0.9) # 銷毀確認按鈕
+            elif name == "common/collect.png":
+                return ((700, 700), 0.9) # 領取按鈕
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect
@@ -461,8 +463,8 @@ class TestStateMachineLogic(unittest.TestCase):
         # 執行 step，觸發 BackpackFullSortingHandler
         self.state_machine.step()
         
-        # 驗證最後一個被點選的是左側貴重物品，證明整個鏈式分選流程成功執行
-        self.mock_mouse.click.assert_called_with(411, 425)
+        # 驗證最後一個被點選的是領取按鈕，證明整個鏈式分選流程成功執行
+        self.mock_mouse.click.assert_called_with(700, 700)
 
     @patch('os.path.exists')
     def test_global_diamond_collection_flow(self, mock_exists):
