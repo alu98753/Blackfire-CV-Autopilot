@@ -56,12 +56,7 @@ class ExploreHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     time.sleep(0.2)
                     
-                elif btn_name == "common/bagfull_quit.png":
-                    logging.warning(f"🧭 偵測到【背包已滿】({btn_name})，信心度: {conf:.4f}，點擊退出彈窗並標記清理背包。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.machine.need_bag_cleaning = True
-                    time.sleep(0.03)
-                    
+
                 elif btn_name == "dungeons/Get_tresure.png" or btn_name == "dungeons/Get_tresure_comfirm.png":
                     logging.info(f"👉 偵測到獲得寶物 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層寶箱已開。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])

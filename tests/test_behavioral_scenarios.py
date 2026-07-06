@@ -166,7 +166,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         # Arrange
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
-        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         mock_exists.return_value = True
         
         # Step 1: 全域攔截到 backpack_full.png，狀態跳轉並自動標記 need_bag_cleaning

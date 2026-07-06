@@ -240,7 +240,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 1. 在結算畫面看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((960, 228), 0.9) if name == "backpack_full.png" else (
-            ((100, 100), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0))
+            ((100, 100), 0.9) if name == "common/quit_bread.png" else (None, 0.0))
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(100, 100)
@@ -331,7 +331,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning，並轉移至 EXPLORING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((960, 228), 0.9) if name == "backpack_full.png" else (
-            ((150, 150), 0.9) if name == "common/bagfull_quit.png" else (None, 0.0))
+            ((150, 150), 0.9) if name == "common/quit_bread.png" else (None, 0.0))
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(150, 150)
@@ -466,7 +466,6 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 執行 step，觸發 BackpackFullSortingHandler
         self.state_machine.step()
-        print("MOCK CLICK CALLS:", self.mock_mouse.click.call_args_list)
         # 驗證最後一個被點選的是領取按鈕，證明整個鏈式分選流程成功執行
         self.mock_mouse.click.assert_called_with(700, 700)
 
