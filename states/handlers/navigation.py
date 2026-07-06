@@ -11,18 +11,10 @@ class NavigationHandler(BaseStateHandler):
         # A. 如果啟用且需要領體力，執行領體力分支流程
         if self.machine.enable_bread and self.machine.need_bread_collection:
             # 依優先級檢查領體力相關按鈕
-            # 1. 彈窗內的確認按鈕 (Cannot get more bread confirm)
-            pos_cannot, conf_cannot = self.matcher.match(screen_img, "common/cannor_get_more_bread_confirm.png", threshold=0.8)
-            if pos_cannot:
-                logging.info(f"🍞 領體力：偵測到體力已滿提示 [{conf_cannot:.4f}]，點擊確認。")
-                self.mouse.click(rect["left"] + pos_cannot[0], rect["top"] + pos_cannot[1])
-                time.sleep(1.0)
-                return
-                
-            # 2. 領完體力的確認按鈕 (bread confirm)
-            pos_conf, conf_conf = self.matcher.match(screen_img, "common/bread_confirm.png", threshold=0.8)
+            # 1. 彈窗內的確認按鈕 (獲得體力確認或體力已滿提示確認)
+            pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
             if pos_conf:
-                logging.info(f"🍞 領體力：偵測到獲得體力確認 [{conf_conf:.4f}]，點擊確認。")
+                logging.info(f"🍞 領體力：偵測到體力確認按鈕 [{conf_conf:.4f}]，點擊確認。")
                 self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
                 time.sleep(1.0)
                 return

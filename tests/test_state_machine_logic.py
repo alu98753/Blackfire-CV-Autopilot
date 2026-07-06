@@ -71,6 +71,13 @@ class TestStateMachineLogic(unittest.TestCase):
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(300, 300)
+
+        # - 看到 common/confirm.png ➔ 點擊確認
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((350, 350), 0.9) if name == "common/confirm.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(350, 350)
         
         # - 看到 quit_bread.png ➔ 點擊退出，結束領取體力流程
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (

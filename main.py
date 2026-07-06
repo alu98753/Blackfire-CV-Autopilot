@@ -94,8 +94,7 @@ def main():
         "dungeons/door.png",
         "common/bread.png",
         "common/bread_collection.png",
-        "common/bread_confirm.png",
-        "common/cannor_get_more_bread_confirm.png",
+        "common/confirm.png",
         "common/quit_bread.png"
     ]
     enable_bread = True
