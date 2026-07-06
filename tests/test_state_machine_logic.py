@@ -541,5 +541,38 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(600, 600)
         self.assertTrue(self.state_machine.need_bread_collection)
 
+    @patch('os.path.exists')
+    def test_diamond_collection_cooldown_flow(self, mock_exists):
+        """
+        測試領鑽石冷卻退出流程：
+        1. need_diamond_collection = True，已在大廳打開鑽石視窗。
+        2. 畫面上沒有免費鑽石 (diamond_free.png 傳回 None)，但有退出按鈕 (common/quit_bread.png) 且大廳入口 (diamond.png) 不在畫面上。
+        3. 預期：應自動點擊退出按鈕，並關閉領鑽石流程 (need_diamond_collection 設為 False)。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = False
+        self.state_machine.need_diamond_collection = True
+        self.state_machine.diamond_collected_this_run = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 模擬比對：
+        # - 尋找 diamond_free.png ➔ None (冷卻中)
+        # - 尋找 common/quit_bread.png ➔ (500, 500)
+        # - 尋找 diamond.png ➔ None (不在大廳)
+        def match_side_effect(img, name, threshold):
+            if name == "common/quit_bread.png":
+                return ((500, 500), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.state_machine.step()
+        
+        # 斷言：應點擊退出按鈕，且 need_diamond_collection 重設為 False
+        self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertFalse(self.state_machine.need_diamond_collection)
+
 if __name__ == "__main__":
     unittest.main()
