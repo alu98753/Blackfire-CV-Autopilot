@@ -22,6 +22,6 @@ class LobbyHandler(BaseStateHandler):
             logging.info(f"🚀 開始第 {self.machine.run_count} 次關卡戰鬥！")
             self.machine.battle_start_time = time.time()
             self.machine.transition_to(self.machine.STATE_BATTLE)
-            time.sleep(2.0) # 等待戰鬥載入
+            time.sleep(1.0) # 等待戰鬥載入
         else:
             self.machine.detect_current_state(screen_img, rect)

@@ -15,7 +15,7 @@ class MouseController:
         self.human_like = human_like
         self.last_action_time = 0.0
 
-    def click(self, x, y, offset_range=(-3, 3), move_duration=(0.05, 0.12)):
+    def click(self, x, y, offset_range=(-3, 3), move_duration=(0.03, 0.07)):
         """
         在絕對螢幕座標 (x, y) 進行點擊，並可隨機偏移以防反作弊偵測。
         
@@ -41,17 +41,17 @@ class MouseController:
                 duration = random.uniform(move_duration[0], move_duration[1])
                 pyautogui.moveTo(target_x, target_y, duration=duration, tween=pyautogui.easeOutQuad)
                 # 稍微停頓一下再點擊
-                time.sleep(random.uniform(0.02, 0.05))
+                time.sleep(random.uniform(0.01, 0.02))
             else:
                 pyautogui.moveTo(target_x, target_y)
 
             # 按下滑鼠、微小間隔、放開滑鼠，模擬真實點擊
             pyautogui.mouseDown()
-            time.sleep(random.uniform(0.02, 0.05))
+            time.sleep(random.uniform(0.01, 0.03))
             pyautogui.mouseUp()
 
             # 點擊後稍微冷卻，提升連擊速度
-            time.sleep(random.uniform(0.05, 0.1))
+            time.sleep(random.uniform(0.03, 0.06))
             return True
         except pyautogui.FailSafeException:
             logging.error("🔴 觸發 PyAutoGUI 安全終止 (FailSafe) 機制！滑鼠已移至螢幕角落。")

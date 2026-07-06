@@ -22,7 +22,7 @@ class NavigationHandler(BaseStateHandler):
                     self.machine.need_bread_collection = False
                     self.machine.bread_collected_this_run = False  # 重設狀態
                     self.machine.last_bread_collection_time = time.time()
-                    time.sleep(1.5)
+                    time.sleep(0.8)
                     return
             else:
                 # 情況二：尚未領取或尚未點擊確認，正常進行領取步驟
@@ -32,7 +32,7 @@ class NavigationHandler(BaseStateHandler):
                     logging.info(f"🍞 領體力：偵測到體力確認按鈕 [{conf_conf:.4f}]，點擊確認。")
                     self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
                     self.machine.bread_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(1.0)
+                    time.sleep(0.5)
                     return
 
                 # 2. 彈窗內的 OK 按鈕 (同樣代表確認)
@@ -41,7 +41,7 @@ class NavigationHandler(BaseStateHandler):
                     logging.info(f"🍞 領體力：偵測到體力 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
                     self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
                     self.machine.bread_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(1.0)
+                    time.sleep(0.5)
                     return
 
                 # 3. 領體力按鈕 (bread collection)
@@ -49,7 +49,7 @@ class NavigationHandler(BaseStateHandler):
                 if pos_coll:
                     logging.info(f"🍞 領體力：偵測到領體力按鈕 [{conf_coll:.4f}]，進行點擊領取。")
                     self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
-                    time.sleep(1.0)
+                    time.sleep(0.5)
                     return
 
                 # 5. 打開體力視窗按鈕 (bread)
@@ -57,7 +57,7 @@ class NavigationHandler(BaseStateHandler):
                 if pos_bread:
                     logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
                     self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
-                    time.sleep(1.5)
+                    time.sleep(0.8)
                     return
 
                 # 6. 入口按鈕 (door)
@@ -65,11 +65,11 @@ class NavigationHandler(BaseStateHandler):
                 if pos_door:
                     logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
                     self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
-                    time.sleep(1.5)
+                    time.sleep(0.8)
                     return
 
             logging.info("⌛ 領體力流程中，正在等待體力畫面或按鈕載入...")
-            time.sleep(0.5)
+            time.sleep(0.3)
             return
 
         # B. 原本的尋路導航邏輯
@@ -97,7 +97,7 @@ class NavigationHandler(BaseStateHandler):
                 logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
                 self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                 clicked_any = True
-                time.sleep(1.5) # 等待跳轉動畫
+                time.sleep(0.8) # 等待跳轉動畫
                 break
 
         if not clicked_any:

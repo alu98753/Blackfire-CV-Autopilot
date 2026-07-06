@@ -15,7 +15,7 @@ class BattleHandler(BaseStateHandler):
                 logging.warning(f"🧭 戰鬥中/結算時偵測到「背包已滿」！出現 'common/bagfull_quit.png'，點擊退出結算。")
                 self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                 self.machine.need_bag_cleaning = True
-                time.sleep(1.0)
+                time.sleep(0.5)
                 
                 if self.machine.config["type"] == "dungeon":
                     self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
@@ -31,7 +31,7 @@ class BattleHandler(BaseStateHandler):
                 logging.info(f"👉 偵測到「自動戰鬥」按鈕（目前為未啟用狀態），進行點擊啟用！")
                 self.mouse.click(rect["left"] + pos_auto[0], rect["top"] + pos_auto[1])
                 self.machine.last_auto_click_time = time.time()
-                time.sleep(0.5)
+                time.sleep(0.3)
 
         # B. 監控戰鬥結算
         if self.machine.config["type"] == "stage":
@@ -47,7 +47,7 @@ class BattleHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_RESULT)
             else:
                 self.log_battle_duration()
-                time.sleep(1.0)
+                time.sleep(0.5)
                 
         elif self.machine.config["type"] == "dungeon":
             # 地下城模式：檢查 dungeon_battle_results 結算按鈕 (排除 continue3.png)
@@ -67,10 +67,10 @@ class BattleHandler(BaseStateHandler):
                 self.mouse.click(rect["left"] + best_match_pos[0], rect["top"] + best_match_pos[1])
                 # 點擊完結算後，會回到地下城層與層之間，轉移回探索狀態
                 self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
-                time.sleep(1.5)
+                time.sleep(0.6)
             else:
                 self.log_battle_duration()
-                time.sleep(1.0)
+                time.sleep(0.5)
 
     def log_battle_duration(self):
         if self.machine.battle_start_time:
