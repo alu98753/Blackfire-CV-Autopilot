@@ -101,6 +101,16 @@ class BackpackFullSortingHandler(BaseStateHandler):
             logging.info("🎒 [背包分選] 左側溢出區無貴重物品（藍色以上），點擊關閉退出。")
             self.mouse.click(close_x, close_y)
             time.sleep(0.5)
+            # 檢查是否出現退出確認彈窗
+            new_screen = self.machine.capturer.capture(rect)
+            if new_screen is not None:
+                pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
+                if pos_conf:
+                    conf_x = rect["left"] + pos_conf[0]
+                    conf_y = rect["top"] + pos_conf[1]
+                    logging.info(f"🎒 [背包分選] 偵測到關閉確認彈窗 [{conf_conf:.4f}]，點擊確認以關閉溢出區。")
+                    self.mouse.click(conf_x, conf_y)
+                    time.sleep(0.5)
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
 
@@ -167,6 +177,16 @@ class BackpackFullSortingHandler(BaseStateHandler):
             logging.info("🎒 [背包分選] 點擊關閉退出，避免卡死。")
             self.mouse.click(close_x, close_y)
             time.sleep(0.5)
+            # 檢查是否出現退出確認彈窗
+            new_screen = self.machine.capturer.capture(rect)
+            if new_screen is not None:
+                pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
+                if pos_conf:
+                    conf_x = rect["left"] + pos_conf[0]
+                    conf_y = rect["top"] + pos_conf[1]
+                    logging.info(f"🎒 [背包分選] 偵測到關閉確認彈窗 [{conf_conf:.4f}]，點擊確認以關閉溢出區。")
+                    self.mouse.click(conf_x, conf_y)
+                    time.sleep(0.5)
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
 
