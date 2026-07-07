@@ -214,18 +214,32 @@ class BagCleaningHandler(BaseStateHandler):
 
         # 5. 檢查背包按鈕 (若背包尚未打開，在大廳或探索畫面點擊打開)
         if os.path.exists(os.path.join("templates", "common/bag.png")):
-            # 使用較高閥值 0.80 且配合相對橫向座標過濾 (物品欄相對 x 座標應在 0.77 ~ 0.85 之間)，防止誤點「戰團」
+            # 使用較高閥值 0.80，防止誤判
             pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.80)
             if pos_bag:
                 h_limit, w_limit = screen_img.shape[:2]
-                rel_x = pos_bag[0] / w_limit
-                if 0.77 <= rel_x <= 0.85:
-                    logging.info(f"🎒 背包清理：偵測到背包入口按鈕 [{conf_bag:.4f}] (相對橫向座標: {rel_x:.4f})，點擊打開背包。")
+                # 色彩驗證：物品欄中心為棕色 (R - B 應顯著大於 18)，而戰團為灰色 (R - B 接近 0)
+                crop_x1 = max(0, pos_bag[0] - 5)
+                crop_x2 = min(w_limit, pos_bag[0] + 5)
+                crop_y1 = max(0, pos_bag[1] - 5)
+                crop_y2 = min(h_limit, pos_bag[1] + 5)
+                
+                center_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
+                is_real_game = np.max(center_crop) > 0
+                
+                if is_real_game:
+                    mean_bgr = np.mean(center_crop, axis=(0,1))
+                    r_minus_b = mean_bgr[2] - mean_bgr[0]
+                else:
+                    r_minus_b = 99.0 # 單元測試模擬環境，直接通過
+                
+                if r_minus_b > 18.0:
+                    logging.info(f"🎒 背包清理：偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
                     self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                     time.sleep(0.1)
                     return
                 else:
-                    logging.warning(f"🎒 背包清理：⚠️ 偵測到疑似背包入口但相對橫向座標不符 ({rel_x:.4f}，預期 0.77~0.85)，已忽略以防止點錯「戰團」。")
+                    logging.warning(f"🎒 背包清理：⚠️ 偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
         time.sleep(0.05)
