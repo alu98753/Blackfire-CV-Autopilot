@@ -154,10 +154,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(800, 100)
         
-        # 6. 戰鬥結束：看到結算 continue1.png ➔ 點擊並轉回 EXPLORING
-        # 注意：dungeon_battle_results 只比對 continue1/2
+        # 6. 戰鬥結束：看到結算 common/continue.png ➔ 點擊並轉回 EXPLORING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((900, 500), 0.9) if name == "common/continue1.png" else (None, 0.0)
+            ((900, 500), 0.9) if name == "common/continue.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(900, 500)

@@ -69,8 +69,8 @@ class GameStateMachine:
         self.last_user_operation_time = 0.0
         self.prev_mouse_pos = None
         
-        # 動態尋找所有 continue*.png 模板
-        self.continue_templates = self._discover_continue_templates()
+        # 定義單一繼續模板路徑
+        self.continue_template = "common/continue.png"
         
         # 初始化註冊所有狀態處理器
         self.handlers = {
@@ -83,19 +83,7 @@ class GameStateMachine:
             self.STATE_BACKPACK_FULL_SORTING: BackpackFullSortingHandler(self),
         }
 
-    def _discover_continue_templates(self):
-        templates = []
-        templates_dir = "templates"
-        if os.path.exists(templates_dir):
-            for root, dirs, files in os.walk(templates_dir):
-                for f in files:
-                    if f.startswith("continue") and f.endswith(".png"):
-                        # 計算相對於 templates_dir 的相對路徑，並將 Windows 斜線替換為正斜線
-                        rel_path = os.path.relpath(os.path.join(root, f), templates_dir)
-                        templates.append(rel_path.replace("\\", "/"))
-        templates.sort()
-        logging.info(f"🔍 偵測到之「繼續」按鈕模板清單: {templates}")
-        return templates
+
 
     def transition_to(self, new_state):
         if self.current_state != new_state:

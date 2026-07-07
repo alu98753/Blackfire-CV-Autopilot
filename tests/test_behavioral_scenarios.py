@@ -719,42 +719,31 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.state_machine.last_auto_click_time, 1004.0)
 
     @patch('os.path.exists')
-    def test_result_continue_buttons_pk_priority(self, mock_exists):
+    def test_result_continue_button_click(self, mock_exists):
         """
-        [行為場景 14] 結算繼續按鈕優先級 PK 比對決策：
-        Given: 狀態機處於 RESULT 狀態。畫面上同時能匹配到多個繼續按鈕模板。
+        [行為場景 14] 結算畫面點擊繼續按鈕：
+        Given: 狀態機處於 RESULT 狀態。畫面上看見繼續按鈕 common/continue.png。
         When: 執行狀態機決策。
-        Then:
-          1. 程式應遵循優先級，點選最高優先級的繼續按鈕 (continue3.png ➔ continue2.png ➔ continue1.png)。
-          2. 不能被背景較低優先級的按鈕干擾點擊。
+        Then: 程式應匹配並點擊 common/continue.png，推進結算流程。
         """
         # Arrange
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_RESULT
         mock_exists.return_value = True
         
-        # 模擬狀態機已發現之繼續模板
-        self.state_machine.continue_templates = ["common/continue1.png", "common/continue2.png", "stages/continue3.png"]
+        # 設定模擬的單一繼續模板
+        self.state_machine.continue_template = "common/continue.png"
         
-        # 模擬 match：同時存在 continue1.png (在 100, 100) 與 continue3.png (在 300, 300)
-        def match_side_effect(img, name, threshold):
-            if name == "common/continue1.png":
-                return ((100, 100), 0.9)
-            elif name == "stages/continue3.png":
-                return ((300, 300), 0.9)
-            return (None, 0.0)
-            
-        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((300, 300), 0.9) if name == "common/continue.png" else (None, 0.0)
+        )
         self.mock_mouse.click.reset_mock()
         
         # Act
         self.state_machine.step()
         
         # Assert
-        # 應優先點選 continue3 (300, 300)，絕非 continue1 (100, 100)
         self.mock_mouse.click.assert_called_with(300, 300)
-        for call in self.mock_mouse.click.call_args_list:
-            self.assertNotEqual(call[0], (100, 100))
 
     @patch('os.path.exists')
     def test_bag_cleaning_bag_color_channel_verification(self, mock_exists):

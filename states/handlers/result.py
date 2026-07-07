@@ -71,11 +71,12 @@ class ResultHandler(BaseStateHandler):
             time.sleep(0.1)
             return True
 
-        # B. 依照優先級由高到低 (continue3 -> continue2 -> continue1) 檢查繼續按鈕
-        for c_temp in reversed(self.machine.continue_templates):
+        # B. 檢查「繼續」按鈕
+        c_temp = self.machine.continue_template
+        if os.path.exists(os.path.join("templates", c_temp)):
             pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=0.8)
             if pos_c:
-                logging.info(f"👉 點擊優先級最高的關卡「繼續」按鈕 ({c_temp})，信心度: {conf_c:.4f}")
+                logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f})，進行點擊。")
                 self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
                 time.sleep(0.1)
                 return True
