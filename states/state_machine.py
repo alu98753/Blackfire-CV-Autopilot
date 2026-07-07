@@ -42,13 +42,13 @@ class GameStateMachine:
         
         # 領體力相關屬性 (由外部 main.py 初始化與設定)
         self.enable_bread = False
-        self.need_bread_collection = True  # 啟動時預設需要領一次體力
-        self.last_bread_collection_time = time.time()
+        self.need_bread_collection = False  # 啟動時預設不設定領取，需大門觸發
+        self.last_bread_collection_time = 0.0
         self.bread_collected_this_run = False
         self.bread_click_attempted = False
         
         # 領鑽石相關屬性
-        self.need_diamond_collection = True  # 啟動時預設領一次鑽石
+        self.need_diamond_collection = False  # 啟動時預設不設定領取，需大門觸發
         self.last_diamond_collection_time = 0.0
         self.diamond_collected_this_run = False
         
@@ -107,19 +107,7 @@ class GameStateMachine:
             time.sleep(1)
             return
 
-        # 1. 檢查領體力與領鑽石定時器 (背包整理模式除外)
-        if self.config["type"] != "bag_clean":
-            # 1.1 鑽石定時器 (2小時 = 7200秒)
-            if time.time() - self.last_diamond_collection_time > 7200.0:
-                if not self.need_diamond_collection:
-                    logging.info("⏰ 距離上次領鑽石已滿 2 小時，排程在下一輪準備階段執行自動領鑽石。")
-                    self.need_diamond_collection = True
-
-            # 1.2 體力定時器 (30分鐘 = 1800秒)
-            if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
-                if not self.need_bread_collection:
-                    logging.info("⏰ 距離上次領體力已滿 30 分鐘，排程在下一輪準備階段執行自動領體力。")
-                    self.need_bread_collection = True
+        pass
 
         # 2. 取得遊戲視窗邊界與擷取畫面
         rect = self.capturer.get_window_rect()
@@ -133,6 +121,9 @@ class GameStateMachine:
             logging.warning("⚠️ 無法擷取畫面")
             time.sleep(0.2)
             return
+
+        # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
+        self.check_collection_trigger(screen_img)
 
         # A. 卡死監控 (stuck monitoring)
         # 只有在非戰鬥、非探索、非未知的過渡狀態下，如果同一個狀態持續了太多幀，說明流程可能卡住了
@@ -311,5 +302,30 @@ class GameStateMachine:
                 logging.info("❓ 未能辨識出大廳按鈕，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
                 self.transition_to(self.STATE_BATTLE)
             else:
-                logging.info("❓ 未能辨識出大廳按鈕，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路。")
+                logging.info("❓ 未能辨識出大廳按鈕，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路. ")
                 self.transition_to(self.STATE_NAVIGATING)
+
+    def check_collection_trigger(self, screen_img):
+        """
+        僅在畫面匹配到大門 common/door.png (說明在大廳) 時，依據冷卻時間觸發鑽石與麵包的領取。
+        """
+        if self.config is not None and self.config["type"] == "bag_clean":
+            return  # 背包整理模式不參與領取
+
+        if os.path.exists(os.path.join("templates", "common/door.png")):
+            pos, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
+            if pos:
+                # 1. 檢查鑽石 CD (2小時 = 7200秒)
+                if time.time() - self.last_diamond_collection_time > 7200.0:
+                    if not self.need_diamond_collection:
+                        logging.info("⏰ 大廳偵測到大門，且距離上次領鑽石已滿 2 小時，觸發自動領鑽石。")
+                        self.need_diamond_collection = True
+                        self.diamond_collected_this_run = False
+
+                # 2. 檢查體力 CD (30分鐘 = 1800秒)
+                if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
+                    if not self.need_bread_collection:
+                        logging.info("⏰ 大廳偵測到大門，且距離上次領體力已滿 30 分鐘，觸發自動領體力。")
+                        self.need_bread_collection = True
+                        self.bread_collected_this_run = False
+                        self.bread_click_attempted = False
