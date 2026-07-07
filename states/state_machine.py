@@ -186,6 +186,13 @@ class GameStateMachine:
                 self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
                 return
 
+        # 0.02 如果看見「戰敗畫面」 (defeat.png)，進入結算狀態
+        if os.path.exists(os.path.join("templates", "defeat.png")):
+            pos, _ = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
+            if pos:
+                self.transition_to(self.STATE_RESULT)
+                return
+
         # 0.05 如果需要清理背包 (need_bag_cleaning == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
         if self.need_bag_cleaning:
             for town_btn in ["common/door.png", "goback_town.png"]:
@@ -199,7 +206,7 @@ class GameStateMachine:
         if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
             nav_buttons = [
                 "common/door.png", "goback_town.png", "diamond.png", "free.png",
-                "common/bread.png", "common/bread_collection.png", "common/quit.png"
+                "common/bread.png", "common/collect.png", "common/bread_collection.png", "common/quit.png"
             ]
             for bf in nav_buttons:
                 if os.path.exists(os.path.join("templates", bf)):

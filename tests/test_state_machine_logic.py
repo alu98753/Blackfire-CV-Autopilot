@@ -67,9 +67,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(200, 200)
         
-        # - 看到 bread_collection.png ➔ 點擊領取
+        # - 看到 common/collect.png ➔ 點擊領取
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name == "common/bread_collection.png" else (None, 0.0)
+            ((300, 300), 0.9) if name == "common/collect.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(300, 300)
@@ -618,6 +618,68 @@ class TestStateMachineLogic(unittest.TestCase):
         # 斷言：應點擊退出按鈕，且 need_diamond_collection 重設為 False
         self.mock_mouse.click.assert_called_with(500, 500)
         self.assertFalse(self.state_machine.need_diamond_collection)
+
+    @patch('os.path.exists')
+    def test_defeat_restart_flow(self, mock_exists):
+        """
+        測試戰鬥中戰敗並重新開始的完整流轉邏輯：
+        1. 處於 BATTLE 狀態下，偵測到戰敗大圖 defeat.png ➔ 轉移至 RESULT
+        2. 進入 RESULT 狀態後，再次匹配 defeat.png。此時：
+           - 模擬 defeat_retry.png 匹配失敗 (None)
+           - 模擬 stages/retry.png 匹配失敗 (None)
+           - 預期：應使用防禦性相對座標 (defeat_center_x - 140, defeat_center_y + 250) 執行點擊
+           - 點擊後，狀態回到 BATTLE，run_count 累加
+        3. 另一個情況：在 RESULT 狀態下且戰敗：
+           - 模擬 defeat_retry.png 匹配成功 (pos)
+           - 預期：直接點擊該按鈕座標，狀態回到 BATTLE
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.run_count = 0
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1920, "height": 1080}
+        
+        # 1. 在 BATTLE 狀態，看見 defeat.png ➔ 轉移至 RESULT
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((500, 500), 0.9) if name == "defeat.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
+        
+        # 2. 在 RESULT 狀態下，匹配失敗按鈕 ➔ 觸發相對座標備份點擊 (X=100+500-140=460, Y=100+500+250=850)
+        # 模擬 match：只有 defeat.png 匹配成功，其餘 None
+        def match_side_effect_fallback(img, name, threshold):
+            if name == "defeat.png":
+                return ((500, 500), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_fallback
+        self.state_machine.step()
+        
+        # 斷言：點擊相對座標 (460, 850)，且轉移回 BATTLE，且次數為 1
+        self.mock_mouse.click.assert_called_with(460, 850)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        self.assertEqual(self.state_machine.run_count, 1)
+        
+        # 3. 再來一次，測試能成功匹配 defeat_retry.png
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        
+        def match_side_effect_success(img, name, threshold):
+            if name == "defeat.png":
+                return ((500, 500), 0.9)
+            if name == "defeat_retry.png":
+                return ((400, 800), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_success
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        
+        # 斷言：應點擊匹配到的按鈕座標 (100+400=500, 100+800=900)
+        self.mock_mouse.click.assert_called_with(500, 900)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        self.assertEqual(self.state_machine.run_count, 2)
 
 if __name__ == "__main__":
     unittest.main()

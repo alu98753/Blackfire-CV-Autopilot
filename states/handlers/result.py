@@ -28,6 +28,42 @@ class ResultHandler(BaseStateHandler):
         """
         處理結算點擊。若成功點擊任何按鈕，回傳 True；否則回傳 False。
         """
+        # A1. 優先檢查是否戰敗 (defeat.png)
+        if os.path.exists(os.path.join("templates", "defeat.png")):
+            pos_defeat, conf_defeat = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
+            if pos_defeat:
+                logging.info(f"💀 結算處理：確認處於戰敗畫面 [{conf_defeat:.4f}]。")
+                
+                # 優先嘗試比對戰敗重新開始按鈕 (defeat_retry.png) 或通用再戰按鈕 (stages/retry.png)
+                pos_retry = None
+                conf_retry = 0.0
+                matched_btn = None
+                
+                for btn_name in ["defeat_retry.png", "stages/retry.png"]:
+                    if os.path.exists(os.path.join("templates", btn_name)):
+                        pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.75)
+                        if pos:
+                            pos_retry = pos
+                            conf_retry = conf
+                            matched_btn = btn_name
+                            break
+                            
+                if pos_retry:
+                    logging.info(f"👉 偵測到重新開始按鈕 [{matched_btn}] (信心度: {conf_retry:.4f})，進行點擊重新開始。")
+                    self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
+                else:
+                    # 作為防禦性 Backup，使用戰敗大圖中心點向左下角相對偏移點擊
+                    # 戰敗大圖寬高為 546x691，中心點向左偏 140 像素，向下偏 250 像素，大約為重新開始按鈕
+                    click_x = rect["left"] + pos_defeat[0] - 140
+                    click_y = rect["top"] + pos_defeat[1] + 250
+                    logging.warning(f"⚠️ 未匹配到重新開始按鈕圖，使用防禦性相對座標點擊: ({click_x}, {click_y})")
+                    self.mouse.click(click_x, click_y)
+                    
+                self.machine.run_count += 1
+                logging.info(f"🚀 開始第 {self.machine.run_count} 次戰鬥！(戰敗重新開始)")
+                self.machine.transition_to(self.machine.STATE_BATTLE)
+                time.sleep(0.1)
+                return True
 
 
         # A2. 檢查離開戰鬥/結算退出按鈕 (在背包滿需要清理，或領取時間到了需要去領體力/鑽石時，退出戰鬥回大廳)

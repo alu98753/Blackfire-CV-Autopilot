@@ -21,6 +21,15 @@ class BattleHandler(BaseStateHandler):
                 time.sleep(0.1)
 
         # B. 監控戰鬥結算
+        # B1. 優先檢查是否戰敗 (defeat.png)
+        if os.path.exists(os.path.join("templates", "defeat.png")):
+            pos_defeat, conf_defeat = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
+            if pos_defeat:
+                logging.info(f"💀 偵測到戰敗畫面 [{conf_defeat:.4f}]，戰鬥結束！切換至結算狀態。")
+                self.machine.transition_to(self.machine.STATE_RESULT)
+                time.sleep(0.15)
+                return
+
         if self.machine.config["type"] == "stage":
             # 關卡模式：檢查 retry.png 與所有 continue*.png
             found_result_trigger = False
