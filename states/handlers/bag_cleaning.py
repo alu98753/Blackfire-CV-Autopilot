@@ -214,12 +214,18 @@ class BagCleaningHandler(BaseStateHandler):
 
         # 5. 檢查背包按鈕 (若背包尚未打開，在大廳或探索畫面點擊打開)
         if os.path.exists(os.path.join("templates", "common/bag.png")):
-            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.7)
+            # 使用較高閥值 0.80 且配合相對橫向座標過濾 (物品欄相對 x 座標應在 0.77 ~ 0.85 之間)，防止誤點「戰團」
+            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.80)
             if pos_bag:
-                logging.info(f"🎒 背包清理：偵測到背包入口按鈕 [{conf_bag:.4f}]，點擊打開背包。")
-                self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
-                time.sleep(0.1)
-                return
+                h_limit, w_limit = screen_img.shape[:2]
+                rel_x = pos_bag[0] / w_limit
+                if 0.77 <= rel_x <= 0.85:
+                    logging.info(f"🎒 背包清理：偵測到背包入口按鈕 [{conf_bag:.4f}] (相對橫向座標: {rel_x:.4f})，點擊打開背包。")
+                    self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
+                    time.sleep(0.1)
+                    return
+                else:
+                    logging.warning(f"🎒 背包清理：⚠️ 偵測到疑似背包入口但相對橫向座標不符 ({rel_x:.4f}，預期 0.77~0.85)，已忽略以防止點錯「戰團」。")
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
         time.sleep(0.05)

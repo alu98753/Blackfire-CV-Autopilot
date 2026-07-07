@@ -266,10 +266,10 @@ class TestStateMachineLogic(unittest.TestCase):
         # 4. BAG_CLEANING 狀態下順序點擊：
         # - 看到 common/bag.png ➔ 點擊打開背包
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((400, 400), 0.9) if name == "common/bag.png" else (None, 0.0)
+            ((1550, 992), 0.9) if name == "common/bag.png" else (None, 0.0)
         )
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(400, 400)
+        self.mock_mouse.click.assert_called_with(1550, 992)
         
         # - 看到 common/Backpack_Disassembly.png ➔ 點擊進入大量分解
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
