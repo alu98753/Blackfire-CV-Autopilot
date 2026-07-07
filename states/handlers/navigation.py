@@ -264,8 +264,14 @@ class NavigationHandler(BaseStateHandler):
                         time.sleep(0.3)
                         break
                 else:
-                    logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    click_x = rect["left"] + pos[0]
+                    click_y = rect["top"] + pos[1]
+                    if "level" in btn and "final" not in btn and "entry" not in btn:
+                        click_y -= 160
+                        logging.info(f"🧭 尋路中：在畫面中找到關卡小島按鈕 [{btn}] (信心度: {conf:.4f})，套用向上偏移 160 像素點擊島嶼本體。")
+                    else:
+                        logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
+                    self.mouse.click(click_x, click_y)
                     clicked_any = True
                     time.sleep(0.03) # 等待跳轉動畫
                     break

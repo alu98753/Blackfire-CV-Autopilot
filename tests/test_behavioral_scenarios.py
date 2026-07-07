@@ -1024,7 +1024,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         )
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(250, 250)
+        self.mock_mouse.click.assert_called_with(250, 90)
         
         # 步驟 3: 畫面看到 stages/stage_label.png，但沒有 stages/level2_final.png ➔ 滾動
         # 設定模擬時間
