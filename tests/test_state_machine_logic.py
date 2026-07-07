@@ -681,5 +681,59 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         self.assertEqual(self.state_machine.run_count, 2)
 
+    @patch('os.path.exists')
+    def test_stuck_protection_flow(self, mock_exists):
+        """
+        測試防卡死監控流程：
+        1. 在 NAVIGATING 狀態下，若連續 15 幀狀態未轉移，則判定為卡死。
+        2. 分支 A: 找到 confirm.png ➔ 點擊該確認按鈕以清除阻礙，保持原本狀態。
+        3. 分支 B: 找不到任何確認按鈕 ➔ 強制轉移至 STATE_UNKNOWN 重新定位。
+        """
+        mock_exists.return_value = True
+        
+        # 準備
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.consecutive_stuck_count = 0
+        self.mock_capturer.capture.return_value = MagicMock()
+        
+        # 模擬 match，前 14 次不觸發卡死
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        for _ in range(14):
+            self.state_machine.step()
+            
+        self.assertEqual(self.state_machine.consecutive_stuck_count, 14)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 測試分支 A: 匹配成功 confirm.png
+        def match_confirm(img, name, threshold):
+            if name == "common/confirm.png":
+                return ((800, 400), 0.9)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_confirm
+        self.mock_mouse.click.reset_mock()
+        
+        # 執行第 15 次 step
+        self.state_machine.step()
+        
+        # 斷言：應該點擊通用確認按鈕 (0+800=800, 0+400=400)，且重置 stuck 次數，且狀態依然保持 NAVIGATING
+        self.mock_mouse.click.assert_called_with(800, 400)
+        self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 測試分支 B: 找不到任何確認按鈕
+        self.state_machine.consecutive_stuck_count = 14  # 手動設回 14 次
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.mock_mouse.click.reset_mock()
+        
+        # 執行第 15 次 step
+        self.state_machine.step()
+        
+        # 斷言：無點擊，狀態被強制重設為 UNKNOWN，且 stuck 次數重置為 0
+        self.mock_mouse.click.assert_not_called()
+        self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
 if __name__ == "__main__":
     unittest.main()
