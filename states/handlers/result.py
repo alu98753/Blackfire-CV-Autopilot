@@ -67,7 +67,9 @@ class ResultHandler(BaseStateHandler):
         if pos_retry:
             logging.info("👉 點擊「再戰」！")
             self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
-            self.machine.transition_to(self.machine.STATE_LOBBY)
+            self.machine.run_count += 1
+            logging.info(f"🚀 開始第 {self.machine.run_count} 次關卡戰鬥！(透過再戰)")
+            self.machine.transition_to(self.machine.STATE_BATTLE)
             time.sleep(0.1)
             return True
 

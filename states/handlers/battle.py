@@ -29,7 +29,7 @@ class BattleHandler(BaseStateHandler):
                             return
 
         # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
-        if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 1.0):
+        if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 0.5):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
             logging.info(f"🔍 檢查自動戰鬥按鈕... 最大相似度: {conf_auto:.4f} (閥值: 0.7)")
             if pos_auto:
