@@ -51,5 +51,6 @@ GAME_CONFIGS = {
         "name": "背包整理",
         "type": "bag_clean",
         "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
     }
 }

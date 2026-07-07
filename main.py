@@ -136,7 +136,12 @@ def main():
     mouse.state_machine = state_machine
     # 將當前配置與體力啟用狀態設定至狀態機中
     state_machine.config = config
-    state_machine.enable_bread = enable_bread
+    if config["type"] == "bag_clean":
+        state_machine.enable_bread = False
+        state_machine.need_diamond_collection = False
+        state_machine.need_bread_collection = False
+    else:
+        state_machine.enable_bread = enable_bread
 
     print("[+] 初始化成功！請確認您的遊戲視窗非最小化，且維持在畫面上。")
     print("[+] 按 [Ctrl + C] 可以隨時終止本程式。")
