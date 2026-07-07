@@ -72,7 +72,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                         counts["purple"] += 1
                         
             max_color = "gray_or_empty"
-            max_count = 25
+            max_count = 150
             for color, count in counts.items():
                 if count > max_count:
                     max_count = count
