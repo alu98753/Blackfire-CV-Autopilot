@@ -83,7 +83,8 @@ class BagCleaningHandler(BaseStateHandler):
                     self.machine.bag_opened_clicked = True
                     time.sleep(0.1)
                     return
-            elif os.path.exists(os.path.join("templates", "common/bag.png")):
+            
+            if os.path.exists(os.path.join("templates", "common/bag.png")):
                 # 備用方案：使用較高閥值 0.80 且配合色彩通道驗證，防止誤點「戰團」
                 pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.80)
                 if pos_bag:

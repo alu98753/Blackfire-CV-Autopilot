@@ -756,5 +756,93 @@ class TestBehavioralScenarios(unittest.TestCase):
         for call in self.mock_mouse.click.call_args_list:
             self.assertNotEqual(call[0], (100, 100))
 
+    @patch('os.path.exists')
+    def test_bag_cleaning_bag_color_channel_verification(self, mock_exists):
+        """
+        [行為場景 15] 備用背包按鈕 common/bag.png 的色彩通道驗證：
+        Given: 狀態機處於 BAG_CLEANING，且 bag_opened_clicked 為 False (背包尚未打開)。
+               畫面上只能匹配到備用模板 common/bag.png (在 100, 100)。
+        When: 
+          - 情況 A: 該位置中心色彩均值 R=100, B=90 (R - B = 10 <= 18.0，疑似灰色「戰團」)。
+          - 情況 B: 該位置中心色彩均值 R=120, B=90 (R - B = 30 > 18.0，真正棕色「背包」)。
+        Then:
+          - 情況 A: 應忽略不點擊，狀態不變。
+          - 情況 B: 應點擊該位置以打開背包，且 bag_opened_clicked 變為 True。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_opened_clicked = False
+        mock_exists.return_value = True
+        
+        # 模擬 matcher 匹配到 common/bag.png 在 (100, 100)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 100), 0.9) if name == "common/bag.png" else (None, 0.0)
+        )
+        
+        # 建立模擬圖像 (R - B 驗證需要擷取以 (100, 100) 為中心的區塊)
+        # 情況 A: 模擬灰色「戰團」 R-B = 10
+        # 圖像格式是 BGR，所以 [B, G, R]
+        # 我們把 (100, 100) 附近 10x10 的區域設為 B=90, G=80, R=100
+        screen_gray = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        screen_gray[95:105, 95:105] = [90, 80, 100]
+        
+        self.mock_capturer.capture.return_value = screen_gray
+        self.mock_mouse.click.reset_mock()
+        
+        # Act 情況 A
+        self.state_machine.step()
+        
+        # Assert 情況 A: 應被忽略
+        self.mock_mouse.click.assert_not_called()
+        self.assertFalse(self.state_machine.bag_opened_clicked)
+        
+        # 情況 B: 模擬棕色「背包」 R-B = 30
+        # 我們把 (100, 100) 附近 10x10 區域設為 B=90, G=80, R=120
+        screen_brown = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        screen_brown[95:105, 95:105] = [90, 80, 120]
+        
+        self.mock_capturer.capture.return_value = screen_brown
+        
+        # Act 情況 B
+        self.state_machine.step()
+        # Assert 情況 B: 應點擊
+        self.mock_mouse.click.assert_called_with(100, 100)
+        self.assertTrue(self.state_machine.bag_opened_clicked)
+
+    @patch('os.path.exists')
+    def test_state_machine_default_fallback_state(self, mock_exists):
+        """
+        [行為場景 16] 全域掃描未知狀態時的安全降級預設落點：
+        Given: 狀態機處於 UNKNOWN 狀態，且畫面匹配不到任何已知特徵 (所有 match 回傳 None)。
+        When: 執行全域狀態掃描。
+        Then:
+          - 當 config["type"] == "stage" (關卡模式) 時，預設安全降級落點應為 STATE_BATTLE。
+          - 當 config["type"] == "dungeon" (地下城模式) 時，預設安全降級落點應為 STATE_DUNGEON_EXPLORING。
+        """
+        # Arrange
+        mock_exists.return_value = True
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        # 情況 A: 關卡模式
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        
+        # Act 情況 A
+        self.state_machine.step()
+        
+        # Assert 情況 A: 預設進入 BATTLE
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        
+        # 情況 B: 地下城模式
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        
+        # Act 情況 B
+        self.state_machine.step()
+        
+        # Assert 情況 B: 預設進入 EXPLORING
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
 if __name__ == "__main__":
     unittest.main()

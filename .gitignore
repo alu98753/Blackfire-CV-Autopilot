@@ -22,3 +22,7 @@ raw_screenshot.png
 
 # Optional: If you don't want to track your custom template images, uncomment the line below:
 # templates/*.png
+
+# Test coverage outputs
+.coverage
+htmlcov/
