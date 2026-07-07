@@ -80,14 +80,14 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(200, 200)
         
-        # Step 4: 進入鑽石視窗 (畫面上存在 common/quit.png)，只比對 diamond_free.png (安全鎖定)
+        # Step 4: 進入鑽石視窗 (畫面上存在 common/quit.png)，只比對 free.png (安全鎖定)
         # 即使此時背景可能有一張 diamond.png，在安全保護下亦不會去點擊它
         def match_side_effect_dia_window(img, name, threshold):
             # 模擬視窗內退出按鈕可見
             if name == "common/quit.png":
                 return ((500, 500), 0.9)
             # 偵測到免費按鈕
-            if name == "diamond_free.png":
+            if name == "free.png":
                 return ((300, 300), 0.9)
             # 如果嘗試去點擊大廳入口，回傳 None 阻止
             if name == "diamond.png":
@@ -143,7 +143,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         def match_side_effect_cooldown(img, name, threshold):
             if name == "common/quit.png":
                 return ((500, 500), 0.9)
-            # diamond_free.png 匹配失敗 (冷卻中)
+            # free.png 匹配失敗 (冷卻中)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect_cooldown

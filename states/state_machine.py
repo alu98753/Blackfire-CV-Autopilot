@@ -149,7 +149,7 @@ class GameStateMachine:
             # 調低門檻至 0.7 以應對可能的光影或微幅變動，確保 100% 偵測成功
             pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
             if pos:
-                if self.current_state != self.STATE_BACKPACK_FULL_SORTING and self.current_state not in [self.STATE_BATTLE, self.STATE_RESULT]:
+                if self.current_state != self.STATE_BACKPACK_FULL_SORTING:
                     logging.warning(f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。")
                     self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
                     return
@@ -198,7 +198,7 @@ class GameStateMachine:
         # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
         if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
             nav_buttons = [
-                "common/door.png", "goback_town.png", "diamond.png", "diamond_free.png",
+                "common/door.png", "goback_town.png", "diamond.png", "free.png",
                 "common/bread.png", "common/bread_collection.png", "common/quit.png"
             ]
             for bf in nav_buttons:

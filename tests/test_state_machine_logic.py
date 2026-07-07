@@ -239,27 +239,21 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
-        # 1. 在結算畫面看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning
+        # 1. 在結算畫面看到背包已滿 (backpack_full.png) ➔ 狀態轉移至 STATE_BACKPACK_FULL_SORTING 且設定 need_bag_cleaning = True
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (
-            ((100, 100), 0.9) if name == "common/quit.png" else (None, 0.0))
+            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(100, 100)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
         self.assertTrue(self.state_machine.need_bag_cleaning)
         
-        # 2. 隨後看到結算確認 confirm.png ➔ 點擊
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((200, 200), 0.9) if name == "common/confirm.png" else (None, 0.0)
-        )
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(200, 200)
+        # 為了測試後續的大廳攔截與 BAG_CLEANING 流程，我們手動將狀態設置為 LOBBY (模擬已完成分選退出後回到大廳的情況)
+        self.state_machine.current_state = self.state_machine.STATE_LOBBY
         
-        # 3. 畫面回到大廳，看到 stages/start.png。此時因為 need_bag_cleaning 標記，大廳處理器應轉移至 LOBBY 再轉至 BAG_CLEANING 狀態
+        # 3. 畫面回到大廳，看到 stages/start.png。此時因為 need_bag_cleaning 標記，大廳處理器應轉移至 BAG_CLEANING 狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((300, 300), 0.9) if name == "stages/start.png" else (None, 0.0)
         )
-        self.state_machine.step()  # 轉移 RESULT -> LOBBY
         self.state_machine.step()  # LobbyHandler 攔截轉移 LOBBY -> BAG_CLEANING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
         
@@ -365,7 +359,7 @@ class TestStateMachineLogic(unittest.TestCase):
     @patch('os.path.exists')
     def test_dungeon_battle_backpack_full_cleaning_flow(self, mock_exists):
         """
-        測試地下城模式下，在 BATTLE 戰鬥結束/結算時偵測到背包滿 ➔ 轉移至 EXPLORING ➔ 攔截進入 BAG_CLEANING。
+        測試地下城模式下，在 BATTLE 戰鬥結束/結算時偵測到背包滿 ➔ 轉移至 BACKPACK_FULL_SORTING ➔ 模擬回到 EXPLORING ➔ 攔截進入 BAG_CLEANING。
         """
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.enable_bread = False
@@ -374,17 +368,16 @@ class TestStateMachineLogic(unittest.TestCase):
         
         mock_exists.return_value = True
         
-        # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png + quit) ➔ 點擊並標記 need_bag_cleaning，並轉移至 EXPLORING
+        # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png) ➔ 直接轉移至 BACKPACK_FULL_SORTING 並標記 need_bag_cleaning
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (
-            ((150, 150), 0.9) if name == "common/quit.png" else (None, 0.0))
+            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(150, 150)
         self.assertTrue(self.state_machine.need_bag_cleaning)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
         
-        # 2. 進入 EXPLORING 後，此時彈窗已關閉，清除 mock 以防 global check 誤匹配，此時因 need_bag_cleaning 標記，應被 ExploreHandler 攔截轉移至 BAG_CLEANING
+        # 2. 模擬分選處理完畢並回到 EXPLORING 狀態
+        self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
@@ -522,7 +515,7 @@ class TestStateMachineLogic(unittest.TestCase):
         1. 看到 goback_town.png ➔ 狀態轉移至 NAVIGATING
         2. 在 NAVIGATING 狀態下看到 goback_town.png ➔ 點點返回大廳
         3. 看到 diamond.png ➔ 點點打開鑽石領取畫面
-        4. 看到 diamond_free.png ➔ 點點領取免費鑽石
+        4. 看到 free.png ➔ 點點領取免費鑽石
         5. 看到 confirm.png ➔ 點點確認並標記 diamond_collected_this_run
         6. 看到 quit_bread.png ➔ 關閉鑽石畫面，結束鑽石流程，並開始體力流程
         7. 看到 common/bread.png ➔ 開始點點進入領體力
@@ -557,9 +550,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(200, 200)
         
-        # 4. 看到 diamond_free.png ➔ 點擊 (此時需模擬 common/quit.png 也存在，代表處於視窗內)
+        # 4. 看到 free.png ➔ 點擊 (此時需模擬 common/quit.png 也存在，代表處於視窗內)
         def match_side_effect_4(img, name, threshold):
-            if name == "diamond_free.png":
+            if name == "free.png":
                 return ((300, 300), 0.9)
             if name == "common/quit.png":
                 return ((500, 500), 0.9)
@@ -598,7 +591,7 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         測試領鑽石冷卻退出流程：
         1. need_diamond_collection = True，已在大廳打開鑽石視窗。
-        2. 畫面上沒有免費鑽石 (diamond_free.png 傳回 None)，但有退出按鈕 (common/quit.png) 且大廳入口 (diamond.png) 不在畫面上。
+        2. 畫面上沒有免費鑽石 (free.png 傳回 None)，但有退出按鈕 (common/quit.png) 且大廳入口 (diamond.png) 不在畫面上。
         3. 預期：應自動點擊退出按鈕，並關閉領鑽石流程 (need_diamond_collection 設為 False)。
         """
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
@@ -611,7 +604,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
         # 模擬比對：
-        # - 尋找 diamond_free.png ➔ None (冷卻中)
+        # - 尋找 free.png ➔ None (冷卻中)
         # - 尋找 common/quit.png ➔ (500, 500)
         # - 尋找 diamond.png ➔ None (不在大廳)
         def match_side_effect(img, name, threshold):

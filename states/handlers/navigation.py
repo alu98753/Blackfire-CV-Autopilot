@@ -31,7 +31,6 @@ class NavigationHandler(BaseStateHandler):
             
             # 其他情況原地等待回城
             logging.info("⌛ 尋路中：背包已滿，正在等待退出戰鬥或返回城鎮畫面...")
-            time.sleep(0.05)
             return
 
         # A1. 如果需要領鑽石，執行領鑽石分支流程 (優先於領體力)
@@ -85,8 +84,8 @@ class NavigationHandler(BaseStateHandler):
                 if in_diamond_window:
                     # 2. 如果在彈窗內，只嘗試領取免費鑽石 (diamond_free.png)
                     # 使用較高閥值 (0.90) 以避免誤判到付費的 $4.99 按鈕
-                    if os.path.exists(os.path.join("templates", "diamond_free.png")):
-                        pos_free, conf_free = self.matcher.match(screen_img, "diamond_free.png", threshold=0.90)
+                    if os.path.exists(os.path.join("templates", "free.png")):
+                        pos_free, conf_free = self.matcher.match(screen_img, "free.png", threshold=0.90)
                         if pos_free:
                             logging.info(f"💎 領鑽石：在視窗內偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
                             self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
@@ -257,4 +256,3 @@ class NavigationHandler(BaseStateHandler):
 
             # 其他情況 (例如動畫播放、切換關卡加載黑屏)，原地等待畫面載入
             logging.info("⌛ 尋路按鈕已不在畫面上，正在等待畫面載入或大廳開始按鈕出現...")
-            time.sleep(0.05)

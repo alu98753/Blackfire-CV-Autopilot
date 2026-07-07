@@ -23,26 +23,12 @@ class ResultHandler(BaseStateHandler):
             return
             
         logging.info("⌛ 結算畫面的按鈕尚未出現或正在過場，維持結算狀態等待中...")
-        time.sleep(0.05)
 
     def _handle_impl(self, screen_img, rect):
         """
         處理結算點擊。若成功點擊任何按鈕，回傳 True；否則回傳 False。
         """
-        # A1. 檢查是否背包已滿 (需要同時看見 backpack_full.png 且能匹配到關閉按鈕)
-        if os.path.exists(os.path.join("templates", "backpack_full.png")):
-            pos_full, conf_full = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
-            if pos_full:
-                # 尋找退出按鈕進行點擊
-                for q_btn in ["common/quit.png"]:
-                    if os.path.exists(os.path.join("templates", q_btn)):
-                        pos_bag, conf_bag = self.matcher.match(screen_img, q_btn, threshold=0.8)
-                        if pos_bag:
-                            logging.warning(f"🧭 偵測到「背包已滿」！出現 'backpack_full.png'，點擊退出按鈕 [{q_btn}]。")
-                            self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
-                            self.machine.need_bag_cleaning = True  # 標記需要清理背包
-                            time.sleep(0.1)
-                            return True
+
 
         # A2. 檢查離開戰鬥/結算退出按鈕 (在背包滿需要清理，或領取時間到了需要去領體力/鑽石時，退出戰鬥回大廳)
         should_exit_battle = (

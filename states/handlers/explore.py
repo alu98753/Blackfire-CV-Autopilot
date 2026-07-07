@@ -115,4 +115,3 @@ class ExploreHandler(BaseStateHandler):
                 return # 成功處理一個優先級最高的事項後即結束該步，等待下一次截圖
                 
         logging.info("⌛ 地下城探索中，正在等待下一層載入或新的隨機事件按鈕出現...")
-        time.sleep(0.02)

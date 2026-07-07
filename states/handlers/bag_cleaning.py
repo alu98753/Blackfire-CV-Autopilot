@@ -21,32 +21,21 @@ class BagCleaningHandler(BaseStateHandler):
             "common/tidy.png",
             "common/quit.png"
         ]
-        
         backpack_opened = getattr(self.machine, "bag_opened_clicked", False)
         if not backpack_opened:
-            for feature in backpack_features:
-                if os.path.exists(os.path.join("templates", feature)):
-                    pos, conf = self.matcher.match(screen_img, feature, threshold=0.75)
-                    if pos:
-                        backpack_opened = True
-                        break
-
-        if not backpack_opened:
-            # 5. 檢查背包按鈕 (若背包尚未打開，在大廳或探索畫面點擊打開)
             # 優先比對「物品欄」三個字，特徵極其獨特，絕對不會誤判到「戰團」
             if os.path.exists(os.path.join("templates", "common/bag_text.png")):
-                pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.80)
+                pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.70)
                 if pos_text:
-                    logging.info(f"🎒 背包清理：偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
-                    # 往上偏移 45 像素點擊圖示中心
+                    logging.info(f"🎒 背包清理：優先偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
                     self.mouse.click(rect["left"] + pos_text[0], rect["top"] + pos_text[1] - 45)
                     self.machine.bag_opened_clicked = True
                     time.sleep(0.1)
                     return
             
+            # 備用方案：使用較低閥值 0.72 且配合色彩通道驗證，防止誤點「戰團」
             if os.path.exists(os.path.join("templates", "common/bag.png")):
-                # 備用方案：使用較高閥值 0.80 且配合色彩通道驗證，防止誤點「戰團」
-                pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.80)
+                pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.72)
                 if pos_bag:
                     h_limit, w_limit = screen_img.shape[:2]
                     # 色彩驗證：物品欄中心為棕色 (R - B 應顯著大於 18)，而戰團為灰色 (R - B 接近 0)
@@ -65,7 +54,7 @@ class BagCleaningHandler(BaseStateHandler):
                         r_minus_b = 99.0
                     
                     if r_minus_b > 18.0:
-                        logging.info(f"🎒 背包清理：使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
+                        logging.info(f"🎒 背包清理：優先使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
                         self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                         self.machine.bag_opened_clicked = True
                         time.sleep(0.1)
@@ -73,11 +62,19 @@ class BagCleaningHandler(BaseStateHandler):
                     else:
                         logging.warning(f"🎒 背包清理：⚠️ 備用模板偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
 
+            # 如果入口均未偵測到，才防禦性檢查是否其實已經處於背包介面 (這才需要比對那 5 個內部特徵)
+            for feature in backpack_features:
+                if os.path.exists(os.path.join("templates", feature)):
+                    pos, conf = self.matcher.match(screen_img, feature, threshold=0.75)
+                    if pos:
+                        backpack_opened = True
+                        break
+
+        if not backpack_opened:
             logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
-            time.sleep(0.05)
             return
 
-        # 1. 優先處理確認與 OK 彈窗 (例如大量分解確認、整理確認等)
+                # 1. 優先處理確認與 OK 彈窗 (例如大量分解確認、整理確認等)
         pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
         if pos_conf:
             logging.info(f"🎒 背包清理：偵測到確認彈窗 [{conf_conf:.4f}]，點擊確認。")
@@ -239,4 +236,3 @@ class BagCleaningHandler(BaseStateHandler):
                     return
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
-        time.sleep(0.05)

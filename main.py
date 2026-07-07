@@ -193,7 +193,7 @@ def main():
             
             # 計算該步所花費時間，若低於設定的偵測間隔，則補足間隔時間
             elapsed = time.time() - start_time
-            sleep_time = max(0.1, args.interval - elapsed)
+            sleep_time = max(0.001, args.interval - elapsed)
             time.sleep(sleep_time)
             
     except KeyboardInterrupt:
