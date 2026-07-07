@@ -190,7 +190,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         test_img[381+88:381+98, 1007+10:1007+98] = [0, 200, 0]
         test_img[381+10:381+98, 1007+10:1007+20] = [0, 200, 0]
         test_img[381+10:381+98, 1007+88:1007+98] = [0, 200, 0]
-        test_img[381+50:381+60, 1007+50:1007+60] = [50, 50, 50]
+        test_img[381+35:381+75, 1007+35:1007+75] = [50, 50, 50]
         self.mock_capturer.capture.return_value = test_img
         
         def match_side_effect_destroy_collect(img, name, threshold):
@@ -229,13 +229,25 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.need_bag_cleaning = True
         mock_exists.return_value = True
         
-        # 模擬左側有黃金物品，右側全部為空置的黑色格子 (標準差 std = 0 < 20)，觸發滾動與安全退出
+        # 模擬左側有黃金物品，右側全部為貴重藍色物品 (標準差大於 18，且顏色為 blue)，觸發滾動與安全退出
         test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        # 左側黃金物件
+        # 左側黃金物件 (Col 0, Row 0)
         test_img[381+10:381+20, 407+10:407+98] = [0, 200, 200]
         test_img[381+88:381+98, 407+10:407+98] = [0, 200, 200]
         test_img[381+10:381+98, 407+10:407+20] = [0, 200, 200]
         test_img[381+10:381+98, 407+88:407+98] = [0, 200, 200]
+        
+        # 模擬右側 4x4 全是貴重藍色裝備 (不是空格，不能被銷毀)
+        for r in range(4):
+            for c in range(4):
+                cx = 1007 + c * 134
+                cy = 381 + r * 134
+                test_img[cy+10:cy+20, cx+10:cx+98] = [200, 0, 0]
+                test_img[cy+88:cy+98, cx+10:cx+98] = [200, 0, 0]
+                test_img[cy+10:cy+98, cx+10:cx+20] = [200, 0, 0]
+                test_img[cy+10:cy+98, cx+88:cx+98] = [200, 0, 0]
+                test_img[cy+35:cy+75, cx+35:cx+75] = [50, 50, 50]
+                
         self.mock_capturer.capture.return_value = test_img
         
         # 關閉二次確認彈窗以及定位彈窗位置
