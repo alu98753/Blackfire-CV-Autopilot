@@ -44,12 +44,17 @@ class ResultHandler(BaseStateHandler):
                             time.sleep(0.1)
                             return True
 
-        # A2. 檢查離開戰鬥/結算退出按鈕 (僅在背包滿需要清理時，才執行退出戰鬥回大廳)
-        if self.machine.need_bag_cleaning:
+        # A2. 檢查離開戰鬥/結算退出按鈕 (在背包滿需要清理，或領取時間到了需要去領體力/鑽石時，退出戰鬥回大廳)
+        should_exit_battle = (
+            self.machine.need_bag_cleaning or 
+            self.machine.need_diamond_collection or 
+            (self.machine.enable_bread and self.machine.need_bread_collection)
+        )
+        if should_exit_battle:
             if os.path.exists(os.path.join("templates", "exit_battle.png")):
                 pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.8)
                 if pos_exit:
-                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算。")
+                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取任務。")
                     self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
                     time.sleep(0.1)
                     return True
