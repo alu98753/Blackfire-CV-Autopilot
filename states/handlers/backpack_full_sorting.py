@@ -16,7 +16,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         4. 點擊銷毀該低稀有度物品 ➔ 確認銷毀 ➔ 點擊左側貴重物品收入背包 ➔ 重置滾動並重複流程。
         """
         # A. 優先進行 backpack_full.png 的精確匹配，取得其中心座標以利定位右上角關閉 X 按鈕
-        pos_full, conf_full = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
+        pos_full, conf_full = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
         if not pos_full:
             # 若沒看見彈窗，退回 UNKNOWN 狀態重新偵測
             logging.info("🎒 [背包分選] 未偵測到背包已滿彈窗，退回 UNKNOWN。")

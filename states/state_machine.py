@@ -177,8 +177,8 @@ class GameStateMachine:
 
         # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
         if os.path.exists(os.path.join("templates", "backpack_full.png")):
-            # 調低門檻至 0.7 以應對可能的光影或微幅變動，確保 100% 偵測成功
-            pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
+            # 調高門檻至 0.80 以避免大廳背景等介面產生虛假誤判，真實彈窗特徵明顯，信心度極高
+            pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
             if pos:
                 if self.current_state != self.STATE_BACKPACK_FULL_SORTING:
                     logging.warning(f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。")
@@ -212,7 +212,7 @@ class GameStateMachine:
         
         # 0.0 如果看見「無法容納的物品 (背包滿)」彈窗，進入分選狀態
         if os.path.exists(os.path.join("templates", "backpack_full.png")):
-            pos, _ = self.matcher.match(screen_img, "backpack_full.png", threshold=0.7)
+            pos, _ = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
             if pos:
                 self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
                 return
