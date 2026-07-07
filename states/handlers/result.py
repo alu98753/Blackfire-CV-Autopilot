@@ -44,14 +44,15 @@ class ResultHandler(BaseStateHandler):
                             time.sleep(0.1)
                             return True
 
-        # A2. 檢查離開戰鬥/結算退出按鈕
-        if os.path.exists(os.path.join("templates", "exit_battle.png")):
-            pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.8)
-            if pos_exit:
-                logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算。")
-                self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
-                time.sleep(0.1)
-                return True
+        # A2. 檢查離開戰鬥/結算退出按鈕 (僅在背包滿需要清理時，才執行退出戰鬥回大廳)
+        if self.machine.need_bag_cleaning:
+            if os.path.exists(os.path.join("templates", "exit_battle.png")):
+                pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.8)
+                if pos_exit:
+                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算。")
+                    self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
+                    time.sleep(0.1)
+                    return True
 
         # A2. 檢查結算通用確認彈窗 (例如關卡結算確認)
         pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)

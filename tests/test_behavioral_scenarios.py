@@ -855,6 +855,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         # Arrange
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.need_bag_cleaning = True
         mock_exists.return_value = True
         
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
@@ -867,6 +868,31 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # Assert
         self.mock_mouse.click.assert_called_with(200, 200)
+
+    @patch('os.path.exists')
+    def test_result_exit_battle_ignored_if_bag_not_full(self, mock_exists):
+        """
+        [行為場景 17-B] 背包未滿時忽略離開戰鬥按鈕：
+        Given: 狀態機處於 RESULT 狀態，且 need_bag_cleaning = False。
+        When: 執行狀態機決策。
+        Then: 即使看見離開戰鬥按鈕 exit_battle.png，也應該忽略不點擊。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.need_bag_cleaning = False
+        mock_exists.return_value = True
+        
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "exit_battle.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        self.mock_mouse.click.assert_not_called()
 
     @patch('os.path.exists')
     def test_result_no_match_fallback_to_unknown(self, mock_exists):
