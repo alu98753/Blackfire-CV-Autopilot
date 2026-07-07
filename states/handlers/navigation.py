@@ -8,6 +8,31 @@ class NavigationHandler(BaseStateHandler):
         """
         尋路導航與自動領體力邏輯。
         """
+        # 0. 背包清理優先防護：如果需要整理背包，尋路只能引導我們退回大廳，不得前進
+        if self.machine.need_bag_cleaning:
+            # 1. 檢查是否已經回到了城鎮大廳 (看到了大門 common/door.png)
+            if os.path.exists(os.path.join("templates", "common/door.png")):
+                pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
+                if pos_door:
+                    logging.info(f"🎒 尋路中：偵測到城鎮大門 [common/door.png] 且需要清理背包，切換至 BAG_CLEANING 狀態。")
+                    self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
+                    return
+            
+            # 2. 如果還在大地圖或結算退出介面，只允許點擊回城/退出按鈕 (如 exit_battle.png 或 goback_town.png)
+            for back_btn in ["exit_battle.png", "goback_town.png"]:
+                if os.path.exists(os.path.join("templates", back_btn)):
+                    pos_b, conf_b = self.matcher.match(screen_img, back_btn, threshold=0.8)
+                    if pos_b:
+                        logging.info(f"🎒 尋路中：需要清理背包，點擊回城按鈕 [{back_btn}] 退回城鎮。")
+                        self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
+                        time.sleep(0.1)
+                        return
+            
+            # 其他情況原地等待回城
+            logging.info("⌛ 尋路中：背包已滿，正在等待退出戰鬥或返回城鎮畫面...")
+            time.sleep(0.05)
+            return
+
         # A1. 如果需要領鑽石，執行領鑽石分支流程 (優先於領體力)
         if self.machine.need_diamond_collection:
             # 情況一：如果已經點過免費鑽石並確認了，我們尋找退出按鈕關閉彈窗

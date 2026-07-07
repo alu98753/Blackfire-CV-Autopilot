@@ -977,5 +977,38 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(350, 350)
         self.mock_mouse.scroll.assert_not_called()
 
+    @patch('os.path.exists')
+    def test_navigation_interceptor_for_bag_cleaning(self, mock_exists):
+        """
+        [行為場景 20] 尋路狀態下的背包清理優先攔截：
+        Given: 狀態機處於 NAVIGATING 狀態，且 need_bag_cleaning = True (背包滿需要清理)。
+        When & Then:
+          1. 畫面看到 exit_battle.png ➔ 應點擊 exit_battle.png 回城，不執行常規關卡選擇前進。
+          2. 畫面看到 common/door.png ➔ 狀態機應將狀態轉移至 BAG_CLEANING。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.need_bag_cleaning = True
+        mock_exists.return_value = True
+        
+        # 1. 畫面看到 exit_battle.png ➔ 應點擊退出，不前進
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "exit_battle.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(200, 200)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 2. 畫面看到 common/door.png ➔ 應判定已抵達大廳，切換至 BAG_CLEANING 狀態
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+        self.mock_mouse.click.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
