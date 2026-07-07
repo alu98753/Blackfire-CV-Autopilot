@@ -10,13 +10,14 @@ class NavigationHandler(BaseStateHandler):
         """
         # 0. 背包清理優先防護：如果需要整理背包，尋路只能引導我們退回大廳，不得前進
         if self.machine.need_bag_cleaning:
-            # 1. 檢查是否已經回到了城鎮大廳 (看到了大門 common/door.png)
-            if os.path.exists(os.path.join("templates", "common/door.png")):
-                pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
-                if pos_door:
-                    logging.info(f"🎒 尋路中：偵測到城鎮大門 [common/door.png] 且需要清理背包，切換至 BAG_CLEANING 狀態。")
-                    self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
-                    return
+            # 1. 檢查是否已經離開關卡回到了大廳/城鎮 (看到了 common/door.png 或 goback_town.png)
+            for town_btn in ["common/door.png", "goback_town.png"]:
+                if os.path.exists(os.path.join("templates", town_btn)):
+                    pos_t, conf_t = self.matcher.match(screen_img, town_btn, threshold=0.8)
+                    if pos_t:
+                        logging.info(f"🎒 尋路中：偵測到大廳/城鎮標誌 [{town_btn}] 且需要清理背包，切換至 BAG_CLEANING 狀態。")
+                        self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
+                        return
             
             # 2. 如果還在大地圖或結算退出介面，只允許點擊回城/退出按鈕 (如 exit_battle.png 或 goback_town.png)
             for back_btn in ["exit_battle.png", "goback_town.png"]:

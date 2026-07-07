@@ -198,13 +198,14 @@ class GameStateMachine:
                 self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
                 return
 
-        # 0.05 如果需要清理背包 (need_bag_cleaning == True) 且已回到了主城大廳 (看到 common/door.png)
+        # 0.05 如果需要清理背包 (need_bag_cleaning == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
         if self.need_bag_cleaning:
-            if os.path.exists(os.path.join("templates", "common/door.png")):
-                pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
-                if pos_door:
-                    self.transition_to(self.STATE_BAG_CLEANING)
-                    return
+            for town_btn in ["common/door.png", "goback_town.png"]:
+                if os.path.exists(os.path.join("templates", town_btn)):
+                    pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
+                    if pos_t:
+                        self.transition_to(self.STATE_BAG_CLEANING)
+                        return
 
         # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
         if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):

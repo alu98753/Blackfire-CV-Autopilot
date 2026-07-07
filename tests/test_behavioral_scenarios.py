@@ -1010,5 +1010,15 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
         self.mock_mouse.click.assert_not_called()
 
+        # 3. 重置狀態並測試：畫面看到 goback_town.png ➔ 應判定已在準備介面，切換至 BAG_CLEANING 狀態
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((150, 150), 0.9) if name == "goback_town.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+        self.mock_mouse.click.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
