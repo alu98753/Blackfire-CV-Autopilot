@@ -704,19 +704,19 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(200, 200)
         self.assertEqual(self.state_machine.last_auto_click_time, 1000.0)
         
-        # Step 2: 1001.5s 執行第二步 ➔ 應跳過點擊
-        mock_time.return_value = 1001.5
+        # Step 2: 1000.5s 執行第二步 (間隔 0.5s < 1.0s) ➔ 應跳過點擊
+        mock_time.return_value = 1000.5
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         self.mock_mouse.click.assert_not_called()
         self.assertEqual(self.state_machine.last_auto_click_time, 1000.0)
         
-        # Step 3: 1004.0s 執行第三步 ➔ 應再次點擊
-        mock_time.return_value = 1004.0
+        # Step 3: 1001.5s 執行第三步 (間隔 1.5s > 1.0s) ➔ 應再次點擊
+        mock_time.return_value = 1001.5
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         self.mock_mouse.click.assert_called_once_with(200, 200)
-        self.assertEqual(self.state_machine.last_auto_click_time, 1004.0)
+        self.assertEqual(self.state_machine.last_auto_click_time, 1001.5)
 
     @patch('os.path.exists')
     def test_result_continue_button_click(self, mock_exists):
