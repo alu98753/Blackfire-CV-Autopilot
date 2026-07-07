@@ -116,18 +116,19 @@ class GameStateMachine:
             time.sleep(1)
             return
 
-        # 1. 檢查領體力與領鑽石定時器
-        # 1.1 鑽石定時器 (2小時 = 7200秒)
-        if time.time() - self.last_diamond_collection_time > 7200.0:
-            if not self.need_diamond_collection:
-                logging.info("⏰ 距離上次領鑽石已滿 2 小時，排程在下一輪準備階段執行自動領鑽石。")
-                self.need_diamond_collection = True
+        # 1. 檢查領體力與領鑽石定時器 (背包整理模式除外)
+        if self.config["type"] != "bag_clean":
+            # 1.1 鑽石定時器 (2小時 = 7200秒)
+            if time.time() - self.last_diamond_collection_time > 7200.0:
+                if not self.need_diamond_collection:
+                    logging.info("⏰ 距離上次領鑽石已滿 2 小時，排程在下一輪準備階段執行自動領鑽石。")
+                    self.need_diamond_collection = True
 
-        # 1.2 體力定時器 (30分鐘 = 1800秒)
-        if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
-            if not self.need_bread_collection:
-                logging.info("⏰ 距離上次領體力已滿 30 分鐘，排程在下一輪準備階段執行自動領體力。")
-                self.need_bread_collection = True
+            # 1.2 體力定時器 (30分鐘 = 1800秒)
+            if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
+                if not self.need_bread_collection:
+                    logging.info("⏰ 距離上次領體力已滿 30 分鐘，排程在下一輪準備階段執行自動領體力。")
+                    self.need_bread_collection = True
 
         # 2. 取得遊戲視窗邊界與擷取畫面
         rect = self.capturer.get_window_rect()
