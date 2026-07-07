@@ -884,7 +884,14 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         mock_exists.return_value = True
         mock_time.return_value = 1000.0
-        
+        # 步驟 0: 畫面看到 common/door.png
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((50, 50), 0.9) if name == "common/door.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(50, 50)
+
         # 步驟 1: 畫面看到 common/select_stage.png
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((150, 150), 0.9) if name == "common/select_stage.png" else (None, 0.0)

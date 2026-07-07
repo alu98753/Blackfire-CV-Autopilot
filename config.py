@@ -7,6 +7,7 @@ GAME_CONFIGS = {
         "type": "stage",
         # 導航進入路徑：離開戰鬥 -> 選擇關卡 -> 點選第二關 -> 分關入口 -> 魔王關入口
         "navigation_path": [
+            "common/door.png",
             "exit_battle.png",
             "common/select_stage.png",
             "level2_Barren_Rocky_Ground.png",
