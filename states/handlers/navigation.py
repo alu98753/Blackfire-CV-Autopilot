@@ -160,10 +160,22 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(0.03)
                     return
 
-                # 3. 領體力按鈕 (bread collection)
-                pos_coll, conf_coll = self.matcher.match(screen_img, "common/bread_collection.png", threshold=0.8)
+                # 3. 領體力按鈕 (嘗試匹配通用 collect.png 或專屬 bread_collection.png，使用 0.70 的容錯閥值)
+                pos_coll = None
+                conf_coll = 0.0
+                matched_template = None
+                
+                for template_name in ["common/collect.png", "common/bread_collection.png"]:
+                    if os.path.exists(os.path.join("templates", template_name)):
+                        pos, conf = self.matcher.match(screen_img, template_name, threshold=0.70)
+                        if pos:
+                            pos_coll = pos
+                            conf_coll = conf
+                            matched_template = template_name
+                            break
+                            
                 if pos_coll:
-                    logging.info(f"🍞 領體力：偵測到領體力按鈕 [{conf_coll:.4f}]，進行點擊領取。")
+                    logging.info(f"🍞 領體力：偵測到領體力按鈕 [{matched_template}] (信心度: {conf_coll:.4f})，進行點擊領取。")
                     self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
                     time.sleep(0.03)
                     return

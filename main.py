@@ -108,7 +108,6 @@ def main():
     bread_files = [
         "common/door.png",
         "common/bread.png",
-        "common/bread_collection.png",
         "common/confirm.png",
         "common/ok.png",
         "common/quit.png"
@@ -118,6 +117,13 @@ def main():
         if not os.path.exists(os.path.join("templates", bf)):
             enable_bread = False
             break
+
+    if enable_bread:
+        # 額外檢查收集按鈕，collect.png 或 bread_collection.png 必須至少存在一個
+        has_collect = os.path.exists(os.path.join("templates", "common/collect.png")) or \
+                      os.path.exists(os.path.join("templates", "common/bread_collection.png"))
+        if not has_collect:
+            enable_bread = False
 
     if enable_bread:
         print("[*] 自動領體力功能: 啟用 (啟動時與每 30 分鐘執行一次)")

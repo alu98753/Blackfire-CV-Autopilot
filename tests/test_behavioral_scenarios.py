@@ -637,7 +637,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         [行為場景 12] 領體力冷卻/已滿自動關閉保護行為：
         Given: 體力領取定時器到期，進入 NAVIGATING 狀態領體力。
-               畫面上無免費領取按鈕 (bread_collection.png 匹配失敗)，但看見關閉退出按鈕 (common/quit.png)。
+               畫面上無免費領取按鈕 (collect.png 匹配失敗)，但看見關閉退出按鈕 (common/quit.png)。
         When: 執行狀態機決策。
         Then:
           1. 程式應識別冷卻/已領狀態，點擊退出按鈕 (common/quit.png)。
@@ -653,7 +653,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 設定虛擬目前時間為 1000s
         mock_time.return_value = 1000.0
         
-        # 模擬 match：quit.png 成功，bread_collection.png 失敗
+        # 模擬 match：quit.png 成功，collect.png 失敗
         def match_side_effect(img, name, threshold):
             if name == "common/quit.png":
                 return ((500, 500), 0.9)
