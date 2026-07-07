@@ -87,6 +87,8 @@ class MouseController:
             # 記錄腳本最後操作滑鼠的位置與時間
             self.last_target_pos = (target_x, target_y)
             self.last_action_time = time.time()
+            if self.state_machine is not None:
+                self.state_machine.consecutive_stuck_count = 0
             return True
         except pyautogui.FailSafeException:
             logging.error("🔴 觸發 PyAutoGUI 安全終止 (FailSafe) 機制！滑鼠已移至螢幕角落。")
@@ -130,6 +132,8 @@ class MouseController:
                 self.last_target_pos = pyautogui.position()
             pyautogui.scroll(clicks)
             self.last_action_time = time.time()
+            if self.state_machine is not None:
+                self.state_machine.consecutive_stuck_count = 0
             time.sleep(0.3)
             return True
         except Exception as e:
