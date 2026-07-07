@@ -869,6 +869,34 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(200, 200)
 
     @patch('os.path.exists')
+    def test_result_no_match_fallback_to_unknown(self, mock_exists):
+        """
+        [行為場景 19] 結算畫面超時未匹配自動降級機制：
+        Given: 狀態機處於 RESULT 狀態。畫面上連續多次找不到任何結算按鈕。
+        When: 執行 5 次狀態機步進。
+        Then:
+          - 第 1 到 4 次，狀態依然是 RESULT。
+          - 第 5 次，狀態轉移到 UNKNOWN。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        mock_exists.return_value = True
+        
+        # 模擬完全匹配不到任何東西
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        # Act & Assert
+        # 前 4 次狀態不變
+        for _ in range(4):
+            self.state_machine.step()
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
+            
+        # 第 5 次狀態變為 UNKNOWN
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+    @patch('os.path.exists')
     @patch('time.time')
     def test_stage_navigation_path_with_scrolling(self, mock_time, mock_exists):
         """
