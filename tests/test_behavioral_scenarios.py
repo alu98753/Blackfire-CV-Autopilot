@@ -823,34 +823,49 @@ class TestBehavioralScenarios(unittest.TestCase):
     def test_state_machine_default_fallback_state(self, mock_exists):
         """
         [行為場景 16] 全域掃描未知狀態時的安全降級預設落點：
-        Given: 狀態機處於 UNKNOWN 狀態，且畫面匹配不到任何已知特徵 (所有 match 回傳 None)。
+        Given: 狀態機處於 UNKNOWN 狀態，且畫面匹配不到任何已知主要特徵。
         When: 執行全域狀態掃描。
         Then:
-          - 當 config["type"] == "stage" (關卡模式) 時，預設安全降級落點應為 STATE_BATTLE。
+          - 當 config["type"] == "stage" (關卡模式) 且無自動戰鬥特徵時，預設落點應為 STATE_NAVIGATING。
+          - 當 config["type"] == "stage" (關卡模式) 且有自動戰鬥特徵時，預設落點應為 STATE_BATTLE。
           - 當 config["type"] == "dungeon" (地下城模式) 時，預設安全降級落點應為 STATE_DUNGEON_EXPLORING。
         """
         # Arrange
         mock_exists.return_value = True
-        self.mock_matcher.match.return_value = (None, 0.0)
         
-        # 情況 A: 關卡模式
+        # 情況 A-1: 關卡模式，且無自動戰鬥特徵
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        self.mock_matcher.match.return_value = (None, 0.0) # 全部回傳 None
         
-        # Act 情況 A
+        # Act 情況 A-1
         self.state_machine.step()
         
-        # Assert 情況 A: 預設進入 BATTLE
+        # Assert 情況 A-1: 預設進入 NAVIGATING 重啟尋路
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 情況 A-2: 關卡模式，但偵測到自動戰鬥特徵
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 100), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        
+        # Act 情況 A-2
+        self.state_machine.step()
+        
+        # Assert 情況 A-2: 預設進入 BATTLE
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         
         # 情況 B: 地下城模式
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        self.mock_matcher.match.side_effect = None
+        self.mock_matcher.match.return_value = (None, 0.0)
         
         # Act 情況 B
         self.state_machine.step()
         
-        # Assert Assert 情況 B: 預設進入 EXPLORING
+        # Assert 情況 B: 預設進入 EXPLORING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
 
     @patch('os.path.exists')
