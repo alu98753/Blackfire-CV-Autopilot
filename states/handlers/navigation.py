@@ -195,7 +195,9 @@ class NavigationHandler(BaseStateHandler):
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
         clicked_any = False
         for btn in reversed(nav_path):
-            pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
+            # 針對 entry 類大背景特徵圖，調降閾值至 0.65，容忍縮放與像素抖動
+            thresh = 0.65 if "entry" in btn else 0.80
+            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh)
             if pos:
                 if btn == "level2_entry1.png":
                     # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
