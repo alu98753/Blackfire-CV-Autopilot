@@ -45,6 +45,7 @@ class GameStateMachine:
         self.need_bread_collection = True  # 啟動時預設需要領一次體力
         self.last_bread_collection_time = time.time()
         self.bread_collected_this_run = False
+        self.bread_click_attempted = False
         
         # 領鑽石相關屬性
         self.need_diamond_collection = True  # 啟動時預設領一次鑽石

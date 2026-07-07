@@ -177,20 +177,34 @@ class NavigationHandler(BaseStateHandler):
                 if pos_coll:
                     logging.info(f"🍞 領體力：偵測到領體力按鈕 [{matched_template}] (信心度: {conf_coll:.4f})，進行點擊領取。")
                     self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
+                    self.machine.bread_click_attempted = True
                     time.sleep(0.03)
                     return
 
-                # 如果體力視窗已經打開 (看見退出按鈕) 但找不到領取按鈕 (說明體力已領取過，處於冷卻或已滿)
-                # 則自動點點退出關閉視窗，重置定時器與標記，避免無限重試。
+                # 新增防禦性相對座標點擊：
+                # 如果體力視窗已開啟 (看到 quit.png)，但沒偵測到「收集」按鈕，
+                # 且我們在本次流程中「尚未點擊過領取」，則使用相對 quit.png 的座標執行一次點擊 (收集食物)。
                 pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
                 if pos_quit:
-                    logging.info(f"🍞 領體力：體力視窗已開啟但無領取按鈕 (處於冷卻或已領完)，點擊退出體力按鈕 [{conf_quit:.4f}] 退出。")
-                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                    self.machine.need_bread_collection = False
-                    self.machine.bread_collected_this_run = False
-                    self.machine.last_bread_collection_time = time.time()
-                    time.sleep(0.03)
-                    return
+                    if not getattr(self.machine, "bread_click_attempted", False):
+                        # 關閉按鈕匹配中心為 (X, Y)，「收集食物」按鈕相對於 X 的偏移為 dx=-208, dy=612
+                        click_x = rect["left"] + pos_quit[0] - 208
+                        click_y = rect["top"] + pos_quit[1] + 612
+                        logging.warning(f"⚠️ 領體力：未匹配到領體力按鈕，執行相對座標防禦性點擊 (收集食物): ({click_x}, {click_y})")
+                        self.mouse.click(click_x, click_y)
+                        self.machine.bread_click_attempted = True
+                        time.sleep(0.1)
+                        return
+                    else:
+                        # 如果已經嘗試點擊過領取 (不論是匹配還是相對點擊)，但畫面上依然沒有確認彈窗，說明確實處於冷卻或已領完，此時點點退出關閉視窗
+                        logging.info(f"🍞 領體力：已嘗試過點擊領取但無效，判定為冷卻或已領完，點擊退出體力按鈕 [{conf_quit:.4f}] 退出。")
+                        self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                        self.machine.need_bread_collection = False
+                        self.machine.bread_collected_this_run = False
+                        self.machine.bread_click_attempted = False  # 重置標記
+                        self.machine.last_bread_collection_time = time.time()
+                        time.sleep(0.03)
+                        return
 
                 # 5. 打開體力視窗按鈕 (bread)
                 pos_bread, conf_bread = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)

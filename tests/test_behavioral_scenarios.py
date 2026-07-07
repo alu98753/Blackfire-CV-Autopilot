@@ -662,14 +662,22 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_matcher.match.side_effect = match_side_effect
         self.mock_mouse.click.reset_mock()
         
-        # Act
+        # Act 1: 第一次執行，因未嘗試過領取，執行防禦性相對座標點擊 (X = 0+500-208 = 292, Y = 0+500+612 = 1112)
         self.state_machine.step()
         
-        # Assert
-        # 1. 應點擊退出按鈕 (500, 500)
+        # Assert 1
+        self.mock_mouse.click.assert_called_with(292, 1112)
+        self.assertTrue(self.state_machine.need_bread_collection)
+        self.assertTrue(self.state_machine.bread_click_attempted)
+        
+        # Act 2: 第二次執行，因已嘗試過領取，執行退出體力按鈕點擊 (500 + 0 = 500, 500 + 0 = 500)
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        
+        # Assert 2
         self.mock_mouse.click.assert_called_with(500, 500)
-        # 2. 領體力標記重設為 False，上次領取時間更新為目前時間 (1000s)
         self.assertFalse(self.state_machine.need_bread_collection)
+        self.assertFalse(self.state_machine.bread_click_attempted)
         self.assertEqual(self.state_machine.last_bread_collection_time, 1000.0)
 
     @patch('os.path.exists')
