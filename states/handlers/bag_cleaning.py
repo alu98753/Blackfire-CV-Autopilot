@@ -52,8 +52,72 @@ class BagCleaningHandler(BaseStateHandler):
                     max_color = color
             return max_color
 
+        # 0. 判斷背包是否已經打開
+        # 背包內特有按鈕包括：大量分解、全選、分解、整理、以及退出背包
+        backpack_features = [
+            "common/Backpack_Disassembly.png",
+            "common/select_all.png",
+            "common/Disassembly.png",
+            "common/tidy.png",
+            "common/quit.png"
+        ]
+        
+        backpack_opened = getattr(self.machine, "bag_opened_clicked", False)
+        if not backpack_opened:
+            for feature in backpack_features:
+                if os.path.exists(os.path.join("templates", feature)):
+                    pos, conf = self.matcher.match(screen_img, feature, threshold=0.75)
+                    if pos:
+                        backpack_opened = True
+                        break
+
+        if not backpack_opened:
+            # 5. 檢查背包按鈕 (若背包尚未打開，在大廳或探索畫面點擊打開)
+            # 優先比對「物品欄」三個字，特徵極其獨特，絕對不會誤判到「戰團」
+            if os.path.exists(os.path.join("templates", "common/bag_text.png")):
+                pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.80)
+                if pos_text:
+                    logging.info(f"🎒 背包清理：偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
+                    # 往上偏移 45 像素點擊圖示中心
+                    self.mouse.click(rect["left"] + pos_text[0], rect["top"] + pos_text[1] - 45)
+                    self.machine.bag_opened_clicked = True
+                    time.sleep(0.1)
+                    return
+            elif os.path.exists(os.path.join("templates", "common/bag.png")):
+                # 備用方案：使用較高閥值 0.80 且配合色彩通道驗證，防止誤點「戰團」
+                pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.80)
+                if pos_bag:
+                    h_limit, w_limit = screen_img.shape[:2]
+                    # 色彩驗證：物品欄中心為棕色 (R - B 應顯著大於 18)，而戰團為灰色 (R - B 接近 0)
+                    crop_x1 = max(0, pos_bag[0] - 5)
+                    crop_x2 = min(w_limit, pos_bag[0] + 5)
+                    crop_y1 = max(0, pos_bag[1] - 5)
+                    crop_y2 = min(h_limit, pos_bag[1] + 5)
+                    
+                    center_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
+                    is_real_game = np.max(center_crop) > 0
+                    
+                    if is_real_game:
+                        mean_bgr = np.mean(center_crop, axis=(0,1))
+                        r_minus_b = mean_bgr[2] - mean_bgr[0]
+                    else:
+                        r_minus_b = 99.0
+                    
+                    if r_minus_b > 18.0:
+                        logging.info(f"🎒 背包清理：使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
+                        self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
+                        self.machine.bag_opened_clicked = True
+                        time.sleep(0.1)
+                        return
+                    else:
+                        logging.warning(f"🎒 背包清理：⚠️ 備用模板偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
+
+            logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
+            time.sleep(0.05)
+            return
+
         # 1. 優先處理確認與 OK 彈窗 (例如大量分解確認、整理確認等)
-        pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.7)
+        pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
         if pos_conf:
             logging.info(f"🎒 背包清理：偵測到確認彈窗 [{conf_conf:.4f}]，點擊確認。")
             self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
@@ -65,7 +129,7 @@ class BagCleaningHandler(BaseStateHandler):
             time.sleep(0.1)
             return
 
-        pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.7)
+        pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
         if pos_ok:
             logging.info(f"🎒 背包清理：偵測到 OK 彈窗 [{conf_ok:.4f}]，點擊確認。")
             self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
@@ -91,6 +155,7 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_disassembled = False  # 重設分解狀態
                         self.machine.bag_select_all_clicked = False  # 重設全選狀態
                         self.machine.bag_deselected = False # 重設反選狀態
+                        self.machine.bag_opened_clicked = False # 重設打開狀態
                         time.sleep(0.1)
                         
                         # 如果是單獨的背包整理模式，在此完成後直接結束腳本
@@ -211,44 +276,6 @@ class BagCleaningHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos_mass[0], rect["top"] + pos_mass[1])
                     time.sleep(0.1)
                     return
-
-        # 5. 檢查背包按鈕 (若背包尚未打開，在大廳或探索畫面點擊打開)
-        # 優先比對「物品欄」三個字，特徵極其獨特，絕對不會誤判到「戰團」
-        if os.path.exists(os.path.join("templates", "common/bag_text.png")):
-            pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.80)
-            if pos_text:
-                logging.info(f"🎒 背包清理：偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
-                # 往上偏移 45 像素點擊圖示中心
-                self.mouse.click(rect["left"] + pos_text[0], rect["top"] + pos_text[1] - 45)
-                time.sleep(0.1)
-                return
-        elif os.path.exists(os.path.join("templates", "common/bag.png")):
-            # 備用方案：使用較高閥值 0.80 且配合色彩通道驗證，防止誤點「戰團」
-            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.80)
-            if pos_bag:
-                h_limit, w_limit = screen_img.shape[:2]
-                # 色彩驗證：物品欄中心為棕色 (R - B 應顯著大於 18)，而戰團為灰色 (R - B 接近 0)
-                crop_x1 = max(0, pos_bag[0] - 5)
-                crop_x2 = min(w_limit, pos_bag[0] + 5)
-                crop_y1 = max(0, pos_bag[1] - 5)
-                crop_y2 = min(h_limit, pos_bag[1] + 5)
-                
-                center_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
-                is_real_game = np.max(center_crop) > 0
-                
-                if is_real_game:
-                    mean_bgr = np.mean(center_crop, axis=(0,1))
-                    r_minus_b = mean_bgr[2] - mean_bgr[0]
-                else:
-                    r_minus_b = 99.0
-                
-                if r_minus_b > 18.0:
-                    logging.info(f"🎒 背包清理：使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
-                    self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
-                    time.sleep(0.1)
-                    return
-                else:
-                    logging.warning(f"🎒 背包清理：⚠️ 備用模板偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
         time.sleep(0.05)
