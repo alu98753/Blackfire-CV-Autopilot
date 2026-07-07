@@ -536,5 +536,100 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertTrue(self.state_machine.user_operating)
         mock_move_to.assert_not_called()
 
+    @patch('os.path.exists')
+    def test_bag_cleaning_only_opens_bag_when_not_opened(self, mock_exists):
+        """
+        [行為場景 10] 背包尚未打開時的安全防禦點擊行為：
+        Given: 狀態機處於 BAG_CLEANING，且 bag_opened_clicked 為 False (背包尚未打開)。
+               此時畫面上同時出現了類似 confirm.png 的圖像 (如大廳的戰團誤判) 與 bag_text.png 背包入口。
+        When: 執行狀態機決策。
+        Then:
+          1. 程式絕對不能點擊 confirm.png，以防止在大廳產生誤判點擊。
+          2. 程式應該優先尋找並點擊 bag_text.png 以打開背包，且將 bag_opened_clicked 設為 True。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_opened_clicked = False
+        mock_exists.return_value = True
+        
+        # 模擬 match 結果：confirm.png 信心度 0.85 (在 100, 100)，bag_text.png 信心度 0.90 (在 1550, 1037)
+        # 其他所有的背包內特有按鈕皆匹配失敗 (返回 None)
+        def match_side_effect(img, name, threshold):
+            if name == "common/confirm.png":
+                return ((100, 100), 0.85)
+            elif name == "common/bag_text.png":
+                return ((1550, 1037), 0.90)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        # 1. 應點擊打開背包的圖示中心 (1550, 1037 - 45) = (1550, 992)
+        self.mock_mouse.click.assert_called_with(1550, 992)
+        # 2. 不能呼叫點擊 confirm.png 的 (100, 100)
+        for call in self.mock_mouse.click.call_args_list:
+            self.assertNotEqual(call[0], (100, 100))
+        # 3. 狀態變數 bag_opened_clicked 應被設為 True
+        self.assertTrue(self.state_machine.bag_opened_clicked)
+
+    @patch('os.path.exists')
+    def test_color_classification_threshold_defense(self, mock_exists):
+        """
+        [行為場景 11] 貴重裝備顏色判定的門檻防禦性行為：
+        Given: 狀態機處於 BAG_CLEANING，且 bag_opened_clicked 為 True (已開啟背包大量分解)。
+               格子 A (Col 0, Row 0) 中只有 50 個金色像素 (模擬木紋雜色邊框)；
+               格子 B (Col 1, Row 0) 中有約 1500 個金色像素 (模擬真正金色貴重物品)。
+        When: 執行背包反選。
+        Then:
+          1. 格子 A 的少數雜色應被 threshold=150 過濾，判定為 gray_or_empty，不被點擊。
+          2. 格子 B 的金色物品應被識別為 orange_yellow，並執行點擊反選 (233, 203)。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_select_all_clicked = True
+        self.state_machine.bag_deselected = False
+        self.state_machine.bag_opened_clicked = True
+        mock_exists.return_value = True
+        
+        import cv2
+        # 建立假的 1080x1920 截圖
+        screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        
+        # 定位 全選按鈕 在 (121, 628) ➔ 網格左上角 (0, 0)
+        # 格子 A (Col 0, Row 0): 中心 (98, 203)。環狀區 (38, 143) 到 (158, 263)。
+        # 在格子 A 的邊緣只畫一個 10x5 的金色 (BGR=[0, 240, 240]) 區域，包含 50 個像素點
+        screen[143:148, 38:48] = [0, 240, 240]
+        
+        # 格子 B (Col 1, Row 0): 中心 (233, 203)。環狀區 (173, 143) 到 (293, 263)。
+        # 在格子 B 的邊緣繪製一個寬度 4 的金色矩形，包含大量彩色像素點
+        cv2.rectangle(screen, (173, 143), (293, 263), (0, 240, 240), 4)
+        
+        self.mock_capturer.capture.return_value = screen
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 匹配定位點
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((121, 628), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        # 1. 必須點擊格子 B 進行反選
+        self.mock_mouse.click.assert_any_call(233, 203)
+        # 2. 絕對不能點擊格子 A
+        for call in self.mock_mouse.click.call_args_list:
+            self.assertNotEqual(call[0], (98, 203))
+        # 3. 標記設為 True
+        self.assertTrue(self.state_machine.bag_deselected)
+
 if __name__ == "__main__":
     unittest.main()
