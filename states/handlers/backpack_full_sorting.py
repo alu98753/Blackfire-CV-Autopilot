@@ -74,150 +74,128 @@ class BackpackFullSortingHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
 
-        # D. 步驟 2: 檢查當前右側頁面是否有空格子 (whole_std < 18.0 或 center_std < 12.0)
-        has_empty_slot = False
-        for r in range(4):
-            for c in range(4):
-                cx = win_x + right_x0 + c * step
-                cy = win_y + right_y0 + r * step
-                crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
-                
-                whole_std = np.std(crop)
-                center_crop = crop[29:79, 29:79]
-                center_std = np.std(center_crop)
-                
-                if whole_std < 18.0 or center_std < 12.0:
-                    has_empty_slot = True
-                    logging.info(f"🎒 [背包分選] 偵測到右側物品欄存在空格子 ({r}, {c}) (whole_std: {whole_std:.2f}, center_std: {center_std:.2f})，將跳過銷毀步驟直接拾取。")
-                    break
-            if has_empty_slot:
-                break
-
         target_right_slot = None # (row, col)
         scroll_count = 0
         right_center_x = rect["left"] + win_x + right_x0 + 2 * step
         right_center_y = rect["top"] + win_y + right_y0 + 2 * step
 
-        if not has_empty_slot:
-            # 先掃描當前頁面尋找非空低稀有度物品
-            for r in range(4):
-                for c in range(4):
-                    cx = win_x + right_x0 + c * step
-                    cy = win_y + right_y0 + r * step
-                    crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
-                    color = self.classify_slot_color(crop)
-                    
-                    whole_std = np.std(crop)
-                    center_crop = crop[29:79, 29:79]
-                    center_std = np.std(center_crop)
-                    
-                    # 只有含有物品的格子才能銷毀，且必須是低稀有度，必須排除標準差過低的空格子
-                    if color in ["green", "gray_or_empty"] and whole_std >= 18.0 and center_std >= 12.0:
-                        target_right_slot = (r, c, color)
-                        break
-                if target_right_slot:
+        # 先掃描當前頁面尋找非空低稀有度物品
+        for r in range(4):
+            for c in range(4):
+                cx = win_x + right_x0 + c * step
+                cy = win_y + right_y0 + r * step
+                crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
+                color = self.classify_slot_color(crop)
+                
+                whole_std = np.std(crop)
+                center_crop = crop[29:79, 29:79]
+                center_std = np.std(center_crop)
+                
+                # 只有含有物品的格子才能銷毀，且必須是低稀有度，必須排除標準差過低的空格子
+                if color in ["green", "gray_or_empty"] and whole_std >= 18.0 and center_std >= 12.0:
+                    target_right_slot = (r, c, color)
                     break
+            if target_right_slot:
+                break
 
-            # 若第一頁沒有，進行向下滾動尋找
-            if not target_right_slot:
-                logging.info("🎒 [背包分選] 右側當前頁面無低稀有度物品，開始向下滾動尋找...")
-                for s in range(1, 4):
-                    # 向下滾動
-                    self.mouse.scroll(-300, right_center_x, right_center_y)
-                    scroll_count += 1
-                    time.sleep(0.1)
-                    
-                    # 重新截圖並分析
-                    new_screen = self.machine.capturer.capture(rect)
-                    if new_screen is None:
-                        continue
-                    
-                    for r in range(4):
-                        for c in range(4):
-                            cx = win_x + right_x0 + c * step
-                            cy = win_y + right_y0 + r * step
-                            crop = new_screen[cy:cy+cell_size, cx:cx+cell_size]
-                            color = self.classify_slot_color(crop)
-                            
-                            whole_std = np.std(crop)
-                            center_crop = crop[29:79, 29:79]
-                            center_std = np.std(center_crop)
-                            
-                            if color in ["green", "gray_or_empty"] and whole_std >= 18.0 and center_std >= 12.0:
-                                target_right_slot = (r, c, color)
-                                screen_img = new_screen
-                                break
-                        if target_right_slot:
+        # 若第一頁沒有，進行向下滾動尋找
+        if not target_right_slot:
+            logging.info("🎒 [背包分選] 右側當前頁面無低稀有度物品，開始向下滾動尋找...")
+            for s in range(1, 4):
+                # 向下滾動
+                self.mouse.scroll(-300, right_center_x, right_center_y)
+                scroll_count += 1
+                time.sleep(0.1)
+                
+                # 重新截圖並分析
+                new_screen = self.machine.capturer.capture(rect)
+                if new_screen is None:
+                    continue
+                
+                for r in range(4):
+                    for c in range(4):
+                        cx = win_x + right_x0 + c * step
+                        cy = win_y + right_y0 + r * step
+                        crop = new_screen[cy:cy+cell_size, cx:cx+cell_size]
+                        color = self.classify_slot_color(crop)
+                        
+                        whole_std = np.std(crop)
+                        center_crop = crop[29:79, 29:79]
+                        center_std = np.std(center_crop)
+                        
+                        if color in ["green", "gray_or_empty"] and whole_std >= 18.0 and center_std >= 12.0:
+                            target_right_slot = (r, c, color)
+                            screen_img = new_screen
                             break
                     if target_right_slot:
-                        logging.info(f"🎒 [背包分選] 滾動第 {s} 次後成功尋獲低稀有度物品！")
                         break
+                if target_right_slot:
+                    logging.info(f"🎒 [背包分選] 滾動第 {s} 次後成功尋獲低稀有度物品！")
+                    break
 
-            # E. 步驟 3: 如果完全找不到低稀有度物品，只好安全關閉
-            if not target_right_slot:
-                logging.warning("🎒 [背包分選] ⚠️ 右側背包內無可銷毀的綠色或灰色低稀有度物品！滾動後仍未尋獲。")
-                if scroll_count > 0:
-                    self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
-                    time.sleep(0.08)
-                logging.info("🎒 [背包分選] 點擊關閉退出，避免卡死。")
-                self.mouse.click(close_x, close_y)
-                time.sleep(0.1)
-                new_screen = self.machine.capturer.capture(rect)
-                if new_screen is not None:
-                    pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
-                    if pos_conf:
-                        conf_x = rect["left"] + pos_conf[0]
-                        conf_y = rect["top"] + pos_conf[1]
-                        logging.info(f"🎒 [背包分選] 偵測到關閉確認彈窗 [{conf_conf:.4f}]，點擊確認以關閉溢出區。")
-                        self.mouse.click(conf_x, conf_y)
-                        time.sleep(0.1)
-                self.machine.transition_to(self.machine.STATE_UNKNOWN)
-                return
+        # E. 步驟 3: 如果完全找不到低稀有度物品，只好安全關閉
+        if not target_right_slot:
+            logging.warning("🎒 [背包分選] ⚠️ 右側背包內無可銷毀的綠色或灰色低稀有度物品！滾動後仍未尋獲。")
+            if scroll_count > 0:
+                self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
+                time.sleep(0.08)
+            logging.info("🎒 [背包分選] 點擊關閉退出，避免卡死。")
+            self.mouse.click(close_x, close_y)
+            time.sleep(0.1)
+            new_screen = self.machine.capturer.capture(rect)
+            if new_screen is not None:
+                pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
+                if pos_conf:
+                    conf_x = rect["left"] + pos_conf[0]
+                    conf_y = rect["top"] + pos_conf[1]
+                    logging.info(f"🎒 [背包分選] 偵測到關閉確認彈窗 [{conf_conf:.4f}]，點擊確認以關閉溢出區。")
+                    self.mouse.click(conf_x, conf_y)
+                    time.sleep(0.1)
+            self.machine.transition_to(self.machine.STATE_UNKNOWN)
+            return
 
-            # F. 步驟 4: 執行銷毀流程
-            r_row, r_col, r_color = target_right_slot
-            rx_click = rect["left"] + win_x + right_x0 + r_col * step + cell_size // 2
-            ry_click = rect["top"] + win_y + right_y0 + r_row * step + cell_size // 2
+        # F. 步驟 4: 執行銷毀流程
+        r_row, r_col, r_color = target_right_slot
+        rx_click = rect["left"] + win_x + right_x0 + r_col * step + cell_size // 2
+        ry_click = rect["top"] + win_y + right_y0 + r_row * step + cell_size // 2
 
-            logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
-            self.mouse.click(rx_click, ry_click)
-            time.sleep(0.1) # 等待詳情面板彈出
+        logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
+        self.mouse.click(rx_click, ry_click)
+        time.sleep(0.1) # 等待詳情面板彈出
+
+        new_screen = self.machine.capturer.capture(rect)
+        if new_screen is None:
+            return
+            
+        pos_dest, conf_dest = self.matcher.match(new_screen, "common/destroy.png", threshold=0.8)
+        if pos_dest:
+            dest_x = rect["left"] + pos_dest[0]
+            dest_y = rect["top"] + pos_dest[1]
+            logging.info(f"🎒 [背包分選] 偵測到銷毀按鈕 [{conf_dest:.4f}]，進行點擊座標: ({dest_x}, {dest_y})。")
+            self.mouse.click(dest_x, dest_y)
+            time.sleep(0.1)
 
             new_screen = self.machine.capturer.capture(rect)
-            if new_screen is None:
-                return
-                
-            pos_dest, conf_dest = self.matcher.match(new_screen, "common/destroy.png", threshold=0.8)
-            if pos_dest:
-                dest_x = rect["left"] + pos_dest[0]
-                dest_y = rect["top"] + pos_dest[1]
-                logging.info(f"🎒 [背包分選] 偵測到銷毀按鈕 [{conf_dest:.4f}]，進行點擊座標: ({dest_x}, {dest_y})。")
-                self.mouse.click(dest_x, dest_y)
-                time.sleep(0.1)
-
-                new_screen = self.machine.capturer.capture(rect)
-                if new_screen is not None:
-                    pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
-                    if pos_conf:
-                        conf_x = rect["left"] + pos_conf[0]
-                        conf_y = rect["top"] + pos_conf[1]
-                        logging.info(f"🎒 [背包分選] 偵測到銷毀確認按鈕 [{conf_conf:.4f}]，點擊確認。")
-                        self.mouse.click(conf_x, conf_y)
-                        time.sleep(0.1)
-            else:
-                logging.warning("🎒 [背包分選] ⚠️ 未能匹配到銷毀按鈕 'destroy.png'，中斷分選。")
-                if scroll_count > 0:
-                    self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
-                    time.sleep(0.08)
-                return
-
-            # 滾動回頂端以恢復初始網格位置
-            if scroll_count > 0:
-                logging.info("🎒 [背包分選] 正在滾動回背包頂端...")
-                self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
-                time.sleep(0.15)
+            if new_screen is not None:
+                pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
+                if pos_conf:
+                    conf_x = rect["left"] + pos_conf[0]
+                    conf_y = rect["top"] + pos_conf[1]
+                    logging.info(f"🎒 [背包分選] 偵測到銷毀確認按鈕 [{conf_conf:.4f}]，點擊確認。")
+                    self.mouse.click(conf_x, conf_y)
+                    time.sleep(0.1)
         else:
-            logging.info("🎒 [背包分選] 偵測到物品欄已有空位，直接執行貴重物品拾取流程。")
+            logging.warning("🎒 [背包分選] ⚠️ 未能匹配到銷毀按鈕 'destroy.png'，中斷分選。")
+            if scroll_count > 0:
+                self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
+                time.sleep(0.08)
+            return
+
+        # 滾動回頂端以恢復初始網格位置
+        if scroll_count > 0:
+            logging.info("🎒 [背包分選] 正在滾動回背包頂端...")
+            self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
+            time.sleep(0.15)
 
         # G. 步驟 5: 點選左側排在最前的貴重物品並領取
         l_row, l_col, l_color = high_rarity_left[0]

@@ -485,7 +485,7 @@ class TestStateMachineLogic(unittest.TestCase):
         test_img[381+88:381+98, 1007+10:1007+98] = [0, 200, 0]
         test_img[381+10:381+98, 1007+10:1007+20] = [0, 200, 0]
         test_img[381+10:381+98, 1007+88:1007+98] = [0, 200, 0]
-        test_img[381+50:381+60, 1007+50:1007+60] = [50, 50, 50]
+        test_img[381+35:381+75, 1007+35:1007+75] = [50, 50, 50]
         
         self.mock_capturer.capture.return_value = test_img
         
