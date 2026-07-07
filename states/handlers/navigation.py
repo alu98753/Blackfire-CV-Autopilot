@@ -218,11 +218,15 @@ class NavigationHandler(BaseStateHandler):
                     break
 
         if not clicked_any:
-            # 如果是地下城模式，我們不應該僅因「找不到尋路按鈕」就判定已進入副本，因為可能正處於通關退出的加載黑屏中。
-            # 我們應該完全依賴上方的主動判定 (偵測到地下城物件才轉入 EXPLORING)。
-            if self.machine.config["type"] == "dungeon":
-                logging.info("⌛ 尋路按鈕已不在畫面上，正在等待地下城畫面載入或尋路按鈕出現...")
-                time.sleep(0.05)
-            else:
-                logging.info("🧭 尋路按鈕已不在畫面上，判斷已成功抵達關卡大廳。")
-                self.machine.transition_to(self.machine.STATE_LOBBY)
+            # 如果能直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳
+            lobby_btn = self.machine.config.get("lobby_start_btn")
+            if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
+                pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
+                if pos_start:
+                    logging.info(f"🧭 尋路完成：偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達大廳。")
+                    self.machine.transition_to(self.machine.STATE_LOBBY)
+                    return
+
+            # 其他情況 (例如動畫播放、切換關卡加載黑屏)，原地等待畫面載入
+            logging.info("⌛ 尋路按鈕已不在畫面上，正在等待畫面載入或大廳開始按鈕出現...")
+            time.sleep(0.05)

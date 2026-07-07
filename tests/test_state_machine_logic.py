@@ -90,8 +90,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertFalse(self.state_machine.need_bread_collection)
         
         # 3. 領完體力後，NAVIGATING 尋路結束，看到大廳的 stages/start.png ➔ 應轉移至 LOBBY
-        # 注意：我們需要先讓尋路因 clicked_any == False 轉移至 LOBBY
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((500, 500), 0.9) if name == "stages/start.png" else (None, 0.0)
+        )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
         
