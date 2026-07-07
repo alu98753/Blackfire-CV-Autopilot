@@ -5,8 +5,14 @@ GAME_CONFIGS = {
     "stage": {
         "name": "普通關卡",
         "type": "stage",
-        # 導航進入路徑 (普通關卡在大廳直接開始，不需尋路)
-        "navigation_path": [],
+        # 導航進入路徑：離開戰鬥 -> 選擇關卡 -> 點選第二關 -> 分關入口 -> 魔王關入口
+        "navigation_path": [
+            "exit_battle.png",
+            "common/select_stage.png",
+            "level2_Barren_Rocky_Ground.png",
+            "level2_entry1.png",
+            "level2_final.png"
+        ],
         # 大廳準備按鈕
         "lobby_start_btn": "stages/start.png",
         # 戰鬥結束按鈕 (PK 相似度，挑選最高的點擊)

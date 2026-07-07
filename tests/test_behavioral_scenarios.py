@@ -841,8 +841,106 @@ class TestBehavioralScenarios(unittest.TestCase):
         # Act 情況 B
         self.state_machine.step()
         
-        # Assert 情況 B: 預設進入 EXPLORING
+        # Assert Assert 情況 B: 預設進入 EXPLORING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
+    @patch('os.path.exists')
+    def test_result_exit_battle_click(self, mock_exists):
+        """
+        [行為場景 17] 結算畫面點擊離開戰鬥：
+        Given: 狀態機處於 RESULT 狀態。畫面上看見離開戰鬥按鈕 exit_battle.png。
+        When: 執行狀態機決策。
+        Then: 程式應點擊 exit_battle.png 退出結算，返回大廳。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        mock_exists.return_value = True
+        
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "exit_battle.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        self.mock_mouse.click.assert_called_with(200, 200)
+
+    @patch('os.path.exists')
+    @patch('time.time')
+    def test_stage_navigation_path_with_scrolling(self, mock_time, mock_exists):
+        """
+        [行為場景 18] 關卡模式下的尋路與滑動向下滾動尋找魔王關：
+        Given: 狀態機處於 NAVIGATING 狀態。
+        When & Then:
+          1. 畫面看到 common/select_stage.png ➔ 應點擊該按鈕。
+          2. 畫面看到 level2_Barren_Rocky_Ground.png ➔ 應點擊進入第二關。
+          3. 畫面看到 level2_entry1.png，但未看見 level2_final.png ➔ 應執行 mouse.scroll 往下滾動，而不進行點擊。
+          4. 畫面同時看到 level2_entry1.png 和 level2_final.png ➔ 應優先點擊 level2_final.png，不執行滾動。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        mock_exists.return_value = True
+        mock_time.return_value = 1000.0
+        
+        # 步驟 1: 畫面看到 common/select_stage.png
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((150, 150), 0.9) if name == "common/select_stage.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(150, 150)
+        
+        # 步驟 2: 畫面看到 level2_Barren_Rocky_Ground.png
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((250, 250), 0.9) if name == "level2_Barren_Rocky_Ground.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(250, 250)
+        
+        # 步驟 3: 畫面看到 level2_entry1.png，但沒有 level2_final.png ➔ 滾動
+        # 設定模擬時間
+        mock_time.return_value = 1000.0
+        self.state_machine.last_stage_scroll_time = 0.0
+        
+        def match_side_effect_step3(img, name, threshold):
+            if name == "level2_entry1.png":
+                return ((100, 100), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_step3
+        self.mock_mouse.click.reset_mock()
+        self.mock_mouse.scroll.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 應調用 scroll 滾動，且不應該點擊
+        self.mock_mouse.click.assert_not_called()
+        # 滾動的點應在視窗中心點： rect=(0,0,1920,1080) ➔ 中心為 (960, 540)
+        # scroll 帶入 clicks=-300, x=960, y=540
+        self.mock_mouse.scroll.assert_called_with(-300, 960, 540)
+        self.assertEqual(self.state_machine.last_stage_scroll_time, 1000.0)
+        
+        # 步驟 4: 畫面同時出現 level2_entry1.png 和 level2_final.png ➔ 直接點擊 final.png
+        def match_side_effect_step4(img, name, threshold):
+            if name == "level2_entry1.png":
+                return ((100, 100), 0.9)
+            elif name == "level2_final.png":
+                return ((350, 350), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_step4
+        self.mock_mouse.click.reset_mock()
+        self.mock_mouse.scroll.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 應直接點擊魔王關，不調用滾動
+        self.mock_mouse.click.assert_called_with(350, 350)
+        self.mock_mouse.scroll.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

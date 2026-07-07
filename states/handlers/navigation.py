@@ -197,11 +197,25 @@ class NavigationHandler(BaseStateHandler):
         for btn in reversed(nav_path):
             pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
             if pos:
-                logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
-                self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                clicked_any = True
-                time.sleep(0.03) # 等待跳轉動畫
-                break
+                if btn == "level2_entry1.png":
+                    # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
+                    # 為了防範快速連續滾動，限制滾動 CD 為 1.5 秒
+                    last_scroll = getattr(self.machine, "last_stage_scroll_time", 0.0)
+                    if time.time() - last_scroll > 1.5:
+                        logging.info("🧭 尋路中：偵測到第二關畫面 [level2_entry1.png] 但未見魔王關，執行滑動向下滾動...")
+                        center_x = rect["left"] + rect["width"] // 2
+                        center_y = rect["top"] + rect["height"] // 2
+                        self.mouse.scroll(-300, center_x, center_y)
+                        self.machine.last_stage_scroll_time = time.time()
+                        clicked_any = True
+                        time.sleep(0.3)
+                        break
+                else:
+                    logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    clicked_any = True
+                    time.sleep(0.03) # 等待跳轉動畫
+                    break
 
         if not clicked_any:
             # 如果是地下城模式，我們不應該僅因「找不到尋路按鈕」就判定已進入副本，因為可能正處於通關退出的加載黑屏中。
