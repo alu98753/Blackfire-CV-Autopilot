@@ -300,5 +300,16 @@ class GameStateMachine:
             logging.info("❓ 未能辨識出特定探索按鈕，預設進入 EXPLORING 狀態。")
             self.transition_to(self.STATE_DUNGEON_EXPLORING)
         else:
-            logging.info("❓ 未能辨識出大廳按鈕，預設進入 BATTLE 狀態。")
-            self.transition_to(self.STATE_BATTLE)
+            # 普通關卡模式下，如果能匹配到自動戰鬥特徵，預設為 BATTLE；否則預設為 NAVIGATING 以重啟大廳尋路
+            has_auto = False
+            if os.path.exists(os.path.join("templates", "common/auto.png")):
+                pos_auto, _ = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
+                if pos_auto:
+                    has_auto = True
+            
+            if has_auto:
+                logging.info("❓ 未能辨識出大廳按鈕，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
+                self.transition_to(self.STATE_BATTLE)
+            else:
+                logging.info("❓ 未能辨識出大廳按鈕，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路。")
+                self.transition_to(self.STATE_NAVIGATING)
