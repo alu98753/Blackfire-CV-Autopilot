@@ -195,19 +195,19 @@ class NavigationHandler(BaseStateHandler):
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
         clicked_any = False
         for btn in reversed(nav_path):
-            # 針對 entry 類大背景特徵圖，調降閾值至 0.65，容忍縮放與像素抖動
-            thresh = 0.65 if "entry" in btn else 0.80
+            # 針對 entry 類或 stage_label 類背景特徵圖，調降閾值至 0.70，容忍縮放與像素抖動
+            thresh = 0.70 if ("entry" in btn or "stage_label" in btn) else 0.80
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh)
             if pos:
-                if btn == "level2_entry1.png":
+                if btn == "stages/stage_label.png":
                     # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
                     # 為了防範快速連續滾動，限制滾動 CD 為 1.5 秒
                     last_scroll = getattr(self.machine, "last_stage_scroll_time", 0.0)
                     if time.time() - last_scroll > 1.5:
-                        logging.info("🧭 尋路中：偵測到第二關畫面 [level2_entry1.png] 但未見魔王關，執行滑動向下滾動...")
+                        logging.info("🧭 尋路中：偵測到第二關畫面 [stages/stage_label.png] 但未見魔王關，執行滑動向下滾動...")
                         center_x = rect["left"] + rect["width"] // 2
                         center_y = rect["top"] + rect["height"] // 2
-                        self.mouse.scroll(-300, center_x, center_y)
+                        self.mouse.scroll(-800, center_x, center_y)
                         self.machine.last_stage_scroll_time = time.time()
                         clicked_any = True
                         time.sleep(0.3)

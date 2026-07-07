@@ -11,7 +11,7 @@ GAME_CONFIGS = {
             "exit_battle.png",
             "common/select_stage.png",
             "level2_Barren_Rocky_Ground.png",
-            "level2_entry1.png",
+            "stages/stage_label.png",
             "level2_final.png"
         ],
         # 大廳準備按鈕

@@ -908,13 +908,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(250, 250)
         
-        # 步驟 3: 畫面看到 level2_entry1.png，但沒有 level2_final.png ➔ 滾動
+        # 步驟 3: 畫面看到 stages/stage_label.png，但沒有 level2_final.png ➔ 滾動
         # 設定模擬時間
         mock_time.return_value = 1000.0
         self.state_machine.last_stage_scroll_time = 0.0
         
         def match_side_effect_step3(img, name, threshold):
-            if name == "level2_entry1.png":
+            if name == "stages/stage_label.png":
                 return ((100, 100), 0.9)
             return (None, 0.0)
             
@@ -927,13 +927,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 應調用 scroll 滾動，且不應該點擊
         self.mock_mouse.click.assert_not_called()
         # 滾動的點應在視窗中心點： rect=(0,0,1920,1080) ➔ 中心為 (960, 540)
-        # scroll 帶入 clicks=-300, x=960, y=540
-        self.mock_mouse.scroll.assert_called_with(-300, 960, 540)
+        # scroll 帶入 clicks=-800, x=960, y=540
+        self.mock_mouse.scroll.assert_called_with(-800, 960, 540)
         self.assertEqual(self.state_machine.last_stage_scroll_time, 1000.0)
         
-        # 步驟 4: 畫面同時出現 level2_entry1.png 和 level2_final.png ➔ 直接點擊 final.png
+        # 步驟 4: 畫面同時出現 stages/stage_label.png 和 level2_final.png ➔ 直接點擊 final.png
         def match_side_effect_step4(img, name, threshold):
-            if name == "level2_entry1.png":
+            if name == "stages/stage_label.png":
                 return ((100, 100), 0.9)
             elif name == "level2_final.png":
                 return ((350, 350), 0.9)
