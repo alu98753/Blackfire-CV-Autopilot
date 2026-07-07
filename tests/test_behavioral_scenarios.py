@@ -607,8 +607,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         screen[143:148, 38:48] = [0, 240, 240]
         
         # 格子 B (Col 1, Row 0): 中心 (233, 203)。環狀區 (173, 143) 到 (293, 263)。
-        # 在格子 B 的邊緣繪製一個寬度 4 的金色矩形，包含大量彩色像素點
-        cv2.rectangle(screen, (173, 143), (293, 263), (0, 240, 240), 4)
+        # 在格子 B 的環狀採樣帶內部 (收縮 20 像素) 繪製一個金色矩形，包含大量彩色像素點
+        cv2.rectangle(screen, (173 + 20, 143 + 20), (293 - 20, 263 - 20), (0, 240, 240), 10)
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}

@@ -342,9 +342,8 @@ class TestStateMachineLogic(unittest.TestCase):
         # 建立假的 1080x1920 遊戲截圖
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
         # 定位 全選按鈕 在 (121, 628)
-        # 第一個 slot 的 center 在 (98, 203)，範圍為 (38, 143) 到 (158, 263)
-        # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品
-        cv2.rectangle(screen, (38, 143), (158, 263), (255, 0, 0), 5)
+        # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品，收縮 20 像素繪製以進入環狀遮罩
+        cv2.rectangle(screen, (38 + 20, 143 + 20), (158 - 20, 263 - 20), (255, 0, 0), 10)
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}

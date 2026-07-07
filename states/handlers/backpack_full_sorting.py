@@ -37,47 +37,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         cell_size = 108
         step = 134
 
-        # 稀有度色彩分類函式
-        def classify_slot(crop):
-            # 取樣 offset 10~20 內圈環狀區域，避開統一的金色外框
-            mask = np.zeros(crop.shape[:2], dtype=np.uint8)
-            cv2.rectangle(mask, (10, 10), (97, 97), 255, -1)
-            cv2.rectangle(mask, (20, 20), (87, 87), 0, -1)
-            
-            ring_pixels = crop[mask == 255]
-            if len(ring_pixels) == 0:
-                return "gray_or_empty"
-                
-            hsv_pixels = cv2.cvtColor(np.expand_dims(ring_pixels, axis=0), cv2.COLOR_BGR2HSV)[0]
-            
-            counts = {
-                "red": 0,
-                "orange_yellow": 0,
-                "green": 0,
-                "blue": 0,
-                "purple": 0
-            }
-            
-            for h, s, v in hsv_pixels:
-                if s > 75 and v > 75:
-                    if h <= 9 or h >= 165:
-                        counts["red"] += 1
-                    elif 10 <= h <= 34:
-                        counts["orange_yellow"] += 1
-                    elif 35 <= h <= 85:
-                        counts["green"] += 1
-                    elif 90 <= h <= 130:
-                        counts["blue"] += 1
-                    elif 130 < h < 165:
-                        counts["purple"] += 1
-                        
-            max_color = "gray_or_empty"
-            max_count = 150
-            for color, count in counts.items():
-                if count > max_count:
-                    max_count = count
-                    max_color = color
-            return max_color
+
 
         def is_high_rarity(color):
             return color in ["blue", "purple", "orange_yellow", "red"]
@@ -90,7 +50,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 cy = win_y + left_y0 + r * step
                 crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
                 if np.std(crop) > 40.0:
-                    color = classify_slot(crop)
+                    color = self.classify_slot_color(crop)
                     if is_high_rarity(color):
                         high_rarity_left.append((r, c, color))
 
@@ -127,7 +87,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 cx = win_x + right_x0 + c * step
                 cy = win_y + right_y0 + r * step
                 crop = screen_img[cy:cy+cell_size, cx:cx+cell_size]
-                color = classify_slot(crop)
+                color = self.classify_slot_color(crop)
                 # 只有含有物品的格子才能銷毀，且必須是低稀有度 (green 或 gray_or_empty)
                 # 為防空置格子誤判，我們確保該區域有一定圖案起伏 (非純色背景)
                 if color in ["green", "gray_or_empty"] and np.std(crop) > 20.0:
@@ -155,7 +115,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                         cx = win_x + right_x0 + c * step
                         cy = win_y + right_y0 + r * step
                         crop = new_screen[cy:cy+cell_size, cx:cx+cell_size]
-                        color = classify_slot(crop)
+                        color = self.classify_slot_color(crop)
                         if color in ["green", "gray_or_empty"] and np.std(crop) > 20.0:
                             target_right_slot = (r, c, color)
                             # 更新 screen_img 為當前滾動後的截圖，以便後面點擊

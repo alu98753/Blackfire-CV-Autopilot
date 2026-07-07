@@ -11,46 +11,6 @@ class BagCleaningHandler(BaseStateHandler):
         背包清理狀態處理邏輯。
         依序執行：打開背包 -> 大量分解 -> 全選 -> 反選貴重物品 -> 分解 -> 確認 -> 整理 -> 退出背包。
         """
-        # 稀有度色彩分類函式 (與 BackpackFullSortingHandler 保持一致且更正為 120x120 邊界)
-        def classify_slot(crop):
-            mask = np.zeros(crop.shape[:2], dtype=np.uint8)
-            cv2.rectangle(mask, (0, 0), (120, 120), 255, -1)
-            cv2.rectangle(mask, (8, 8), (112, 112), 0, -1)
-            
-            ring_pixels = crop[mask == 255]
-            if len(ring_pixels) == 0:
-                return "gray_or_empty"
-                
-            hsv_pixels = cv2.cvtColor(np.expand_dims(ring_pixels, axis=0), cv2.COLOR_BGR2HSV)[0]
-            
-            counts = {
-                "red": 0,
-                "orange_yellow": 0,
-                "green": 0,
-                "blue": 0,
-                "purple": 0
-            }
-            
-            for h, s, v in hsv_pixels:
-                if s > 75 and v > 75:
-                    if h <= 9 or h >= 165:
-                        counts["red"] += 1
-                    elif 10 <= h <= 34:
-                        counts["orange_yellow"] += 1
-                    elif 35 <= h <= 85:
-                        counts["green"] += 1
-                    elif 90 <= h <= 130:
-                        counts["blue"] += 1
-                    elif 130 < h < 165:
-                        counts["purple"] += 1
-                        
-            max_color = "gray_or_empty"
-            max_count = 150
-            for color, count in counts.items():
-                if count > max_count:
-                    max_count = count
-                    max_color = color
-            return max_color
 
         # 0. 判斷背包是否已經打開
         # 背包內特有按鈕包括：大量分解、全選、分解、整理、以及退出背包
@@ -243,7 +203,7 @@ class BagCleaningHandler(BaseStateHandler):
                             if 0 <= crop_x and crop_x + 120 <= w_limit and 0 <= crop_y and crop_y + 120 <= h_limit:
                                 crop = screen_img[crop_y:crop_y+120, crop_x:crop_x+120]
                                 if np.std(crop) > 20.0:
-                                    color = classify_slot(crop)
+                                    color = self.classify_slot_color(crop)
                                     # 藍、紫、橙黃、紅稀有度物品需要反向點擊取消選取
                                     if color in ["blue", "purple", "orange_yellow", "red"]:
                                         logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，進行點擊以取消選取！")
