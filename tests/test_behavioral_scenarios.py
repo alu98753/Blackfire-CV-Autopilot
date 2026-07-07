@@ -631,5 +631,130 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 3. 標記設為 True
         self.assertTrue(self.state_machine.bag_deselected)
 
+    @patch('os.path.exists')
+    @patch('time.time')
+    def test_bread_cooldown_exit_defense(self, mock_time, mock_exists):
+        """
+        [行為場景 12] 領體力冷卻/已滿自動關閉保護行為：
+        Given: 體力領取定時器到期，進入 NAVIGATING 狀態領體力。
+               畫面上無免費領取按鈕 (bread_collection.png 匹配失敗)，但看見關閉退出按鈕 (common/quit.png)。
+        When: 執行狀態機決策。
+        Then:
+          1. 程式應識別冷卻/已領狀態，點擊退出按鈕 (common/quit.png)。
+          2. need_bread_collection 應被設為 False，last_bread_collection_time 應更新，防止無限卡死在視窗內。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = True
+        self.state_machine.need_bread_collection = True
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        mock_exists.return_value = True
+        
+        # 設定虛擬目前時間為 1000s
+        mock_time.return_value = 1000.0
+        
+        # 模擬 match：quit.png 成功，bread_collection.png 失敗
+        def match_side_effect(img, name, threshold):
+            if name == "common/quit.png":
+                return ((500, 500), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        # 1. 應點擊退出按鈕 (500, 500)
+        self.mock_mouse.click.assert_called_with(500, 500)
+        # 2. 領體力標記重設為 False，上次領取時間更新為目前時間 (1000s)
+        self.assertFalse(self.state_machine.need_bread_collection)
+        self.assertEqual(self.state_machine.last_bread_collection_time, 1000.0)
+
+    @patch('os.path.exists')
+    @patch('time.time')
+    def test_battle_auto_click_cooldown_defense(self, mock_time, mock_exists):
+        """
+        [行為場景 13] 啟用自動戰鬥防重複點擊 CD 機制：
+        Given: 狀態機處於 BATTLE 狀態。
+        When:
+          1. 時間 1000.0s，看到 auto.png (未啟用)，點擊啟用。
+          2. 時間 1001.5s (間隔 1.5s < 3.0s)，即使又看到 auto.png 也不應點擊。
+          3. 時間 1004.0s (間隔 4.0s > 3.0s)，看到 auto.png 應再次點擊。
+        Then:
+          1. 第一步應點擊，並更新 last_auto_click_time。
+          2. 第二步應跳過點擊。
+          3. 第三步應再次點擊。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.last_auto_click_time = 0.0
+        mock_exists.return_value = True
+        
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        
+        # Step 1: 1000s 執行第一步 ➔ 應點擊
+        mock_time.return_value = 1000.0
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_once_with(200, 200)
+        self.assertEqual(self.state_machine.last_auto_click_time, 1000.0)
+        
+        # Step 2: 1001.5s 執行第二步 ➔ 應跳過點擊
+        mock_time.return_value = 1001.5
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_not_called()
+        self.assertEqual(self.state_machine.last_auto_click_time, 1000.0)
+        
+        # Step 3: 1004.0s 執行第三步 ➔ 應再次點擊
+        mock_time.return_value = 1004.0
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_once_with(200, 200)
+        self.assertEqual(self.state_machine.last_auto_click_time, 1004.0)
+
+    @patch('os.path.exists')
+    def test_result_continue_buttons_pk_priority(self, mock_exists):
+        """
+        [行為場景 14] 結算繼續按鈕優先級 PK 比對決策：
+        Given: 狀態機處於 RESULT 狀態。畫面上同時能匹配到多個繼續按鈕模板。
+        When: 執行狀態機決策。
+        Then:
+          1. 程式應遵循優先級，點選最高優先級的繼續按鈕 (continue3.png ➔ continue2.png ➔ continue1.png)。
+          2. 不能被背景較低優先級的按鈕干擾點擊。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        mock_exists.return_value = True
+        
+        # 模擬狀態機已發現之繼續模板
+        self.state_machine.continue_templates = ["common/continue1.png", "common/continue2.png", "stages/continue3.png"]
+        
+        # 模擬 match：同時存在 continue1.png (在 100, 100) 與 continue3.png (在 300, 300)
+        def match_side_effect(img, name, threshold):
+            if name == "common/continue1.png":
+                return ((100, 100), 0.9)
+            elif name == "stages/continue3.png":
+                return ((300, 300), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        # 應優先點選 continue3 (300, 300)，絕非 continue1 (100, 100)
+        self.mock_mouse.click.assert_called_with(300, 300)
+        for call in self.mock_mouse.click.call_args_list:
+            self.assertNotEqual(call[0], (100, 100))
+
 if __name__ == "__main__":
     unittest.main()
