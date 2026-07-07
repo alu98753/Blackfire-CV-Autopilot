@@ -264,9 +264,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
         
         # 4. BAG_CLEANING 狀態下順序點擊：
-        # - 看到 common/bag.png ➔ 點擊打開背包
+        # - 看到 common/bag_text.png ➔ 點擊打開背包
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((1550, 992), 0.9) if name == "common/bag.png" else (None, 0.0)
+            ((1550, 1037), 0.9) if name == "common/bag_text.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1550, 992)

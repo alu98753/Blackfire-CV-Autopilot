@@ -286,7 +286,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 2. 依次比對點擊流程
         # - 打開背包
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((1550, 992), 0.9) if name == "common/bag.png" else (None, 0.0)
+            ((1550, 1037), 0.9) if name == "common/bag_text.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1550, 992)

@@ -213,8 +213,17 @@ class BagCleaningHandler(BaseStateHandler):
                     return
 
         # 5. 檢查背包按鈕 (若背包尚未打開，在大廳或探索畫面點擊打開)
-        if os.path.exists(os.path.join("templates", "common/bag.png")):
-            # 使用較高閥值 0.80，防止誤判
+        # 優先比對「物品欄」三個字，特徵極其獨特，絕對不會誤判到「戰團」
+        if os.path.exists(os.path.join("templates", "common/bag_text.png")):
+            pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.80)
+            if pos_text:
+                logging.info(f"🎒 背包清理：偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
+                # 往上偏移 45 像素點擊圖示中心
+                self.mouse.click(rect["left"] + pos_text[0], rect["top"] + pos_text[1] - 45)
+                time.sleep(0.1)
+                return
+        elif os.path.exists(os.path.join("templates", "common/bag.png")):
+            # 備用方案：使用較高閥值 0.80 且配合色彩通道驗證，防止誤點「戰團」
             pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.80)
             if pos_bag:
                 h_limit, w_limit = screen_img.shape[:2]
@@ -231,15 +240,15 @@ class BagCleaningHandler(BaseStateHandler):
                     mean_bgr = np.mean(center_crop, axis=(0,1))
                     r_minus_b = mean_bgr[2] - mean_bgr[0]
                 else:
-                    r_minus_b = 99.0 # 單元測試模擬環境，直接通過
+                    r_minus_b = 99.0
                 
                 if r_minus_b > 18.0:
-                    logging.info(f"🎒 背包清理：偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
+                    logging.info(f"🎒 背包清理：使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
                     self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                     time.sleep(0.1)
                     return
                 else:
-                    logging.warning(f"🎒 背包清理：⚠️ 偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
+                    logging.warning(f"🎒 背包清理：⚠️ 備用模板偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
         time.sleep(0.05)
