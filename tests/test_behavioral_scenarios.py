@@ -1110,5 +1110,121 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
         self.mock_mouse.click.assert_not_called()
 
+    @patch('os.path.exists')
+    def test_level_island_click_y_offset(self, mock_exists):
+        """
+        [行為場景 21] 尋路狀態下關卡小島按鈕 Y 軸向上偏置點擊：
+        Given: 狀態機處於 NAVIGATING 狀態。
+        When: 畫面中匹配到 stages/level3_ancient_forest.png，其座標為 (500, 600)。
+        Then: 點擊的 Y 軸座標應向上偏置減去 160 像素，點擊座標應為 (500, 440)。
+        """
+        # 手動設置 config 的 navigation_path 包含該關卡小島
+        self.state_machine.config = {
+            "type": "stage",
+            "navigation_path": ["stages/level3_ancient_forest.png"],
+            "lobby_start_btn": "stages/start.png"
+        }
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        mock_exists.return_value = True
+
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((500, 600), 0.9) if name == "stages/level3_ancient_forest.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(500, 440)
+
+    @patch('os.path.exists')
+    def test_navigation_prioritize_lobby_check(self, mock_exists):
+        """
+        [行為場景 22] 尋路狀態下大廳開始按鈕優先攔截：
+        Given: 狀態機處於 NAVIGATING 狀態。
+        When: 畫面同時出現大廳開始按鈕 stages/start.png 與小島按鈕 stages/level3_ancient_forest.png。
+        Then: 狀態機應優先偵測到大廳開始按鈕，將狀態轉移至 LOBBY，且不觸發小島點擊。
+        """
+        self.state_machine.config = {
+            "type": "stage",
+            "navigation_path": ["stages/level3_ancient_forest.png"],
+            "lobby_start_btn": "stages/start.png"
+        }
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        mock_exists.return_value = True
+
+        def match_side_effect(img, name, threshold):
+            if name == "stages/start.png":
+                return ((800, 800), 0.9)
+            elif name == "stages/level3_ancient_forest.png":
+                return ((500, 600), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+        self.mock_mouse.click.assert_not_called()
+
+    def test_stuck_count_reset_on_mouse_action(self):
+        """
+        [行為場景 23] 鼠標操作 (點擊與滾動) 後自動重置卡死計數器：
+        Given: 狀態機 stuck 計為 10。
+        When & Then:
+          1. 呼叫 mouse.click() ➔ consecutive_stuck_count 應重置為 0。
+          2. 呼叫 mouse.scroll() ➔ consecutive_stuck_count 應重置為 0。
+        """
+        from actions.mouse import MouseController
+        real_mouse = MouseController(human_like=False)
+        real_mouse.state_machine = self.state_machine
+        
+        self.state_machine.user_operating = False
+
+        # 用 patch 避免發出真實滑鼠動作，並強制使用者介入檢查為 False
+        with patch('pyautogui.moveTo'), \
+             patch('pyautogui.mouseDown'), \
+             patch('pyautogui.mouseUp'), \
+             patch('pyautogui.scroll'), \
+             patch.object(real_mouse, 'check_user_intervention', return_value=False):
+             
+            # 1. click 測試
+            self.state_machine.consecutive_stuck_count = 10
+            real_mouse.click(100, 100)
+            self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
+            
+            # 2. scroll 測試
+            self.state_machine.consecutive_stuck_count = 10
+            real_mouse.scroll(-800, 100, 100)
+            self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
+
+    @patch('os.path.exists')
+    def test_backpack_full_detection_threshold_override(self, mock_exists):
+        """
+        [行為場景 24] 背包滿彈窗高閾值比對防誤判：
+        Given: 狀態機處於 NAVIGATING 狀態。
+        When & Then:
+          1. 畫面上出現相似度為 0.72 的 backpack_full.png (大廳誤判) ➔ 狀態機應拒絕轉移，維持 NAVIGATING。
+          2. 畫面上出現相似度為 0.85 的 backpack_full.png (真實彈窗) ➔ 狀態機應正確轉移至 BACKPACK_FULL_SORTING。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        mock_exists.return_value = True
+
+        # 模擬 match logic，如果比對分數小於 threshold，則不匹配 (回傳 None)
+        def mock_match_impl(img, name, threshold):
+            if name == "backpack_full.png":
+                score = getattr(self, "_current_mock_score", 0.0)
+                if score >= threshold:
+                    return ((300, 300), score)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = mock_match_impl
+
+        # 1. 0.72 相似度 (低於新閾值 0.80)
+        self._current_mock_score = 0.72
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
+        # 2. 0.85 相似度 (高於新閾值 0.80)
+        self._current_mock_score = 0.85
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
+
 if __name__ == "__main__":
     unittest.main()
