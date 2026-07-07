@@ -1226,5 +1226,25 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
 
+    @patch('os.path.exists')
+    def test_detect_state_auto_quit_sub_interface(self, mock_exists):
+        """
+        [行為場景 25] 未知狀態下在手動子介面自動點擊退出按鈕返回大廳：
+        Given: 狀態機處於 UNKNOWN 狀態，且無法辨識出任何主要狀態。
+        When: 畫面上匹配到退出按鈕 common/quit.png (中心座標在 (1289, 177))。
+        Then: 狀態機應點擊該按鈕以關閉子介面，不進行狀態轉移 (維持 UNKNOWN)。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        mock_exists.return_value = True
+
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((1289, 177), 0.9) if name == "common/quit.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(1289, 177)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
 if __name__ == "__main__":
     unittest.main()

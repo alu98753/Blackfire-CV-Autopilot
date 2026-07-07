@@ -283,7 +283,18 @@ class GameStateMachine:
             self.transition_to(self.STATE_BAG_CLEANING)
             return
 
-        # 6. 如果以上皆非，依模式給予最安全的預設落點
+        # 6. 如果以上皆非，嘗試檢查是否有退出或確認按鈕可以點擊（代表可能卡在某個手動操作的子視窗/子介面，需關閉以返回大廳）
+        for quit_btn in ["common/quit.png", "common/confirm.png", "common/ok.png"]:
+            if os.path.exists(os.path.join("templates", quit_btn)):
+                pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.8)
+                if pos:
+                    logging.info(f"🧭 全域定位：未能辨識主要狀態，但偵測到退出/確認按鈕 [{quit_btn}] (信心度: {conf:.4f})，嘗試點擊以返回大廳。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    # 點擊後不轉移狀態，等待下一幀的 UNKNOWN 重新進行定位與尋路
+                    time.sleep(0.3)
+                    return
+
+        # 7. 如果真的是完全沒有任何可交互按鈕，才依模式給予最安全的預設落點
         if self.config["type"] == "dungeon":
             # 地下城模式下，大部份時間都在走格探索，預設回到 EXPLORING 狀態最為安全
             logging.info("❓ 未能辨識出特定探索按鈕，預設進入 EXPLORING 狀態。")
