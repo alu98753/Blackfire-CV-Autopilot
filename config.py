@@ -10,9 +10,9 @@ GAME_CONFIGS = {
             "common/door.png",
             "exit_battle.png",
             "common/select_stage.png",
-            "level2_Barren_Rocky_Ground.png",
+            "stages/level2_barren_rocks.png",
             "stages/stage_label.png",
-            "level2_final.png"
+            "stages/level2_final.png"
         ],
         # 大廳準備按鈕
         "lobby_start_btn": "stages/start.png",

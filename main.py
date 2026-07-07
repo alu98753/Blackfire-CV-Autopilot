@@ -82,7 +82,44 @@ def main():
     args = parser.parse_args()
 
     # 取得當前模式的配置
-    config = GAME_CONFIGS[args.mode]
+    config = GAME_CONFIGS[args.mode].copy()  # 使用 copy 避免影響原始 GAME_CONFIGS 字典
+
+    if args.mode == "stage":
+        print("請選擇要打的關卡 Boss：")
+        print(" 1) 蒼穹平原 (Level 1)")
+        print(" 2) 荒蕪岩地 (Level 2) - 預設")
+        print(" 3) 古樹森林 (Level 3)")
+        print(" 4) 沙漠廢墟 (Level 4)")
+        try:
+            choice = input("請輸入關卡數字 [1-4] (直接 Enter 鍵預設為 2): ").strip()
+            if not choice:
+                choice = "2"
+        except KeyboardInterrupt:
+            print("\n[!] 取消啟動。")
+            sys.exit(0)
+        except Exception:
+            choice = "2"
+
+        stage_map = {
+            "1": ("stages/level1_sky_plains.png", "stages/level1_final.png", "蒼穹平原"),
+            "2": ("stages/level2_barren_rocks.png", "stages/level2_final.png", "荒蕪岩地"),
+            "3": ("stages/level3_ancient_forest.png", "stages/level3_final.png", "古樹森林"),
+            "4": ("stages/level4_desert_ruins.png", "stages/level4_final.png", "沙漠廢墟")
+        }
+        if choice not in stage_map:
+            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第二關 [荒蕪岩地]...")
+            choice = "2"
+
+        level_btn, boss_btn, stage_name = stage_map[choice]
+        config["name"] = f"普通關卡 - {stage_name}"
+        config["navigation_path"] = [
+            "common/door.png",
+            "exit_battle.png",
+            "common/select_stage.png",
+            level_btn,
+            "stages/stage_label.png",
+            boss_btn
+        ]
 
     print("=" * 60)
     print(" 🚀 Blackfire Crusade 自動掛機輔助腳本啟動 🚀")

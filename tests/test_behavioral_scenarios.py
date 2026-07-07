@@ -994,9 +994,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         Given: 狀態機處於 NAVIGATING 狀態。
         When & Then:
           1. 畫面看到 common/select_stage.png ➔ 應點擊該按鈕。
-          2. 畫面看到 level2_Barren_Rocky_Ground.png ➔ 應點擊進入第二關。
-          3. 畫面看到 level2_entry1.png，但未看見 level2_final.png ➔ 應執行 mouse.scroll 往下滾動，而不進行點擊。
-          4. 畫面同時看到 level2_entry1.png 和 level2_final.png ➔ 應優先點擊 level2_final.png，不執行滾動。
+          2. 畫面看到 stages/level2_barren_rocks.png ➔ 應點擊進入第二關。
+          3. 畫面看到 stages/level2_entry1.png，但未看見 stages/level2_final.png ➔ 應執行 mouse.scroll 往下滾動，而不進行點擊。
+          4. 畫面同時看到 stages/level2_entry1.png 和 stages/level2_final.png ➔ 應優先點擊 stages/level2_final.png，不執行滾動。
         """
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
@@ -1018,15 +1018,15 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(150, 150)
         
-        # 步驟 2: 畫面看到 level2_Barren_Rocky_Ground.png
+        # 步驟 2: 畫面看到 stages/level2_barren_rocks.png
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((250, 250), 0.9) if name == "level2_Barren_Rocky_Ground.png" else (None, 0.0)
+            ((250, 250), 0.9) if name == "stages/level2_barren_rocks.png" else (None, 0.0)
         )
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(250, 250)
         
-        # 步驟 3: 畫面看到 stages/stage_label.png，但沒有 level2_final.png ➔ 滾動
+        # 步驟 3: 畫面看到 stages/stage_label.png，但沒有 stages/level2_final.png ➔ 滾動
         # 設定模擬時間
         mock_time.return_value = 1000.0
         self.state_machine.last_stage_scroll_time = 0.0
@@ -1049,11 +1049,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.scroll.assert_called_with(-800, 960, 540)
         self.assertEqual(self.state_machine.last_stage_scroll_time, 1000.0)
         
-        # 步驟 4: 畫面同時出現 stages/stage_label.png 和 level2_final.png ➔ 直接點擊 final.png
+        # 步驟 4: 畫面同時出現 stages/stage_label.png 和 stages/level2_final.png ➔ 直接點擊 final.png
         def match_side_effect_step4(img, name, threshold):
             if name == "stages/stage_label.png":
                 return ((100, 100), 0.9)
-            elif name == "level2_final.png":
+            elif name == "stages/level2_final.png":
                 return ((350, 350), 0.9)
             return (None, 0.0)
             
