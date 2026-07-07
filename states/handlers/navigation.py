@@ -233,6 +233,15 @@ class NavigationHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_LOBBY)
             return
 
+        # 0. 優先判定：如果已經可以直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳，直接移轉狀態！
+        lobby_btn = self.machine.config.get("lobby_start_btn")
+        if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
+            pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
+            if pos_start:
+                logging.info(f"🧭 尋路成功！偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達準備大廳，狀態轉移至 LOBBY。")
+                self.machine.transition_to(self.machine.STATE_LOBBY)
+                return
+
         # 主動判定：如果我們已經看到任何地下城探索或結束按鈕，說明點擊已經成功並進入內部，直接轉移狀態！
         if self.machine.config["type"] == "dungeon":
             for check_btn in ["dungeons/dungeon_fight.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png", "dungeons/dungeons_complete.png"]:
