@@ -4,6 +4,26 @@ import os
 import argparse
 import sys
 
+def save_diagnostic_images(screen_img, template_img, top_left, temp_w, temp_h, max_val, brightness_ratio, template_name, output_dir="."):
+    """
+    畫紅框標記並保存全螢幕與切片診斷圖片，方便調試。
+    """
+    base = os.path.splitext(os.path.basename(template_name))[0]
+    marked_screen = screen_img.copy()
+    cv2.rectangle(marked_screen, top_left, (top_left[0] + temp_w, top_left[1] + temp_h), (0, 0, 255), 3)
+    cv2.putText(marked_screen, f"Conf: {max_val:.2f}, Ratio: {brightness_ratio:.2f}", 
+                (top_left[0], top_left[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+    # 取得切片
+    crop = screen_img[top_left[1]:top_left[1]+temp_h, top_left[0]:top_left[0]+temp_w]
+
+    full_out = os.path.join(output_dir, f"debug_{base}_dim_full.png")
+    crop_out = os.path.join(output_dir, f"debug_{base}_dim_crop.png")
+
+    cv2.imwrite(full_out, marked_screen)
+    cv2.imwrite(crop_out, crop)
+    return full_out, crop_out
+
 def analyze_brightness(screen_path, template_path, output_dir="."):
     """
     分析給定截圖中與模板匹配區域的灰階平均亮度，計算相似度與亮度比例。
@@ -65,17 +85,8 @@ def analyze_brightness(screen_path, template_path, output_dir="."):
         print("💚 判定結果：亮度比例達標 (>= 0.8)，屬於「前景高亮區域」！")
     print("=" * 60)
 
-    # 5. 繪製紅框定位並保存結果圖片
-    marked_screen = screen_img.copy()
-    cv2.rectangle(marked_screen, top_left, (top_left[0] + temp_w, top_left[1] + temp_h), (0, 0, 255), 3)
-    cv2.putText(marked_screen, f"Conf: {max_val:.2f}, Ratio: {brightness_ratio:.2f}", 
-                (top_left[0], max_loc[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-    full_out = os.path.join(output_dir, "debug_analyze_full.png")
-    crop_out = os.path.join(output_dir, "debug_analyze_crop.png")
-
-    cv2.imwrite(full_out, marked_screen)
-    cv2.imwrite(crop_out, crop)
+    # 5. 調用公用函數保存結果圖片
+    full_out, crop_out = save_diagnostic_images(screen_img, template_img, top_left, temp_w, temp_h, max_val, brightness_ratio, template_path, output_dir)
 
     print(f"[+] 標記定位全螢幕圖已保存至: {full_out}")
     print(f"[+] 匹配區域切片圖已保存至:   {crop_out}")
