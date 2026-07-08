@@ -140,7 +140,16 @@
 如果您是協同開發的 AI Coding Agent：
 1. **工作規範**：在進行任何代碼修改前，請務必先閱讀工作區自訂技能規範檔案：[.agents/skills/state_machine_development/SKILL.md (開發規範)](file:///e:/Side_Project/.agents/skills/state_machine_development/SKILL.md)。
 2. **決策樹文件**：可透過讀取 [docs/dungeon_flow.md (流程圖)](file:///e:/Side_Project/BlackfireCrusade_tool/docs/dungeon_flow.md) 來快速了解地下城探索與體力領取的比對決策邏輯。
-3. **迴歸測試**：重構或修改狀態機代碼後，請**必須執行**以下測試以確保邏輯無損：
+3. **圖像亮度與背景過濾診斷**：若遇到按鈕因為大廳/關卡背景變暗而導致誤匹配（例如將背景調暗的 continue 按鈕誤判為前景按鈕點擊），可使用我們提供的專屬分析工具進行診斷：
+   ```powershell
+   # 預設診斷最近一次後台點擊截圖 (debug_click.png) 與繼續按鈕 (continue.png) 之間的亮度比例
+   .\.venv\Scripts\python tools/analyze_template_brightness.py
+   
+   # 或指定自訂的截圖與模板進行高精確匹配與亮度比例分析
+   .\.venv\Scripts\python tools/analyze_template_brightness.py -s <截圖路徑> -t <模板路徑>
+   ```
+   * **輸出結果**：工具會自動在根目錄輸出標記有相似度與亮度比例的 `debug_analyze_full.png` 全螢幕圖與 `debug_analyze_crop.png` 匹配切片，並給出是否屬於背景暗區的建議，便於微調過濾閾值。
+4. **迴歸測試**：重構或修改狀態機代碼後，請**必須執行**以下測試以確保邏輯無損：
 ```powershell
 .\.venv\Scripts\python tests/test_state_machine_logic.py
 ```
