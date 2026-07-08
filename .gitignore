@@ -31,9 +31,5 @@ htmlcov/
 debug_click.png
 debug_grid_test.png
 
-# Development drafts and temporary analyze tools
-scratch/analyze_*.py
-scratch/verify_*.py
-scratch/measure_pixels.py
-scratch/draw_grid_test.py
-scratch/*.png
+# Development drafts and temporary scratch files (entire directory)
+scratch/
