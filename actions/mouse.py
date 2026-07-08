@@ -70,8 +70,10 @@ class MouseController:
                     cv2.putText(img, text, (img_x + 20, img_y - 10), font, 0.6, (0, 0, 255), 2)
                     
                     cv2.imwrite("debug_click.png", img)
+                    cv2.imwrite("debug_running_screen.png", img)
+                    logging.info(f"🎯 點擊繪製完成：物理相對座標 ({rx_physical}, {ry_physical})，已寫入 debug_click.png 和 debug_running_screen.png")
                 except Exception as e:
-                    logging.debug(f"無法寫入 debug_click.png: {e}")
+                    logging.debug(f"無法寫入 debug_click.png 或 debug_running_screen.png: {e}")
 
     def check_user_intervention(self):
         """
@@ -147,14 +149,14 @@ class MouseController:
                     rx_offset_phys = rx_physical + dx
                     ry_offset_phys = ry_physical + dy
                     
-                    # 實測證實：在 DPI Aware 2 進程下，後台 PostMessage 的 lParam 座標應直接發送物理相對值，無需進行 DPI 縮放折算
+                    # 根據實測反饋，方案 A（無 DPI 換算，直接發送物理相對值）為正確的後台點擊方案，故 dpi_factor 固定為 1.0
                     dpi_factor = 1.0
                     rx_logical = int(rx_offset_phys / dpi_factor)
                     ry_logical = int(ry_offset_phys / dpi_factor)
                     
                     logging.info(f"[後台點擊] 物理相對: ({rx_offset_phys}, {ry_offset_phys}) -> 邏輯相對: ({rx_logical}, {ry_logical}) [DPI 縮放: {dpi_factor}]")
                     
-                    # 繪製 Debug 紅圈圖檔
+                    # 繪製 Debug 紅圈圖檔，保存為 debug_click.png 與實時畫面 debug_running_screen.png
                     self._draw_debug_click(hwnd, rx_offset_phys, ry_offset_phys)
                     
                     lParam = win32api.MAKELONG(rx_logical, ry_logical)
