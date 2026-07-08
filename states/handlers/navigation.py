@@ -554,7 +554,8 @@ class NavigationHandler(BaseStateHandler):
                         logging.info("🧭 尋路中：偵測到第二關畫面 [stages/stage_label.png] 但未見魔王關，執行溫和滑動向下滾動...")
                         center_x = rect["left"] + rect["width"] // 2
                         center_y = rect["top"] + rect["height"] // 2
-                        self.mouse.scroll(-400, center_x, center_y)
+                        # 改為使用拖曳手勢，向上滑動拖曳 350 像素使列表向下滾動，繞過後台滾輪無焦點失效問題
+                        self.mouse.drag(center_x, center_y + 150, center_x, center_y - 200)
                         self.machine.last_stage_scroll_time = time.time()
                         clicked_any = True
                         time.sleep(0.3)
@@ -600,7 +601,8 @@ class NavigationHandler(BaseStateHandler):
                         logging.info("🧭 尋路中：判定已在關卡細節畫面但未見魔王關，執行溫和向下滑動滾動尋找魔王...")
                         center_x = rect["left"] + rect["width"] // 2
                         center_y = rect["top"] + rect["height"] // 2
-                        self.mouse.scroll(-400, center_x, center_y)
+                        # 改為使用拖曳手勢，向上滑動拖曳 350 像素使列表向下滾動，繞過後台滾輪無焦點失效問題
+                        self.mouse.drag(center_x, center_y + 150, center_x, center_y - 200)
                         self.machine.last_stage_scroll_time = time.time()
                         clicked_any = True
                         time.sleep(0.3)

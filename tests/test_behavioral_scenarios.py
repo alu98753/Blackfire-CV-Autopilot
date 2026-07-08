@@ -1065,18 +1065,18 @@ class TestBehavioralScenarios(unittest.TestCase):
             
         self.mock_matcher.match.side_effect = match_side_effect_step3
         self.mock_mouse.click.reset_mock()
-        self.mock_mouse.scroll.reset_mock()
+        self.mock_mouse.drag.reset_mock()
         
         # 模擬魔王關卡已經缺失 2.0 秒，使等待緩衝期已過
         self.state_machine.__setattr__("missing_time_stages/level2_final.png", time.time() - 2.0)
 
         self.state_machine.step()
         
-        # 應調用 scroll 滾動，且不應該點擊
+        # 應調用 drag 拖曳滑動，且不應該點擊
         self.mock_mouse.click.assert_not_called()
-        # 滾動的點應在視窗中心點： rect=(0,0,1920,1080) ➔ 中心為 (960, 540)
-        # scroll 帶入 clicks=-400, x=960, y=540
-        self.mock_mouse.scroll.assert_called_with(-400, 960, 540)
+        # 拖曳的點應在視窗中心點： rect=(0,0,1920,1080) ➔ 中心為 (960, 540)
+        # drag 帶入 start_x=960, start_y=690, end_x=960, end_y=340
+        self.mock_mouse.drag.assert_called_with(960, 690, 960, 340)
         self.assertEqual(self.state_machine.last_stage_scroll_time, 1000.0)
         
         # 步驟 4: 畫面同時出現 stages/stage_label.png 和 stages/level2_final.png ➔ 直接點擊 final.png
@@ -1089,13 +1089,13 @@ class TestBehavioralScenarios(unittest.TestCase):
             
         self.mock_matcher.match.side_effect = match_side_effect_step4
         self.mock_mouse.click.reset_mock()
-        self.mock_mouse.scroll.reset_mock()
+        self.mock_mouse.drag.reset_mock()
         
         self.state_machine.step()
         
-        # 應直接點擊魔王關，不調用滾動
+        # 應直接點擊魔王關，不調用拖曳
         self.mock_mouse.click.assert_called_with(350, 350)
-        self.mock_mouse.scroll.assert_not_called()
+        self.mock_mouse.drag.assert_not_called()
 
     @patch('os.path.exists')
     def test_navigation_interceptor_for_bag_cleaning(self, mock_exists):

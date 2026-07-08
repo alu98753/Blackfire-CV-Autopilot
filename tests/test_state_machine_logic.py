@@ -960,7 +960,7 @@ class TestStateMachineLogic(unittest.TestCase):
                 return ((100, 100), 0.9)
             return (None, 0.0)
         self.mock_matcher.match.side_effect = match_side_effect
-        self.mock_mouse.scroll.reset_mock()
+        self.mock_mouse.drag.reset_mock()
         self.mock_mouse.click.reset_mock()
         
         # 模擬魔王關卡已經缺失 2.0 秒，使等待緩衝期已過
@@ -968,9 +968,8 @@ class TestStateMachineLogic(unittest.TestCase):
 
         self.state_machine.step()
         
-        # 驗證觸發了向下的 scroll
-        # 視窗中心點：100 + 1000 // 2 = 600, 100 + 800 // 2 = 500
-        self.mock_mouse.scroll.assert_called_with(-400, 600, 500)
+        # 驗證觸發了向下的拖曳 (center_x = 600, center_y = 500)
+        self.mock_mouse.drag.assert_called_with(600, 650, 600, 300)
 
     @patch('os.path.exists')
     def test_backpack_full_sorting_custom_disassemble_threshold(self, mock_exists):
