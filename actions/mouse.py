@@ -147,8 +147,8 @@ class MouseController:
                     rx_offset_phys = rx_physical + dx
                     ry_offset_phys = ry_physical + dy
                     
-                    # 動態獲取視窗所在顯示器的 DPI 縮放因子，將物理相對座標折算為遊戲視窗期望的邏輯座標
-                    dpi_factor = self.get_dpi_factor(hwnd)
+                    # 實測證實：在 DPI Aware 2 進程下，後台 PostMessage 的 lParam 座標應直接發送物理相對值，無需進行 DPI 縮放折算
+                    dpi_factor = 1.0
                     rx_logical = int(rx_offset_phys / dpi_factor)
                     ry_logical = int(ry_offset_phys / dpi_factor)
                     
