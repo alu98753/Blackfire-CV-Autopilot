@@ -50,30 +50,6 @@ class TemplateMatcher:
         if template_img is None or screen_img is None:
             return None, 0.0
 
-        # 動態獲取遊戲視窗的 DPI 縮放因子，自適應拉伸/縮小模板圖片
-        dpi_factor = 1.0
-        hwnd_debug = 0
-        try:
-            import win32gui
-            import ctypes
-            hwnd_debug = win32gui.FindWindow(None, "Blackfire Crusade")
-            if hwnd_debug:
-                dpi = ctypes.windll.user32.GetDpiForWindow(hwnd_debug)
-                dpi_factor = dpi / 96.0
-        except Exception:
-            pass
-            
-        logging.info(f"[DEBUG] matcher.py - hwnd: {hwnd_debug}, dpi_factor: {dpi_factor}, 模板原形狀: {template_img.shape}")
-            
-        if abs(dpi_factor - 1.0) > 0.01:
-            try:
-                new_w = int(template_img.shape[1] * dpi_factor)
-                new_h = int(template_img.shape[0] * dpi_factor)
-                template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-                logging.info(f"[DEBUG] matcher.py - 模板 resize 後形狀: {template_img.shape}")
-            except Exception as e_resize:
-                logging.debug(f"自適應 DPI 縮放模板失敗: {e_resize}")
-
         screen_h, screen_w = screen_img.shape[:2]
         temp_h, temp_w = template_img.shape[:2]
 
