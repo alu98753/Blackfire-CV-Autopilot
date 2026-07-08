@@ -235,6 +235,16 @@ class MouseController:
                     wparam = win32api.MAKELONG(0, wheel_delta)
                     lparam = win32api.MAKELONG(target_x, target_y)
                     
+                    # 1. 計算用於 WM_MOUSEMOVE 的視窗相對座標 (Client Coordinates)
+                    rx_client = target_x - rect[0]
+                    ry_client = target_y - rect[1]
+                    lparam_move = win32api.MAKELONG(rx_client, ry_client)
+                    
+                    # 2. 先在後台將滑鼠焦點移入滾動區域
+                    win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam_move)
+                    time.sleep(0.05)  # 提供微小延遲讓遊戲引擎響應移入
+                    
+                    # 3. 發送滾動消息 (lparam 為螢幕絕對座標)
                     logging.info(f"[後台滾輪] delta={wheel_delta}, 目標座標: ({target_x}, {target_y})")
                     win32gui.PostMessage(hwnd, win32con.WM_MOUSEWHEEL, wparam, lparam)
                     
