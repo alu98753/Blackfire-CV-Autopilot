@@ -156,41 +156,46 @@ class BagCleaningHandler(BaseStateHandler):
 
             # 4.2 如果已經點擊過「全選」，但尚未進行反向選擇，則掃描並反選稀有物品
             elif not getattr(self.machine, "bag_deselected", False):
-                # 多錨點彈窗左上角定位 (win_x, win_y)
-                win_x, win_y = None, None
+                # 多錨點彈窗定位全選按鈕中心 (btn_cx, btn_cy)
+                btn_cx, btn_cy = None, None
                 
                 # 嘗試使用「全選」按鈕定位
                 if os.path.exists(os.path.join("templates", "common/select_all.png")):
                     pos, conf = self.matcher.match(screen_img, "common/select_all.png", threshold=0.7)
                     if pos:
-                        win_x = pos[0] - 121
-                        win_y = pos[1] - 628
-                        logging.info(f"🎒 背包清理：使用「全選」定位彈窗左上角 ({win_x}, {win_y})，信心度: {conf:.4f}")
+                        btn_cx = pos[0]
+                        btn_cy = pos[1]
+                        logging.info(f"🎒 背包清理：使用「全選」定位錨點 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
                 
                 # 嘗試使用「分解」按鈕定位
-                if win_x is None and os.path.exists(os.path.join("templates", "common/Disassembly.png")):
+                if btn_cx is None and os.path.exists(os.path.join("templates", "common/Disassembly.png")):
                     pos, conf = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7)
                     if pos:
-                        win_x = pos[0] - 546
-                        win_y = pos[1] - 635
-                        logging.info(f"🎒 背包清理：使用「分解」定位彈窗左上角 ({win_x}, {win_y})，信心度: {conf:.4f}")
+                        btn_cx = pos[0] - 425
+                        btn_cy = pos[1] - 7
+                        logging.info(f"🎒 背包清理：使用「分解」定位錨點 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
 
                 # 嘗試使用「關閉」按鈕定位
-                if win_x is None and os.path.exists(os.path.join("templates", "common/quit.png")):
+                if btn_cx is None and os.path.exists(os.path.join("templates", "common/quit.png")):
                     pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
                     if pos:
-                        win_x = pos[0] - 859
-                        win_y = pos[1] - 38
-                        logging.info(f"🎒 背包清理：使用「關閉」定位彈窗左上角 ({win_x}, {win_y})，信心度: {conf:.4f}")
+                        btn_cx = pos[0] - 738
+                        btn_cy = pos[1] + 590
+                        logging.info(f"🎒 背包清理：使用「關閉」定位錨點 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
 
-                if win_x is not None and win_y is not None:
+                if btn_cx is not None and btn_cy is not None:
                     logging.info("🎒 背包清理：開始掃描大量分解網格以反選貴重物品 (藍色及以上)...")
+                    
+                    items_found = 0
+                    valuable_found = 0
+                    target_to_deselect = None
                     
                     # 6x3 網格掃描
                     for r in range(3):
                         for c in range(6):
-                            cx = win_x + 98 + c * 135
-                            cy = win_y + 203 + r * 135
+                            # 使用實測高精度對齊 offset
+                            cx = btn_cx - 58 + c * 135
+                            cy = btn_cy - 443 + r * 135
                             
                             crop_x = cx - 60
                             crop_y = cy - 60
@@ -200,13 +205,65 @@ class BagCleaningHandler(BaseStateHandler):
                             if 0 <= crop_x and crop_x + 120 <= w_limit and 0 <= crop_y and crop_y + 120 <= h_limit:
                                 crop = screen_img[crop_y:crop_y+120, crop_x:crop_x+120]
                                 if np.std(crop) > 20.0:
+                                    items_found += 1
                                     color = self.classify_slot_color(crop)
-                                    # 藍、紫、橙黃、紅稀有度物品需要反向點擊取消選取
-                                    if color in ["blue", "purple", "orange_yellow", "red"]:
-                                        logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，進行點擊以取消選取！")
-                                        self.mouse.click(rect["left"] + cx, rect["top"] + cy)
-                                        time.sleep(0.08)
+                                    
+                                    # 貴重裝備 (不在大量分解清單中)
+                                    disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
+                                    keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
+                                    is_valuable = color in keep_colors
+                                    if is_valuable:
+                                        valuable_found += 1
+                                    
+                                    # 裁切正中心 35x35 的判定區
+                                    check_x = cx - 17
+                                    check_y = cy - 17
+                                    check_zone = screen_img[check_y:check_y+35, check_x:check_x+35]
+                                    
+                                    # 判定是否有綠色打勾記號 (使用經過高飽和與高亮度實測調校的純綠篩選條件)
+                                    hsv_check = cv2.cvtColor(check_zone, cv2.COLOR_BGR2HSV)
+                                    lower_green = np.array([55, 120, 100])
+                                    upper_green = np.array([95, 255, 255])
+                                    mask_green = cv2.inRange(hsv_check, lower_green, upper_green)
+                                    has_check_mark = np.sum(mask_green > 0) > 30  # 大於 30 個像素點代表目前有綠色打勾記號
+                                    
+                                    # 只有當它是貴重裝備，且目前是勾選狀態時，我們才進行反選點擊
+                                    if is_valuable and has_check_mark:
+                                        if target_to_deselect is None:
+                                            target_to_deselect = (rect["left"] + cx, rect["top"] + cy, color, r, c)
+                        # 我們在同一個 handle 中只取第一個貴重物品點選，以單步反選防吞指令
+                        # 如果已經找到一個貴重物品需要取消，直接 break 退出網格掃描
+                        if target_to_deselect:
+                            break
                     
+                    # 如果有發現貴重物品，進行單步點擊取消勾選，並直接 return 等待下一影格重新確認
+                    if target_to_deselect:
+                        click_x, click_y, color, r, c = target_to_deselect
+                        logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y})")
+                        self.mouse.click(click_x, click_y)
+                        time.sleep(0.25)  # 提供充足的反選彈出/重繪時間
+                        return
+                    
+                    # 如果循環完畢沒有任何貴重物品被選中
+                    # 檢查是否所有物品都被反選了（即全選後全反選，代表無可分解物品），此時直接點擊關閉退出
+                    if items_found > 0 and valuable_found == items_found:
+                        logging.info("🎒 背包清理：網格中全部為貴重裝備，無可分解裝備，直接關閉退出。")
+                        pos_quit = None
+                        if os.path.exists(os.path.join("templates", "common/quit.png")):
+                            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
+                        
+                        click_x = rect["left"] + (pos_quit[0] if pos_quit else btn_cx - 738 + 859)
+                        click_y = rect["top"] + (pos_quit[1] if pos_quit else btn_cy - 590 + 38)
+                        
+                        logging.info(f"🎒 背包清理：點擊關閉按鈕 ({click_x}, {click_y}) 退出大量分解。")
+                        self.mouse.click(click_x, click_y)
+                        self.machine.bag_deselected = True
+                        self.machine.bag_disassembled = True
+                        time.sleep(0.1)
+                        return
+                    
+                    # 無貴重物品需要反選，代表反選流程完全結束，可以安全進入分解
+                    logging.info("🎒 背包清理：所有貴重物品均已確認反選，進入分解步驟。")
                     self.machine.bag_deselected = True
                     time.sleep(0.1)
                     return
