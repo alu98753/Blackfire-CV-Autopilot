@@ -206,14 +206,14 @@ def main():
     print(" 4) 紫色 (史詩)")
     print(" 5) 橘黃色 (傳奇)")
     try:
-        disassemble_choice = input("請輸入數字 [1-5] (直接 Enter 鍵預設為 2): ").strip()
+        disassemble_choice = input("請輸入數字 [1-5] (直接 Enter 鍵預設為 3): ").strip()
         if not disassemble_choice:
-            disassemble_choice = "2"
+            disassemble_choice = "3"
     except KeyboardInterrupt:
         print("\n[!] 取消啟動。")
         sys.exit(0)
     except Exception:
-        disassemble_choice = "2"
+        disassemble_choice = "3"
 
     disassemble_choices_map = {
         "1": ["gray_or_empty"],
@@ -223,8 +223,8 @@ def main():
         "5": ["gray_or_empty", "green", "blue", "purple", "orange_yellow"]
     }
     if disassemble_choice not in disassemble_choices_map:
-        print(f"[!] 無效選擇 '{disassemble_choice}'，已自動使用預設的 [2: 綠色及以下]...")
-        disassemble_choice = "2"
+        print(f"[!] 無效選擇 '{disassemble_choice}'，已自動使用預設的 [3: 藍色及以下]...")
+        disassemble_choice = "3"
 
     config["disassemble_colors"] = disassemble_choices_map[disassemble_choice]
 

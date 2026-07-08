@@ -207,7 +207,6 @@ class BagCleaningHandler(BaseStateHandler):
                                 if np.std(crop) > 20.0:
                                     items_found += 1
                                     color = self.classify_slot_color(crop)
-                                    
                                     # 貴重裝備 (不在大量分解清單中)
                                     disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
                                     is_valuable = color not in disassemble_colors
