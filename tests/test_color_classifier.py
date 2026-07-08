@@ -10,12 +10,12 @@ class TestGearColorClassifier(unittest.TestCase):
     def create_mock_slot(self, color_bgr, width=5):
         """
         輔助方法：創建一個模擬裝備格子 (120x120)。
-        按照新環狀採樣區，我們會在環帶中間繪製目標顏色，以利分類器辨識。
-        環帶範圍為 (15, 15) 到 (105, 105) 之間，挖空中心 (35, 35) ~ (85, 85)。
+        按照緊貼外邊緣的極細環狀採樣區，我們會在邊帶中間繪製目標顏色，以利分類器辨識。
+        採樣帶範圍為外圍 (2, 2) 到 (118, 118)，挖空內圍 (12, 12) 到 (108, 108)。
         """
         img = np.zeros((120, 120, 3), dtype=np.uint8)
-        # 在環狀採樣區內繪製目標色（例如在 25 像素處畫一個寬度為 5 的框，這會完全落在遮罩內）
-        cv2.rectangle(img, (20, 20), (100, 100), color_bgr, width)
+        # 在邊帶中線處 (6像素處) 畫一個邊框，使顏色精確落在遮罩內
+        cv2.rectangle(img, (6, 6), (114, 114), color_bgr, width)
         return img
 
     def test_gray_or_empty_slot(self):

@@ -23,10 +23,10 @@ class GearColorClassifier:
         else:
             crop = crop_img
 
-        # 建立環狀遮罩：採集 (15, 15) 到 (105, 105) 之間，避開中心打勾 (35, 35) 到 (85, 85)
+        # 建立緊貼外邊緣的極細環狀遮罩 (寬度 10 像素)，完美避開內部裝備圖案干擾
         mask = np.zeros((120, 120), dtype=np.uint8)
-        cv2.rectangle(mask, (15, 15), (105, 105), 255, -1)
-        cv2.rectangle(mask, (35, 35), (85, 85), 0, -1)
+        cv2.rectangle(mask, (2, 2), (118, 118), 255, -1)
+        cv2.rectangle(mask, (12, 12), (108, 108), 0, -1)
         
         ring_pixels = crop[mask == 255]
         total_pixels = len(ring_pixels)
@@ -72,7 +72,7 @@ class GearColorClassifier:
                     counts["green"] += 1
                     
         max_color = "gray_or_empty"
-        max_count = 300 # 品質判斷的點數閾值
+        max_count = 150 # 品質判斷的點數閾值 (配合極細遮罩減小後的採樣面積)
         for color, count in counts.items():
             if count > max_count:
                 max_count = count
