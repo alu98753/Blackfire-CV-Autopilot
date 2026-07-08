@@ -52,12 +52,37 @@ class ScreenCapturer:
 
     def get_logical_window_rect(self, phys_rect):
         """
-        啟動一個極快的 DPI Unaware 子進程來獲取邏輯座標，避開跨顯示器 DPI 座標折算偏差。
-        採用物理 rect 變更偵測進行零開銷快取，防止重複執行子進程。
+        優先使用 Windows 原生 PhysicalToLogicalPointForWindow API 獲取 100% 精準的邏輯座標。
+        若 API 呼叫失敗，則退回使用 DPI Unaware 子進程快取方案。
         """
         if phys_rect is None:
             return None
             
+        hwnd = self.get_hwnd()
+        if hwnd:
+            try:
+                class POINT(ctypes.Structure):
+                    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+                
+                # 物理左上角與右下角
+                pt_tl = POINT(phys_rect["left"], phys_rect["top"])
+                pt_br = POINT(phys_rect["left"] + phys_rect["width"], phys_rect["top"] + phys_rect["height"])
+                
+                res_tl = ctypes.windll.user32.PhysicalToLogicalPointForWindow(hwnd, ctypes.byref(pt_tl))
+                res_br = ctypes.windll.user32.PhysicalToLogicalPointForWindow(hwnd, ctypes.byref(pt_br))
+                
+                if res_tl and res_br:
+                    log_rect = {
+                        "left": pt_tl.x,
+                        "top": pt_tl.y,
+                        "width": pt_br.x - pt_tl.x,
+                        "height": pt_br.y - pt_tl.y
+                    }
+                    return log_rect
+            except Exception as e_api:
+                logging.debug(f"使用 PhysicalToLogicalPointForWindow API 轉換失敗: {e_api}")
+
+        # Fallback 備份方案：使用子進程獲取
         if hasattr(self, "_cached_phys_rect") and self._cached_phys_rect == phys_rect:
             if hasattr(self, "_cached_log_rect") and self._cached_log_rect is not None:
                 return self._cached_log_rect
@@ -144,6 +169,12 @@ class ScreenCapturer:
         if self.backend_mode and hwnd:
             img = self._capture_backend(hwnd)
             if img is not None:
+                # 診斷：將 BitBlt 擷取結果存檔
+                try:
+                    cv2.imwrite("debug_bitblt.png", img)
+                    logging.info(f"📸 [後台 BitBlt 截圖成功] 尺寸: {img.shape}，已存檔為 debug_bitblt.png")
+                except Exception:
+                    pass
                 return img
                 
         # 退回前台 / MSS 跨螢幕絕對座標裁剪 (第二防線)
@@ -190,6 +221,13 @@ class ScreenCapturer:
             # 如果有縮放，將截圖重新縮放回物理尺寸，確保與物理像素精確重合
             if rect is not None and abs(dpi_factor - 1.0) > 0.01:
                 img_bgr = cv2.resize(img_bgr, (rect["width"], rect["height"]), interpolation=cv2.INTER_LINEAR)
+                
+            # 診斷：將 MSS 擷取結果存檔
+            try:
+                cv2.imwrite("debug_mss.png", img_bgr)
+                logging.info(f"📸 [前台 MSS 截圖成功] 邏輯座標: {monitor}，物理尺寸: {img_bgr.shape}，已存檔為 debug_mss.png")
+            except Exception:
+                pass
                 
             return img_bgr
         except Exception as e:
