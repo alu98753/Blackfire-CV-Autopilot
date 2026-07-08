@@ -74,15 +74,26 @@ def main():
         except AttributeError:
             pass
             
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1) # PROCESS_SYSTEM_DPI_AWARE
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+            
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.05, help="畫面偵測間隔秒數 (預設: 0.05)")
     parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
                         help="掛機模式：stage (普通關卡) 或 dungeon_slime (史萊姆地下城)")
+    parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
     args = parser.parse_args()
 
     # 取得當前模式的配置
     config = GAME_CONFIGS[args.mode].copy()  # 使用 copy 避免影響原始 GAME_CONFIGS 字典
+    config["backend_mode"] = args.backend
 
     if args.mode == "stage":
         print("請選擇要打的關卡 Boss：")
@@ -120,6 +131,102 @@ def main():
             "stages/stage_label.png",
             boss_btn
         ]
+
+    elif args.mode == "dungeon_slime":
+        print("請選擇要探索的地下城：")
+        print(" 1) 黏糊糊的石窟 (Slime_entry)")
+        print(" 2) 幽影地穴 (Ghost_entry)")
+        print(" 3) 森林迷宮 (Forest_entry)")
+        print(" 4) 神秘遺跡 (Ruins_entry)")
+        print(" 5) 自動貪婪挑選 (Greedy Select) - 預設")
+        try:
+            choice = input("請輸入地下城數字 [1-5] (直接 Enter 鍵預設為 5): ").strip()
+            if not choice:
+                choice = "5"
+        except KeyboardInterrupt:
+            print("\n[!] 取消啟動。")
+            sys.exit(0)
+        except Exception:
+            choice = "5"
+
+        dungeon_map = {
+            "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
+            "2": ("dungeons/Ghost_entry.png", "幽影地穴", False),
+            "3": ("dungeons/Forest_entry.png", "森林迷宮", False),
+            "4": ("dungeons/Ruins_entry.png", "神秘遺跡", False),
+            "5": (None, "自動貪婪挑選", True)
+        }
+        if choice not in dungeon_map:
+            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [自動貪婪挑選]...")
+            choice = "5"
+
+        entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
+        config["name"] = f"地下城 - {dungeon_name}"
+        config["greedy_dungeon"] = is_greedy
+        if is_greedy:
+            config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+        else:
+            config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_btn]
+
+    # 1. 選擇要保留/領取的最低裝備品質
+    print("\n請選擇要【保留/領取】的最低裝備品質（該品質及以上皆會被保留，背包滿時優先拿取）：")
+    print(" 1) 灰色 (普通)")
+    print(" 2) 綠色 (優秀)")
+    print(" 3) 藍色 (精良) - 預設")
+    print(" 4) 紫色 (史詩)")
+    print(" 5) 橘黃色 (傳奇)")
+    try:
+        keep_choice = input("請輸入數字 [1-5] (直接 Enter 鍵預設為 3): ").strip()
+        if not keep_choice:
+            keep_choice = "3"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        keep_choice = "3"
+
+    keep_choices_map = {
+        "1": ["gray_or_empty", "green", "blue", "purple", "orange_yellow", "red"],
+        "2": ["green", "blue", "purple", "orange_yellow", "red"],
+        "3": ["blue", "purple", "orange_yellow", "red"],
+        "4": ["purple", "orange_yellow", "red"],
+        "5": ["orange_yellow", "red"]
+    }
+    if keep_choice not in keep_choices_map:
+        print(f"[!] 無效選擇 '{keep_choice}'，已自動使用預設的 [3: 藍色及以上]...")
+        keep_choice = "3"
+
+    config["keep_colors"] = keep_choices_map[keep_choice]
+
+    # 2. 選擇可大量分解的最高裝備品質
+    print("\n請選擇可【大量分解】的最高裝備品質（該品質及以下在大廳時會被自動大量分解）：")
+    print(" 1) 灰色 (普通)")
+    print(" 2) 綠色 (優秀) - 預設")
+    print(" 3) 藍色 (精良)")
+    print(" 4) 紫色 (史詩)")
+    print(" 5) 橘黃色 (傳奇)")
+    try:
+        disassemble_choice = input("請輸入數字 [1-5] (直接 Enter 鍵預設為 2): ").strip()
+        if not disassemble_choice:
+            disassemble_choice = "2"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        disassemble_choice = "2"
+
+    disassemble_choices_map = {
+        "1": ["gray_or_empty"],
+        "2": ["gray_or_empty", "green"],
+        "3": ["gray_or_empty", "green", "blue"],
+        "4": ["gray_or_empty", "green", "blue", "purple"],
+        "5": ["gray_or_empty", "green", "blue", "purple", "orange_yellow"]
+    }
+    if disassemble_choice not in disassemble_choices_map:
+        print(f"[!] 無效選擇 '{disassemble_choice}'，已自動使用預設的 [2: 綠色及以下]...")
+        disassemble_choice = "2"
+
+    config["disassemble_colors"] = disassemble_choices_map[disassemble_choice]
 
     print("=" * 60)
     print(" 🚀 Blackfire Crusade 自動掛機輔助腳本啟動 🚀")
@@ -169,12 +276,13 @@ def main():
     print("=" * 60)
 
     # 初始化模組
-    capturer = ScreenCapturer(window_title=args.title)
+    capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend)
     matcher = TemplateMatcher(templates_dir="templates")
-    mouse = MouseController(human_like=True)
+    mouse = MouseController(human_like=True, backend_mode=args.backend)
     
     # 初始化狀態機 (傳入模式配置)
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+    state_machine.backend_mode = args.backend
     # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
     mouse.state_machine = state_machine
     # 將當前配置與體力啟用狀態設定至狀態機中
@@ -209,12 +317,23 @@ def main():
                 
                 # 若滑鼠偏移大於 5 像素且腳本在 1.2 秒內無動作，視為手動介入
                 if dx > 5 or dy > 5:
-                    last_action_diff = time.time() - state_machine.mouse.last_action_time
-                    if last_action_diff > 1.2:
-                        if not state_machine.user_operating:
-                            logging.warning(f"⚠️ 偵測到使用者手動操作 (滑鼠移動至 {cur_pos})，自動暫停掛機，鎖定目前狀態: [{state_machine.current_state}]。")
-                            state_machine.user_operating = True
-                        state_machine.last_user_operation_time = time.time()
+                    is_inside = True
+                    if getattr(state_machine, "backend_mode", False):
+                        rect = state_machine.capturer.get_window_rect()
+                        if rect:
+                            mx, my = cur_pos
+                            is_inside = (rect["left"] <= mx <= rect["left"] + rect["width"] and 
+                                         rect["top"] <= my <= rect["top"] + rect["height"])
+                        else:
+                            is_inside = False
+
+                    if is_inside:
+                        last_action_diff = time.time() - state_machine.mouse.last_action_time
+                        if last_action_diff > 1.2:
+                            if not state_machine.user_operating:
+                                logging.warning(f"⚠️ 偵測到使用者手動操作 (滑鼠移動至 {cur_pos})，自動暫停掛機，鎖定目前狀態: [{state_machine.current_state}]。")
+                                state_machine.user_operating = True
+                            state_machine.last_user_operation_time = time.time()
             
             # 更新滑鼠座標快照
             state_machine.prev_mouse_pos = cur_pos
