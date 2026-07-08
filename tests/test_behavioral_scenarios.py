@@ -632,8 +632,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 模擬打勾狀態：在貴重物品格子內畫上一個綠色實心方塊，代表「綠色打勾記號」
         cv2.rectangle(screen, (181, 168), (215, 202), (0, 255, 0), -1)
         
-        # 設定可分解最高品質為橘黃色，使金色貴重物品被自動全選打勾，從而符合反選保護條件
-        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue", "purple", "orange_yellow"]
+        # 設定可分解最高品質為紫色，使橘黃色貴重物品不屬於可分解列表，從而觸發反選保護條件
+        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue", "purple"]
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}

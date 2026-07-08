@@ -184,7 +184,7 @@ class BagCleaningHandler(BaseStateHandler):
                         logging.info(f"🎒 背包清理：使用「關閉」定位錨點 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
 
                 if btn_cx is not None and btn_cy is not None:
-                    logging.info("🎒 背包清理：開始掃描大量分解網格以反選貴重物品 (藍色及以上)...")
+                    logging.info("🎒 背包清理：開始掃描大量分解網格以反選貴重物品 (不在大量分解清單中的裝備)...")
                     
                     items_found = 0
                     valuable_found = 0
@@ -210,8 +210,7 @@ class BagCleaningHandler(BaseStateHandler):
                                     
                                     # 貴重裝備 (不在大量分解清單中)
                                     disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
-                                    keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
-                                    is_valuable = color in keep_colors
+                                    is_valuable = color not in disassemble_colors
                                     if is_valuable:
                                         valuable_found += 1
                                     

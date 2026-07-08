@@ -354,8 +354,8 @@ class TestStateMachineLogic(unittest.TestCase):
         # 繪製一個綠色垃圾裝備，使其不被判定為「無可分解裝備而直接退出」
         cv2.rectangle(screen, (158, 145), (238, 225), (0, 255, 0), 10)
         
-        # 設定可分解最高品質為藍色，使藍色貴重物品被自動全選打勾，從而符合反選保護條件
-        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue"]
+        # 設定可分解最高品質為綠色，使藍色貴重物品不屬於可分解列表，從而觸發反選保護條件
+        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green"]
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
