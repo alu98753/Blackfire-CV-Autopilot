@@ -17,6 +17,13 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_matcher = MagicMock()
         self.mock_mouse = MagicMock()
         
+        # 解決 Mock match 被傳入 check_brightness 參數時的不相容問題，自動過濾 kwargs
+        orig_call = self.mock_matcher.match._mock_call
+        def patched_mock_call(*args, **kwargs):
+            kwargs.pop('check_brightness', None)
+            return orig_call(*args, **kwargs)
+        self.mock_matcher.match._mock_call = patched_mock_call
+        
         # 模擬視窗大小
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "right": 800, "bottom": 600}
         self.mock_capturer.capture.return_value = MagicMock() # 傳回假的圖片物件

@@ -24,6 +24,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse = MagicMock()
         self.mock_mouse.last_action_time = 0.0
         
+        # 解決 Mock match 被傳入 check_brightness 參數時的不相容問題，自動過濾 kwargs
+        orig_call = self.mock_matcher.match._mock_call
+        def patched_mock_call(*args, **kwargs):
+            kwargs.pop('check_brightness', None)
+            return orig_call(*args, **kwargs)
+        self.mock_matcher.match._mock_call = patched_mock_call
+        
         # 預設視窗座標與大小 (1920x1080)
         self.mock_capturer.get_window_rect.return_value = {
             "left": 0, "top": 0, "width": 1920, "height": 1080

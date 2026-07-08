@@ -103,7 +103,7 @@ class ResultHandler(BaseStateHandler):
         # B. 檢查「繼續」按鈕
         c_temp = self.machine.continue_template
         if os.path.exists(os.path.join("templates", c_temp)):
-            pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=0.8)
+            pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=0.8, check_brightness=True)
             if pos_c:
                 logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f})，進行點擊。")
                 self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])

@@ -35,13 +35,14 @@ class TemplateMatcher:
         self._cached_templates[template_name] = template_img
         return template_img
 
-    def match(self, screen_img, template_name, threshold=0.8):
+    def match(self, screen_img, template_name, threshold=0.8, check_brightness=False):
         """
         在 screen_img 中尋找與 template_name 匹配度最高的位置。
         
         :param screen_img: 來源畫面 (numpy array)
         :param template_name: 模板檔名或路徑
         :param threshold: 信心度閥值 (0.0 ~ 1.0)
+        :param check_brightness: 是否檢查匹配區域與模板的亮度比例，避免誤判背景調暗按鈕
         :return: (center_x, center_y), confidence. 若未達閥值，回傳 None, confidence
         """
         template_img = self._load_template(template_name)
@@ -67,6 +68,29 @@ class TemplateMatcher:
         center_y = top_left[1] + temp_h // 2
 
         if max_val >= threshold:
+            if check_brightness:
+                import numpy as np
+                # 取得匹配區域切片
+                crop = screen_img[top_left[1]:top_left[1]+temp_h, top_left[0]:top_left[0]+temp_w]
+                
+                # 計算灰階平均亮度
+                temp_gray = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
+                crop_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+                
+                mean_temp = np.mean(temp_gray)
+                mean_crop = np.mean(crop_gray)
+                
+                # 亮度比例 (crop / temp)
+                brightness_ratio = mean_crop / max(1.0, mean_temp)
+                
+                # 若亮度比例低於 0.8，代表該按鈕已被黑色遮罩調暗，是不可互動的背景按鈕
+                if brightness_ratio < 0.8:
+                    logging.warning(
+                        f"⚠️ 模板 '{template_name}' 匹配相似度達標 [{max_val:.4f}]，"
+                        f"但亮度比例偏低 ({brightness_ratio:.2f} < 0.8)，判定為背景暗區按鈕，予以過濾！"
+                    )
+                    return None, max_val
+
             logging.info(f"成功匹配模板 '{template_name}'！信心度: {max_val:.4f}，中心座標: ({center_x}, {center_y})")
             return (center_x, center_y), max_val
         else:
