@@ -50,6 +50,43 @@ class ScreenCapturer:
             logging.error(f"取得視窗座標時發生錯誤: {e}")
             return None
 
+    def get_logical_window_rect(self, phys_rect):
+        """
+        啟動一個極快的 DPI Unaware 子進程來獲取邏輯座標，避開跨顯示器 DPI 座標折算偏差。
+        採用物理 rect 變更偵測進行零開銷快取，防止重複執行子進程。
+        """
+        if phys_rect is None:
+            return None
+            
+        if hasattr(self, "_cached_phys_rect") and self._cached_phys_rect == phys_rect:
+            if hasattr(self, "_cached_log_rect") and self._cached_log_rect is not None:
+                return self._cached_log_rect
+                
+        log_rect = None
+        try:
+            import subprocess
+            import sys
+            cmd = [
+                sys.executable,
+                "-c",
+                f"import win32gui; hwnd = win32gui.FindWindow(None, '{self.window_title}'); print(win32gui.GetWindowRect(hwnd)) if hwnd else print('None')"
+            ]
+            out = subprocess.check_output(cmd, timeout=0.8).decode().strip()
+            if out and out != "None":
+                val = eval(out)
+                log_rect = {
+                    "left": val[0],
+                    "top": val[1],
+                    "width": val[2] - val[0],
+                    "height": val[3] - val[1]
+                }
+        except Exception as e:
+            logging.debug(f"獲取邏輯座標失敗: {e}")
+            
+        self._cached_phys_rect = phys_rect
+        self._cached_log_rect = log_rect
+        return log_rect
+
     def _capture_backend(self, hwnd):
         """
         利用 Windows API BitBlt 進行後台視窗複製 (第一防線)
@@ -119,29 +156,38 @@ class ScreenCapturer:
                 monitor = self.sct.monitors[1]
                 dpi_factor = 1.0
             else:
-                # 取得當前視窗所在螢幕的 DPI 因子
-                dpi_factor = 1.0
-                if hwnd:
-                    try:
-                        import ctypes
-                        dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
-                        dpi_factor = dpi / 96.0
-                    except Exception:
-                        pass
-                
-                # 將物理 rect 轉換為 mss 庫底層所需的邏輯座標
-                monitor = {
-                    "left": int(rect["left"] / dpi_factor),
-                    "top": int(rect["top"] / dpi_factor),
-                    "width": int(rect["width"] / dpi_factor),
-                    "height": int(rect["height"] / dpi_factor)
-                }
+                # 優先取得作業系統背書的邏輯座標
+                log_rect = self.get_logical_window_rect(rect)
+                if log_rect is not None:
+                    monitor = {
+                        "left": log_rect["left"],
+                        "top": log_rect["top"],
+                        "width": log_rect["width"],
+                        "height": log_rect["height"]
+                    }
+                    dpi_factor = rect["width"] / log_rect["width"]
+                else:
+                    # 備用退路：動態計算 DPI
+                    dpi_factor = 1.0
+                    if hwnd:
+                        try:
+                            import ctypes
+                            dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
+                            dpi_factor = dpi / 96.0
+                        except Exception:
+                            pass
+                    monitor = {
+                        "left": int(rect["left"] / dpi_factor),
+                        "top": int(rect["top"] / dpi_factor),
+                        "width": int(rect["width"] / dpi_factor),
+                        "height": int(rect["height"] / dpi_factor)
+                    }
             
             screenshot = self.sct.grab(monitor)
             img = np.array(screenshot)
             img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             
-            # 如果有縮放，將截圖重新縮放回物理尺寸，確保寬高和物理像素精確重合
+            # 如果有縮放，將截圖重新縮放回物理尺寸，確保與物理像素精確重合
             if rect is not None and abs(dpi_factor - 1.0) > 0.01:
                 img_bgr = cv2.resize(img_bgr, (rect["width"], rect["height"]), interpolation=cv2.INTER_LINEAR)
                 
@@ -153,12 +199,22 @@ class ScreenCapturer:
                 if rect is None:
                     img_pil = ImageGrab.grab()
                 else:
-                    bbox = (
-                        int(rect["left"] / dpi_factor),
-                        int(rect["top"] / dpi_factor),
-                        int((rect["left"] + rect["width"]) / dpi_factor),
-                        int((rect["top"] + rect["height"]) / dpi_factor)
-                    )
+                    # 優先使用邏輯座標
+                    log_rect = self.get_logical_window_rect(rect)
+                    if log_rect is not None:
+                        bbox = (
+                            log_rect["left"],
+                            log_rect["top"],
+                            log_rect["left"] + log_rect["width"],
+                            log_rect["top"] + log_rect["height"]
+                        )
+                    else:
+                        bbox = (
+                            int(rect["left"] / dpi_factor),
+                            int(rect["top"] / dpi_factor),
+                            int((rect["left"] + rect["width"]) / dpi_factor),
+                            int((rect["top"] + rect["height"]) / dpi_factor)
+                        )
                     img_pil = ImageGrab.grab(bbox)
                 img_bgr = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
                 
