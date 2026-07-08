@@ -533,7 +533,7 @@ class NavigationHandler(BaseStateHandler):
 
             # 針對 level/entry/stage_label 類背景特徵圖，調降閾值至 0.70，容忍縮放與像素抖動
             thresh = 0.70 if ("entry" in btn or "stage_label" in btn or "level" in btn) else 0.80
-            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh)
+            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
             if pos:
                 if btn == "stages/stage_label.png":
                     # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
