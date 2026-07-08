@@ -41,7 +41,9 @@ class BattleHandler(BaseStateHandler):
             # 關卡模式：檢查 retry.png 與所有 continue*.png
             found_result_trigger = False
             for btn in self.machine.config["result_buttons"]:
-                pos, _ = self.matcher.match(screen_img, btn, threshold=0.8, check_brightness=(btn == "common/continue.png"))
+                thresh = 0.88 if btn == "common/continue_gray.png" else 0.8
+                b_thresh = 0.8 if btn == "common/continue.png" else (0.65 if btn == "common/continue_gray.png" else 0.0)
+                pos, _ = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
                 if pos:
                     logging.info(f"🏆 偵測到結算按鈕 [{btn}]，戰鬥結束！")
                     found_result_trigger = True
@@ -59,7 +61,9 @@ class BattleHandler(BaseStateHandler):
             best_match_temp = None
             
             for btn in self.machine.config["dungeon_battle_results"]:
-                pos, conf = self.matcher.match(screen_img, btn, threshold=best_match_conf, check_brightness=(btn == "common/continue.png"))
+                thresh = max(best_match_conf, 0.88) if btn == "common/continue_gray.png" else best_match_conf
+                b_thresh = 0.8 if btn == "common/continue.png" else (0.65 if btn == "common/continue_gray.png" else 0.0)
+                pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
                 if pos and conf > best_match_conf:
                     best_match_conf = conf
                     best_match_pos = pos

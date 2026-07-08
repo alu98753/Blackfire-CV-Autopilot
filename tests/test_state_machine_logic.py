@@ -17,10 +17,11 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_matcher = MagicMock()
         self.mock_mouse = MagicMock()
         
-        # 解決 Mock match 被傳入 check_brightness 參數時的不相容問題，自動過濾 kwargs
+        # 解決 Mock match 被傳入 check_brightness 或 brightness_threshold 參數時的不相容問題，自動過濾 kwargs
         orig_call = self.mock_matcher.match._mock_call
         def patched_mock_call(*args, **kwargs):
             kwargs.pop('check_brightness', None)
+            kwargs.pop('brightness_threshold', None)
             return orig_call(*args, **kwargs)
         self.mock_matcher.match._mock_call = patched_mock_call
         

@@ -101,10 +101,14 @@ class ResultHandler(BaseStateHandler):
             return True
 
         # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如金黃色與灰色繼續按鈕）
-        continue_templates = [self.machine.continue_template, "common/continue_gray.png"]
-        for c_temp in continue_templates:
+        # 金色 Continue 採用嚴格的亮度門檻 (0.80)；灰色 Continue 採用寬鬆的亮度門檻 (0.65)，並將相似度門檻提高到 0.88 防止金色背景誤匹配。
+        continue_configs = [
+            (self.machine.continue_template, 0.80, 0.80),
+            ("common/continue_gray.png", 0.88, 0.65)
+        ]
+        for c_temp, thresh, b_thresh in continue_configs:
             if os.path.exists(os.path.join("templates", c_temp)):
-                pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=0.8, check_brightness=True)
+                pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=thresh, brightness_threshold=b_thresh)
                 if pos_c:
                     logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f})，進行點擊。")
                     self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])

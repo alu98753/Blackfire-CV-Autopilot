@@ -35,14 +35,14 @@ class TemplateMatcher:
         self._cached_templates[template_name] = template_img
         return template_img
 
-    def match(self, screen_img, template_name, threshold=0.8, check_brightness=False):
+    def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0):
         """
         在 screen_img 中尋找與 template_name 匹配度最高的位置。
         
         :param screen_img: 來源畫面 (numpy array)
         :param template_name: 模板檔名或路徑
         :param threshold: 信心度閥值 (0.0 ~ 1.0)
-        :param check_brightness: 是否檢查匹配區域與模板的亮度比例，避免誤判背景調暗按鈕
+        :param brightness_threshold: 亮度比例門檻 (0.0代表不啟用，大於0代表低於此比例則過濾)
         :return: (center_x, center_y), confidence. 若未達閥值，回傳 None, confidence
         """
         template_img = self._load_template(template_name)
@@ -68,7 +68,7 @@ class TemplateMatcher:
         center_y = top_left[1] + temp_h // 2
 
         if max_val >= threshold:
-            if check_brightness:
+            if brightness_threshold > 0.0:
                 import numpy as np
                 # 取得匹配區域切片
                 crop = screen_img[top_left[1]:top_left[1]+temp_h, top_left[0]:top_left[0]+temp_w]
@@ -83,8 +83,8 @@ class TemplateMatcher:
                 # 亮度比例 (crop / temp)
                 brightness_ratio = mean_crop / max(1.0, mean_temp)
                 
-                # 若亮度比例低於 0.8，代表該按鈕已被黑色遮罩調暗，是不可互動的背景按鈕
-                if brightness_ratio < 0.8:
+                # 若亮度比例低於門檻，代表該按鈕已被調暗或是背景按鈕
+                if brightness_ratio < brightness_threshold:
                     # 動態導入工具模組下的公用保存函數，實現關注點分離
                     try:
                         from tools.analyze_template_brightness import save_diagnostic_images
@@ -95,7 +95,7 @@ class TemplateMatcher:
                     base = os.path.splitext(os.path.basename(template_name))[0]
                     logging.warning(
                         f"⚠️ 模板 '{template_name}' 匹配相似度達標 [{max_val:.4f}]，"
-                        f"但亮度比例偏低 ({brightness_ratio:.2f} < 0.8)，判定為背景暗區按鈕，予以過濾！"
+                        f"但亮度比例偏低 ({brightness_ratio:.2f} < {brightness_threshold:.2f})，判定為背景暗區按鈕，予以過濾！"
                         f"已自動保存診斷圖片至 debug_{base}_dim_full.png 和 debug_{base}_dim_crop.png"
                     )
                     return None, max_val
