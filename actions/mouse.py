@@ -132,8 +132,13 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    # 獲取頂層視窗左上角座標，直接計算相對於視窗左上角(含邊框)的相對座標
-                    rect = win32gui.GetWindowRect(hwnd)
+                    # 優先使用狀態機當前幀快取的正確物理 rect，防範 win32gui.GetWindowRect 在跨 DPI 螢幕時隨機發生的 DPI 虛擬化回退
+                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+                        rect_box = self.state_machine.last_rect
+                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+                    else:
+                        rect = win32gui.GetWindowRect(hwnd)
+                        
                     rx_physical = int(x) - rect[0]
                     ry_physical = int(y) - rect[1]
                     
@@ -224,7 +229,11 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    rect = win32gui.GetWindowRect(hwnd)
+                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+                        rect_box = self.state_machine.last_rect
+                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+                    else:
+                        rect = win32gui.GetWindowRect(hwnd)
                     center_x = rect[0] + (rect[2] - rect[0]) // 2
                     center_y = rect[1] + (rect[3] - rect[1]) // 2
                     
@@ -289,8 +298,13 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    # 獲取頂層視窗左上角座標，直接計算相對於視窗左上角(含邊框)的相對座標
-                    rect = win32gui.GetWindowRect(hwnd)
+                    # 優先使用狀態機當前幀快取的正確物理 rect，防範 win32gui.GetWindowRect 在跨 DPI 螢幕時隨機發生的 DPI 虛擬化回退
+                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+                        rect_box = self.state_machine.last_rect
+                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+                    else:
+                        rect = win32gui.GetWindowRect(hwnd)
+                        
                     rsx_phys = int(start_x) - rect[0]
                     rsy_phys = int(start_y) - rect[1]
                     rex_phys = int(end_x) - rect[0]
