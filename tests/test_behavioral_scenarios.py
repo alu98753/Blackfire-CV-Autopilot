@@ -613,14 +613,19 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 建立假的 1080x1920 截圖
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
-        # 定位 全選按鈕 在 (121, 628) ➔ 網格左上角 (0, 0)
-        # 格子 A (Col 0, Row 0): 中心 (98, 203)。環狀區 (38, 143) 到 (158, 263)。
+        # 定位 全選按鈕 在 (121, 628)
+        # 格子 A (Col 0, Row 0): 中心 (63, 185)。環狀區 (3, 125) 到 (123, 245)。
         # 在格子 A 的邊緣只畫一個 10x5 的金色 (BGR=[0, 240, 240]) 區域，包含 50 個像素點
-        screen[143:148, 38:48] = [0, 240, 240]
+        screen[125:130, 3:13] = [0, 240, 240]
         
-        # 格子 B (Col 1, Row 0): 中心 (233, 203)。環狀區 (173, 143) 到 (293, 263)。
+        # 格子 B (Col 1, Row 0): 中心 (198, 185)。環狀區 (138, 125) 到 (258, 245)。
         # 在格子 B 的環狀採樣帶內部 (收縮 20 像素) 繪製一個金色矩形，包含大量彩色像素點
-        cv2.rectangle(screen, (173 + 20, 143 + 20), (293 - 20, 263 - 20), (0, 240, 240), 10)
+        cv2.rectangle(screen, (158, 145), (238, 225), (0, 240, 240), 10)
+        # 模擬打勾狀態：在貴重物品格子內畫上一個綠色實心方塊，代表「綠色打勾記號」
+        cv2.rectangle(screen, (181, 168), (215, 202), (0, 255, 0), -1)
+        
+        # 設定可分解最高品質為橘黃色，使金色貴重物品被自動全選打勾，從而符合反選保護條件
+        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue", "purple", "orange_yellow"]
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -636,11 +641,18 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # Assert
         # 1. 必須點擊格子 B 進行反選
-        self.mock_mouse.click.assert_any_call(233, 203)
+        self.mock_mouse.click.assert_any_call(198, 185)
         # 2. 絕對不能點擊格子 A
         for call in self.mock_mouse.click.call_args_list:
-            self.assertNotEqual(call[0], (98, 203))
-        # 3. 標記設為 True
+            self.assertNotEqual(call[0], (63, 185))
+        # 3. 此時由於單步反選，bag_deselected 應為 False
+        self.assertFalse(self.state_machine.bag_deselected)
+        
+        # 模擬下一影格：清除格子 B 的畫像，重新截圖
+        clean_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = clean_screen
+        
+        self.state_machine.step()
         self.assertTrue(self.state_machine.bag_deselected)
 
     @patch('os.path.exists')
@@ -1055,13 +1067,16 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.reset_mock()
         self.mock_mouse.scroll.reset_mock()
         
+        # 模擬魔王關卡已經缺失 2.0 秒，使等待緩衝期已過
+        self.state_machine.__setattr__("missing_time_stages/level2_final.png", time.time() - 2.0)
+
         self.state_machine.step()
         
         # 應調用 scroll 滾動，且不應該點擊
         self.mock_mouse.click.assert_not_called()
         # 滾動的點應在視窗中心點： rect=(0,0,1920,1080) ➔ 中心為 (960, 540)
-        # scroll 帶入 clicks=-800, x=960, y=540
-        self.mock_mouse.scroll.assert_called_with(-800, 960, 540)
+        # scroll 帶入 clicks=-400, x=960, y=540
+        self.mock_mouse.scroll.assert_called_with(-400, 960, 540)
         self.assertEqual(self.state_machine.last_stage_scroll_time, 1000.0)
         
         # 步驟 4: 畫面同時出現 stages/stage_label.png 和 stages/level2_final.png ➔ 直接點擊 final.png
@@ -1260,6 +1275,88 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1289, 177)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+    @patch('os.path.exists')
+    def test_greedy_dungeon_selection(self, mock_exists):
+        """
+        [行為場景 26] 自動貪婪地下城選關行為：
+        Given: 狀態機啟用 greedy_dungeon = True 且處於 NAVIGATING 狀態。
+               - 第 4 關 (神秘遺跡, index 3) 的冷卻為無限大 (不可刷)。
+               - 第 3 關 (森林迷宮, index 2) 處於冷卻中。
+               - 第 2 關 (幽影地穴, index 1) 與第 1 關 (黏糊糊的石窟, index 0) 冷卻已過。
+               - 畫面上匹配到基準入口 dungeons/Slime_entry.png 於 (0, 0)。
+        When: 執行狀態機導航決策。
+        Then:
+               1. 應依序 4 -> 3 -> 2 -> 1 遍歷檢查。
+               2. 第 4 關與第 3 關因為冷卻跳過。
+               3. 第 2 關 (index 1) 未冷卻且偵測到亮骨頭 (解鎖)，應點擊進入第 2 關 (X=678, Y=170)。
+               4. 記錄當前地下城索引 `current_dungeon_index = 1`。
+        """
+        mock_exists.return_value = True
+        
+        # 設定貪婪地下城配置
+        self.state_machine.config = {
+            "type": "dungeon",
+            "greedy_dungeon": True,
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png"]
+        }
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        # 設定冷卻時間
+        self.state_machine.dungeon_cooldowns = {
+            3: float('inf'),          # 第 4 關：永久不可刷
+            2: time.time() + 100.0,   # 第 3 關：冷卻中
+            1: 0.0,                   # 第 2 關：就緒
+            0: 0.0                    # 第 1 關：就緒
+        }
+        
+        # Mock 視窗大小為 1920x1080 (scale = 1.0)
+        self.mock_capturer.get_window_rect.return_value = {
+            "left": 0, "top": 0, "width": 1920, "height": 1080
+        }
+        
+        # Mock 截圖 (BGR格式)
+        img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = img
+        
+        # Mock 匹配邏輯
+        def mock_match_impl(screen, name, threshold):
+            if name == "dungeons/Slime_entry.png":
+                return ((173, 170), 0.95)
+            elif name == "dungeons/Ghost_entry.png":
+                return ((693, 170), 0.95)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = mock_match_impl
+        self.mock_mouse.click.reset_mock()
+        
+        # Mock cv2.imread 與 cv2.minMaxLoc 以免依賴實體圖片與黑色裁切
+        mock_light_t = np.zeros((45, 45, 3), dtype=np.uint8)
+        
+        def mock_minMaxLoc_impl(res):
+            if res.shape[1] > 500:
+                # 卡片匹配：回傳 Ghost 卡片起點 X=520 (center=693)
+                return (0.0, 0.95, (0, 0), (520, 0))
+            elif res.shape[1] > 200:
+                # 冷卻木牌匹配：回傳無冷卻
+                return (0.0, 0.0, (0, 0), (0, 0))
+            else:
+                # 骨頭匹配
+                return (0.0, 0.88, (0, 0), (0, 0))
+                
+        with patch('cv2.imread', return_value=mock_light_t), \
+             patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl):
+            # Act
+            self.state_machine.step()
+        
+        # Assert
+        # 1. 應點擊第 2 關的中心點：
+        # x = 0 + 1 * 520 + 346 // 2 = 693
+        # y = 0 + 341 // 2 = 170
+        self.mock_mouse.click.assert_called_with(693, 170)
+        
+        # 2. current_dungeon_index 應更新為 1
+        self.assertEqual(self.state_machine.current_dungeon_index, 1)
 
 if __name__ == "__main__":
     unittest.main()

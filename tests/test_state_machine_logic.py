@@ -146,6 +146,8 @@ class TestStateMachineLogic(unittest.TestCase):
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        # 模擬戰鬥已經開始了 10 秒，繞過剛進戰鬥前 8 秒的結算判定安全冷卻期
+        self.state_machine.battle_start_time = time.time() - 10.0
         
         # 5. BATTLE 狀態下：看到 common/auto.png ➔ 點擊啟用
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
@@ -337,7 +339,15 @@ class TestStateMachineLogic(unittest.TestCase):
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
         # 定位 全選按鈕 在 (121, 628)
         # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品，收縮 20 像素繪製以進入環狀遮罩
-        cv2.rectangle(screen, (38 + 20, 143 + 20), (158 - 20, 263 - 20), (255, 0, 0), 10)
+        cv2.rectangle(screen, (23, 145), (103, 225), (255, 0, 0), 10)
+        # 模擬打勾狀態：在貴重物品格子內畫上一個綠色實心方塊，代表「綠色打勾記號」
+        cv2.rectangle(screen, (46, 168), (80, 202), (0, 255, 0), -1)
+        
+        # 繪製一個綠色垃圾裝備，使其不被判定為「無可分解裝備而直接退出」
+        cv2.rectangle(screen, (158, 145), (238, 225), (0, 255, 0), 10)
+        
+        # 設定可分解最高品質為藍色，使藍色貴重物品被自動全選打勾，從而符合反選保護條件
+        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue"]
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -352,8 +362,15 @@ class TestStateMachineLogic(unittest.TestCase):
         
         self.state_machine.step()
         
-        # 應偵測到貴重物品，並對該 slot 中心點 (98, 203) 進行反向點擊
-        self.mock_mouse.click.assert_any_call(98, 203)
+        # 應偵測到貴重物品，並對該 slot 中心點 (63, 185) 進行反向點擊
+        self.mock_mouse.click.assert_any_call(63, 185)
+        self.assertFalse(self.state_machine.bag_deselected)
+        
+        # 模擬下一影格：清除貴重物品畫像，重新截圖掃描
+        clean_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = clean_screen
+        
+        self.state_machine.step()
         self.assertTrue(self.state_machine.bag_deselected)
 
     @patch('os.path.exists')
@@ -735,5 +752,299 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
 
+    @patch('os.path.exists')
+    def test_dungeon_slime_global_stamina_collection_trigger(self, mock_exists):
+        """
+        測試史萊姆地下城模式：全域定時觸發體力領取邏輯與尋路導航中的退回城鎮。
+        """
+        # 1. 設置為 dungeon_slime 配置，啟用領體力
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.enable_bread = True
+        self.state_machine.need_bread_collection = False
+        # 將上次領取時間設為 1900 秒之前，大於 1800 秒的 CD
+        self.state_machine.last_bread_collection_time = time.time() - 1900.0
+        self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
+        
+        mock_exists.return_value = True
+        
+        # 模擬 match，沒有大門 (door.png) 的匹配，模擬在地下城探索
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        
+        # 執行 step，此時應觸發定時器將 need_bread_collection 設為 True
+        self.state_machine.step()
+        
+        self.assertTrue(self.state_machine.need_bread_collection)
+        
+        # 2. 地下城結束，點擊 dungeons_complete.png ➔ 應轉移至 STATE_NAVIGATING
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "dungeons/dungeons_complete.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 3. 在 NAVIGATING 狀態下：
+        # - 因為 need_bread_collection 為 True，看到 goback_town.png ➔ 應點擊退回城鎮
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((300, 300), 0.9) if name == "goback_town.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(300, 300)
+
+    @patch('os.path.exists')
+    def test_greedy_dungeon_on_screen_cooldown_detection(self, mock_exists):
+        """
+        測試自動貪婪地下城模式下，藉由畫面匹配防禦性跳過正在冷卻的地下城卡片。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config["greedy_dungeon"] = True
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        mock_exists.return_value = True
+        
+        # 模擬 match_side_effect 用於大廳/尋路 (如果有比對的話)
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_mouse.click.reset_mock()
+        
+        # 用於模擬 cv2.imread
+        dummy_img = np.zeros((10, 10, 3), dtype=np.uint8)
+        
+        # 記錄各種類型 matchTemplate / minMaxLoc 的呼叫次數
+        counts = {"card": 0, "cooldown": 0, "skull": 0}
+        
+        def mock_minMaxLoc_impl(res):
+            if res.shape[1] > 1000:
+                counts["card"] += 1
+                if counts["card"] == 1:
+                    # any_entry_found: 匹配 Slime 成功
+                    return (0.0, 0.95, (0, 0), (200, 0))
+                elif counts["card"] == 2:
+                    # i = 3 (Ruins): 匹配失敗
+                    return (0.0, 0.0, (0, 0), (0, 0))
+                elif counts["card"] == 3:
+                    # i = 2 (Forest): 匹配成功，起點為 727
+                    return (0.0, 0.95, (0, 0), (727, 0))
+                elif counts["card"] == 4:
+                    # i = 1 (Ghost): 匹配失敗
+                    return (0.0, 0.0, (0, 0), (0, 0))
+                elif counts["card"] == 5:
+                    # i = 0 (Slime): 匹配成功，起點為 200
+                    return (0.0, 0.95, (0, 0), (200, 0))
+                return (0.0, 0.0, (0, 0), (0, 0))
+            elif 200 < res.shape[1] <= 1000:
+                counts["cooldown"] += 1
+                if counts["cooldown"] == 1:
+                    # Forest cooldown_left 匹配成功 (高相似度)
+                    return (0.0, 0.90, (0, 0), (10, 10))
+                # 其他 (Slime 的 cooldown_left, cooldown_right) 匹配失敗
+                return (0.0, 0.0, (0, 0), (0, 0))
+            else:
+                counts["skull"] += 1
+                # Slime skull 匹配成功
+                return (0.0, 0.88, (0, 0), (0, 0))
+                
+        with patch('cv2.imread', return_value=dummy_img), \
+             patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl):
+            # 執行 step()，由於 Forest 被偵測到冷卻，應跳過，最後選擇點擊 Slime (X=0+200+346//2=373, Y=0+341//2=170)
+            self.state_machine.step()
+        
+        # 驗證：點擊目標應該是 Slime 入口的中心，而不是 Forest
+        # Slime 的 center x = 200 + 173 = 373, center y = 170 (以 scale=1.0 計算)
+        self.mock_mouse.click.assert_called_with(373, 170)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        # 確保 Forest 索引 (2) 的冷卻時間被設為未來時間
+        self.assertGreater(self.state_machine.dungeon_cooldowns[2], time.time())
+
+    @patch('os.path.exists')
+    def test_stage_navigation_horizontal_drag_flow(self, mock_exists):
+        """
+        測試普通關卡選關左右滑動與防重入邏輯：
+        1. 當在關卡選擇介面時，不應重複點選 common/select_stage.png。
+        2. 當目標關卡 stages/level4_desert_ruins.png 尚未出現在畫面上時，執行拖曳動作。
+        3. 當目標關卡出現時，精準點選。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        # 目標為關卡 4 (沙漠廢墟)
+        self.state_machine.config["name"] = "普通關卡 - 沙漠廢墟"
+        self.state_machine.config["navigation_path"] = [
+            "common/door.png",
+            "exit_battle.png",
+            "common/select_stage.png",
+            "stages/level4_desert_ruins.png",
+            "stages/stage_label.png",
+            "stages/level4_final.png"
+        ]
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        mock_exists.return_value = True
+        
+        # 模擬視窗尺寸為 1000x800
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 場景 1：在關卡選擇介面，看見 Level 1 (Sky Plains) 說明清單開啟，但沒看見目標 Level 4
+        # 且畫面上同時能匹配到 common/select_stage.png
+        # 預期：不點擊 select_stage.png，而是執行 mouse.drag 向左拖曳
+        def match_side_effect_drag(img, name, threshold):
+            if name == "stages/level1_sky_plains.png":
+                return ((200, 200), 0.9)
+            elif name == "common/select_stage.png":
+                return ((300, 300), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_drag
+        self.mock_mouse.click.reset_mock()
+        self.mock_mouse.drag.reset_mock()
+        
+        # 模擬目標關卡已經缺失 2.0 秒，使等待緩衝期已過
+        self.state_machine.__setattr__("missing_time_stages/level4_desert_ruins.png", time.time() - 2.0)
+        
+        self.state_machine.step()
+        
+        # 驗證沒有點擊任何按鈕 (特別是 select_stage.png)
+        self.mock_mouse.click.assert_not_called()
+        # 驗證執行了 drag 拖曳，起點大約在 100 + 1000 * 0.58 = 680，終點大約在 100 + 1000 * 0.42 = 520
+        # 高度為 100 + 800 * 0.5 = 500
+        self.mock_mouse.drag.assert_called_with(680, 500, 520, 500, duration=0.8)
+        
+        # 場景 2：清單滑動後，看見了目標關卡小島 stages/level4_desert_ruins.png
+        # 預期：進行點擊小島並套用 -160 像素的點擊向上偏移 (y = 200 - 160 = 40 ➔ 絕對 y = 100 + 40 = 140)
+        def match_side_effect_click(img, name, threshold):
+            if name == "stages/level4_desert_ruins.png":
+                return ((500, 200), 0.9)
+            elif name == "stages/level1_sky_plains.png":
+                return ((200, 200), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_click
+        self.mock_mouse.click.reset_mock()
+        self.mock_mouse.drag.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 驗證沒有拖曳
+        self.mock_mouse.drag.assert_not_called()
+        # 驗證點擊座標 (100 + 500 = 600, 100 + 200 - 160 = 140)
+        self.mock_mouse.click.assert_called_with(600, 140)
+
+    @patch('os.path.exists')
+    def test_stage_navigation_vertical_scroll_fallback(self, mock_exists):
+        """
+        測試普通關卡備用滾動尋找魔王邏輯：
+        當在關卡內部細節畫面，且沒有任何匹配按鈕 (包括 boss 關卡按鈕、大廳開始按鈕、城鎮按鈕、選關清單等)，
+        應自動觸發 mouse.scroll 向下滾動尋找魔王關。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.config["navigation_path"] = [
+            "common/door.png",
+            "exit_battle.png",
+            "common/select_stage.png",
+            "stages/level4_desert_ruins.png",
+            "stages/stage_label.png",
+            "stages/level4_final.png"
+        ]
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        mock_exists.return_value = True
+        
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 模擬偵測到 stages/stage_label.png，代表確實在內部細節畫面，但魔王未見
+        def match_side_effect(img, name, threshold=None):
+            if name == "stages/stage_label.png":
+                return ((100, 100), 0.9)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.scroll.reset_mock()
+        self.mock_mouse.click.reset_mock()
+        
+        # 模擬魔王關卡已經缺失 2.0 秒，使等待緩衝期已過
+        self.state_machine.__setattr__("missing_time_stages/level4_final.png", time.time() - 2.0)
+
+        self.state_machine.step()
+        
+        # 驗證觸發了向下的 scroll
+        # 視窗中心點：100 + 1000 // 2 = 600, 100 + 800 // 2 = 500
+        self.mock_mouse.scroll.assert_called_with(-400, 600, 500)
+
+    @patch('os.path.exists')
+    def test_backpack_full_sorting_custom_disassemble_threshold(self, mock_exists):
+        """
+        測試背包已滿溢出分選自訂分解閾值邏輯：
+        當設定 disassemble_colors 包含藍色時，藍色裝備被判定為低稀有度（可銷毀），而紫色裝備被判定為高稀有度（需保留）。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        # 自訂只分解/銷毀 灰色、綠色、藍色 裝備
+        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue"]
+        # 設定保留紫色及以上（藍色不在保留名單中，因此可以被銷毀）
+        self.state_machine.config["keep_colors"] = ["purple", "orange_yellow", "red"]
+        self.state_machine.current_state = self.state_machine.STATE_BACKPACK_FULL_SORTING
+        
+        mock_exists.return_value = True
+        
+        # 模擬彈窗中心在 (630, 37) ➔ 左上角 win_x = 0, win_y = 0
+        def match_side_effect(img, name, threshold=None):
+            if name == "backpack_full.png":
+                return ((630, 37), 0.9)
+            elif name == "common/destroy.png":
+                return ((700, 700), 0.9)
+            elif name == "common/confirm.png":
+                return ((800, 800), 0.9)
+            elif name == "common/collect.png":
+                return ((900, 900), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        # 模擬截圖中，左側溢出區 Row 0, Col 0 為紫色貴重裝備 (std > 40)，而右側背包 Row 0, Col 0 為藍色裝備 (可銷毀)
+        import cv2
+        import numpy as np
+        screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        
+        # 左側溢出區 Row 0, Col 0: cx = 77, cy = 190, cell_size = 108
+        # 模擬紫色 (std > 40)
+        screen[190:298, 77:185] = [200, 0, 200]  # 紫色背景
+        
+        # 右側背包 Row 0, Col 0: cx = 677, cy = 190, cell_size = 108
+        # 模擬藍色 (std > 18)
+        screen[190:298, 677:785] = [200, 100, 0]  # 藍色背景
+        
+        self.mock_capturer.capture.return_value = screen
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 模擬 classify_slot_color 區分顏色
+        # 溢出區為 purple，背包內為 blue
+        def classify_slot_color_impl(crop):
+            bgr_mean = np.mean(crop, axis=(0,1))
+            if bgr_mean[2] > 150 and bgr_mean[0] > 150:
+                return "purple"
+            elif bgr_mean[0] > 150:
+                return "blue"
+            return "green"
+            
+        handler = self.state_machine.handlers[self.state_machine.STATE_BACKPACK_FULL_SORTING]
+        with patch.object(handler, 'classify_slot_color', side_effect=classify_slot_color_impl):
+            self.state_machine.step()
+            
+        # 驗證執行了以下步驟：
+        # 1. 點擊右側藍色裝備進行銷毀 (中心在 677 + 54 = 731, 190 + 54 = 244)
+        # 2. 點擊銷毀按鈕 (700, 700)
+        # 3. 點擊確認銷毀 (800, 800)
+        # 4. 點擊左側紫色貴重裝備彈出詳情 (中心在 77 + 54 = 131, 190 + 54 = 244)
+        # 5. 點擊領取按鈕 (900, 900)
+        self.mock_mouse.click.assert_any_call(731, 244)
+        self.mock_mouse.click.assert_any_call(700, 700)
+        self.mock_mouse.click.assert_any_call(800, 800)
+        self.mock_mouse.click.assert_any_call(131, 244)
+        self.mock_mouse.click.assert_any_call(900, 900)
+
 if __name__ == "__main__":
     unittest.main()
+
+
