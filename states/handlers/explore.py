@@ -52,6 +52,19 @@ class ExploreHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.run_count += 1
                     logging.info(f"📊 已完成第 {self.machine.run_count} 次地下城通關！")
+                    
+                    # 動態設定當前地下城的冷卻時間（第一關沒有冷卻，第二關 5 分鐘，第三關 15 分鐘，第四關 25 分鐘）
+                    if hasattr(self.machine, "current_dungeon_index") and self.machine.current_dungeon_index is not None:
+                        cooldown_map = {
+                            0: 0.0,
+                            1: 5.0 * 60.0,
+                            2: 15.0 * 60.0,
+                            3: 20.0 * 60.0
+                        }
+                        cd_seconds = cooldown_map.get(self.machine.current_dungeon_index, 900.0)
+                        self.machine.dungeon_cooldowns[self.machine.current_dungeon_index] = time.time() + cd_seconds
+                        logging.info(f"⏳ 貪婪地下城：設定第 {self.machine.current_dungeon_index + 1} 個地下城進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+                        
                     # 通關後回到最外層大廳，轉移至尋路導航狀態重新進副本
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     time.sleep(0.2)

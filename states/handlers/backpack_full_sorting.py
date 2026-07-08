@@ -6,6 +6,23 @@ import numpy as np
 from states.handlers.base import BaseStateHandler
 
 class BackpackFullSortingHandler(BaseStateHandler):
+    def click_close_button(self, screen_img, rect, win_x, win_y):
+        """
+        嘗試利用影像匹配點擊紅色 X 關閉按鈕，如匹配失敗則使用寫死偏差的防禦點擊。
+        """
+        pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
+        if pos_quit:
+            qx = rect["left"] + pos_quit[0]
+            qy = rect["top"] + pos_quit[1]
+            logging.info(f"🎒 [背包分選] 成功匹配關閉按鈕 'common/quit.png' [{conf_quit:.4f}]，點擊座標: ({qx}, {qy})")
+            return self.mouse.click(qx, qy)
+        else:
+            # 備用防禦性點擊 (使用原有的寫死偏置計算)
+            close_x = rect["left"] + win_x + 1228
+            close_y = rect["top"] + win_y + 50
+            logging.warning(f"🎒 [背包分選] 未能匹配到 'common/quit.png' 關閉按鈕，執行備用防禦性點擊: ({close_x}, {close_y})")
+            return self.mouse.click(close_x, close_y)
+
     def handle(self, screen_img, rect):
         """
         處理背包已滿 (無法容納的物品) 畫面。
@@ -39,8 +56,11 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
 
 
+        keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
+        disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
+
         def is_high_rarity(color):
-            return color in ["blue", "purple", "orange_yellow", "red"]
+            return color in keep_colors
 
         # C. 步驟 1: 掃描左側 4x4 網格
         high_rarity_left = [] # 儲存 (row, col, color)
@@ -58,8 +78,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         
         # 如果左側沒有貴重物品，直接退出
         if not high_rarity_left:
-            logging.info("🎒 [背包分選] 左側溢出區無貴重物品（藍色以上），點擊關閉退出。")
-            self.mouse.click(close_x, close_y)
+            logging.info("🎒 [背包分選] 左側溢出區無貴重物品（高於分解設定品質），點擊關閉退出。")
+            self.click_close_button(screen_img, rect, win_x, win_y)
             time.sleep(0.1)
             # 檢查是否出現退出確認彈窗
             new_screen = self.machine.capturer.capture(rect)
@@ -91,8 +111,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 center_crop = crop[29:79, 29:79]
                 center_std = np.std(center_crop)
                 
-                # 只有含有物品的格子才能銷毀，且必須是低稀有度，必須排除標準差過低的空格子
-                if color in ["green", "gray_or_empty"] and whole_std >= 18.0 and center_std >= 12.0:
+                # 只有含有物品的格子才能銷毀，且必須是低稀有度（可分解且非保留品質），必須排除標準差過低的空格子
+                if color in disassemble_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
                     target_right_slot = (r, c, color)
                     break
             if target_right_slot:
@@ -123,7 +143,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                         center_crop = crop[29:79, 29:79]
                         center_std = np.std(center_crop)
                         
-                        if color in ["green", "gray_or_empty"] and whole_std >= 18.0 and center_std >= 12.0:
+                        if color in disassemble_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
                             target_right_slot = (r, c, color)
                             screen_img = new_screen
                             break
@@ -140,7 +160,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
                 time.sleep(0.08)
             logging.info("🎒 [背包分選] 點擊關閉退出，避免卡死。")
-            self.mouse.click(close_x, close_y)
+            self.click_close_button(screen_img, rect, win_x, win_y)
             time.sleep(0.1)
             new_screen = self.machine.capturer.capture(rect)
             if new_screen is not None:
@@ -195,7 +215,14 @@ class BackpackFullSortingHandler(BaseStateHandler):
         if scroll_count > 0:
             logging.info("🎒 [背包分選] 正在滾動回背包頂端...")
             self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
-            time.sleep(0.15)
+            time.sleep(0.25)  # 增加滾動及 UI 重繪的延遲
+        else:
+            time.sleep(0.1)  # 即使沒滾動也稍微等待，確保確認銷毀後介面完全更新
+
+        # 重新擷取最新畫面，避免拿舊畫面的網格狀態進行點擊
+        screen_img = self.machine.capturer.capture(rect)
+        if screen_img is None:
+            return
 
         # G. 步驟 5: 點選左側排在最前的貴重物品並領取
         l_row, l_col, l_color = high_rarity_left[0]
@@ -205,7 +232,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         # 第一次點擊彈出詳情
         logging.info(f"🎒 [背包分選] 點擊左側溢出貴重物品 [{l_color}] 座標: ({lx_click}, {ly_click})，等待彈出詳情...")
         self.mouse.click(lx_click, ly_click)
-        time.sleep(0.2) # 調高等待時間至 0.2s
+        time.sleep(0.25)  # 提高等待時間至 0.25s 確保詳情面板彈出
 
         # 檢測領取按鈕
         new_screen = self.machine.capturer.capture(rect)

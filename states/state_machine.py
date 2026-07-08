@@ -66,6 +66,10 @@ class GameStateMachine:
         self.last_godown_click_time = None
         self.consecutive_stuck_count = 0
         
+        # 地下城冷卻與貪婪選關相關屬性
+        self.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
+        self.current_dungeon_index = 0
+        
         # 使用者手動介入偵測相關屬性
         self.user_operating = False
         self.last_user_operation_time = 0.0
@@ -307,25 +311,23 @@ class GameStateMachine:
 
     def check_collection_trigger(self, screen_img):
         """
-        僅在畫面匹配到大門 common/door.png (說明在大廳) 時，依據冷卻時間觸發鑽石與麵包的領取。
+        依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。
         """
         if self.config is not None and self.config["type"] == "bag_clean":
             return  # 背包整理模式不參與領取
 
-        if os.path.exists(os.path.join("templates", "common/door.png")):
-            pos, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
-            if pos:
-                # 1. 檢查鑽石 CD (2小時 = 7200秒)
-                if time.time() - self.last_diamond_collection_time > 7200.0:
-                    if not self.need_diamond_collection:
-                        logging.info("⏰ 大廳偵測到大門，且距離上次領鑽石已滿 2 小時，觸發自動領鑽石。")
-                        self.need_diamond_collection = True
-                        self.diamond_collected_this_run = False
+        # 1. 檢查鑽石 CD (2小時 = 7200秒)
+        if time.time() - self.last_diamond_collection_time > 7200.0:
+            if not self.need_diamond_collection:
+                logging.info("⏰ 距離上次領鑽石已滿 2 小時，觸發自動領鑽石。")
+                self.need_diamond_collection = True
+                self.diamond_collected_this_run = False
 
-                # 2. 檢查體力 CD (30分鐘 = 1800秒)
-                if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
-                    if not self.need_bread_collection:
-                        logging.info("⏰ 大廳偵測到大門，且距離上次領體力已滿 30 分鐘，觸發自動領體力。")
-                        self.need_bread_collection = True
-                        self.bread_collected_this_run = False
-                        self.bread_click_attempted = False
+        # 2. 檢查體力 CD (30分鐘 = 1800秒)
+        if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
+            if not self.need_bread_collection:
+                logging.info("⏰ 距離上次領體力已滿 30 分鐘，觸發自動領體力。")
+                self.need_bread_collection = True
+                self.bread_collected_this_run = False
+                self.bread_click_attempted = False
+

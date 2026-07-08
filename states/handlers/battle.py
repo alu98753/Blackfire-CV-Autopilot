@@ -21,6 +21,13 @@ class BattleHandler(BaseStateHandler):
                 time.sleep(0.1)
 
         # B. 監控戰鬥結算
+        # 為了防範剛進入戰鬥時，由於畫面轉換延遲與殘留按鈕導致誤判上一次戰鬥的結算按鈕，
+        # 在進入戰鬥狀態的前 8 秒內，不進行任何結算/戰敗判定。
+        if self.machine.battle_start_time and (time.time() - self.machine.battle_start_time < 8.0):
+            self.log_battle_duration()
+            time.sleep(0.15)
+            return
+
         # B1. 優先檢查是否戰敗 (defeat.png)
         if os.path.exists(os.path.join("templates", "defeat.png")):
             pos_defeat, conf_defeat = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
