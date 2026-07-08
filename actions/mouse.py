@@ -147,8 +147,8 @@ class MouseController:
                     rx_offset_phys = rx_physical + dx
                     ry_offset_phys = ry_physical + dy
                     
-                    # 暫緩延伸螢幕 DPI 自適應對齊開發，優先確保大螢幕 (DPI=1.0) 後台點擊無偏置
-                    dpi_factor = 1.0
+                    # 動態獲取視窗所在顯示器的 DPI 縮放因子，將物理相對座標折算為遊戲視窗期望的邏輯座標
+                    dpi_factor = self.get_dpi_factor(hwnd)
                     rx_logical = int(rx_offset_phys / dpi_factor)
                     ry_logical = int(ry_offset_phys / dpi_factor)
                     
