@@ -1,3 +1,12 @@
+import ctypes
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
 import time
 import sys
 import os
@@ -73,15 +82,6 @@ def main():
             sys.stderr.reconfigure(encoding='utf-8')
         except AttributeError:
             pass
-            
-        try:
-            import ctypes
-            ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
-        except Exception:
-            try:
-                ctypes.windll.user32.SetProcessDPIAware()
-            except Exception:
-                pass
             
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
