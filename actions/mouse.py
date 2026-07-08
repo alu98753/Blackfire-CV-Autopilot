@@ -149,8 +149,9 @@ class MouseController:
                     rx_offset_phys = rx_physical + dx
                     ry_offset_phys = ry_physical + dy
                     
-                    # 根據實測反饋，方案 A（無 DPI 換算，直接發送物理相對值）為正確的後台點擊方案，故 dpi_factor 固定為 1.0
-                    dpi_factor = 1.0
+                    # 在 Per-Monitor DPI Aware (2) 進程下，GetWindowRect 獲取的是物理座標，
+                    # 必須將物理相對座標除以當前螢幕的 DPI 縮放因子，折算為遊戲視窗（DPI Unaware 視窗）所期待的邏輯相對座標
+                    dpi_factor = self.get_dpi_factor(hwnd)
                     rx_logical = int(rx_offset_phys / dpi_factor)
                     ry_logical = int(ry_offset_phys / dpi_factor)
                     
