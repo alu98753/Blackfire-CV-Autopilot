@@ -85,9 +85,21 @@ class TemplateMatcher:
                 
                 # 若亮度比例低於 0.8，代表該按鈕已被黑色遮罩調暗，是不可互動的背景按鈕
                 if brightness_ratio < 0.8:
+                    base = os.path.splitext(os.path.basename(template_name))[0]
+                    # 繪製紅框與文字標記
+                    marked_screen = screen_img.copy()
+                    cv2.rectangle(marked_screen, top_left, (top_left[0] + temp_w, top_left[1] + temp_h), (0, 0, 255), 3)
+                    cv2.putText(marked_screen, f"Conf: {max_val:.2f}, Ratio: {brightness_ratio:.2f}", 
+                                (top_left[0], top_left[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    
+                    # 保存診斷截圖與切片圖片
+                    cv2.imwrite(f"debug_{base}_dim_full.png", marked_screen)
+                    cv2.imwrite(f"debug_{base}_dim_crop.png", crop)
+                    
                     logging.warning(
                         f"⚠️ 模板 '{template_name}' 匹配相似度達標 [{max_val:.4f}]，"
                         f"但亮度比例偏低 ({brightness_ratio:.2f} < 0.8)，判定為背景暗區按鈕，予以過濾！"
+                        f"已自動保存診斷圖片至 debug_{base}_dim_full.png 和 debug_{base}_dim_crop.png"
                     )
                     return None, max_val
 

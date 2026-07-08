@@ -30,6 +30,8 @@ htmlcov/
 # Project-specific debug and grid verification screenshots
 debug_click.png
 debug_grid_test.png
+debug_*_dim_*.png
+debug_analyze_*.png
 
 # Development drafts and temporary scratch files (entire directory)
 scratch/
