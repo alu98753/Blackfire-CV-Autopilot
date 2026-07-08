@@ -17,7 +17,7 @@ GAME_CONFIGS = {
         # 大廳準備按鈕
         "lobby_start_btn": "stages/start.png",
         # 戰鬥結束按鈕 (PK 相似度，挑選最高的點擊)
-        "result_buttons": ["stages/retry.png", "common/continue.png"],
+        "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
     },
     
     # ------------------ 史萊姆地下城模式 ------------------
@@ -29,7 +29,7 @@ GAME_CONFIGS = {
         # 進入地下城內每一層戰鬥的入口按鈕
         "dungeon_fight_btn": "dungeons/dungeon_fight.png",
         # 地下城戰鬥的結算按鈕 (注意：沒有關卡專屬的 continue3.png)
-        "dungeon_battle_results": ["common/continue.png"],
+        "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
         # 地下城探險中 (層與層之間) 畫面所有事件按鈕的優先級 (由高到低比對)
         # 注意：choice_bless.png 必須在 quit.png 之前，確保先點選取祝福，才點擊退出關閉事件！
         "explore_priorities": [
