@@ -117,17 +117,34 @@ class ScreenCapturer:
             if rect is None:
                 logging.info("將擷取主螢幕畫面作為備用方案...")
                 monitor = self.sct.monitors[1]
+                dpi_factor = 1.0
             else:
+                # 取得當前視窗所在螢幕的 DPI 因子
+                dpi_factor = 1.0
+                if hwnd:
+                    try:
+                        import ctypes
+                        dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
+                        dpi_factor = dpi / 96.0
+                    except Exception:
+                        pass
+                
+                # 將物理 rect 轉換為 mss 庫底層所需的邏輯座標
                 monitor = {
-                    "left": rect["left"],
-                    "top": rect["top"],
-                    "width": rect["width"],
-                    "height": rect["height"]
+                    "left": int(rect["left"] / dpi_factor),
+                    "top": int(rect["top"] / dpi_factor),
+                    "width": int(rect["width"] / dpi_factor),
+                    "height": int(rect["height"] / dpi_factor)
                 }
             
             screenshot = self.sct.grab(monitor)
             img = np.array(screenshot)
             img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+            
+            # 如果有縮放，將截圖重新縮放回物理尺寸，確保寬高和物理像素精確重合
+            if rect is not None and abs(dpi_factor - 1.0) > 0.01:
+                img_bgr = cv2.resize(img_bgr, (rect["width"], rect["height"]), interpolation=cv2.INTER_LINEAR)
+                
             return img_bgr
         except Exception as e:
             logging.warning(f"mss 擷取失敗 ({e})，嘗試使用 PIL ImageGrab 作為備份方案...")
@@ -137,13 +154,17 @@ class ScreenCapturer:
                     img_pil = ImageGrab.grab()
                 else:
                     bbox = (
-                        rect["left"],
-                        rect["top"],
-                        rect["left"] + rect["width"],
-                        rect["top"] + rect["height"]
+                        int(rect["left"] / dpi_factor),
+                        int(rect["top"] / dpi_factor),
+                        int((rect["left"] + rect["width"]) / dpi_factor),
+                        int((rect["top"] + rect["height"]) / dpi_factor)
                     )
                     img_pil = ImageGrab.grab(bbox)
                 img_bgr = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+                
+                if rect is not None and abs(dpi_factor - 1.0) > 0.01:
+                    img_bgr = cv2.resize(img_bgr, (rect["width"], rect["height"]), interpolation=cv2.INTER_LINEAR)
+                    
                 return img_bgr
             except Exception as e_pil:
                 logging.error(f"備份方案 PIL ImageGrab 擷取亦失敗: {e_pil}")
