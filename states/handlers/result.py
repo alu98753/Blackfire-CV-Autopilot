@@ -101,10 +101,10 @@ class ResultHandler(BaseStateHandler):
             return True
 
         # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如金黃色與灰色繼續按鈕）
-        # 金色 Continue 採用嚴格的亮度門檻 (0.80)；灰色 Continue 採用寬鬆的亮度門檻 (0.65)，並將相似度門檻提高到 0.88 防止金色背景誤匹配。
+        # 統一採用 0.70 通用亮度比及格線。灰色 Continue 門檻設為 0.88 防止金色背景誤匹配。
         continue_configs = [
-            (self.machine.continue_template, 0.80, 0.80),
-            ("common/continue_gray.png", 0.88, 0.65)
+            (self.machine.continue_template, 0.80, 0.70),
+            ("common/continue_gray.png", 0.88, 0.70)
         ]
         for c_temp, thresh, b_thresh in continue_configs:
             if os.path.exists(os.path.join("templates", c_temp)):

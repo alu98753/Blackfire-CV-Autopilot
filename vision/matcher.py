@@ -42,7 +42,7 @@ class TemplateMatcher:
         :param screen_img: 來源畫面 (numpy array)
         :param template_name: 模板檔名或路徑
         :param threshold: 信心度閥值 (0.0 ~ 1.0)
-        :param brightness_threshold: 亮度比例門檻 (0.0代表不啟用，大於0代表低於此比例則過濾)
+        :param brightness_threshold: 亮度比例門檻 (0.0代表不啟用，大於0代表低於此比例則過濾，並進行最亮點選擇)
         :return: (center_x, center_y), confidence. 若未達閥值，回傳 None, confidence
         """
         template_img = self._load_template(template_name)
@@ -59,52 +59,73 @@ class TemplateMatcher:
 
         # 使用標準化相關係數配對方法
         res = cv2.matchTemplate(screen_img, template_img, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+        
+        # 1. 找出所有相似度大於等於門檻的候選點
+        loc = np.where(res >= threshold)
+        candidates = []
+        for pt in zip(*loc[::-1]):
+            # 進行簡單的聚類抑制，避免重疊框
+            too_close = False
+            for cx, cy, c_conf in candidates:
+                if abs(pt[0] - cx) < 20 and abs(pt[1] - cy) < 20:
+                    too_close = True
+                    break
+            if not too_close:
+                conf = res[pt[1], pt[0]]
+                candidates.append((pt[0], pt[1], conf))
 
-        # 取得匹配最高點的左上角座標
-        top_left = max_loc
-        # 計算中心點
-        center_x = top_left[0] + temp_w // 2
-        center_y = top_left[1] + temp_h // 2
-
-        if max_val >= threshold:
-            if brightness_threshold > 0.0:
-                import numpy as np
-                # 取得匹配區域切片
-                crop = screen_img[top_left[1]:top_left[1]+temp_h, top_left[0]:top_left[0]+temp_w]
-                
-                # 計算灰階平均亮度
-                temp_gray = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
-                crop_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-                
-                mean_temp = np.mean(temp_gray)
-                mean_crop = np.mean(crop_gray)
-                
-                # 亮度比例 (crop / temp)
-                brightness_ratio = mean_crop / max(1.0, mean_temp)
-                
-                # 若亮度比例低於門檻，代表該按鈕已被調暗或是背景按鈕
-                if brightness_ratio < brightness_threshold:
-                    # 動態導入工具模組下的公用保存函數，實現關注點分離
-                    try:
-                        from tools.analyze_template_brightness import save_diagnostic_images
-                        save_diagnostic_images(screen_img, template_img, top_left, temp_w, temp_h, max_val, brightness_ratio, template_name)
-                    except Exception as e:
-                        logging.error(f"無法調用 tools/save_diagnostic_images: {e}")
-                    
-                    base = os.path.splitext(os.path.basename(template_name))[0]
-                    logging.warning(
-                        f"⚠️ 模板 '{template_name}' 匹配相似度達標 [{max_val:.4f}]，"
-                        f"但亮度比例偏低 ({brightness_ratio:.2f} < {brightness_threshold:.2f})，判定為背景暗區按鈕，予以過濾！"
-                        f"已自動保存診斷圖片至 debug_{base}_dim_full.png 和 debug_{base}_dim_crop.png"
-                    )
-                    return None, max_val
-
-            logging.info(f"成功匹配模板 '{template_name}'！信心度: {max_val:.4f}，中心座標: ({center_x}, {center_y})")
-            return (center_x, center_y), max_val
-        else:
-            logging.debug(f"模板 '{template_name}' 匹配信心度未達閥值 (目前: {max_val:.4f} < {threshold})")
+        if not candidates:
+            # 若無任何達標點，回傳最大相似度
+            _, max_val, _, _ = cv2.minMaxLoc(res)
             return None, max_val
+
+        # 2. 計算每個候選點的亮度比例
+        import numpy as np
+        temp_gray = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
+        mean_temp = np.mean(temp_gray)
+        screen_gray = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+
+        evaluated_candidates = []
+        for x, y, conf in candidates:
+            crop = screen_gray[y:y+temp_h, x:x+temp_w]
+            mean_crop = np.mean(crop)
+            ratio = mean_crop / max(1.0, mean_temp)
+            evaluated_candidates.append((x, y, conf, ratio))
+
+        # 3. 執行自適應亮度過濾與最亮排序選擇
+        if brightness_threshold > 0.0:
+            # (a) 基本亮度底線過濾
+            passed = [c for c in evaluated_candidates if c[3] >= brightness_threshold]
+            
+            if not passed:
+                # 若全部都小於及格門檻，說明全是背景被調暗的按鈕，予以過濾
+                best_raw = max(evaluated_candidates, key=lambda c: c[2])
+                try:
+                    from tools.analyze_template_brightness import save_diagnostic_images
+                    save_diagnostic_images(screen_img, template_img, (best_raw[0], best_raw[1]), temp_w, temp_h, best_raw[2], best_raw[3], template_name)
+                except Exception as e:
+                    logging.error(f"無法調用 tools/save_diagnostic_images: {e}")
+                
+                base = os.path.splitext(os.path.basename(template_name))[0]
+                logging.warning(
+                    f"⚠️ 模板 '{template_name}' 匹配到 {len(candidates)} 個候選點，"
+                    f"但所有點的亮度比例均低於門檻 {brightness_threshold:.2f}，判定為背景暗區按鈕，予以過濾！"
+                )
+                return None, best_raw[2]
+            
+            # (b) 局部亮度最大化排序：從合格的候選點中，只選擇亮度比例最高的那一個
+            best_selected = max(passed, key=lambda c: c[3])
+        else:
+            # 若未啟用亮度檢查，直接抓取相似度最高的點
+            best_selected = max(evaluated_candidates, key=lambda c: c[2])
+
+        # 4. 回傳最優點的中心座標與相似度
+        final_x, final_y, final_conf, final_ratio = best_selected
+        center_x = final_x + temp_w // 2
+        center_y = final_y + temp_h // 2
+
+        logging.info(f"成功匹配模板 '{template_name}'！相似度: {final_conf:.4f}，相對亮度比: {final_ratio:.2f}，座標: ({center_x}, {center_y})")
+        return (center_x, center_y), final_conf
 
 if __name__ == "__main__":
     # 簡單單體測試

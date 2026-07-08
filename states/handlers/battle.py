@@ -42,7 +42,7 @@ class BattleHandler(BaseStateHandler):
             found_result_trigger = False
             for btn in self.machine.config["result_buttons"]:
                 thresh = 0.88 if btn == "common/continue_gray.png" else 0.8
-                b_thresh = 0.8 if btn == "common/continue.png" else (0.65 if btn == "common/continue_gray.png" else 0.0)
+                b_thresh = 0.70 if btn in ["common/continue.png", "common/continue_gray.png"] else 0.0
                 pos, _ = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
                 if pos:
                     logging.info(f"🏆 偵測到結算按鈕 [{btn}]，戰鬥結束！")
@@ -62,7 +62,7 @@ class BattleHandler(BaseStateHandler):
             
             for btn in self.machine.config["dungeon_battle_results"]:
                 thresh = max(best_match_conf, 0.88) if btn == "common/continue_gray.png" else best_match_conf
-                b_thresh = 0.8 if btn == "common/continue.png" else (0.65 if btn == "common/continue_gray.png" else 0.0)
+                b_thresh = 0.70 if btn in ["common/continue.png", "common/continue_gray.png"] else 0.0
                 pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
                 if pos and conf > best_match_conf:
                     best_match_conf = conf
