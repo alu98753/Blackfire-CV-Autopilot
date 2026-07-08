@@ -1,6 +1,7 @@
 import cv2
 import os
 import logging
+import numpy as np
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -80,7 +81,6 @@ class TemplateMatcher:
             return None, max_val
 
         # 2. 計算每個候選點的亮度比例
-        import numpy as np
         temp_gray = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
         mean_temp = np.mean(temp_gray)
         screen_gray = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
