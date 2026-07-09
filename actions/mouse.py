@@ -92,10 +92,9 @@ class MouseController:
                     cv2.putText(img, text, (img_x + 20, img_y - 10), font, 0.6, (0, 0, 255), 2)
                     
                     cv2.imwrite("debug_click.png", img)
-                    cv2.imwrite("debug_running_screen.png", img)
-                    logging.info(f"🎯 點擊繪製完成：物理相對座標 ({rx_physical}, {ry_physical})，已寫入 debug_click.png 和 debug_running_screen.png")
+                    logging.info(f"🎯 點擊繪製完成：物理相對座標 ({rx_physical}, {ry_physical})，已寫入 debug_click.png")
                 except Exception as e:
-                    logging.debug(f"無法寫入 debug_click.png 或 debug_running_screen.png: {e}")
+                    logging.debug(f"無法寫入 debug_click.png: {e}")
 
     def check_user_intervention(self):
         """
