@@ -90,12 +90,6 @@ class ExploreHandler(BaseStateHandler):
                     self.machine.skill_selected_this_floor = True
                     time.sleep(0.03)
                     
-                elif btn_name == "dungeons/choice_bless.png":
-                    logging.info(f"👉 偵測到選擇祝福 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層祝福已領。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.machine.bless_received_this_floor = True
-                    time.sleep(0.03)
-
                 elif btn_name == "dungeons/Treasure.png":
                     logging.info(f"👉 偵測到寶箱地圖格 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「開啟寶箱」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
@@ -110,10 +104,11 @@ class ExploreHandler(BaseStateHandler):
                     time.sleep(0.02)
                     
                 elif btn_name == "dungeons/dungeon_bless.png":
-                    logging.info(f"👉 偵測到接受祝福圖示 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層祝福已領。")
+                    logging.info(f"👉 偵測到接受祝福圖示 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「領取祝福」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.bless_received_this_floor = True
-                    time.sleep(0.02)
+                    time.sleep(0.5)  # 等待祝福開啟動畫開始
+                    self._run_bless_subflow(rect)
                     
                 elif btn_name in ["dungeons/gungeon_godown.png", "dungeons/gungeon_godown_confirm.png"]:
                     logging.info(f"🧭 偵測到下樓按鈕 [{btn_name}]，信心度: {conf:.4f}，點擊下樓並開始本層記憶冷卻。")
@@ -192,3 +187,54 @@ class ExploreHandler(BaseStateHandler):
                 consecutive_empty_count = 0
                 
         logging.warning("📦 [子流程] 開啟寶箱子流程超時結束。")
+
+    def _run_bless_subflow(self, rect):
+        logging.info("🧭 [子流程] 開始執行「領取祝福」子流程...")
+        start_time = time.time()
+        timeout = 10.0  # 最多執行 10 秒
+        
+        # 定義子流程中專屬的匹配優先順序
+        subflow_templates = [
+            ("dungeons/choice_bless.png", 0.70),
+            ("common/ok.png", 0.80),
+            ("common/quit.png", 0.75)
+        ]
+        
+        last_click_time = 0.0
+        consecutive_empty_count = 0
+        
+        while time.time() - start_time < timeout:
+            screen_img = self.machine.capturer.capture(rect)
+            if screen_img is None:
+                time.sleep(0.2)
+                continue
+                
+            matched_any = False
+            for template_name, thresh in subflow_templates:
+                if not os.path.exists(os.path.join("templates", template_name)):
+                    continue
+                pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
+                if pos:
+                    logging.info(f"🧭 [子流程] 偵測到按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    last_click_time = time.time()
+                    matched_any = True
+                    
+                    if template_name == "common/quit.png":
+                        logging.info("🧭 [子流程] 已點擊退出按鈕，結束祝福子流程。")
+                        time.sleep(0.3)
+                        return
+                        
+                    time.sleep(0.8)  # 點擊後等待動畫過渡
+                    break
+                    
+            if not matched_any:
+                consecutive_empty_count += 1
+                if consecutive_empty_count >= 3 and (time.time() - last_click_time > 1.5):
+                    logging.info("🧭 [子流程] 畫面已無祝福相關按鈕，提前結束子流程。")
+                    return
+                time.sleep(0.3)
+            else:
+                consecutive_empty_count = 0
+                
+        logging.warning("🧭 [子流程] 領取祝福子流程超時結束。")

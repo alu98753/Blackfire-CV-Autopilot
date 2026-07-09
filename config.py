@@ -40,7 +40,6 @@ GAME_CONFIGS = {
             "common/continue_gray.png",             # 結算繼續按鈕 (灰色)
             "dungeons/gungeon_godown_confirm.png",   # 3. 下樓特定確認彈窗
             "common/ok.png",                        # 5. 通用 OK 按鈕 (如：選完祝福後的確認等)
-            "dungeons/choice_bless.png",            # 7. 選擇祝福 (準備進入戰鬥或接受祝福後的彈窗選項)
             "dungeons/choose.png",                  # 8. 通用選擇按鈕 (如技能事件的選擇等)
             "dungeons/dungeon_fight.png",           # 9. 戰鬥房入口 (優先級調高，避免在入口彈窗誤點 quit 關閉)
             "common/quit.png",                      # 10. 結束/關閉事件彈窗 (例如選擇祝福後的退出按鈕)
