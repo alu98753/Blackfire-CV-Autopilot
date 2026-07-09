@@ -189,12 +189,12 @@ class TestBehavioralScenarios(unittest.TestCase):
         import cv2
         test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         # 左側 (Col 0, Row 0): 黃金 (BGR = [0, 200, 200])，邊框畫在相對6像素處以進入極細邊帶
-        cv2.rectangle(test_img, (407+6, 381+6), (407+114, 381+114), (0, 200, 200), 10)
+        cv2.rectangle(test_img, (371+6, 394+6), (371+114, 394+114), (0, 200, 200), 10)
         
         # 右側 (Col 0, Row 0): 綠色 (BGR = [0, 200, 0])，邊框畫在相對6像素處以進入極細邊帶
-        cv2.rectangle(test_img, (1023+6, 381+6), (1023+114, 381+114), (0, 200, 0), 10)
+        cv2.rectangle(test_img, (994+6, 394+6), (994+114, 394+114), (0, 200, 0), 10)
         # 我們也在中間給一些起伏，使 std 較大，避免被當成純黑空格
-        test_img[381+35:381+75, 1023+35:1023+75] = [50, 50, 50]
+        test_img[394+35:394+75, 994+35:994+75] = [50, 50, 50]
         self.mock_capturer.capture.return_value = test_img
         
         def match_side_effect_destroy_collect(img, name, threshold):
@@ -236,16 +236,16 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 模擬左側有黃金物品，右側全部為貴重藍色物品 (標準差大於 18，且顏色為 blue)，觸發滾動與安全退出
         test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         # 左側黃金物件 (Col 0, Row 0)
-        test_img[388+10:388+20, 407+10:407+98] = [0, 200, 200]
-        test_img[388+88:388+98, 407+10:407+98] = [0, 200, 200]
-        test_img[388+10:388+98, 407+10:407+20] = [0, 200, 200]
-        test_img[388+10:388+98, 407+88:407+98] = [0, 200, 200]
+        test_img[394+10:394+20, 371+10:371+98] = [0, 200, 200]
+        test_img[394+88:394+98, 371+10:371+98] = [0, 200, 200]
+        test_img[394+10:394+98, 371+10:371+20] = [0, 200, 200]
+        test_img[394+10:394+98, 371+88:371+98] = [0, 200, 200]
         
         # 模擬右側 4x4 全是貴重藍色裝備 (不是空格，不能被銷毀)
         for r in range(4):
             for c in range(4):
-                cx = 1007 + c * 134
-                cy = 388 + r * 134
+                cx = 994 + c * 134
+                cy = 394 + int(r * 139.5)
                 test_img[cy+10:cy+20, cx+10:cx+98] = [200, 0, 0]
                 test_img[cy+88:cy+98, cx+10:cx+98] = [200, 0, 0]
                 test_img[cy+10:cy+98, cx+10:cx+20] = [200, 0, 0]

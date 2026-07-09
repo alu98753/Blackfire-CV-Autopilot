@@ -36,20 +36,22 @@ class BackpackFullSortingHandler(BaseStateHandler):
         """
         debug_img = screen_img.copy()
         
-        # 標題中心相對網格左上角偏移量
-        left_start_dx = -553
-        left_start_dy = 99
-        right_start_dx = 47
-        right_start_dy = 99
-        cell_size = 134
-        step = 134
+        # 標題中心相對網格左上角偏移量 (已由使用者手動校準微調)
+        left_start_dx = -589
+        left_start_dy = 105
+        right_start_dx = 34
+        right_start_dy = 105
+        cell_w = 134
+        cell_h = 139.5
+        step_x = 134
+        step_y = 139.5
         
         # 繪製左側格網
         for r, c, color, std_val in left_slots_data:
-            cx = int(pos_full[0] + (left_start_dx + c * step) * scale_x)
-            cy = int(pos_full[1] + (left_start_dy + r * step) * scale_y)
-            cw = int(cell_size * scale_x)
-            ch = int(cell_size * scale_y)
+            cx = int(pos_full[0] + (left_start_dx + c * step_x) * scale_x)
+            cy = int(pos_full[1] + (left_start_dy + r * step_y) * scale_y)
+            cw = int(cell_w * scale_x)
+            ch = int(cell_h * scale_y)
             
             # 繪製綠框
             cv2.rectangle(debug_img, (cx, cy), (cx+cw, cy+ch), (0, 255, 0), 2)
@@ -61,10 +63,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # 繪製右側格網
         for r, c, color, whole_std, center_std in right_slots_data:
-            cx = int(pos_full[0] + (right_start_dx + c * step) * scale_x)
-            cy = int(pos_full[1] + (right_start_dy + r * step) * scale_y)
-            cw = int(cell_size * scale_x)
-            ch = int(cell_size * scale_y)
+            cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
+            cy = int(pos_full[1] + (right_start_dy + r * step_y) * scale_y)
+            cw = int(cell_w * scale_x)
+            ch = int(cell_h * scale_y)
             
             # 繪製藍框
             cv2.rectangle(debug_img, (cx, cy), (cx+cw, cy+ch), (255, 0, 0), 2)
@@ -109,13 +111,15 @@ class BackpackFullSortingHandler(BaseStateHandler):
         scale_x = real_w / 1920.0
         scale_y = real_h / 1080.0
 
-        # 設計網格相對偏移與常數設定
-        left_start_dx = -553
-        left_start_dy = 99
-        right_start_dx = 47
-        right_start_dy = 99
-        cell_size = 134
-        step = 134
+        # 設計網格相對偏移與常數設定 (已由使用者手動校準微調)
+        left_start_dx = -589
+        left_start_dy = 105
+        right_start_dx = 34
+        right_start_dy = 105
+        cell_w = 134
+        cell_h = 139.5
+        step_x = 134
+        step_y = 139.5
 
         keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
         disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
@@ -129,10 +133,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
         
         for r in range(4):
             for c in range(4):
-                cx = int(pos_full[0] + (left_start_dx + c * step) * scale_x)
-                cy = int(pos_full[1] + (left_start_dy + r * step) * scale_y)
-                cw = int(cell_size * scale_x)
-                ch = int(cell_size * scale_y)
+                cx = int(pos_full[0] + (left_start_dx + c * step_x) * scale_x)
+                cy = int(pos_full[1] + (left_start_dy + r * step_y) * scale_y)
+                cw = int(cell_w * scale_x)
+                ch = int(cell_h * scale_y)
                 
                 crop = screen_img[cy:cy+ch, cx:cx+cw]
                 std_val = np.std(crop)
@@ -151,10 +155,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
         # 先掃描當前頁面
         for r in range(4):
             for c in range(4):
-                cx = int(pos_full[0] + (right_start_dx + c * step) * scale_x)
-                cy = int(pos_full[1] + (right_start_dy + r * step) * scale_y)
-                cw = int(cell_size * scale_x)
-                ch = int(cell_size * scale_y)
+                cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
+                cy = int(pos_full[1] + (right_start_dy + r * step_y) * scale_y)
+                cw = int(cell_w * scale_x)
+                ch = int(cell_h * scale_y)
                 
                 crop = screen_img[cy:cy+ch, cx:cx+cw]
                 color = self.classify_slot_color(crop)
@@ -175,9 +179,9 @@ class BackpackFullSortingHandler(BaseStateHandler):
                         target_right_slot = (r, c, color)
 
         # 滾動定位參考中心點 (右側網格中心位置)
-        # 相對設計位移：dx = 47 + 2 * 134 = 315, dy = 99 + 2 * 134 = 367
-        right_center_x = rect["left"] + int(pos_full[0] + 315 * scale_x)
-        right_center_y = rect["top"] + int(pos_full[1] + 367 * scale_y)
+        # 相對設計位移：dx = 34 + 2 * 134 = 302, dy = 105 + 2 * 139.5 = 384
+        right_center_x = rect["left"] + int(pos_full[0] + 302 * scale_x)
+        right_center_y = rect["top"] + int(pos_full[1] + 384 * scale_y)
 
         # 如果左側沒有貴重物品，則直接生成審計圖並關閉退出
         if not high_rarity_left:
@@ -222,10 +226,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 right_slots_data.clear()
                 for r in range(4):
                     for c in range(4):
-                        cx = int(pos_full[0] + (right_start_dx + c * step) * scale_x)
-                        cy = int(pos_full[1] + (right_start_dy + r * step) * scale_y)
-                        cw = int(cell_size * scale_x)
-                        ch = int(cell_size * scale_y)
+                        cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
+                        cy = int(pos_full[1] + (right_start_dy + r * step_y) * scale_y)
+                        cw = int(cell_w * scale_x)
+                        ch = int(cell_h * scale_y)
                         
                         crop = new_screen[cy:cy+ch, cx:cx+cw]
                         color = self.classify_slot_color(crop)
@@ -279,8 +283,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         r_row, r_col, r_color = target_right_slot
         
         # 計算點擊座標 (邏輯相對)
-        tx_rel = int((right_start_dx + r_col * step + cell_size // 2) * scale_x)
-        ty_rel = int((right_start_dy + r_row * step + cell_size // 2) * scale_y)
+        tx_rel = int((right_start_dx + r_col * step_x + cell_w // 2) * scale_x)
+        ty_rel = int((right_start_dy + r_row * step_y + cell_h // 2) * scale_y)
         rx_click = rect["left"] + int(pos_full[0] + tx_rel)
         ry_click = rect["top"] + int(pos_full[1] + ty_rel)
 
@@ -337,8 +341,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         # G. 步驟 5: 點選左側排在最前的貴重物品並領取 (存檔診斷截圖)
         l_row, l_col, l_color = high_rarity_left[0]
         
-        lx_rel = int((left_start_dx + l_col * step + cell_size // 2) * scale_x)
-        ly_rel = int((left_start_dy + l_row * step + cell_size // 2) * scale_y)
+        lx_rel = int((left_start_dx + l_col * step_x + cell_w // 2) * scale_x)
+        ly_rel = int((left_start_dy + l_row * step_y + cell_h // 2) * scale_y)
         lx_click = rect["left"] + int(pos_full[0] + lx_rel)
         ly_click = rect["top"] + int(pos_full[1] + ly_rel)
         

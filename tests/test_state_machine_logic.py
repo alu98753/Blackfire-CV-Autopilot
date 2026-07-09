@@ -553,12 +553,12 @@ class TestStateMachineLogic(unittest.TestCase):
         import cv2
         test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         # 左側 Col 0, Row 0: 黃金邊框 (BGR = [0, 200, 200])，邊框畫在相對6像素處以進入極細邊帶
-        cv2.rectangle(test_img, (407+6, 381+6), (407+114, 381+114), (0, 200, 200), 10)
+        cv2.rectangle(test_img, (371+6, 394+6), (371+114, 394+114), (0, 200, 200), 10)
         
         # 右側 Col 0, Row 0: 綠色邊框 (BGR = [0, 200, 0])，邊框畫在相對6像素處以進入極細邊帶
-        cv2.rectangle(test_img, (1023+6, 381+6), (1023+114, 381+114), (0, 200, 0), 10)
+        cv2.rectangle(test_img, (994+6, 394+6), (994+114, 394+114), (0, 200, 0), 10)
         # 我們也在中間給一些起伏，使 std 較大，避免被當成純黑空格
-        test_img[381+35:381+75, 1023+35:1023+75] = [50, 50, 50]
+        test_img[394+35:394+75, 994+35:994+75] = [50, 50, 50]
         
         self.mock_capturer.capture.return_value = test_img
         
@@ -1060,13 +1060,13 @@ class TestStateMachineLogic(unittest.TestCase):
         import numpy as np
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
-        # 左側溢出區 Row 0, Col 0: cx = 77, cy = 190, cell_size = 134
+        # 左側溢出區 Row 0, Col 0: cx = 41, cy = 203, cell_w = 134, cell_h = 139.5
         # 模擬紫色 (std > 40)
-        screen[190:324, 77:211] = [200, 0, 200]  # 紫色背景
+        screen[203:342, 41:175] = [200, 0, 200]  # 紫色背景
         
-        # 右側背包 Row 0, Col 0: cx = 677, cy = 190, cell_size = 134
+        # 右側背包 Row 0, Col 0: cx = 664, cy = 203, cell_w = 134, cell_h = 139.5
         # 模擬藍色 (std > 18)
-        screen[190:324, 677:811] = [200, 100, 0]  # 藍色背景
+        screen[203:342, 664:798] = [200, 100, 0]  # 藍色背景
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -1086,15 +1086,15 @@ class TestStateMachineLogic(unittest.TestCase):
             self.state_machine.step()
             
         # 驗證執行了以下步驟：
-        # 1. 點擊右側藍色裝備進行銷毀 (中心在 677 + 67 = 744, 190 + 67 + 7 = 264)
+        # 1. 點擊右側藍色裝備進行銷毀 (中心在 630 + 34 + 67 = 731, 98 + 105 + 69 = 272)
         # 2. 點擊銷毀按鈕 (700, 700)
         # 3. 點擊確認銷毀 (800, 800)
-        # 4. 點擊左側紫色貴重裝備彈出詳情 (中心在 77 + 67 = 144, 190 + 67 + 7 = 264)
+        # 4. 點擊左側紫色貴重裝備彈出詳情 (中心在 630 - 589 + 67 = 108, 98 + 105 + 69 = 272)
         # 5. 點擊領取按鈕 (900, 900)
-        self.mock_mouse.click.assert_any_call(744, 264)
+        self.mock_mouse.click.assert_any_call(731, 272)
         self.mock_mouse.click.assert_any_call(700, 700)
         self.mock_mouse.click.assert_any_call(800, 800)
-        self.mock_mouse.click.assert_any_call(144, 264)
+        self.mock_mouse.click.assert_any_call(108, 272)
         self.mock_mouse.click.assert_any_call(900, 900)
 
     @patch('states.state_machine.os.path.exists')
