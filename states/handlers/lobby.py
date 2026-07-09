@@ -36,4 +36,5 @@ class LobbyHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_BATTLE)
             time.sleep(0.3) # 等待戰鬥載入
         else:
-            self.machine.detect_current_state(screen_img, rect)
+            logging.info("🧭 大廳：未偵測到開始按鈕，判定處於城鎮外圍，轉移至 NAVIGATING 進行尋路跳轉。")
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
