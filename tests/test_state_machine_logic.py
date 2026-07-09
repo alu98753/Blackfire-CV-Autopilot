@@ -304,7 +304,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 在結算畫面看到背包已滿 (backpack_full.png) ➔ 狀態轉移至 STATE_BACKPACK_FULL_SORTING 且設定 need_bag_cleaning = True
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
@@ -448,7 +448,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png) ➔ 直接轉移至 BACKPACK_FULL_SORTING 並標記 need_bag_cleaning
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.assertTrue(self.state_machine.need_bag_cleaning)
@@ -513,17 +513,17 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 全域偵測到 backpack_full.png
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
         
         # 2. 執行 BackpackFullSortingHandler，由於為空畫面 (無貴重物品)，應直接點擊關閉並回到 STATE_UNKNOWN
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(1558, 241)
+        self.mock_mouse.click.assert_called_with(1558, 248)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
 
     @patch('os.path.exists')
@@ -546,7 +546,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 偵測到 backpack_full.png 進入狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         # 2. 準備實體 numpy 圖像，畫上指定邊框顏色以供分選
@@ -556,16 +556,16 @@ class TestStateMachineLogic(unittest.TestCase):
         cv2.rectangle(test_img, (407+6, 381+6), (407+114, 381+114), (0, 200, 200), 10)
         
         # 右側 Col 0, Row 0: 綠色邊框 (BGR = [0, 200, 0])，邊框畫在相對6像素處以進入極細邊帶
-        cv2.rectangle(test_img, (1007+6, 381+6), (1007+114, 381+114), (0, 200, 0), 10)
+        cv2.rectangle(test_img, (1023+6, 381+6), (1023+114, 381+114), (0, 200, 0), 10)
         # 我們也在中間給一些起伏，使 std 較大，避免被當成純黑空格
-        test_img[381+35:381+75, 1007+35:1007+75] = [50, 50, 50]
+        test_img[381+35:381+75, 1023+35:1023+75] = [50, 50, 50]
         
         self.mock_capturer.capture.return_value = test_img
         
         # 模擬 match 結果
         def match_side_effect(img, name, threshold):
             if name == "backpack_full.png":
-                return ((960, 228), 0.9)
+                return ((960, 289), 0.9)
             elif name == "common/destroy.png":
                 return ((500, 500), 0.9) # 銷毀按鈕
             elif name == "common/confirm.png":
@@ -1040,10 +1040,10 @@ class TestStateMachineLogic(unittest.TestCase):
         
         mock_exists.return_value = True
         
-        # 模擬彈窗中心在 (630, 37) ➔ 左上角 win_x = 0, win_y = 0
+        # 模擬彈窗中心在 (630, 98) ➔ 左上角 win_x = 0, win_y = 7
         def match_side_effect(img, name, threshold=None):
             if name == "backpack_full.png":
-                return ((630, 37), 0.9)
+                return ((630, 98), 0.9)
             elif name == "common/destroy.png":
                 return ((700, 700), 0.9)
             elif name == "common/confirm.png":
@@ -1086,15 +1086,15 @@ class TestStateMachineLogic(unittest.TestCase):
             self.state_machine.step()
             
         # 驗證執行了以下步驟：
-        # 1. 點擊右側藍色裝備進行銷毀 (中心在 677 + 67 = 744, 190 + 67 = 257)
+        # 1. 點擊右側藍色裝備進行銷毀 (中心在 677 + 67 = 744, 190 + 67 + 7 = 264)
         # 2. 點擊銷毀按鈕 (700, 700)
         # 3. 點擊確認銷毀 (800, 800)
-        # 4. 點擊左側紫色貴重裝備彈出詳情 (中心在 77 + 67 = 144, 190 + 67 = 257)
+        # 4. 點擊左側紫色貴重裝備彈出詳情 (中心在 77 + 67 = 144, 190 + 67 + 7 = 264)
         # 5. 點擊領取按鈕 (900, 900)
-        self.mock_mouse.click.assert_any_call(744, 257)
+        self.mock_mouse.click.assert_any_call(744, 264)
         self.mock_mouse.click.assert_any_call(700, 700)
         self.mock_mouse.click.assert_any_call(800, 800)
-        self.mock_mouse.click.assert_any_call(144, 257)
+        self.mock_mouse.click.assert_any_call(144, 264)
         self.mock_mouse.click.assert_any_call(900, 900)
 
     @patch('states.state_machine.os.path.exists')

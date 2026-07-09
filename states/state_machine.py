@@ -102,6 +102,7 @@ class GameStateMachine:
                 self.last_auto_click_time = 0
             elif new_state == self.STATE_BACKPACK_FULL_SORTING:
                 self.need_bag_cleaning = True
+                self.handlers[new_state].screenshot_counter = 1
 
     def step(self):
         """

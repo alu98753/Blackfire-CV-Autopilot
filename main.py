@@ -170,39 +170,37 @@ def main():
 
     # 1. 選擇要保留/領取的最低裝備品質
     print("\n請選擇要【保留/領取】的最低裝備品質（該品質及以上皆會被保留，背包滿時優先拿取）：")
-    print(" 1) 灰色 (普通)")
-    print(" 2) 綠色 (優秀)")
-    print(" 3) 藍色 (精良) - 預設")
-    print(" 4) 紫色 (史詩)")
-    print(" 5) 橘黃色 (傳奇)")
+    print(" 1) 綠色 (優秀)")
+    print(" 2) 藍色 (精良) - 預設")
+    print(" 3) 紫色 (史詩)")
+    print(" 4) 橘黃色 (傳奇)")
     try:
-        keep_choice = input("請輸入數字 [1-5] (直接 Enter 鍵預設為 3): ").strip()
+        keep_choice = input("請輸入數字 [1-4] (直接 Enter 鍵預設為 2): ").strip()
         if not keep_choice:
-            keep_choice = "3"
+            keep_choice = "2"
     except KeyboardInterrupt:
         print("\n[!] 取消啟動。")
         sys.exit(0)
     except Exception:
-        keep_choice = "3"
+        keep_choice = "2"
 
     keep_choices_map = {
-        "1": ["gray_or_empty", "green", "blue", "purple", "orange_yellow", "red"],
-        "2": ["green", "blue", "purple", "orange_yellow", "red"],
-        "3": ["blue", "purple", "orange_yellow", "red"],
-        "4": ["purple", "orange_yellow", "red"],
-        "5": ["orange_yellow", "red"]
+        "1": ["green", "blue", "purple", "orange_yellow", "red"],
+        "2": ["blue", "purple", "orange_yellow", "red"],
+        "3": ["purple", "orange_yellow", "red"],
+        "4": ["orange_yellow", "red"]
     }
     if keep_choice not in keep_choices_map:
-        print(f"[!] 無效選擇 '{keep_choice}'，已自動使用預設的 [3: 藍色及以上]...")
-        keep_choice = "3"
+        print(f"[!] 無效選擇 '{keep_choice}'，已自動使用預設的 [2: 藍色及以上]...")
+        keep_choice = "2"
 
     config["keep_colors"] = keep_choices_map[keep_choice]
 
     # 2. 選擇可大量分解的最高裝備品質
     print("\n請選擇可【大量分解】的最高裝備品質（該品質及以下在大廳時會被自動大量分解）：")
     print(" 1) 灰色 (普通)")
-    print(" 2) 綠色 (優秀) - 預設")
-    print(" 3) 藍色 (精良)")
+    print(" 2) 綠色 (優秀)")
+    print(" 3) 藍色 (精良) - 預設")
     print(" 4) 紫色 (史詩)")
     print(" 5) 橘黃色 (傳奇)")
     try:

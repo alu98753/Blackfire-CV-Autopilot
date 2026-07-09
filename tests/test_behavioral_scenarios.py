@@ -179,7 +179,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # Step 1: 全域攔截到 backpack_full.png，狀態跳轉並自動標記 need_bag_cleaning
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 228), 0.9) if name == "backpack_full.png" else (None, 0.0)
+            ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
@@ -192,14 +192,14 @@ class TestBehavioralScenarios(unittest.TestCase):
         cv2.rectangle(test_img, (407+6, 381+6), (407+114, 381+114), (0, 200, 200), 10)
         
         # 右側 (Col 0, Row 0): 綠色 (BGR = [0, 200, 0])，邊框畫在相對6像素處以進入極細邊帶
-        cv2.rectangle(test_img, (1007+6, 381+6), (1007+114, 381+114), (0, 200, 0), 10)
+        cv2.rectangle(test_img, (1023+6, 381+6), (1023+114, 381+114), (0, 200, 0), 10)
         # 我們也在中間給一些起伏，使 std 較大，避免被當成純黑空格
-        test_img[381+35:381+75, 1007+35:1007+75] = [50, 50, 50]
+        test_img[381+35:381+75, 1023+35:1023+75] = [50, 50, 50]
         self.mock_capturer.capture.return_value = test_img
         
         def match_side_effect_destroy_collect(img, name, threshold):
             if name == "backpack_full.png":
-                return ((960, 228), 0.9)
+                return ((960, 289), 0.9)
             elif name == "common/destroy.png":
                 return ((500, 500), 0.9)
             elif name == "common/confirm.png":
@@ -236,16 +236,16 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 模擬左側有黃金物品，右側全部為貴重藍色物品 (標準差大於 18，且顏色為 blue)，觸發滾動與安全退出
         test_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         # 左側黃金物件 (Col 0, Row 0)
-        test_img[381+10:381+20, 407+10:407+98] = [0, 200, 200]
-        test_img[381+88:381+98, 407+10:407+98] = [0, 200, 200]
-        test_img[381+10:381+98, 407+10:407+20] = [0, 200, 200]
-        test_img[381+10:381+98, 407+88:407+98] = [0, 200, 200]
+        test_img[388+10:388+20, 407+10:407+98] = [0, 200, 200]
+        test_img[388+88:388+98, 407+10:407+98] = [0, 200, 200]
+        test_img[388+10:388+98, 407+10:407+20] = [0, 200, 200]
+        test_img[388+10:388+98, 407+88:407+98] = [0, 200, 200]
         
         # 模擬右側 4x4 全是貴重藍色裝備 (不是空格，不能被銷毀)
         for r in range(4):
             for c in range(4):
                 cx = 1007 + c * 134
-                cy = 381 + r * 134
+                cy = 388 + r * 134
                 test_img[cy+10:cy+20, cx+10:cx+98] = [200, 0, 0]
                 test_img[cy+88:cy+98, cx+10:cx+98] = [200, 0, 0]
                 test_img[cy+10:cy+98, cx+10:cx+20] = [200, 0, 0]
@@ -257,7 +257,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 關閉二次確認彈窗以及定位彈窗位置
         def match_side_effect_scroll_exit(img, name, threshold):
             if name == "backpack_full.png":
-                return ((960, 228), 0.9)
+                return ((960, 289), 0.9)
             elif name == "common/confirm.png":
                 return ((600, 600), 0.9)
             return (None, 0.0)
@@ -267,7 +267,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         
         # Assert: 應點擊關閉按鈕，隨後點擊確認關閉，狀態回到 UNKNOWN，且 need_bag_cleaning 標記保持 True
-        self.mock_mouse.click.assert_any_call(1558, 241) # 關閉按鈕座標
+        self.mock_mouse.click.assert_any_call(1558, 248) # 關閉按鈕座標
         self.mock_mouse.click.assert_called_with(600, 600) # 二次確認
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
         self.assertTrue(self.state_machine.need_bag_cleaning)

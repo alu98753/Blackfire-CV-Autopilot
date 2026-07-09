@@ -13,15 +13,12 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Test outputs and temporary screenshots
-test_captured_*.png
-test_captured.png
-test_full_screen.png
-test_start_btn_mock.png
-raw_screenshot.png
+# Ignore all png files by default
+*.png
+# Allow png templates
+!templates/**/*.png
+!templates/*.png
 
-# Optional: If you don't want to track your custom template images, uncomment the line below:
-# templates/*.png
 
 # Test coverage outputs
 .coverage
