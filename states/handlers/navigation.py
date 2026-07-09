@@ -449,6 +449,13 @@ class NavigationHandler(BaseStateHandler):
             if pos_after:
                 stage_select_open = True
 
+        # 檢查是否處於地下城選擇介面 (判斷畫面上是否有已開啟、帶有紅色邊框的 dungeons/dungeon_after.png)
+        dungeon_select_open = False
+        if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
+            pos_d_after, _ = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.80)
+            if pos_d_after:
+                dungeon_select_open = True
+
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單
         if self.machine.config.get("type") == "stage" and stage_select_open:
             if len(nav_path) > 3:
@@ -521,6 +528,10 @@ class NavigationHandler(BaseStateHandler):
         for btn in reversed(nav_path):
             # 防重入：如果在關卡選擇介面，跳過 common/select_stage.png 避免重複開啟或誤點
             if btn == "common/select_stage.png" and stage_select_open:
+                continue
+
+            # 防重入：如果地下城選擇選單已開啟，跳過 dungeons/dungeon.png 避免重複開啟或誤點
+            if btn == "dungeons/dungeon.png" and dungeon_select_open:
                 continue
 
             # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (小島名稱包含 level 且不含 final 或 entry)
