@@ -1046,6 +1046,28 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_any_call(131, 244)
         self.mock_mouse.click.assert_any_call(900, 900)
 
+    @patch('states.state_machine.os.path.exists')
+    def test_run_task_complete_subflow_success(self, mock_exists):
+        """
+        測試任務完成彈窗領取獎勵子流程成功跑完的狀態：
+        1. 看到 common/confirm.png ➔ 點選並結束子流程
+        """
+        mock_exists.return_value = True
+        
+        # 模擬 matcher.match 尋找到 confirm.png
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((150, 150), 0.92) if name == "common/confirm.png" else (None, 0.0)
+        )
+        
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+        
+        # 以 patch 縮短 subflow 的 sleep 時間以加快測試速度
+        with patch('states.state_machine.time.sleep') as mock_sleep:
+            self.state_machine._run_task_complete_subflow(rect)
+            
+        # 驗證是否點擊了確認按鈕，且座標加上 rect["left"] / rect["top"]
+        self.mock_mouse.click.assert_called_once_with(160, 170)  # 10 + 150, 20 + 150
+
 if __name__ == "__main__":
     unittest.main()
 
