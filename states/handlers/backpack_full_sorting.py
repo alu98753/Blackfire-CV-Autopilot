@@ -60,7 +60,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
 
         def is_high_rarity(color):
-            return color in keep_colors
+            return color in keep_colors or color == "unknown_colored"
 
         # C. 步驟 1: 掃描左側 4x4 網格
         high_rarity_left = [] # 儲存 (row, col, color)
