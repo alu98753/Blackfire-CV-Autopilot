@@ -15,12 +15,14 @@ class ExploreHandler(BaseStateHandler):
             return
 
         # 1. 檢查是否已過下樓冷卻時間，若是，則重設本層探索記憶
-        if self.machine.last_godown_click_time and (time.time() - self.machine.last_godown_click_time > 4.0):
-            logging.info("⏳ 下樓冷卻結束，已進入地下城新樓層，重設探索記憶。")
-            self.machine.chest_opened_this_floor = False
-            self.machine.skill_selected_this_floor = False
-            self.machine.bless_received_this_floor = False
-            self.machine.last_godown_click_time = None
+        if self.machine.dungeon_floor_transitioning and self.machine.last_godown_click_time:
+            if time.time() - self.machine.last_godown_click_time > 4.0:
+                logging.info("⏳ 下樓冷卻結束，已進入地下城新樓層，重設探索記憶。")
+                self.machine.chest_opened_this_floor = False
+                self.machine.skill_selected_this_floor = False
+                self.machine.bless_received_this_floor = False
+                self.machine.dungeon_floor_transitioning = False
+                self.machine.last_godown_click_time = None
 
         # 2. 優先判定是否已經進入真實戰鬥中 (看見 common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")):
@@ -85,6 +87,8 @@ class ExploreHandler(BaseStateHandler):
                     
 
                 elif btn_name == "dungeons/Treasure.png":
+                    if self.machine.dungeon_floor_transitioning:
+                        self._reset_floor_memory_transition()
                     logging.info(f"👉 偵測到寶箱地圖格 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「開啟寶箱」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.chest_opened_this_floor = True
@@ -92,6 +96,8 @@ class ExploreHandler(BaseStateHandler):
                     self._run_treasure_subflow(rect)
                     
                 elif btn_name == "dungeons/skill_event.png":
+                    if self.machine.dungeon_floor_transitioning:
+                        self._reset_floor_memory_transition()
                     logging.info(f"👉 偵測到技能事件圖示 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「技能選擇」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.skill_selected_this_floor = True
@@ -99,6 +105,8 @@ class ExploreHandler(BaseStateHandler):
                     self._run_skill_subflow(rect)
                     
                 elif btn_name == "dungeons/dungeon_bless.png":
+                    if self.machine.dungeon_floor_transitioning:
+                        self._reset_floor_memory_transition()
                     logging.info(f"👉 偵測到接受祝福圖示 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「領取祝福」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.bless_received_this_floor = True
@@ -108,8 +116,9 @@ class ExploreHandler(BaseStateHandler):
                 elif btn_name in ["dungeons/gungeon_godown.png", "dungeons/gungeon_godown_confirm.png"]:
                     logging.info(f"🧭 偵測到下樓按鈕 [{btn_name}]，信心度: {conf:.4f}，點擊下樓並開始本層記憶冷卻。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    # 僅設定下樓點擊時間，由冷卻時間屆滿後在 handle() 起始處重設，防止切換期重複點擊舊圖示
+                    # 設定下樓點擊時間與過渡狀態，由冷卻時間屆滿後或在新樓層檢測到事件時重設
                     self.machine.last_godown_click_time = time.time()
+                    self.machine.dungeon_floor_transitioning = True
                     time.sleep(0.04)
                     
                 elif btn_name == "dungeons/dungeon_fight.png":
@@ -319,3 +328,11 @@ class ExploreHandler(BaseStateHandler):
             time.sleep(0.3)
             
         logging.warning("🧭 [子流程] 技能選擇子流程超時結束。")
+
+    def _reset_floor_memory_transition(self):
+        logging.info("🧭 偵測到新樓層探索事件，提前結束下樓過渡期並重設探索記憶。")
+        self.machine.chest_opened_this_floor = False
+        self.machine.skill_selected_this_floor = False
+        self.machine.bless_received_this_floor = False
+        self.machine.dungeon_floor_transitioning = False
+        self.machine.last_godown_click_time = None

@@ -65,6 +65,7 @@ class GameStateMachine:
         self.skill_selected_this_floor = False
         self.bless_received_this_floor = False
         self.last_godown_click_time = None
+        self.dungeon_floor_transitioning = False
         self.consecutive_stuck_count = 0
         
         # 地下城冷卻與貪婪選關相關屬性
