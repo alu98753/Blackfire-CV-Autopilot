@@ -58,13 +58,13 @@ class GearColorClassifier:
             elif 90 <= h_val <= 130:
                 if s >= 55 and v >= 20:
                     counts["blue"] += 1
-            # 橙黃色品質 (排除棕土色/黃褐色背景干擾)：飽和度 >= 95，亮度 >= 50
+            # 橙黃色品質 (排除棕土色/黃褐色背景干擾)：飽和度 >= 130，亮度 >= 90
             elif 10 <= h_val <= 34:
-                if s >= 95 and v >= 50:
+                if s >= 130 and v >= 90:
                     counts["orange_yellow"] += 1
-            # 紅色品質 (排除火焰強光溢出)：飽和度 >= 95，亮度 >= 50
+            # 紅色品質 (排除火焰強光溢出)：飽和度 >= 130，亮度 >= 90
             elif h_val <= 9 or h_val >= 165:
-                if s >= 95 and v >= 50:
+                if s >= 130 and v >= 90:
                     counts["red"] += 1
             # 綠色品質：飽和度 >= 50，亮度 >= 20
             elif 35 <= h_val <= 85:
@@ -87,14 +87,6 @@ class GearColorClassifier:
             if count >= thresh and count > max_count:
                 max_count = count
                 max_color = color
-                
-        # 安全防線：防禦性避免將高飽和度的彩色裝備判定為灰色裝備而被誤銷毀
-        # 灰色裝備邊框的平均飽和度 (S) 接近於 0 (通常 < 15)
-        # 如果最終判定為 gray_or_empty，但邊框像素的平均飽和度 >= 30，說明該格是彩色裝備
-        if max_color == "gray_or_empty" and total_pixels > 0:
-            mean_s = np.mean(hsv_pixels[:, 1])
-            if mean_s >= 30.0:
-                max_color = "unknown_colored"
                 
         is_rare = max_color in ["blue", "purple", "orange_yellow", "red"]
         ratios = {color: count / total_pixels for color, count in counts.items()}
