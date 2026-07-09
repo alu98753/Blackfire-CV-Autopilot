@@ -447,7 +447,8 @@ class NavigationHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
             pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
             pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.60)
-            if pos_after and (not pos_before or conf_after > conf_before):
+            # 防禦性判定：只有在至少一個按鈕有大於 0.72 的清晰匹配時，才信任此開啟判定，避免低信度背景雜訊誤判
+            if pos_after and (conf_before > 0.72 or conf_after > 0.72) and (not pos_before or conf_after > conf_before):
                 stage_select_open = True
 
         # 檢查是否處於地下城選擇介面 (利用對比式匹配判定 dungeon.png 與 dungeon_after.png 的信心度)
@@ -455,7 +456,8 @@ class NavigationHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
             pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
             pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.60)
-            if pos_d_after and (not pos_d_before or conf_d_after > conf_d_before):
+            # 防禦性判定：只有在至少一個按鈕有大於 0.72 的清晰匹配時，才信任此開啟判定，避免低信度背景雜訊誤判
+            if pos_d_after and (conf_d_before > 0.72 or conf_d_after > 0.72) and (not pos_d_before or conf_d_after > conf_d_before):
                 dungeon_select_open = True
 
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單
@@ -540,8 +542,9 @@ class NavigationHandler(BaseStateHandler):
             if in_detail_screen and "level" in btn and "final" not in btn and "entry" not in btn:
                 continue
 
-            # 針對 entry/stage_label 類背景特徵圖，調降閾值至 0.70，容忍縮放與像素抖動
-            thresh = 0.70 if ("entry" in btn or "stage_label" in btn) else 0.80
+            # 針對尋路按鈕，調降大廳主要功能與跳轉按鈕之匹配閾值至 0.60，以容忍解析度微幅縮放與抖動
+            is_lobby_btn = "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn
+            thresh = 0.60 if is_lobby_btn else 0.80
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
             if pos:
                 if btn == "stages/stage_label.png":

@@ -1362,5 +1362,92 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 2. current_dungeon_index 應更新為 1
         self.assertEqual(self.state_machine.current_dungeon_index, 1)
 
+    @patch('os.path.exists')
+    def test_battle_unexpected_exit_protection(self, mock_exists):
+        """
+        [行為場景 26] 戰鬥狀態下意外退出保護與重設機制：
+        Given: 狀態機處於 BATTLE 狀態下，且已過 8 秒安全期。
+        When: 畫面中完全沒有任何戰鬥特徵圖與結算圖，持續 5 秒。且大廳大門 common/door.png 可見。
+        Then: 狀態機應將狀態轉移至 STATE_UNKNOWN，且相關計時器重置。
+        """
+        self.state_machine.config = {
+            "type": "stage",
+            "result_buttons": ["common/continue.png"]
+        }
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.battle_start_time = time.time() - 10.0 # 過了 8 秒
+        
+        # 取得 BattleHandler 實例
+        handler = self.state_machine.handlers[self.state_machine.STATE_BATTLE]
+        handler.non_battle_feature_start_time = None
+        
+        mock_exists.return_value = True
+        
+        # 1. 模擬完全偵測不到戰鬥與結算特徵
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        # 第一步：觸發計時器啟動
+        self.state_machine.step()
+        self.assertIsNotNone(handler.non_battle_feature_start_time)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        
+        # 第二步：手動將計時器調至 6 秒前，模擬超時
+        handler.non_battle_feature_start_time = time.time() - 6.0
+        
+        # 模擬此時看見大門 common/door.png 
+        def mock_match_with_door(img, name, threshold, **kwargs):
+            if name == "common/door.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = mock_match_with_door
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertIsNone(handler.non_battle_feature_start_time)
+        self.assertIsNone(self.state_machine.battle_start_time)
+        self.mock_mouse.click.assert_not_called() # 已經在大廳，直接重設狀態，不觸發關閉點選
+
+    @patch('os.path.exists')
+    def test_battle_unexpected_exit_protection_click_quit(self, mock_exists):
+        """
+        [行為場景 27] 戰鬥狀態下意外退出且不在大廳，嘗試點點通用退出按鈕：
+        Given: 狀態機處於 BATTLE 狀態下，且已過 8 秒安全期，無戰鬥與結算特徵持續 5 秒。
+        When: 畫面中看不見大廳大門，但看見 common/quit.png。
+        Then: 狀態機應點擊 common/quit.png，隨後重置狀態至 STATE_UNKNOWN。
+        """
+        self.state_machine.config = {
+            "type": "stage",
+            "result_buttons": ["common/continue.png"]
+        }
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.battle_start_time = time.time() - 10.0
+        
+        handler = self.state_machine.handlers[self.state_machine.STATE_BATTLE]
+        handler.non_battle_feature_start_time = time.time() - 6.0 # 模擬已超時
+        
+        mock_exists.return_value = True
+        
+        # 模擬看不到大廳大門，但看見 common/quit.png
+        def mock_match_with_quit(img, name, threshold, **kwargs):
+            if name == "common/quit.png":
+                return ((200, 200), 0.90)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = mock_match_with_quit
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertIsNone(handler.non_battle_feature_start_time)
+        self.mock_mouse.click.assert_called_with(200, 200)
+
 if __name__ == "__main__":
     unittest.main()
