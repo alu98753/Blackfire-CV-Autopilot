@@ -18,6 +18,7 @@ exit /b
 :VENV_OK
 echo [*] 成功偵測到虛擬環境 Python 執行檔。
 
+:MENU_LOOP
 echo ============================================================
 echo 【常用執行模式說明】
 echo  1. 史萊姆地下城 (後台推薦):  --backend --mode dungeon_slime
@@ -35,7 +36,7 @@ echo.
 set "custom_args="
 set /p custom_args="請輸入啟動參數 (直接 Enter 鍵預設為: --backend --mode dungeon_slime): "
 
-:: 如果使用者沒有輸入任何東西，設定為預設值
+:: 如果使用者沒有輸入 any 東西，設定為預設值
 if "%custom_args%"=="" set custom_args=--backend --mode dungeon_slime
 
 echo.
@@ -44,4 +45,21 @@ echo ------------------------------------------------------------
 "%~dp0.venv\Scripts\python.exe" "%~dp0main.py" %custom_args%
 echo ------------------------------------------------------------
 echo [!] 掛機腳本已結束。
-pause
+echo.
+
+:: 提示是否重新掛機 (不輸入 Q 則預設為重新掛機)
+set "retry_choice="
+set /p retry_choice="[?] 是否要重新啟動掛機？(按 Enter 鍵或任意鍵重啟，輸入 Q 退出): "
+
+if /i "%retry_choice%"=="Q" goto EXIT_BAT
+if /i "%retry_choice%"=="q" goto EXIT_BAT
+
+echo.
+echo [*] 準備重新選取參數並啟動掛機...
+cls
+goto MENU_LOOP
+
+:EXIT_BAT
+echo [*] 感謝使用，正在退出...
+timeout /t 2 > nul
+exit /b
