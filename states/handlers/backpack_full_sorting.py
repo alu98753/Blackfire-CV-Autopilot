@@ -51,7 +51,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         # B. 定義網格座標參數 (相對於截圖)
         left_x0, left_y0 = 77, 190
         right_x0, right_y0 = 677, 190
-        cell_size = 108
+        cell_size = 134
         step = 134
 
 
@@ -60,7 +60,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
 
         def is_high_rarity(color):
-            return color in keep_colors
+            return color in keep_colors or color == "unknown_colored"
 
         # C. 步驟 1: 掃描左側 4x4 網格
         high_rarity_left = [] # 儲存 (row, col, color)

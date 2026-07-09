@@ -84,12 +84,6 @@ class ExploreHandler(BaseStateHandler):
                     time.sleep(0.2)
                     
 
-                elif btn_name == "dungeons/choose.png":
-                    logging.info(f"👉 偵測到選擇技能 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層技能已選。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.machine.skill_selected_this_floor = True
-                    time.sleep(0.03)
-                    
                 elif btn_name == "dungeons/Treasure.png":
                     logging.info(f"👉 偵測到寶箱地圖格 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「開啟寶箱」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
@@ -98,10 +92,11 @@ class ExploreHandler(BaseStateHandler):
                     self._run_treasure_subflow(rect)
                     
                 elif btn_name == "dungeons/skill_event.png":
-                    logging.info(f"👉 偵測到技能事件圖示 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層技能已選。")
+                    logging.info(f"👉 偵測到技能事件圖示 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「技能選擇」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.skill_selected_this_floor = True
-                    time.sleep(0.02)
+                    time.sleep(0.5)  # 等待技能選擇對話框開啟動畫
+                    self._run_skill_subflow(rect)
                     
                 elif btn_name == "dungeons/dungeon_bless.png":
                     logging.info(f"👉 偵測到接受祝福圖示 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「領取祝福」子流程。")
@@ -260,3 +255,67 @@ class ExploreHandler(BaseStateHandler):
             time.sleep(0.3)
             
         logging.warning("🧭 [子流程] 領取祝福子流程超時結束。")
+
+    def _run_skill_subflow(self, rect):
+        logging.info("🧭 [子流程] 開始執行「技能選擇」子流程...")
+        start_time = time.time()
+        timeout = 10.0  # 最多執行 10 秒
+        
+        choose_clicked = False
+        confirm_clicked = False
+        last_click_time = 0.0
+        
+        while time.time() - start_time < timeout:
+            screen_img = self.machine.capturer.capture(rect)
+            if screen_img is None:
+                time.sleep(0.2)
+                continue
+                
+            if not choose_clicked:
+                pos, conf = self.matcher.match(screen_img, "dungeons/choose.png", threshold=0.70)
+                if pos:
+                    logging.info(f"🧭 [子流程] 偵測到選擇技能按鈕 'dungeons/choose.png'，相似度: {conf:.4f}，進行點擊。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    choose_clicked = True
+                    last_click_time = time.time()
+                    time.sleep(1.0)  # 等待動畫
+                    continue
+            elif not confirm_clicked:
+                pos_c, conf_c = self.matcher.match(screen_img, "common/confirm.png", threshold=0.80)
+                if pos_c:
+                    logging.info(f"🧭 [子流程] 偵測到確認按鈕 'common/confirm.png'，相似度: {conf_c:.4f}，進行點擊。")
+                    self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                    confirm_clicked = True
+                    last_click_time = time.time()
+                    time.sleep(1.0)
+                    continue
+                    
+                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
+                if pos_quit:
+                    logging.info(f"🧭 [子流程] 未看到確認但直接偵測到退出按鈕 'common/quit.png'，相似度: {conf_quit:.4f}，進行點擊並退出。")
+                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                    time.sleep(0.3)
+                    return
+            else:
+                pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
+                if pos:
+                    logging.info(f"🧭 [子流程] 偵測到退出按鈕 'common/quit.png'，相似度: {conf:.4f}，進行點擊並結束技能選擇子流程。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    time.sleep(0.3)
+                    return
+                    
+            if time.time() - last_click_time > 2.0:
+                has_any = False
+                for btn, thresh in [("dungeons/choose.png", 0.70), ("common/confirm.png", 0.80), ("common/quit.png", 0.75)]:
+                    if os.path.exists(os.path.join("templates", btn)):
+                        pos, _ = self.matcher.match(screen_img, btn, threshold=thresh)
+                        if pos:
+                            has_any = True
+                            break
+                if not has_any:
+                    logging.info("🧭 [子流程] 畫面已無技能選擇關聯按鈕且無新動作，提前結束子流程。")
+                    return
+                    
+            time.sleep(0.3)
+            
+        logging.warning("🧭 [子流程] 技能選擇子流程超時結束。")

@@ -58,23 +58,23 @@ class GearColorClassifier:
             elif 90 <= h_val <= 130:
                 if s >= 55 and v >= 20:
                     counts["blue"] += 1
-            # 橙黃色品質 (排除棕土色/黃褐色背景干擾)：飽和度 >= 150，亮度 >= 100
+            # 橙黃色品質 (排除棕土色/黃褐色背景干擾)：飽和度 >= 130，亮度 >= 90
             elif 10 <= h_val <= 34:
-                if s >= 150 and v >= 100:
+                if s >= 130 and v >= 90:
                     counts["orange_yellow"] += 1
-            # 紅色品質 (排除火焰強光溢出)：飽和度 >= 150，亮度 >= 100
+            # 紅色品質 (排除火焰強光溢出)：飽和度 >= 130，亮度 >= 90
             elif h_val <= 9 or h_val >= 165:
-                if s >= 150 and v >= 100:
+                if s >= 130 and v >= 90:
                     counts["red"] += 1
             # 綠色品質：飽和度 >= 50，亮度 >= 20
             elif 35 <= h_val <= 85:
                 if s >= 50 and v >= 20:
                     counts["green"] += 1
                     
-        # 分顏色計數門檻，防禦內圍雜色與背景溢出 (橙色250，其餘400)
+        # 分顏色計數門檻，防禦內圍雜色與背景溢出 (橙色200，紅色200，其餘400)
         color_thresholds = {
-            "red": 400,
-            "orange_yellow": 250,
+            "red": 200,
+            "orange_yellow": 200,
             "green": 400,
             "blue": 400,
             "purple": 400
