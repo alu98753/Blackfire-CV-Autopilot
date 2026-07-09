@@ -217,7 +217,8 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
 
     @patch('os.path.exists')
-    def test_dungeon_skill_event_and_descend_flow(self, mock_exists):
+    @patch('states.handlers.explore.time.sleep')
+    def test_dungeon_skill_event_and_descend_flow(self, mock_sleep, mock_exists):
         """
         測試地下城模式技能事件與下樓流程：
         點擊技能事件 ➔ 點擊選擇 ➔ 點擊確認/OK ➔ 點擊退出 ➔ 點擊下樓 ➔ 點擊下樓確認。
@@ -228,51 +229,59 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         
         mock_exists.return_value = True
+        self.mock_capturer.capture.return_value = MagicMock()
         
-        # 1. 看到 skill_event.png ➔ 點擊
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((150, 150), 0.9) if name == "dungeons/skill_event.png" else (None, 0.0)
-        )
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(150, 150)
+        match_call_count = 0
+        def side_effect(img, name, threshold, brightness_threshold=0.0):
+            nonlocal match_call_count
+            # --- 第一階段：點擊 skill_event.png 並進入技能選擇子流程 ---
+            if name == "dungeons/skill_event.png" and match_call_count == 0:
+                match_call_count += 1
+                return (150, 150), 0.90
+            elif name == "dungeons/choose.png" and match_call_count == 1:
+                match_call_count += 1
+                return (250, 250), 0.90
+            elif name == "common/confirm.png" and match_call_count == 2:
+                match_call_count += 1
+                return (350, 350), 0.90
+            elif name == "common/quit.png" and match_call_count == 3:
+                match_call_count += 1
+                return (450, 450), 0.90
+                
+            # --- 第二階段：點擊下樓 ---
+            elif name == "dungeons/gungeon_godown.png" and match_call_count == 4:
+                match_call_count += 1
+                return (550, 550), 0.90
+                
+            # --- 第三階段：下樓確認 ---
+            elif name == "dungeons/gungeon_godown_confirm.png" and match_call_count == 5:
+                match_call_count += 1
+                return (650, 650), 0.90
+                
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = side_effect
+        self.mock_mouse.click.reset_mock()
         
-        # 2. 看到 choose.png ➔ 點擊
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((250, 250), 0.9) if name == "dungeons/choose.png" else (None, 0.0)
-        )
+        # 1. 執行第一步：應偵測到 skill_event.png，點擊並進入技能選擇子流程，執行選擇、確認、退出點擊
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(250, 250)
-        
-        # 3. 看到 common/ok.png ➔ 點擊確認
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((350, 350), 0.9) if name == "common/ok.png" else (None, 0.0)
-        )
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(350, 350)
-        
-        # 4. 看到 quit.png ➔ 點擊退出
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((450, 450), 0.9) if name == "common/quit.png" else (None, 0.0)
-        )
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(450, 450)
-        
-        # 5. 看到 gungeon_godown.png ➔ 點擊下樓
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((550, 550), 0.9) if name == "dungeons/gungeon_godown.png" else (None, 0.0)
-        )
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(550, 550)
-        
-        # 6. 看到 gungeon_godown_confirm.png ➔ 點擊確認下樓
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((650, 650), 0.9) if name == "dungeons/gungeon_godown_confirm.png" else (None, 0.0)
-        )
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(650, 650)
+        self.mock_mouse.click.assert_any_call(150, 150)
+        self.mock_mouse.click.assert_any_call(250, 250)
+        self.mock_mouse.click.assert_any_call(350, 350)
+        self.mock_mouse.click.assert_any_call(450, 450)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
         
-        # 7. 手動將下樓點擊時間推前 7 秒，模擬冷卻時間屆滿後，重設本層記憶
+        # 2. 執行第二步：點擊下樓
+        self.state_machine.step()
+        self.mock_mouse.click.assert_any_call(550, 550)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+        
+        # 3. 執行第三步：下樓確認
+        self.state_machine.step()
+        self.mock_mouse.click.assert_any_call(650, 650)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+        
+        # 4. 手動將下樓點擊時間推前 7 秒，模擬冷卻時間屆滿後，重設本層記憶
         self.assertTrue(self.state_machine.skill_selected_this_floor)
         self.state_machine.last_godown_click_time -= 7.0
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)

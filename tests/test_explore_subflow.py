@@ -107,6 +107,44 @@ class TestExploreSubflow(unittest.TestCase):
         self.mock_mouse.click.assert_any_call(130, 240)  # 10 + 120, 20 + 220
         self.mock_mouse.click.assert_any_call(190, 300)  # 10 + 180, 20 + 280
         self.mock_mouse.click.assert_any_call(330, 140)  # 10 + 320, 20 + 120
+
+    @patch('states.handlers.explore.os.path.exists')
+    def test_run_skill_subflow_success(self, mock_exists):
+        """
+        測試技能選擇子流程成功跑完的狀態：
+        1. 看到 dungeons/choose.png ➔ 點選
+        2. 看到 common/confirm.png ➔ 點選
+        3. 看到 common/quit.png ➔ 點選並結束子流程
+        """
+        mock_exists.return_value = True
+        self.mock_capturer.capture.return_value = MagicMock()
+        
+        match_call_count = 0
+        def side_effect(img, name, threshold):
+            nonlocal match_call_count
+            if name == "dungeons/choose.png" and match_call_count == 0:
+                match_call_count += 1
+                return (140, 240), 0.95
+            elif name == "common/confirm.png" and match_call_count == 1:
+                match_call_count += 1
+                return (190, 290), 0.95
+            elif name == "common/quit.png" and match_call_count == 2:
+                match_call_count += 1
+                return (330, 130), 0.95
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+        
+        with patch('states.handlers.explore.time.sleep') as mock_sleep:
+            self.handler._run_skill_subflow(rect)
+            
+        self.assertEqual(self.mock_mouse.click.call_count, 3)
+        self.mock_mouse.click.assert_any_call(150, 260)  # 10 + 140, 20 + 240
+        self.mock_mouse.click.assert_any_call(200, 310)  # 10 + 190, 20 + 290
+        self.mock_mouse.click.assert_any_call(340, 150)  # 10 + 330, 20 + 130
         
 if __name__ == '__main__':
     unittest.main()
