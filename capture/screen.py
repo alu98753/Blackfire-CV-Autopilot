@@ -6,6 +6,9 @@ import win32gui
 import win32api
 import win32con
 import win32ui
+import ctypes
+import subprocess
+import sys
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -89,8 +92,6 @@ class ScreenCapturer:
                 
         log_rect = None
         try:
-            import subprocess
-            import sys
             cmd = [
                 sys.executable,
                 "-c",
