@@ -964,8 +964,8 @@ class TestStateMachineLogic(unittest.TestCase):
         # 驗證沒有點擊任何按鈕 (特別是 select_stage.png)
         self.mock_mouse.click.assert_not_called()
         # 驗證執行了 drag 拖曳，起點大約在 100 + 1000 * 0.58 = 680，終點大約在 100 + 1000 * 0.42 = 520
-        # 高度為 100 + 800 * 0.5 = 500
-        self.mock_mouse.drag.assert_called_with(680, 500, 520, 500, duration=0.8)
+        # 高度為 100 + 800 * 0.3 = 340
+        self.mock_mouse.drag.assert_called_with(680, 340, 520, 340, duration=0.8, inertia=False)
         
         # 場景 2：清單滑動後，看見了目標關卡小島 stages/level4_desert_ruins.png
         # 預期：進行點擊小島並套用 -160 像素的點擊向上偏移 (y = 200 - 160 = 40 ➔ 絕對 y = 100 + 40 = 140)

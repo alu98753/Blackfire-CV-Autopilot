@@ -304,7 +304,7 @@ class MouseController:
             logging.error(f"滾動操作失敗: {e}")
             return False
 
-    def drag(self, start_x, start_y, end_x, end_y, duration=0.5):
+    def drag(self, start_x, start_y, end_x, end_y, duration=0.5, inertia=True):
         """
         在絕對螢幕座標上執行滑鼠左鍵拖曳。
         在後台模式下發送 WM_LBUTTONDOWN -> MOUSEMOVE -> LBUTTONUP，在前台使用 pyautogui.dragTo。
@@ -351,6 +351,10 @@ class MouseController:
                         win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
                         time.sleep(0.02)
                         
+                    # 2.5 停頓以消除釋放慣性 (只在非慣性模式下生效)
+                    if not inertia:
+                        time.sleep(0.1)
+                    
                     # 3. 釋放
                     lparam_end = win32api.MAKELONG(rex_logical, rey_logical)
                     win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam_end)
@@ -367,8 +371,15 @@ class MouseController:
 
         # 前台拖曳實體點擊
         try:
-            pyautogui.moveTo(start_x, start_y)
-            pyautogui.dragTo(end_x, end_y, duration=duration, button='left')
+            if inertia:
+                pyautogui.moveTo(start_x, start_y)
+                pyautogui.dragTo(end_x, end_y, duration=duration, button='left')
+            else:
+                pyautogui.moveTo(start_x, start_y)
+                pyautogui.mouseDown(button='left')
+                pyautogui.moveTo(end_x, end_y, duration=duration)
+                time.sleep(0.1)  # 關鍵暫停：消除釋放時的慣性速度
+                pyautogui.mouseUp(button='left')
             self.last_target_pos = (end_x, end_y)
             self.last_action_time = time.time()
             if self.state_machine is not None:

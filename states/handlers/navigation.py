@@ -488,8 +488,8 @@ class NavigationHandler(BaseStateHandler):
                                 end_x = rect["left"] + int(rect["width"] * 0.58)
                                 self.machine.horizontal_scroll_count = scroll_count + 1
 
-                            y_pos = rect["top"] + int(rect["height"] * 0.5)
-                            self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8)
+                            y_pos = rect["top"] + int(rect["height"] * 0.3)
+                            self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
                             self.machine.last_stage_scroll_time = time.time()
                             # 增加靜止等待時間，確保清單滑動動畫完全停止後再進行下一幀偵測與點擊
                             time.sleep(1.2)
