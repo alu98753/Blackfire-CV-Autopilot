@@ -4,6 +4,10 @@ import logging
 from states.handlers.base import BaseStateHandler
 
 class BattleHandler(BaseStateHandler):
+    def __init__(self, machine):
+        super().__init__(machine)
+        self.non_battle_feature_start_time = None
+
     def handle(self, screen_img, rect):
         """
         戰鬥狀態處理：啟用自動戰鬥與監控戰鬥結算。
@@ -27,6 +31,85 @@ class BattleHandler(BaseStateHandler):
             self.log_battle_duration()
             time.sleep(0.15)
             return
+
+        # C. 檢查是否發生戰鬥中途意外退出 (連續 5 秒無戰鬥或結算特徵)
+        has_battle_feature = False
+        
+        # 1. 檢查戰鬥專屬特徵
+        for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
+            if os.path.exists(os.path.join("templates", feat)):
+                thresh = 0.65 if feat == "common/auto.png" else 0.70
+                pos, _ = self.matcher.match(screen_img, feat, threshold=thresh)
+                if pos:
+                    has_battle_feature = True
+                    break
+                    
+        # 2. 檢查結算與戰敗特徵
+        if not has_battle_feature:
+            # 2.1 檢查戰敗
+            if os.path.exists(os.path.join("templates", "defeat.png")):
+                pos, _ = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
+                if pos:
+                    has_battle_feature = True
+            
+            # 2.2 檢查當前配置的結算繼續按鈕
+            if not has_battle_feature:
+                res_buttons = (self.machine.config["result_buttons"] 
+                               if self.machine.config["type"] == "stage" 
+                               else self.machine.config["dungeon_battle_results"])
+                for btn in res_buttons:
+                    thresh = 0.88 if btn == "common/continue_gray.png" else 0.80
+                    b_thresh = 0.70 if btn in ["common/continue.png", "common/continue_gray.png"] else 0.0
+                    pos, _ = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
+                    if pos:
+                        has_battle_feature = True
+                        break
+
+        # 3. 根據特徵有無進行計時
+        if not has_battle_feature:
+            if self.non_battle_feature_start_time is None:
+                self.non_battle_feature_start_time = time.time()
+                logging.info("⏳ 戰鬥畫面中未偵測到任何已知戰鬥或結算特徵，開啟意外退出監控計時...")
+            else:
+                elapsed = time.time() - self.non_battle_feature_start_time
+                logging.warning(f"⚠️ 連續 {elapsed:.1f} 秒未偵測到戰鬥特徵，若滿 5 秒將觸發意外退出防禦程序。")
+                if elapsed >= 5.0:
+                    logging.warning("🚨 [防卡死] 戰鬥狀態下連續 5 秒未偵測到任何戰鬥特徵或結算按鈕，判定為意外退出戰鬥。啟動防禦性重設定位...")
+                    
+                    # 3.1 嘗試檢查是否已經身處安全大廳
+                    is_in_lobby = False
+                    for lobby_btn in ["common/door.png", "goback_town.png", "common/select_stage.png"]:
+                        if os.path.exists(os.path.join("templates", lobby_btn)):
+                            pos, _ = self.matcher.match(screen_img, lobby_btn, threshold=0.70)
+                            if pos:
+                                is_in_lobby = True
+                                break
+                    
+                    if is_in_lobby:
+                        logging.info("🧭 偵測到目前已處於安全大廳畫面，直接重設狀態機為 UNKNOWN 進行定位。")
+                    else:
+                        # 3.2 不在大廳，嘗試尋找通用退出/確認按鈕並點選以清除可能誤觸開啟的子視窗
+                        logging.info("🧭 未能偵測到大廳特徵，可能卡在子選單。嘗試尋找並點選通用退出/確認按鈕...")
+                        dismissed = False
+                        for quit_btn in ["common/quit.png", "common/confirm.png", "common/ok.png"]:
+                            if os.path.exists(os.path.join("templates", quit_btn)):
+                                pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.80)
+                                if pos:
+                                    logging.info(f"👉 點選通用按鈕 [{quit_btn}] 以關閉子視窗。")
+                                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                                    dismissed = True
+                                    time.sleep(0.3)
+                                    break
+                    
+                    # 3.3 重置狀態與計時器，轉移至 UNKNOWN
+                    self.non_battle_feature_start_time = None
+                    self.machine.battle_start_time = None
+                    self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                    return
+        else:
+            if self.non_battle_feature_start_time is not None:
+                logging.info("🟢 重新偵測到戰鬥特徵，重置意外退出計時器。")
+                self.non_battle_feature_start_time = None
 
         # B1. 優先檢查是否戰敗 (defeat.png)
         if os.path.exists(os.path.join("templates", "defeat.png")):
