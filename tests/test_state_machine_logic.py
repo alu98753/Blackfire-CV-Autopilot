@@ -113,9 +113,11 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
 
     @patch('os.path.exists')
-    def test_dungeon_slime_explore_and_battle_flow(self, mock_exists):
+    @patch('states.handlers.explore.time.sleep')
+    def test_dungeon_slime_explore_and_battle_flow(self, mock_sleep, mock_exists):
         """
         測試史萊姆地下城模式：探索事件 -> 遇怪 -> 戰鬥 -> 結算 -> 繼續探索。
+        對齊全新的開啟寶箱與領取祝福子流程。
         """
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.enable_bread = False
@@ -123,46 +125,88 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         
         mock_exists.return_value = True
+        self.mock_capturer.capture.return_value = MagicMock()
         
-        # 1. EXPLORING 狀態下：看到開寶箱 Treasure.png ➔ 點擊處理
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((600, 600), 0.9) if name == "dungeons/Treasure.png" else (None, 0.0)
-        )
+        # 模擬 matcher.match，配合探索主循環與子流程內部的多階段比對
+        match_call_count = 0
+        def side_effect(img, name, threshold, brightness_threshold=0.0):
+            nonlocal match_call_count
+            # --- 第一階段：點擊 Treasure.png 並進入開啟寶箱子流程 ---
+            if name == "dungeons/Treasure.png" and match_call_count == 0:
+                match_call_count += 1
+                return (600, 600), 0.90
+            elif name == "dungeons/Get_tresure.png" and match_call_count == 1:
+                match_call_count += 1
+                return (610, 610), 0.90
+            elif name == "dungeons/Get_tresure_comfirm.png" and match_call_count == 2:
+                match_call_count += 1
+                return (620, 620), 0.90
+            elif name == "common/quit.png" and match_call_count == 3:
+                match_call_count += 1
+                return (630, 630), 0.90
+                
+            # --- 第二階段：探索戰鬥房入口 ---
+            elif name == "dungeons/dungeon_fight.png" and match_call_count == 4:
+                match_call_count += 1
+                return (700, 700), 0.90
+                
+            # --- 第三階段：點擊 dungeon_bless.png 並進入選擇祝福子流程 ---
+            elif name == "dungeons/dungeon_bless.png" and match_call_count == 5:
+                match_call_count += 1
+                return (750, 750), 0.90
+            elif name == "dungeons/choice_bless.png" and match_call_count == 6:
+                match_call_count += 1
+                return (800, 200), 0.90
+            elif name == "common/ok.png" and match_call_count == 7:
+                match_call_count += 1
+                return (810, 210), 0.90
+            elif name == "common/quit.png" and match_call_count == 8:
+                match_call_count += 1
+                return (820, 220), 0.90
+                
+            # --- 第四階段：發現戰鬥開始 auto.png 並切換為 BATTLE 狀態 ---
+            elif name == "common/auto.png" and match_call_count == 9:
+                match_call_count += 1
+                return (800, 100), 0.90
+            elif name == "common/auto.png" and match_call_count == 10:
+                match_call_count += 1
+                return (800, 100), 0.90
+                
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        # 1. 執行第一步：應偵測到 Treasure.png，點擊並進入寶箱子流程，執行獲取、確認、退出點擊
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(600, 600)
+        self.mock_mouse.click.assert_any_call(600, 600)
+        self.mock_mouse.click.assert_any_call(610, 610)
+        self.mock_mouse.click.assert_any_call(620, 620)
+        self.mock_mouse.click.assert_any_call(630, 630)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
         
-        # 2. EXPLORING 狀態下：看到戰鬥房入口 dungeon_fight.png ➔ 點擊進入
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((700, 700), 0.9) if name == "dungeons/dungeon_fight.png" else (None, 0.0)
-        )
+        # 2. 執行第二步：應偵測到 dungeons/dungeon_fight.png 並點擊
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(700, 700)
-        # 點擊入口時不應轉移狀態，仍保持在 EXPLORING (等待選祝福)
+        self.mock_mouse.click.assert_any_call(700, 700)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
         
-        # 3. 進入準備畫面後：看到選擇祝福 choice_bless.png ➔ 點擊
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((800, 200), 0.9) if name == "dungeons/choice_bless.png" else (None, 0.0)
-        )
+        # 3. 執行第三步：應偵測到 dungeons/dungeon_bless.png 并進入選擇祝福子流程，執行祝福、OK、退出點擊
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(800, 200)
+        self.mock_mouse.click.assert_any_call(750, 750)
+        self.mock_mouse.click.assert_any_call(800, 200)
+        self.mock_mouse.click.assert_any_call(810, 210)
+        self.mock_mouse.click.assert_any_call(820, 220)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
         
-        # 4. 戰鬥真正開打後：偵測到 common/auto.png ➔ 轉移至 BATTLE
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((800, 100), 0.9) if name == "common/auto.png" else (None, 0.0)
-        )
+        # 4. 執行第四步：看到戰鬥開始 auto.png ➔ 轉移至 BATTLE
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         # 模擬戰鬥已經開始了 10 秒，繞過剛進戰鬥前 8 秒的結算判定安全冷卻期
         self.state_machine.battle_start_time = time.time() - 10.0
         
         # 5. BATTLE 狀態下：看到 common/auto.png ➔ 點擊啟用
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((800, 100), 0.9) if name == "common/auto.png" else (None, 0.0)
-        )
         self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(800, 100)
+        self.mock_mouse.click.assert_any_call(800, 100)
         
         # 6. 戰鬥結束：看到結算 common/continue.png ➔ 點擊並轉回 EXPLORING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
