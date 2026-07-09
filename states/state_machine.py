@@ -129,15 +129,7 @@ class GameStateMachine:
             time.sleep(0.2)
             return
 
-        # 每隔 1.0 秒，將當前腳本看到的畫面保存為 debug_running_screen.png 供使用者觀察
-        now = time.time()
-        last_save = getattr(self, "_last_screen_save_time", 0.0)
-        if now - last_save >= 1.0:
-            try:
-                cv2.imwrite("debug_running_screen.png", screen_img)
-                self._last_screen_save_time = now
-            except Exception:
-                pass
+
 
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
