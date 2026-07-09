@@ -442,12 +442,21 @@ class NavigationHandler(BaseStateHandler):
 
         # （已將地下城專屬按鈕的主動判定移至 handle 方法最前頭，作為最高優先權判定）
 
-        # 判斷是否處於關卡選擇介面 (判斷畫面上是否有已點選展開、帶有紅色邊框的 select_stage_after.png)
+        # 判斷是否處於關卡選擇介面 (利用對比式匹配判定 select_stage.png 與 select_stage_after.png 的信心度)
         stage_select_open = False
         if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-            pos_after, _ = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.80)
-            if pos_after:
+            pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
+            pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.60)
+            if pos_after and (not pos_before or conf_after > conf_before):
                 stage_select_open = True
+
+        # 檢查是否處於地下城選擇介面 (利用對比式匹配判定 dungeon.png 與 dungeon_after.png 的信心度)
+        dungeon_select_open = False
+        if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
+            pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
+            pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.60)
+            if pos_d_after and (not pos_d_before or conf_d_after > conf_d_before):
+                dungeon_select_open = True
 
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單
         if self.machine.config.get("type") == "stage" and stage_select_open:
@@ -521,6 +530,10 @@ class NavigationHandler(BaseStateHandler):
         for btn in reversed(nav_path):
             # 防重入：如果在關卡選擇介面，跳過 common/select_stage.png 避免重複開啟或誤點
             if btn == "common/select_stage.png" and stage_select_open:
+                continue
+
+            # 防重入：如果地下城選擇選單已開啟，跳過 dungeons/dungeon.png 避免重複開啟或誤點
+            if btn == "dungeons/dungeon.png" and dungeon_select_open:
                 continue
 
             # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (小島名稱包含 level 且不含 final 或 entry)

@@ -159,7 +159,7 @@ class BagCleaningHandler(BaseStateHandler):
                 
                 # 嘗試使用「全選」按鈕定位
                 if os.path.exists(os.path.join("templates", "common/select_all.png")):
-                    pos, conf = self.matcher.match(screen_img, "common/select_all.png", threshold=0.7)
+                    pos, conf = self.matcher.match(screen_img, "common/select_all.png", threshold=0.7, brightness_threshold=0.70)
                     if pos:
                         btn_cx = pos[0]
                         btn_cy = pos[1]
@@ -167,7 +167,7 @@ class BagCleaningHandler(BaseStateHandler):
                 
                 # 嘗試使用「分解」按鈕定位
                 if btn_cx is None and os.path.exists(os.path.join("templates", "common/Disassembly.png")):
-                    pos, conf = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7)
+                    pos, conf = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7, brightness_threshold=0.70)
                     if pos:
                         btn_cx = pos[0] - 425
                         btn_cy = pos[1] - 7
@@ -175,7 +175,7 @@ class BagCleaningHandler(BaseStateHandler):
 
                 # 嘗試使用「關閉」按鈕定位
                 if btn_cx is None and os.path.exists(os.path.join("templates", "common/quit.png")):
-                    pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
+                    pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.7, brightness_threshold=0.70)
                     if pos:
                         btn_cx = pos[0] - 738
                         btn_cy = pos[1] + 590
@@ -272,7 +272,7 @@ class BagCleaningHandler(BaseStateHandler):
             # 4.3 如果已經全選且反選完畢，則點擊「分解」
             else:
                 if os.path.exists(os.path.join("templates", "common/Disassembly.png")):
-                    pos_dis, conf_dis = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7)
+                    pos_dis, conf_dis = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7, brightness_threshold=0.70)
                     if pos_dis:
                         logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
                         self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
@@ -281,7 +281,7 @@ class BagCleaningHandler(BaseStateHandler):
 
             # 4.4 檢查大量分解按鈕 (打開背包後會看見)
             if os.path.exists(os.path.join("templates", "common/Backpack_Disassembly.png")):
-                pos_mass, conf_mass = self.matcher.match(screen_img, "common/Backpack_Disassembly.png", threshold=0.7)
+                pos_mass, conf_mass = self.matcher.match(screen_img, "common/Backpack_Disassembly.png", threshold=0.7, brightness_threshold=0.70)
                 if pos_mass:
                     logging.info(f"🎒 背包清理：偵測到大量分解按鈕 [{conf_mass:.4f}]，點擊進入大量分解。")
                     self.mouse.click(rect["left"] + pos_mass[0], rect["top"] + pos_mass[1])

@@ -99,14 +99,14 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 3. 領完體力後，NAVIGATING 尋路結束，看到大廳的 stages/start.png ➔ 應轉移至 LOBBY
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((500, 500), 0.9) if name == "stages/start.png" else (None, 0.0)
+            ((500, 500), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
         
         # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並轉移至 BATTLE
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((500, 500), 0.9) if name == "stages/start.png" else (None, 0.0)
+            ((500, 500), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
@@ -315,7 +315,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 3. 畫面回到大廳，看到 stages/start.png。此時因為 need_bag_cleaning 標記，大廳處理器應轉移至 BAG_CLEANING 狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name == "stages/start.png" else (None, 0.0)
+            ((300, 300), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()  # LobbyHandler 攔截轉移 LOBBY -> BAG_CLEANING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
@@ -1118,6 +1118,43 @@ class TestStateMachineLogic(unittest.TestCase):
             
         # 驗證是否點擊了確認按鈕，且座標加上 rect["left"] / rect["top"]
         self.mock_mouse.click.assert_called_once_with(160, 170)  # 10 + 150, 20 + 150
+
+    @patch('os.path.exists')
+    def test_dungeon_navigation_anti_reentry(self, mock_exists):
+        """
+        測試地下城選單防重入邏輯：
+        當在尋路過程中，且地下城入口選單已開啟 (偵測到 dungeons/dungeon_after.png)，
+        應自動跳過 dungeons/dungeon.png，只匹配並點擊最深層的 dungeons/Slime_entry.png。
+        """
+        self.state_machine.config = {
+            "type": "dungeon",
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        }
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 模擬比對結果：dungeons/dungeon.png 與 dungeons/dungeon_after.png 同時在畫面上
+        # 預期：跳過 dungeon.png 不點擊，只點擊 dungeons/Slime_entry.png (座標 200, 200)
+        def match_side_effect(img, name, threshold=None, brightness_threshold=None):
+            if name == "dungeons/dungeon_after.png":
+                return ((300, 300), 0.95)
+            elif name == "dungeons/dungeon.png":
+                return ((400, 400), 0.65)
+            elif name == "dungeons/Slime_entry.png":
+                return ((200, 200), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 驗證點擊了 Slime_entry.png (100 + 200 = 300, 100 + 200 = 300)
+        # 且沒有點擊過 dungeon.png (100 + 400 = 500)
+        self.mock_mouse.click.assert_called_once_with(300, 300)
 
 if __name__ == "__main__":
     unittest.main()
