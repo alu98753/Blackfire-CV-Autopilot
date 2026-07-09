@@ -123,4 +123,12 @@ class ResultHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_LOBBY)
             return True
             
+        # D. 檢查是否已經進入戰鬥狀態 (避免人手點擊或自動戰鬥提早開始時卡在結算超時)
+        if os.path.exists(os.path.join("templates", "common/auto.png")):
+            pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
+            if pos_auto:
+                logging.info(f"⚔️ 結算畫面偵測到「自動戰鬥」按鈕 (相似度: {conf_auto:.4f})，判定已進入戰鬥，將狀態切換至 BATTLE。")
+                self.machine.transition_to(self.machine.STATE_BATTLE)
+                return True
+
         return False
