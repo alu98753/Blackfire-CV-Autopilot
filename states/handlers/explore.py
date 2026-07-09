@@ -84,12 +84,6 @@ class ExploreHandler(BaseStateHandler):
                     time.sleep(0.2)
                     
 
-                elif btn_name == "dungeons/Get_tresure.png" or btn_name == "dungeons/Get_tresure_comfirm.png":
-                    logging.info(f"👉 偵測到獲得寶物 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層寶箱已開。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.machine.chest_opened_this_floor = True
-                    time.sleep(0.03)
-                    
                 elif btn_name == "dungeons/choose.png":
                     logging.info(f"👉 偵測到選擇技能 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層技能已選。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
