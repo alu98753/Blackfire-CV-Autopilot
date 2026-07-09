@@ -1140,9 +1140,9 @@ class TestStateMachineLogic(unittest.TestCase):
         # 預期：跳過 dungeon.png 不點擊，只點擊 dungeons/Slime_entry.png (座標 200, 200)
         def match_side_effect(img, name, threshold=None, brightness_threshold=None):
             if name == "dungeons/dungeon_after.png":
-                return ((300, 300), 0.9)
+                return ((300, 300), 0.95)
             elif name == "dungeons/dungeon.png":
-                return ((400, 400), 0.9)
+                return ((400, 400), 0.65)
             elif name == "dungeons/Slime_entry.png":
                 return ((200, 200), 0.9)
             return (None, 0.0)

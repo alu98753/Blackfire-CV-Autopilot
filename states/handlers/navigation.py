@@ -442,18 +442,20 @@ class NavigationHandler(BaseStateHandler):
 
         # （已將地下城專屬按鈕的主動判定移至 handle 方法最前頭，作為最高優先權判定）
 
-        # 判斷是否處於關卡選擇介面 (判斷畫面上是否有已點選展開、帶有紅色邊框的 select_stage_after.png)
+        # 判斷是否處於關卡選擇介面 (利用對比式匹配判定 select_stage.png 與 select_stage_after.png 的信心度)
         stage_select_open = False
         if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-            pos_after, _ = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.80)
-            if pos_after:
+            pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
+            pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.60)
+            if pos_after and (not pos_before or conf_after > conf_before):
                 stage_select_open = True
 
-        # 檢查是否處於地下城選擇介面 (判斷畫面上是否有已開啟、帶有紅色邊框的 dungeons/dungeon_after.png)
+        # 檢查是否處於地下城選擇介面 (利用對比式匹配判定 dungeon.png 與 dungeon_after.png 的信心度)
         dungeon_select_open = False
         if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-            pos_d_after, _ = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.80)
-            if pos_d_after:
+            pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
+            pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.60)
+            if pos_d_after and (not pos_d_before or conf_d_after > conf_d_before):
                 dungeon_select_open = True
 
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單
