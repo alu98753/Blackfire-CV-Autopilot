@@ -254,11 +254,16 @@ class GameStateMachine:
                 self.transition_to(self.STATE_BATTLE)
                 return
 
-        # 2. 檢查是否在普通關卡大廳
+        # 2. 檢查是否在普通關卡大廳 (判斷 common/select_stage.png 與 goback_town.png 至少存在一個)
         if self.config["type"] == "stage":
-            lobby_btn = self.config["lobby_start_btn"]
-            pos, _ = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-            if pos:
+            in_lobby = False
+            for btn in ["common/select_stage.png", "goback_town.png"]:
+                if os.path.exists(os.path.join("templates", btn)):
+                    pos, _ = self.matcher.match(screen_img, btn, threshold=0.8)
+                    if pos:
+                        in_lobby = True
+                        break
+            if in_lobby:
                 self.transition_to(self.STATE_LOBBY)
                 return
                 
@@ -309,10 +314,10 @@ class GameStateMachine:
                     has_auto = True
             
             if has_auto:
-                logging.info("❓ 未能辨識出大廳按鈕，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
+                logging.info("❓ 未能辨識出關卡大廳特徵，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
                 self.transition_to(self.STATE_BATTLE)
             else:
-                logging.info("❓ 未能辨識出大廳按鈕，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路. ")
+                logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")
                 self.transition_to(self.STATE_NAVIGATING)
 
     def check_collection_trigger(self, screen_img):

@@ -99,14 +99,14 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 3. 領完體力後，NAVIGATING 尋路結束，看到大廳的 stages/start.png ➔ 應轉移至 LOBBY
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((500, 500), 0.9) if name == "stages/start.png" else (None, 0.0)
+            ((500, 500), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
         
         # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並轉移至 BATTLE
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((500, 500), 0.9) if name == "stages/start.png" else (None, 0.0)
+            ((500, 500), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
@@ -315,7 +315,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 3. 畫面回到大廳，看到 stages/start.png。此時因為 need_bag_cleaning 標記，大廳處理器應轉移至 BAG_CLEANING 狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name == "stages/start.png" else (None, 0.0)
+            ((300, 300), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()  # LobbyHandler 攔截轉移 LOBBY -> BAG_CLEANING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
