@@ -95,7 +95,7 @@ def diagnose_dpi():
     # 2. 擷取畫面
     print("[*] 正在進行畫面擷取...")
     try:
-        with mss.mss() as sct:
+        with mss.MSS() as sct:
             monitor = {"left": phys_rect[0], "top": phys_rect[1], "width": pw, "height": ph}
             screenshot = sct.grab(monitor)
             img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGRA2BGR)
