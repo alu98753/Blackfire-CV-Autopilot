@@ -16,7 +16,7 @@ class ScreenCapturer:
     def __init__(self, window_title="Blackfire Crusade", backend_mode=False):
         self.window_title = window_title
         self.backend_mode = backend_mode
-        self.sct = mss.mss()
+        self.sct = mss.MSS()
         self._hwnd = None
 
     def get_hwnd(self):

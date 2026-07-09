@@ -45,7 +45,21 @@ class ExploreHandler(BaseStateHandler):
             if btn_name == "dungeons/dungeon_bless.png" and self.machine.bless_received_this_floor:
                 continue
                 
-            pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
+            # 依不同探險按鈕特性設定自訂閥值，文字按鈕預設調低以提升匹配率，預設為 0.80
+            thresholds = {
+                "dungeons/Get_tresure.png": 0.70,
+                "dungeons/Get_tresure_comfirm.png": 0.70,
+                "common/confirm.png": 0.70,
+                "common/ok.png": 0.70,
+                "dungeons/choose.png": 0.70,
+                "dungeons/choice_bless.png": 0.70,
+                "common/quit.png": 0.75,
+                "common/continue_gray.png": 0.88,
+                "common/continue.png": 0.80,
+            }
+            thresh = thresholds.get(btn_name, 0.80)
+            
+            pos, conf = self.matcher.match(screen_img, btn_name, threshold=thresh)
             if pos:
                 if btn_name == "dungeons/dungeons_complete.png":
                     logging.info(f"🎉 偵測到【地下城通關結束】({btn_name})，信心度: {conf:.4f}，點擊退出。")

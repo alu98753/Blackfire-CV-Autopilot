@@ -36,6 +36,8 @@ GAME_CONFIGS = {
             # === 第一階段：彈窗與對話框處理 (高優先級，必須先解決，否則會卡在畫面上) ===
             "dungeons/dungeons_complete.png",       # 1. 地下城通關結束
             "common/confirm.png",                   # 2. 通用確認彈窗 (如：下樓確認、獲得寶物確認等)
+            "common/continue.png",                  # 結算繼續按鈕 (金色)
+            "common/continue_gray.png",             # 結算繼續按鈕 (灰色)
             "dungeons/gungeon_godown_confirm.png",   # 3. 下樓特定確認彈窗
             "dungeons/Get_tresure_comfirm.png",     # 4. 獲得寶物特定確認彈窗
             "common/ok.png",                        # 5. 通用 OK 按鈕 (如：選完祝福後的確認等)
