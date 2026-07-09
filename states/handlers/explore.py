@@ -138,54 +138,63 @@ class ExploreHandler(BaseStateHandler):
         start_time = time.time()
         timeout = 10.0  # 最多執行 10 秒
         
-        # 定義子流程中專屬的匹配優先順序 (只比對這三個，不匹配主流程物件)
-        subflow_templates = [
-            ("dungeons/Get_tresure.png", 0.70),
-            ("dungeons/Get_tresure_comfirm.png", 0.70),
-            ("common/quit.png", 0.75)
-        ]
-        
+        treasure_clicked = False
+        confirm_clicked = False
         last_click_time = 0.0
-        consecutive_empty_count = 0
         
         while time.time() - start_time < timeout:
-            # 獲取最新畫面
             screen_img = self.machine.capturer.capture(rect)
             if screen_img is None:
                 time.sleep(0.2)
                 continue
                 
-            matched_any = False
-            # 依序匹配子流程按鈕
-            for template_name, thresh in subflow_templates:
-                if not os.path.exists(os.path.join("templates", template_name)):
-                    continue
-                pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
+            if not treasure_clicked:
+                pos, conf = self.matcher.match(screen_img, "dungeons/Get_tresure.png", threshold=0.70)
                 if pos:
-                    logging.info(f"📦 [子流程] 偵測到按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊。")
+                    logging.info(f"📦 [子流程] 偵測到獲得寶物按鈕 'dungeons/Get_tresure.png'，相似度: {conf:.4f}，進行點擊。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    treasure_clicked = True
                     last_click_time = time.time()
-                    matched_any = True
+                    time.sleep(1.0)
+                    continue
+            elif not confirm_clicked:
+                pos_c, conf_c = self.matcher.match(screen_img, "dungeons/Get_tresure_comfirm.png", threshold=0.70)
+                if pos_c:
+                    logging.info(f"📦 [子流程] 偵測到獲得寶物確認按鈕 'dungeons/Get_tresure_comfirm.png'，相似度: {conf_c:.4f}，進行點擊。")
+                    self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                    confirm_clicked = True
+                    last_click_time = time.time()
+                    time.sleep(1.0)
+                    continue
                     
-                    # 如果點擊了退出按鈕，說明子流程已完成，延遲一下即可退出子流程
-                    if template_name == "common/quit.png":
-                        logging.info("📦 [子流程] 已點擊退出按鈕，結束寶箱子流程。")
-                        time.sleep(0.3)
-                        return
-                    
-                    time.sleep(0.8)  # 點擊後等待動畫過渡
-                    break  # 點擊了該幀匹配最高的按鈕，重新截圖比對
-                    
-            if not matched_any:
-                # 如果連續 3 幀都沒匹配到任何子流程按鈕，且距離上次點擊已過 1.5 秒，說明視窗已關閉，可以提前結束
-                consecutive_empty_count += 1
-                if consecutive_empty_count >= 3 and (time.time() - last_click_time > 1.5):
-                    logging.info("📦 [子流程] 畫面已無寶箱相關按鈕，提前結束子流程。")
+                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
+                if pos_quit:
+                    logging.info(f"📦 [子流程] 未看到寶物確認但直接偵測到退出按鈕 'common/quit.png'，相似度: {conf_quit:.4f}，進行點擊並退出。")
+                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                    time.sleep(0.3)
                     return
-                time.sleep(0.3)
             else:
-                consecutive_empty_count = 0
-                
+                pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
+                if pos:
+                    logging.info(f"📦 [子流程] 偵測到退出按鈕 'common/quit.png'，相似度: {conf:.4f}，進行點擊並結束寶箱子流程。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    time.sleep(0.3)
+                    return
+                    
+            if time.time() - last_click_time > 2.0:
+                has_any = False
+                for btn, thresh in [("dungeons/Get_tresure.png", 0.70), ("dungeons/Get_tresure_comfirm.png", 0.70), ("common/quit.png", 0.75)]:
+                    if os.path.exists(os.path.join("templates", btn)):
+                        pos, _ = self.matcher.match(screen_img, btn, threshold=thresh)
+                        if pos:
+                            has_any = True
+                            break
+                if not has_any:
+                    logging.info("📦 [子流程] 畫面已無寶箱關聯按鈕且無新動作，提前結束子流程。")
+                    return
+                    
+            time.sleep(0.3)
+            
         logging.warning("📦 [子流程] 開啟寶箱子流程超時結束。")
 
     def _run_bless_subflow(self, rect):
@@ -193,15 +202,9 @@ class ExploreHandler(BaseStateHandler):
         start_time = time.time()
         timeout = 10.0  # 最多執行 10 秒
         
-        # 定義子流程中專屬的匹配優先順序
-        subflow_templates = [
-            ("dungeons/choice_bless.png", 0.70),
-            ("common/ok.png", 0.80),
-            ("common/quit.png", 0.75)
-        ]
-        
+        bless_clicked = False
+        ok_clicked = False
         last_click_time = 0.0
-        consecutive_empty_count = 0
         
         while time.time() - start_time < timeout:
             screen_img = self.machine.capturer.capture(rect)
@@ -209,32 +212,51 @@ class ExploreHandler(BaseStateHandler):
                 time.sleep(0.2)
                 continue
                 
-            matched_any = False
-            for template_name, thresh in subflow_templates:
-                if not os.path.exists(os.path.join("templates", template_name)):
-                    continue
-                pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
+            if not bless_clicked:
+                pos, conf = self.matcher.match(screen_img, "dungeons/choice_bless.png", threshold=0.70)
                 if pos:
-                    logging.info(f"🧭 [子流程] 偵測到按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊。")
+                    logging.info(f"🧭 [子流程] 偵測到選擇祝福按鈕 'dungeons/choice_bless.png'，相似度: {conf:.4f}，進行點擊。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    bless_clicked = True
                     last_click_time = time.time()
-                    matched_any = True
+                    time.sleep(1.0)  # 等待動畫
+                    continue
+            elif not ok_clicked:
+                pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.80)
+                if pos_ok:
+                    logging.info(f"🧭 [子流程] 偵測到 OK 按鈕 'common/ok.png'，相似度: {conf_ok:.4f}，進行點擊。")
+                    self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
+                    ok_clicked = True
+                    last_click_time = time.time()
+                    time.sleep(1.0)
+                    continue
                     
-                    if template_name == "common/quit.png":
-                        logging.info("🧭 [子流程] 已點擊退出按鈕，結束祝福子流程。")
-                        time.sleep(0.3)
-                        return
-                        
-                    time.sleep(0.8)  # 點擊後等待動畫過渡
-                    break
-                    
-            if not matched_any:
-                consecutive_empty_count += 1
-                if consecutive_empty_count >= 3 and (time.time() - last_click_time > 1.5):
-                    logging.info("🧭 [子流程] 畫面已無祝福相關按鈕，提前結束子流程。")
+                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
+                if pos_quit:
+                    logging.info(f"🧭 [子流程] 未看到 OK 但直接偵測到退出按鈕 'common/quit.png'，相似度: {conf_quit:.4f}，進行點擊並退出。")
+                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                    time.sleep(0.3)
                     return
-                time.sleep(0.3)
             else:
-                consecutive_empty_count = 0
-                
+                pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
+                if pos:
+                    logging.info(f"🧭 [子流程] 偵測到退出按鈕 'common/quit.png'，相似度: {conf:.4f}，進行點擊並結束祝福子流程。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    time.sleep(0.3)
+                    return
+                    
+            if time.time() - last_click_time > 2.0:
+                has_any = False
+                for btn, thresh in [("dungeons/choice_bless.png", 0.70), ("common/ok.png", 0.80), ("common/quit.png", 0.75)]:
+                    if os.path.exists(os.path.join("templates", btn)):
+                        pos, _ = self.matcher.match(screen_img, btn, threshold=thresh)
+                        if pos:
+                            has_any = True
+                            break
+                if not has_any:
+                    logging.info("🧭 [子流程] 畫面已無祝福關聯按鈕且無新動作，提前結束子流程。")
+                    return
+                    
+            time.sleep(0.3)
+            
         logging.warning("🧭 [子流程] 領取祝福子流程超時結束。")
