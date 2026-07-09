@@ -49,8 +49,8 @@ class ExploreHandler(BaseStateHandler):
             thresholds = {
                 "dungeons/Get_tresure.png": 0.70,
                 "dungeons/Get_tresure_comfirm.png": 0.70,
-                "common/confirm.png": 0.70,
-                "common/ok.png": 0.70,
+                "common/confirm.png": 0.80,
+                "common/ok.png": 0.80,
                 "dungeons/choose.png": 0.70,
                 "dungeons/choice_bless.png": 0.70,
                 "common/quit.png": 0.75,
