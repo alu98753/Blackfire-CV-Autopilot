@@ -946,9 +946,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 且畫面上同時能匹配到 common/select_stage.png
         # 預期：不點擊 select_stage.png，而是執行 mouse.drag 向左拖曳
         def match_side_effect_drag(img, name, threshold):
-            if name == "stages/level1_sky_plains.png":
-                return ((200, 200), 0.9)
-            elif name == "common/select_stage.png":
+            if name == "common/select_stage_after.png":
                 return ((300, 300), 0.9)
             return (None, 0.0)
             
@@ -972,8 +970,8 @@ class TestStateMachineLogic(unittest.TestCase):
         def match_side_effect_click(img, name, threshold):
             if name == "stages/level4_desert_ruins.png":
                 return ((500, 200), 0.9)
-            elif name == "stages/level1_sky_plains.png":
-                return ((200, 200), 0.9)
+            elif name == "common/select_stage_after.png":
+                return ((300, 300), 0.9)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect_click

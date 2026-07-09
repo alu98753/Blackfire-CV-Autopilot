@@ -442,23 +442,19 @@ class NavigationHandler(BaseStateHandler):
 
         # （已將地下城專屬按鈕的主動判定移至 handle 方法最前頭，作為最高優先權判定）
 
-        # 判斷是否處於關卡選擇介面 (看見任何一個關卡入口小島)
+        # 判斷是否處於關卡選擇介面 (判斷畫面上是否有已點選展開、帶有紅色邊框的 select_stage_after.png)
         stage_select_open = False
-        for lvl in ["stages/level1_sky_plains.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png"]:
-            if os.path.exists(os.path.join("templates", lvl)):
-                # 調降閾值至 0.70，容忍小島按鈕的縮放與抖動，確保精準識別關卡選擇清單開啟
-                pos_lvl, _ = self.matcher.match(screen_img, lvl, threshold=0.70)
-                if pos_lvl:
-                    stage_select_open = True
-                    break
+        if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
+            pos_after, _ = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.80)
+            if pos_after:
+                stage_select_open = True
 
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單
         if self.machine.config.get("type") == "stage" and stage_select_open:
             if len(nav_path) > 3:
                 target_level_btn = nav_path[3]
                 if os.path.exists(os.path.join("templates", target_level_btn)):
-                    lvl_thresh = 0.70 if "level" in target_level_btn else 0.80
-                    pos_target, _ = self.matcher.match(screen_img, target_level_btn, threshold=lvl_thresh)
+                    pos_target, _ = self.matcher.match(screen_img, target_level_btn, threshold=0.80)
                     if pos_target:
                         # 成功找到目標小島，重置缺失計時器與水平滾動計數
                         self.machine.__setattr__(f"missing_time_{target_level_btn}", 0.0)
@@ -531,8 +527,8 @@ class NavigationHandler(BaseStateHandler):
             if in_detail_screen and "level" in btn and "final" not in btn and "entry" not in btn:
                 continue
 
-            # 針對 level/entry/stage_label 類背景特徵圖，調降閾值至 0.70，容忍縮放與像素抖動
-            thresh = 0.70 if ("entry" in btn or "stage_label" in btn or "level" in btn) else 0.80
+            # 針對 entry/stage_label 類背景特徵圖，調降閾值至 0.70，容忍縮放與像素抖動
+            thresh = 0.70 if ("entry" in btn or "stage_label" in btn) else 0.80
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
             if pos:
                 if btn == "stages/stage_label.png":
