@@ -169,12 +169,12 @@ class ScreenCapturer:
         if self.backend_mode and hwnd:
             img = self._capture_backend(hwnd)
             if img is not None:
-                # 診斷：將 BitBlt 擷取結果存檔
-                try:
-                    cv2.imwrite("debug_bitblt.png", img)
-                    logging.info(f"📸 [後台 BitBlt 截圖成功] 尺寸: {img.shape}，已存檔為 debug_bitblt.png")
-                except Exception:
-                    pass
+                # 診斷：將 BitBlt 擷取結果存檔 (已註解)
+                # try:
+                #     cv2.imwrite("debug_bitblt.png", img)
+                #     logging.info(f"📸 [後台 BitBlt 截圖成功] 尺寸: {img.shape}，已存檔為 debug_bitblt.png")
+                # except Exception:
+                #     pass
                 return img
                 
         # 退回前台 / MSS 跨螢幕絕對座標裁剪 (第二防線)
@@ -199,15 +199,12 @@ class ScreenCapturer:
             img = np.array(screenshot)
             img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             
-            # 診斷日誌
-            logging.info(f"[DEBUG] mss 原始截圖 shape: {img_bgr.shape}, dpi_factor: {dpi_factor}, 傳入 rect: {rect}")
-            
-            # 診斷：將 MSS 擷取結果存檔
-            try:
-                cv2.imwrite("debug_mss.png", img_bgr)
-                logging.info(f"📸 [前台 MSS 截圖成功] 邏輯座標: {monitor}，物理尺寸: {img_bgr.shape}，已存檔為 debug_mss.png")
-            except Exception:
-                pass
+            # 診斷：將 MSS 擷取結果存檔 (已註解)
+            # try:
+            #     cv2.imwrite("debug_mss.png", img_bgr)
+            #     logging.info(f"📸 [前台 MSS 截圖成功] 邏輯座標: {monitor}，物理尺寸: {img_bgr.shape}，已存檔為 debug_mss.png")
+            # except Exception:
+            #     pass
                 
             return img_bgr
         except Exception as e:
@@ -225,8 +222,6 @@ class ScreenCapturer:
                     )
                     img_pil = ImageGrab.grab(bbox)
                 img_bgr = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-                
-                logging.info(f"[DEBUG] PIL 原始截圖 shape: {img_bgr.shape}, dpi_factor: {dpi_factor}")
                 return img_bgr
             except Exception as e_pil:
                 logging.error(f"備份方案 PIL ImageGrab 擷取亦失敗: {e_pil}")
