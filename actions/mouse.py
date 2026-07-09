@@ -45,6 +45,28 @@ class MouseController:
         except Exception:
             return 1.0
 
+    def _phys_to_logical(self, hwnd, rect, phys_x, phys_y):
+        """
+        將物理視窗相對座標轉換為 PostMessage lParam 所需的座標。
+        由於本程式已宣告為 Per-Monitor DPI Aware (2)，Windows 的 DPI 虛擬化機制
+        在向 DPI Unaware 的遊戲視窗傳遞 PostMessage 時，會自動將 lParam
+        座標從物理像素除以縮放因子 (如 1.25) 轉換為邏輯像素。
+        因此，我們只需將「物理視窗相對座標」減去「物理邊框/標題列」，轉換成
+        「物理視窗 Client 區域相對座標」直接傳入即可，Windows 會代勞縮放。
+        """
+        try:
+            client_pt = win32gui.ClientToScreen(hwnd, (0, 0))
+            border_left = client_pt[0] - rect[0]
+            border_top = client_pt[1] - rect[1]
+        except Exception:
+            border_left = 0
+            border_top = 0
+            
+        lx = phys_x - border_left
+        ly = phys_y - border_top
+        dpi_factor = self.get_dpi_factor(hwnd)
+        return lx, ly, dpi_factor
+
     def _draw_debug_click(self, hwnd, rx_physical, ry_physical):
         """
         擷取當前畫面並繪製點擊位置紅圈，存檔為 debug_click.png 供調試排查。
@@ -70,6 +92,7 @@ class MouseController:
                     cv2.putText(img, text, (img_x + 20, img_y - 10), font, 0.6, (0, 0, 255), 2)
                     
                     cv2.imwrite("debug_click.png", img)
+                    logging.info(f"🎯 點擊繪製完成：物理相對座標 ({rx_physical}, {ry_physical})，已寫入 debug_click.png")
                 except Exception as e:
                     logging.debug(f"無法寫入 debug_click.png: {e}")
 
@@ -132,8 +155,13 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    # 獲取頂層視窗左上角座標，直接計算相對於視窗左上角(含邊框)的相對座標
-                    rect = win32gui.GetWindowRect(hwnd)
+                    # 優先使用狀態機當前幀快取的正確物理 rect，防範 win32gui.GetWindowRect 在跨 DPI 螢幕時隨機發生的 DPI 虛擬化回退
+                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+                        rect_box = self.state_machine.last_rect
+                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+                    else:
+                        rect = win32gui.GetWindowRect(hwnd)
+                        
                     rx_physical = int(x) - rect[0]
                     ry_physical = int(y) - rect[1]
                     
@@ -142,14 +170,11 @@ class MouseController:
                     rx_offset_phys = rx_physical + dx
                     ry_offset_phys = ry_physical + dy
                     
-                    # 暫緩延伸螢幕 DPI 自適應對齊開發，優先確保大螢幕 (DPI=1.0) 後台點擊無偏置
-                    dpi_factor = 1.0
-                    rx_logical = int(rx_offset_phys / dpi_factor)
-                    ry_logical = int(ry_offset_phys / dpi_factor)
+                    rx_logical, ry_logical, dpi_factor = self._phys_to_logical(hwnd, rect, rx_offset_phys, ry_offset_phys)
                     
                     logging.info(f"[後台點擊] 物理相對: ({rx_offset_phys}, {ry_offset_phys}) -> 邏輯相對: ({rx_logical}, {ry_logical}) [DPI 縮放: {dpi_factor}]")
                     
-                    # 繪製 Debug 紅圈圖檔
+                    # 繪製 Debug 紅圈圖檔，保存為 debug_click.png 與實時畫面 debug_running_screen.png
                     self._draw_debug_click(hwnd, rx_offset_phys, ry_offset_phys)
                     
                     lParam = win32api.MAKELONG(rx_logical, ry_logical)
@@ -224,7 +249,11 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    rect = win32gui.GetWindowRect(hwnd)
+                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+                        rect_box = self.state_machine.last_rect
+                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+                    else:
+                        rect = win32gui.GetWindowRect(hwnd)
                     center_x = rect[0] + (rect[2] - rect[0]) // 2
                     center_y = rect[1] + (rect[3] - rect[1]) // 2
                     
@@ -289,19 +318,20 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    # 獲取頂層視窗左上角座標，直接計算相對於視窗左上角(含邊框)的相對座標
-                    rect = win32gui.GetWindowRect(hwnd)
+                    # 優先使用狀態機當前幀快取的正確物理 rect，防範 win32gui.GetWindowRect 在跨 DPI 螢幕時隨機發生的 DPI 虛擬化回退
+                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+                        rect_box = self.state_machine.last_rect
+                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+                    else:
+                        rect = win32gui.GetWindowRect(hwnd)
+                        
                     rsx_phys = int(start_x) - rect[0]
                     rsy_phys = int(start_y) - rect[1]
                     rex_phys = int(end_x) - rect[0]
                     rey_phys = int(end_y) - rect[1]
                     
-                    # 暫緩延伸螢幕 DPI 自適應對齊開發，優先確保大螢幕 (DPI=1.0) 後台拖曳無偏置
-                    dpi_factor = 1.0
-                    rsx_logical = int(rsx_phys / dpi_factor)
-                    rsy_logical = int(rsy_phys / dpi_factor)
-                    rex_logical = int(rex_phys / dpi_factor)
-                    rey_logical = int(rey_phys / dpi_factor)
+                    rsx_logical, rsy_logical, dpi_factor = self._phys_to_logical(hwnd, rect, rsx_phys, rsy_phys)
+                    rex_logical, rey_logical, _ = self._phys_to_logical(hwnd, rect, rex_phys, rey_phys)
                     
                     logging.info(f"[後台拖曳] 物理相對起點 ({rsx_phys}, {rsy_phys}) -> 邏輯相對起點 ({rsx_logical}, {rsy_logical}) [DPI 縮放: {dpi_factor}]")
                     
@@ -315,8 +345,7 @@ class MouseController:
                     for i in range(1, steps + 1):
                         curr_x_phys = int(rsx_phys + (rex_phys - rsx_phys) * (i / steps))
                         curr_y_phys = int(rsy_phys + (rey_phys - rsy_phys) * (i / steps))
-                        curr_x_logical = int(curr_x_phys / dpi_factor)
-                        curr_y_logical = int(curr_y_phys / dpi_factor)
+                        curr_x_logical, curr_y_logical, _ = self._phys_to_logical(hwnd, rect, curr_x_phys, curr_y_phys)
                         
                         lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
                         win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)

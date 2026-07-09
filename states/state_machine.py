@@ -1,5 +1,6 @@
 import time
 import os
+import cv2
 import logging
 from states.handlers import (
     NavigationHandler,
@@ -115,6 +116,8 @@ class GameStateMachine:
 
         # 2. 取得遊戲視窗邊界與擷取畫面
         rect = self.capturer.get_window_rect()
+        self.last_rect = rect # 快取當前幀最穩定的物理邊界
+        
         if rect is None:
             logging.warning("⚠️ 找不到遊戲視窗，請確認遊戲未縮小且視窗名稱符合設定。")
             time.sleep(0.5)
@@ -125,6 +128,8 @@ class GameStateMachine:
             logging.warning("⚠️ 無法擷取畫面")
             time.sleep(0.2)
             return
+
+
 
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)

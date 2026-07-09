@@ -24,43 +24,41 @@ class BagCleaningHandler(BaseStateHandler):
         backpack_opened = getattr(self.machine, "bag_opened_clicked", False)
         if not backpack_opened:
             # 優先比對「物品欄」三個字，特徵極其獨特，絕對不會誤判到「戰團」
-            if os.path.exists(os.path.join("templates", "common/bag_text.png")):
-                pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.70)
-                if pos_text:
-                    logging.info(f"🎒 背包清理：優先偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
-                    self.mouse.click(rect["left"] + pos_text[0], rect["top"] + pos_text[1] - 45)
+            pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.70)
+            if pos_text:
+                logging.info(f"🎒 背包清理：優先偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
+                self.mouse.click(rect["left"] + pos_text[0], rect["top"] + pos_text[1] - 45)
+                self.machine.bag_opened_clicked = True
+                time.sleep(0.1)
+                return
+            
+            # 備用方案：使用較低閥值 0.72 且配合色彩通道驗證，防止誤點「戰團」
+            pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.72)
+            if pos_bag:
+                h_limit, w_limit = screen_img.shape[:2]
+                # 色彩驗證：物品欄中心為棕色 (R - B 應顯著大於 18)，而戰團為灰色 (R - B 接近 0)
+                crop_x1 = max(0, pos_bag[0] - 5)
+                crop_x2 = min(w_limit, pos_bag[0] + 5)
+                crop_y1 = max(0, pos_bag[1] - 5)
+                crop_y2 = min(h_limit, pos_bag[1] + 5)
+                
+                center_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
+                is_real_game = np.max(center_crop) > 0
+                
+                if is_real_game:
+                    mean_bgr = np.mean(center_crop, axis=(0,1))
+                    r_minus_b = mean_bgr[2] - mean_bgr[0]
+                else:
+                    r_minus_b = 99.0
+                
+                if r_minus_b > 18.0:
+                    logging.info(f"🎒 背包清理：優先使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
+                    self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                     self.machine.bag_opened_clicked = True
                     time.sleep(0.1)
                     return
-            
-            # 備用方案：使用較低閥值 0.72 且配合色彩通道驗證，防止誤點「戰團」
-            if os.path.exists(os.path.join("templates", "common/bag.png")):
-                pos_bag, conf_bag = self.matcher.match(screen_img, "common/bag.png", threshold=0.72)
-                if pos_bag:
-                    h_limit, w_limit = screen_img.shape[:2]
-                    # 色彩驗證：物品欄中心為棕色 (R - B 應顯著大於 18)，而戰團為灰色 (R - B 接近 0)
-                    crop_x1 = max(0, pos_bag[0] - 5)
-                    crop_x2 = min(w_limit, pos_bag[0] + 5)
-                    crop_y1 = max(0, pos_bag[1] - 5)
-                    crop_y2 = min(h_limit, pos_bag[1] + 5)
-                    
-                    center_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
-                    is_real_game = np.max(center_crop) > 0
-                    
-                    if is_real_game:
-                        mean_bgr = np.mean(center_crop, axis=(0,1))
-                        r_minus_b = mean_bgr[2] - mean_bgr[0]
-                    else:
-                        r_minus_b = 99.0
-                    
-                    if r_minus_b > 18.0:
-                        logging.info(f"🎒 背包清理：優先使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
-                        self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
-                        self.machine.bag_opened_clicked = True
-                        time.sleep(0.1)
-                        return
-                    else:
-                        logging.warning(f"🎒 背包清理：⚠️ 備用模板偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
+                else:
+                    logging.warning(f"🎒 背包清理：⚠️ 備用模板偵測到疑似背包入口但色彩不符 (R-B: {r_minus_b:.2f} <= 18)，判斷為「戰團」，已忽略。")
 
             # 如果入口均未偵測到，才防禦性檢查是否其實已經處於背包介面 (這才需要比對那 5 個內部特徵)
             for feature in backpack_features:
