@@ -1062,13 +1062,13 @@ class TestStateMachineLogic(unittest.TestCase):
         import numpy as np
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
-        # 左側溢出區 Row 0, Col 0: cx = 77, cy = 190, cell_size = 108
+        # 左側溢出區 Row 0, Col 0: cx = 77, cy = 190, cell_size = 134
         # 模擬紫色 (std > 40)
-        screen[190:298, 77:185] = [200, 0, 200]  # 紫色背景
+        screen[190:324, 77:211] = [200, 0, 200]  # 紫色背景
         
-        # 右側背包 Row 0, Col 0: cx = 677, cy = 190, cell_size = 108
+        # 右側背包 Row 0, Col 0: cx = 677, cy = 190, cell_size = 134
         # 模擬藍色 (std > 18)
-        screen[190:298, 677:785] = [200, 100, 0]  # 藍色背景
+        screen[190:324, 677:811] = [200, 100, 0]  # 藍色背景
         
         self.mock_capturer.capture.return_value = screen
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -1088,15 +1088,15 @@ class TestStateMachineLogic(unittest.TestCase):
             self.state_machine.step()
             
         # 驗證執行了以下步驟：
-        # 1. 點擊右側藍色裝備進行銷毀 (中心在 677 + 54 = 731, 190 + 54 = 244)
+        # 1. 點擊右側藍色裝備進行銷毀 (中心在 677 + 67 = 744, 190 + 67 = 257)
         # 2. 點擊銷毀按鈕 (700, 700)
         # 3. 點擊確認銷毀 (800, 800)
-        # 4. 點擊左側紫色貴重裝備彈出詳情 (中心在 77 + 54 = 131, 190 + 54 = 244)
+        # 4. 點擊左側紫色貴重裝備彈出詳情 (中心在 77 + 67 = 144, 190 + 67 = 257)
         # 5. 點擊領取按鈕 (900, 900)
-        self.mock_mouse.click.assert_any_call(731, 244)
+        self.mock_mouse.click.assert_any_call(744, 257)
         self.mock_mouse.click.assert_any_call(700, 700)
         self.mock_mouse.click.assert_any_call(800, 800)
-        self.mock_mouse.click.assert_any_call(131, 244)
+        self.mock_mouse.click.assert_any_call(144, 257)
         self.mock_mouse.click.assert_any_call(900, 900)
 
     @patch('states.state_machine.os.path.exists')

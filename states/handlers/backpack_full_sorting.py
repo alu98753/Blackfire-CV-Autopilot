@@ -51,7 +51,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         # B. 定義網格座標參數 (相對於截圖)
         left_x0, left_y0 = 77, 190
         right_x0, right_y0 = 677, 190
-        cell_size = 108
+        cell_size = 134
         step = 134
 
 
