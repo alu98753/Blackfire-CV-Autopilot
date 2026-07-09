@@ -103,10 +103,11 @@ class ExploreHandler(BaseStateHandler):
                     time.sleep(0.03)
 
                 elif btn_name == "dungeons/Treasure.png":
-                    logging.info(f"👉 偵測到寶箱地圖格 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層寶箱已開。")
+                    logging.info(f"👉 偵測到寶箱地圖格 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「開啟寶箱」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.chest_opened_this_floor = True
-                    time.sleep(0.01)
+                    time.sleep(0.5)  # 等待寶箱開啟動畫開始
+                    self._run_treasure_subflow(rect)
                     
                 elif btn_name == "dungeons/skill_event.png":
                     logging.info(f"👉 偵測到技能事件圖示 [{btn_name}]，信心度: {conf:.4f}，點擊並標記本層技能已選。")
@@ -142,3 +143,58 @@ class ExploreHandler(BaseStateHandler):
                 return # 成功處理一個優先級最高的事項後即結束該步，等待下一次截圖
                 
         logging.info("⌛ 地下城探索中，正在等待下一層載入或新的隨機事件按鈕出現...")
+
+    def _run_treasure_subflow(self, rect):
+        logging.info("📦 [子流程] 開始執行「開啟寶箱」子流程...")
+        start_time = time.time()
+        timeout = 10.0  # 最多執行 10 秒
+        
+        # 定義子流程中專屬的匹配優先順序 (只比對這三個，不匹配主流程物件)
+        subflow_templates = [
+            ("dungeons/Get_tresure.png", 0.70),
+            ("dungeons/Get_tresure_comfirm.png", 0.70),
+            ("common/quit.png", 0.75)
+        ]
+        
+        last_click_time = 0.0
+        consecutive_empty_count = 0
+        
+        while time.time() - start_time < timeout:
+            # 獲取最新畫面
+            screen_img = self.machine.capturer.capture(rect)
+            if screen_img is None:
+                time.sleep(0.2)
+                continue
+                
+            matched_any = False
+            # 依序匹配子流程按鈕
+            for template_name, thresh in subflow_templates:
+                if not os.path.exists(os.path.join("templates", template_name)):
+                    continue
+                pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
+                if pos:
+                    logging.info(f"📦 [子流程] 偵測到按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    last_click_time = time.time()
+                    matched_any = True
+                    
+                    # 如果點擊了退出按鈕，說明子流程已完成，延遲一下即可退出子流程
+                    if template_name == "common/quit.png":
+                        logging.info("📦 [子流程] 已點擊退出按鈕，結束寶箱子流程。")
+                        time.sleep(0.3)
+                        return
+                    
+                    time.sleep(0.8)  # 點擊後等待動畫過渡
+                    break  # 點擊了該幀匹配最高的按鈕，重新截圖比對
+                    
+            if not matched_any:
+                # 如果連續 3 幀都沒匹配到任何子流程按鈕，且距離上次點擊已過 1.5 秒，說明視窗已關閉，可以提前結束
+                consecutive_empty_count += 1
+                if consecutive_empty_count >= 3 and (time.time() - last_click_time > 1.5):
+                    logging.info("📦 [子流程] 畫面已無寶箱相關按鈕，提前結束子流程。")
+                    return
+                time.sleep(0.3)
+            else:
+                consecutive_empty_count = 0
+                
+        logging.warning("📦 [子流程] 開啟寶箱子流程超時結束。")
