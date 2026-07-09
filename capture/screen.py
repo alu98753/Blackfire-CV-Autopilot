@@ -6,6 +6,9 @@ import win32gui
 import win32api
 import win32con
 import win32ui
+import ctypes
+import subprocess
+import sys
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -13,7 +16,7 @@ class ScreenCapturer:
     def __init__(self, window_title="Blackfire Crusade", backend_mode=False):
         self.window_title = window_title
         self.backend_mode = backend_mode
-        self.sct = mss.mss()
+        self.sct = mss.MSS()
         self._hwnd = None
 
     def get_hwnd(self):
@@ -89,8 +92,6 @@ class ScreenCapturer:
                 
         log_rect = None
         try:
-            import subprocess
-            import sys
             cmd = [
                 sys.executable,
                 "-c",

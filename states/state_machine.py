@@ -170,9 +170,10 @@ class GameStateMachine:
                 # 計算「領取獎勵」按鈕的相對位置並點擊
                 btn_x = rect["left"] + pos[0]
                 btn_y = rect["top"] + pos[1] + 281
-                logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，點擊「領取獎勵」按鈕座標: ({btn_x}, {btn_y})。")
+                logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程。")
                 self.mouse.click(btn_x, btn_y)
-                time.sleep(0.1)
+                time.sleep(0.5)  # 等待動畫
+                self._run_task_complete_subflow(rect)
                 return
 
         # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
@@ -335,4 +336,35 @@ class GameStateMachine:
                 self.need_bread_collection = True
                 self.bread_collected_this_run = False
                 self.bread_click_attempted = False
+
+    def _run_task_complete_subflow(self, rect):
+        logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")
+        start_time = time.time()
+        timeout = 5.0  # 最多執行 5 秒
+        
+        # 專屬匹配確認按鈕
+        subflow_templates = [
+            ("common/confirm.png", 0.80),
+            ("common/ok.png", 0.80)
+        ]
+        
+        while time.time() - start_time < timeout:
+            screen_img = self.capturer.capture(rect)
+            if screen_img is None:
+                time.sleep(0.2)
+                continue
+                
+            for template_name, thresh in subflow_templates:
+                if not os.path.exists(os.path.join("templates", template_name)):
+                    continue
+                pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
+                if pos:
+                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊並結束子流程。")
+                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    time.sleep(0.3)
+                    return
+                    
+            time.sleep(0.3)
+            
+        logging.warning("🎉 [子流程] 「領取任務獎勵」確認子流程超時結束。")
 
