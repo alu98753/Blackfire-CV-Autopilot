@@ -49,7 +49,7 @@ class TemplateMatcher:
         self._cached_templates[template_name] = template_img
         return template_img
 
-    def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0):
+    def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0, quiet=False):
         """
         在 screen_img 中尋找與 template_name 匹配度最高的位置。
         
@@ -142,7 +142,8 @@ class TemplateMatcher:
         center_x = final_x + temp_w // 2
         center_y = final_y + temp_h // 2
 
-        logging.info(f"成功匹配模板 '{template_name}'！相似度: {final_conf:.4f}，相對亮度比: {final_ratio:.2f}，座標: ({center_x}, {center_y})")
+        if not quiet:
+            logging.info(f"成功匹配模板 '{template_name}'！相似度: {final_conf:.4f}，相對亮度比: {final_ratio:.2f}，座標: ({center_x}, {center_y})")
         return (center_x, center_y), final_conf
 
 if __name__ == "__main__":

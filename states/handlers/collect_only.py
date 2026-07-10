@@ -16,13 +16,13 @@ class CollectOnlyHandler(BaseStateHandler):
         is_town = False
         is_lobby = False
         
-        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
-        pos_diamond, _ = self.matcher.match(screen_img, "diamond.png", threshold=0.8)
+        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.8, quiet=True)
+        pos_diamond, _ = self.matcher.match(screen_img, "diamond.png", threshold=0.8, quiet=True)
         if pos_door or pos_diamond:
             is_town = True
             
-        pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
-        pos_bread_btn, _ = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
+        pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8, quiet=True)
+        pos_bread_btn, _ = self.matcher.match(screen_img, "common/bread.png", threshold=0.8, quiet=True)
         if pos_goback or pos_bread_btn:
             is_lobby = True
 
@@ -65,6 +65,12 @@ class CollectOnlyHandler(BaseStateHandler):
                 return
 
         # 4. 如果不需要任何領取，執行待機/返回邏輯
+        now = time.time()
+        last_log = getattr(self, "last_log_time", 0.0)
+        should_log = (now - last_log >= 60.0)  # 每 60 秒印一次 log，不刷屏
+        if should_log:
+            self.last_log_time = now
+
         if is_lobby:
             if pos_goback:
                 logging.info("🧭 定時領取：目前在大廳且無領取任務，點擊 [goback_town.png] 返回城鎮...")
@@ -72,10 +78,12 @@ class CollectOnlyHandler(BaseStateHandler):
                 time.sleep(1.0)
                 return
         elif is_town:
-            logging.info("⌛ 定時領取：已在城鎮主畫面，且無領取任務，原地等待中...")
+            if should_log:
+                logging.info("⌛ 定時領取：已在城鎮主畫面，且無領取任務，原地等待中...")
             time.sleep(1.0)
             return
         else:
-            logging.warning("⚠️ 定時領取：未處於大廳或城鎮，嘗試原地等待重新偵測...")
+            if should_log:
+                logging.warning("⚠️ 定時領取：未處於大廳或城鎮，嘗試原地等待重新偵測...")
             time.sleep(1.0)
             return

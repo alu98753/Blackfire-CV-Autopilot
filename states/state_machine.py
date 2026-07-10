@@ -154,7 +154,7 @@ class GameStateMachine:
 
         # A. 卡死監控 (stuck monitoring)
         # 只有在非戰鬥、非探索、非未知的過渡狀態下，如果同一個狀態持續了太多幀，說明流程可能卡住了
-        if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN]:
+        if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN, self.STATE_COLLECT_ONLY]:
             self.consecutive_stuck_count += 1
             
             if self.consecutive_stuck_count >= 15:
