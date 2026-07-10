@@ -77,6 +77,7 @@ class GameStateMachine:
         # 地下城冷卻與貪婪選關相關屬性
         self.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
         self.current_dungeon_index = 0
+        self.fallback_swipe_count = 0
         
         # 使用者手動介入偵測相關屬性
         self.user_operating = False

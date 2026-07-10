@@ -1505,7 +1505,7 @@ class TestBehavioralScenarios(unittest.TestCase):
              patch('cv2.matchTemplate', side_effect=mock_matchTemplate_a):
             self.mock_mouse.drag.reset_mock()
             self.state_machine.step()
-            self.mock_mouse.drag.assert_called_once_with(900, 500, 300, 500)
+            self.mock_mouse.drag.assert_called_once_with(900, 500, 300, 500, duration=0.8, inertia=False)
             
         # 案例 B：目標是 Slime_entry (index 0)，畫面上只有 Ruins_entry (index 3) 於 X=100
         # 預期：目標 index (0) 小於當前可見 index (3)，代表目標在左側 ➔ 向右滑動 drag(300, 500, 900, 500)
@@ -1522,7 +1522,72 @@ class TestBehavioralScenarios(unittest.TestCase):
              patch('cv2.matchTemplate', side_effect=mock_matchTemplate_b):
             self.mock_mouse.drag.reset_mock()
             self.state_machine.step()
+            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500, duration=0.8, inertia=False)
+
+    @patch('os.path.exists')
+    def test_dungeon_selection_fallback_swipe(self, mock_exists):
+        """
+        [行為場景 29] 地下城選關頁面無任何解鎖卡片時的防呆拉回機制：
+        - 畫面上無已解鎖卡片 (Slime, Ghost, Forest, Ruins 相似度均低)，
+        - 但偵測到鎖定卡片 locked_entry.png 相似度高 (>= 0.75) ➔ 判定為選關頁面。
+        - 執行向右滑動拉回 (drag 0.2 -> 0.8)，連續計數遞增。
+        - 連續計數達到 3 次時，停止滑動，原地等待。
+        """
+        mock_exists.return_value = True
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine.config = {
+            "type": "dungeon",
+            "greedy_dungeon": True
+        }
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.fallback_swipe_count = 0
+        
+        # Mock 視窗大小為 1000x800
+        self.mock_capturer.get_window_rect.return_value = {
+            "left": 100, "top": 100, "width": 1000, "height": 800
+        }
+        
+        img = np.zeros((800, 1000, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = img
+        
+        # mock cv2.matchTemplate 使得前 4 次 (Slime, Ghost, Forest, Ruins) 均返回 0.0,
+        # 第 5 次 (locked_entry) 返回 0.95 (匹配成功)
+        call_count = 0
+        def mock_matchTemplate(img_arg, templ, method):
+            nonlocal call_count
+            val = 0.95 if call_count == 4 else 0.0
+            call_count += 1
+            return np.array([[val]], dtype=np.float32)
+            
+        with patch('cv2.imread', return_value=np.zeros((10, 10, 3), dtype=np.uint8)), \
+             patch('cv2.matchTemplate', side_effect=mock_matchTemplate):
+             
+            # 第一次防呆滑動：預期 drag(300, 500, 900, 500)
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
             self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500)
+            self.assertEqual(self.state_machine.fallback_swipe_count, 1)
+            
+            # 第二次防呆滑動
+            call_count = 0
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
+            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500)
+            self.assertEqual(self.state_machine.fallback_swipe_count, 2)
+            
+            # 第三次防呆滑動
+            call_count = 0
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
+            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500)
+            self.assertEqual(self.state_machine.fallback_swipe_count, 3)
+            
+            # 第四次：已達到上限 3，預期不執行滑動
+            call_count = 0
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
+            self.mock_mouse.drag.assert_not_called()
+            self.assertEqual(self.state_machine.fallback_swipe_count, 3)
 
 if __name__ == "__main__":
     unittest.main()

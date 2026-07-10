@@ -153,6 +153,7 @@ class NavigationHandler(BaseStateHandler):
                 "dungeons/Forest_entry.png",
                 "dungeons/Ruins_entry.png"
             ]
+            temp_confidences = {}
             
             for idx, temp_name in enumerate(entry_templates):
                 if os.path.exists(os.path.join("templates", temp_name)):
@@ -163,12 +164,50 @@ class NavigationHandler(BaseStateHandler):
                         resized_t = cv2.resize(t_img, (t_w, t_h))
                         res = cv2.matchTemplate(screen_img, resized_t, cv2.TM_CCOEFF_NORMED)
                         _, max_val, _, max_loc = cv2.minMaxLoc(res)
+                        temp_confidences[dungeon_names[idx]] = max_val
                         if max_val >= 0.75:
                             visible_dungeons[idx] = max_loc
                             is_dungeon_page = True
-                            
+            
+            # 另外偵測鎖定狀態的卡片 locked_entry
+            if os.path.exists(os.path.join("templates", "common/locked_entry.png")):
+                l_img = cv2.imread(os.path.join("templates", "common/locked_entry.png"))
+                if l_img is not None:
+                    l_w = int(238.0 * scale)
+                    l_h = int(41.0 * scale)
+                    resized_l = cv2.resize(l_img, (l_w, l_h))
+                    res_l = cv2.matchTemplate(screen_img, resized_l, cv2.TM_CCOEFF_NORMED)
+                    _, max_val_l, _, _ = cv2.minMaxLoc(res_l)
+                    temp_confidences["LockedEntry"] = max_val_l
+                    if max_val_l >= 0.75:
+                        is_dungeon_page = True
+
+            if not is_dungeon_page:
+                # 僅在真的被判定為非選關介面時印出信心度以供除錯
+                conf_str = ", ".join([f"{k}: {v:.4f}" for k, v in temp_confidences.items()])
+                logging.info(f"🔍 [除錯] 未偵測到地下城選關介面 (is_dungeon_page=False)。各模板信心度: {conf_str}")
+
             if is_dungeon_page:
                 logging.info("🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。")
+                
+                if not visible_dungeons:
+                    fallback_count = getattr(self.machine, "fallback_swipe_count", 0)
+                    if fallback_count < 3:
+                        logging.info("🧭 貪婪地下城：未見任何解鎖的卡片，執行防呆向右滑動拉回左側關卡...")
+                        start_x = rect["left"] + int(rect["width"] * 0.2)
+                        end_x = rect["left"] + int(rect["width"] * 0.8)
+                        y_pos = rect["top"] + int(rect["height"] * 0.5)
+                        self.mouse.drag(start_x, y_pos, end_x, y_pos)
+                        self.machine.fallback_swipe_count = fallback_count + 1
+                        time.sleep(1.2)
+                    else:
+                        logging.warning("⚠️ 警告：已執行防呆拉回滑動但仍未發現解鎖卡片，判定目前無可打關卡，原地等待中...")
+                        time.sleep(1.0)
+                    return
+                
+                # 有找到解鎖卡片，重置防呆滑動計數
+                self.machine.fallback_swipe_count = 0
+                
                 target_idx = None
                 is_greedy = self.machine.config.get("greedy_dungeon", False)
                 
