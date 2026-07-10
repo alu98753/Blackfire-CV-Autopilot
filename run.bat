@@ -24,9 +24,10 @@ echo 【常用執行模式說明】
 echo  1. 史萊姆地下城 (後台推薦):  --backend --mode dungeon_slime
 echo  2. 普通關卡刷關 (後台推薦):  --backend --mode stage
 echo  3. 單次清理背包 (後台推薦):  --backend --mode bag_clean
+echo  4. 定時領體力與鑽石 (後台):  --backend --mode collect_only
 echo ------------------------------------------------------------
 echo 【參數選項說明】
-echo  --mode [模式名]  : 設定掛機模式 (dungeon_slime / stage / bag_clean)
+echo  --mode [模式名]  : 設定掛機模式 (dungeon_slime / stage / bag_clean / collect_only)
 echo  --backend        : 啟用後台模式 (滑鼠可移走，不搶滑鼠)
 echo  --interval [秒]  : 設定畫面偵測間隔 (預設: 0.05)
 echo ============================================================

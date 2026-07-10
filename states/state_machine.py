@@ -358,15 +358,17 @@ class GameStateMachine:
         if self.config is not None and self.config["type"] == "bag_clean":
             return  # 背包整理模式不參與領取
 
-        # 1. 檢查鑽石 CD (2小時 = 7200秒)
-        if time.time() - self.last_diamond_collection_time > 7200.0:
+        # 1. 檢查鑽石 CD
+        diamond_cd = self.config.get("diamond_cd", 7200.0) if self.config else 7200.0
+        if time.time() - self.last_diamond_collection_time > diamond_cd:
             if not self.need_diamond_collection:
-                logging.info("⏰ 距離上次領鑽石已滿 2 小時，觸發自動領鑽石。")
+                logging.info(f"⏰ 距離上次領鑽石已滿 {int(diamond_cd // 60)} 分鐘，觸發自動領鑽石。")
                 self.need_diamond_collection = True
                 self.diamond_collected_this_run = False
 
-        # 2. 檢查體力 CD (30分鐘 = 1800秒)
-        bread_cd = 7200.0 if self.config.get("type") == "collect_only" else 1800.0
+        # 2. 檢查體力 CD
+        default_bread_cd = 7200.0 if self.config.get("type") == "collect_only" else 1800.0
+        bread_cd = self.config.get("bread_cd", default_bread_cd) if self.config else default_bread_cd
         if self.enable_bread and (time.time() - self.last_bread_collection_time > bread_cd):
             if not self.need_bread_collection:
                 logging.info(f"⏰ 距離上次領體力已滿 {int(bread_cd // 60)} 分鐘，觸發自動領體力。")
