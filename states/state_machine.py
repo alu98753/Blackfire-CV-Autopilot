@@ -9,7 +9,9 @@ from states.handlers import (
     ResultHandler,
     ExploreHandler,
     BagCleaningHandler,
-    BackpackFullSortingHandler
+    BackpackFullSortingHandler,
+    BreadCollectionHandler,
+    DiamondCollectionHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -24,6 +26,8 @@ class GameStateMachine:
     STATE_DUNGEON_EXPLORING = "EXPLORING"    # [地下城專屬] 地下城探索中，處理隨機事件與前進下一層
     STATE_BAG_CLEANING = "BAG_CLEANING"      # 背包滿了時，自動打開背包進行分解與整理
     STATE_BACKPACK_FULL_SORTING = "BACKPACK_FULL_SORTING" # 背包滿時自適應裝備分選與銷毀
+    STATE_BREAD_COLLECTION = "BREAD_COLLECTION"          # 自動領體力流程
+    STATE_DIAMOND_COLLECTION = "DIAMOND_COLLECTION"      # 自動領鑽石流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -47,11 +51,13 @@ class GameStateMachine:
         self.last_bread_collection_time = 0.0
         self.bread_collected_this_run = False
         self.bread_click_attempted = False
+        self.bread_window_opened = False
         
         # 領鑽石相關屬性
         self.need_diamond_collection = False  # 啟動時預設不設定領取，需大門觸發
         self.last_diamond_collection_time = 0.0
         self.diamond_collected_this_run = False
+        self.diamond_window_opened = False
         
         # 背包清理相關屬性
         self.need_bag_cleaning = False
@@ -65,6 +71,7 @@ class GameStateMachine:
         self.skill_selected_this_floor = False
         self.bless_received_this_floor = False
         self.last_godown_click_time = None
+        self.dungeon_floor_transitioning = False
         self.consecutive_stuck_count = 0
         
         # 地下城冷卻與貪婪選關相關屬性
@@ -88,6 +95,8 @@ class GameStateMachine:
             self.STATE_DUNGEON_EXPLORING: ExploreHandler(self),
             self.STATE_BAG_CLEANING: BagCleaningHandler(self),
             self.STATE_BACKPACK_FULL_SORTING: BackpackFullSortingHandler(self),
+            self.STATE_BREAD_COLLECTION: BreadCollectionHandler(self),
+            self.STATE_DIAMOND_COLLECTION: DiamondCollectionHandler(self),
         }
 
 
@@ -210,6 +219,15 @@ class GameStateMachine:
         """
         全域掃描定位當前狀態。
         """
+        # 每秒最多存檔一次除錯畫面，避免過度佔用硬碟 I/O
+        import numpy as np
+        now = time.time()
+        if now - getattr(self, "last_detect_save_time", 0.0) > 1.0:
+            self.last_detect_save_time = now
+            if isinstance(screen_img, np.ndarray):
+                cv2.imwrite("debug_detect.png", screen_img)
+                logging.info("📸 [除錯] 已儲存當前全域辨識畫面至專案根目錄下的 debug_detect.png")
+
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
         # 0.0 如果看見「無法容納的物品 (背包滿)」彈窗，進入分選狀態
@@ -236,6 +254,7 @@ class GameStateMachine:
                         return
 
         # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
+        # logging.info(f"🔍 [除錯] 領取旗標狀態：need_diamond={self.need_diamond_collection}, enable_bread={self.enable_bread}, need_bread={self.need_bread_collection}")
         if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
             nav_buttons = [
                 "common/door.png", "goback_town.png", "diamond.png", "free.png",
@@ -270,8 +289,9 @@ class GameStateMachine:
                 
         # 3. 檢查是否在大廳的尋路路徑上
         for btn in self.config.get("navigation_path", []):
-            pos, _ = self.matcher.match(screen_img, btn, threshold=0.8)
-            if pos:
+            pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
+            logging.info(f"🔍 [除錯] 比對尋路按鈕 '{btn}'，最高相似度: {conf:.4f}，座標: {pos}")
+            if pos and conf >= 0.8:
                 self.transition_to(self.STATE_NAVIGATING)
                 return
                 

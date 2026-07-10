@@ -125,6 +125,23 @@ class ScreenCapturer:
             if width <= 0 or height <= 0:
                 return None
 
+            # 輸出視窗與虛擬桌面座標資訊以供診斷
+            v_left = win32api.GetSystemMetrics(win32con.SM_XVIRTUALSCREEN)
+            v_top = win32api.GetSystemMetrics(win32con.SM_YVIRTUALSCREEN)
+            v_w = win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN)
+            v_h = win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN)
+            v_right = v_left + v_w
+            v_bottom = v_top + v_h
+            
+            logging.debug(f"📸 [後台截圖] 視窗座標: (left={left}, top={top}, right={right}, bottom={bottom})，尺寸: {width}x{height}")
+            # 檢查是否有部分視窗超出整個虛擬桌面邊界，只輸出一次警告以防洗版
+            if left < v_left or top < v_top or right > v_right or bottom > v_bottom:
+                if not getattr(self, "_boundary_warning_logged", False):
+                    logging.warning(f"⚠️ [後台截圖警報] 視窗有部分超出螢幕邊界！(桌面總範圍: {v_left},{v_top} ~ {v_right},{v_bottom})。超出邊界的部分在後台 GDI 截圖中會變成純黑色塊！請將視窗拖回螢幕內。")
+                    self._boundary_warning_logged = True
+            else:
+                self._boundary_warning_logged = False
+
             # 取得視窗設備上下文
             hwndDC = win32gui.GetWindowDC(hwnd)
             mfcDC = win32ui.CreateDCFromHandle(hwndDC)
@@ -141,17 +158,36 @@ class ScreenCapturer:
             bmpinfo = saveBitMap.GetInfo()
             bmpstr = saveBitMap.GetBitmapBits(True)
             img = np.frombuffer(bmpstr, dtype=np.uint8).reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
+            img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             
+            # 檢查是否為大面積黑畫面 (如 > 50% 黑色)，防範 3D/硬體加速渲染在後台時截出黑底
+            black_pixels = np.sum((img_bgr[:, :, 0] == 0) & (img_bgr[:, :, 1] == 0) & (img_bgr[:, :, 2] == 0))
+            total_pixels = img_bgr.shape[0] * img_bgr.shape[1]
+            
+            if (black_pixels / total_pixels) > 0.50:
+                logging.debug(f"⚠️ 偵測到後台 BitBlt 截圖呈現大面積黑畫面 ({black_pixels/total_pixels*100:.1f}%)，嘗試使用 PrintWindow (PW_RENDERFULLCONTENT=2) 作為後備後台截圖方案...")
+                try:
+                    # PW_RENDERFULLCONTENT = 2
+                    res = ctypes.windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 2)
+                    if res:
+                        bmpstr_pw = saveBitMap.GetBitmapBits(True)
+                        img_pw = np.frombuffer(bmpstr_pw, dtype=np.uint8).reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
+                        img_bgr_pw = cv2.cvtColor(img_pw, cv2.COLOR_BGRA2BGR)
+                        
+                        black_pixels_pw = np.sum((img_bgr_pw[:, :, 0] == 0) & (img_bgr_pw[:, :, 1] == 0) & (img_bgr_pw[:, :, 2] == 0))
+                        if (black_pixels_pw / total_pixels) < 0.50:
+                            logging.debug("✨ PrintWindow 備份後台截圖成功！")
+                            img_bgr = img_bgr_pw
+                except Exception as e_pw:
+                    logging.debug(f"PrintWindow 備份方案執行失敗: {e_pw}")
+
             # 釋放所有 GDI 資源
             win32gui.DeleteObject(saveBitMap.GetHandle())
             saveDC.DeleteDC()
             mfcDC.DeleteDC()
             win32gui.ReleaseDC(hwnd, hwndDC)
             
-            # 去除 Alpha Channel 轉為 BGR
-            img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-            
-            # 檢查截圖有效性 (防範某些 3D/硬體加速渲染在後台時截出全黑畫面)
+            # 再次檢查最終截圖有效性 (若連 PrintWindow 都回傳全黑，回傳 None 以便退回前台截圖)
             if np.all(img_bgr == 0):
                 return None
                 

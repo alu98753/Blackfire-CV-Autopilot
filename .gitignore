@@ -19,6 +19,12 @@ Thumbs.db
 !templates/**/*.png
 !templates/*.png
 
+# Allow images in documentation stories
+!docs/storys/**/*.png
+!docs/storys/**/*.jpg
+!docs/storys/**/*.jpeg
+!docs/storys/**/*.gif
+
 
 # Test coverage outputs
 .coverage

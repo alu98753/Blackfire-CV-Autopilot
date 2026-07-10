@@ -89,12 +89,17 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(350, 350)
         
-        # - 看到 quit_bread.png ➔ 點擊退出，結束領取體力流程
+        # - 看到 quit_bread.png ➔ 點擊退出，第一步應點擊但尚未重置
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((400, 400), 0.9) if name == "common/quit.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(400, 400)
+        self.assertTrue(self.state_machine.need_bread_collection)
+        
+        # - 模擬退出按鈕消失，第二步完成重置與退出
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
         self.assertFalse(self.state_machine.need_bread_collection)
         
         # 3. 領完體力後，NAVIGATING 尋路結束，看到大廳的 stages/start.png ➔ 應轉移至 LOBBY
@@ -642,12 +647,17 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(400, 400)
         self.assertTrue(self.state_machine.diamond_collected_this_run)
         
-        # 6. 看到退出按鈕 ➔ 關閉鑽石，重置 need_diamond_collection 為 False，開始體力流程
+        # 6. 看到退出按鈕 ➔ 關閉鑽石，第一步點擊退出但尚未重置
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((500, 500), 0.9) if name == "common/quit.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertTrue(self.state_machine.need_diamond_collection)
+        
+        # - 模擬退出按鈕消失，第二步完成重置與退出
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
         self.assertFalse(self.state_machine.need_diamond_collection)
         self.assertFalse(self.state_machine.diamond_collected_this_run)
         
@@ -671,6 +681,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.enable_bread = False
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_collected_this_run = False
+        self.state_machine.diamond_window_opened = True
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
         mock_exists.return_value = True
@@ -688,8 +699,13 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_matcher.match.side_effect = match_side_effect
         self.state_machine.step()
         
-        # 斷言：應點擊退出按鈕，且 need_diamond_collection 重設為 False
+        # 斷言：第一步應點擊退出按鈕，但尚未重置
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertTrue(self.state_machine.need_diamond_collection)
+        
+        # 模擬退出按鈕消失，第二步完成重置
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
         self.assertFalse(self.state_machine.need_diamond_collection)
 
     @patch('os.path.exists')
@@ -839,12 +855,13 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         
         # 3. 在 NAVIGATING 狀態下：
-        # - 因為 need_bread_collection 為 True，看到 goback_town.png ➔ 應點擊退回城鎮
+        # - 因為 need_bread_collection 為 True，在大廳看到 common/bread.png ➔ 應點擊打開體力視窗並跳轉至 BREAD_COLLECTION
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name == "goback_town.png" else (None, 0.0)
+            ((300, 300), 0.9) if name == "common/bread.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(300, 300)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BREAD_COLLECTION)
 
     @patch('os.path.exists')
     def test_greedy_dungeon_on_screen_cooldown_detection(self, mock_exists):

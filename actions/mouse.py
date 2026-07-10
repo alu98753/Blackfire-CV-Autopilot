@@ -178,6 +178,9 @@ class MouseController:
                     self._draw_debug_click(hwnd, rx_offset_phys, ry_offset_phys)
                     
                     lParam = win32api.MAKELONG(rx_logical, ry_logical)
+                    # 先發送滑鼠移動消息以在後台觸發按鈕的 Hover (懸停) 狀態，確保點擊穩定性
+                    win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lParam)
+                    time.sleep(0.01) # 微小延遲供遊戲引擎反應
                     win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lParam)
                     time.sleep(0.04) # 模擬按下的物理延遲
                     win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lParam)

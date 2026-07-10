@@ -115,12 +115,17 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(400, 400)
         self.assertTrue(self.state_machine.diamond_collected_this_run)
         
-        # Step 6: 點擊退出按鈕，結束鑽石領取
+        # Step 6: 點擊退出按鈕，結束鑽石領取，第一步應點擊但尚未重置
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((500, 500), 0.9) if name == "common/quit.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertTrue(self.state_machine.need_diamond_collection)
+        
+        # 模擬退出按鈕消失，第二步完成重置
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
         self.assertFalse(self.state_machine.need_diamond_collection)
         self.assertFalse(self.state_machine.diamond_collected_this_run)
         
@@ -144,6 +149,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_collected_this_run = False
+        self.state_machine.diamond_window_opened = True
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         mock_exists.return_value = True
         
@@ -151,7 +157,6 @@ class TestBehavioralScenarios(unittest.TestCase):
         def match_side_effect_cooldown(img, name, threshold):
             if name == "common/quit.png":
                 return ((500, 500), 0.9)
-            # free.png 匹配失敗 (冷卻中)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect_cooldown
@@ -159,6 +164,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # Assert
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertTrue(self.state_machine.need_diamond_collection)
+        
+        # 模擬退出按鈕消失，第二步完成重置
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
         self.assertFalse(self.state_machine.need_diamond_collection)
 
     @patch('os.path.exists')
@@ -671,10 +681,10 @@ class TestBehavioralScenarios(unittest.TestCase):
           1. 程式應識別冷卻/已領狀態，點擊退出按鈕 (common/quit.png)。
           2. need_bread_collection 應被設為 False，last_bread_collection_time 應更新，防止無限卡死在視窗內。
         """
-        # Arrange
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
+        self.state_machine.bread_window_opened = True
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         mock_exists.return_value = True
         
@@ -698,12 +708,21 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertTrue(self.state_machine.need_bread_collection)
         self.assertTrue(self.state_machine.bread_click_attempted)
         
-        # Act 2: 第二次執行，因已嘗試過領取，執行退出體力按鈕點擊 (500 + 0 = 500, 500 + 0 = 500)
+        # Act 2: 第二次執行，因已嘗試過領取，執行退出體力按鈕點擊，第一步應點擊但尚未重置
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         
         # Assert 2
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertTrue(self.state_machine.need_bread_collection)
+        self.assertTrue(self.state_machine.bread_click_attempted)
+        
+        # Act 3: 第三次執行，模擬退出按鈕消失，完成退出重置
+        self.mock_mouse.click.reset_mock()
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
+        
+        # Assert 3
         self.assertFalse(self.state_machine.need_bread_collection)
         self.assertFalse(self.state_machine.bread_click_attempted)
         self.assertEqual(self.state_machine.last_bread_collection_time, 1000.0)

@@ -54,207 +54,73 @@ class NavigationHandler(BaseStateHandler):
             logging.info("⌛ 尋路中：背包已滿，正在等待退出戰鬥或返回城鎮畫面...")
             return
 
-        # A1. 如果需要領鑽石，執行領鑽石分支流程 (優先於領體力)
-        if self.machine.need_diamond_collection:
-            # 情況一：如果已經點過免費鑽石並確認了，我們尋找退出按鈕關閉彈窗
-            if self.machine.diamond_collected_this_run:
-                for quit_btn in ["common/quit.png"]:
-                    if os.path.exists(os.path.join("templates", quit_btn)):
-                        pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
-                        if pos_quit:
-                            logging.info(f"💎 領鑽石：偵測到退出按鈕 [{quit_btn}] ({conf_quit:.4f})，點擊關閉，領鑽石流程結束。")
-                            self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                            self.machine.need_diamond_collection = False
-                            self.machine.diamond_collected_this_run = False
-                            self.machine.last_diamond_collection_time = time.time()
-                            time.sleep(0.03)
-                            return
-            else:
-                # 情況二：尚未領取或確認，進行領取步驟
-                # 1. 彈窗內的確認按鈕 (獲得鑽石確認)
-                pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
-                if pos_conf:
-                    logging.info(f"💎 領鑽石：偵測到確認按鈕 [{conf_conf:.4f}]，點擊確認。")
-                    self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-                    self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.03)
-                    return
-                
-                pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
-                if pos_ok:
-                    logging.info(f"💎 領鑽石：偵測到 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
-                    self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
-                    self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.03)
-                    return
-
-                # 檢查是否在領鑽石彈窗內 (尋找退出/關閉按鈕)
-                in_diamond_window = False
-                active_quit_btn = None
-                quit_pos = None
-                for quit_btn in ["common/quit.png"]:
-                    if os.path.exists(os.path.join("templates", quit_btn)):
-                        pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.8)
-                        if pos_quit:
-                            # 有退出按鈕在畫面上，高機率已經在彈窗內
-                            in_diamond_window = True
-                            active_quit_btn = quit_btn
-                            quit_pos = pos_quit
-                            break
-
-                if in_diamond_window:
-                    # 2. 如果在彈窗內，只嘗試領取免費鑽石 (diamond_free.png)
-                    # 使用較高閥值 (0.90) 以避免誤判到付費的 $4.99 按鈕
-                    if os.path.exists(os.path.join("templates", "free.png")):
-                        pos_free, conf_free = self.matcher.match(screen_img, "free.png", threshold=0.90)
-                        if pos_free:
-                            logging.info(f"💎 領鑽石：在視窗內偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
-                            self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
-                            time.sleep(0.03)
-                            return
-
-                    # 3. 如果在彈窗內但沒有免費鑽石按鈕，說明鑽石正處於冷卻，點點退出按鈕關閉
-                    logging.info(f"💎 領鑽石：鑽石視窗已開啟但無免費按鈕 (處於冷卻)，點擊退出按鈕 [{active_quit_btn}] 退出。")
-                    self.mouse.click(rect["left"] + quit_pos[0], rect["top"] + quit_pos[1])
-                    self.machine.need_diamond_collection = False
-                    self.machine.diamond_collected_this_run = False
-                    self.machine.last_diamond_collection_time = time.time()
-                    time.sleep(0.08)
-                    return
-
-                # 4. 如果不在彈窗內，再嘗試點擊鑽石入口或返回城鎮
-                # 3. 鑽石按鈕 (diamond.png)
-                if os.path.exists(os.path.join("templates", "diamond.png")):
-                    pos_dia, conf_dia = self.matcher.match(screen_img, "diamond.png", threshold=0.8)
-                    if pos_dia:
-                        logging.info(f"💎 領鑽石：在畫面偵測到鑽石按鈕 [{conf_dia:.4f}]，點擊打開領取畫面。")
-                        self.mouse.click(rect["left"] + pos_dia[0], rect["top"] + pos_dia[1])
-                        time.sleep(0.03)
-                        return
-
-                # 4. 返回城鎮按鈕 (goback_town.png)
-                if os.path.exists(os.path.join("templates", "goback_town.png")):
-                    pos_town, conf_town = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
-                    if pos_town:
-                        logging.info(f"💎 領鑽石：在畫面中偵測到返回城鎮按鈕 [{conf_town:.4f}]，點擊返回。")
-                        self.mouse.click(rect["left"] + pos_town[0], rect["top"] + pos_town[1])
-                        time.sleep(0.03)
-                        return
-
-            logging.info("⌛ 領鑽石流程中，正在等待鑽石畫面或按鈕載入...")
-            time.sleep(0.01)
+        # 1. 偵測當前畫面狀態 (城鎮 vs 大廳)
+        is_town = False
+        is_lobby = False
+        
+        # 檢查已開啟彈窗防禦
+        if self.machine.diamond_window_opened:
+            logging.info("💎 尋路中：偵測到鑽石視窗已開啟，跳轉至 DIAMOND_COLLECTION。")
+            self.machine.transition_to(self.machine.STATE_DIAMOND_COLLECTION)
+            self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
             return
-
-        # A. 如果啟用且需要領體力，執行領體力分支流程
-        if self.machine.enable_bread and self.machine.need_bread_collection:
-            # 依優先級檢查領體力相關按鈕
             
-            # 情況一：如果已經確認領過體力（或體力已滿確認了），我們只專心尋找退出按鈕，不要重複按領取或體力按鈕
-            if self.machine.bread_collected_this_run:
-                # 4. 關閉體力視窗按鈕 (quit bread)
-                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
-                if pos_quit:
-                    logging.info(f"🍞 領體力：偵測到退出體力按鈕 [{conf_quit:.4f}]，點擊關閉，領取體力流程結束。")
-                    self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                    self.machine.need_bread_collection = False
-                    self.machine.bread_collected_this_run = False  # 重設狀態
-                    self.machine.last_bread_collection_time = time.time()
-                    time.sleep(0.03)
-                    return
-            else:
-                # 情況二：尚未領取或尚未點擊確認，正常進行領取步驟
-                # 1. 彈窗內的確認按鈕 (獲得體力確認或體力已滿提示確認)
-                pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
-                if pos_conf:
-                    logging.info(f"🍞 領體力：偵測到體力確認按鈕 [{conf_conf:.4f}]，點擊確認。")
-                    self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-                    self.machine.bread_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.03)
-                    return
-
-                # 2. 彈窗內的 OK 按鈕 (同樣代表確認)
-                pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
-                if pos_ok:
-                    logging.info(f"🍞 領體力：偵測到體力 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
-                    self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
-                    self.machine.bread_collected_this_run = True  # 標記本次已確認領取
-                    time.sleep(0.03)
-                    return
-
-                # 3. 領體力按鈕 (嘗試匹配通用 collect.png 或專屬 bread_collection.png，使用 0.70 的容錯閥值)
-                pos_coll = None
-                conf_coll = 0.0
-                matched_template = None
-                
-                for template_name in ["common/collect.png", "common/bread_collection.png"]:
-                    if os.path.exists(os.path.join("templates", template_name)):
-                        pos, conf = self.matcher.match(screen_img, template_name, threshold=0.70)
-                        if pos:
-                            pos_coll = pos
-                            conf_coll = conf
-                            matched_template = template_name
-                            break
-                            
-                if pos_coll:
-                    logging.info(f"🍞 領體力：偵測到領體力按鈕 [{matched_template}] (信心度: {conf_coll:.4f})，進行點擊領取。")
-                    self.mouse.click(rect["left"] + pos_coll[0], rect["top"] + pos_coll[1])
-                    self.machine.bread_click_attempted = True
-                    time.sleep(0.03)
-                    return
-
-                # 新增防禦性相對座標點擊：
-                # 如果體力視窗已開啟 (看到 quit.png)，但沒偵測到「收集」按鈕，
-                # 且我們在本次流程中「尚未點擊過領取」，則使用相對 quit.png 的座標執行一次點擊 (收集食物)。
-                pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
-                if pos_quit:
-                    if not getattr(self.machine, "bread_click_attempted", False):
-                        # 關閉按鈕匹配中心為 (X, Y)，「收集食物」按鈕相對於 X 的偏移為 dx=-208, dy=612
-                        click_x = rect["left"] + pos_quit[0] - 208
-                        click_y = rect["top"] + pos_quit[1] + 612
-                        logging.warning(f"⚠️ 領體力：未匹配到領體力按鈕，執行相對座標防禦性點擊 (收集食物): ({click_x}, {click_y})")
-                        self.mouse.click(click_x, click_y)
-                        self.machine.bread_click_attempted = True
-                        time.sleep(0.1)
-                        return
-                    else:
-                        # 如果已經嘗試點擊過領取 (不論是匹配還是相對點擊)，但畫面上依然沒有確認彈窗，說明確實處於冷卻或已領完，此時點點退出關閉視窗
-                        logging.info(f"🍞 領體力：已嘗試過點擊領取但無效，判定為冷卻或已領完，點擊退出體力按鈕 [{conf_quit:.4f}] 退出。")
-                        self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                        self.machine.need_bread_collection = False
-                        self.machine.bread_collected_this_run = False
-                        self.machine.bread_click_attempted = False  # 重置標記
-                        self.machine.last_bread_collection_time = time.time()
-                        time.sleep(0.03)
-                        return
-
-                # 5. 打開體力視窗按鈕 (bread)
-                pos_bread, conf_bread = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
-                if pos_bread:
-                    logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
-                    self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
-                    time.sleep(0.03)
-                    return
-
-                # 6. 入口按鈕 (door)
-                pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
-                if pos_door:
-                    logging.info(f"🍞 領體力：在主畫面偵測到入口按鈕 [{conf_door:.4f}]，點擊進入大廳。")
-                    self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
-                    time.sleep(0.03)
-                    return
-
-                # 7. 返回城鎮按鈕 (goback_town.png)
-                if os.path.exists(os.path.join("templates", "goback_town.png")):
-                    pos_town, conf_town = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
-                    if pos_town:
-                        logging.info(f"🍞 領體力：在畫面中偵測到返回城鎮按鈕 [{conf_town:.4f}]，點擊返回。")
-                        self.mouse.click(rect["left"] + pos_town[0], rect["top"] + pos_town[1])
-                        time.sleep(0.03)
-                        return
-
-            logging.info("⌛ 領體力流程中，正在等待體力畫面或按鈕載入...")
-            time.sleep(0.01)
+        if self.machine.bread_window_opened:
+            logging.info("🍞 尋路中：偵測到體力視窗已開啟，跳轉至 BREAD_COLLECTION。")
+            self.machine.transition_to(self.machine.STATE_BREAD_COLLECTION)
+            self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
             return
+            
+        # 檢查城鎮指標 (door.png 或 diamond.png)
+        pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
+        pos_diamond, conf_diamond = self.matcher.match(screen_img, "diamond.png", threshold=0.8)
+        if pos_door or pos_diamond:
+            is_town = True
+            
+        # 檢查大廳指標 (goback_town.png 或 bread.png)
+        pos_goback, conf_goback = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
+        pos_bread_btn, conf_bread_btn = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
+        if pos_goback or pos_bread_btn:
+            is_lobby = True
+
+        # 2. 領鑽石優先流程
+        if self.machine.need_diamond_collection:
+            if is_town:
+                logging.info("💎 尋路中：在城鎮畫面，跳轉至 DIAMOND_COLLECTION。")
+                self.machine.transition_to(self.machine.STATE_DIAMOND_COLLECTION)
+                self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
+                return
+            elif is_lobby:
+                if pos_goback:
+                    logging.info("💎 領鑽石：在大廳畫面，點擊返回城鎮按鈕 [goback_town.png] 以進行鑽石領取。")
+                    self.mouse.click(rect["left"] + pos_goback[0], rect["top"] + pos_goback[1])
+                    time.sleep(0.1)
+                    return
+            # 輔助：如果都沒比對到，但有鑽石入口在畫面上，直接跳轉
+            if pos_diamond:
+                self.machine.transition_to(self.machine.STATE_DIAMOND_COLLECTION)
+                self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
+                return
+
+        # 3. 領體力流程
+        elif self.machine.enable_bread and self.machine.need_bread_collection:
+            if is_lobby:
+                logging.info("🍞 尋路中：在大廳畫面，跳轉至 BREAD_COLLECTION。")
+                self.machine.transition_to(self.machine.STATE_BREAD_COLLECTION)
+                self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
+                return
+            elif is_town:
+                if pos_door:
+                    logging.info("🍞 領體力：在城鎮畫面，點擊入口按鈕 [common/door.png] 進入大廳以領取體力。")
+                    self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
+                    time.sleep(0.1)
+                    return
+            # 輔助：如果都沒比對到，但有體力入口在畫面上，直接跳轉
+            if pos_bread_btn:
+                self.machine.transition_to(self.machine.STATE_BREAD_COLLECTION)
+                self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
+                return
+
 
         # B. 原本的尋路導航邏輯
         # 如果是自動貪婪地下城模式，且畫面上看見第一個地下城入口，執行貪婪選關邏輯
@@ -445,20 +311,54 @@ class NavigationHandler(BaseStateHandler):
         # 判斷是否處於關卡選擇介面 (利用對比式匹配判定 select_stage.png 與 select_stage_after.png 的信心度)
         stage_select_open = False
         if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-            pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
-            pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.60)
-            # 防禦性判定：只有在至少一個按鈕有大於 0.72 的清晰匹配時，才信任此開啟判定，避免低信度背景雜訊誤判
-            if pos_after and (conf_before > 0.72 or conf_after > 0.72) and (not pos_before or conf_after > conf_before):
-                stage_select_open = True
+            pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.58)
+            pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.58)
+            # 放寬防禦性門檻，並支援微小誤差容忍
+            if pos_after:
+                if (conf_before > 0.58 or conf_after > 0.58) and (not pos_before or conf_after > conf_before - 0.05):
+                    stage_select_open = True
+
+        # 額外比對關卡島嶼及標籤 (OR-Check)，若比對到任一關卡特徵，判定關卡選擇介面已開啟
+        if not stage_select_open:
+            stage_templates = [
+                "stages/level1_sky_plains.png",
+                "stages/level2_Barren_Rocky_Ground.png",
+                "stages/level2_barren_rocks.png",
+                "stages/level3_ancient_forest.png",
+                "stages/level4_desert_ruins.png"
+            ]
+            for st_temp in stage_templates:
+                if os.path.exists(os.path.join("templates", st_temp)):
+                    pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.60)
+                    if pos:
+                        logging.info(f"🧭 偵測到選關特徵元素 [{st_temp}] (相似度: {conf:.4f})，判定關卡選擇介面已開啟。")
+                        stage_select_open = True
+                        break
 
         # 檢查是否處於地下城選擇介面 (利用對比式匹配判定 dungeon.png 與 dungeon_after.png 的信心度)
         dungeon_select_open = False
         if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-            pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
-            pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.60)
-            # 防禦性判定：只有在至少一個按鈕有大於 0.72 的清晰匹配時，才信任此開啟判定，避免低信度背景雜訊誤判
-            if pos_d_after and (conf_d_before > 0.72 or conf_d_after > 0.72) and (not pos_d_before or conf_d_after > conf_d_before):
-                dungeon_select_open = True
+            pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.58)
+            pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.58)
+            if pos_d_after:
+                if (conf_d_before > 0.58 or conf_d_after > 0.58) and (not pos_d_before or conf_d_after > conf_d_before - 0.05):
+                    dungeon_select_open = True
+
+        # 額外比對地下城門扉入口 (OR-Check)，若比對到任一地下城入口特徵，判定地下城選擇介面已開啟
+        if not dungeon_select_open:
+            dungeon_templates = [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png"
+            ]
+            for dg_temp in dungeon_templates:
+                if os.path.exists(os.path.join("templates", dg_temp)):
+                    pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.60)
+                    if pos:
+                        logging.info(f"🧭 偵測到地下城入口元素 [{dg_temp}] (相似度: {conf:.4f})，判定地下城選擇介面已開啟。")
+                        dungeon_select_open = True
+                        break
 
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單
         if self.machine.config.get("type") == "stage" and stage_select_open:
@@ -543,7 +443,7 @@ class NavigationHandler(BaseStateHandler):
                 continue
 
             # 針對尋路按鈕，調降大廳主要功能與跳轉按鈕之匹配閾值至 0.60，以容忍解析度微幅縮放與抖動
-            is_lobby_btn = "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn
+            is_lobby_btn = "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn or "final" in btn
             thresh = 0.60 if is_lobby_btn else 0.80
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
             if pos:
