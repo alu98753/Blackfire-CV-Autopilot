@@ -11,7 +11,8 @@ from states.handlers import (
     BagCleaningHandler,
     BackpackFullSortingHandler,
     BreadCollectionHandler,
-    DiamondCollectionHandler
+    DiamondCollectionHandler,
+    CollectOnlyHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -28,6 +29,7 @@ class GameStateMachine:
     STATE_BACKPACK_FULL_SORTING = "BACKPACK_FULL_SORTING" # 背包滿時自適應裝備分選與銷毀
     STATE_BREAD_COLLECTION = "BREAD_COLLECTION"          # 自動領體力流程
     STATE_DIAMOND_COLLECTION = "DIAMOND_COLLECTION"      # 自動領鑽石流程
+    STATE_COLLECT_ONLY = "COLLECT_ONLY"                  # 定時領取麵包與鑽石待機流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -98,11 +100,16 @@ class GameStateMachine:
             self.STATE_BACKPACK_FULL_SORTING: BackpackFullSortingHandler(self),
             self.STATE_BREAD_COLLECTION: BreadCollectionHandler(self),
             self.STATE_DIAMOND_COLLECTION: DiamondCollectionHandler(self),
+            self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
         }
 
 
 
     def transition_to(self, new_state):
+        if self.config is not None and self.config.get("type") == "collect_only":
+            if new_state in [self.STATE_NAVIGATING, self.STATE_LOBBY]:
+                new_state = self.STATE_COLLECT_ONLY
+
         if self.current_state != new_state:
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
             self.current_state = new_state
@@ -359,9 +366,10 @@ class GameStateMachine:
                 self.diamond_collected_this_run = False
 
         # 2. 檢查體力 CD (30分鐘 = 1800秒)
-        if self.enable_bread and (time.time() - self.last_bread_collection_time > 1800.0):
+        bread_cd = 7200.0 if self.config.get("type") == "collect_only" else 1800.0
+        if self.enable_bread and (time.time() - self.last_bread_collection_time > bread_cd):
             if not self.need_bread_collection:
-                logging.info("⏰ 距離上次領體力已滿 30 分鐘，觸發自動領體力。")
+                logging.info(f"⏰ 距離上次領體力已滿 {int(bread_cd // 60)} 分鐘，觸發自動領體力。")
                 self.need_bread_collection = True
                 self.bread_collected_this_run = False
                 self.bread_click_attempted = False

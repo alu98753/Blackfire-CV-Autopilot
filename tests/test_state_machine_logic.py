@@ -1174,6 +1174,72 @@ class TestStateMachineLogic(unittest.TestCase):
         # 且沒有點擊過 dungeon.png (100 + 400 = 500)
         self.mock_mouse.click.assert_called_once_with(300, 300)
 
+    @patch('os.path.exists')
+    def test_collect_only_mode_flow(self, mock_exists):
+        """
+        測試定時領取模式 (collect_only)：
+        1. 狀態與跳轉攔截 (NAVIGATING -> COLLECT_ONLY)
+        2. 定時冷卻 (體力CD改為2小時對齊)
+        3. CollectOnlyHandler 導航轉移至領取或城鎮待機
+        """
+        self.state_machine.config = GAME_CONFIGS["collect_only"]
+        self.state_machine.enable_bread = True
+        self.state_machine.need_diamond_collection = True
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        
+        mock_exists.return_value = True
+        
+        # 1. 測試轉移攔截：
+        # 當需要領取時，detect_current_state 會嘗試進入 NAVIGATING，但應被攔截並轉移至 COLLECT_ONLY
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=None: (
+            ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        
+        # 2. 測試 CollectOnlyHandler 領鑽石流程：
+        # 當在城鎮 (is_town=True) 且 need_diamond_collection=True 時，應轉移至 DIAMOND_COLLECTION
+        self.state_machine.need_diamond_collection = True
+        self.state_machine.need_bread_collection = False
+        
+        # 模擬在城鎮的畫面比對 (看到 door.png 且 diamond.png)
+        def match_town(img, name, threshold=None):
+            if name in ["common/door.png", "diamond.png"]:
+                return ((150, 150), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_town
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DIAMOND_COLLECTION)
+        
+        # 3. 測試阻斷重定向：
+        # 當領完鑽石後 DiamondCollectionHandler 會轉移回 NAVIGATING，應自動重定向回 COLLECT_ONLY
+        self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        
+        # 4. 測試 CollectOnlyHandler 領體力流程：
+        # 當在城鎮且 need_bread_collection=True，應點擊門 (door.png) 進入大廳，而不是直接跳轉
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = True
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        # 點擊了 door.png 的相對座標 (150, 150)
+        self.mock_mouse.click.assert_called_once_with(150, 150)
+        
+        # 5. 測試定時冷卻對齊 (體力在 collect_only 模式下為 2 小時 CD)
+        self.state_machine.need_bread_collection = False
+        
+        # 5.1 經過 1 小時 (3600秒)，不應觸發領取
+        self.state_machine.last_bread_collection_time = time.time() - 3600.0
+        self.state_machine.check_collection_trigger(None)
+        self.assertFalse(self.state_machine.need_bread_collection)
+        
+        # 5.2 經過 2.1 小時 (7500秒)，應該觸發領取
+        self.state_machine.last_bread_collection_time = time.time() - 7500.0
+        self.state_machine.check_collection_trigger(None)
+        self.assertTrue(self.state_machine.need_bread_collection)
+
 if __name__ == "__main__":
     unittest.main()
 

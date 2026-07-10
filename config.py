@@ -57,5 +57,12 @@ GAME_CONFIGS = {
         "type": "bag_clean",
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
+    },
+    
+    # ------------------ 定時領取麵包與鑽石模式 ------------------
+    "collect_only": {
+        "name": "定時領取麵包與鑽石",
+        "type": "collect_only",
+        "navigation_path": [],
     }
 }
