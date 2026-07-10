@@ -9,6 +9,7 @@
 2. 點擊diamond.png
 3. 等待領鑽石畫面
 4. 如果有free.png 就點擊
+    - 在點擊 free.png 後，遊戲會彈出獲得獎勵的確認視窗。因此程式額外匹配了 common/confirm.png / common/ok.png 來點擊確認。
 5. 如果沒有free.png 就點擊quit.png
 6. 點擊後,流程結束 會回到城鎮的圖樣
 
