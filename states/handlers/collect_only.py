@@ -67,9 +67,39 @@ class CollectOnlyHandler(BaseStateHandler):
         # 4. 如果不需要任何領取，執行待機/返回邏輯
         now = time.time()
         last_log = getattr(self, "last_log_time", 0.0)
-        should_log = (now - last_log >= 60.0)  # 每 60 秒印一次 log，不刷屏
+        
+        # 動態決定 log 間隔：最長為 300 秒 (5分鐘)，若 CD 比 5 分鐘短則跟隨較短的 CD，以利測試
+        diamond_cd = self.machine.config.get("diamond_cd", 7200.0)
+        default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else 1800.0
+        bread_cd = self.machine.config.get("bread_cd", default_bread_cd)
+        log_interval = min(300.0, diamond_cd, bread_cd)
+        
+        should_log = (now - last_log >= log_interval)
         if should_log:
             self.last_log_time = now
+            
+            # 計算剩餘秒數
+            dia_rem = max(0.0, diamond_cd - (now - self.machine.last_diamond_collection_time))
+            brd_rem = max(0.0, bread_cd - (now - self.machine.last_bread_collection_time))
+            
+            # 格式化輸出剩餘時間
+            def format_time(seconds):
+                if seconds <= 0:
+                    return "即將執行"
+                h = int(seconds // 3600)
+                m = int((seconds % 3600) // 60)
+                s = int(seconds % 60)
+                if h > 0:
+                    return f"{h}小時{m}分{s}秒"
+                elif m > 0:
+                    return f"{m}分{s}秒"
+                else:
+                    return f"{s}秒"
+                    
+            dia_str = format_time(dia_rem)
+            brd_str = format_time(brd_rem) if self.machine.enable_bread else "已停用"
+            
+            logging.info(f"⌛ [定時領取狀態] 運作中。距離下一次領取 💎 鑽石還剩: {dia_str}，🍞 體力還剩: {brd_str}。")
 
         if is_lobby:
             if pos_goback:
@@ -78,8 +108,6 @@ class CollectOnlyHandler(BaseStateHandler):
                 time.sleep(1.0)
                 return
         elif is_town:
-            if should_log:
-                logging.info("⌛ 定時領取：已在城鎮主畫面，且無領取任務，原地等待中...")
             time.sleep(1.0)
             return
         else:
