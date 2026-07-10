@@ -287,15 +287,15 @@ class NavigationHandler(BaseStateHandler):
                         start_x = rect["left"] + int(rect["width"] * 0.8)
                         end_x = rect["left"] + int(rect["width"] * 0.2)
                         y_pos = rect["top"] + int(rect["height"] * 0.5)
-                        self.mouse.drag(start_x, y_pos, end_x, y_pos)
+                        self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
                     else:
                         # 畫面上的地下城 index 大於目標，說明目標在左側，我們需要向右滑動（拖曳由左至右）
                         logging.info(f"🧭 貪婪地下城：目標 [{dungeon_names[target_idx]}] 在左側，執行向右滑動以翻頁...")
                         start_x = rect["left"] + int(rect["width"] * 0.2)
                         end_x = rect["left"] + int(rect["width"] * 0.8)
                         y_pos = rect["top"] + int(rect["height"] * 0.5)
-                        self.mouse.drag(start_x, y_pos, end_x, y_pos)
-                    time.sleep(0.6)  # 等待滑動動畫
+                        self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
+                    time.sleep(1.2)  # 等待滑動動畫
                     return
 
         nav_path = self.machine.config.get("navigation_path", [])
