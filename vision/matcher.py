@@ -131,8 +131,8 @@ class TemplateMatcher:
                 )
                 return None, best_raw[2]
             
-            # (b) 局部亮度最大化排序：從合格的候選點中，只選擇亮度比例最高的那一個
-            best_selected = max(passed, key=lambda c: c[3])
+            # (b) 相似度最大化排序：在亮度合格的候選點中，選擇相似度最高的那一個
+            best_selected = max(passed, key=lambda c: c[2])
         else:
             # 若未啟用亮度檢查，直接抓取相似度最高的點
             best_selected = max(evaluated_candidates, key=lambda c: c[2])
