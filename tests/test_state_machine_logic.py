@@ -1182,7 +1182,9 @@ class TestStateMachineLogic(unittest.TestCase):
         2. 定時冷卻 (體力CD改為2小時對齊)
         3. CollectOnlyHandler 導航轉移至領取或城鎮待機
         """
-        self.state_machine.config = GAME_CONFIGS["collect_only"]
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.config["diamond_cd"] = 7200.0
+        self.state_machine.config["bread_cd"] = 7200.0
         self.state_machine.enable_bread = True
         self.state_machine.need_diamond_collection = True
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
