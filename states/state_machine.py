@@ -177,10 +177,12 @@ class GameStateMachine:
         if os.path.exists(os.path.join("templates", "task_complete.png")):
             pos, conf = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
             if pos:
-                # 計算「領取獎勵」按鈕的相對位置並點擊
+                # 計算「領取獎勵」按鈕的相對位置（依據當前畫面高度動態縮放偏移量，以 1080p 為基準）
+                height_to_use = rect.get("height") or screen_img.shape[0] or 1080
+                scale_y = height_to_use / 1080.0
                 btn_x = rect["left"] + pos[0]
-                btn_y = rect["top"] + pos[1] + 281
-                logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程。")
+                btn_y = rect["top"] + pos[1] + int(281 * scale_y)
+                logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程，點擊座標 ({btn_x}, {btn_y})。")
                 self.mouse.click(btn_x, btn_y)
                 time.sleep(0.5)  # 等待動畫
                 self._run_task_complete_subflow(rect)

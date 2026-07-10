@@ -476,8 +476,11 @@ class NavigationHandler(BaseStateHandler):
                     click_x = rect["left"] + pos[0]
                     click_y = rect["top"] + pos[1]
                     if "level" in btn and "final" not in btn and "entry" not in btn:
-                        click_y -= 160
-                        logging.info(f"🧭 尋路中：在畫面中找到關卡小島按鈕 [{btn}] (信心度: {conf:.4f})，套用向上偏移 160 像素點擊島嶼本體。")
+                        height_to_use = rect.get("height") or screen_img.shape[0] or 1080
+                        scale_y = height_to_use / 1080.0
+                        offset_y = int(160 * scale_y)
+                        click_y -= offset_y
+                        logging.info(f"🧭 尋路中：在畫面中找到關卡小島按鈕 [{btn}] (信心度: {conf:.4f})，套用向上偏移 {offset_y} 像素點擊島嶼本體。")
                     else:
                         logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
                     self.mouse.click(click_x, click_y)
