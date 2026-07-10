@@ -872,6 +872,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config["greedy_dungeon"] = True
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.dungeon_cooldowns = {1: float("inf"), 3: float("inf")}
         
         import numpy as np
         self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -999,8 +1000,8 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 驗證沒有拖曳
         self.mock_mouse.drag.assert_not_called()
-        # 驗證點擊座標 (100 + 500 = 600, 100 + 200 - 160 = 140)
-        self.mock_mouse.click.assert_called_with(600, 140)
+        # 驗證點擊座標 (100 + 500 = 600, 100 + 200 - int(160 * 800 / 1080) = 182)
+        self.mock_mouse.click.assert_called_with(600, 182)
 
     @patch('os.path.exists')
     def test_stage_navigation_vertical_scroll_fallback(self, mock_exists):

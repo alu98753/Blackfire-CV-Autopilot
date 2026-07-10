@@ -344,7 +344,8 @@ class MouseController:
                     time.sleep(0.05)
                     
                     # 2. 插值模擬移動軌跡
-                    steps = 8
+                    steps = max(5, int(duration / 0.02))
+                    step_sleep = duration / steps
                     for i in range(1, steps + 1):
                         curr_x_phys = int(rsx_phys + (rex_phys - rsx_phys) * (i / steps))
                         curr_y_phys = int(rsy_phys + (rey_phys - rsy_phys) * (i / steps))
@@ -352,11 +353,13 @@ class MouseController:
                         
                         lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
                         win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
-                        time.sleep(0.02)
+                        time.sleep(step_sleep)
                         
-                    # 2.5 停頓以消除釋放慣性 (只在非慣性模式下生效)
+                    # 2.5 停頓以消除釋放慣性並確保釋放穩定性
                     if not inertia:
-                        time.sleep(0.1)
+                        time.sleep(0.15)
+                    else:
+                        time.sleep(0.02)
                     
                     # 3. 釋放
                     lparam_end = win32api.MAKELONG(rex_logical, rey_logical)
