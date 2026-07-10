@@ -1193,7 +1193,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 測試轉移攔截：
         # 當需要領取時，detect_current_state 會嘗試進入 NAVIGATING，但應被攔截並轉移至 COLLECT_ONLY
-        self.mock_matcher.match.side_effect = lambda img, name, threshold=None: (
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kwargs: (
             ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
         )
         self.state_machine.step()
@@ -1205,7 +1205,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.need_bread_collection = False
         
         # 模擬在城鎮的畫面比對 (看到 door.png 且 diamond.png)
-        def match_town(img, name, threshold=None):
+        def match_town(img, name, threshold=None, **kwargs):
             if name in ["common/door.png", "diamond.png"]:
                 return ((150, 150), 0.9)
             return (None, 0.0)
