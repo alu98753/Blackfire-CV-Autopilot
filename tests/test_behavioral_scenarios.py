@@ -144,6 +144,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_collected_this_run = False
+        self.state_machine.diamond_window_opened = True
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         mock_exists.return_value = True
         
@@ -671,10 +672,10 @@ class TestBehavioralScenarios(unittest.TestCase):
           1. 程式應識別冷卻/已領狀態，點擊退出按鈕 (common/quit.png)。
           2. need_bread_collection 應被設為 False，last_bread_collection_time 應更新，防止無限卡死在視窗內。
         """
-        # Arrange
         self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
+        self.state_machine.bread_window_opened = True
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         mock_exists.return_value = True
         

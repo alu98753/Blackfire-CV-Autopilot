@@ -671,6 +671,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.enable_bread = False
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_collected_this_run = False
+        self.state_machine.diamond_window_opened = True
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
         mock_exists.return_value = True
@@ -839,12 +840,13 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         
         # 3. 在 NAVIGATING 狀態下：
-        # - 因為 need_bread_collection 為 True，看到 goback_town.png ➔ 應點擊退回城鎮
+        # - 因為 need_bread_collection 為 True，在大廳看到 common/bread.png ➔ 應點擊打開體力視窗並跳轉至 BREAD_COLLECTION
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name == "goback_town.png" else (None, 0.0)
+            ((300, 300), 0.9) if name == "common/bread.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(300, 300)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BREAD_COLLECTION)
 
     @patch('os.path.exists')
     def test_greedy_dungeon_on_screen_cooldown_detection(self, mock_exists):
