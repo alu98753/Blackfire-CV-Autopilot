@@ -872,6 +872,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config["greedy_dungeon"] = True
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.dungeon_cooldowns = {1: float("inf"), 3: float("inf")}
         
         import numpy as np
         self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)

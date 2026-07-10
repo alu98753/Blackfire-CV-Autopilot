@@ -1468,5 +1468,61 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertIsNone(handler.non_battle_feature_start_time)
         self.mock_mouse.click.assert_called_with(200, 200)
 
+    @patch('os.path.exists')
+    def test_dungeon_selection_with_scrolling(self, mock_exists):
+        """
+        [行為場景 28] 地下城模式下，目標地下城不在畫面上時，應執行左右滑動尋找：
+        - 案例 A：目標在右側，應執行向左滑動。
+        - 案例 B：目標在左側，應執行向右滑動。
+        """
+        mock_exists.return_value = True
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine.config = {
+            "type": "dungeon",
+            "greedy_dungeon": False,
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Ruins_entry.png"]
+        }
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        # Mock 視窗大小為 1000x800
+        self.mock_capturer.get_window_rect.return_value = {
+            "left": 100, "top": 100, "width": 1000, "height": 800
+        }
+        
+        img = np.zeros((800, 1000, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = img
+        
+        # 案例 A：目標是 Ruins_entry (index 3)，畫面上只有 Slime_entry (index 0) 於 X=100
+        # 預期：目標 index (3) 大於當前可見 index (0)，代表目標在右側 ➔ 向左滑動 drag(900, 500, 300, 500)
+        call_count_a = 0
+        def mock_matchTemplate_a(img_arg, templ, method):
+            nonlocal call_count_a
+            val = 0.95 if call_count_a == 0 else 0.0
+            call_count_a += 1
+            return np.array([[val]], dtype=np.float32)
+            
+        with patch('cv2.imread', return_value=np.zeros((10, 10, 3), dtype=np.uint8)), \
+             patch('cv2.matchTemplate', side_effect=mock_matchTemplate_a):
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
+            self.mock_mouse.drag.assert_called_once_with(900, 500, 300, 500)
+            
+        # 案例 B：目標是 Slime_entry (index 0)，畫面上只有 Ruins_entry (index 3) 於 X=100
+        # 預期：目標 index (0) 小於當前可見 index (3)，代表目標在左側 ➔ 向右滑動 drag(300, 500, 900, 500)
+        self.state_machine.config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        
+        call_count_b = 0
+        def mock_matchTemplate_b(img_arg, templ, method):
+            nonlocal call_count_b
+            val = 0.95 if call_count_b == 3 else 0.0
+            call_count_b += 1
+            return np.array([[val]], dtype=np.float32)
+            
+        with patch('cv2.imread', return_value=np.zeros((10, 10, 3), dtype=np.uint8)), \
+             patch('cv2.matchTemplate', side_effect=mock_matchTemplate_b):
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
+            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500)
+
 if __name__ == "__main__":
     unittest.main()

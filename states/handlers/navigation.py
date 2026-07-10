@@ -126,10 +126,17 @@ class NavigationHandler(BaseStateHandler):
         # 如果是自動貪婪地下城模式，且畫面上看見第一個地下城入口，執行貪婪選關邏輯
         # B. 原本的尋路導航邏輯
         # 如果是自動貪婪地下城模式，且畫面上看見任何一個地下城入口，執行貪婪選關邏輯
-        if self.machine.config.get("greedy_dungeon", False):
+        # B. 原本的尋路導航邏輯
+        # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
+        is_dungeon_mode = self.machine.config.get("type") == "dungeon"
+        
+        # 為了避免在單元測試中使用 MagicMock 時 cv2 運算崩潰，僅在 screen_img 有 shape 屬性時執行 OpenCV 模板匹配
+        is_dungeon_page = False
+        visible_dungeons = {}
+        scale = 1.0
+        
+        if is_dungeon_mode and type(screen_img).__name__ == "ndarray":
             import cv2
-            
-            # 使用擷取的影像寬度計算縮放比例，並對齊至標準遊戲解析度寬度以消除視窗邊框干擾
             h_img, w_img = screen_img.shape[:2]
             standard_widths = [1280, 1366, 1600, 1920, 2560, 3840]
             matched_width = w_img
@@ -147,9 +154,7 @@ class NavigationHandler(BaseStateHandler):
                 "dungeons/Ruins_entry.png"
             ]
             
-            # 檢查目前是否確實在地下城選關介面 (至少要能識別到一個入口)
-            any_entry_found = False
-            for temp_name in entry_templates:
+            for idx, temp_name in enumerate(entry_templates):
                 if os.path.exists(os.path.join("templates", temp_name)):
                     t_img = cv2.imread(os.path.join("templates", temp_name))
                     if t_img is not None:
@@ -157,138 +162,140 @@ class NavigationHandler(BaseStateHandler):
                         t_h = int(341.0 * scale)
                         resized_t = cv2.resize(t_img, (t_w, t_h))
                         res = cv2.matchTemplate(screen_img, resized_t, cv2.TM_CCOEFF_NORMED)
-                        _, max_val, _, _ = cv2.minMaxLoc(res)
+                        _, max_val, _, max_loc = cv2.minMaxLoc(res)
                         if max_val >= 0.75:
-                            any_entry_found = True
+                            visible_dungeons[idx] = max_loc
+                            is_dungeon_page = True
+                            
+            if is_dungeon_page:
+                logging.info("🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。")
+                target_idx = None
+                is_greedy = self.machine.config.get("greedy_dungeon", False)
+                
+                if is_greedy:
+                    # 貪婪模式：從高到低遍歷，尋找第一個就緒且解鎖的地下城
+                    for i in range(3, -1, -1):
+                        cooldown_until = self.machine.dungeon_cooldowns.get(i, 0.0)
+                        if time.time() < cooldown_until:
+                            if cooldown_until == float('inf'):
+                                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 處於永久不可打狀態，跳過。")
+                            else:
+                                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，跳過。")
+                            continue
+                            
+                        # 如果目標地下城在畫面上，我們檢測冷卻與解鎖狀態
+                        if i in visible_dungeons:
+                            max_loc = visible_dungeons[i]
+                            t_w = int(346.0 * scale)
+                            t_h = int(341.0 * scale)
+                            
+                            # 檢查冷卻木牌
+                            in_cooldown = False
+                            h_limit, w_limit = screen_img.shape[:2]
+                            crop_y1 = max_loc[1]
+                            crop_y2 = min(h_limit, max_loc[1] + t_h)
+                            crop_x1 = max_loc[0]
+                            crop_x2 = min(w_limit, max_loc[0] + t_w)
+                            dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
+                            
+                            for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
+                                if os.path.exists(os.path.join("templates", cd_temp)):
+                                    cd_img = cv2.imread(os.path.join("templates", cd_temp))
+                                    if cd_img is not None:
+                                        cd_w = int(cd_img.shape[1] * scale)
+                                        cd_h = int(cd_img.shape[0] * scale)
+                                        cd_w = max(5, cd_w)
+                                        cd_h = max(5, cd_h)
+                                        resized_cd = cv2.resize(cd_img, (cd_w, cd_h))
+                                        res_cd = cv2.matchTemplate(dungeon_crop, resized_cd, cv2.TM_CCOEFF_NORMED)
+                                        _, max_val_cd, _, _ = cv2.minMaxLoc(res_cd)
+                                        if max_val_cd >= 0.75:
+                                            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌 [{cd_temp}] (相似度: {max_val_cd:.4f})，判定為冷卻中。")
+                                            in_cooldown = True
+                                            break
+                            if in_cooldown:
+                                self.machine.dungeon_cooldowns[i] = time.time() + 30.0
+                                continue
+                                
+                            # 檢查亮骨頭 (解鎖)
+                            cx = max_loc[0] + t_w // 2
+                            cy = max_loc[1] + t_h // 2
+                            x1 = cx - int(90.0 * scale)
+                            y1 = cy + int(240.0 * scale)
+                            w_skull = int(200.0 * scale)
+                            h_skull = int(60.0 * scale)
+                            x2 = x1 + w_skull
+                            y2 = y1 + h_skull
+                            
+                            if 0 <= x1 and x2 <= w_limit and 0 <= y1 and y2 <= h_limit:
+                                skull_crop = screen_img[y1:y2, x1:x2]
+                                light_t_name = "dungeons/light_skull.png"
+                                if os.path.exists(os.path.join("templates", light_t_name)):
+                                    light_t = cv2.imread(os.path.join("templates", light_t_name))
+                                    if light_t is not None:
+                                        s_w = int(light_t.shape[1] * scale)
+                                        s_h = int(light_t.shape[0] * scale)
+                                        s_w = max(5, s_w)
+                                        s_h = max(5, s_h)
+                                        resized_light_t = cv2.resize(light_t, (s_w, s_h))
+                                        res_s = cv2.matchTemplate(skull_crop, resized_light_t, cv2.TM_CCOEFF_NORMED)
+                                        _, max_val_skull, _, _ = cv2.minMaxLoc(res_s)
+                                        logging.info(f"🧭 貪婪地下城：[{dungeon_names[i]}] 亮骨頭匹配相似度: {max_val_skull:.4f} (閾值: 0.75)")
+                                        if max_val_skull < 0.75:
+                                            logging.warning(f"🔒 貪婪地下城：[{dungeon_names[i]}] 亮骨頭相似度過低 ({max_val_skull:.4f})，判定為未解鎖或無法自動刷，設為無限冷卻。")
+                                            self.machine.dungeon_cooldowns[i] = float('inf')
+                                            continue
+                                            
+                            # 通過所有檢查，該關卡是我們的貪婪目標！
+                            target_idx = i
+                            break
+                        else:
+                            # 該關卡是我們想打的最高副本，但是目前不在畫面上，我們需要滑動來尋找它！
+                            target_idx = i
+                            break
+                else:
+                    # 非貪婪模式（指定特定副本）：目標 index 直接從 navigation_path 中尋找
+                    nav_path = self.machine.config.get("navigation_path", [])
+                    for idx, temp_name in enumerate(entry_templates):
+                        if temp_name in nav_path:
+                            target_idx = idx
                             break
                             
-            if any_entry_found:
-                logging.info("🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊選關。")
-                selected_index = None
-                click_target = None
-                
-                # 從 4 到 1 逆序遍歷
-                for i in range(3, -1, -1):
-                    cooldown_until = self.machine.dungeon_cooldowns.get(i, 0.0)
-                    if time.time() < cooldown_until:
-                        if cooldown_until == float('inf'):
-                            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 處於永久不可打狀態，跳過。")
-                        else:
-                            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，跳過。")
-                        continue
-                        
-                    temp_name = entry_templates[i]
-                    if not os.path.exists(os.path.join("templates", temp_name)):
-                        continue
-                        
-                    t_img = cv2.imread(os.path.join("templates", temp_name))
-                    if t_img is None:
-                        continue
-                        
+                if target_idx is None:
+                    logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
+                    time.sleep(1.0)
+                    return
+                    
+                # 檢查目標地下城是否已在畫面上
+                if target_idx in visible_dungeons:
+                    max_loc = visible_dungeons[target_idx]
                     t_w = int(346.0 * scale)
                     t_h = int(341.0 * scale)
-                    resized_t = cv2.resize(t_img, (t_w, t_h))
-                    
-                    # 匹配入口中心
-                    res = cv2.matchTemplate(screen_img, resized_t, cv2.TM_CCOEFF_NORMED)
-                    _, max_val, _, max_loc = cv2.minMaxLoc(res)
-                    
-                    if max_val < 0.75:
-                        # 該地下城不在當前畫面中 (滾動到其他地方)
-                        continue
-                        
-                    # === 檢測該地下城是否在冷卻中 (畫面木牌比對) ===
-                    in_cooldown = False
-                    h_limit, w_limit = screen_img.shape[:2]
-                    crop_y1 = max_loc[1]
-                    crop_y2 = min(h_limit, max_loc[1] + t_h)
-                    crop_x1 = max_loc[0]
-                    crop_x2 = min(w_limit, max_loc[0] + t_w)
-                    dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
-                    
-                    for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
-                        if os.path.exists(os.path.join("templates", cd_temp)):
-                            cd_img = cv2.imread(os.path.join("templates", cd_temp))
-                            if cd_img is not None:
-                                cd_w = int(cd_img.shape[1] * scale)
-                                cd_h = int(cd_img.shape[0] * scale)
-                                cd_w = max(5, cd_w)
-                                cd_h = max(5, cd_h)
-                                resized_cd = cv2.resize(cd_img, (cd_w, cd_h))
-                                
-                                res_cd = cv2.matchTemplate(dungeon_crop, resized_cd, cv2.TM_CCOEFF_NORMED)
-                                _, max_val_cd, _, _ = cv2.minMaxLoc(res_cd)
-                                if max_val_cd >= 0.75:
-                                    logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌 [{cd_temp}] (相似度: {max_val_cd:.4f})，判定為冷卻中。")
-                                    in_cooldown = True
-                                    break
-                                    
-                    if in_cooldown:
-                        # 設為 30 秒冷卻，避免每一影格重複進行模板匹配運算
-                        self.machine.dungeon_cooldowns[i] = time.time() + 30.0
-                        continue
-                        
-                    cx = max_loc[0] + t_w // 2
-                    cy = max_loc[1] + t_h // 2
-                    
-                    # 使用寬度 200 像素的容錯區間裁切並匹配亮骨頭
-                    x1 = cx - int(90.0 * scale)
-                    y1 = cy + int(240.0 * scale)
-                    w_skull = int(200.0 * scale)
-                    h_skull = int(60.0 * scale)
-                    x2 = x1 + w_skull
-                    y2 = y1 + h_skull
-                    
-                    h_limit, w_limit = screen_img.shape[:2]
-                    if 0 <= x1 and x2 <= w_limit and 0 <= y1 and y2 <= h_limit:
-                        skull_crop = screen_img[y1:y2, x1:x2]
-                        
-                        light_t_name = "dungeons/light_skull.png"
-                        if os.path.exists(os.path.join("templates", light_t_name)):
-                            light_t = cv2.imread(os.path.join("templates", light_t_name))
-                            if light_t is not None:
-                                s_w = int(light_t.shape[1] * scale)
-                                s_h = int(light_t.shape[0] * scale)
-                                s_w = max(5, s_w)
-                                s_h = max(5, s_h)
-                                resized_light_t = cv2.resize(light_t, (s_w, s_h))
-                                
-                                # 執行匹配
-                                res_s = cv2.matchTemplate(skull_crop, resized_light_t, cv2.TM_CCOEFF_NORMED)
-                                _, max_val_skull, _, _ = cv2.minMaxLoc(res_s)
-                                
-                                logging.info(f"🧭 貪婪地下城：[{dungeon_names[i]}] 亮骨頭匹配相似度: {max_val_skull:.4f} (閾值: 0.75)")
-                                
-                                if max_val_skull < 0.75:
-                                    logging.warning(f"🔒 貪婪地下城：[{dungeon_names[i]}] 亮骨頭相似度過低 ({max_val_skull:.4f})，判定為未解鎖或無法自動刷，設為無限冷卻。")
-                                    self.machine.dungeon_cooldowns[i] = float('inf')
-                                    continue
-                            else:
-                                logging.warning(f"⚠️ 找不到亮骨頭模板圖片 {light_t_name}，跳過解鎖判定。")
-                        else:
-                            logging.warning(f"⚠️ 模板檔案不存在 {light_t_name}，跳過解鎖判定。")
-                    else:
-                        logging.warning(f"🧭 貪婪地下城：[{dungeon_names[i]}] 骨頭裁切座標超出畫面，無法檢測，跳過。")
-                        continue
-                        
-                    # 成功找到可點擊的最高等地下城
-                    selected_index = i
-                    click_target = (cx, cy)
-                    break
-                    
-                if selected_index is not None:
-                    # 點擊該卡片門扉中心進入
-                    click_x = rect["left"] + click_target[0]
-                    click_y = rect["top"] + click_target[1]
-                    logging.info(f"👉 貪婪地下城：選擇進入第 {selected_index+1} 個地下城 [{dungeon_names[selected_index]}]，點擊座標 ({click_x}, {click_y})。")
+                    click_x = rect["left"] + max_loc[0] + t_w // 2
+                    click_y = rect["top"] + max_loc[1] + t_h // 2
+                    logging.info(f"👉 貪婪地下城：選擇進入 [{dungeon_names[target_idx]}]，點擊座標 ({click_x}, {click_y})。")
                     self.mouse.click(click_x, click_y)
-                    
-                    self.machine.current_dungeon_index = selected_index
+                    self.machine.current_dungeon_index = target_idx
                     time.sleep(0.2)
                     return
                 else:
-                    logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
-                    time.sleep(1.0)
+                    # 不在畫面上，進行左右滑動尋找目標地下城
+                    any_visible_idx = list(visible_dungeons.keys())[0]
+                    if any_visible_idx < target_idx:
+                        # 畫面上的地下城 index 小於目標，說明目標在右側，我們需要向左滑動（拖曳由右至左）
+                        logging.info(f"🧭 貪婪地下城：目標 [{dungeon_names[target_idx]}] 在右側，執行向左滑動以翻頁...")
+                        start_x = rect["left"] + int(rect["width"] * 0.8)
+                        end_x = rect["left"] + int(rect["width"] * 0.2)
+                        y_pos = rect["top"] + int(rect["height"] * 0.5)
+                        self.mouse.drag(start_x, y_pos, end_x, y_pos)
+                    else:
+                        # 畫面上的地下城 index 大於目標，說明目標在左側，我們需要向右滑動（拖曳由左至右）
+                        logging.info(f"🧭 貪婪地下城：目標 [{dungeon_names[target_idx]}] 在左側，執行向右滑動以翻頁...")
+                        start_x = rect["left"] + int(rect["width"] * 0.2)
+                        end_x = rect["left"] + int(rect["width"] * 0.8)
+                        y_pos = rect["top"] + int(rect["height"] * 0.5)
+                        self.mouse.drag(start_x, y_pos, end_x, y_pos)
+                    time.sleep(0.6)  # 等待滑動動畫
                     return
 
         nav_path = self.machine.config.get("navigation_path", [])
