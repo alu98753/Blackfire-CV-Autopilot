@@ -1,11 +1,12 @@
-import ctypes
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
-except Exception:
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()
-    except Exception:
-        pass
+# 已關閉 DPI 識別度，使腳本以 DPI-unaware 模式運行，相容高 DPI 螢幕下的遊戲後台截圖與無黑邊對齊
+# import ctypes
+# try:
+#     ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+# except Exception:
+#     try:
+#         ctypes.windll.user32.SetProcessDPIAware()
+#     except Exception:
+#         pass
 
 import time
 import sys
@@ -275,7 +276,7 @@ def main():
 
     # 初始化模組
     capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend)
-    matcher = TemplateMatcher(templates_dir="templates")
+    matcher = TemplateMatcher(templates_dir="templates", template_scale=0.8)
     mouse = MouseController(human_like=True, backend_mode=args.backend)
     
     # 初始化狀態機 (傳入模式配置)

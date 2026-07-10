@@ -6,8 +6,9 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class TemplateMatcher:
-    def __init__(self, templates_dir="templates"):
+    def __init__(self, templates_dir="templates", template_scale=1.0):
         self.templates_dir = templates_dir
+        self.template_scale = template_scale
         self._cached_templates = {}
 
     def _load_template(self, template_name):
@@ -33,6 +34,18 @@ class TemplateMatcher:
             logging.error(f"無法解析/讀取圖片: {path}")
             return None
 
+        # 如果設定了縮放比例且不為 1.0，動態對模板進行縮放
+        if self.template_scale != 1.0:
+            h, w = template_img.shape[:2]
+            nw = int(w * self.template_scale)
+            nh = int(h * self.template_scale)
+            if nw > 0 and nh > 0:
+                template_img = cv2.resize(
+                    template_img, 
+                    (nw, nh), 
+                    interpolation=cv2.INTER_AREA if self.template_scale < 1.0 else cv2.INTER_CUBIC
+                )
+
         self._cached_templates[template_name] = template_img
         return template_img
 
@@ -52,28 +65,33 @@ class TemplateMatcher:
 
         screen_h, screen_w = screen_img.shape[:2]
         temp_h, temp_w = template_img.shape[:2]
+        
+        # logging.info(f"[除錯-比對大小] 模板 '{template_name}' 大小: {temp_w}x{temp_h}, 來源畫面大小: {screen_w}x{screen_h}")
 
-        # 如果模板比來源畫面大，必無法匹配
-        if temp_h > screen_h or temp_w > screen_w:
-            logging.warning(f"模板尺寸 ({temp_w}x{temp_h}) 大於來源畫面尺寸 ({screen_w}x{screen_h})。")
-            return None, 0.0
+        # # 如果模板比來源畫面大，必無法匹配
+        # if temp_h > screen_h or temp_w > screen_w:
+        #     logging.warning(f"模板尺寸 ({temp_w}x{temp_h}) 大於來源畫面尺寸 ({screen_w}x{screen_h})。")
+        #     return None, 0.0
 
         # 使用標準化相關係數配對方法
         res = cv2.matchTemplate(screen_img, template_img, cv2.TM_CCOEFF_NORMED)
         
-        # 1. 找出所有相似度大於等於門檻的候選點
+        # 1. 找出所有相似度大於等於門檻的候選點，並按相似度從大到小排序進行 Non-Maximum Suppression (NMS)
         loc = np.where(res >= threshold)
+        pts = list(zip(*loc[::-1]))
+        raw_candidates = [(pt[0], pt[1], res[pt[1], pt[0]]) for pt in pts]
+        raw_candidates.sort(key=lambda x: x[2], reverse=True)
+
         candidates = []
-        for pt in zip(*loc[::-1]):
+        for x, y, conf in raw_candidates:
             # 進行簡單的聚類抑制，避免重疊框
             too_close = False
             for cx, cy, c_conf in candidates:
-                if abs(pt[0] - cx) < 20 and abs(pt[1] - cy) < 20:
+                if abs(x - cx) < 20 and abs(y - cy) < 20:
                     too_close = True
                     break
             if not too_close:
-                conf = res[pt[1], pt[0]]
-                candidates.append((pt[0], pt[1], conf))
+                candidates.append((x, y, conf))
 
         if not candidates:
             # 若無任何達標點，回傳最大相似度
