@@ -159,8 +159,8 @@ class GameStateMachine:
             return
 
         # C. 體力不足（食物不足）退避處理
-        # 僅在可能進入戰鬥的狀態下才進行體力不足偵測（如大廳、尋路、戰鬥或地下城探索），避免在資源領取或背包整理時產生虛假誤判
-        if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING]:
+        # 僅在可能啟動新關卡/新副本的狀態下才進行體力不足偵測（如大廳、尋路、或戰鬥結算後再戰時），避免在戰鬥中、地下城探索或背包整理時產生虛假誤判
+        if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT]:
             from states.stamina_flow import handle_insufficient_stamina
             if handle_insufficient_stamina(self, screen_img, rect):
                 return

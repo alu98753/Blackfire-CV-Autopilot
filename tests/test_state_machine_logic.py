@@ -1499,7 +1499,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 設定原始配置為史萊姆地下城
         orig_config = GAME_CONFIGS["dungeon_slime"].copy()
         self.state_machine.config = orig_config
-        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.current_state = self.state_machine.STATE_LOBBY
         
         mock_exists.return_value = True
         self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
