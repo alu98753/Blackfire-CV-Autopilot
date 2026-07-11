@@ -101,15 +101,15 @@ class CollectOnlyHandler(BaseStateHandler):
             
             logging.info(f"⌛ [定時領取狀態] 運作中。距離下一次領取 💎 鑽石還剩: {dia_str}，🍞 體力還剩: {brd_str}。")
 
-        # 4.1 [心跳防斷線] 每 5 分鐘在城鎮畫面執行一次微幅水平拖曳，模擬活躍操作防止閒置斷線
+        # 4.1 [心跳防斷線] 每 1 分鐘在城鎮畫面執行一次微幅水平拖曳，模擬活躍操作防止閒置斷線
         last_heartbeat = getattr(self, "last_heartbeat_time", 0.0)
         if last_heartbeat == 0.0:
-            # 初始防護：啟動 30 秒後觸發第一次心跳，便於快速驗證
-            self.last_heartbeat_time = now - 270.0
+            # 初始防護：啟動 15 秒後觸發第一次心跳，便於快速驗證
+            self.last_heartbeat_time = now - 45.0
         elif now - last_heartbeat >= 60.0:
             self.last_heartbeat_time = now
             if is_town:
-                logging.info("💓 [心跳防斷線] 偵測到閒置已滿 5 分鐘，執行城鎮地圖微幅水平拖曳以維持伺服器連線活躍...")
+                logging.info("💓 [心跳防斷線] 偵測到閒置已滿 1 分鐘，執行城鎮地圖微幅水平拖曳以維持伺服器連線活躍...")
                 center_x = rect["left"] + int(rect["width"] * 0.5)
                 center_y = rect["top"] + int(rect["height"] * 0.5)
                 # 微幅向右拖曳 60 像素
