@@ -386,7 +386,6 @@ class GameStateMachine:
         start_time = time.time()
         timeout = 5.0  # 最多執行 5 秒
         
-        # 專屬匹配確認按鈕
         subflow_templates = [
             ("common/confirm.png", 0.80),
             ("common/ok.png", 0.80)
@@ -398,17 +397,31 @@ class GameStateMachine:
                 time.sleep(0.2)
                 continue
                 
+            matched_any = False
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
                     continue
                 pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
                 if pos:
-                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊並結束子流程。")
+                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊...")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    time.sleep(0.3)
-                    return
+                    matched_any = True
+                    time.sleep(0.5) # 等待彈窗關閉動畫
+                    break # 重新擷取畫面以確認是否消失
                     
-            time.sleep(0.3)
-            
-        logging.warning("🎉 [子流程] 「領取任務獎勵」確認子流程超時結束。")
+            if not matched_any:
+                # 2. 如果無任何確認按鈕，檢查任務完成主彈窗是否消失
+                pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
+                if not pos_task:
+                    logging.info("🟢 [子流程] 任務完成彈窗已確認關閉，成功領取獎勵！")
+                    return
+                else:
+                    # 3. 若任務彈窗仍存在且無確認按鈕，說明第一步點選「領取獎勵」失效，進行重新點擊！
+                    height_to_use = rect.get("height") or screen_img.shape[0] or 1080
+                    scale_y = height_to_use / 1080.0
+                    btn_x = rect["left"] + pos_task[0]
+                    btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
+                    logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，重新點擊領取獎勵座標 ({btn_x}, {btn_y})。")
+                    self.mouse.click(btn_x, btn_y)
+                    time.sleep(0.5)
 
