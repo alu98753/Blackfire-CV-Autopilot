@@ -1358,6 +1358,67 @@ class TestStateMachineLogic(unittest.TestCase):
         # click_y = 500 + 253 = 753
         self.mock_mouse.click.assert_called_once_with(497, 753)
 
+    @patch('os.path.exists')
+    def test_insufficient_stamina_defense_subflow(self, mock_exists):
+        """
+        測試全域食物不足（體力不足）退避自癒子流程：
+        1. 偵測到 no_bread/no_bread.png 時觸發
+        2. 點擊 no_bread/cancel.png
+        3. 進行 quit 按鈕清除循環
+        4. 尋找並點擊 goback_town.png
+        5. 一律切換為 collect_only 模式與狀態
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LOBBY
+        
+        # 讓 os.path.exists 對所有範本返回 True
+        mock_exists.return_value = True
+        
+        # 模擬視窗物理範圍
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 800, "height": 600}
+        
+        # 我們將用一個計數器來模擬多個步驟的畫面匹配結果
+        match_call_count = [0]
+        
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            match_call_count[0] += 1
+            if name == "no_bread/no_bread.png":
+                return ((200, 200), 0.9)
+            elif name == "no_bread/cancel.png":
+                return ((150, 250), 0.9)
+            elif name == "common/quit.png":
+                # 第一輪清除有 quit，第二輪沒有
+                if match_call_count[0] <= 5: # 用呼叫計數來模擬
+                    return ((300, 50), 0.9)
+                return (None, 0.0)
+            elif name == "goback_town.png":
+                return ((50, 450), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        # 以 patch 縮短 stamina_flow 的 sleep 時間以加快測試速度
+        with patch('states.stamina_flow.time.sleep') as mock_sleep:
+            self.state_machine.step()
+            
+        # 驗證點擊序列：
+        # 1. 點擊取消 (100 + 150 = 250, 100 + 250 = 350)
+        # 2. 點擊 quit (100 + 300 = 400, 100 + 50 = 150)
+        # 3. 點擊 goback_town (100 + 50 = 150, 100 + 450 = 550)
+        from unittest.mock import call
+        expected_clicks = [
+            call(250, 350), # 點擊取消
+            call(400, 150), # 點擊 quit
+            call(150, 550)  # 點擊返回城鎮
+        ]
+        self.mock_mouse.click.assert_has_calls(expected_clicks)
+        
+        # 驗證配置已被切換為 collect_only
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        # 驗證狀態已轉移至 STATE_COLLECT_ONLY
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+
 if __name__ == "__main__":
     unittest.main()
 

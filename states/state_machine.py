@@ -154,6 +154,11 @@ class GameStateMachine:
         if handle_global_login(self, screen_img, rect):
             return
 
+        # C. 全域體力不足（食物不足）處理
+        from states.stamina_flow import handle_insufficient_stamina
+        if handle_insufficient_stamina(self, screen_img, rect):
+            return
+
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
 
