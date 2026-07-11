@@ -172,7 +172,7 @@ class MouseController:
                     
                     rx_logical, ry_logical, dpi_factor = self._phys_to_logical(hwnd, rect, rx_offset_phys, ry_offset_phys)
                     
-                    logging.info(f"[後台點擊] 物理相對: ({rx_offset_phys}, {ry_offset_phys}) -> 邏輯相對: ({rx_logical}, {ry_logical}) [DPI 縮放: {dpi_factor}]")
+                    # logging.info(f"[後台點擊] 物理相對: ({rx_offset_phys}, {ry_offset_phys}) -> 邏輯相對: ({rx_logical}, {ry_logical}) [DPI 縮放: {dpi_factor}]")
                     
                     # 繪製 Debug 紅圈圖檔，保存為 debug_click.png 與實時畫面 debug_running_screen.png
                     self._draw_debug_click(hwnd, rx_offset_phys, ry_offset_phys)
@@ -204,7 +204,7 @@ class MouseController:
             target_x = x + dx
             target_y = y + dy
 
-            logging.info(f"準備點擊座標: ({target_x}, {target_y})，隨機偏移: ({dx}, {dy})")
+            # logging.info(f"準備點擊座標: ({target_x}, {target_y})，隨機偏移: ({dx}, {dy})")
 
             if self.human_like:
                 duration = random.uniform(move_duration[0], move_duration[1])
@@ -277,7 +277,7 @@ class MouseController:
                     time.sleep(0.05)  # 提供微小延遲讓遊戲引擎響應移入
                     
                     # 3. 發送滾動消息 (lparam 為螢幕絕對座標)
-                    logging.info(f"[後台滾輪] delta={wheel_delta}, 目標座標: ({target_x}, {target_y})")
+                    # logging.info(f"[後台滾輪] delta={wheel_delta}, 目標座標: ({target_x}, {target_y})")
                     win32gui.PostMessage(hwnd, win32con.WM_MOUSEWHEEL, wparam, lparam)
                     
                     self.last_target_pos = pyautogui.position()
@@ -336,7 +336,7 @@ class MouseController:
                     rsx_logical, rsy_logical, dpi_factor = self._phys_to_logical(hwnd, rect, rsx_phys, rsy_phys)
                     rex_logical, rey_logical, _ = self._phys_to_logical(hwnd, rect, rex_phys, rey_phys)
                     
-                    logging.info(f"[後台拖曳] 物理相對起點 ({rsx_phys}, {rsy_phys}) -> 邏輯相對起點 ({rsx_logical}, {rsy_logical}) [DPI 縮放: {dpi_factor}]")
+                    # logging.info(f"[後台拖曳] 物理相對起點 ({rsx_phys}, {rsy_phys}) -> 邏輯相對起點 ({rsx_logical}, {rsy_logical}) [DPI 縮放: {dpi_factor}]")
                     
                     # 1. 按下
                     lparam_start = win32api.MAKELONG(rsx_logical, rsy_logical)
