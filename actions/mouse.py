@@ -361,9 +361,14 @@ class MouseController:
                     else:
                         time.sleep(0.02)
                     
-                    # 3. 釋放
+                    # 3. 確保最後一個移動點和釋放動作使用 SendMessage 同步發送，防止消息在隊列中被合併或遺漏，保證滑鼠放開狀態 100% 被即時接收
+                    curr_x_logical, curr_y_logical, _ = self._phys_to_logical(hwnd, rect, rex_phys, rey_phys)
+                    lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
+                    win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
+                    time.sleep(0.02)
+                    
                     lparam_end = win32api.MAKELONG(rex_logical, rey_logical)
-                    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam_end)
+                    win32gui.SendMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam_end)
                     
                     self.last_target_pos = pyautogui.position()
                     self.last_action_time = time.time()
