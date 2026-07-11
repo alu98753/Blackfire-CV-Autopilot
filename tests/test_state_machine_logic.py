@@ -1420,6 +1420,74 @@ class TestStateMachineLogic(unittest.TestCase):
         # 驗證狀態已轉移至 STATE_COLLECT_ONLY
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
 
+    @patch('os.path.exists')
+    def test_bread_collection_window_missing_self_healing(self, mock_exists):
+        """
+        測試領體力視窗自癒機制：
+        1. bread_window_opened = True，但畫面上找不到退出按鈕 quit.png。
+        2. 預期：連續 3 幀未偵測到退出按鈕後，自動將 bread_window_opened 重設為 False，以利下一輪重新打開。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.need_bread_collection = True
+        self.state_machine.bread_window_opened = True
+        self.state_machine.bread_window_missing_count = 0
+        self.state_machine.current_state = self.state_machine.STATE_BREAD_COLLECTION
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 800, "height": 600}
+        
+        # 模擬比對結果：所有模板都匹配不到 (None)
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        # 第一幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.bread_window_opened)
+        self.assertEqual(self.state_machine.bread_window_missing_count, 1)
+        
+        # 第二幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.bread_window_opened)
+        self.assertEqual(self.state_machine.bread_window_missing_count, 2)
+        
+        # 第三幀（應觸發重設）
+        self.state_machine.step()
+        self.assertFalse(self.state_machine.bread_window_opened)
+        self.assertEqual(self.state_machine.bread_window_missing_count, 0)
+
+    @patch('os.path.exists')
+    def test_diamond_collection_window_missing_self_healing(self, mock_exists):
+        """
+        測試領鑽石視窗自癒機制：
+        1. diamond_window_opened = True，但畫面上找不到退出按鈕 quit.png。
+        2. 預期：連續 3 幀未偵測到退出按鈕後，自動將 diamond_window_opened 重設為 False，以利下一輪重新打開。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.need_diamond_collection = True
+        self.state_machine.diamond_window_opened = True
+        self.state_machine.diamond_window_missing_count = 0
+        self.state_machine.current_state = self.state_machine.STATE_DIAMOND_COLLECTION
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 800, "height": 600}
+        
+        # 模擬比對結果：所有模板都匹配不到 (None)
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        # 第一幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.diamond_window_opened)
+        self.assertEqual(self.state_machine.diamond_window_missing_count, 1)
+        
+        # 第二幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.diamond_window_opened)
+        self.assertEqual(self.state_machine.diamond_window_missing_count, 2)
+        
+        # 第三幀（應觸發重設）
+        self.state_machine.step()
+        self.assertFalse(self.state_machine.diamond_window_opened)
+        self.assertEqual(self.state_machine.diamond_window_missing_count, 0)
+
 if __name__ == "__main__":
     unittest.main()
 

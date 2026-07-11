@@ -10,6 +10,31 @@ class DiamondCollectionHandler(BaseStateHandler):
         """
         # A. 如果鑽石視窗已開啟 (看到 quit.png 或 diamond_window_opened)
         if self.machine.diamond_window_opened:
+            # 偵測退出按鈕是否還在
+            pos_quit = None
+            conf_quit = 0.0
+            for quit_btn in ["common/quit.png"]:
+                if os.path.exists(os.path.join("templates", quit_btn)):
+                    pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.8)
+                    if pos:
+                        pos_quit = pos
+                        conf_quit = conf
+                        break
+
+            # 自癒防禦：若視窗應該已開啟，但連續 3 幀未偵測到退出按鈕 (quit.png)，判定為打開失敗或已被關閉，重置狀態以重新開啟
+            if not pos_quit:
+                missing_count = getattr(self.machine, "diamond_window_missing_count", 0) + 1
+                self.machine.diamond_window_missing_count = missing_count
+                logging.info(f"💎 領鑽石：未偵測到退出按鈕 [common/quit.png]，累計未發現次數: {missing_count}/3...")
+                if missing_count >= 3:
+                    logging.warning("⚠️ 領鑽石：連續 3 幀未偵測到退出按鈕，判定鑽石視窗已關閉或打開失敗。重置開啟狀態...")
+                    self.machine.diamond_window_opened = False
+                    self.machine.diamond_window_missing_count = 0
+                    self.machine.diamond_free_clicked = False
+                return
+            else:
+                self.machine.diamond_window_missing_count = 0
+
             # 1. 彈窗內的確認按鈕 (獲得鑽石確認) - 僅在已點擊過免費按鈕後才執行
             if getattr(self.machine, "diamond_free_clicked", False):
                 pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
@@ -27,17 +52,6 @@ class DiamondCollectionHandler(BaseStateHandler):
                     self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
                     time.sleep(0.03)
                     return
-
-            # 偵測退出按鈕是否還在
-            pos_quit = None
-            conf_quit = 0.0
-            for quit_btn in ["common/quit.png"]:
-                if os.path.exists(os.path.join("templates", quit_btn)):
-                    pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.8)
-                    if pos:
-                        pos_quit = pos
-                        conf_quit = conf
-                        break
 
             # 判斷是否需要退出 (已領取確認，或者無免費按鈕判定為冷卻)
             if not self.machine.diamond_collected_this_run and not getattr(self.machine, "diamond_cooldown_detected", False):
@@ -76,6 +90,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                     self.machine.diamond_window_opened = False
                     self.machine.diamond_free_clicked = False
                     self.machine.diamond_cooldown_confirm_count = 0
+                    self.machine.diamond_window_missing_count = 0
                     self.machine.last_diamond_collection_time = time.time()
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return

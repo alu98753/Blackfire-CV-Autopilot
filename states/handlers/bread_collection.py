@@ -10,6 +10,31 @@ class BreadCollectionHandler(BaseStateHandler):
         """
         # A. 如果體力視窗已開啟 (看到 quit.png 或 bread_window_opened)
         if self.machine.bread_window_opened:
+            # 偵測退出按鈕是否還在
+            pos_quit = None
+            conf_quit = 0.0
+            for quit_btn in ["common/quit.png"]:
+                if os.path.exists(os.path.join("templates", quit_btn)):
+                    pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.8)
+                    if pos:
+                        pos_quit = pos
+                        conf_quit = conf
+                        break
+
+            # 自癒防禦：若視窗應該已開啟，但連續 3 幀未偵測到退出按鈕 (quit.png)，判定為打開失敗或已被關閉，重置狀態以重新開啟
+            if not pos_quit:
+                missing_count = getattr(self.machine, "bread_window_missing_count", 0) + 1
+                self.machine.bread_window_missing_count = missing_count
+                logging.info(f"🍞 領體力：未偵測到退出按鈕 [common/quit.png]，累計未發現次數: {missing_count}/3...")
+                if missing_count >= 3:
+                    logging.warning("⚠️ 領體力：連續 3 幀未偵測到退出按鈕，判定體力視窗已關閉或打開失敗。重置開啟狀態...")
+                    self.machine.bread_window_opened = False
+                    self.machine.bread_window_missing_count = 0
+                    self.machine.bread_click_attempted = False
+                return
+            else:
+                self.machine.bread_window_missing_count = 0
+
             # 1. 彈窗內的確認按鈕 (獲得體力確認或體力已滿提示確認)
             pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
             if pos_conf:
@@ -27,17 +52,6 @@ class BreadCollectionHandler(BaseStateHandler):
                 self.machine.bread_collected_this_run = True  # 標記本次已確認領取
                 time.sleep(0.03)
                 return
-
-            # 偵測退出按鈕是否還在
-            pos_quit = None
-            conf_quit = 0.0
-            for quit_btn in ["common/quit.png"]:
-                if os.path.exists(os.path.join("templates", quit_btn)):
-                    pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.8)
-                    if pos:
-                        pos_quit = pos
-                        conf_quit = conf
-                        break
 
             # 判斷是否需要退出 (已領取確認，或者判定為冷卻/已領完)
             if not self.machine.bread_collected_this_run and not getattr(self.machine, "bread_cooldown_detected", False):
@@ -75,6 +89,7 @@ class BreadCollectionHandler(BaseStateHandler):
                     self.machine.bread_cooldown_detected = False
                     self.machine.bread_window_opened = False
                     self.machine.bread_click_attempted = False
+                    self.machine.bread_window_missing_count = 0
                     self.machine.last_bread_collection_time = time.time()
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return
