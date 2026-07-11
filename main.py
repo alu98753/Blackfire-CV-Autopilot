@@ -104,14 +104,14 @@ def main():
         print(" 4) 沙漠廢墟 (Level 4)")
         print(" 5) 幽暗沼澤 (Level 5)")
         try:
-            choice = input("請輸入關卡數字 [1-5] (直接 Enter 鍵預設為 2): ").strip()
+            choice = input("請輸入關卡數字 [1-5] (直接 Enter 鍵預設為 5): ").strip()
             if not choice:
-                choice = "2"
+                choice = "5"
         except KeyboardInterrupt:
             print("\n[!] 取消啟動。")
             sys.exit(0)
         except Exception:
-            choice = "2"
+            choice = "5"
 
         stage_map = {
             "1": ("stages/level1_sky_plains.png", "stages/level1_final.png", "蒼穹平原"),
@@ -121,8 +121,8 @@ def main():
             "5": ("stages/level5_gloomy_swamp.png", "stages/level5_final.png", "幽暗沼澤")
         }
         if choice not in stage_map:
-            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第二關 [荒蕪岩地]...")
-            choice = "2"
+            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [幽暗沼澤]...")
+            choice = "5"
 
         level_btn, boss_btn, stage_name = stage_map[choice]
         config["name"] = f"普通關卡 - {stage_name}"
