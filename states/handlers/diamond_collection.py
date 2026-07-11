@@ -19,21 +19,8 @@ class DiamondCollectionHandler(BaseStateHandler):
                     if pos:
                         pos_quit = pos
                         conf_quit = conf
+                        self.machine.diamond_window_missing_count = 0  # 成功看到元素，重置缺失計數
                         break
-
-            # 自癒防禦：若視窗應該已開啟，但連續 3 幀未偵測到退出按鈕 (quit.png)，判定為打開失敗或已被關閉，重置狀態以重新開啟
-            if not pos_quit:
-                missing_count = getattr(self.machine, "diamond_window_missing_count", 0) + 1
-                self.machine.diamond_window_missing_count = missing_count
-                logging.info(f"💎 領鑽石：未偵測到退出按鈕 [common/quit.png]，累計未發現次數: {missing_count}/3...")
-                if missing_count >= 3:
-                    logging.warning("⚠️ 領鑽石：連續 3 幀未偵測到退出按鈕，判定鑽石視窗已關閉或打開失敗。重置開啟狀態...")
-                    self.machine.diamond_window_opened = False
-                    self.machine.diamond_window_missing_count = 0
-                    self.machine.diamond_free_clicked = False
-                return
-            else:
-                self.machine.diamond_window_missing_count = 0
 
             # 1. 彈窗內的確認按鈕 (獲得鑽石確認) - 僅在已點擊過免費按鈕後才執行
             if getattr(self.machine, "diamond_free_clicked", False):
@@ -42,6 +29,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                     logging.info(f"💎 領鑽石：偵測到確認按鈕 [{conf_conf:.4f}]，點擊確認。")
                     self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
                     self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
+                    self.machine.diamond_window_missing_count = 0  # 成功看到元素，重置缺失計數
                     time.sleep(0.03)
                     return
                 
@@ -50,6 +38,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                     logging.info(f"💎 領鑽石：偵測到 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
                     self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
                     self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
+                    self.machine.diamond_window_missing_count = 0  # 成功看到元素，重置缺失計數
                     time.sleep(0.03)
                     return
 
@@ -58,6 +47,8 @@ class DiamondCollectionHandler(BaseStateHandler):
                 pos_free = None
                 if os.path.exists(os.path.join("templates", "free.png")):
                     pos_free, conf_free = self.matcher.match(screen_img, "free.png", threshold=0.90)
+                    if pos_free:
+                        self.machine.diamond_window_missing_count = 0  # 成功看到元素，重置缺失計數
                 if not pos_free and pos_quit:
                     cooldown_count = getattr(self.machine, "diamond_cooldown_confirm_count", 0) + 1
                     self.machine.diamond_cooldown_confirm_count = cooldown_count
@@ -102,8 +93,20 @@ class DiamondCollectionHandler(BaseStateHandler):
                     logging.info(f"💎 領鑽石：在視窗內偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
                     self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
                     self.machine.diamond_free_clicked = True
+                    self.machine.diamond_window_missing_count = 0  # 成功看到元素，重置缺失計數
                     time.sleep(0.03)
                     return
+
+            # 自癒防禦：若走到這一步，代表鑽石開啟狀態為 True，但畫面上找不到任何相關彈窗元素 (confirm/ok/quit/free)
+            missing_count = getattr(self.machine, "diamond_window_missing_count", 0) + 1
+            self.machine.diamond_window_missing_count = missing_count
+            logging.info(f"💎 領鑽石：未偵測到任何彈窗內元素，累計未發現次數: {missing_count}/3...")
+            if missing_count >= 3:
+                logging.warning("⚠️ 領鑽石：連續 3 幀未偵測到任何視窗元素，判定鑽石視窗已關閉或打開失敗。重置開啟狀態...")
+                self.machine.diamond_window_opened = False
+                self.machine.diamond_window_missing_count = 0
+                self.machine.diamond_free_clicked = False
+            return
         else:
             # B. 情況三：尚未開啟鑽石彈窗，尋找並點選城鎮中的鑽石入口
             if os.path.exists(os.path.join("templates", "diamond.png")):

@@ -10,37 +10,13 @@ class BreadCollectionHandler(BaseStateHandler):
         """
         # A. 如果體力視窗已開啟 (看到 quit.png 或 bread_window_opened)
         if self.machine.bread_window_opened:
-            # 偵測退出按鈕是否還在
-            pos_quit = None
-            conf_quit = 0.0
-            for quit_btn in ["common/quit.png"]:
-                if os.path.exists(os.path.join("templates", quit_btn)):
-                    pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.8)
-                    if pos:
-                        pos_quit = pos
-                        conf_quit = conf
-                        break
-
-            # 自癒防禦：若視窗應該已開啟，但連續 3 幀未偵測到退出按鈕 (quit.png)，判定為打開失敗或已被關閉，重置狀態以重新開啟
-            if not pos_quit:
-                missing_count = getattr(self.machine, "bread_window_missing_count", 0) + 1
-                self.machine.bread_window_missing_count = missing_count
-                logging.info(f"🍞 領體力：未偵測到退出按鈕 [common/quit.png]，累計未發現次數: {missing_count}/3...")
-                if missing_count >= 3:
-                    logging.warning("⚠️ 領體力：連續 3 幀未偵測到退出按鈕，判定體力視窗已關閉或打開失敗。重置開啟狀態...")
-                    self.machine.bread_window_opened = False
-                    self.machine.bread_window_missing_count = 0
-                    self.machine.bread_click_attempted = False
-                return
-            else:
-                self.machine.bread_window_missing_count = 0
-
             # 1. 彈窗內的確認按鈕 (獲得體力確認或體力已滿提示確認)
             pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
             if pos_conf:
                 logging.info(f"🍞 領體力：偵測到體力確認按鈕 [{conf_conf:.4f}]，點擊確認。")
                 self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
                 self.machine.bread_collected_this_run = True  # 標記本次已確認領取
+                self.machine.bread_window_missing_count = 0  # 成功看到元素，重置缺失計數
                 time.sleep(0.03)
                 return
 
@@ -50,8 +26,21 @@ class BreadCollectionHandler(BaseStateHandler):
                 logging.info(f"🍞 領體力：偵測到體力 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
                 self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
                 self.machine.bread_collected_this_run = True  # 標記本次已確認領取
+                self.machine.bread_window_missing_count = 0  # 成功看到元素，重置缺失計數
                 time.sleep(0.03)
                 return
+
+            # 偵測退出按鈕是否還在
+            pos_quit = None
+            conf_quit = 0.0
+            for quit_btn in ["common/quit.png"]:
+                if os.path.exists(os.path.join("templates", quit_btn)):
+                    pos, conf = self.matcher.match(screen_img, quit_btn, threshold=0.8)
+                    if pos:
+                        pos_quit = pos
+                        conf_quit = conf
+                        self.machine.bread_window_missing_count = 0  # 成功看到元素，重置缺失計數
+                        break
 
             # 判斷是否需要退出 (已領取確認，或者判定為冷卻/已領完)
             if not self.machine.bread_collected_this_run and not getattr(self.machine, "bread_cooldown_detected", False):
@@ -62,6 +51,7 @@ class BreadCollectionHandler(BaseStateHandler):
                         pos, conf = self.matcher.match(screen_img, template_name, threshold=0.70)
                         if pos:
                             pos_coll = pos
+                            self.machine.bread_window_missing_count = 0  # 成功看到元素，重置缺失計數
                             break
                 # 如果沒有收集按鈕且我們已經嘗試過點擊，判定為冷卻/已領取，此時需要退出
                 if not pos_coll and getattr(self.machine, "bread_click_attempted", False) and pos_quit:
@@ -106,6 +96,7 @@ class BreadCollectionHandler(BaseStateHandler):
                         pos_coll = pos
                         conf_coll = conf
                         matched_template = template_name
+                        self.machine.bread_window_missing_count = 0  # 成功看到元素，重置缺失計數
                         break
                         
             if pos_coll:
@@ -124,6 +115,17 @@ class BreadCollectionHandler(BaseStateHandler):
                 self.machine.bread_click_attempted = True
                 time.sleep(0.1)
                 return
+
+            # 自癒防禦：若走到這一步，代表體力開啟狀態為 True，但畫面上找不到任何相關彈窗元素 (confirm/ok/quit/collect)
+            missing_count = getattr(self.machine, "bread_window_missing_count", 0) + 1
+            self.machine.bread_window_missing_count = missing_count
+            logging.info(f"🍞 領體力：未偵測到任何彈窗內元素，累計未發現次數: {missing_count}/3...")
+            if missing_count >= 3:
+                logging.warning("⚠️ 領體力：連續 3 幀未偵測到任何視窗元素，判定體力視窗已關閉或打開失敗。重置開啟狀態...")
+                self.machine.bread_window_opened = False
+                self.machine.bread_window_missing_count = 0
+                self.machine.bread_click_attempted = False
+            return
         else:
             # B. 情況三：尚未開啟體力彈窗，尋找並點選大廳中的入口按鈕打開它
             # 5. 打開體力視窗按鈕 (bread)
