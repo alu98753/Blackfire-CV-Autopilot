@@ -484,9 +484,14 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 偵測到 task_complete.png 位於中心 (960, 540)
         # 預計點擊 Claim Rewards 按鈕中心: X=960, Y=540+281 = 821
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 540), 0.9) if name == "task_complete.png" else (None, 0.0)
-        )
+        call_count = [0]
+        def match_side_effect_1(img, name, threshold=None, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1 and name == "task_complete.png":
+                return ((960, 540), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_1
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(960, 821)
         
@@ -1125,10 +1130,15 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         mock_exists.return_value = True
         
-        # 模擬 matcher.match 尋找到 confirm.png
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((150, 150), 0.92) if name == "common/confirm.png" else (None, 0.0)
-        )
+        # 模擬 matcher.match 尋找到 confirm.png 隨後消失
+        call_count = [0]
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1 and name == "common/confirm.png":
+                return ((150, 150), 0.92)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
         
         rect = {"left": 10, "top": 20, "width": 800, "height": 600}
         
