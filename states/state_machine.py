@@ -150,34 +150,9 @@ class GameStateMachine:
 
 
         # B. 全域登入/重新登入處理
-        if os.path.exists(os.path.join("templates", "login/login.png")):
-            pos_login, conf_login = self.matcher.match(screen_img, "login/login.png", threshold=0.8)
-            if pos_login:
-                logging.info(f"🔑 偵測到遊戲登入主畫面 [login.png] (信心度: {conf_login:.4f})。")
-                
-                # 優先尋找開始冒險按鈕直接點擊
-                if os.path.exists(os.path.join("templates", "login/login_confirm.png")):
-                    pos_btn, conf_btn = self.matcher.match(screen_img, "login/login_confirm.png", threshold=0.8)
-                    if pos_btn:
-                        logging.info(f"👉 成功定位「開始冒險」按鈕 [login_confirm.png] (信心度: {conf_btn:.4f})，進行點擊...")
-                        self.mouse.click(rect["left"] + pos_btn[0], rect["top"] + pos_btn[1])
-                        time.sleep(1.0)
-                        self.consecutive_stuck_count = 0
-                        return
-                
-                # 備用：無 login_confirm.png 時，計算相對於 login.png 中心的偏移量
-                height_to_use = rect.get("height") or screen_img.shape[0] or 1080
-                scale_y = height_to_use / 1080.0
-                
-                dx = int(-3 * scale_y)
-                dy = int(253 * scale_y)
-                click_x = rect["left"] + pos_login[0] + dx
-                click_y = rect["top"] + pos_login[1] + dy
-                logging.info(f"👉 未找到/匹配 login_confirm.png，採用相對中心偏移點擊座標 ({click_x}, {click_y})...")
-                self.mouse.click(click_x, click_y)
-                time.sleep(1.0)
-                self.consecutive_stuck_count = 0
-                return
+        from states.login_flow import handle_global_login
+        if handle_global_login(self, screen_img, rect):
+            return
 
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
