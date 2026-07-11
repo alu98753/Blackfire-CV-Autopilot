@@ -117,7 +117,7 @@ class BreadCollectionHandler(BaseStateHandler):
                 logging.info(f"🍞 領體力：在大廳偵測到體力按鈕 [{conf_bread:.4f}]，點擊打開體力視窗。")
                 self.mouse.click(rect["left"] + pos_bread[0], rect["top"] + pos_bread[1])
                 self.machine.bread_window_opened = True  # 標記體力視窗已開啟
-                time.sleep(0.03)
+                time.sleep(1.0)
                 return
 
             logging.info("⌛ 領體力狀態中，正在等待體力畫面或入口載入...")

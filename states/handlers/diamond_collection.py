@@ -45,8 +45,14 @@ class DiamondCollectionHandler(BaseStateHandler):
                 if os.path.exists(os.path.join("templates", "free.png")):
                     pos_free, conf_free = self.matcher.match(screen_img, "free.png", threshold=0.90)
                 if not pos_free and pos_quit:
-                    logging.info("💎 領鑽石：鑽石視窗已開啟但無免費按鈕 (處於冷卻)，標記冷卻並準備退出。")
-                    self.machine.diamond_cooldown_detected = True
+                    cooldown_count = getattr(self.machine, "diamond_cooldown_confirm_count", 0) + 1
+                    self.machine.diamond_cooldown_confirm_count = cooldown_count
+                    logging.info(f"💎 領鑽石：無免費按鈕，累計檢測次數: {cooldown_count}/3...")
+                    if cooldown_count >= 3:
+                        logging.info("💎 領鑽石：鑽石視窗已開啟且連續 3 幀無免費按鈕 (處於冷卻)，標記冷卻並準備退出。")
+                        self.machine.diamond_cooldown_detected = True
+                else:
+                    self.machine.diamond_cooldown_confirm_count = 0
 
             if self.machine.diamond_collected_this_run or getattr(self.machine, "diamond_cooldown_detected", False):
                 if pos_quit:
@@ -69,6 +75,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                     self.machine.diamond_cooldown_detected = False
                     self.machine.diamond_window_opened = False
                     self.machine.diamond_free_clicked = False
+                    self.machine.diamond_cooldown_confirm_count = 0
                     self.machine.last_diamond_collection_time = time.time()
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return
@@ -90,7 +97,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                     logging.info(f"💎 領鑽石：在畫面偵測到鑽石按鈕 [{conf_dia:.4f}]，點擊打開領取畫面。")
                     self.mouse.click(rect["left"] + pos_dia[0], rect["top"] + pos_dia[1])
                     self.machine.diamond_window_opened = True
-                    time.sleep(0.03)
+                    time.sleep(1.0)
                     return
 
             logging.info("⌛ 領鑽石狀態中，正在等待鑽石畫面或入口載入...")
