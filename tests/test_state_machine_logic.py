@@ -1488,6 +1488,68 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertFalse(self.state_machine.diamond_window_opened)
         self.assertEqual(self.state_machine.diamond_window_missing_count, 0)
 
+    @patch('os.path.exists')
+    def test_stamina_insufficient_retreat_and_restoration(self, mock_exists):
+        """
+        測試體力不足退避與定時恢復機制：
+        1. 觸發體力不足時，應備份原始配置並設定開始時間。
+        2. 當在 COLLECT_ONLY 狀態下，若未滿設定時間，維持 COLLECT_ONLY。
+        3. 若時間已滿，自動還原原始配置，重置時間，並轉移至 STATE_UNKNOWN 以重新尋路。
+        """
+        # 設定原始配置為史萊姆地下城
+        orig_config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = orig_config
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 1. 模擬偵測到 no_bread.png，觸發體力不足
+        def mock_match_nobread(img, name, threshold):
+            if name == "no_bread/no_bread.png":
+                return ((150, 250), 0.9)
+            elif name == "no_bread/cancel.png":
+                return ((150, 250), 0.9)
+            elif name == "common/quit.png":
+                return (None, 0.0)
+            elif name == "goback_town.png":
+                return ((50, 450), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = mock_match_nobread
+        
+        with patch('states.stamina_flow.time.sleep') as mock_sleep:
+            self.state_machine.step()
+            
+        # 驗證 original_config 與 stamina_retreat_start_time 已設定
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        self.assertIsNotNone(self.state_machine.stamina_retreat_start_time)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        
+        # 2. 模擬處於 COLLECT_ONLY，時間未到 4.0 小時
+        # 預期：維持 COLLECT_ONLY
+        self.mock_matcher.match.side_effect = None
+        self.mock_matcher.match.return_value = (None, 0.0) # 模擬無領取鑽石/體力需求
+        
+        # 暫時設定 retreat_duration 為 4.0 小時，並模擬只過了 1.0 小時
+        self.state_machine.config["stamina_retreat_duration"] = 4.0
+        self.state_machine.stamina_retreat_start_time = time.time() - 3600.0
+        
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        
+        # 3. 模擬時間已滿 4.0 小時 (例如已過 4.1 小時)
+        # 預期：恢復為 orig_config，時間清空，轉移至 STATE_UNKNOWN
+        self.state_machine.stamina_retreat_start_time = time.time() - (4.1 * 3600.0)
+        
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertIsNone(self.state_machine.original_config)
+        self.assertIsNone(self.state_machine.stamina_retreat_start_time)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
 if __name__ == "__main__":
     unittest.main()
 
