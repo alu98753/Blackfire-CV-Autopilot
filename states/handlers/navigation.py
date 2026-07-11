@@ -201,8 +201,18 @@ class NavigationHandler(BaseStateHandler):
                         self.machine.fallback_swipe_count = fallback_count + 1
                         time.sleep(1.2)
                     else:
-                        logging.warning("⚠️ 警告：已執行防呆拉回滑動但仍未發現解鎖卡片，判定目前無可打關卡，原地等待中...")
-                        time.sleep(1.0)
+                        logging.warning("⚠️ 警告：已執行防呆拉回滑動但仍未發現解鎖卡片，判定目前無可打關卡，嘗試返回大廳...")
+                        pos_back = None
+                        if os.path.exists(os.path.join("templates", "goback_town.png")):
+                            pos_back, conf_back = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
+                        if pos_back:
+                            logging.info(f"👉 偵測到返回按鈕 [goback_town.png] (信心度: {conf_back:.4f})，點擊返回。")
+                            self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                            self.machine.fallback_swipe_count = 0  # 重置計數
+                            time.sleep(1.0)
+                        else:
+                            logging.warning("⚠️ 無法定位返回按鈕 [goback_town.png]，原地等待中...")
+                            time.sleep(1.0)
                     return
                 
                 # 有找到解鎖卡片，重置防呆滑動計數

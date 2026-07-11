@@ -1191,6 +1191,45 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(300, 300)
 
     @patch('os.path.exists')
+    def test_dungeon_navigation_stuck_exit(self, mock_exists):
+        """
+        測試地下城選單選關卡卡死自癒退出邏輯：
+        當 `fallback_swipe_count` >= 3，且 visible_dungeons 為空時，
+        應自動尋找並點擊返回按鈕 `goback_town.png`，並重置 `fallback_swipe_count` 為 0。
+        """
+        self.state_machine.config = {
+            "type": "dungeon",
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        }
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.fallback_swipe_count = 3
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 模擬比對結果：
+        # - locked_entry.png 匹配到（代表處於選關頁面，is_dungeon_page = True）
+        # - visible_dungeons 均未匹配到
+        # - goback_town.png 匹配到於 (50, 50)
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "common/locked_entry.png":
+                return ((100, 100), 0.9)
+            elif name == "goback_town.png":
+                return ((50, 50), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 驗證點擊了返回按鈕 (100 + 50 = 150, 100 + 50 = 150)
+        self.mock_mouse.click.assert_called_once_with(150, 150)
+        # 驗證 `fallback_swipe_count` 已經被重置為 0
+        self.assertEqual(self.state_machine.fallback_swipe_count, 0)
+
+    @patch('os.path.exists')
     def test_collect_only_mode_flow(self, mock_exists):
         """
         測試定時領取模式 (collect_only)：
