@@ -10,22 +10,23 @@ class DiamondCollectionHandler(BaseStateHandler):
         """
         # A. 如果鑽石視窗已開啟 (看到 quit.png 或 diamond_window_opened)
         if self.machine.diamond_window_opened:
-            # 1. 彈窗內的確認按鈕 (獲得鑽石確認)
-            pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
-            if pos_conf:
-                logging.info(f"💎 領鑽石：偵測到確認按鈕 [{conf_conf:.4f}]，點擊確認。")
-                self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-                self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
-                time.sleep(0.03)
-                return
-            
-            pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
-            if pos_ok:
-                logging.info(f"💎 領鑽石：偵測到 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
-                self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
-                self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
-                time.sleep(0.03)
-                return
+            # 1. 彈窗內的確認按鈕 (獲得鑽石確認) - 僅在已點擊過免費按鈕後才執行
+            if getattr(self.machine, "diamond_free_clicked", False):
+                pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
+                if pos_conf:
+                    logging.info(f"💎 領鑽石：偵測到確認按鈕 [{conf_conf:.4f}]，點擊確認。")
+                    self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
+                    self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
+                    time.sleep(0.03)
+                    return
+                
+                pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
+                if pos_ok:
+                    logging.info(f"💎 領鑽石：偵測到 OK 按鈕 [{conf_ok:.4f}]，點擊 OK。")
+                    self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
+                    self.machine.diamond_collected_this_run = True  # 標記本次已確認領取
+                    time.sleep(0.03)
+                    return
 
             # 偵測退出按鈕是否還在
             pos_quit = None
@@ -67,16 +68,18 @@ class DiamondCollectionHandler(BaseStateHandler):
                     self.machine.diamond_collected_this_run = False
                     self.machine.diamond_cooldown_detected = False
                     self.machine.diamond_window_opened = False
+                    self.machine.diamond_free_clicked = False
                     self.machine.last_diamond_collection_time = time.time()
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return
-
+ 
             # 情況二：尚未領取且無冷卻，點擊免費鑽石
             if os.path.exists(os.path.join("templates", "free.png")):
                 pos_free, conf_free = self.matcher.match(screen_img, "free.png", threshold=0.90)
                 if pos_free:
                     logging.info(f"💎 領鑽石：在視窗內偵測到免費鑽石按鈕 [{conf_free:.4f}]，點擊領取。")
                     self.mouse.click(rect["left"] + pos_free[0], rect["top"] + pos_free[1])
+                    self.machine.diamond_free_clicked = True
                     time.sleep(0.03)
                     return
         else:
