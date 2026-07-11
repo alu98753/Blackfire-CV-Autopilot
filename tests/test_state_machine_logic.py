@@ -1242,6 +1242,47 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.check_collection_trigger(None)
         self.assertTrue(self.state_machine.need_bread_collection)
 
+    @patch('os.path.exists')
+    def test_login_page_detection_with_confirm_btn(self, mock_exists):
+        """
+        測試全域登入功能（包含確認按鈕）：
+        若有 login_confirm.png，應精確定位並點選按鈕。
+        """
+        mock_exists.side_effect = lambda path: True
+        
+        # 模擬比對結果：login.png 位於中心 (500, 500), login_confirm.png 位於 (970, 783)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kwargs: (
+            ((500, 500), 0.95) if name == "login/login.png" else (
+                ((970, 783), 0.92) if name == "login/login_confirm.png" else (None, 0.0)
+            )
+        )
+        
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        
+        self.mock_mouse.click.assert_called_once_with(970, 783)
+
+    @patch('os.path.exists')
+    def test_login_page_detection_with_fallback_offset(self, mock_exists):
+        """
+        測試全域登入功能（無確認按鈕，使用相對偏移量）：
+        若無 login_confirm.png，應基於 login.png 中心算出的偏移量進行點選。
+        """
+        mock_exists.side_effect = lambda path: "login_confirm.png" not in path.replace("\\", "/")
+        
+        # 模擬比對結果：login.png 位於中心 (500, 500)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kwargs: (
+            ((500, 500), 0.95) if name == "login/login.png" else (None, 0.0)
+        )
+        
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        
+        # 計算偏移量：dx = -3, dy = 253 (因為 mock 視窗高度為 1080, scale_y = 1.0)
+        # click_x = 500 - 3 = 497
+        # click_y = 500 + 253 = 753
+        self.mock_mouse.click.assert_called_once_with(497, 753)
+
 if __name__ == "__main__":
     unittest.main()
 
