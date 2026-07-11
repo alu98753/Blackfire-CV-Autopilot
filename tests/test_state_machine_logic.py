@@ -1254,7 +1254,9 @@ class TestStateMachineLogic(unittest.TestCase):
         # 模擬比對結果：login.png 位於中心 (500, 500), login_confirm.png 位於 (970, 783)
         self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kwargs: (
             ((500, 500), 0.95) if name == "login/login.png" else (
-                ((970, 783), 0.92) if name == "login/login_confirm.png" else (None, 0.0)
+                ((970, 783), 0.92) if name == "login/login_confirm.png" else (
+                    ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
+                )
             )
         )
         
@@ -1275,7 +1277,9 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 模擬比對結果：login.png 位於中心 (500, 500)
         self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kwargs: (
-            ((500, 500), 0.95) if name == "login/login.png" else (None, 0.0)
+            ((500, 500), 0.95) if name == "login/login.png" else (
+                ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
+            )
         )
         
         self.mock_mouse.click.reset_mock()
