@@ -484,11 +484,13 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 偵測到 task_complete.png 位於中心 (960, 540)
         # 預計點擊 Claim Rewards 按鈕中心: X=960, Y=540+281 = 821
-        call_count = [0]
+        task_complete_matched = [False]
         def match_side_effect_1(img, name, threshold=None, **kwargs):
-            call_count[0] += 1
-            if call_count[0] == 1 and name == "task_complete.png":
-                return ((960, 540), 0.9)
+            if name == "task_complete.png":
+                if not task_complete_matched[0]:
+                    task_complete_matched[0] = True
+                    return ((960, 540), 0.9)
+                return (None, 0.0)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect_1
@@ -1131,11 +1133,13 @@ class TestStateMachineLogic(unittest.TestCase):
         mock_exists.return_value = True
         
         # 模擬 matcher.match 尋找到 confirm.png 隨後消失
-        call_count = [0]
+        confirm_matched = [False]
         def match_side_effect(img, name, threshold=None, **kwargs):
-            call_count[0] += 1
-            if call_count[0] == 1 and name == "common/confirm.png":
-                return ((150, 150), 0.92)
+            if name == "common/confirm.png":
+                if not confirm_matched[0]:
+                    confirm_matched[0] = True
+                    return ((150, 150), 0.92)
+                return (None, 0.0)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect
