@@ -338,12 +338,12 @@ class MouseController:
                     
                     # logging.info(f"[後台拖曳] 物理相對起點 ({rsx_phys}, {rsy_phys}) -> 邏輯相對起點 ({rsx_logical}, {rsy_logical}) [DPI 縮放: {dpi_factor}]")
                     
-                    # 1. 按下
+                    # 1. 按下 (使用 SendMessage 確保同步按下)
                     lparam_start = win32api.MAKELONG(rsx_logical, rsy_logical)
-                    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam_start)
+                    win32gui.SendMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam_start)
                     time.sleep(0.05)
                     
-                    # 2. 插值模擬移動軌跡
+                    # 2. 插值模擬移動軌跡 (使用 SendMessage 確保每一步軌跡均同步更新且不被合併)
                     steps = max(5, int(duration / 0.02))
                     step_sleep = duration / steps
                     for i in range(1, steps + 1):
@@ -352,7 +352,7 @@ class MouseController:
                         curr_x_logical, curr_y_logical, _ = self._phys_to_logical(hwnd, rect, curr_x_phys, curr_y_phys)
                         
                         lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
-                        win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
+                        win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
                         time.sleep(step_sleep)
                         
                     # 2.5 停頓以消除釋放慣性並確保釋放穩定性
