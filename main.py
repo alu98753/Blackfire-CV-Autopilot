@@ -102,8 +102,9 @@ def main():
         print(" 2) 荒蕪岩地 (Level 2) - 預設")
         print(" 3) 古樹森林 (Level 3)")
         print(" 4) 沙漠廢墟 (Level 4)")
+        print(" 5) 幽暗沼澤 (Level 5)")
         try:
-            choice = input("請輸入關卡數字 [1-4] (直接 Enter 鍵預設為 2): ").strip()
+            choice = input("請輸入關卡數字 [1-5] (直接 Enter 鍵預設為 2): ").strip()
             if not choice:
                 choice = "2"
         except KeyboardInterrupt:
@@ -116,7 +117,8 @@ def main():
             "1": ("stages/level1_sky_plains.png", "stages/level1_final.png", "蒼穹平原"),
             "2": ("stages/level2_barren_rocks.png", "stages/level2_final.png", "荒蕪岩地"),
             "3": ("stages/level3_ancient_forest.png", "stages/level3_final.png", "古樹森林"),
-            "4": ("stages/level4_desert_ruins.png", "stages/level4_final.png", "沙漠廢墟")
+            "4": ("stages/level4_desert_ruins.png", "stages/level4_final.png", "沙漠廢墟"),
+            "5": ("stages/level5_gloomy_swamp.png", "stages/level5_final.png", "幽暗沼澤")
         }
         if choice not in stage_map:
             print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第二關 [荒蕪岩地]...")

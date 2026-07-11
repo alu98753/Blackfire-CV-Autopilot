@@ -381,7 +381,8 @@ class NavigationHandler(BaseStateHandler):
                 "stages/level2_Barren_Rocky_Ground.png",
                 "stages/level2_barren_rocks.png",
                 "stages/level3_ancient_forest.png",
-                "stages/level4_desert_ruins.png"
+                "stages/level4_desert_ruins.png",
+                "stages/level5_gloomy_swamp.png"
             ]
             for st_temp in stage_templates:
                 if os.path.exists(os.path.join("templates", st_temp)):
