@@ -1270,6 +1270,7 @@ class TestStateMachineLogic(unittest.TestCase):
         若無 login_confirm.png，應基於 login.png 中心算出的偏移量進行點選。
         """
         self.state_machine.config = GAME_CONFIGS["stage"]
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         mock_exists.side_effect = lambda path: "login_confirm.png" not in path.replace("\\", "/")
         
         # 模擬比對結果：login.png 位於中心 (500, 500)
