@@ -441,13 +441,30 @@ class NavigationHandler(BaseStateHandler):
                         last_scroll = getattr(self.machine, "last_stage_scroll_time", 0.0)
                         if time.time() - last_scroll > 1.2:
                             scroll_count = getattr(self.machine, "horizontal_scroll_count", 0)
-                            if scroll_count == 0:
-                                logging.info(f"🧭 尋路中：已在關卡選擇介面，但未見目標關卡 [{target_level_btn}]，執行微小緩慢向左滑動清單 (地圖向右移)...")
+                            
+                            if scroll_count >= 6:
+                                logging.warning(f"⚠️ 警告：已執行左右滑動各 3 次但仍未發現目標關卡 [{target_level_btn}]，嘗試點擊返回大廳以重設流程...")
+                                pos_back = None
+                                if os.path.exists(os.path.join("templates", "goback_town.png")):
+                                    pos_back, conf_back = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
+                                if pos_back:
+                                    logging.info(f"👉 偵測到返回按鈕 [goback_town.png] (信心度: {conf_back:.4f})，點擊返回。")
+                                    self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                                    self.machine.horizontal_scroll_count = 0
+                                    time.sleep(1.2)
+                                else:
+                                    logging.warning("⚠️ 無法定位返回按鈕 [goback_town.png]，重置滑動計數原地等待...")
+                                    self.machine.horizontal_scroll_count = 0
+                                    time.sleep(1.0)
+                                return
+
+                            if scroll_count < 3:
+                                logging.info(f"🧭 尋路中：已在關卡選擇介面，但未見目標關卡 [{target_level_btn}]，執行向左滑動清單 (地圖向右移) 第 {scroll_count + 1}/3 次...")
                                 start_x = rect["left"] + int(rect["width"] * 0.58)
                                 end_x = rect["left"] + int(rect["width"] * 0.42)
-                                self.machine.horizontal_scroll_count = 1
+                                self.machine.horizontal_scroll_count = scroll_count + 1
                             else:
-                                logging.info(f"🧭 尋路中：已在關卡選擇介面，但仍未見目標關卡 [{target_level_btn}]，改為向右滑動清單返回主區 (地圖向左移)...")
+                                logging.info(f"🧭 尋路中：已在關卡選擇介面，但仍未見目標關卡 [{target_level_btn}]，執行向右滑動清單 (地圖向左移) 第 {scroll_count - 2}/3 次...")
                                 start_x = rect["left"] + int(rect["width"] * 0.42)
                                 end_x = rect["left"] + int(rect["width"] * 0.58)
                                 self.machine.horizontal_scroll_count = scroll_count + 1
