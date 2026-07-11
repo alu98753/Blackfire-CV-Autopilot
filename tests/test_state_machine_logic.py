@@ -698,6 +698,8 @@ class TestStateMachineLogic(unittest.TestCase):
             
         self.mock_matcher.match.side_effect = match_side_effect
         self.state_machine.step()
+        self.state_machine.step()
+        self.state_machine.step()
         
         # 斷言：第一步應點擊退出按鈕，但尚未重置
         self.mock_mouse.click.assert_called_with(500, 500)

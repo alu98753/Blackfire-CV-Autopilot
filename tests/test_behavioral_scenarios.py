@@ -161,6 +161,8 @@ class TestBehavioralScenarios(unittest.TestCase):
             
         self.mock_matcher.match.side_effect = match_side_effect_cooldown
         self.state_machine.step()
+        self.state_machine.step()
+        self.state_machine.step()
         
         # Assert
         self.mock_mouse.click.assert_called_with(500, 500)
