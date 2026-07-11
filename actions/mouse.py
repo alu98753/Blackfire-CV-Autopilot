@@ -338,8 +338,12 @@ class MouseController:
                     
                     # logging.info(f"[後台拖曳] 物理相對起點 ({rsx_phys}, {rsy_phys}) -> 邏輯相對起點 ({rsx_logical}, {rsy_logical}) [DPI 縮放: {dpi_factor}]")
                     
-                    # 1. 按下 (使用 SendMessage 確保同步按下)
+                    # 1. 預先將滑鼠游標移動到起點 (不帶 MK_LBUTTON)，強迫遊戲引擎更新滑鼠座標快取，避免被判定為反向位移
                     lparam_start = win32api.MAKELONG(rsx_logical, rsy_logical)
+                    win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam_start)
+                    time.sleep(0.03) # 給予遊戲引擎微小的更新快取時間
+                    
+                    # 2. 按下 (使用 SendMessage 確保同步按下)
                     win32gui.SendMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam_start)
                     time.sleep(0.05)
                     
