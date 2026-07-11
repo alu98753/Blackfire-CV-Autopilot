@@ -1191,7 +1191,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(300, 300)
 
     @patch('os.path.exists')
-    def test_dungeon_navigation_stuck_exit(self, mock_exists):
+    @patch('cv2.imread')
+    @patch('cv2.minMaxLoc')
+    def test_dungeon_navigation_stuck_exit(self, mock_minMaxLoc, mock_imread, mock_exists):
         """
         測試地下城選單選關卡卡死自癒退出邏輯：
         當 `fallback_swipe_count` >= 3，且 visible_dungeons 為空時，
@@ -1208,18 +1210,29 @@ class TestStateMachineLogic(unittest.TestCase):
         mock_exists.return_value = True
         self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
         
-        # 模擬比對結果：
-        # - locked_entry.png 匹配到（代表處於選關頁面，is_dungeon_page = True）
-        # - visible_dungeons 均未匹配到
-        # - goback_town.png 匹配到於 (50, 50)
+        # 傳回真實 numpy array 圖片以進入 OpenCV 比對邏輯
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((800, 1000, 3), dtype=np.uint8)
+        
+        # 模擬 cv2.imread 返回 dummy 影像
+        mock_imread.return_value = np.zeros((10, 10, 3), dtype=np.uint8)
+        
+        # 模擬 cv2.minMaxLoc：第 5 次比對（locked_entry）回傳高信心度，其餘回傳低信心度
+        minMaxLoc_calls = [0]
+        def mock_minMaxLoc_impl(res):
+            minMaxLoc_calls[0] += 1
+            if minMaxLoc_calls[0] == 5:
+                return (0.0, 0.95, (0, 0), (0, 0))
+            return (0.0, 0.1, (0, 0), (0, 0))
+        mock_minMaxLoc.side_effect = mock_minMaxLoc_impl
+        
+        # 模擬 matcher.match 匹配 goback_town.png
         def match_side_effect(img, name, threshold=None, **kwargs):
-            if name == "common/locked_entry.png":
-                return ((100, 100), 0.9)
-            elif name == "goback_town.png":
+            if name == "goback_town.png":
                 return ((50, 50), 0.9)
             return (None, 0.0)
-            
         self.mock_matcher.match.side_effect = match_side_effect
+        
         self.mock_mouse.click.reset_mock()
         
         self.state_machine.step()
