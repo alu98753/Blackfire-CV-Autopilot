@@ -1248,6 +1248,7 @@ class TestStateMachineLogic(unittest.TestCase):
         測試全域登入功能（包含確認按鈕）：
         若有 login_confirm.png，應精確定位並點選按鈕。
         """
+        self.state_machine.config = GAME_CONFIGS["stage"]
         mock_exists.side_effect = lambda path: True
         
         # 模擬比對結果：login.png 位於中心 (500, 500), login_confirm.png 位於 (970, 783)
@@ -1268,6 +1269,7 @@ class TestStateMachineLogic(unittest.TestCase):
         測試全域登入功能（無確認按鈕，使用相對偏移量）：
         若無 login_confirm.png，應基於 login.png 中心算出的偏移量進行點選。
         """
+        self.state_machine.config = GAME_CONFIGS["stage"]
         mock_exists.side_effect = lambda path: "login_confirm.png" not in path.replace("\\", "/")
         
         # 模擬比對結果：login.png 位於中心 (500, 500)
