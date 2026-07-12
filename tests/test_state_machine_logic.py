@@ -1550,6 +1550,49 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertIsNone(self.state_machine.stamina_retreat_start_time)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
 
+    @patch('os.path.exists')
+    def test_dungeon_navigation_transition_corrected(self, mock_exists):
+        """
+        測試修正後的地下城進入狀態轉移邏輯：
+        1. 看到 dungeons/dungeon_fight.png 時，狀態應保持 STATE_NAVIGATING 且執行點擊，不提早轉移。
+        2. 只有看到 dungeons/leave.png（或寶箱/祝福等內部按鈕）時，才轉移至 STATE_DUNGEON_EXPLORING。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 1. 模擬畫面只看到 dungeon_fight.png (無 leave.png)
+        def match_fight(img, name, threshold=None, brightness_threshold=None):
+            if name == "dungeons/dungeon_fight.png":
+                return (200, 300), 0.9
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = match_fight
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        # 應點擊戰鬥按鈕
+        self.mock_mouse.click.assert_called_once_with(300, 400) # left=100, top=100 + offset (200, 300)
+        # 狀態仍應維持 STATE_NAVIGATING 
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 2. 模擬畫面看到 leave.png (無 dungeon_fight.png)
+        def match_leave(img, name, threshold=None, brightness_threshold=None):
+            if name == "dungeons/leave.png":
+                return (150, 250), 0.9
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = match_leave
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        # 不應點擊
+        self.mock_mouse.click.assert_not_called()
+        # 狀態轉移至 STATE_DUNGEON_EXPLORING
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
 if __name__ == "__main__":
     unittest.main()
 

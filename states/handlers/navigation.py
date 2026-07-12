@@ -19,15 +19,26 @@ class NavigationHandler(BaseStateHandler):
         rect["width"] = width
         rect["height"] = height
 
-        # 優先判定：如果我們已經看到任何地下城探索或結束按鈕，說明點擊已經成功並進入內部，直接轉移狀態！
+        # 優先判定：如果我們已經看到地下城內部的離開按鈕或其他探索按鈕，說明點擊已經成功並進入內部，轉移狀態！
         if self.machine.config.get("type") == "dungeon":
-            for check_btn in ["dungeons/dungeon_fight.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png"]:
+            # 移出 dungeons/dungeon_fight.png，改由 dungeons/leave.png 判定已正式進入
+            for check_btn in ["dungeons/leave.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png"]:
                 if os.path.exists(os.path.join("templates", check_btn)):
                     pos, conf = self.matcher.match(screen_img, check_btn, threshold=0.8)
                     if pos:
-                        logging.info(f"🧭 尋路中偵測到地下城專屬按鈕 [{check_btn}] (信心度: {conf:.4f})，判定已進入地下城，轉移至 DUNGEON_EXPLORING。")
+                        logging.info(f"🧭 尋路中偵測到地下城內部按鈕 [{check_btn}] (信心度: {conf:.4f})，判定已進入地下城，轉移至 DUNGEON_EXPLORING。")
                         self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
                         return
+
+            # 如果已經在準備進入地下城的介面（看見戰鬥入口 dungeons/dungeon_fight.png，但尚未看到 leave.png）
+            # 此時我們在 NAVIGATING 狀態下執行點擊戰鬥，以便體力不足偵測（no_bread）在此狀態下正常工作
+            if os.path.exists(os.path.join("templates", "dungeons/dungeon_fight.png")):
+                pos_fight, conf_fight = self.matcher.match(screen_img, "dungeons/dungeon_fight.png", threshold=0.8)
+                if pos_fight:
+                    logging.info(f"🧭 尋路中：在畫面上找到地下城戰鬥開始按鈕 [dungeons/dungeon_fight.png] (信心度: {conf_fight:.4f})，點擊進入地下城。")
+                    self.mouse.click(rect["left"] + pos_fight[0], rect["top"] + pos_fight[1])
+                    time.sleep(0.5)
+                    return
 
         # 0. 背包清理優先防護：如果需要整理背包，尋路只能引導我們退回大廳，不得前進
         if self.machine.need_bag_cleaning:
