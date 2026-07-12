@@ -48,10 +48,6 @@ class ResultHandler(BaseStateHandler):
                             matched_btn = btn_name
                             break
                             
-                now = time.time()
-                if now - getattr(self.machine, "last_result_retry_click_time", 0.0) < 4.0:
-                    logging.info("⌛ 剛點擊過重新開始按鈕，正在等待畫面載入...")
-                    return True
                 if pos_retry:
                     logging.info(f"👉 偵測到重新開始按鈕 [{matched_btn}] (信心度: {conf_retry:.4f})，進行點擊重新開始。")
                     self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
@@ -63,9 +59,10 @@ class ResultHandler(BaseStateHandler):
                     logging.warning(f"⚠️ 未匹配到重新開始按鈕圖，使用防禦性相對座標點擊: ({click_x}, {click_y})")
                     self.mouse.click(click_x, click_y)
                     
-                self.machine.last_result_retry_click_time = now
+                self.machine.last_result_retry_click_time = time.time()
                 self.machine.run_count += 1
-                logging.info(f"🚀 點擊重新開始按鈕，等待戰鬥載入... (累計啟動次數: {self.machine.run_count})")
+                logging.info(f"🚀 點擊重新開始按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
+                self.machine.transition_to(self.machine.STATE_LOADING)
                 time.sleep(0.1)
                 return True
 
@@ -96,15 +93,12 @@ class ResultHandler(BaseStateHandler):
         # A3. 檢查「再戰」
         pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8)
         if pos_retry:
-            now = time.time()
-            if now - getattr(self.machine, "last_result_retry_click_time", 0.0) < 4.0:
-                logging.info("⌛ 剛點擊過再戰按鈕，正在等待畫面載入...")
-                return True
             logging.info("👉 點擊「再戰」！")
             self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
-            self.machine.last_result_retry_click_time = now
+            self.machine.last_result_retry_click_time = time.time()
             self.machine.run_count += 1
-            logging.info(f"🚀 點擊再戰按鈕，等待戰鬥載入... (累計啟動次數: {self.machine.run_count})")
+            logging.info(f"🚀 點擊再戰按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
+            self.machine.transition_to(self.machine.STATE_LOADING)
             time.sleep(0.1)
             return True
 

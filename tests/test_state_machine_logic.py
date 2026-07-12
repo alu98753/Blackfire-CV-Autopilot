@@ -109,13 +109,13 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
         
-        # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並等待，不立即切換狀態
+        # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並轉移至 LOADING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((500, 500), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         
         # 5. 看到戰鬥自動按鈕 ➔ 正式轉入 BATTLE
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
@@ -762,9 +762,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_matcher.match.side_effect = match_side_effect_fallback
         self.state_machine.step()
         
-        # 斷言：點擊相對座標 (460, 850)，且轉移為 RESULT，且次數為 1
+        # 斷言：點擊相對座標 (460, 850)，且轉移為 LOADING，且次數為 1
         self.mock_mouse.click.assert_called_with(460, 850)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         self.assertEqual(self.state_machine.run_count, 1)
         
         # 模擬進入戰鬥，看見 auto.png ➔ 轉移為 BATTLE
@@ -789,9 +789,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         
-        # 斷言：應點擊匹配到的按鈕座標 (100+400=500, 100+800=900)
+        # 斷言：應點擊匹配到的按鈕座標 (100+400=500, 100+800=900)，且轉移為 LOADING
         self.mock_mouse.click.assert_called_with(500, 900)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         self.assertEqual(self.state_machine.run_count, 2)
 
         # 模擬再次進入戰鬥，看見 auto.png ➔ 轉移為 BATTLE
@@ -1614,6 +1614,46 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_not_called()
         # 狀態轉移至 STATE_DUNGEON_EXPLORING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
+    @patch('os.path.exists')
+    def test_loading_state_flow(self, mock_exists):
+        """
+        測試過渡加載狀態 (STATE_LOADING) 的運作流程：
+        1. 看到戰鬥特徵 ➔ 進入 BATTLE。
+        2. 超時過長 ➔ 重置為 UNKNOWN。
+        3. 跳出體力不足 ➔ 觸發退避。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_LOADING
+        self.state_machine.loading_start_time = time.time()
+        mock_exists.return_value = True
+
+        # 情況 1: 沒有戰鬥特徵，且未超時 ➔ 繼續等待
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+
+        # 情況 2: 超時 (設定啟動時間在 20 秒前) ➔ 重置為 UNKNOWN
+        self.state_machine.loading_start_time = time.time() - 20.0
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+        # 情況 3: 跳出體力不足 ➔ 觸發退避 (全域攔截)
+        self.state_machine.current_state = self.state_machine.STATE_LOADING
+        self.state_machine.loading_start_time = time.time()
+        
+        # 模擬看見 no_bread.png
+        def match_no_bread(img, name, threshold=None, brightness_threshold=None):
+            if name == "no_bread/no_bread.png":
+                return (500, 500), 0.9
+            if name == "goback_town.png":
+                return (100, 100), 0.9
+            return None, 0.0
+        self.mock_matcher.match.side_effect = match_no_bread
+        self.state_machine.step()
+        
+        # 應觸發退避並變為 COLLECT_ONLY
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
 
 if __name__ == "__main__":
     unittest.main()

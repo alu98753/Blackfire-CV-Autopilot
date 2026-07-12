@@ -12,7 +12,8 @@ from states.handlers import (
     BackpackFullSortingHandler,
     BreadCollectionHandler,
     DiamondCollectionHandler,
-    CollectOnlyHandler
+    CollectOnlyHandler,
+    LoadingHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -30,6 +31,7 @@ class GameStateMachine:
     STATE_BREAD_COLLECTION = "BREAD_COLLECTION"          # 自動領體力流程
     STATE_DIAMOND_COLLECTION = "DIAMOND_COLLECTION"      # 自動領鑽石流程
     STATE_COLLECT_ONLY = "COLLECT_ONLY"                  # 定時領取麵包與鑽石待機流程
+    STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -91,6 +93,7 @@ class GameStateMachine:
         self.stamina_retreat_start_time = None
         self.last_lobby_start_click_time = 0.0
         self.last_result_retry_click_time = 0.0
+        self.loading_start_time = 0.0
         
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"
@@ -107,6 +110,7 @@ class GameStateMachine:
             self.STATE_BREAD_COLLECTION: BreadCollectionHandler(self),
             self.STATE_DIAMOND_COLLECTION: DiamondCollectionHandler(self),
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
+            self.STATE_LOADING: LoadingHandler(self),
         }
 
 
@@ -123,6 +127,8 @@ class GameStateMachine:
             self.consecutive_stuck_count = 0
             if new_state == self.STATE_BATTLE:
                 self.last_auto_click_time = 0
+            elif new_state == self.STATE_LOADING:
+                self.loading_start_time = time.time()
             elif new_state == self.STATE_BACKPACK_FULL_SORTING:
                 self.need_bag_cleaning = True
                 self.handlers[new_state].screenshot_counter = 1
@@ -162,7 +168,7 @@ class GameStateMachine:
 
         # C. 體力不足（食物不足）退避處理
         # 僅在可能啟動新關卡/新副本的狀態下才進行體力不足偵測（如大廳、尋路、或戰鬥結算後再戰時），避免在戰鬥中、地下城探索或背包整理時產生虛假誤判
-        if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT]:
+        if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING]:
             from states.stamina_flow import handle_insufficient_stamina
             if handle_insufficient_stamina(self, screen_img, rect):
                 return
@@ -172,7 +178,7 @@ class GameStateMachine:
 
         # A. 卡死監控 (stuck monitoring)
         # 只有在非戰鬥、非探索、非未知的過渡狀態下，如果同一個狀態持續了太多幀，說明流程可能卡住了
-        if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN, self.STATE_COLLECT_ONLY]:
+        if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN, self.STATE_COLLECT_ONLY, self.STATE_LOADING]:
             self.consecutive_stuck_count += 1
             
             if self.consecutive_stuck_count >= 15:

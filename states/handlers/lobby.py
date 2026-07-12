@@ -40,15 +40,12 @@ class LobbyHandler(BaseStateHandler):
         lobby_btn = self.machine.config["lobby_start_btn"]
         pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
         if pos:
-            now = time.time()
-            if now - getattr(self.machine, "last_lobby_start_click_time", 0.0) < 4.0:
-                logging.info("⌛ 剛點擊過開始按鈕，正在等待戰鬥載入...")
-                return
             logging.info(f"👉 偵測到大廳開始按鈕 [{lobby_btn}] (信心度: {conf:.4f})，進行點擊。")
             self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-            self.machine.last_lobby_start_click_time = now
+            self.machine.last_lobby_start_click_time = time.time()
             self.machine.run_count += 1
             logging.info(f"🚀 點擊大廳開始按鈕，進入加載等待... (累計啟動次數: {self.machine.run_count})")
+            self.machine.transition_to(self.machine.STATE_LOADING)
             time.sleep(0.3)
         else:
             logging.info("🧭 大廳：未偵測到開始按鈕，判定處於城鎮外圍，轉移至 NAVIGATING 進行尋路跳轉。")
