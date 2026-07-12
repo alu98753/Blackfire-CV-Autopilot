@@ -192,6 +192,7 @@ class MouseController:
                     self.last_action_time = time.time()
                     if self.state_machine is not None:
                         self.state_machine.consecutive_stuck_count = 0
+                    self.move_to_safe_area()
                     return True
                 except Exception as e:
                     logging.error(f"[後台] 點擊操作失敗: {e}")
@@ -222,6 +223,7 @@ class MouseController:
             self.last_action_time = time.time()
             if self.state_machine is not None:
                 self.state_machine.consecutive_stuck_count = 0
+            self.move_to_safe_area()
             return True
         except pyautogui.FailSafeException:
             logging.error("🔴 觸發 PyAutoGUI 安全終止 (FailSafe) 機制！滑鼠已移至螢幕角落。")
@@ -379,6 +381,7 @@ class MouseController:
                     if self.state_machine is not None:
                         self.state_machine.consecutive_stuck_count = 0
                     time.sleep(0.3)
+                    self.move_to_safe_area()
                     return True
                 except Exception as e:
                     logging.error(f"[後台] 拖曳操作失敗: {e}")
@@ -400,7 +403,38 @@ class MouseController:
             if self.state_machine is not None:
                 self.state_machine.consecutive_stuck_count = 0
             time.sleep(0.3)
+            self.move_to_safe_area()
             return True
         except Exception as e:
             logging.error(f"拖曳操作失敗: {e}")
             return False
+
+    def move_to_safe_area(self):
+        """
+        將滑鼠游標移動到遊戲視窗邊角的安全區域（例如左上角 15, 15），
+        以清除遊戲中因為滑鼠懸停 (hover) 產生的亮邊或高亮效果，避免干擾模板匹配。
+        """
+        if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+            rect_box = self.state_machine.last_rect
+            rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+        else:
+            hwnd = self.get_hwnd()
+            if hwnd:
+                try:
+                    rect = win32gui.GetWindowRect(hwnd)
+                except Exception:
+                    return
+            else:
+                return
+                
+        safe_rel_x = 15
+        safe_rel_y = 15
+        
+        if self.backend_mode:
+            hwnd = self.get_hwnd()
+            if hwnd:
+                rsx_logical, rsy_logical, _ = self._phys_to_logical(hwnd, rect, safe_rel_x, safe_rel_y)
+                lparam = win32api.MAKELONG(rsx_logical, rsy_logical)
+                win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
+        else:
+            pyautogui.moveTo(rect[0] + safe_rel_x, rect[1] + safe_rel_y)
