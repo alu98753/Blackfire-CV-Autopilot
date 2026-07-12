@@ -89,6 +89,8 @@ class GameStateMachine:
         # 體力不足退避與還原相關屬性
         self.original_config = None
         self.stamina_retreat_start_time = None
+        self.last_lobby_start_click_time = 0.0
+        self.last_result_retry_click_time = 0.0
         
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"

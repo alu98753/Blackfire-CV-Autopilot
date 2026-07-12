@@ -48,6 +48,10 @@ class ResultHandler(BaseStateHandler):
                             matched_btn = btn_name
                             break
                             
+                now = time.time()
+                if now - getattr(self.machine, "last_result_retry_click_time", 0.0) < 4.0:
+                    logging.info("⌛ 剛點擊過重新開始按鈕，正在等待畫面載入...")
+                    return True
                 if pos_retry:
                     logging.info(f"👉 偵測到重新開始按鈕 [{matched_btn}] (信心度: {conf_retry:.4f})，進行點擊重新開始。")
                     self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
@@ -59,9 +63,9 @@ class ResultHandler(BaseStateHandler):
                     logging.warning(f"⚠️ 未匹配到重新開始按鈕圖，使用防禦性相對座標點擊: ({click_x}, {click_y})")
                     self.mouse.click(click_x, click_y)
                     
+                self.machine.last_result_retry_click_time = now
                 self.machine.run_count += 1
-                logging.info(f"🚀 開始第 {self.machine.run_count} 次戰鬥！(戰敗重新開始)")
-                self.machine.transition_to(self.machine.STATE_BATTLE)
+                logging.info(f"🚀 點擊重新開始按鈕，等待戰鬥載入... (累計啟動次數: {self.machine.run_count})")
                 time.sleep(0.1)
                 return True
 
@@ -92,11 +96,15 @@ class ResultHandler(BaseStateHandler):
         # A3. 檢查「再戰」
         pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8)
         if pos_retry:
+            now = time.time()
+            if now - getattr(self.machine, "last_result_retry_click_time", 0.0) < 4.0:
+                logging.info("⌛ 剛點擊過再戰按鈕，正在等待畫面載入...")
+                return True
             logging.info("👉 點擊「再戰」！")
             self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
+            self.machine.last_result_retry_click_time = now
             self.machine.run_count += 1
-            logging.info(f"🚀 開始第 {self.machine.run_count} 次關卡戰鬥！(透過再戰)")
-            self.machine.transition_to(self.machine.STATE_BATTLE)
+            logging.info(f"🚀 點擊再戰按鈕，等待戰鬥載入... (累計啟動次數: {self.machine.run_count})")
             time.sleep(0.1)
             return True
 
@@ -124,11 +132,14 @@ class ResultHandler(BaseStateHandler):
             return True
             
         # D. 檢查是否已經進入戰鬥狀態 (避免人手點擊或自動戰鬥提早開始時卡在結算超時)
-        if os.path.exists(os.path.join("templates", "common/auto.png")):
-            pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
-            if pos_auto:
-                logging.info(f"⚔️ 結算畫面偵測到「自動戰鬥」按鈕 (相似度: {conf_auto:.4f})，判定已進入戰鬥，將狀態切換至 BATTLE。")
-                self.machine.transition_to(self.machine.STATE_BATTLE)
-                return True
+        for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
+            if os.path.exists(os.path.join("templates", feat)):
+                thresh = 0.65 if feat == "common/auto.png" else 0.70
+                pos_auto, conf_auto = self.matcher.match(screen_img, feat, threshold=thresh)
+                if pos_auto:
+                    logging.info(f"⚔️ 結算畫面偵測到戰鬥特徵 [{feat}] (相似度: {conf_auto:.4f})，判定已進入戰鬥，將狀態切換至 BATTLE。")
+                    self.machine.battle_start_time = time.time()
+                    self.machine.transition_to(self.machine.STATE_BATTLE)
+                    return True
 
         return False

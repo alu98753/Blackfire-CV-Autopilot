@@ -109,12 +109,19 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
         
-        # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並轉移至 BATTLE
+        # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並等待，不立即切換狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((500, 500), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+        
+        # 5. 看到戰鬥自動按鈕 ➔ 正式轉入 BATTLE
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
 
     @patch('os.path.exists')
@@ -755,10 +762,17 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_matcher.match.side_effect = match_side_effect_fallback
         self.state_machine.step()
         
-        # 斷言：點擊相對座標 (460, 850)，且轉移回 BATTLE，且次數為 1
+        # 斷言：點擊相對座標 (460, 850)，且轉移為 RESULT，且次數為 1
         self.mock_mouse.click.assert_called_with(460, 850)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
         self.assertEqual(self.state_machine.run_count, 1)
+        
+        # 模擬進入戰鬥，看見 auto.png ➔ 轉移為 BATTLE
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         
         # 3. 再來一次，測試能成功匹配 defeat_retry.png
         self.state_machine.current_state = self.state_machine.STATE_RESULT
@@ -776,8 +790,15 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 斷言：應點擊匹配到的按鈕座標 (100+400=500, 100+800=900)
         self.mock_mouse.click.assert_called_with(500, 900)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
         self.assertEqual(self.state_machine.run_count, 2)
+
+        # 模擬再次進入戰鬥，看見 auto.png ➔ 轉移為 BATTLE
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
 
     @patch('os.path.exists')
     def test_stuck_protection_flow(self, mock_exists):
