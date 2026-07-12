@@ -776,6 +776,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 3. 再來一次，測試能成功匹配 defeat_retry.png
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.last_result_retry_click_time = 0.0
         
         def match_side_effect_success(img, name, threshold):
             if name == "defeat.png":
