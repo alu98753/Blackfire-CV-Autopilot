@@ -439,8 +439,31 @@ class NavigationHandler(BaseStateHandler):
                         dungeon_select_open = True
                         break
 
-        # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單
-        if self.machine.config.get("type") == "stage" and stage_select_open:
+        # 判斷是否已經在關卡內部細節畫面 (提前判定以避免小島在抽屜下方時水平滑動邏輯誤觸)
+        in_detail_screen = False
+        pos_label = None
+        if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
+            pos_label, _ = self.matcher.match(screen_img, "stages/stage_label.png", threshold=0.70)
+        
+        # 尋找路徑中是否有魔王關 (包含 final) 出現在畫面上
+        pos_final = None
+        target_final_btn = None
+        for btn in nav_path:
+            if "final" in btn:
+                target_final_btn = btn
+                if os.path.exists(os.path.join("templates", btn)):
+                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=0.75)
+                    if pos_f:
+                        pos_final = pos_f
+                        # 成功找到魔王關，重置其缺失計時器
+                        self.machine.__setattr__(f"missing_time_{btn}", 0.0)
+                        break
+
+        if pos_label or pos_final:
+            in_detail_screen = True
+
+        # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單 (只在尚未進入細節畫面時執行)
+        if self.machine.config.get("type") == "stage" and stage_select_open and not in_detail_screen:
             if len(nav_path) > 3:
                 target_level_btn = nav_path[3]
                 if os.path.exists(os.path.join("templates", target_level_btn)):
@@ -505,29 +528,6 @@ class NavigationHandler(BaseStateHandler):
                         # 增加靜止等待時間，確保清單滑動動畫完全停止後再進行下一幀偵測與點擊
                         time.sleep(1.2)
                         return
-
-        # 判斷是否已經在關卡內部細節畫面
-        in_detail_screen = False
-        pos_label = None
-        if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
-            pos_label, _ = self.matcher.match(screen_img, "stages/stage_label.png", threshold=0.70)
-        
-        # 尋找路徑中是否有魔王關 (包含 final) 出現在畫面上
-        pos_final = None
-        target_final_btn = None
-        for btn in nav_path:
-            if "final" in btn:
-                target_final_btn = btn
-                if os.path.exists(os.path.join("templates", btn)):
-                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=0.75)
-                    if pos_f:
-                        pos_final = pos_f
-                        # 成功找到魔王關，重置其缺失計時器
-                        self.machine.__setattr__(f"missing_time_{btn}", 0.0)
-                        break
-
-        if pos_label or pos_final:
-            in_detail_screen = True
 
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
         clicked_any = False
