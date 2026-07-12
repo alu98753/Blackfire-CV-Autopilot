@@ -1,4 +1,9 @@
-# config.py
+# ==================== 全域冷卻時間設定 ====================
+GLOBAL_SETTINGS = {
+    # 非純領取模式下（推圖、刷副本）的資源檢測與領取冷卻時間（秒）
+    "default_diamond_cd": 7200.0,  # 預設 2 小時領一次鑽石
+    "default_bread_cd": 1800.0,    # 預設 30 分鐘領一次體力
+}
 
 GAME_CONFIGS = {
     # ------------------ 普通關卡模式 ------------------
@@ -66,6 +71,6 @@ GAME_CONFIGS = {
         "navigation_path": [],
         "diamond_cd": 300.0, # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
         "bread_cd": 300.0,   # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
-        "stamina_retreat_duration": 6.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
+        "stamina_retreat_duration": 1.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
     }
 }

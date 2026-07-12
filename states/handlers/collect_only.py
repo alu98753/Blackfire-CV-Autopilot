@@ -21,8 +21,10 @@ class CollectOnlyHandler(BaseStateHandler):
             # 每隔一段時間輸出退避剩餘時間
             now = time.time()
             last_log = getattr(self, "last_log_time", 0.0)
-            diamond_cd = self.machine.config.get("diamond_cd", 7200.0)
-            default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else 1800.0
+            from config import GLOBAL_SETTINGS
+            default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
+            diamond_cd = self.machine.config.get("diamond_cd", default_diamond_cd)
+            default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else GLOBAL_SETTINGS.get("default_bread_cd", 1800.0)
             bread_cd = self.machine.config.get("bread_cd", default_bread_cd)
             log_interval = min(300.0, diamond_cd, bread_cd)
             
@@ -102,8 +104,10 @@ class CollectOnlyHandler(BaseStateHandler):
         last_log = getattr(self, "last_log_time", 0.0)
         
         # 動態決定 log 間隔：最長為 300 秒 (5分鐘)，若 CD 比 5 分鐘短則跟隨較短的 CD，以利測試
-        diamond_cd = self.machine.config.get("diamond_cd", 7200.0)
-        default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else 1800.0
+        from config import GLOBAL_SETTINGS
+        default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
+        diamond_cd = self.machine.config.get("diamond_cd", default_diamond_cd)
+        default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else GLOBAL_SETTINGS.get("default_bread_cd", 1800.0)
         bread_cd = self.machine.config.get("bread_cd", default_bread_cd)
         log_interval = min(300.0, diamond_cd, bread_cd)
         
