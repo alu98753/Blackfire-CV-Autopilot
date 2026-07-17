@@ -109,12 +109,19 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
         
-        # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並轉移至 BATTLE
+        # 4. LOBBY 狀態下：看到大廳 stages/start.png ➔ 點擊並轉移至 LOADING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((500, 500), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+        
+        # 5. 看到戰鬥自動按鈕 ➔ 正式轉入 BATTLE
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
 
     @patch('os.path.exists')
@@ -484,9 +491,16 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 1. 偵測到 task_complete.png 位於中心 (960, 540)
         # 預計點擊 Claim Rewards 按鈕中心: X=960, Y=540+281 = 821
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((960, 540), 0.9) if name == "task_complete.png" else (None, 0.0)
-        )
+        task_complete_matched = [False]
+        def match_side_effect_1(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                if not task_complete_matched[0]:
+                    task_complete_matched[0] = True
+                    return ((960, 540), 0.9)
+                return (None, 0.0)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect_1
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(960, 821)
         
@@ -698,6 +712,8 @@ class TestStateMachineLogic(unittest.TestCase):
             
         self.mock_matcher.match.side_effect = match_side_effect
         self.state_machine.step()
+        self.state_machine.step()
+        self.state_machine.step()
         
         # 斷言：第一步應點擊退出按鈕，但尚未重置
         self.mock_mouse.click.assert_called_with(500, 500)
@@ -746,13 +762,21 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_matcher.match.side_effect = match_side_effect_fallback
         self.state_machine.step()
         
-        # 斷言：點擊相對座標 (460, 850)，且轉移回 BATTLE，且次數為 1
+        # 斷言：點擊相對座標 (460, 850)，且轉移為 LOADING，且次數為 1
         self.mock_mouse.click.assert_called_with(460, 850)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         self.assertEqual(self.state_machine.run_count, 1)
+        
+        # 模擬進入戰鬥，看見 auto.png ➔ 轉移為 BATTLE
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         
         # 3. 再來一次，測試能成功匹配 defeat_retry.png
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.last_result_retry_click_time = 0.0
         
         def match_side_effect_success(img, name, threshold):
             if name == "defeat.png":
@@ -765,10 +789,17 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         
-        # 斷言：應點擊匹配到的按鈕座標 (100+400=500, 100+800=900)
+        # 斷言：應點擊匹配到的按鈕座標 (100+400=500, 100+800=900)，且轉移為 LOADING
         self.mock_mouse.click.assert_called_with(500, 900)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         self.assertEqual(self.state_machine.run_count, 2)
+
+        # 模擬再次進入戰鬥，看見 auto.png ➔ 轉移為 BATTLE
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((400, 400), 0.9) if name == "common/auto.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
 
     @patch('os.path.exists')
     def test_stuck_protection_flow(self, mock_exists):
@@ -1123,10 +1154,17 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         mock_exists.return_value = True
         
-        # 模擬 matcher.match 尋找到 confirm.png
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((150, 150), 0.92) if name == "common/confirm.png" else (None, 0.0)
-        )
+        # 模擬 matcher.match 尋找到 confirm.png 隨後消失
+        confirm_matched = [False]
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "common/confirm.png":
+                if not confirm_matched[0]:
+                    confirm_matched[0] = True
+                    return ((150, 150), 0.92)
+                return (None, 0.0)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
         
         rect = {"left": 10, "top": 20, "width": 800, "height": 600}
         
@@ -1173,6 +1211,58 @@ class TestStateMachineLogic(unittest.TestCase):
         # 驗證點擊了 Slime_entry.png (100 + 200 = 300, 100 + 200 = 300)
         # 且沒有點擊過 dungeon.png (100 + 400 = 500)
         self.mock_mouse.click.assert_called_once_with(300, 300)
+
+    @patch('os.path.exists')
+    @patch('cv2.imread')
+    @patch('cv2.minMaxLoc')
+    def test_dungeon_navigation_stuck_exit(self, mock_minMaxLoc, mock_imread, mock_exists):
+        """
+        測試地下城選單選關卡卡死自癒退出邏輯：
+        當 `fallback_swipe_count` >= 3，且 visible_dungeons 為空時，
+        應自動尋找並點擊返回按鈕 `goback_town.png`，並重置 `fallback_swipe_count` 為 0。
+        """
+        self.state_machine.config = {
+            "type": "dungeon",
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        }
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.fallback_swipe_count = 3
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 傳回真實 numpy array 圖片以進入 OpenCV 比對邏輯
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((800, 1000, 3), dtype=np.uint8)
+        
+        # 模擬 cv2.imread 返回 dummy 影像
+        mock_imread.return_value = np.zeros((10, 10, 3), dtype=np.uint8)
+        
+        # 模擬 cv2.minMaxLoc：第 5 次比對（locked_entry）回傳高信心度，其餘回傳低信心度
+        minMaxLoc_calls = [0]
+        def mock_minMaxLoc_impl(res):
+            minMaxLoc_calls[0] += 1
+            if minMaxLoc_calls[0] == 5:
+                return (0.0, 0.95, (0, 0), (0, 0))
+            return (0.0, 0.1, (0, 0), (0, 0))
+        mock_minMaxLoc.side_effect = mock_minMaxLoc_impl
+        
+        # 模擬 matcher.match 匹配 goback_town.png
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "goback_town.png":
+                return ((50, 50), 0.9)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_side_effect
+        
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 驗證點擊了返回按鈕 (100 + 50 = 150, 100 + 50 = 150)
+        self.mock_mouse.click.assert_called_once_with(150, 150)
+        # 驗證 `fallback_swipe_count` 已經被重置為 0
+        self.assertEqual(self.state_machine.fallback_swipe_count, 0)
 
     @patch('os.path.exists')
     def test_collect_only_mode_flow(self, mock_exists):
@@ -1289,6 +1379,281 @@ class TestStateMachineLogic(unittest.TestCase):
         # click_x = 500 - 3 = 497
         # click_y = 500 + 253 = 753
         self.mock_mouse.click.assert_called_once_with(497, 753)
+
+    @patch('os.path.exists')
+    def test_insufficient_stamina_defense_subflow(self, mock_exists):
+        """
+        測試全域食物不足（體力不足）退避自癒子流程：
+        1. 偵測到 no_bread/no_bread.png 時觸發
+        2. 點擊 no_bread/cancel.png
+        3. 進行 quit 按鈕清除循環
+        4. 尋找並點擊 goback_town.png
+        5. 一律切換為 collect_only 模式與狀態
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LOBBY
+        
+        # 讓 os.path.exists 對所有範本返回 True
+        mock_exists.return_value = True
+        
+        # 模擬視窗物理範圍
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 800, "height": 600}
+        
+        # 我們將用一個計數器來模擬多個步驟的畫面匹配結果
+        match_call_count = [0]
+        
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            match_call_count[0] += 1
+            if name == "no_bread/no_bread.png":
+                return ((200, 200), 0.9)
+            elif name == "no_bread/cancel.png":
+                return ((150, 250), 0.9)
+            elif name == "common/quit.png":
+                # 第一輪清除有 quit，第二輪沒有
+                if match_call_count[0] <= 5: # 用呼叫計數來模擬
+                    return ((300, 50), 0.9)
+                return (None, 0.0)
+            elif name == "goback_town.png":
+                return ((50, 450), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = match_side_effect
+        self.mock_mouse.click.reset_mock()
+        
+        # 以 patch 縮短 stamina_flow 的 sleep 時間以加快測試速度
+        with patch('states.stamina_flow.time.sleep') as mock_sleep:
+            self.state_machine.step()
+            
+        # 驗證點擊序列：
+        # 1. 點擊取消 (100 + 150 = 250, 100 + 250 = 350)
+        # 2. 點擊 quit 兩次 (100 + 300 = 400, 100 + 50 = 150)
+        # 3. 點擊 goback_town (100 + 50 = 150, 100 + 450 = 550)
+        from unittest.mock import call
+        expected_clicks = [
+            call(250, 350), # 點擊取消
+            call(400, 150), # 點擊 quit (第一輪)
+            call(400, 150), # 點擊 quit (第二輪)
+            call(150, 550)  # 點擊返回城鎮
+        ]
+        self.mock_mouse.click.assert_has_calls(expected_clicks)
+        
+        # 驗證配置已被切換為 collect_only
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        # 驗證狀態已轉移至 STATE_COLLECT_ONLY
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+
+    @patch('os.path.exists')
+    def test_bread_collection_window_missing_self_healing(self, mock_exists):
+        """
+        測試領體力視窗自癒機制：
+        1. bread_window_opened = True，但畫面上找不到退出按鈕 quit.png。
+        2. 預期：連續 3 幀未偵測到退出按鈕後，自動將 bread_window_opened 重設為 False，以利下一輪重新打開。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.need_bread_collection = True
+        self.state_machine.bread_window_opened = True
+        self.state_machine.bread_window_missing_count = 0
+        self.state_machine.current_state = self.state_machine.STATE_BREAD_COLLECTION
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 800, "height": 600}
+        
+        # 模擬比對結果：所有模板都匹配不到 (None)
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        # 第一幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.bread_window_opened)
+        self.assertEqual(self.state_machine.bread_window_missing_count, 1)
+        
+        # 第二幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.bread_window_opened)
+        self.assertEqual(self.state_machine.bread_window_missing_count, 2)
+        
+        # 第三幀（應觸發重設）
+        self.state_machine.step()
+        self.assertFalse(self.state_machine.bread_window_opened)
+        self.assertEqual(self.state_machine.bread_window_missing_count, 0)
+
+    @patch('os.path.exists')
+    def test_diamond_collection_window_missing_self_healing(self, mock_exists):
+        """
+        測試領鑽石視窗自癒機制：
+        1. diamond_window_opened = True，但畫面上找不到退出按鈕 quit.png。
+        2. 預期：連續 3 幀未偵測到退出按鈕後，自動將 diamond_window_opened 重設為 False，以利下一輪重新打開。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.need_diamond_collection = True
+        self.state_machine.diamond_window_opened = True
+        self.state_machine.diamond_window_missing_count = 0
+        self.state_machine.current_state = self.state_machine.STATE_DIAMOND_COLLECTION
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 800, "height": 600}
+        
+        # 模擬比對結果：所有模板都匹配不到 (None)
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        # 第一幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.diamond_window_opened)
+        self.assertEqual(self.state_machine.diamond_window_missing_count, 1)
+        
+        # 第二幀
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.diamond_window_opened)
+        self.assertEqual(self.state_machine.diamond_window_missing_count, 2)
+        
+        # 第三幀（應觸發重設）
+        self.state_machine.step()
+        self.assertFalse(self.state_machine.diamond_window_opened)
+        self.assertEqual(self.state_machine.diamond_window_missing_count, 0)
+
+    @patch('os.path.exists')
+    def test_stamina_insufficient_retreat_and_restoration(self, mock_exists):
+        """
+        測試體力不足退避與定時恢復機制：
+        1. 觸發體力不足時，應備份原始配置並設定開始時間。
+        2. 當在 COLLECT_ONLY 狀態下，若未滿設定時間，維持 COLLECT_ONLY。
+        3. 若時間已滿，自動還原原始配置，重置時間，並轉移至 STATE_UNKNOWN 以重新尋路。
+        """
+        # 設定原始配置為史萊姆地下城
+        orig_config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = orig_config
+        self.state_machine.current_state = self.state_machine.STATE_LOBBY
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 1. 模擬偵測到 no_bread.png，觸發體力不足
+        def mock_match_nobread(img, name, threshold):
+            if name == "no_bread/no_bread.png":
+                return ((150, 250), 0.9)
+            elif name == "no_bread/cancel.png":
+                return ((150, 250), 0.9)
+            elif name == "common/quit.png":
+                return (None, 0.0)
+            elif name == "goback_town.png":
+                return ((50, 450), 0.9)
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = mock_match_nobread
+        
+        with patch('states.stamina_flow.time.sleep') as mock_sleep:
+            self.state_machine.step()
+            
+        # 驗證 original_config 與 stamina_retreat_start_time 已設定
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        self.assertIsNotNone(self.state_machine.stamina_retreat_start_time)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        
+        # 2. 模擬處於 COLLECT_ONLY，時間未到 4.0 小時
+        # 預期：維持 COLLECT_ONLY
+        self.mock_matcher.match.side_effect = None
+        self.mock_matcher.match.return_value = (None, 0.0) # 模擬無領取鑽石/體力需求
+        
+        # 暫時設定 retreat_duration 為 4.0 小時，並模擬只過了 1.0 小時
+        self.state_machine.config["stamina_retreat_duration"] = 4.0
+        self.state_machine.stamina_retreat_start_time = time.time() - 3600.0
+        
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        
+        # 3. 模擬時間已滿 4.0 小時 (例如已過 4.1 小時)
+        # 預期：恢復為 orig_config，時間清空，轉移至 STATE_UNKNOWN
+        self.state_machine.stamina_retreat_start_time = time.time() - (4.1 * 3600.0)
+        
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertIsNone(self.state_machine.original_config)
+        self.assertIsNone(self.state_machine.stamina_retreat_start_time)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+    @patch('os.path.exists')
+    def test_dungeon_navigation_transition_corrected(self, mock_exists):
+        """
+        測試修正後的地下城進入狀態轉移邏輯：
+        1. 看到 dungeons/dungeon_fight.png 時，狀態應保持 STATE_NAVIGATING 且執行點擊，不提早轉移。
+        2. 只有看到 dungeons/leave.png（或寶箱/祝福等內部按鈕）時，才轉移至 STATE_DUNGEON_EXPLORING。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
+        
+        # 1. 模擬畫面只看到 dungeon_fight.png (無 leave.png)
+        def match_fight(img, name, threshold=None, brightness_threshold=None):
+            if name == "dungeons/dungeon_fight.png":
+                return (200, 300), 0.9
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = match_fight
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        # 應點擊戰鬥按鈕
+        self.mock_mouse.click.assert_called_once_with(300, 400) # left=100, top=100 + offset (200, 300)
+        # 狀態仍應維持 STATE_NAVIGATING 
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 2. 模擬畫面看到 leave.png (無 dungeon_fight.png)
+        def match_leave(img, name, threshold=None, brightness_threshold=None):
+            if name == "dungeons/leave.png":
+                return (150, 250), 0.9
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = match_leave
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        # 不應點擊
+        self.mock_mouse.click.assert_not_called()
+        # 狀態轉移至 STATE_DUNGEON_EXPLORING
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
+    @patch('os.path.exists')
+    def test_loading_state_flow(self, mock_exists):
+        """
+        測試過渡加載狀態 (STATE_LOADING) 的運作流程：
+        1. 看到戰鬥特徵 ➔ 進入 BATTLE。
+        2. 超時過長 ➔ 重置為 UNKNOWN。
+        3. 跳出體力不足 ➔ 觸發退避。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_LOADING
+        self.state_machine.loading_start_time = time.time()
+        mock_exists.return_value = True
+
+        # 情況 1: 沒有戰鬥特徵，且未超時 ➔ 繼續等待
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+
+        # 情況 2: 超時 (設定啟動時間在 20 秒前) ➔ 重置為 UNKNOWN
+        self.state_machine.loading_start_time = time.time() - 20.0
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+        # 情況 3: 跳出體力不足 ➔ 觸發退避 (全域攔截)
+        self.state_machine.current_state = self.state_machine.STATE_LOADING
+        self.state_machine.loading_start_time = time.time()
+        
+        # 模擬看見 no_bread.png
+        def match_no_bread(img, name, threshold=None, brightness_threshold=None):
+            if name == "no_bread/no_bread.png":
+                return (500, 500), 0.9
+            if name == "goback_town.png":
+                return (100, 100), 0.9
+            return None, 0.0
+        self.mock_matcher.match.side_effect = match_no_bread
+        self.state_machine.step()
+        
+        # 應觸發退避並變為 COLLECT_ONLY
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
 
 if __name__ == "__main__":
     unittest.main()

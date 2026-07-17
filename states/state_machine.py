@@ -12,7 +12,8 @@ from states.handlers import (
     BackpackFullSortingHandler,
     BreadCollectionHandler,
     DiamondCollectionHandler,
-    CollectOnlyHandler
+    CollectOnlyHandler,
+    LoadingHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -30,6 +31,7 @@ class GameStateMachine:
     STATE_BREAD_COLLECTION = "BREAD_COLLECTION"          # 自動領體力流程
     STATE_DIAMOND_COLLECTION = "DIAMOND_COLLECTION"      # 自動領鑽石流程
     STATE_COLLECT_ONLY = "COLLECT_ONLY"                  # 定時領取麵包與鑽石待機流程
+    STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -86,6 +88,13 @@ class GameStateMachine:
         self.last_user_operation_time = 0.0
         self.prev_mouse_pos = None
         
+        # 體力不足退避與還原相關屬性
+        self.original_config = None
+        self.stamina_retreat_start_time = None
+        self.last_lobby_start_click_time = 0.0
+        self.last_result_retry_click_time = 0.0
+        self.loading_start_time = 0.0
+        
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"
         
@@ -101,6 +110,7 @@ class GameStateMachine:
             self.STATE_BREAD_COLLECTION: BreadCollectionHandler(self),
             self.STATE_DIAMOND_COLLECTION: DiamondCollectionHandler(self),
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
+            self.STATE_LOADING: LoadingHandler(self),
         }
 
 
@@ -117,6 +127,8 @@ class GameStateMachine:
             self.consecutive_stuck_count = 0
             if new_state == self.STATE_BATTLE:
                 self.last_auto_click_time = 0
+            elif new_state == self.STATE_LOADING:
+                self.loading_start_time = time.time()
             elif new_state == self.STATE_BACKPACK_FULL_SORTING:
                 self.need_bag_cleaning = True
                 self.handlers[new_state].screenshot_counter = 1
@@ -154,12 +166,19 @@ class GameStateMachine:
         if handle_global_login(self, screen_img, rect):
             return
 
+        # C. 體力不足（食物不足）退避處理
+        # 僅在可能啟動新關卡/新副本的狀態下才進行體力不足偵測（如大廳、尋路、或戰鬥結算後再戰時），避免在戰鬥中、地下城探索或背包整理時產生虛假誤判
+        if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING]:
+            from states.stamina_flow import handle_insufficient_stamina
+            if handle_insufficient_stamina(self, screen_img, rect):
+                return
+
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
 
         # A. 卡死監控 (stuck monitoring)
         # 只有在非戰鬥、非探索、非未知的過渡狀態下，如果同一個狀態持續了太多幀，說明流程可能卡住了
-        if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN, self.STATE_COLLECT_ONLY]:
+        if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN, self.STATE_COLLECT_ONLY, self.STATE_LOADING]:
             self.consecutive_stuck_count += 1
             
             if self.consecutive_stuck_count >= 15:
@@ -363,8 +382,11 @@ class GameStateMachine:
         if self.config is not None and self.config["type"] == "bag_clean":
             return  # 背包整理模式不參與領取
 
+        from config import GLOBAL_SETTINGS
+
         # 1. 檢查鑽石 CD
-        diamond_cd = self.config.get("diamond_cd", 7200.0) if self.config else 7200.0
+        default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
+        diamond_cd = self.config.get("diamond_cd", default_diamond_cd) if self.config else default_diamond_cd
         if time.time() - self.last_diamond_collection_time > diamond_cd:
             if not self.need_diamond_collection:
                 logging.info(f"⏰ 距離上次領鑽石已滿 {int(diamond_cd // 60)} 分鐘，觸發自動領鑽石。")
@@ -372,7 +394,7 @@ class GameStateMachine:
                 self.diamond_collected_this_run = False
 
         # 2. 檢查體力 CD
-        default_bread_cd = 7200.0 if self.config.get("type") == "collect_only" else 1800.0
+        default_bread_cd = 7200.0 if (self.config and self.config.get("type") == "collect_only") else GLOBAL_SETTINGS.get("default_bread_cd", 1800.0)
         bread_cd = self.config.get("bread_cd", default_bread_cd) if self.config else default_bread_cd
         if self.enable_bread and (time.time() - self.last_bread_collection_time > bread_cd):
             if not self.need_bread_collection:
@@ -386,7 +408,6 @@ class GameStateMachine:
         start_time = time.time()
         timeout = 5.0  # 最多執行 5 秒
         
-        # 專屬匹配確認按鈕
         subflow_templates = [
             ("common/confirm.png", 0.80),
             ("common/ok.png", 0.80)
@@ -398,17 +419,31 @@ class GameStateMachine:
                 time.sleep(0.2)
                 continue
                 
+            matched_any = False
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
                     continue
                 pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
                 if pos:
-                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊並結束子流程。")
+                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊...")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    time.sleep(0.3)
-                    return
+                    matched_any = True
+                    time.sleep(0.5) # 等待彈窗關閉動畫
+                    break # 重新擷取畫面以確認是否消失
                     
-            time.sleep(0.3)
-            
-        logging.warning("🎉 [子流程] 「領取任務獎勵」確認子流程超時結束。")
+            if not matched_any:
+                # 2. 如果無任何確認按鈕，檢查任務完成主彈窗是否消失
+                pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
+                if not pos_task:
+                    logging.info("🟢 [子流程] 任務完成彈窗已確認關閉，成功領取獎勵！")
+                    return
+                else:
+                    # 3. 若任務彈窗仍存在且無確認按鈕，說明第一步點選「領取獎勵」失效，進行重新點擊！
+                    height_to_use = rect.get("height") or screen_img.shape[0] or 1080
+                    scale_y = height_to_use / 1080.0
+                    btn_x = rect["left"] + pos_task[0]
+                    btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
+                    logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，重新點擊領取獎勵座標 ({btn_x}, {btn_y})。")
+                    self.mouse.click(btn_x, btn_y)
+                    time.sleep(0.5)
 

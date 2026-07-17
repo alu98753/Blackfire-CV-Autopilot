@@ -12,6 +12,41 @@ class CollectOnlyHandler(BaseStateHandler):
         - 如果需要領取體力，在大廳則進入領取；在城鎮則點擊門進入大廳。
         - 如果目前無領取任務，在大廳則自動返回城鎮，在城鎮則維持原地待機。
         """
+        # 0. 檢查體力不足退避恢復機制
+        if self.machine.original_config is not None and self.machine.stamina_retreat_start_time is not None:
+            retreat_hours = self.machine.config.get("stamina_retreat_duration", 4.0)
+            retreat_seconds = float(retreat_hours) * 3600.0
+            elapsed = time.time() - self.machine.stamina_retreat_start_time
+            
+            # 每隔一段時間輸出退避剩餘時間
+            now = time.time()
+            last_log = getattr(self, "last_log_time", 0.0)
+            from config import GLOBAL_SETTINGS
+            default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
+            diamond_cd = self.machine.config.get("diamond_cd", default_diamond_cd)
+            default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else GLOBAL_SETTINGS.get("default_bread_cd", 1800.0)
+            bread_cd = self.machine.config.get("bread_cd", default_bread_cd)
+            log_interval = min(300.0, diamond_cd, bread_cd)
+            
+            if now - last_log >= log_interval or last_log == 0.0:
+                self.last_log_time = now
+                remaining = max(0.0, retreat_seconds - elapsed)
+                h = int(remaining // 3600)
+                m = int((remaining % 3600) // 60)
+                s = int(remaining % 60)
+                time_str = f"{h}小時{m}分{s}秒" if h > 0 else (f"{m}分{s}秒" if m > 0 else f"{s}秒")
+                logging.info(f"⏳ [體力退避狀態] collect_only 模式已執行 {int(elapsed // 60)} 分鐘。距離回到原掛機模式 [{self.machine.original_config['name']}] 還剩: {time_str}。")
+                
+            if elapsed >= retreat_seconds:
+                logging.warning(f"🔄 [體力退避恢復] collect_only 模式已執行滿 {retreat_hours} 小時，自動恢復為原掛機模式 [{self.machine.original_config['name']}]！")
+                self.machine.config = self.machine.original_config
+                self.machine.original_config = None
+                self.machine.stamina_retreat_start_time = None
+                
+                # 為了能從原模式的起點（大廳或尋路）開始，重設狀態為 UNKNOWN 進行重新定位
+                self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                return
+
         # 1. 取得當前位置狀態
         is_town = False
         is_lobby = False
@@ -69,8 +104,10 @@ class CollectOnlyHandler(BaseStateHandler):
         last_log = getattr(self, "last_log_time", 0.0)
         
         # 動態決定 log 間隔：最長為 300 秒 (5分鐘)，若 CD 比 5 分鐘短則跟隨較短的 CD，以利測試
-        diamond_cd = self.machine.config.get("diamond_cd", 7200.0)
-        default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else 1800.0
+        from config import GLOBAL_SETTINGS
+        default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
+        diamond_cd = self.machine.config.get("diamond_cd", default_diamond_cd)
+        default_bread_cd = 7200.0 if self.machine.config.get("type") == "collect_only" else GLOBAL_SETTINGS.get("default_bread_cd", 1800.0)
         bread_cd = self.machine.config.get("bread_cd", default_bread_cd)
         log_interval = min(300.0, diamond_cd, bread_cd)
         

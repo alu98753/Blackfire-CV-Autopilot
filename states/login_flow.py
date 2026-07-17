@@ -23,14 +23,7 @@ def _wait_for_town(state_machine, rect):
             time.sleep(0.5)
             continue
             
-        # 1. 檢查 door.png 是否可見
-        pos_door, _ = state_machine.matcher.match(screen_img, "common/door.png", threshold=0.8)
-        if pos_door:
-            logging.info("🟢 [登入流程] 成功偵測到城鎮大門 [common/door.png]，已確認完全進入城鎮！")
-            door_found = True
-            break
-            
-        # 2. 如果門不可見，檢查是否被每日簽到或公告彈窗遮擋，嘗試點擊關閉/確認按鈕
+        # 1. 優先消除畫面上現存的任何彈窗按鈕
         dismissed_popup = False
         for btn in ["common/quit.png", "common/confirm.png", "common/ok.png"]:
             if os.path.exists(os.path.join("templates", btn)):
@@ -42,9 +35,17 @@ def _wait_for_town(state_machine, rect):
                     time.sleep(1.0) # 等待彈窗關閉動畫
                     break
                     
-        if not dismissed_popup:
-            # 若無彈窗遮擋，單純等待載入
-            time.sleep(0.5)
+        if dismissed_popup:
+            continue
+            
+        # 2. 只有在無任何彈窗按鈕時，才判定大門是否可見
+        pos_door, _ = state_machine.matcher.match(screen_img, "common/door.png", threshold=0.8)
+        if pos_door:
+            logging.info("🟢 [登入流程] 成功偵測到城鎮大門 [common/door.png]，且無彈窗遮擋，已確認完全進入城鎮！")
+            door_found = True
+            break
+            
+        time.sleep(0.5)
             
     if not door_found:
         logging.warning("⚠️ [登入流程] 等待城鎮大門超時 (30 秒)，嘗試繼續後續流程。")

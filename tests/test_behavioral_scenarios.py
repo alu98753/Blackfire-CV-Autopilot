@@ -161,6 +161,8 @@ class TestBehavioralScenarios(unittest.TestCase):
             
         self.mock_matcher.match.side_effect = match_side_effect_cooldown
         self.state_machine.step()
+        self.state_machine.step()
+        self.state_machine.step()
         
         # Assert
         self.mock_mouse.click.assert_called_with(500, 500)
@@ -1283,30 +1285,28 @@ class TestBehavioralScenarios(unittest.TestCase):
     def test_detect_state_auto_quit_sub_interface(self, mock_exists):
         """
         [行為場景 25] 未知狀態下在手動子介面自動點擊退出按鈕返回大廳：
-        Given: 狀態機處於 UNKNOWN 狀態，且無法辨識出任何主要狀態。
-        When: 畫面上匹配到退出按鈕 common/quit.png (中心座標在 (1289, 177))。
-        Then: 狀態機應點擊該按鈕以關閉子介面，不進行狀態轉移 (維持 UNKNOWN)。
-        """
-        self.state_machine.config = GAME_CONFIGS["stage"]
-        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
-        mock_exists.return_value = True
-
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((1289, 177), 0.9) if name == "common/quit.png" else (None, 0.0)
-        )
-        self.mock_mouse.click.reset_mock()
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(1289, 177)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
-
-    @patch('os.path.exists')
-    def test_greedy_dungeon_selection(self, mock_exists):
-        """
-        [行為場景 26] 自動貪婪地下城選關行為：
-        Given: 狀態機啟用 greedy_dungeon = True 且處於 NAVIGATING 狀態。
-               - 第 4 關 (神秘遺跡, index 3) 的冷卻為無限大 (不可刷)。
-               - 第 3 關 (森林迷宮, index 2) 處於冷卻中。
-               - 第 2 關 (幽影地穴, index 1) 與第 1 關 (黏糊糊的石窟, index 0) 冷卻已過。
+        Given: 狀態機處於 UNKNOWN 狀態，且無        with patch('cv2.imread', return_value=np.zeros((10, 10, 3), dtype=np.uint8)), \
+             patch('cv2.matchTemplate', side_effect=mock_matchTemplate_a):
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
+            self.mock_mouse.drag.assert_called_once_with(700, 500, 500, 500, duration=0.8, inertia=False)
+             
+        # 案例 B：目標是 Slime_entry (index 0)，畫面上只有 Ruins_entry (index 3) 於 X=100
+        # 預期：目標 index (0) 小於當前可見 index (3)，代表目標在左側 ➔ 向右滑動 drag(500, 500, 700, 500)
+        self.state_machine.config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        
+        call_count_b = 0
+        def mock_matchTemplate_b(img_arg, templ, method):
+            nonlocal call_count_b
+            val = 0.95 if call_count_b == 3 else 0.0
+            call_count_b += 1
+            return np.array([[val]], dtype=np.float32)
+            
+        with patch('cv2.imread', return_value=np.zeros((10, 10, 3), dtype=np.uint8)), \
+             patch('cv2.matchTemplate', side_effect=mock_matchTemplate_b):
+            self.mock_mouse.drag.reset_mock()
+            self.state_machine.step()
+            self.mock_mouse.drag.assert_called_once_with(500, 500, 700, 500, duration=0.8, inertia=False)糊糊的石窟, index 0) 冷卻已過。
                - 畫面上匹配到基準入口 dungeons/Slime_entry.png 於 (0, 0)。
         When: 執行狀態機導航決策。
         Then:
@@ -1505,7 +1505,7 @@ class TestBehavioralScenarios(unittest.TestCase):
              patch('cv2.matchTemplate', side_effect=mock_matchTemplate_a):
             self.mock_mouse.drag.reset_mock()
             self.state_machine.step()
-            self.mock_mouse.drag.assert_called_once_with(900, 500, 300, 500, duration=0.8, inertia=False)
+            self.mock_mouse.drag.assert_called_once_with(700, 500, 500, 500, duration=0.8, inertia=False)
             
         # 案例 B：目標是 Slime_entry (index 0)，畫面上只有 Ruins_entry (index 3) 於 X=100
         # 預期：目標 index (0) 小於當前可見 index (3)，代表目標在左側 ➔ 向右滑動 drag(300, 500, 900, 500)
@@ -1522,7 +1522,7 @@ class TestBehavioralScenarios(unittest.TestCase):
              patch('cv2.matchTemplate', side_effect=mock_matchTemplate_b):
             self.mock_mouse.drag.reset_mock()
             self.state_machine.step()
-            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500, duration=0.8, inertia=False)
+            self.mock_mouse.drag.assert_called_once_with(500, 500, 700, 500, duration=0.8, inertia=False)
 
     @patch('os.path.exists')
     def test_dungeon_selection_fallback_swipe(self, mock_exists):

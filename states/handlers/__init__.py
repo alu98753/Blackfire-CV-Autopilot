@@ -9,4 +9,5 @@ from states.handlers.backpack_full_sorting import BackpackFullSortingHandler
 from states.handlers.bread_collection import BreadCollectionHandler
 from states.handlers.diamond_collection import DiamondCollectionHandler
 from states.handlers.collect_only import CollectOnlyHandler
+from states.handlers.loading import LoadingHandler
 

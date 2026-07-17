@@ -86,7 +86,7 @@ def main():
             
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
-    parser.add_argument("--interval", type=float, default=0.05, help="畫面偵測間隔秒數 (預設: 0.05)")
+    parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
     parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
                         help="掛機模式：stage (普通關卡) 或 dungeon_slime (史萊姆地下城)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
@@ -102,25 +102,27 @@ def main():
         print(" 2) 荒蕪岩地 (Level 2) - 預設")
         print(" 3) 古樹森林 (Level 3)")
         print(" 4) 沙漠廢墟 (Level 4)")
+        print(" 5) 幽暗沼澤 (Level 5)")
         try:
-            choice = input("請輸入關卡數字 [1-4] (直接 Enter 鍵預設為 2): ").strip()
+            choice = input("請輸入關卡數字 [1-5] (直接 Enter 鍵預設為 5): ").strip()
             if not choice:
-                choice = "2"
+                choice = "5"
         except KeyboardInterrupt:
             print("\n[!] 取消啟動。")
             sys.exit(0)
         except Exception:
-            choice = "2"
+            choice = "5"
 
         stage_map = {
             "1": ("stages/level1_sky_plains.png", "stages/level1_final.png", "蒼穹平原"),
             "2": ("stages/level2_barren_rocks.png", "stages/level2_final.png", "荒蕪岩地"),
             "3": ("stages/level3_ancient_forest.png", "stages/level3_final.png", "古樹森林"),
-            "4": ("stages/level4_desert_ruins.png", "stages/level4_final.png", "沙漠廢墟")
+            "4": ("stages/level4_desert_ruins.png", "stages/level4_final.png", "沙漠廢墟"),
+            "5": ("stages/level5_gloomy_swamp.png", "stages/level5_final.png", "幽暗沼澤")
         }
         if choice not in stage_map:
-            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第二關 [荒蕪岩地]...")
-            choice = "2"
+            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [幽暗沼澤]...")
+            choice = "5"
 
         level_btn, boss_btn, stage_name = stage_map[choice]
         config["name"] = f"普通關卡 - {stage_name}"

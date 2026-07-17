@@ -192,6 +192,7 @@ class MouseController:
                     self.last_action_time = time.time()
                     if self.state_machine is not None:
                         self.state_machine.consecutive_stuck_count = 0
+                    self.move_to_safe_area()
                     return True
                 except Exception as e:
                     logging.error(f"[後台] 點擊操作失敗: {e}")
@@ -222,6 +223,7 @@ class MouseController:
             self.last_action_time = time.time()
             if self.state_machine is not None:
                 self.state_machine.consecutive_stuck_count = 0
+            self.move_to_safe_area()
             return True
         except pyautogui.FailSafeException:
             logging.error("🔴 觸發 PyAutoGUI 安全終止 (FailSafe) 機制！滑鼠已移至螢幕角落。")
@@ -338,12 +340,16 @@ class MouseController:
                     
                     # logging.info(f"[後台拖曳] 物理相對起點 ({rsx_phys}, {rsy_phys}) -> 邏輯相對起點 ({rsx_logical}, {rsy_logical}) [DPI 縮放: {dpi_factor}]")
                     
-                    # 1. 按下
+                    # 1. 預先將滑鼠游標移動到起點 (不帶 MK_LBUTTON)，強迫遊戲引擎更新滑鼠座標快取，避免被判定為反向位移
                     lparam_start = win32api.MAKELONG(rsx_logical, rsy_logical)
-                    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam_start)
+                    win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam_start)
+                    time.sleep(0.03) # 給予遊戲引擎微小的更新快取時間
+                    
+                    # 2. 按下 (使用 SendMessage 確保同步按下)
+                    win32gui.SendMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam_start)
                     time.sleep(0.05)
                     
-                    # 2. 插值模擬移動軌跡
+                    # 2. 插值模擬移動軌跡 (使用 SendMessage 確保每一步軌跡均同步更新且不被合併)
                     steps = max(5, int(duration / 0.02))
                     step_sleep = duration / steps
                     for i in range(1, steps + 1):
@@ -352,7 +358,7 @@ class MouseController:
                         curr_x_logical, curr_y_logical, _ = self._phys_to_logical(hwnd, rect, curr_x_phys, curr_y_phys)
                         
                         lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
-                        win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
+                        win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
                         time.sleep(step_sleep)
                         
                     # 2.5 停頓以消除釋放慣性並確保釋放穩定性
@@ -361,15 +367,21 @@ class MouseController:
                     else:
                         time.sleep(0.02)
                     
-                    # 3. 釋放
+                    # 3. 確保最後一個移動點和釋放動作使用 SendMessage 同步發送，防止消息在隊列中被合併或遺漏，保證滑鼠放開狀態 100% 被即時接收
+                    curr_x_logical, curr_y_logical, _ = self._phys_to_logical(hwnd, rect, rex_phys, rey_phys)
+                    lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
+                    win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
+                    time.sleep(0.02)
+                    
                     lparam_end = win32api.MAKELONG(rex_logical, rey_logical)
-                    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam_end)
+                    win32gui.SendMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam_end)
                     
                     self.last_target_pos = pyautogui.position()
                     self.last_action_time = time.time()
                     if self.state_machine is not None:
                         self.state_machine.consecutive_stuck_count = 0
                     time.sleep(0.3)
+                    self.move_to_safe_area()
                     return True
                 except Exception as e:
                     logging.error(f"[後台] 拖曳操作失敗: {e}")
@@ -391,7 +403,38 @@ class MouseController:
             if self.state_machine is not None:
                 self.state_machine.consecutive_stuck_count = 0
             time.sleep(0.3)
+            self.move_to_safe_area()
             return True
         except Exception as e:
             logging.error(f"拖曳操作失敗: {e}")
             return False
+
+    def move_to_safe_area(self):
+        """
+        將滑鼠游標移動到遊戲視窗邊角的安全區域（例如左上角 15, 15），
+        以清除遊戲中因為滑鼠懸停 (hover) 產生的亮邊或高亮效果，避免干擾模板匹配。
+        """
+        if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
+            rect_box = self.state_machine.last_rect
+            rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+        else:
+            hwnd = self.get_hwnd()
+            if hwnd:
+                try:
+                    rect = win32gui.GetWindowRect(hwnd)
+                except Exception:
+                    return
+            else:
+                return
+                
+        safe_rel_x = 15
+        safe_rel_y = 15
+        
+        if self.backend_mode:
+            hwnd = self.get_hwnd()
+            if hwnd:
+                rsx_logical, rsy_logical, _ = self._phys_to_logical(hwnd, rect, safe_rel_x, safe_rel_y)
+                lparam = win32api.MAKELONG(rsx_logical, rsy_logical)
+                win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
+        else:
+            pyautogui.moveTo(rect[0] + safe_rel_x, rect[1] + safe_rel_y)
