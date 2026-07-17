@@ -71,6 +71,6 @@ GAME_CONFIGS = {
         "navigation_path": [],
         "diamond_cd": 300.0, # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
         "bread_cd": 300.0,   # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
-        "stamina_retreat_duration": 2.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
+        "stamina_retreat_duration": 4.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
     }
 }
