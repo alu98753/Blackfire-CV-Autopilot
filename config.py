@@ -31,6 +31,7 @@ GAME_CONFIGS = {
         "name": "史萊姆地下城",
         "type": "dungeon",
         "bless_mode": "combat",  # 預設為戰鬥/傷害祝福
+        "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
         # 導航進入路徑：總入口 -> 地下城 -> 史萊姆副本
         "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
         # 進入地下城內每一層戰鬥的入口按鈕

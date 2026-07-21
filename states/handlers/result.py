@@ -34,6 +34,45 @@ class ResultHandler(BaseStateHandler):
             if pos_defeat:
                 logging.info(f"💀 結算處理：確認處於戰敗畫面 [{conf_defeat:.4f}]。")
                 
+                # 判定是否需要放棄 (連續戰敗 3 次)
+                if self.machine.dungeon_defeat_count >= 2:
+                    logging.warning(f"🚨 連續戰敗次數已達 {self.machine.dungeon_defeat_count + 1} 次！執行「放棄挑戰」流程。")
+                    giveup_temp = "defeat_giveup.png"
+                    if os.path.exists(os.path.join("templates", giveup_temp)):
+                        pos_g, conf_g = self.matcher.match(screen_img, giveup_temp, threshold=0.75)
+                        if pos_g:
+                            logging.info(f"👉 偵測到放棄挑戰按鈕 [{giveup_temp}] (信心度: {conf_g:.4f})，進行點擊。")
+                            self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
+                            
+                            # 進入確認放棄子流程，等待並點擊 confirm.png
+                            confirm_clicked = False
+                            start_time = time.time()
+                            while time.time() - start_time < 5.0:
+                                loop_screen = self.machine.capturer.capture(rect)
+                                if loop_screen is not None:
+                                    pos_c, conf_c = self.matcher.match(loop_screen, "common/confirm.png", threshold=0.80)
+                                    if pos_c:
+                                        logging.info(f"👉 偵測到退出確認按鈕 'common/confirm.png'，相似度: {conf_c:.4f}，進行點擊確認。")
+                                        self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                                        confirm_clicked = True
+                                        break
+                                time.sleep(0.3)
+                            
+                            if confirm_clicked:
+                                # 依照各自地下城的時間設定冷卻（防止第一關 0 CD 死循環進，戰敗冷卻最少設定 5 分鐘）
+                                idx = getattr(self.machine, "current_dungeon_index", 0)
+                                cooldown_map = self.machine.config.get("cooldown_map", {})
+                                cd_seconds = max(300.0, cooldown_map.get(idx, 300.0))
+                                self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
+                                logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定地下城 {idx} 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+                                
+                                self.machine.dungeon_defeat_count = 0
+                                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                                time.sleep(0.2)
+                                return True
+                            else:
+                                logging.warning("⚠️ 放棄確認點擊逾時，嘗試繼續常規戰敗處理...")
+                
                 # 優先嘗試比對戰敗重新開始按鈕 (defeat_retry.png) 或通用再戰按鈕 (stages/retry.png)
                 pos_retry = None
                 conf_retry = 0.0
@@ -59,6 +98,8 @@ class ResultHandler(BaseStateHandler):
                     logging.warning(f"⚠️ 未匹配到重新開始按鈕圖，使用防禦性相對座標點擊: ({click_x}, {click_y})")
                     self.mouse.click(click_x, click_y)
                     
+                self.machine.dungeon_defeat_count += 1
+                logging.info(f"🚀 已點擊重新開始按鈕，累計戰敗次數: {self.machine.dungeon_defeat_count}")
                 self.machine.last_result_retry_click_time = time.time()
                 self.machine.run_count += 1
                 logging.info(f"🚀 點擊重新開始按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")

@@ -70,15 +70,9 @@ class ExploreHandler(BaseStateHandler):
                     self.machine.run_count += 1
                     logging.info(f"📊 已完成第 {self.machine.run_count} 次地下城通關！")
                     
-                    # 動態設定當前地下城的冷卻時間（第一關沒有冷卻，第二關 5 分鐘，第三關 15 分鐘，第四關 25 分鐘）
+                    # 動態設定當前地下城的冷卻時間（從 config 配置中動態獲取）
                     if hasattr(self.machine, "current_dungeon_index") and self.machine.current_dungeon_index is not None:
-                        cooldown_map = {
-                            0: 0.0,
-                            1: 5.0 * 60.0,
-                            2: 15.0 * 60.0,
-                            3: 20.0 * 60.0,
-                            4: 30.0 * 60.0
-                        }
+                        cooldown_map = self.machine.config.get("cooldown_map", {})
                         cd_seconds = cooldown_map.get(self.machine.current_dungeon_index, 900.0)
                         self.machine.dungeon_cooldowns[self.machine.current_dungeon_index] = time.time() + cd_seconds
                         logging.info(f"⏳ 貪婪地下城：設定第 {self.machine.current_dungeon_index + 1} 個地下城進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
@@ -121,6 +115,7 @@ class ExploreHandler(BaseStateHandler):
                     # 設定下樓點擊時間與過渡狀態，由冷卻時間屆滿後或在新樓層檢測到事件時重設
                     self.machine.last_godown_click_time = time.time()
                     self.machine.dungeon_floor_transitioning = True
+                    self.machine.dungeon_defeat_count = 0
                     time.sleep(0.04)
                     
                 elif btn_name == "dungeons/dungeon_fight.png":

@@ -46,6 +46,7 @@ class LobbyHandler(BaseStateHandler):
             self.machine.run_count += 1
             logging.info(f"🚀 點擊大廳開始按鈕，進入加載等待... (累計啟動次數: {self.machine.run_count})")
             self.machine.transition_to(self.machine.STATE_LOADING)
+            self.machine.dungeon_defeat_count = 0
             time.sleep(0.3)
         else:
             logging.info("🧭 大廳：未偵測到開始按鈕，判定處於城鎮外圍，轉移至 NAVIGATING 進行尋路跳轉。")

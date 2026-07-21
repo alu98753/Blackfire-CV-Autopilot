@@ -157,6 +157,7 @@ class BattleHandler(BaseStateHandler):
                 self.mouse.click(rect["left"] + best_match_pos[0], rect["top"] + best_match_pos[1])
                 # 點擊完結算後，會回到地下城層與層之間，轉移回探索狀態
                 self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
+                self.machine.dungeon_defeat_count = 0
                 time.sleep(0.15)
             else:
                 self.log_battle_duration()

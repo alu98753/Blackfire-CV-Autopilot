@@ -1595,5 +1595,73 @@ class TestBehavioralScenarios(unittest.TestCase):
             self.mock_mouse.drag.assert_not_called()
             self.assertEqual(self.state_machine.fallback_swipe_count, 3)
 
+    @patch('os.path.exists')
+    def test_dungeon_defeat_giveup_flow(self, mock_exists):
+        """
+        [行為測試 26] 測試地下城連續戰敗退出與冷卻重設邏輯：
+        1. 第一次與第二次戰敗時，點選 retry，dungeon_defeat_count 遞增。
+        2. 第三次戰敗時，點選 defeat_giveup.png 與 confirm.png 放棄。
+        3. 驗證當前地下城被設為 30 分鐘冷卻 (冰雪洞窟 idx=4)，且狀態移轉至 STATE_NAVIGATING。
+        """
+        # 初始化配置為地下城模式
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.current_dungeon_index = 4  # 冰雪洞窟
+        self.state_machine.dungeon_defeat_count = 0
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        
+        # Mock exists 都返回 True
+        mock_exists.return_value = True
+        
+        # 設置視窗大小
+        self.mock_capturer.get_window_rect.return_value = {
+            "left": 0, "top": 0, "width": 1920, "height": 1080
+        }
+        
+        # Mock 影像
+        dummy_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = dummy_img
+        
+        # Mock 模板匹配
+        # 1. 前二次戰敗：我們需要匹配 defeat.png 成功，以及 defeat_retry.png 成功
+        # 2. 第三次戰敗：我們需要匹配 defeat.png 成功，defeat_giveup.png 成功，以及 confirm.png 成功
+        def mock_match(img_arg, name, threshold=0.7, **kwargs):
+            if name == "defeat.png":
+                return (100, 100), 0.85
+            elif name in ["defeat_retry.png", "stages/retry.png"]:
+                return (200, 200), 0.88
+            elif name == "defeat_giveup.png":
+                return (300, 300), 0.88
+            elif name == "common/confirm.png":
+                return (400, 400), 0.88
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = mock_match
+             
+        # 第一次戰敗
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.dungeon_defeat_count, 1)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+        
+        # 回歸到結算狀態準備第二次
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        
+        # 第二次戰敗
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.dungeon_defeat_count, 2)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+        
+        # 回歸到結算狀態準備第三次
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        
+        # 第三次戰敗：這次因為 count=2 >= 2，會點選放棄與確認退出
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了 30 分鐘 (1800 秒) 的冷卻
+        self.assertEqual(self.state_machine.dungeon_defeat_count, 0)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertGreater(self.state_machine.dungeon_cooldowns[4], time.time() + 1790.0)
+
 if __name__ == "__main__":
     unittest.main()
