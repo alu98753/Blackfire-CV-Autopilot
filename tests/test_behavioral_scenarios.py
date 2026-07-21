@@ -1327,6 +1327,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # 設定冷卻時間
         self.state_machine.dungeon_cooldowns = {
+            4: float('inf'),          # 第 5 關：永久不可刷
             3: float('inf'),          # 第 4 關：永久不可刷
             2: time.time() + 100.0,   # 第 3 關：冷卻中
             1: 0.0,                   # 第 2 關：就緒
@@ -1555,7 +1556,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         call_count = 0
         def mock_matchTemplate(img_arg, templ, method):
             nonlocal call_count
-            val = 0.95 if call_count == 4 else 0.0
+            val = 0.95 if call_count == 5 else 0.0
             call_count += 1
             return np.array([[val]], dtype=np.float32)
             

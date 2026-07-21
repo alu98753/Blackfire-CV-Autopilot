@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import os
 import sys
 import time
+import numpy as np
 
 # 將專案根目錄加入系統路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -137,11 +138,11 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         
         mock_exists.return_value = True
-        self.mock_capturer.capture.return_value = MagicMock()
+        self.mock_capturer.capture.return_value = np.zeros((600, 800, 3), dtype=np.uint8)
         
         # 模擬 matcher.match，配合探索主循環與子流程內部的多階段比對
         match_call_count = 0
-        def side_effect(img, name, threshold, brightness_threshold=0.0):
+        def side_effect(img, name, threshold=0.8, brightness_threshold=0.0, *args, **kwargs):
             nonlocal match_call_count
             # --- 第一階段：點擊 Treasure.png 並進入開啟寶箱子流程 ---
             if name == "dungeons/Treasure.png" and match_call_count == 0:
@@ -166,21 +167,24 @@ class TestStateMachineLogic(unittest.TestCase):
             elif name == "dungeons/dungeon_bless.png" and match_call_count == 5:
                 match_call_count += 1
                 return (750, 750), 0.90
-            elif name == "dungeons/choice_bless.png" and match_call_count == 6:
+            elif name == "dungeons/bless_combat.png" and match_call_count == 6:
                 match_call_count += 1
                 return (800, 200), 0.90
-            elif name == "common/ok.png" and match_call_count == 7:
+            elif name == "dungeons/choice_bless.png" and match_call_count == 7:
+                match_call_count += 1
+                return (450, 200), 0.90  # 局部座標 (450, 200)，加 x_min(350) = 800，完美對齊
+            elif name == "common/ok.png" and match_call_count == 8:
                 match_call_count += 1
                 return (810, 210), 0.90
-            elif name == "common/quit.png" and match_call_count == 8:
+            elif name == "common/quit.png" and match_call_count == 9:
                 match_call_count += 1
                 return (820, 220), 0.90
                 
             # --- 第四階段：發現戰鬥開始 auto.png 並切換為 BATTLE 狀態 ---
-            elif name == "common/auto.png" and match_call_count == 9:
+            elif name == "common/auto.png" and match_call_count == 10:
                 match_call_count += 1
                 return (800, 100), 0.90
-            elif name == "common/auto.png" and match_call_count == 10:
+            elif name == "common/auto.png" and match_call_count == 11:
                 match_call_count += 1
                 return (800, 100), 0.90
                 
@@ -903,7 +907,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config["greedy_dungeon"] = True
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.dungeon_cooldowns = {1: float("inf"), 3: float("inf")}
+        self.state_machine.dungeon_cooldowns = {1: float("inf"), 3: float("inf"), 4: float("inf")}
         
         import numpy as np
         self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -928,17 +932,11 @@ class TestStateMachineLogic(unittest.TestCase):
                     # any_entry_found: 匹配 Slime 成功
                     return (0.0, 0.95, (0, 0), (200, 0))
                 elif counts["card"] == 2:
-                    # i = 3 (Ruins): 匹配失敗
-                    return (0.0, 0.0, (0, 0), (0, 0))
-                elif counts["card"] == 3:
-                    # i = 2 (Forest): 匹配成功，起點為 727
-                    return (0.0, 0.95, (0, 0), (727, 0))
-                elif counts["card"] == 4:
-                    # i = 1 (Ghost): 匹配失敗
-                    return (0.0, 0.0, (0, 0), (0, 0))
-                elif counts["card"] == 5:
                     # i = 0 (Slime): 匹配成功，起點為 200
                     return (0.0, 0.95, (0, 0), (200, 0))
+                elif counts["card"] == 4:
+                    # i = 2 (Forest): 匹配成功，起點為 727
+                    return (0.0, 0.95, (0, 0), (727, 0))
                 return (0.0, 0.0, (0, 0), (0, 0))
             elif 200 < res.shape[1] <= 1000:
                 counts["cooldown"] += 1
@@ -1010,9 +1008,9 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 驗證沒有點擊任何按鈕 (特別是 select_stage.png)
         self.mock_mouse.click.assert_not_called()
-        # 驗證執行了 drag 拖曳，起點大約在 100 + 1000 * 0.58 = 680，終點大約在 100 + 1000 * 0.42 = 520
+        # 驗證執行了 drag 拖曳，起點大約在 100 + 1000 * 0.62 = 720，終點大約在 100 + 1000 * 0.38 = 480
         # 高度為 100 + 800 * 0.3 = 340
-        self.mock_mouse.drag.assert_called_with(680, 340, 520, 340, duration=0.8, inertia=False)
+        self.mock_mouse.drag.assert_called_with(720, 340, 480, 340, duration=0.8, inertia=False)
         
         # 場景 2：清單滑動後，看見了目標關卡小島 stages/level4_desert_ruins.png
         # 預期：進行點擊小島並套用 -160 像素的點擊向上偏移 (y = 200 - 160 = 40 ➔ 絕對 y = 100 + 40 = 140)
@@ -1243,7 +1241,7 @@ class TestStateMachineLogic(unittest.TestCase):
         minMaxLoc_calls = [0]
         def mock_minMaxLoc_impl(res):
             minMaxLoc_calls[0] += 1
-            if minMaxLoc_calls[0] == 5:
+            if minMaxLoc_calls[0] == 6:
                 return (0.0, 0.95, (0, 0), (0, 0))
             return (0.0, 0.1, (0, 0), (0, 0))
         mock_minMaxLoc.side_effect = mock_minMaxLoc_impl

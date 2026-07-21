@@ -68,10 +68,11 @@ class TemplateMatcher:
         
         # logging.info(f"[除錯-比對大小] 模板 '{template_name}' 大小: {temp_w}x{temp_h}, 來源畫面大小: {screen_w}x{screen_h}")
 
-        # # 如果模板比來源畫面大，必無法匹配
-        # if temp_h > screen_h or temp_w > screen_w:
-        #     logging.warning(f"模板尺寸 ({temp_w}x{temp_h}) 大於來源畫面尺寸 ({screen_w}x{screen_h})。")
-        #     return None, 0.0
+        # 如果模板比來源畫面大，必無法匹配，直接回傳 None 以免 OpenCV 崩潰
+        if temp_h > screen_h or temp_w > screen_w:
+            if not quiet:
+                logging.warning(f"模板尺寸 ({temp_w}x{temp_h}) 大於來源畫面尺寸 ({screen_w}x{screen_h})。")
+            return None, 0.0
 
         # 使用標準化相關係數配對方法
         res = cv2.matchTemplate(screen_img, template_img, cv2.TM_CCOEFF_NORMED)

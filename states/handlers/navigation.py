@@ -166,12 +166,13 @@ class NavigationHandler(BaseStateHandler):
                     break
             scale = matched_width / 1920.0
             
-            dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡"]
+            dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
             entry_templates = [
                 "dungeons/Slime_entry.png",
                 "dungeons/Ghost_entry.png",
                 "dungeons/Forest_entry.png",
-                "dungeons/Ruins_entry.png"
+                "dungeons/Ruins_entry.png",
+                "dungeons/Ice_entry.png"
             ]
             temp_confidences = {}
             
@@ -179,8 +180,9 @@ class NavigationHandler(BaseStateHandler):
                 if os.path.exists(os.path.join("templates", temp_name)):
                     t_img = cv2.imread(os.path.join("templates", temp_name))
                     if t_img is not None:
-                        t_w = int(346.0 * scale)
-                        t_h = int(341.0 * scale)
+                        orig_h, orig_w = t_img.shape[:2]
+                        t_w = int(orig_w * scale)
+                        t_h = int(orig_h * scale)
                         resized_t = cv2.resize(t_img, (t_w, t_h))
                         res = cv2.matchTemplate(screen_img, resized_t, cv2.TM_CCOEFF_NORMED)
                         _, max_val, _, max_loc = cv2.minMaxLoc(res)
@@ -244,7 +246,7 @@ class NavigationHandler(BaseStateHandler):
                 
                 if is_greedy:
                     # 貪婪模式：從高到低遍歷，尋找第一個就緒且解鎖的地下城
-                    for i in range(3, -1, -1):
+                    for i in range(len(entry_templates) - 1, -1, -1):
                         cooldown_until = self.machine.dungeon_cooldowns.get(i, 0.0)
                         if time.time() < cooldown_until:
                             if cooldown_until == float('inf'):
@@ -429,7 +431,8 @@ class NavigationHandler(BaseStateHandler):
                 "dungeons/Slime_entry.png",
                 "dungeons/Ghost_entry.png",
                 "dungeons/Forest_entry.png",
-                "dungeons/Ruins_entry.png"
+                "dungeons/Ruins_entry.png",
+                "dungeons/Ice_entry.png"
             ]
             for dg_temp in dungeon_templates:
                 if os.path.exists(os.path.join("templates", dg_temp)):
@@ -511,15 +514,15 @@ class NavigationHandler(BaseStateHandler):
                                 time.sleep(1.0)
                             return
 
-                        if scroll_count < 4:
-                            logging.info(f"🧭 尋路中：已在關卡選擇介面，但未見目標關卡 [{target_level_btn}]，執行向左滑動清單 (地圖向右移) 第 {scroll_count + 1}/4 次...")
-                            start_x = rect["left"] + int(rect["width"] * 0.58)
-                            end_x = rect["left"] + int(rect["width"] * 0.42)
+                        if scroll_count < 6:
+                            logging.info(f"🧭 尋路中：已在關卡選擇介面，但未見目標關卡 [{target_level_btn}]，執行向左滑動清單 (地圖向右移) 第 {scroll_count + 1}/6 次...")
+                            start_x = rect["left"] + int(rect["width"] * 0.62)
+                            end_x = rect["left"] + int(rect["width"] * 0.38)
                             self.machine.horizontal_scroll_count = scroll_count + 1
                         else:
-                            logging.info(f"🧭 尋路中：已在關卡選擇介面，但仍未見目標關卡 [{target_level_btn}]，執行向右滑動清單 (地圖向左移) 第 {scroll_count - 3}/4 次...")
-                            start_x = rect["left"] + int(rect["width"] * 0.42)
-                            end_x = rect["left"] + int(rect["width"] * 0.58)
+                            logging.info(f"🧭 尋路中：已在關卡選擇介面，但仍未見目標關卡 [{target_level_btn}]，執行向右滑動清單 (地圖向左移) 第 {scroll_count - 5}/6 次...")
+                            start_x = rect["left"] + int(rect["width"] * 0.38)
+                            end_x = rect["left"] + int(rect["width"] * 0.62)
                             self.machine.horizontal_scroll_count = scroll_count + 1
 
                         y_pos = rect["top"] + int(rect["height"] * 0.3)

@@ -3,6 +3,7 @@ GLOBAL_SETTINGS = {
     # 非純領取模式下（推圖、刷副本）的資源檢測與領取冷卻時間（秒）
     "default_diamond_cd": 7200.0,  # 預設 2 小時領一次鑽石
     "default_bread_cd": 1800.0,    # 預設 30 分鐘領一次體力
+    "default_bless_mode": "combat",  # 預設為戰鬥/傷害祝福
 }
 
 GAME_CONFIGS = {
@@ -29,6 +30,7 @@ GAME_CONFIGS = {
     "dungeon_slime": {
         "name": "史萊姆地下城",
         "type": "dungeon",
+        "bless_mode": "combat",  # 預設為戰鬥/傷害祝福
         # 導航進入路徑：總入口 -> 地下城 -> 史萊姆副本
         "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
         # 進入地下城內每一層戰鬥的入口按鈕

@@ -90,6 +90,8 @@ def main():
     parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
                         help="掛機模式：stage (普通關卡) 或 dungeon_slime (史萊姆地下城)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
+    parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
+                        help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
     args = parser.parse_args()
 
     # 取得當前模式的配置
@@ -141,27 +143,29 @@ def main():
         print(" 2) 幽影地穴 (Ghost_entry)")
         print(" 3) 森林迷宮 (Forest_entry)")
         print(" 4) 神秘遺跡 (Ruins_entry)")
-        print(" 5) 自動貪婪挑選 (Greedy Select) - 預設")
+        print(" 5) 冰雪洞窟 (Ice_entry)")
+        print(" 6) 自動貪婪挑選 (Greedy Select) - 預設")
         try:
-            choice = input("請輸入地下城數字 [1-5] (直接 Enter 鍵預設為 5): ").strip()
+            choice = input("請輸入地下城數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
             if not choice:
-                choice = "5"
+                choice = "6"
         except KeyboardInterrupt:
             print("\n[!] 取消啟動。")
             sys.exit(0)
         except Exception:
-            choice = "5"
+            choice = "6"
 
         dungeon_map = {
             "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
             "2": ("dungeons/Ghost_entry.png", "幽影地穴", False),
             "3": ("dungeons/Forest_entry.png", "森林迷宮", False),
             "4": ("dungeons/Ruins_entry.png", "神秘遺跡", False),
-            "5": (None, "自動貪婪挑選", True)
+            "5": ("dungeons/Ice_entry.png", "冰雪洞窟", False),
+            "6": (None, "自動貪婪挑選", True)
         }
         if choice not in dungeon_map:
-            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [自動貪婪挑選]...")
-            choice = "5"
+            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [自動貪婪挑選]...")
+            choice = "6"
 
         entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
         config["name"] = f"地下城 - {dungeon_name}"
@@ -170,6 +174,35 @@ def main():
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
         else:
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_btn]
+
+        # 選擇地下城祝福模式
+        bless_mode = args.blessmode
+        if not bless_mode:
+            print("\n請選擇地下城祝福模式：")
+            print(" 1) 戰鬥/傷害祝福 (Combat) - 預設")
+            print(" 2) 生命祝福 (Life)")
+            print(" 3) 經驗祝福 (Exp)")
+            try:
+                bless_choice = input("請輸入數字 [1-3] (直接 Enter 鍵預設為 1): ").strip()
+                if not bless_choice:
+                    bless_choice = "1"
+            except KeyboardInterrupt:
+                print("\n[!] 取消啟動。")
+                sys.exit(0)
+            except Exception:
+                bless_choice = "1"
+
+            bless_map = {
+                "1": "combat",
+                "2": "life",
+                "3": "exp"
+            }
+            if bless_choice not in bless_map:
+                print(f"[!] 無效選擇 '{bless_choice}'，已自動使用預設的 [1: 戰鬥/傷害祝福]...")
+                bless_choice = "1"
+            bless_mode = bless_map[bless_choice]
+
+        config["bless_mode"] = bless_mode
 
     if args.mode == "collect_only":
         config["keep_colors"] = []

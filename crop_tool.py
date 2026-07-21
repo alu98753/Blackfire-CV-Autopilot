@@ -1,3 +1,13 @@
+import ctypes
+try:
+    # 宣告進程為 Per-Monitor DPI Aware 確保取得物理坐標，避免 OpenCV 視窗在高 DPI 縮放下無法拖曳且卡死
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
 import cv2
 import os
 import sys
@@ -63,8 +73,10 @@ def main():
     # 使用 OpenCV 的 ROI 選擇器
     r = cv2.selectROI(window_name, img, fromCenter=False, showCrosshair=True)
     
-    # 關閉所有視窗
+    # 關閉所有視窗並清空事件佇列，防範視窗殘留卡死
     cv2.destroyAllWindows()
+    for _ in range(5):
+        cv2.waitKey(1)
     
     x, y, w, h = r
     if w > 0 and h > 0:
