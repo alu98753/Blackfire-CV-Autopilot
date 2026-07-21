@@ -17,7 +17,7 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS
+from config import GAME_CONFIGS, STAGE_CONFIGS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -99,42 +99,90 @@ def main():
     config["backend_mode"] = args.backend
 
     if args.mode == "stage":
-        print("請選擇要打的關卡 Boss：")
+        print("請選擇要打的關卡大關：")
         print(" 1) 蒼穹平原 (Level 1)")
-        print(" 2) 荒蕪岩地 (Level 2) - 預設")
+        print(" 2) 荒蕪岩地 (Level 2)")
         print(" 3) 古樹森林 (Level 3)")
         print(" 4) 沙漠廢墟 (Level 4)")
         print(" 5) 幽暗沼澤 (Level 5)")
+        print(" 6) 冰雪洞窟 (Level 6) - 預設")
         try:
-            choice = input("請輸入關卡數字 [1-5] (直接 Enter 鍵預設為 5): ").strip()
+            choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
             if not choice:
-                choice = "5"
+                choice = "6"
         except KeyboardInterrupt:
             print("\n[!] 取消啟動。")
             sys.exit(0)
         except Exception:
-            choice = "5"
+            choice = "6"
 
-        stage_map = {
-            "1": ("stages/level1_sky_plains.png", "stages/level1_final.png", "蒼穹平原"),
-            "2": ("stages/level2_barren_rocks.png", "stages/level2_final.png", "荒蕪岩地"),
-            "3": ("stages/level3_ancient_forest.png", "stages/level3_final.png", "古樹森林"),
-            "4": ("stages/level4_desert_ruins.png", "stages/level4_final.png", "沙漠廢墟"),
-            "5": ("stages/level5_gloomy_swamp.png", "stages/level5_final.png", "幽暗沼澤")
-        }
-        if choice not in stage_map:
-            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [幽暗沼澤]...")
-            choice = "5"
+        if choice not in STAGE_CONFIGS:
+            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
+            choice = "6"
 
-        level_btn, boss_btn, stage_name = stage_map[choice]
-        config["name"] = f"普通關卡 - {stage_name}"
+        cfg = STAGE_CONFIGS[choice]
+        stage_name = cfg["name"]
+        
+        # 判斷是否有多個子關卡
+        sub_stages = cfg["sub_stages"]
+        sub_choice_key = "final"  # 預設打 Boss / Final
+        
+        if len(sub_stages) > 1:
+            print(f"\n請選擇 [{stage_name}] 要打的小關卡類型：")
+            # 依序印出選項
+            opts = []
+            if "first" in sub_stages:
+                print(" 1) 第一小關 (First Stage)")
+                opts.append(("1", "first"))
+            if "middle" in sub_stages:
+                print(" 2) 中間小關 (Middle Stage)")
+                opts.append(("2", "middle"))
+            if "six" in sub_stages:
+                print(" 3) 第六小關 (Six Stage)")
+                opts.append(("3", "six"))
+            print(" 4) 魔王關 (Boss / Final) - 預設")
+            opts.append(("4", "final"))
+            
+            try:
+                sub_choice = input("請輸入數字 (直接 Enter 鍵預設為 4): ").strip()
+                if not sub_choice:
+                    sub_choice = "4"
+            except KeyboardInterrupt:
+                print("\n[!] 取消啟動。")
+                sys.exit(0)
+            except Exception:
+                sub_choice = "4"
+                
+            # 尋找對應的 key
+            matched_key = None
+            for opt_num, opt_key in opts:
+                if sub_choice == opt_num:
+                    matched_key = opt_key
+                    break
+            if matched_key is None:
+                print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [魔王關]...")
+                matched_key = "final"
+            sub_choice_key = matched_key
+
+        # 嚴格防禦性退出：檢查子關卡圖片是否存在，如果不存在則說明沒有該截圖並退出
+        if sub_choice_key not in sub_stages:
+            print(f"\n[!] 錯誤：該關卡 [{stage_name}] 未配置小關卡類型 '{sub_choice_key}'，或找不到對應的模板圖片！")
+            sys.exit(1)
+            
+        fight_entrance = sub_stages[sub_choice_key]
+        if not os.path.exists(os.path.join("templates", fight_entrance)):
+            print(f"\n[!] 錯誤：找不到該關卡的模板圖片 'templates/{fight_entrance}'，請先使用 crop_tool 進行裁剪！")
+            sys.exit(1)
+
+        level_btn = cfg["entry"]
+        config["name"] = f"普通關卡 - {stage_name} ({sub_choice_key})"
         config["navigation_path"] = [
             "common/door.png",
             "exit_battle.png",
             "common/select_stage.png",
             level_btn,
             "stages/stage_label.png",
-            boss_btn
+            fight_entrance
         ]
 
     elif args.mode == "dungeon_slime":

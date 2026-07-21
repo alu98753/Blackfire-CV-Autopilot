@@ -77,3 +77,51 @@ GAME_CONFIGS = {
         "stamina_retreat_duration": 4.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
     }
 }
+
+STAGE_CONFIGS = {
+    "1": {
+        "name": "蒼穹平原",
+        "entry": "stages/level1_sky_plains.png",
+        "sub_stages": {
+            "final": "stages/level1_final.png"
+        }
+    },
+    "2": {
+        "name": "荒蕪岩地",
+        "entry": "stages/level2_barren_rocks.png",
+        "sub_stages": {
+            "final": "stages/level2_final.png"
+        }
+    },
+    "3": {
+        "name": "古樹森林",
+        "entry": "stages/level3_ancient_forest.png",
+        "sub_stages": {
+            "final": "stages/level3_final.png"
+        }
+    },
+    "4": {
+        "name": "沙漠廢墟",
+        "entry": "stages/level4_desert_ruins.png",
+        "sub_stages": {
+            "final": "stages/level4_final.png"
+        }
+    },
+    "5": {
+        "name": "幽暗沼澤",
+        "entry": "stages/level5_gloomy_swamp.png",
+        "sub_stages": {
+            "final": "stages/level5_final.png"
+        }
+    },
+    "6": {
+        "name": "冰雪洞窟",
+        "entry": "stages/level6_ice_cave.png",
+        "sub_stages": {
+            "first": "stages/first_stage.png",
+            "middle": "stages/level6_middle.png",
+            "six": "stages/six_stage.png",
+            "final": "stages/level6_final.png"
+        }
+    }
+}
