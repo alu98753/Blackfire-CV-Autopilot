@@ -929,13 +929,10 @@ class TestStateMachineLogic(unittest.TestCase):
             if res.shape[1] > 1000:
                 counts["card"] += 1
                 if counts["card"] == 1:
-                    # any_entry_found: 匹配 Slime 成功
+                    # idx = 0 (Slime): 匹配成功，起點為 200
                     return (0.0, 0.95, (0, 0), (200, 0))
-                elif counts["card"] == 2:
-                    # i = 0 (Slime): 匹配成功，起點為 200
-                    return (0.0, 0.95, (0, 0), (200, 0))
-                elif counts["card"] == 4:
-                    # i = 2 (Forest): 匹配成功，起點為 727
+                elif counts["card"] == 3:
+                    # idx = 2 (Forest): 匹配成功，起點為 727
                     return (0.0, 0.95, (0, 0), (727, 0))
                 return (0.0, 0.0, (0, 0), (0, 0))
             elif 200 < res.shape[1] <= 1000:
@@ -950,7 +947,12 @@ class TestStateMachineLogic(unittest.TestCase):
                 # Slime skull 匹配成功
                 return (0.0, 0.88, (0, 0), (0, 0))
                 
-        with patch('cv2.imread', return_value=dummy_img), \
+        def mock_imread_impl(path):
+            if "entry" in path:
+                return np.zeros((341, 346, 3), dtype=np.uint8)
+            return np.zeros((10, 10, 3), dtype=np.uint8)
+            
+        with patch('cv2.imread', side_effect=mock_imread_impl), \
              patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl):
             # 執行 step()，由於 Forest 被偵測到冷卻，應跳過，最後選擇點擊 Slime (X=0+200+346//2=373, Y=0+341//2=170)
             self.state_machine.step()

@@ -1368,7 +1368,12 @@ class TestBehavioralScenarios(unittest.TestCase):
                 # 骨頭匹配
                 return (0.0, 0.88, (0, 0), (0, 0))
                 
-        with patch('cv2.imread', return_value=mock_light_t), \
+        def mock_imread_impl(path):
+            if "entry" in path:
+                return np.zeros((341, 346, 3), dtype=np.uint8)
+            return np.zeros((10, 10, 3), dtype=np.uint8)
+            
+        with patch('cv2.imread', side_effect=mock_imread_impl), \
              patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl):
             # Act
             self.state_machine.step()

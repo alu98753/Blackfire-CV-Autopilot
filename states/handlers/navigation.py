@@ -188,7 +188,7 @@ class NavigationHandler(BaseStateHandler):
                         _, max_val, _, max_loc = cv2.minMaxLoc(res)
                         temp_confidences[dungeon_names[idx]] = max_val
                         if max_val >= 0.75:
-                            visible_dungeons[idx] = max_loc
+                            visible_dungeons[idx] = (max_loc, t_w, t_h)
                             is_dungeon_page = True
             
             # 另外偵測鎖定狀態的卡片 locked_entry
@@ -257,9 +257,7 @@ class NavigationHandler(BaseStateHandler):
                             
                         # 如果目標地下城在畫面上，我們檢測冷卻與解鎖狀態
                         if i in visible_dungeons:
-                            max_loc = visible_dungeons[i]
-                            t_w = int(346.0 * scale)
-                            t_h = int(341.0 * scale)
+                            max_loc, t_w, t_h = visible_dungeons[i]
                             
                             # 檢查冷卻木牌
                             in_cooldown = False
@@ -291,13 +289,12 @@ class NavigationHandler(BaseStateHandler):
                                 
                             # 檢查亮骨頭 (解鎖)
                             cx = max_loc[0] + t_w // 2
-                            cy = max_loc[1] + t_h // 2
                             x1 = cx - int(90.0 * scale)
-                            y1 = cy + int(240.0 * scale)
+                            # 使用卡片下方較大 Y 軸區間進行骨頭掃描，消除不同模板裁切與高度的影響
+                            y1 = max_loc[1] + int(250.0 * scale)
+                            y2 = max_loc[1] + int(520.0 * scale)
                             w_skull = int(200.0 * scale)
-                            h_skull = int(60.0 * scale)
                             x2 = x1 + w_skull
-                            y2 = y1 + h_skull
                             
                             if 0 <= x1 and x2 <= w_limit and 0 <= y1 and y2 <= h_limit:
                                 skull_crop = screen_img[y1:y2, x1:x2]
@@ -340,9 +337,7 @@ class NavigationHandler(BaseStateHandler):
                     
                 # 檢查目標地下城是否已在畫面上
                 if target_idx in visible_dungeons:
-                    max_loc = visible_dungeons[target_idx]
-                    t_w = int(346.0 * scale)
-                    t_h = int(341.0 * scale)
+                    max_loc, t_w, t_h = visible_dungeons[target_idx]
                     click_x = rect["left"] + max_loc[0] + t_w // 2
                     click_y = rect["top"] + max_loc[1] + t_h // 2
                     logging.info(f"👉 貪婪地下城：選擇進入 [{dungeon_names[target_idx]}]，點擊座標 ({click_x}, {click_y})。")
