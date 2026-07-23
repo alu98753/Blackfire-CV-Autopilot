@@ -116,7 +116,7 @@ class ScreenCapturer:
     def _capture_backend(self, hwnd):
         """
         後台視窗複製：優先使用 PrintWindow (flag=2) 以相容 GPU 硬體加速與跨螢幕邊界渲染，
-        若失敗則退回傳統 BitBlt 複製方案。
+        若判定不可用則自適應鎖定為 BitBlt 複製方案，防止每幀無謂嘗試與 Exception 開銷。
         """
         try:
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
@@ -135,26 +135,28 @@ class ScreenCapturer:
             saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
             saveDC.SelectObject(saveBitMap)
             
-            # 1. 優先嘗試 PrintWindow (PW_RENDERFULLCONTENT = 2)
             img_bgr = None
-            try:
-                # PW_RENDERFULLCONTENT = 2
-                res = ctypes.windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 2)
-                if res:
-                    bmpinfo = saveBitMap.GetInfo()
-                    bmpstr = saveBitMap.GetBitmapBits(True)
-                    img = np.frombuffer(bmpstr, dtype=np.uint8).reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
-                    img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-                    
-                    # 確保不是全黑
-                    if np.all(img_bgr == 0):
-                        img_bgr = None
-            except Exception as e_pw:
-                logging.debug(f"PrintWindow capture failed: {e_pw}")
 
-            # 2. 備份方案：若 PrintWindow 失敗或回傳空畫面，使用傳統 BitBlt 複製
+            # 1. 優先嘗試 PrintWindow (若以前失敗過則自適應跳過，鎖定 BitBlt)
+            use_pw = getattr(self, "_use_printwindow", True)
+            if use_pw:
+                try:
+                    res = ctypes.windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 2)
+                    if res:
+                        bmpinfo = saveBitMap.GetInfo()
+                        bmpstr = saveBitMap.GetBitmapBits(True)
+                        img = np.frombuffer(bmpstr, dtype=np.uint8).reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
+                        img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+                        if np.all(img_bgr == 0):
+                            img_bgr = None
+                            self._use_printwindow = False
+                    else:
+                        self._use_printwindow = False
+                except Exception as e_pw:
+                    self._use_printwindow = False
+
+            # 2. 備份方案：若 PrintWindow 失敗、未使用或回傳空畫面，使用傳統 BitBlt 複製
             if img_bgr is None:
-                logging.debug("⚠️ 後台 PrintWindow 失敗或為空，退回使用 BitBlt 備用方案...")
                 saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
                 bmpinfo = saveBitMap.GetInfo()
                 bmpstr = saveBitMap.GetBitmapBits(True)

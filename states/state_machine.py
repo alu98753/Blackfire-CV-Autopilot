@@ -176,17 +176,25 @@ class GameStateMachine:
 
 
 
-        # B. 全域登入/重新登入處理
-        from states.login_flow import handle_global_login
-        if handle_global_login(self, screen_img, rect):
-            return
+        # B. 全域自動重登處理 (低頻率檢測)
+        now_time = time.time()
+        last_low_freq = getattr(self, "_last_low_freq_check_time", 0.0)
+        last_state = getattr(self, "_last_low_freq_state", None)
+        state_changed = (self.current_state != last_state)
+        should_check_low_freq = state_changed or (now_time - last_low_freq >= 1.5) or (self.current_state in [self.STATE_UNKNOWN, self.STATE_LOADING])
 
-        # C. 體力不足（食物不足）退避處理
-        # 僅在可能啟動新關卡/新副本的狀態下才進行體力不足偵測（如大廳、尋路、或戰鬥結算後再戰時），避免在戰鬥中、地下城探索或背包整理時產生虛假誤判
-        if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING]:
-            from states.stamina_flow import handle_insufficient_stamina
-            if handle_insufficient_stamina(self, screen_img, rect):
+        if should_check_low_freq:
+            self._last_low_freq_check_time = now_time
+            self._last_low_freq_state = self.current_state
+            from states.login_flow import handle_global_login
+            if handle_global_login(self, screen_img, rect):
                 return
+
+            # C. 體力不足（食物不足）退避處理
+            if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING]:
+                from states.stamina_flow import handle_insufficient_stamina
+                if handle_insufficient_stamina(self, screen_img, rect):
+                    return
 
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
@@ -219,42 +227,43 @@ class GameStateMachine:
         else:
             self.consecutive_stuck_count = 0
 
-        # 3. 全域彈窗與任務完成處理
-        # 3.1 檢查「任務完成」彈窗 (task_complete.png)
-        if os.path.exists(os.path.join("templates", "task_complete.png")):
-            pos, conf = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
-            if pos:
-                # 計算「領取獎勵」按鈕的相對位置（依據當前畫面高度動態縮放偏移量，以 1080p 為基準）
-                height_to_use = rect.get("height") or screen_img.shape[0] or 1080
-                scale_y = height_to_use / 1080.0
-                btn_x = rect["left"] + pos[0]
-                btn_y = rect["top"] + pos[1] + int(281 * scale_y)
-                logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程，點擊座標 ({btn_x}, {btn_y})。")
-                self.mouse.click(btn_x, btn_y)
-                time.sleep(0.5)  # 等待動畫
-                self._run_task_complete_subflow(rect)
-                return
-
-        # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
-        if os.path.exists(os.path.join("templates", "backpack_full.png")):
-            # 調高門檻至 0.80 以避免大廳背景等介面產生虛假誤判，真實彈窗特徵明顯，信心度極高
-            pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
-            if pos:
-                if self.current_state != self.STATE_BACKPACK_FULL_SORTING:
-                    logging.warning(f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。")
-                    self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
+        # 3. 全域彈窗與任務完成處理 (低頻率檢測)
+        if should_check_low_freq:
+            # 3.1 檢查「任務完成」彈窗 (task_complete.png)
+            if os.path.exists(os.path.join("templates", "task_complete.png")):
+                pos, conf = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
+                if pos:
+                    # 計算「領取獎勵」按鈕的相對位置（依據當前畫面高度動態縮放偏移量，以 1080p 為基準）
+                    height_to_use = rect.get("height") or screen_img.shape[0] or 1080
+                    scale_y = height_to_use / 1080.0
+                    btn_x = rect["left"] + pos[0]
+                    btn_y = rect["top"] + pos[1] + int(281 * scale_y)
+                    logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程，點擊座標 ({btn_x}, {btn_y})。")
+                    self.mouse.click(btn_x, btn_y)
+                    time.sleep(0.5)  # 等待動畫
+                    self._run_task_complete_subflow(rect)
                     return
 
-        # 3.3 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認，排除背包清理狀態自身處理)
-        if (self.current_state == self.STATE_LOBBY or self.need_bag_cleaning) and self.current_state not in [self.STATE_BAG_CLEANING, self.STATE_BACKPACK_FULL_SORTING]:
-            for conf_btn in ["common/confirm.png", "common/ok.png"]:
-                if os.path.exists(os.path.join("templates", conf_btn)):
-                    pos, conf = self.matcher.match(screen_img, conf_btn, threshold=0.8)
-                    if pos:
-                        logging.info(f"👉 偵測到通用確認按鈕 [{conf_btn}] (信心度: {conf:.4f})，點擊關閉。")
-                        self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                        time.sleep(0.08)
+            # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
+            if os.path.exists(os.path.join("templates", "backpack_full.png")):
+                # 調高門檻至 0.80 以避免大廳背景等介面產生虛假誤判，真實彈窗特徵明顯，信心度極高
+                pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
+                if pos:
+                    if self.current_state != self.STATE_BACKPACK_FULL_SORTING:
+                        logging.warning(f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。")
+                        self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
                         return
+
+            # 3.3 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認，排除背包清理狀態自身處理)
+            if (self.current_state == self.STATE_LOBBY or self.need_bag_cleaning) and self.current_state not in [self.STATE_BAG_CLEANING, self.STATE_BACKPACK_FULL_SORTING]:
+                for conf_btn in ["common/confirm.png", "common/ok.png"]:
+                    if os.path.exists(os.path.join("templates", conf_btn)):
+                        pos, conf = self.matcher.match(screen_img, conf_btn, threshold=0.8)
+                        if pos:
+                            logging.info(f"👉 偵測到通用確認按鈕 [{conf_btn}] (信心度: {conf:.4f})，點擊關閉。")
+                            self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                            time.sleep(0.08)
+                            return
 
         # 4. 分發處理至當前狀態的 Handler
         handler = self.handlers.get(self.current_state)
