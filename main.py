@@ -303,7 +303,7 @@ def setup_mode_config(args):
     return config
 
 def setup_equipment_config(config):
-    if config["type"] in ["bag_clean", "collect_only"]:
+    if config["type"] == "collect_only":
         config["keep_colors"] = []
         config["disassemble_colors"] = []
         return
