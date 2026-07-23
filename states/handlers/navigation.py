@@ -7,24 +7,45 @@ from states.handlers.base import BaseStateHandler
 class NavigationHandler(BaseStateHandler):
     def _parse_time_to_seconds(self, time_str):
         """
-        將 OCR 識別出的時間字串 (如 "00:17:10" 或 "17:10") 解析為總秒數。
+        將 OCR 識別出的時間字串 (如 "00:17:10", "17:10", "00:1635" 或 "1635") 解析為總秒數。
+        當冒號漏讀時，支援從右至左兩兩拆解 (秒、分、時)。
         """
         cleaned = re.sub(r"[^0-9:]", "", time_str)
         if not cleaned:
             return None
-        parts = cleaned.split(":")
+        parts = [p for p in cleaned.split(":") if p]
+        
+        # 展開零件中漏讀冒號的四位或六位純數字塊 (例如 "1635" -> "16", "35")
+        expanded_parts = []
+        for p in parts:
+            if len(p) == 4 and p.isdigit():
+                expanded_parts.append(p[:2])
+                expanded_parts.append(p[2:])
+            elif len(p) == 6 and p.isdigit():
+                expanded_parts.append(p[:2])
+                expanded_parts.append(p[2:4])
+                expanded_parts.append(p[4:])
+            else:
+                expanded_parts.append(p)
+                
+        parts = expanded_parts
         try:
-            if len(parts) == 3:  # 時:分:秒 (hh:mm:ss)
-                h = int(parts[0])
-                m = int(parts[1])
-                s = int(parts[2])
+            if len(parts) >= 3:  # 時:分:秒 (hh:mm:ss)
+                h = int(parts[-3])
+                m = int(parts[-2])
+                s = int(parts[-1])
                 return h * 3600 + m * 60 + s
             elif len(parts) == 2:  # 分:秒 (mm:ss)
                 m = int(parts[0])
                 s = int(parts[1])
                 return m * 60 + s
-            elif len(parts) == 1 and parts[0]:  # 單純秒數
-                return int(parts[0])
+            elif len(parts) == 1 and parts[0]:
+                val = int(parts[0])
+                if len(parts[0]) == 4:
+                    m = int(parts[0][:2])
+                    s = int(parts[0][2:])
+                    return m * 60 + s
+                return val
         except ValueError:
             pass
         return None
@@ -291,7 +312,7 @@ class NavigationHandler(BaseStateHandler):
         # 如果是自動貪婪地下城模式，且畫面上看見任何一個地下城入口，執行貪婪選關邏輯
         # B. 原本的尋路導航邏輯
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
-        is_dungeon_mode = self.machine.config.get("type") == "dungeon"
+        is_dungeon_mode = self.machine.config.get("type") in ["dungeon", "mix"]
         
         # 為了避免在單元測試中使用 MagicMock 時 cv2 運算崩潰，僅在 screen_img 有 shape 屬性時執行 OpenCV 模板匹配
         is_dungeon_page = False
@@ -441,6 +462,13 @@ class NavigationHandler(BaseStateHandler):
                         # 1. 優先檢查記憶體冷卻
                         cooldown_until = self.machine.dungeon_cooldowns.get(target_idx, 0.0)
                         if time.time() < cooldown_until:
+                            if self.machine.config.get("type") == "mix":
+                                logging.info(f"⏳ 混合模式：指定副本 [{dungeon_names[target_idx]}] 處於冷卻中，點擊返回活動大廳切換至普通關卡...")
+                                pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
+                                if pos_back:
+                                    self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                                    time.sleep(0.5)
+                                return
                             if cooldown_until == float('inf'):
                                 logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於永久不可打狀態，原地等待中...")
                             else:
@@ -454,6 +482,13 @@ class NavigationHandler(BaseStateHandler):
                                 screen_img, scale, h_limit, w_limit, target_idx, visible_dungeons
                             )
                             if is_unavailable:
+                                if self.machine.config.get("type") == "mix":
+                                    logging.info(f"⏳ 混合模式：畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中，點擊返回活動大廳切換至普通關卡...")
+                                    pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
+                                    if pos_back:
+                                        self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                                        time.sleep(0.5)
+                                    return
                                 time.sleep(1.0)
                                 return
                             
