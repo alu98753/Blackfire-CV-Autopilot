@@ -1,6 +1,6 @@
-# 地下城、體力/鑽石領取與背包分選決策流程圖 (Decision Tree / Flowchart) 📊
+# 地下城、混合模式與體力退避決策流程圖 (Decision Tree / Flowchart) 📊
 
-本文件記錄了地下城模式下，體力/鑽石自動領取、探險隨機事件、以及背包已滿自適應分選的決策樹結構。
+本文件記錄了地下城模式、混合模式 (`mix`)、體力/鑽石自動領取、體力退避自適應、探險隨機事件、以及背包已滿自適應分選的決策樹結構。
 
 ---
 
@@ -156,4 +156,46 @@ graph TD
     
     CheckBag -- Yes --> ClickBag[點擊打開背包]
     CheckBag -- No --> WaitBag[等待背包載入或按鈕出現]
+```
+
+---
+
+## 5. 混合模式 (`mix`) 雙向動態切換決策流程 (Hybrid Mix Mode Flow)
+
+在 `mix` 模式下，導航引擎會動態評估地下城 CD 狀態並在大廳進行切換：
+
+```mermaid
+graph TD
+    StartMix([NAVIGATING 導航觸發]) --> CheckAvail{has_available_dungeon()<br>有可用地下城?}
+    
+    CheckAvail -- Yes --> CheckDunTab{目前在地下城頁籤?<br>dungeon_select_open == True}
+    CheckDunTab -- Yes --> SelectDungeon[對齊與點擊地下城入口] --> EnterDungeon([進入地下城探索])
+    CheckDunTab -- No --> ClickDunTab[點擊 dungeons/dungeon.png 切換至地下城頁籤] --> SelectDungeon
+    
+    CheckAvail -- No (全冷卻) --> CheckStageTab{目前在普通關卡頁籤?<br>select_stage_after == True}
+    CheckStageTab -- Yes --> SelectStage[地圖滑動與點擊 stage_target 小關卡/魔王關] --> EnterStage([進入普通關卡準備/戰鬥])
+    CheckStageTab -- No --> ClickStageTab[點擊 common/select_stage.png 切換至普通關卡頁籤] --> SelectStage
+```
+
+---
+
+## 6. 全域體力不足 (`no_bread`) 退避與恢復流程 (Stamina Retreat Flow)
+
+```mermaid
+graph TD
+    StartStep([step 幀監控]) --> DetectNoBread{畫面出現 no_bread.png?}
+    
+    DetectNoBread -- Yes --> ClickCancel[點擊 no_bread/cancel.png 關閉彈窗]
+    ClickCancel --> ClearWins[清空 quit.png / exit_battle.png]
+    ClearWins --> ClickGoTown[點擊 goback_town.png 返回城鎮]
+    ClickGoTown --> BackupConfig[備份 original_config = config<br>記錄 stamina_retreat_start_time]
+    BackupConfig --> SwitchCollect[載入 collect_only 配置<br>切換至 STATE_COLLECT_ONLY]
+    
+    SwitchCollect --> LoopCollect[在城鎮待機 / 定時領鑽石與體力 / 心跳防斷線]
+    LoopCollect --> CheckTime{累積退避時間 >= 4.0 小時?}
+    CheckTime -- No --> LoopCollect
+    CheckTime -- Yes --> RestoreConfig[還原 config = original_config<br>重置 original_config = None]
+    RestoreConfig --> TransUnknown[轉移至 STATE_UNKNOWN 全域重新定位]
+    
+    DetectNoBread -- No --> NormalStep([繼續正常狀態 Handler 處理])
 ```
