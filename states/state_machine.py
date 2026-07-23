@@ -414,14 +414,13 @@ class GameStateMachine:
             return False
         else:
             # 非貪婪模式 (指定特定副本)：只檢查 navigation_path 中指定的副本索引
-            entry_templates = [
-                "dungeons/Slime_entry.png",
-                "dungeons/Ghost_entry.png",
-                "dungeons/Forest_entry.png",
-                "dungeons/Ruins_entry.png",
-                "dungeons/Ice_entry.png"
-            ]
-            nav_path = self.config.get("navigation_path", [])
+            entry_templates = self.config.get("dungeon_entries")
+            if entry_templates is None:
+                raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
+            nav_path = self.config.get("navigation_path")
+            if nav_path is None:
+                raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
+
             target_idx = None
             for idx, temp_name in enumerate(entry_templates):
                 if temp_name in nav_path:
@@ -439,26 +438,30 @@ class GameStateMachine:
         :return: (status_summary_str, available_dungeon_names_list)
         """
         if not self.config:
-            return "未初始化 config", []
+            raise ValueError("配置錯誤：GameStateMachine 尚未設定 config。")
+
+        dungeon_names = self.config.get("dungeon_names")
+        if dungeon_names is None:
+            raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
+
+        allowed_indices = self.config.get("greedy_allowed_indices")
+        if allowed_indices is None:
+            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單。")
 
         from utils.time_parser import format_seconds_to_readable
-        
-        dungeon_names = self.config.get("dungeon_names", ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"])
-        allowed_indices = self.config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
         now = time.time()
 
         is_greedy = self.config.get("greedy_dungeon", False)
         if is_greedy:
             target_indices = allowed_indices
         else:
-            entry_templates = [
-                "dungeons/Slime_entry.png",
-                "dungeons/Ghost_entry.png",
-                "dungeons/Forest_entry.png",
-                "dungeons/Ruins_entry.png",
-                "dungeons/Ice_entry.png"
-            ]
-            nav_path = self.config.get("navigation_path", [])
+            entry_templates = self.config.get("dungeon_entries")
+            if entry_templates is None:
+                raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
+            nav_path = self.config.get("navigation_path")
+            if nav_path is None:
+                raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
+
             target_idx = None
             for idx, temp_name in enumerate(entry_templates):
                 if temp_name in nav_path:
@@ -470,7 +473,9 @@ class GameStateMachine:
         available_names = []
 
         for idx in allowed_indices:
-            name = dungeon_names[idx] if idx < len(dungeon_names) else f"Dungeon #{idx}"
+            if idx >= len(dungeon_names):
+                raise ValueError(f"配置錯誤：greedy_allowed_indices 中的索引 {idx} 超出 dungeon_names 長度 ({len(dungeon_names)})。")
+            name = dungeon_names[idx]
             cd_until = self.dungeon_cooldowns.get(idx, 0.0)
             rem = cd_until - now
             if rem > 0:

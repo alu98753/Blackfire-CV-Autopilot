@@ -19,8 +19,12 @@ class NavigationHandler(BaseStateHandler):
         列出所有允許地下城的剩餘冷卻時間日誌，並優先點擊同頁面的 common/select_stage.png 切換至普通關卡。
         """
         now = time.time()
-        dungeon_names = self.machine.config.get("dungeon_names", [])
-        allowed_indices = self.machine.config.get("greedy_allowed_indices", [])
+        dungeon_names = self.machine.config.get("dungeon_names")
+        if dungeon_names is None:
+            raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
+        allowed_indices = self.machine.config.get("greedy_allowed_indices")
+        if allowed_indices is None:
+            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單。")
         
         cd_details = []
         min_remaining = 180.0
@@ -64,7 +68,9 @@ class NavigationHandler(BaseStateHandler):
             return False
             
         max_loc, t_w, t_h = visible_dungeons[i]
-        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+        dungeon_names = self.machine.config.get("dungeon_names")
+        if dungeon_names is None:
+            raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
         
         # 1. 檢查冷卻木牌
         in_cooldown = False
@@ -350,14 +356,12 @@ class NavigationHandler(BaseStateHandler):
                     break
             scale = matched_width / 1920.0
             
-            dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
-            entry_templates = [
-                "dungeons/Slime_entry.png",
-                "dungeons/Ghost_entry.png",
-                "dungeons/Forest_entry.png",
-                "dungeons/Ruins_entry.png",
-                "dungeons/Ice_entry.png"
-            ]
+            dungeon_names = self.machine.config.get("dungeon_names")
+            if dungeon_names is None:
+                raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
+            entry_templates = self.machine.config.get("dungeon_entries")
+            if entry_templates is None:
+                raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
             temp_confidences = {}
             
             for idx, temp_name in enumerate(entry_templates):
