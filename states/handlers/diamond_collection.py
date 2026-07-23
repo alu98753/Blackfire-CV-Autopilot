@@ -2,32 +2,14 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
+from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 
 class DiamondCollectionHandler(BaseStateHandler):
     def _parse_time_to_seconds(self, time_str):
         """
-        將 OCR 識別出的時間字串 (如 "00:18:43" 或 "18:43") 解析為總秒數。
+        將 OCR 識別出的時間字串解析為總秒數 (委充自 utils.time_parser 共用模組)。
         """
-        import re
-        cleaned = re.sub(r"[^0-9:]", "", time_str)
-        if not cleaned:
-            return None
-        parts = cleaned.split(":")
-        try:
-            if len(parts) == 3:  # 時:分:秒 (hh:mm:ss)
-                h = int(parts[0])
-                m = int(parts[1])
-                s = int(parts[2])
-                return h * 3600 + m * 60 + s
-            elif len(parts) == 2:  # 分:秒 (mm:ss)
-                m = int(parts[0])
-                s = int(parts[1])
-                return m * 60 + s
-            elif len(parts) == 1 and parts[0]:  # 單純秒數
-                return int(parts[0])
-        except ValueError:
-            pass
-        return None
+        return parse_time_to_seconds(time_str)
 
     def handle(self, screen_img, rect):
         """
@@ -125,7 +107,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                                         diamond_cd = self.machine.config.get("diamond_cd", default_diamond_cd) if self.machine.config else default_diamond_cd
                                         self.machine.last_diamond_collection_time = time.time() - (diamond_cd - parsed_secs)
                                         self.machine.diamond_ocr_success = True
-                                        logging.info(f"💎 領鑽石：成功辨識出精確剩餘時間: \"{raw_text}\" ({parsed_secs // 60} 分 {parsed_secs % 60} 秒，信心度: {conf:.4f})")
+                                        logging.info(f"💎 領鑽石：成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)}，信心度: {conf:.4f})")
                                         logging.info(f"⏰ 已將下一次自動領鑽石排程推遲到 {parsed_secs} 秒後。")
                         except Exception as ocr_err:
                             logging.warning(f"⚠️ 領鑽石：精確冷卻時間讀取失敗 (將使用預設冷卻退避): {ocr_err}")

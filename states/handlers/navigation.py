@@ -3,52 +3,14 @@ import time
 import logging
 import re
 from states.handlers.base import BaseStateHandler
+from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 
 class NavigationHandler(BaseStateHandler):
     def _parse_time_to_seconds(self, time_str):
         """
-        將 OCR 識別出的時間字串 (如 "00:17:10", "17:10", "00:1635" 或 "1635") 解析為總秒數。
-        當冒號漏讀時，支援從右至左兩兩拆解 (秒、分、時)。
+        將 OCR 識別出的時間字串解析為總秒數 (委充自 utils.time_parser 共用模組)。
         """
-        cleaned = re.sub(r"[^0-9:]", "", time_str)
-        if not cleaned:
-            return None
-        parts = [p for p in cleaned.split(":") if p]
-        
-        # 展開零件中漏讀冒號的四位或六位純數字塊 (例如 "1635" -> "16", "35")
-        expanded_parts = []
-        for p in parts:
-            if len(p) == 4 and p.isdigit():
-                expanded_parts.append(p[:2])
-                expanded_parts.append(p[2:])
-            elif len(p) == 6 and p.isdigit():
-                expanded_parts.append(p[:2])
-                expanded_parts.append(p[2:4])
-                expanded_parts.append(p[4:])
-            else:
-                expanded_parts.append(p)
-                
-        parts = expanded_parts
-        try:
-            if len(parts) >= 3:  # 時:分:秒 (hh:mm:ss)
-                h = int(parts[-3])
-                m = int(parts[-2])
-                s = int(parts[-1])
-                return h * 3600 + m * 60 + s
-            elif len(parts) == 2:  # 分:秒 (mm:ss)
-                m = int(parts[0])
-                s = int(parts[1])
-                return m * 60 + s
-            elif len(parts) == 1 and parts[0]:
-                val = int(parts[0])
-                if len(parts[0]) == 4:
-                    m = int(parts[0][:2])
-                    s = int(parts[0][2:])
-                    return m * 60 + s
-                return val
-        except ValueError:
-            pass
-        return None
+        return parse_time_to_seconds(time_str)
 
 
     def _switch_to_stage_or_back(self, screen_img, rect, reason):
@@ -150,7 +112,7 @@ class NavigationHandler(BaseStateHandler):
                                     conf = ocr_results[0][2]
                                     parsed_secs = self._parse_time_to_seconds(raw_text)
                                     if parsed_secs is not None and parsed_secs > 0:
-                                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({parsed_secs // 60} 分 {parsed_secs % 60} 秒，信心度: {conf:.4f})")
+                                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)}，信心度: {conf:.4f})")
                                         self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
                                         ocr_success = True
                                         break
