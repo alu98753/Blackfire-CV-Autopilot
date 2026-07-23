@@ -414,14 +414,14 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 建立假的 1080x1920 遊戲截圖
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        # 定位 全選按鈕 在 (121, 628)
-        # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品，使顏色完美落在 2-12 像素的極細邊緣帶中
-        cv2.rectangle(screen, (9, 131), (117, 239), (255, 0, 0), 10)
-        # 模擬打勾狀態：在貴重物品格子內畫上一個綠色實心方塊，代表「綠色打勾記號」
-        cv2.rectangle(screen, (46, 168), (80, 202), (0, 255, 0), -1)
+        # 定位 全選按鈕 在 (676, 808)，算得 Slot A (Col 0, Row 0) 左上角 (549, 288)，中心點為 (616, 358)
+        # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品 (crop: 549 to 683, 288 to 428)
+        cv2.rectangle(screen, (549, 288), (683, 428), (255, 0, 0), 10)
+        # 模擬打勾狀態：在貴重物品格子的頂端打勾區 (check_x=599, check_y=332) 畫上綠色實心方塊
+        cv2.rectangle(screen, (599, 332), (633, 362), (0, 255, 0), -1)
         
-        # 繪製一個綠色垃圾裝備，使顏色完美落在 2-12 像素的極細邊緣帶中
-        cv2.rectangle(screen, (144, 131), (252, 239), (0, 255, 0), 10)
+        # 繪製一個綠色垃圾裝備
+        cv2.rectangle(screen, (683, 288), (817, 428), (0, 255, 0), 10)
         
         # 設定可分解最高品質為綠色，使藍色貴重物品不屬於可分解列表，從而觸發反選保護條件
         self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green"]
@@ -430,8 +430,8 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
         # 點擊過全選後，步進會執行反選掃描。此時 matcher 需要匹配 select_all.png 作為定位點
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((121, 628), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold, **kwargs: (
+            ((676, 808), 0.9) if name == "common/select_all.png" else (None, 0.0)
         )
         
         # 清除之前的點擊紀錄
@@ -439,8 +439,8 @@ class TestStateMachineLogic(unittest.TestCase):
         
         self.state_machine.step()
         
-        # 應偵測到貴重物品，並對該 slot 中心點 (63, 185) 進行反向點擊
-        self.mock_mouse.click.assert_any_call(63, 185)
+        # 應偵測到貴重物品，並對該 slot 中心點 (616, 357) 進行反向點擊
+        self.mock_mouse.click.assert_any_call(616, 357)
         self.assertFalse(self.state_machine.bag_deselected)
         
         # 模擬下一影格：清除貴重物品畫像，重新截圖掃描

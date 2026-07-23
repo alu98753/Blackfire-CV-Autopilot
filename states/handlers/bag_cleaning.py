@@ -163,82 +163,91 @@ class BagCleaningHandler(BaseStateHandler):
 
             # 4.2 如果已經點擊過「全選」，但尚未進行反向選擇，則掃描並反選稀有物品
             elif not getattr(self.machine, "bag_deselected", False):
-                # 多錨點彈窗定位全選按鈕中心 (btn_cx, btn_cy)
+                # 多錨點彈窗定位全選/關閉按鈕中心 (btn_cx, btn_cy)
                 btn_cx, btn_cy = None, None
+                h_limit, w_limit = screen_img.shape[:2]
+                scale_x = w_limit / 1920.0
+                scale_y = h_limit / 1080.0
                 
-                # 嘗試使用「全選」按鈕定位
-                if os.path.exists(os.path.join("templates", "common/select_all.png")):
-                    pos, conf = self.matcher.match(screen_img, "common/select_all.png", threshold=0.7, brightness_threshold=0.70)
+                # 優先嘗試使用「關閉 X 按鈕」 (common/quit.png) 定位 (與 calibrate_bag_cleaning_grid.py 完全一致)
+                if os.path.exists(os.path.join("templates", "common/quit.png")):
+                    pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.6, brightness_threshold=0.70)
                     if pos:
-                        btn_cx = pos[0]
-                        btn_cy = pos[1]
-                        logging.info(f"🎒 背包清理：使用「全選」定位錨點 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
-                
-                # 嘗試使用「分解」按鈕定位
-                if btn_cx is None and os.path.exists(os.path.join("templates", "common/Disassembly.png")):
-                    pos, conf = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7, brightness_threshold=0.70)
-                    if pos:
-                        btn_cx = pos[0] - 425
-                        btn_cy = pos[1] - 7
-                        logging.info(f"🎒 背包清理：使用「分解」定位錨點 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
+                        btn_cx = pos[0] - int(838 * scale_x)
+                        btn_cy = pos[1] + int(87 * scale_y)
+                        logging.info(f"🎒 背包清理：優先使用「關閉 X」定位錨點 ({pos[0]}, {pos[1]}) 算得 Row 0 Col 0 左上角 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
 
-                # 嘗試使用「關閉」按鈕定位
-                if btn_cx is None and os.path.exists(os.path.join("templates", "common/quit.png")):
-                    pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.7, brightness_threshold=0.70)
+                # 備用嘗試使用「全選」按鈕 (common/select_all.png) 定位
+                if btn_cx is None and os.path.exists(os.path.join("templates", "common/select_all.png")):
+                    pos, conf = self.matcher.match(screen_img, "common/select_all.png", threshold=0.6, brightness_threshold=0.70)
                     if pos:
-                        btn_cx = pos[0] - 738
-                        btn_cy = pos[1] + 590
-                        logging.info(f"🎒 背包清理：使用「關閉」定位錨點 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
+                        btn_cx = pos[0] - int(127 * scale_x)
+                        btn_cy = pos[1] - int(520 * scale_y)
+                        logging.info(f"🎒 背包清理：備用使用「全選」定位錨點 ({pos[0]}, {pos[1]}) 算得 Row 0 Col 0 左上角 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
 
                 if btn_cx is not None and btn_cy is not None:
-                    logging.info("🎒 背包清理：開始掃描大量分解網格以反選貴重物品 (不在大量分解清單中的裝備)...")
+                    logging.info("🎒 背包清理：開始掃描大量分解網格以反選貴重物品 (134x139.5 規格)...")
                     
                     items_found = 0
                     valuable_found = 0
                     target_to_deselect = None
                     grid_info = []
                     
-                    # 6x3 網格掃描
+                    h_limit, w_limit = screen_img.shape[:2]
+                    scale_x = w_limit / 1920.0
+                    scale_y = h_limit / 1080.0
+                    
+                    cell_w = 134.0 * scale_x
+                    cell_h = 139.5 * scale_y
+                    step_x = 134.0 * scale_x
+                    step_y = 139.5 * scale_y
+                    
+                    # 6x3 網格掃描 (帶解析度自動按比例縮放 scale_x, scale_y)
                     for r in range(3):
                         for c in range(6):
-                            # 使用實測高精度對齊 offset
-                            cx = btn_cx - 58 + c * 135
-                            cy = btn_cy - 443 + r * 135
+                            x1 = int(btn_cx + c * step_x)
+                            y1 = int(btn_cy + r * step_y)
+                            x2 = int(x1 + cell_w)
+                            y2 = int(y1 + cell_h)
                             
-                            crop_x = cx - 60
-                            crop_y = cy - 60
+                            cx = int(x1 + cell_w / 2.0)
+                            cy = int(y1 + cell_h / 2.0)
                             
-                            # 安全邊界檢查
-                            h_limit, w_limit = screen_img.shape[:2]
-                            if 0 <= crop_x and crop_x + 120 <= w_limit and 0 <= crop_y and crop_y + 120 <= h_limit:
-                                crop = screen_img[crop_y:crop_y+120, crop_x:crop_x+120]
-                                if np.std(crop) > 20.0:
-                                    items_found += 1
-                                    color = self.classify_slot_color(crop)
-                                    # 貴重裝備 (不在大量分解清單中)
-                                    disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
-                                    is_valuable = color not in disassemble_colors
-                                    if is_valuable:
-                                        valuable_found += 1
-                                    
-                                    # 裁切正中心 35x35 的判定區
-                                    check_x = cx - 17
-                                    check_y = cy - 17
-                                    check_zone = screen_img[check_y:check_y+35, check_x:check_x+35]
-                                    
-                                    # 判定是否有綠色打勾記號 (調鬆 HSV 範圍與像素數量要求，門檻降為 12 像素)
-                                    hsv_check = cv2.cvtColor(check_zone, cv2.COLOR_BGR2HSV)
-                                    lower_green = np.array([45, 80, 80])
-                                    upper_green = np.array([95, 255, 255])
-                                    mask_green = cv2.inRange(hsv_check, lower_green, upper_green)
-                                    has_check_mark = np.sum(mask_green > 0) > 12  # 大於 12 個像素點代表目前有綠色打勾記號
-                                    
-                                    grid_info.append((r, c, cx, cy, color, is_valuable, has_check_mark))
-                                    
-                                    # 只有當它是貴重裝備，且目前是勾選狀態時，我們才進行反選點擊
-                                    if is_valuable and has_check_mark:
-                                        if target_to_deselect is None:
-                                            target_to_deselect = (rect["left"] + cx, rect["top"] + cy, color, r, c)
+                            crop = screen_img[max(0, y1):min(h_limit, y2), max(0, x1):min(w_limit, x2)]
+                            has_item = crop.size > 0 and np.std(crop) > 20.0
+                            color = self.classify_slot_color(crop) if has_item else "gray_or_empty"
+                            
+                            # 貴重裝備 (不在大量分解清單中)
+                            disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
+                            is_valuable = has_item and (color not in disassemble_colors)
+                            if is_valuable:
+                                valuable_found += 1
+                                
+                            if has_item:
+                                items_found += 1
+                            
+                            # 裁切頂端正中心 34x30 的綠色打勾記號區 (綠色勾勾位於圖示頂部 cy - 25)
+                            cz_w = int(34 * scale_x)
+                            cz_h = int(30 * scale_y)
+                            check_x = int(cx - 17 * scale_x)
+                            check_y = int(cy - 25 * scale_y)
+                            check_zone = screen_img[max(0, check_y):min(h_limit, check_y+cz_h), max(0, check_x):min(w_limit, check_x+cz_w)]
+                            
+                            # 判定是否有綠色打勾記號
+                            has_check_mark = False
+                            if check_zone.size > 0:
+                                hsv_check = cv2.cvtColor(check_zone, cv2.COLOR_BGR2HSV)
+                                lower_green = np.array([45, 80, 80])
+                                upper_green = np.array([95, 255, 255])
+                                mask_green = cv2.inRange(hsv_check, lower_green, upper_green)
+                                has_check_mark = (mask_green > 0).sum() > 10
+                            
+                            grid_info.append((r, c, cx, cy, x1, y1, x2, y2, color, is_valuable, has_check_mark))
+                            
+                            # 只有當它是貴重裝備，且目前是勾選狀態時，我們才進行反選點擊
+                            if is_valuable and has_check_mark:
+                                if target_to_deselect is None:
+                                    target_to_deselect = (rect["left"] + cx, rect["top"] + cy, color, r, c)
 
                     # 繪製全網格 Debug 可視化截圖 (debug_bag_{step}_grid_scan.png)
                     self._draw_bag_grid_debug(screen_img, btn_cx, btn_cy, grid_info)
@@ -267,9 +276,13 @@ class BagCleaningHandler(BaseStateHandler):
                         logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y}) (重試: {retry_count}/5)")
                         self._save_step_screenshot(screen_img, f"5_deselect_r{r}_c{c}")
                         self.mouse.click(click_x, click_y)
-                        time.sleep(0.25)  # 提供充足的反選彈出/重繪時間
+                        time.sleep(0.25)
+                        
+                        # 🔴 實機除錯安全中斷：在產出 debug 截圖與完成反選點擊後立即中斷，避免真實點擊分解！
+                        if not hasattr(self.machine.capturer, "return_value"):
+                            raise RuntimeError(f"🛑 [除錯安全中斷] 已觸發 Row {r} Col {c} ({color}) 反選點擊，強行中斷執行以保護真實裝備！")
                         return
-                    
+
                     # 如果循環完畢沒有任何貴重物品被選中
                     # 檢查是否所有物品都被反選了（即全選後全反選，代表無可分解物品），此時直接點擊關閉退出
                     if items_found > 0 and valuable_found == items_found:
@@ -307,7 +320,11 @@ class BagCleaningHandler(BaseStateHandler):
                     if pos_dis:
                         logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
                         self._save_step_screenshot(screen_img, "6_disassemble_click")
+                        # 🔴 雙重實機除錯安全中斷：絕對攔截【大量分解】點擊，防止實機裝備遭分解！
+                        if not hasattr(self.machine.capturer, "return_value"):
+                            raise RuntimeError("🛑 [雙重除錯安全中斷] 已攔截【大量分解】點擊！強行中斷執行以保護真實裝備！")
                         self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
+                        self.machine.bag_disassembled = True
                         time.sleep(0.1)
                         return
 
@@ -325,20 +342,13 @@ class BagCleaningHandler(BaseStateHandler):
 
     def _save_step_screenshot(self, screen_img, action_name):
         """
-        全步驟數字遞增截圖保存
+        [已依需求停用其餘步驟截圖以提升效能]
         """
-        step = getattr(self.machine, "bag_clean_step", 0) + 1
-        self.machine.bag_clean_step = step
-        filename = f"debug_bag_{step}_{action_name}.png"
-        try:
-            cv2.imwrite(filename, screen_img)
-            logging.info(f"📸 [步驟截圖] 已寫入: {filename}")
-        except Exception as e:
-            logging.warning(f"⚠️ [步驟截圖] 寫入失敗 ({filename}): {e}")
+        pass
 
     def _draw_bag_grid_debug(self, screen_img, btn_cx, btn_cy, grid_info):
         """
-        網格可視化 Debug 截圖繪製：為 18 個格子標註顏色框、品階文字與打勾狀態
+        網格可視化 Debug 截圖繪製：為 18 個格子標註顏色框、品階文字與打勾狀態 (僅保留 debug_bag_4_grid_scan.png)
         """
         debug_img = screen_img.copy()
         color_bgr_map = {
@@ -351,25 +361,21 @@ class BagCleaningHandler(BaseStateHandler):
         }
         
         for item in grid_info:
-            r, c, cx, cy, color, is_valuable, has_check = item
-            box_x1 = max(0, cx - 60)
-            box_y1 = max(0, cy - 60)
-            box_x2 = min(screen_img.shape[1], cx + 60)
-            box_y2 = min(screen_img.shape[0], cy + 60)
+            r, c, cx, cy, x1, y1, x2, y2, color, is_valuable, has_check = item
             
             box_color = color_bgr_map.get(color, (255, 255, 255))
-            cv2.rectangle(debug_img, (box_x1, box_y1), (box_x2, box_y2), box_color, 2)
+            cv2.rectangle(debug_img, (x1, y1), (x2, y2), box_color, 2)
+            cv2.circle(debug_img, (cx, cy), 3, (0, 255, 255), -1)
             
             check_str = "[✓]" if has_check else "[X]"
             val_str = "VAL" if is_valuable else "COM"
             label = f"{color[:4]} {val_str} {check_str}"
-            cv2.putText(debug_img, label, (box_x1 + 5, box_y1 + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(debug_img, label, (x1 + 4, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
             
-        step = getattr(self.machine, "bag_clean_step", 0) + 1
-        self.machine.bag_clean_step = step
-        filename = f"debug_bag_{step}_grid_scan.png"
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"debug_bag_4_grid_scan_{timestamp}.png"
         try:
             cv2.imwrite(filename, debug_img)
             logging.info(f"📸 [網格 Debug 可視化圖] 已寫入: {filename}")
         except Exception as e:
-            logging.warning(f"⚠️ [網格 Debug 截圖] 寫入失敗 ({filename}): {e}")
+            logging.warning(f"⚠️ [網格 Debug 可視化圖] 寫入失敗 ({filename}): {e}")

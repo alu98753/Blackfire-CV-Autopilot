@@ -629,16 +629,14 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 建立假的 1080x1920 截圖
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
-        # 定位 全選按鈕 在 (121, 628)
-        # 格子 A (Col 0, Row 0): 中心 (63, 185)。環狀區 (3, 125) 到 (123, 245)。
-        # 在格子 A 的邊緣只畫一個 10x5 的金色 (BGR=[0, 240, 240]) 區域，包含 50 個像素點
-        screen[125:130, 3:13] = [0, 240, 240]
+        # 定位 全選按鈕 在 (676, 808) 算得 Slot A 中心 (616, 358), Slot B 中心 (750, 358)
+        # 格子 A (Col 0, Row 0): 只在邊緣畫一點點金色
+        screen[290:295, 549:559] = [0, 240, 240]
         
-        # 格子 B (Col 1, Row 0): 中心 (198, 185)。邊緣帶為 (140, 127) 到 (256, 243) 之間。
-        # 在格子 B 的邊緣帶中線處 (相對6像素處) 繪製一個金色矩形，包含大量彩色像素點
-        cv2.rectangle(screen, (144, 131), (252, 239), (0, 240, 240), 10)
-        # 模擬打勾狀態：在貴重物品格子內畫上一個綠色實心方塊，代表「綠色打勾記號」
-        cv2.rectangle(screen, (181, 168), (215, 202), (0, 255, 0), -1)
+        # 格子 B (Col 1, Row 0): 中心 (750, 358)。繪製金色矩形 (683 to 817, 288 to 428)
+        cv2.rectangle(screen, (683, 288), (817, 428), (0, 240, 240), 10)
+        # 模擬打勾狀態：在貴重物品格子 B 的頂端打勾區 (check_x=733, check_y=332) 畫綠色實心方塊
+        cv2.rectangle(screen, (733, 332), (767, 362), (0, 255, 0), -1)
         
         # 設定可分解最高品質為紫色，使橘黃色貴重物品不屬於可分解列表，從而觸發反選保護條件
         self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue", "purple"]
@@ -647,8 +645,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
         # 匹配定位點
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((121, 628), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold, **kwargs: (
+            ((676, 808), 0.9) if name == "common/select_all.png" else (None, 0.0)
         )
         self.mock_mouse.click.reset_mock()
         
@@ -657,10 +655,10 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # Assert
         # 1. 必須點擊格子 B 進行反選
-        self.mock_mouse.click.assert_any_call(198, 185)
+        self.mock_mouse.click.assert_any_call(750, 357)
         # 2. 絕對不能點擊格子 A
         for call in self.mock_mouse.click.call_args_list:
-            self.assertNotEqual(call[0], (63, 185))
+            self.assertNotEqual(call[0], (616, 357))
         # 3. 此時由於單步反選，bag_deselected 應為 False
         self.assertFalse(self.state_machine.bag_deselected)
         
