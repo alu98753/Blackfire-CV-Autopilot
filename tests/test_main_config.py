@@ -17,9 +17,9 @@ class TestMainConfig(unittest.TestCase):
         
         setup_stage_config(config)
         
-        self.assertEqual(config["stage_target"], "stages/level6_final.png")
+        self.assertEqual(config["stage_target"], "stages/first_stage.png")
         self.assertEqual(config["stage_entry"], "stages/level6_ice_cave.png")
-        self.assertIn("stages/level6_final.png", config["navigation_path"])
+        self.assertIn("stages/first_stage.png", config["navigation_path"])
 
     @patch('os.path.exists')
     @patch('builtins.input', side_effect=["1", "4"])

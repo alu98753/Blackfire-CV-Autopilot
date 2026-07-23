@@ -1050,7 +1050,15 @@ class TestBehavioralScenarios(unittest.TestCase):
           3. 畫面看到 stages/level2_entry1.png，但未看見 stages/level2_final.png ➔ 應執行 mouse.scroll 往下滾動，而不進行點擊。
           4. 畫面同時看到 stages/level2_entry1.png 和 stages/level2_final.png ➔ 應優先點擊 stages/level2_final.png，不執行滾動。
         """
-        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.config["navigation_path"] = [
+            "common/door.png",
+            "exit_battle.png",
+            "common/select_stage.png",
+            "stages/level2_barren_rocks.png",
+            "stages/stage_label.png",
+            "stages/level2_final.png"
+        ]
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         mock_exists.return_value = True
         mock_time.return_value = 1000.0

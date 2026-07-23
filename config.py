@@ -11,14 +11,14 @@ GAME_CONFIGS = {
     "stage": {
         "name": "普通關卡",
         "type": "stage",
-        # 導航進入路徑：離開戰鬥 -> 選擇關卡 -> 點選第二關 -> 分關入口 -> 魔王關入口
+        # 導航進入路徑：離開戰鬥 -> 選擇關卡 -> 點選第六關 -> 分關入口 -> 第一小關
         "navigation_path": [
             "common/door.png",
             "exit_battle.png",
             "common/select_stage.png",
-            "stages/level2_barren_rocks.png",
+            "stages/level6_ice_cave.png",
             "stages/stage_label.png",
-            "stages/level2_final.png"
+            "stages/first_stage.png"
         ],
         # 大廳準備按鈕
         "lobby_start_btn": "stages/start.png",
@@ -44,7 +44,7 @@ GAME_CONFIGS = {
         # 注意：choice_bless.png 必須在 quit.png 之前，確保先點選取祝福，才點擊退出關閉事件！
         "explore_priorities": [
             # === 第一階段：彈窗與對話框處理 (高優先級，必須先解決，否則會卡在畫面上) ===
-            "dungeons/dungeons_complete.png",       # 1. 地下城通關結束
+            "dungeons/dungeons_complete.png",       # 1. 通關結束
             "common/confirm.png",                   # 2. 通用確認彈窗 (如：下樓確認、獲得寶物確認等)
             "common/continue.png",                  # 結算繼續按鈕 (金色)
             "common/continue_gray.png",             # 結算繼續按鈕 (灰色)
@@ -86,8 +86,17 @@ GAME_CONFIGS = {
             "dungeons/dungeon_bless.png",
             "dungeons/gungeon_godown.png"
         ],
-        # 退守普通關卡配置 (預設為第 2 關魔王關)
-        "stage_target": "stages/level2_final.png",
+        # 退守普通關卡配置 (預設為第 6 關第一小關)
+        "stage_name": "冰雪洞窟 (first)",
+        "stage_entry": "stages/level6_ice_cave.png",
+        "stage_target": "stages/first_stage.png",
+        "stage_navigation_path": [
+            "common/door.png",
+            "common/select_stage.png",
+            "stages/level6_ice_cave.png",
+            "stages/stage_label.png",
+            "stages/first_stage.png"
+        ],
         "lobby_start_btn": "stages/start.png",
         "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
     },

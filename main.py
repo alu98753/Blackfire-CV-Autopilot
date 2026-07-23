@@ -103,13 +103,13 @@ def setup_stage_config(config, prompt_prefix=""):
     
     # 判斷是否有多個子關卡
     sub_stages = cfg["sub_stages"]
-    sub_choice_key = "final"  # 預設打 Boss / Final
+    sub_choice_key = "first" if "first" in sub_stages else "final"  # 預設打第一小關 First Stage
     
     if len(sub_stages) > 1:
         print(f"\n{prompt_prefix}請選擇 [{stage_name}] 要打的小關卡類型：")
         opts = []
         if "first" in sub_stages:
-            print(" 1) 第一小關 (First Stage)")
+            print(" 1) 第一小關 (First Stage) - 預設")
             opts.append(("1", "first"))
         if "middle" in sub_stages:
             print(" 2) 中間小關 (Middle Stage)")
@@ -117,18 +117,18 @@ def setup_stage_config(config, prompt_prefix=""):
         if "six" in sub_stages:
             print(" 3) 第六小關 (Six Stage)")
             opts.append(("3", "six"))
-        print(" 4) 魔王關 (Boss / Final) - 預設")
+        print(" 4) 魔王關 (Boss / Final)")
         opts.append(("4", "final"))
         
         try:
-            sub_choice = input("請輸入數字 (直接 Enter 鍵預設為 4): ").strip()
+            sub_choice = input("請輸入數字 (直接 Enter 鍵預設為 1): ").strip()
             if not sub_choice:
-                sub_choice = "4"
+                sub_choice = "1"
         except KeyboardInterrupt:
             print("\n[!] 取消啟動。")
             sys.exit(0)
         except Exception:
-            sub_choice = "4"
+            sub_choice = "1"
             
         matched_key = None
         for opt_num, opt_key in opts:
@@ -136,8 +136,8 @@ def setup_stage_config(config, prompt_prefix=""):
                 matched_key = opt_key
                 break
         if matched_key is None:
-            print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [魔王關]...")
-            matched_key = "final"
+            print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [第一小關]...")
+            matched_key = "first" if "first" in sub_stages else "final"
         sub_choice_key = matched_key
 
     if sub_choice_key not in sub_stages:
@@ -280,8 +280,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
-    parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
-                        help="掛機模式：stage (普通關卡)、dungeon (地下城) 或 mix (混合模式)")
+    parser.add_argument("--mode", type=str, default="mix", choices=list(GAME_CONFIGS.keys()), 
+                        help="掛機模式：mix (混合模式，預設)、dungeon (地下城) 或 stage (普通關卡)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
