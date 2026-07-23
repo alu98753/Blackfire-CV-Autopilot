@@ -76,6 +76,13 @@ class ExploreHandler(BaseStateHandler):
                         cd_seconds = cooldown_map.get(self.machine.current_dungeon_index, 900.0)
                         self.machine.dungeon_cooldowns[self.machine.current_dungeon_index] = time.time() + cd_seconds
                         logging.info(f"⏳ 貪婪地下城：設定第 {self.machine.current_dungeon_index + 1} 個地下城進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+                        if self.machine.config.get("type") == "mix":
+                            status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                            avail_str = ", ".join(avail_names) if avail_names else "無"
+                            if not avail_names:
+                                logging.info(f"⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。")
+                            else:
+                                logging.info(f"⏳ [混合模式] 地下城通關！各副本冷卻情形: {status_str} ➔ 剩餘可挑戰地下城: [{avail_str}]。")
                         
                     # 通關後回到最外層大廳，轉移至尋路導航狀態重新進副本
                     self.machine.is_in_dungeon = False

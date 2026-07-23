@@ -584,9 +584,10 @@ class NavigationHandler(BaseStateHandler):
                 nav_path = ["common/door.png", "dungeons/dungeon.png"]
             else:
                 # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤，點擊 select_stage.png 切換！
+                status_str, _ = self.machine.get_dungeon_cooldown_status()
                 pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
                 if pos_st and not stage_select_open:
-                    logging.info(f"🧭 混合模式：地下城全冷卻，在活動大廳偵測到 [common/select_stage.png] ({conf_st:.4f})，點擊切換至普通關卡頁籤！")
+                    logging.info(f"🧭 混合模式：地下城全冷卻 (冷卻情形: {status_str})，在活動大廳點擊 [common/select_stage.png] ({conf_st:.4f}) 切換至普通關卡頁籤！")
                     self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
                     time.sleep(0.3)
                     return
