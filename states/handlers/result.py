@@ -34,8 +34,8 @@ class ResultHandler(BaseStateHandler):
             if pos_defeat:
                 logging.info(f"💀 結算處理：確認處於戰敗畫面 [{conf_defeat:.4f}]。")
                 
-                # 判定是否需要放棄 (連續戰敗 3 次)
-                if self.machine.dungeon_defeat_count >= 2:
+                # 判定是否需要放棄 (連續戰敗 2 次)
+                if self.machine.dungeon_defeat_count >= 1:
                     logging.warning(f"🚨 連續戰敗次數已達 {self.machine.dungeon_defeat_count + 1} 次！執行「放棄挑戰」流程。")
                     giveup_temp = "defeat_giveup.png"
                     if os.path.exists(os.path.join("templates", giveup_temp)):

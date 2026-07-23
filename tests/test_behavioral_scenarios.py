@@ -1599,8 +1599,8 @@ class TestBehavioralScenarios(unittest.TestCase):
     def test_dungeon_defeat_giveup_flow(self, mock_exists):
         """
         [行為測試 26] 測試地下城連續戰敗退出與冷卻重設邏輯：
-        1. 第一次與第二次戰敗時，點選 retry，dungeon_defeat_count 遞增。
-        2. 第三次戰敗時，點選 defeat_giveup.png 與 confirm.png 放棄。
+        1. 第一次戰敗時，點選 retry，dungeon_defeat_count 遞增為 1。
+        2. 第二次戰敗時，點選 defeat_giveup.png 與 confirm.png 放棄。
         3. 驗證當前地下城被設為 30 分鐘冷卻 (冰雪洞窟 idx=4)，且狀態移轉至 STATE_NAVIGATING。
         """
         # 初始化配置為地下城模式
@@ -1622,8 +1622,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_capturer.capture.return_value = dummy_img
         
         # Mock 模板匹配
-        # 1. 前二次戰敗：我們需要匹配 defeat.png 成功，以及 defeat_retry.png 成功
-        # 2. 第三次戰敗：我們需要匹配 defeat.png 成功，defeat_giveup.png 成功，以及 confirm.png 成功
+        # 1. 第一次戰敗：我們需要匹配 defeat.png 成功，以及 defeat_retry.png 成功
+        # 2. 第二次戰敗：我們需要匹配 defeat.png 成功，defeat_giveup.png 成功，以及 confirm.png 成功
         def mock_match(img_arg, name, threshold=0.7, **kwargs):
             if name == "defeat.png":
                 return (100, 100), 0.85
@@ -1646,16 +1646,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 回歸到結算狀態準備第二次
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
-        # 第二次戰敗
-        self.mock_mouse.click.reset_mock()
-        self.state_machine.step()
-        self.assertEqual(self.state_machine.dungeon_defeat_count, 2)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
-        
-        # 回歸到結算狀態準備第三次
-        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
-        
-        # 第三次戰敗：這次因為 count=2 >= 2，會點選放棄與確認退出
+        # 第二次戰敗：這次因為 count=1 >= 1，會點選放棄與確認退出
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了 30 分鐘 (1800 秒) 的冷卻
