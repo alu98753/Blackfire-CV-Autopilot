@@ -146,13 +146,13 @@ class ResultHandler(BaseStateHandler):
             return True
 
         # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如金黃色與灰色繼續按鈕）
-        # 統一採用 0.70 通用亮度比及格線。灰色 Continue 門檻設為 0.88 防止金色背景誤匹配。
+        # 繼續按鈕亮度門檻調鬆為 0.0，避免勝場動畫漸變影響匹配
         continue_configs = [
-            (self.machine.continue_template, 0.80, 0.70),
+            (self.machine.continue_template, 0.80, 0.0),
             ("common/continue_gray.png", 0.88, 0.70)
         ]
         for c_temp, thresh, b_thresh in continue_configs:
-            if os.path.exists(os.path.join("templates", c_temp)):
+            if c_temp and os.path.exists(os.path.join("templates", c_temp)):
                 pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=thresh, brightness_threshold=b_thresh)
                 if pos_c:
                     logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f})，進行點擊。")
@@ -161,12 +161,13 @@ class ResultHandler(BaseStateHandler):
                     return True
 
         # C. 檢查是否已經默默回到準備大廳
-        lobby_btn = self.machine.config["lobby_start_btn"]
-        pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-        if pos_start:
-            logging.info(f"👉 偵測到已回到大廳 ({lobby_btn})，將狀態轉回 LOBBY。")
-            self.machine.transition_to(self.machine.STATE_LOBBY)
-            return True
+        lobby_btn = self.machine.config.get("lobby_start_btn")
+        if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
+            pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
+            if pos_start:
+                logging.info(f"👉 偵測到已回到大廳 ({lobby_btn})，將狀態轉回 LOBBY。")
+                self.machine.transition_to(self.machine.STATE_LOBBY)
+                return True
             
         # D. 檢查是否已經進入戰鬥狀態 (避免人手點擊或自動戰鬥提早開始時卡在結算超時)
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
