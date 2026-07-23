@@ -209,7 +209,7 @@ class NavigationHandler(BaseStateHandler):
         rect["height"] = height
 
         # 優先判定：如果我們已經看到地下城內部的離開按鈕或其他探索按鈕，說明點擊已經成功並進入內部，轉移狀態！
-        if self.machine.config.get("type") == "dungeon":
+        if self.machine.config.get("type") in ["dungeon", "mix"]:
             # 移出 dungeons/dungeon_fight.png，改由 dungeons/leave.png 判定已正式進入
             for check_btn in ["dungeons/leave.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png"]:
                 if os.path.exists(os.path.join("templates", check_btn)):
