@@ -398,7 +398,9 @@ class NavigationHandler(BaseStateHandler):
                 h_limit, w_limit = screen_img.shape[:2]
                 
                 if is_greedy:
-                    allowed_indices = self.machine.config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
+                    allowed_indices = self.machine.config.get("greedy_allowed_indices")
+                    if allowed_indices is None:
+                        raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
                     # 貪婪模式：從高到低遍歷，尋找第一個就緒且解鎖的地下城
                     for i in range(len(entry_templates) - 1, -1, -1):
                         if i not in allowed_indices:

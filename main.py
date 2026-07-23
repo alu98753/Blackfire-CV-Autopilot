@@ -76,28 +76,6 @@ def check_mode_templates(config):
                 
     return missing
 
-def main():
-    if sys.platform.startswith('win'):
-        try:
-            sys.stdout.reconfigure(encoding='utf-8')
-            sys.stderr.reconfigure(encoding='utf-8')
-        except AttributeError:
-            pass
-            
-    parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
-    parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
-    parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
-    parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
-                        help="掛機模式：stage (普通關卡)、dungeon (地下城) 或 mix (混合模式)")
-    parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
-    parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
-                        help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
-    args = parser.parse_args()
-
-    # 取得當前模式的配置
-    config = GAME_CONFIGS[args.mode].copy()  # 使用 copy 避免影響原始 GAME_CONFIGS 字典
-    config["backend_mode"] = args.backend
-
 def setup_stage_config(config, prompt_prefix=""):
     print(f"\n{prompt_prefix}請選擇要打的關卡大關：")
     print(" 1) 蒼穹平原 (Level 1)")
@@ -291,6 +269,13 @@ def setup_dungeon_config(config, args):
         print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
 
 def main():
+    if sys.platform.startswith('win'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except AttributeError:
+            pass
+
     # 建立 ArgumentParser 物件
     is_gui_running = False
     try:
@@ -323,8 +308,8 @@ def main():
 
     elif args.mode == "mix":
         setup_dungeon_config(config, args)
-        setup_stage_config(config, prompt_prefix="[地下城冷卻退守] ")
-        print(f"[*] 地下城冷卻時退守普通關卡目標：{config['stage_name']} ({config['stage_target']})")
+        setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
+        print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
 
     if args.mode == "collect_only":
         config["keep_colors"] = []

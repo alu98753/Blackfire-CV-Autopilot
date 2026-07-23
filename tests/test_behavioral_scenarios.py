@@ -1321,6 +1321,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.config = {
             "type": "dungeon",
             "greedy_dungeon": True,
+            "greedy_allowed_indices": [0, 1, 2, 3, 4],
             "navigation_path": ["common/door.png", "dungeons/dungeon.png"]
         }
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING

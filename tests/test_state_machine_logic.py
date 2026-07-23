@@ -1911,6 +1911,15 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(200, 200)
 
+    def test_missing_greedy_allowed_indices_raises_error(self):
+        """
+        測試當 config 中缺乏 greedy_allowed_indices (或為 None) 時，
+        has_available_dungeon 應主動拋出 ValueError 引導使用者設定。
+        """
+        self.state_machine.config = {"type": "mix", "greedy_allowed_indices": None}
+        with self.assertRaises(ValueError):
+            self.state_machine.has_available_dungeon()
+
 if __name__ == "__main__":
     unittest.main()
 

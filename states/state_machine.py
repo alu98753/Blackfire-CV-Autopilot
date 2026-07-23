@@ -394,7 +394,7 @@ class GameStateMachine:
             return False
         allowed_indices = self.config.get("greedy_allowed_indices")
         if allowed_indices is None:
-            allowed_indices = [0, 1, 2, 3, 4]
+            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
         now = time.time()
         for idx in allowed_indices:
             if now >= self.dungeon_cooldowns.get(idx, 0.0):
