@@ -965,6 +965,139 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertGreater(self.state_machine.dungeon_cooldowns[2], time.time())
 
     @patch('os.path.exists')
+    def test_greedy_dungeon_allowed_filter(self, mock_exists):
+        """
+        測試自動貪婪地下城模式下，藉由 greedy_allowed_indices 限制過濾不想要的關卡。
+        1. 設定只允許打 Slime (0) 與 Forest (2)。
+        2. 模擬畫面中看到 Slime (0)、Ghost (1) 與 Forest (2)。
+        3. 驗證：雖然 Ghost (1) 比 Slime (0) 等級高，但因為它不在允許清單中，系統應只考慮 Slime 與 Forest。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config["greedy_dungeon"] = True
+        # 僅允許打 Slime (idx 0) 與 Forest (idx 2)
+        self.state_machine.config["greedy_allowed_indices"] = [0, 2]
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        mock_exists.return_value = True
+        
+        # 模擬 match_side_effect 用於大廳/尋路
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_mouse.click.reset_mock()
+        
+        # 模擬 matchTemplate / minMaxLoc 的呼叫次數
+        counts = {"card": 0}
+        
+        def mock_minMaxLoc_impl(res):
+            if res.shape[1] > 1000:
+                counts["card"] += 1
+                if counts["card"] == 1:
+                    # idx = 0 (Slime): 匹配成功，起點為 200
+                    return (0.0, 0.95, (0, 0), (200, 0))
+                elif counts["card"] == 2:
+                    # idx = 1 (Ghost): 匹配成功，起點為 400 (雖然存在且未冷卻，但不應被考慮)
+                    return (0.0, 0.95, (0, 0), (400, 0))
+                elif counts["card"] == 3:
+                    # idx = 2 (Forest): 匹配成功，起點為 700
+                    return (0.0, 0.95, (0, 0), (700, 0))
+                return (0.0, 0.0, (0, 0), (0, 0))
+            elif 200 < res.shape[1] <= 1000:
+                # 其它冷卻匹配
+                return (0.0, 0.0, (0, 0), (0, 0))
+            else:
+                # 亮骨頭匹配 (解鎖狀態，返回 0.90 > 0.75 閾值)
+                return (0.0, 0.90, (0, 0), (0, 0))
+                
+        def mock_imread_impl(path):
+            if "entry" in path:
+                return np.zeros((341, 346, 3), dtype=np.uint8)
+            return np.zeros((10, 10, 3), dtype=np.uint8)
+            
+        with patch('cv2.imread', side_effect=mock_imread_impl), \
+             patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl):
+            self.state_machine.step()
+            
+        # 驗證：由於是從高到低遍歷，且僅允許 0 與 2，系統應優先點擊 index 2 (Forest) 而不是 1 (Ghost)
+        # Forest 的 center x = 700 + 346//2 = 873, center y = 0 + 341//2 = 170 (以 scale=1.0 計算)
+        self.mock_mouse.click.assert_called_with(873, 170)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
+    @patch('os.path.exists')
+    def test_specific_dungeon_cooldown_waiting(self, mock_exists):
+        """
+        測試在非貪婪模式（指定特定副本）下，如果副本正在冷卻，應該直接原地等待，不執行點擊。
+        1. 記憶體冷卻中：直接不執行任何點擊，退出。
+        2. 畫面上有冷卻木牌：執行 OCR 時間讀取，寫入記憶體冷卻時間，並不執行任何點擊。
+        """
+        # 1. 測試記憶體冷卻中
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config["greedy_dungeon"] = False
+        self.state_machine.config["navigation_path"] = ["dungeons/Slime_entry.png"]
+        self.state_machine.enable_bread = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        # 設為 Slime (index 0) 正在冷卻
+        self.state_machine.dungeon_cooldowns = {0: time.time() + 100.0}
+        
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        mock_exists.return_value = True
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_mouse.click.reset_mock()
+        
+        def mock_minMaxLoc_impl_cooldown(res):
+            if res.shape[1] > 1000:
+                # 模擬 Slime 入口在畫面上
+                return (0.0, 0.95, (0, 0), (200, 0))
+            return (0.0, 0.0, (0, 0), (0, 0))
+            
+        def mock_imread_impl(path):
+            return np.zeros((341, 346, 3), dtype=np.uint8)
+            
+        with patch('cv2.imread', side_effect=mock_imread_impl), \
+             patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl_cooldown):
+            self.state_machine.step()
+            
+        # 驗證：因為記憶體冷卻，不應呼叫滑動或點擊卡片
+        self.mock_mouse.click.assert_not_called()
+        self.mock_mouse.drag.assert_not_called()
+        
+        # 2. 測試記憶體無冷卻，但畫面上有冷卻木牌（首次偵測到冷卻）
+        self.state_machine.dungeon_cooldowns = {}
+        self.mock_mouse.click.reset_mock()
+        
+        # 模擬比對到冷卻木牌的 side effect
+        def mock_minMaxLoc_impl_ocr(res):
+            if res.shape[1] > 1000:
+                # 匹配卡片 Slime 成功
+                return (0.0, 0.95, (0, 0), (200, 0))
+            elif 200 < res.shape[1] <= 1000:
+                # 匹配木牌成功
+                return (0.0, 0.90, (0, 0), (10, 10))
+            return (0.0, 0.0, (0, 0), (0, 0))
+            
+        # 模擬 OCR 辨識出 "00:15:30" (即 930 秒)
+        mock_reader = MagicMock()
+        mock_reader.readtext.return_value = [[None, "00:15:30", 0.99]]
+        self.state_machine.get_ocr_reader = MagicMock(return_value=mock_reader)
+        
+        with patch('cv2.imread', side_effect=mock_imread_impl), \
+             patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl_ocr):
+            self.state_machine.step()
+            
+        # 驗證：因為畫面偵測到冷卻，不應呼叫點擊
+        self.mock_mouse.click.assert_not_called()
+        # 驗證：冷卻時間被成功記錄在記憶體中 (約為未來 930 秒)
+        self.assertIn(0, self.state_machine.dungeon_cooldowns)
+        self.assertGreater(self.state_machine.dungeon_cooldowns[0], time.time() + 900.0)
+
+    @patch('os.path.exists')
     def test_stage_navigation_horizontal_drag_flow(self, mock_exists):
         """
         測試普通關卡選關左右滑動與防重入邏輯：
@@ -1654,6 +1787,64 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 應觸發退避並變為 COLLECT_ONLY
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+
+    @patch('os.path.exists')
+    def test_diamond_cooldown_ocr_detection(self, mock_exists):
+        """
+        測試領鑽石流程中，當偵測到冷卻（無免費按鈕）時，藉由 OCR 讀取時間並精確推遲下一次觸發。
+        """
+        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_DIAMOND_COLLECTION
+        self.state_machine.diamond_window_opened = True
+        self.state_machine.diamond_collected_this_run = False
+        self.state_machine.diamond_cooldown_confirm_count = 2 # 下一次會是 3 ➔ 觸發 OCR
+        self.state_machine.last_diamond_collection_time = 0.0
+        
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        mock_exists.return_value = True
+        
+        # 模擬 match_side_effect
+        def mock_match_impl(img, name, threshold=None, **kwargs):
+            if name == "common/quit.png":
+                # 退出按鈕在 (1638, 235)
+                return (1638, 235), 0.95
+            # 找不到 free.png 及其它
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = mock_match_impl
+        
+        # Mock OCR reader
+        mock_reader = MagicMock()
+        mock_reader.readtext.return_value = [[None, "00:18:43", 0.99]]
+        self.state_machine.get_ocr_reader = MagicMock(return_value=mock_reader)
+        
+        # Mock cv2.imread 與 cv2.imwrite
+        dummy_img = np.zeros((10, 10, 3), dtype=np.uint8)
+        with patch('cv2.imread', return_value=dummy_img), \
+             patch('cv2.imwrite') as mock_write:
+            self.state_machine.step()
+            
+        # 驗證 1: 標記冷卻中應為 True
+        self.assertTrue(self.state_machine.diamond_cooldown_detected)
+        self.assertTrue(self.state_machine.diamond_ocr_success)
+        # 驗證 2: last_diamond_collection_time 應被寫入，且約為未來 1123 秒 (00:18:43 = 1123s) 再次觸發
+        # 預設 CD 為 7200 秒，7200 - 1123 = 6077 秒前，所以 time.time() - 6077 左右
+        saved_cd_time = self.state_machine.last_diamond_collection_time
+        expected_time_diff = time.time() - saved_cd_time
+        # 這個差值應該在 7200 - 1123 = 6077 秒左右 (容差 10 秒)
+        self.assertAlmostEqual(expected_time_diff, 6077.0, delta=10.0)
+
+        # 3. 模擬下一幀：點選退出後退出按鈕消失（quit.png 匹配失敗），視窗成功關閉
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kwargs: (None, 0.0)
+        self.state_machine.step()
+
+        # 驗證 4: 視窗成功關閉，所有狀態重置，且 last_diamond_collection_time 依然保留為先前計算的時間 (並未被 time.time() 覆蓋)
+        self.assertFalse(self.state_machine.diamond_window_opened)
+        self.assertFalse(self.state_machine.diamond_ocr_success)
+        self.assertEqual(self.state_machine.last_diamond_collection_time, saved_cd_time)
 
 if __name__ == "__main__":
     unittest.main()

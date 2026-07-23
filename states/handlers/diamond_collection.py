@@ -124,6 +124,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                                         default_diamond_cd = 7200.0
                                         diamond_cd = self.machine.config.get("diamond_cd", default_diamond_cd) if self.machine.config else default_diamond_cd
                                         self.machine.last_diamond_collection_time = time.time() - (diamond_cd - parsed_secs)
+                                        self.machine.diamond_ocr_success = True
                                         logging.info(f"💎 領鑽石：成功辨識出精確剩餘時間: \"{raw_text}\" ({parsed_secs // 60} 分 {parsed_secs % 60} 秒，信心度: {conf:.4f})")
                                         logging.info(f"⏰ 已將下一次自動領鑽石排程推遲到 {parsed_secs} 秒後。")
                         except Exception as ocr_err:
@@ -154,7 +155,10 @@ class DiamondCollectionHandler(BaseStateHandler):
                     self.machine.diamond_free_clicked = False
                     self.machine.diamond_cooldown_confirm_count = 0
                     self.machine.diamond_window_missing_count = 0
-                    self.machine.last_diamond_collection_time = time.time()
+                    if not getattr(self.machine, "diamond_ocr_success", False):
+                        self.machine.last_diamond_collection_time = time.time()
+                    else:
+                        self.machine.diamond_ocr_success = False
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return
  

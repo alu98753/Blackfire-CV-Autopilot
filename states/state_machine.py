@@ -62,6 +62,7 @@ class GameStateMachine:
         self.last_diamond_collection_time = 0.0
         self.diamond_collected_this_run = False
         self.diamond_window_opened = False
+        self.diamond_ocr_success = False
         
         # 背包清理相關屬性
         self.need_bag_cleaning = False
@@ -98,6 +99,7 @@ class GameStateMachine:
         
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"
+        self._ocr_reader = None
         
         # 初始化註冊所有狀態處理器
         self.handlers = {
@@ -113,6 +115,16 @@ class GameStateMachine:
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
             self.STATE_LOADING: LoadingHandler(self),
         }
+
+    def get_ocr_reader(self):
+        """
+        延遲載入並取得 EasyOCR 讀取器實例，避免啟動延遲。
+        """
+        if self._ocr_reader is None:
+            import easyocr
+            logging.info("⚙️ 正在首次載入 EasyOCR 辨識模型 (使用 CPU)...")
+            self._ocr_reader = easyocr.Reader(['en'], gpu=False)
+        return self._ocr_reader
 
 
 
