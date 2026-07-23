@@ -554,8 +554,16 @@ class NavigationHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
                     time.sleep(0.3)
                     return
-                stage_target = self.machine.config.get("stage_target", "stages/level2_final.png")
-                nav_path = self.machine.config.get("stage_navigation_path", ["common/door.png", "common/select_stage.png", stage_target])
+                stage_entry = self.machine.config.get("stage_entry", "stages/level6_ice_cave.png")
+                stage_target = self.machine.config.get("stage_target", "stages/first_stage.png")
+                default_stage_nav = [
+                    "common/door.png",
+                    "common/select_stage.png",
+                    stage_entry,
+                    "stages/stage_label.png",
+                    stage_target
+                ]
+                nav_path = self.machine.config.get("stage_navigation_path", default_stage_nav)
         else:
             nav_path = self.machine.config.get("navigation_path", [])
 
