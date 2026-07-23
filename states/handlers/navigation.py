@@ -19,11 +19,8 @@ class NavigationHandler(BaseStateHandler):
         列出所有允許地下城的剩餘冷卻時間日誌，並優先點擊同頁面的 common/select_stage.png 切換至普通關卡。
         """
         now = time.time()
-        dungeon_names = self.machine.config.get(
-            "dungeon_names",
-            ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
-        )
-        allowed_indices = self.machine.config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
+        dungeon_names = self.machine.config.get("dungeon_names", [])
+        allowed_indices = self.machine.config.get("greedy_allowed_indices", [])
         
         cd_details = []
         min_remaining = 180.0
@@ -555,14 +552,7 @@ class NavigationHandler(BaseStateHandler):
         dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
 
         if not stage_select_open and not dungeon_select_open:
-            stage_templates = [
-                "stages/level1_sky_plains.png",
-                "stages/level2_Barren_Rocky_Ground.png",
-                "stages/level2_barren_rocks.png",
-                "stages/level3_ancient_forest.png",
-                "stages/level4_desert_ruins.png",
-                "stages/level5_gloomy_swamp.png"
-            ]
+            stage_templates = self.machine.config.get("stage_templates", [])
             for st_temp in stage_templates:
                 if os.path.exists(os.path.join("templates", st_temp)):
                     pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.60)
@@ -571,13 +561,7 @@ class NavigationHandler(BaseStateHandler):
                         break
 
         if not stage_select_open and not dungeon_select_open:
-            dungeon_templates = [
-                "dungeons/Slime_entry.png",
-                "dungeons/Ghost_entry.png",
-                "dungeons/Forest_entry.png",
-                "dungeons/Ruins_entry.png",
-                "dungeons/Ice_entry.png"
-            ]
+            dungeon_templates = self.machine.config.get("dungeon_entries", [])
             for dg_temp in dungeon_templates:
                 if os.path.exists(os.path.join("templates", dg_temp)):
                     pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.60)
@@ -630,61 +614,7 @@ class NavigationHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_LOBBY)
                 return
 
-        # （已將地下城專屬按鈕的主動判定移至 handle 方法最前頭，作為最高優先權判定）
-
-        # 判斷是否處於關卡選擇介面 (利用對比式匹配判定 select_stage.png 與 select_stage_after.png 的信心度)
-        stage_select_open = False
-        if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-            pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.58)
-            pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.58)
-            # 放寬防禦性門檻，並支援微小誤差容忍
-            if pos_after:
-                if (conf_before > 0.58 or conf_after > 0.58) and (not pos_before or conf_after > conf_before - 0.05):
-                    stage_select_open = True
-
-        # 額外比對關卡島嶼及標籤 (OR-Check)，若比對到任一關卡特徵，判定關卡選擇介面已開啟
-        if not stage_select_open:
-            stage_templates = self.machine.config.get("stage_templates", [
-                "stages/level1_sky_plains.png",
-                "stages/level2_Barren_Rocky_Ground.png",
-                "stages/level2_barren_rocks.png",
-                "stages/level3_ancient_forest.png",
-                "stages/level4_desert_ruins.png",
-                "stages/level5_gloomy_swamp.png"
-            ])
-            for st_temp in stage_templates:
-                if os.path.exists(os.path.join("templates", st_temp)):
-                    pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.60)
-                    if pos:
-                        logging.info(f"🧭 偵測到選關特徵元素 [{st_temp}] (相似度: {conf:.4f})，判定關卡選擇介面已開啟。")
-                        stage_select_open = True
-                        break
-
-        # 檢查是否處於地下城選擇介面 (利用對比式匹配判定 dungeon.png 與 dungeon_after.png 的信心度)
-        dungeon_select_open = False
-        if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-            pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.58)
-            pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.58)
-            if pos_d_after:
-                if (conf_d_before > 0.58 or conf_d_after > 0.58) and (not pos_d_before or conf_d_after > conf_d_before - 0.05):
-                    dungeon_select_open = True
-
-        # 額外比對地下城門扉入口 (OR-Check)，若比對到任一地下城入口特徵，判定地下城選擇介面已開啟
-        if not dungeon_select_open:
-            dungeon_templates = self.machine.config.get("dungeon_entries", [
-                "dungeons/Slime_entry.png",
-                "dungeons/Ghost_entry.png",
-                "dungeons/Forest_entry.png",
-                "dungeons/Ruins_entry.png",
-                "dungeons/Ice_entry.png"
-            ])
-            for dg_temp in dungeon_templates:
-                if os.path.exists(os.path.join("templates", dg_temp)):
-                    pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.60)
-                    if pos:
-                        logging.info(f"🧭 偵測到地下城入口元素 [{dg_temp}] (相似度: {conf:.4f})，判定地下城選擇介面已開啟。")
-                        dungeon_select_open = True
-                        break
+        # （已於 handle 前段完成頁籤開啟狀態統一對比與判定）
 
         # 判斷是否已經在關卡內部細節畫面 (提前判定以避免小島在抽屜下方時水平滑動邏輯誤觸)
         in_detail_screen = False
