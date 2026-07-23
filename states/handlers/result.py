@@ -34,6 +34,45 @@ class ResultHandler(BaseStateHandler):
             if pos_defeat:
                 logging.info(f"💀 結算處理：確認處於戰敗畫面 [{conf_defeat:.4f}]。")
                 
+                # 判定是否需要放棄 (連續戰敗 2 次)
+                if self.machine.dungeon_defeat_count >= 1:
+                    logging.warning(f"🚨 連續戰敗次數已達 {self.machine.dungeon_defeat_count + 1} 次！執行「放棄挑戰」流程。")
+                    giveup_temp = "defeat_giveup.png"
+                    if os.path.exists(os.path.join("templates", giveup_temp)):
+                        pos_g, conf_g = self.matcher.match(screen_img, giveup_temp, threshold=0.75)
+                        if pos_g:
+                            logging.info(f"👉 偵測到放棄挑戰按鈕 [{giveup_temp}] (信心度: {conf_g:.4f})，進行點擊。")
+                            self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
+                            
+                            # 進入確認放棄子流程，等待並點擊 confirm.png
+                            confirm_clicked = False
+                            start_time = time.time()
+                            while time.time() - start_time < 5.0:
+                                loop_screen = self.machine.capturer.capture(rect)
+                                if loop_screen is not None:
+                                    pos_c, conf_c = self.matcher.match(loop_screen, "common/confirm.png", threshold=0.80)
+                                    if pos_c:
+                                        logging.info(f"👉 偵測到退出確認按鈕 'common/confirm.png'，相似度: {conf_c:.4f}，進行點擊確認。")
+                                        self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                                        confirm_clicked = True
+                                        break
+                                time.sleep(0.3)
+                            
+                            if confirm_clicked:
+                                # 依照各自地下城的時間設定冷卻（防止第一關 0 CD 死循環進，戰敗冷卻最少設定 5 分鐘）
+                                idx = getattr(self.machine, "current_dungeon_index", 0)
+                                cooldown_map = self.machine.config.get("cooldown_map", {})
+                                cd_seconds = max(300.0, cooldown_map.get(idx, 300.0))
+                                self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
+                                logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定地下城 {idx} 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+                                
+                                self.machine.dungeon_defeat_count = 0
+                                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                                time.sleep(0.2)
+                                return True
+                            else:
+                                logging.warning("⚠️ 放棄確認點擊逾時，嘗試繼續常規戰敗處理...")
+                
                 # 優先嘗試比對戰敗重新開始按鈕 (defeat_retry.png) 或通用再戰按鈕 (stages/retry.png)
                 pos_retry = None
                 conf_retry = 0.0
@@ -59,6 +98,8 @@ class ResultHandler(BaseStateHandler):
                     logging.warning(f"⚠️ 未匹配到重新開始按鈕圖，使用防禦性相對座標點擊: ({click_x}, {click_y})")
                     self.mouse.click(click_x, click_y)
                     
+                self.machine.dungeon_defeat_count += 1
+                logging.info(f"🚀 已點擊重新開始按鈕，累計戰敗次數: {self.machine.dungeon_defeat_count}")
                 self.machine.last_result_retry_click_time = time.time()
                 self.machine.run_count += 1
                 logging.info(f"🚀 點擊重新開始按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
@@ -71,15 +112,21 @@ class ResultHandler(BaseStateHandler):
         should_exit_battle = (
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
-            (self.machine.enable_bread and self.machine.need_bread_collection)
+            (self.machine.enable_bread and self.machine.need_bread_collection) or
+            (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon())
         )
         if should_exit_battle:
             if os.path.exists(os.path.join("templates", "exit_battle.png")):
-                pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.8)
+                pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.9)
                 if pos_exit:
-                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取任務。")
+                    if self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon():
+                        status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                        avail_str = ", ".join(avail_names) if avail_names else "無"
+                        logging.info(f"⏳ [混合模式] 結算時偵測到可用地下城！各副本冷卻情形: {status_str} | 判定可挑戰: [{avail_str}]")
+                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
                     self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
-                    time.sleep(0.1)
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    time.sleep(0.2)
                     return True
 
         # A2. 檢查結算通用確認彈窗 (例如關卡結算確認)
@@ -103,13 +150,13 @@ class ResultHandler(BaseStateHandler):
             return True
 
         # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如金黃色與灰色繼續按鈕）
-        # 統一採用 0.70 通用亮度比及格線。灰色 Continue 門檻設為 0.88 防止金色背景誤匹配。
+        # 繼續按鈕亮度門檻調鬆為 0.0，避免勝場動畫漸變影響匹配
         continue_configs = [
-            (self.machine.continue_template, 0.80, 0.70),
+            (self.machine.continue_template, 0.80, 0.0),
             ("common/continue_gray.png", 0.88, 0.70)
         ]
         for c_temp, thresh, b_thresh in continue_configs:
-            if os.path.exists(os.path.join("templates", c_temp)):
+            if c_temp and os.path.exists(os.path.join("templates", c_temp)):
                 pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=thresh, brightness_threshold=b_thresh)
                 if pos_c:
                     logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f})，進行點擊。")
@@ -118,12 +165,13 @@ class ResultHandler(BaseStateHandler):
                     return True
 
         # C. 檢查是否已經默默回到準備大廳
-        lobby_btn = self.machine.config["lobby_start_btn"]
-        pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-        if pos_start:
-            logging.info(f"👉 偵測到已回到大廳 ({lobby_btn})，將狀態轉回 LOBBY。")
-            self.machine.transition_to(self.machine.STATE_LOBBY)
-            return True
+        lobby_btn = self.machine.config.get("lobby_start_btn")
+        if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
+            pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
+            if pos_start:
+                logging.info(f"👉 偵測到已回到大廳 ({lobby_btn})，將狀態轉回 LOBBY。")
+                self.machine.transition_to(self.machine.STATE_LOBBY)
+                return True
             
         # D. 檢查是否已經進入戰鬥狀態 (避免人手點擊或自動戰鬥提早開始時卡在結算超時)
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:

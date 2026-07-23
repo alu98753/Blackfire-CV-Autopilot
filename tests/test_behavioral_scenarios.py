@@ -63,7 +63,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           4. 二次確認領取後關閉視窗，清除鑽石需求，並開始體力領取。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
         self.state_machine.need_diamond_collection = True
@@ -146,7 +146,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         Then: 程式應識別冷卻狀態，直接點擊退出按鈕退出視窗，且重設鑽石領取需求，防止卡在視窗中。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_collected_this_run = False
         self.state_machine.diamond_window_opened = True
@@ -185,7 +185,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           3. 依次執行銷毀 (點擊右側綠色 ➔ 點擊 destroy.png ➔ 點擊 confirm.png) ➔ 收集 (點擊左側黃金 ➔ 點擊 collect.png)。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         mock_exists.return_value = True
         
@@ -240,7 +240,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           3. 若有關閉確認彈窗，應自動點選 confirm.png 確認關閉，回到 STATE_UNKNOWN。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_BACKPACK_FULL_SORTING
         self.state_machine.need_bag_cleaning = True
         mock_exists.return_value = True
@@ -386,7 +386,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           5. 5 秒後 (冷卻結束) ➔ 應重置探索記憶 (`chest_opened_this_floor = False`)。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         mock_exists.return_value = True
         
@@ -683,7 +683,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           1. 程式應識別冷卻/已領狀態，點擊退出按鈕 (common/quit.png)。
           2. need_bread_collection 應被設為 False，last_bread_collection_time 應更新，防止無限卡死在視窗內。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
         self.state_machine.bread_window_opened = True
@@ -894,7 +894,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         
         # 情況 B: 地下城模式
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
         self.mock_matcher.match.side_effect = None
         self.mock_matcher.match.return_value = (None, 0.0)
@@ -1050,7 +1050,15 @@ class TestBehavioralScenarios(unittest.TestCase):
           3. 畫面看到 stages/level2_entry1.png，但未看見 stages/level2_final.png ➔ 應執行 mouse.scroll 往下滾動，而不進行點擊。
           4. 畫面同時看到 stages/level2_entry1.png 和 stages/level2_final.png ➔ 應優先點擊 stages/level2_final.png，不執行滾動。
         """
-        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.config["navigation_path"] = [
+            "common/door.png",
+            "exit_battle.png",
+            "common/select_stage.png",
+            "stages/level2_barren_rocks.png",
+            "stages/stage_label.png",
+            "stages/level2_final.png"
+        ]
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         mock_exists.return_value = True
         mock_time.return_value = 1000.0
@@ -1318,15 +1326,16 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_exists.return_value = True
         
         # 設定貪婪地下城配置
-        self.state_machine.config = {
-            "type": "dungeon",
-            "greedy_dungeon": True,
-            "navigation_path": ["common/door.png", "dungeons/dungeon.png"]
-        }
+        config = GAME_CONFIGS["dungeon"].copy()
+        config["greedy_dungeon"] = True
+        config["greedy_allowed_indices"] = [0, 1, 2, 3, 4]
+        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+        self.state_machine.config = config
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
         # 設定冷卻時間
         self.state_machine.dungeon_cooldowns = {
+            4: float('inf'),          # 第 5 關：永久不可刷
             3: float('inf'),          # 第 4 關：永久不可刷
             2: time.time() + 100.0,   # 第 3 關：冷卻中
             1: 0.0,                   # 第 2 關：就緒
@@ -1367,7 +1376,12 @@ class TestBehavioralScenarios(unittest.TestCase):
                 # 骨頭匹配
                 return (0.0, 0.88, (0, 0), (0, 0))
                 
-        with patch('cv2.imread', return_value=mock_light_t), \
+        def mock_imread_impl(path):
+            if "entry" in path:
+                return np.zeros((341, 346, 3), dtype=np.uint8)
+            return np.zeros((10, 10, 3), dtype=np.uint8)
+            
+        with patch('cv2.imread', side_effect=mock_imread_impl), \
              patch('cv2.minMaxLoc', side_effect=mock_minMaxLoc_impl):
             # Act
             self.state_machine.step()
@@ -1477,11 +1491,10 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         mock_exists.return_value = True
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.state_machine.config = {
-            "type": "dungeon",
-            "greedy_dungeon": False,
-            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Ruins_entry.png"]
-        }
+        config_a = GAME_CONFIGS["dungeon"].copy()
+        config_a["greedy_dungeon"] = False
+        config_a["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ruins_entry.png"]
+        self.state_machine.config = config_a
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
         # Mock 視窗大小為 1000x800
@@ -1535,10 +1548,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         mock_exists.return_value = True
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.state_machine.config = {
-            "type": "dungeon",
-            "greedy_dungeon": True
-        }
+        config_fb = GAME_CONFIGS["dungeon"].copy()
+        config_fb["greedy_dungeon"] = True
+        self.state_machine.config = config_fb
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         self.state_machine.fallback_swipe_count = 0
         
@@ -1555,7 +1567,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         call_count = 0
         def mock_matchTemplate(img_arg, templ, method):
             nonlocal call_count
-            val = 0.95 if call_count == 4 else 0.0
+            val = 0.95 if call_count == 5 else 0.0
             call_count += 1
             return np.array([[val]], dtype=np.float32)
             
@@ -1588,6 +1600,276 @@ class TestBehavioralScenarios(unittest.TestCase):
             self.state_machine.step()
             self.mock_mouse.drag.assert_not_called()
             self.assertEqual(self.state_machine.fallback_swipe_count, 3)
+
+    @patch('os.path.exists')
+    def test_dungeon_defeat_giveup_flow(self, mock_exists):
+        """
+        [行為測試 26] 測試地下城連續戰敗退出與冷卻重設邏輯：
+        1. 第一次戰敗時，點選 retry，dungeon_defeat_count 遞增為 1。
+        2. 第二次戰敗時，點選 defeat_giveup.png 與 confirm.png 放棄。
+        3. 驗證當前地下城被設為 30 分鐘冷卻 (冰雪洞窟 idx=4)，且狀態移轉至 STATE_NAVIGATING。
+        """
+        # 初始化配置為地下城模式
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.current_dungeon_index = 4  # 冰雪洞窟
+        self.state_machine.dungeon_defeat_count = 0
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        
+        # Mock exists 都返回 True
+        mock_exists.return_value = True
+        
+        # 設置視窗大小
+        self.mock_capturer.get_window_rect.return_value = {
+            "left": 0, "top": 0, "width": 1920, "height": 1080
+        }
+        
+        # Mock 影像
+        dummy_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = dummy_img
+        
+        # Mock 模板匹配
+        # 1. 第一次戰敗：我們需要匹配 defeat.png 成功，以及 defeat_retry.png 成功
+        # 2. 第二次戰敗：我們需要匹配 defeat.png 成功，defeat_giveup.png 成功，以及 confirm.png 成功
+        def mock_match(img_arg, name, threshold=0.7, **kwargs):
+            if name == "defeat.png":
+                return (100, 100), 0.85
+            elif name in ["defeat_retry.png", "stages/retry.png"]:
+                return (200, 200), 0.88
+            elif name == "defeat_giveup.png":
+                return (300, 300), 0.88
+            elif name == "common/confirm.png":
+                return (400, 400), 0.88
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = mock_match
+             
+        # 第一次戰敗
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.dungeon_defeat_count, 1)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+        
+        # 回歸到結算狀態準備第二次
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        
+        # 第二次戰敗：這次因為 count=1 >= 1，會點選放棄與確認退出
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了 30 分鐘 (1800 秒) 的冷卻
+        self.assertEqual(self.state_machine.dungeon_defeat_count, 0)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertGreater(self.state_machine.dungeon_cooldowns[4], time.time() + 1790.0)
+
+    @patch('cv2.minMaxLoc')
+    @patch('cv2.matchTemplate')
+    @patch('cv2.imread')
+    @patch('os.path.exists')
+    def test_mix_mode_specified_dungeon_full_lifecycle(self, mock_exists, mock_imread, mock_match_temp, mock_min_max):
+        """
+        [行為場景 7] 混合模式 (mix) 指定副本完整生命週期測試：
+        1. 城鎮開局 (door.png) ➔ 大廳 (dungeons/dungeon.png) ➔ 進入地下城選關 (Ice_entry.png)。
+        2. 點擊探險 (dungeons/dungeon_fight.png) ➔ 進入戰鬥 ➔ 戰鬥結束。
+        3. 冰雪洞窟進入冷卻 (300 秒) ➔ 點擊 common/select_stage.png 退守普通關卡。
+        4. has_available_dungeon 傳回 False ➔ 依據 stage_navigation_path 進入 level6 first_stage 打普通關卡。
+        5. 普通關卡戰鬥結算 (common/continue.png)。
+        6. 快進時間 301 秒，冰雪洞窟冷卻到期，has_available_dungeon 變回 True ➔ 返抵大廳自動點擊 dungeons/dungeon.png 切回地下城！
+        """
+        mock_exists.return_value = True
+        dummy_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = dummy_img
+        
+        def mock_imread_impl(filepath, *args, **kwargs):
+            if "cooldown" in str(filepath) or "locked" in str(filepath):
+                return np.zeros((10, 10, 3), dtype=np.uint8)
+            return np.zeros((500, 500, 3), dtype=np.uint8)
+        mock_imread.side_effect = mock_imread_impl
+        
+        def mock_match_temp_impl(image, templ, *args, **kwargs):
+            if templ.shape[0] <= 20:
+                return np.zeros((10, 10), dtype=np.float32)
+            return np.zeros((500, 500), dtype=np.float32)
+        mock_match_temp.side_effect = mock_match_temp_impl
+        
+        is_dungeon_page_active = [False]
+        def min_max_side_effect(res_arg):
+            if is_dungeon_page_active[0] and hasattr(res_arg, 'shape') and res_arg.shape[0] > 100:
+                return (0.0, 0.9, (0, 0), (1400, 300))
+            return (0.0, 0.0, (0, 0), (0, 0))
+        mock_min_max.side_effect = min_max_side_effect
+        
+        from config import GAME_CONFIGS
+        config = dict(GAME_CONFIGS["mix"])
+        config["navigation_path"] = ["dungeons/Ice_entry.png"]
+        config["stage_navigation_path"] = [
+            "common/door.png",
+            "common/select_stage.png",
+            "stages/level6_ice_cave.png",
+            "stages/stage_label.png",
+            "stages/first_stage.png"
+        ]
+        config["greedy_dungeon"] = False
+        config["greedy_allowed_indices"] = [0, 1, 2, 3, 4]
+        self.state_machine.config = config
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        
+        # --- 階段 1：從城鎮大門 (door.png) 進入大廳 ---
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # --- 階段 2：在大廳看到 dungeons/dungeon.png 進入地下城選關 ---
+        self.assertTrue(self.state_machine.has_available_dungeon())
+        
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((650, 750), 0.95) if name == "dungeons/dungeon.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(650, 750)
+        
+        # --- 階段 3：進入地下城選關介面，看到 Ice_entry.png 選擇並點擊入場 ---
+        is_dungeon_page_active[0] = True
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((1400, 300), 0.9) if name == "dungeons/Ice_entry.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_dungeon_index, 4)
+        self.mock_mouse.click.assert_called_with(1650, 550)
+        
+        # --- 階段 4：彈出 dungeons/dungeon_fight.png，點擊探險進入戰鬥 ---
+        is_dungeon_page_active[0] = False
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((900, 500), 0.9) if name == "dungeons/dungeon_fight.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(900, 500)
+        
+        # 模擬進入戰鬥並完成戰鬥
+        self.state_machine.transition_to(self.state_machine.STATE_BATTLE)
+        self.state_machine.battle_start_time = time.time() - 10.0
+        
+        # --- 階段 5：戰鬥結束且冰雪洞窟進入冷卻 (300 秒) ➔ 退回大廳尋路 ---
+        now = time.time()
+        self.state_machine.dungeon_cooldowns[4] = now + 300.0
+        self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
+        
+        # 斷言：目前冰雪洞窟冷卻中，has_available_dungeon 必須為 False！
+        self.assertFalse(self.state_machine.has_available_dungeon())
+        
+        # --- 階段 6：地下城冷卻中，導向普通關卡 (select_stage.png) ---
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((530, 750), 0.95) if name == "common/select_stage.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(530, 750)
+        
+        # --- 階段 7：快進時間 (過 301 秒)，冰雪洞窟冷卻到期！ ---
+        self.state_machine.dungeon_cooldowns[4] = time.time() - 1.0  # 冷卻結束
+        
+        # 斷言：冰雪洞窟冷卻結束，has_available_dungeon 必須變回 True！
+        self.assertTrue(self.state_machine.has_available_dungeon())
+        
+        # --- 階段 8：返回大廳尋路時，自動點擊 dungeons/dungeon.png 切回地下城！ ---
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((650, 750), 0.95) if name == "dungeons/dungeon.png" else (None, 0.0)
+        )
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(650, 750)
+
+    @patch('cv2.minMaxLoc')
+    @patch('cv2.matchTemplate')
+    @patch('cv2.imread')
+    @patch('os.path.exists')
+    def test_mix_mode_greedy_dungeon_full_lifecycle(self, mock_exists, mock_imread, mock_match_temp, mock_min_max):
+        """
+        [行為場景 8] 混合模式 (mix) 貪婪地下城多關卡冷卻與優先順序復歸測試：
+        1. 貪婪模式下優先選最高階 Ice_entry (idx=4) 入場。
+        2. Ice_entry 冷卻 300s ➔ 貪婪自動降階選擇 Forest_entry (idx=2) 入場。
+        3. Forest_entry 亦冷卻 300s (所有允許地下城全冷卻) ➔ has_available_dungeon 傳回 False ➔ 導向普通關卡。
+        4. 快進時間 301s ➔ 最高階 Ice_entry 優先冷卻結束 ➔ has_available_dungeon 變回 True ➔ 返抵大廳自動切回地下城並優先選 Ice_entry (idx=4)！
+        """
+        mock_exists.return_value = True
+        dummy_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = dummy_img
+        
+        def mock_imread_impl(filepath, *args, **kwargs):
+            if "cooldown" in str(filepath) or "locked" in str(filepath):
+                return np.zeros((10, 10, 3), dtype=np.uint8)
+            return np.zeros((500, 500, 3), dtype=np.uint8)
+        mock_imread.side_effect = mock_imread_impl
+        
+        def mock_match_temp_impl(image, templ, *args, **kwargs):
+            if templ.shape[0] <= 20:
+                return np.zeros((10, 10), dtype=np.float32)
+            return np.zeros((500, 500), dtype=np.float32)
+        mock_match_temp.side_effect = mock_match_temp_impl
+        
+        is_dungeon_page_active = [False]
+        def min_max_side_effect(res_arg):
+            if is_dungeon_page_active[0] and hasattr(res_arg, 'shape') and res_arg.shape[0] > 100:
+                return (0.0, 0.9, (0, 0), (1400, 300))
+            return (0.0, 0.0, (0, 0), (0, 0))
+        mock_min_max.side_effect = min_max_side_effect
+        
+        from config import GAME_CONFIGS
+        config = dict(GAME_CONFIGS["mix"])
+        config["greedy_dungeon"] = True
+        config["greedy_allowed_indices"] = [0, 2, 4]  # 允許 史萊姆(0), 森林(2), 冰雪(4)
+        config["stage_navigation_path"] = [
+            "common/door.png",
+            "common/select_stage.png",
+            "stages/level6_ice_cave.png",
+            "stages/first_stage.png"
+        ]
+        self.state_machine.config = config
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        # --- 階段 1：進入地下城選關，貪婪選擇最高階 Ice_entry (idx=4) ---
+        self.assertTrue(self.state_machine.has_available_dungeon())
+        
+        # --- 階段 2：最高階 Ice_entry (idx=4) 進入冷卻 300 秒，但 Forest_entry (idx=2) 仍可用 ---
+        now = time.time()
+        self.state_machine.dungeon_cooldowns[4] = now + 300.0
+        self.state_machine.dungeon_cooldowns[2] = 0.0  # Forest 仍可用
+        self.state_machine.dungeon_cooldowns[0] = now + 300.0
+        
+        # 斷言：由於 Forest (idx=2) 仍可用，has_available_dungeon 必須仍為 True！
+        self.assertTrue(self.state_machine.has_available_dungeon())
+        
+        # --- 階段 3：Forest_entry (idx=2) 亦進入冷卻 300 秒 (所有允許的地下城全冷卻) ---
+        self.state_machine.dungeon_cooldowns[2] = now + 300.0
+        
+        # 斷言：所有允許副本全冷卻，has_available_dungeon 必須為 False！
+        self.assertFalse(self.state_machine.has_available_dungeon())
+        
+        # --- 階段 4：地下城全冷卻，在大廳點擊 select_stage.png 導向普通關卡 ---
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((530, 750), 0.95) if name == "common/select_stage.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(530, 750)
+        
+        # --- 階段 5：快進時間 (過 301 秒)，最高階 Ice_entry (idx=4) 優先冷卻結束！ ---
+        self.state_machine.dungeon_cooldowns[4] = time.time() - 1.0  # Ice 結束
+        # Forest (idx=2) 與 Slime (idx=0) 仍在冷卻中
+        self.state_machine.dungeon_cooldowns[2] = time.time() + 300.0
+        self.state_machine.dungeon_cooldowns[0] = time.time() + 300.0
+        
+        # 斷言：最高階地下城冷卻結束，has_available_dungeon 必須變回 True！
+        self.assertTrue(self.state_machine.has_available_dungeon())
+        
+        # --- 階段 6：返抵大廳時，自動點擊 dungeons/dungeon.png 切回地下城！ ---
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (
+            ((650, 750), 0.95) if name == "dungeons/dungeon.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(650, 750)
 
 if __name__ == "__main__":
     unittest.main()

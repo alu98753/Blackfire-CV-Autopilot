@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import numpy as np
 from states.handlers.base import BaseStateHandler
 
 class ExploreHandler(BaseStateHandler):
@@ -69,19 +70,22 @@ class ExploreHandler(BaseStateHandler):
                     self.machine.run_count += 1
                     logging.info(f"📊 已完成第 {self.machine.run_count} 次地下城通關！")
                     
-                    # 動態設定當前地下城的冷卻時間（第一關沒有冷卻，第二關 5 分鐘，第三關 15 分鐘，第四關 25 分鐘）
+                    # 動態設定當前地下城的冷卻時間（從 config 配置中動態獲取）
                     if hasattr(self.machine, "current_dungeon_index") and self.machine.current_dungeon_index is not None:
-                        cooldown_map = {
-                            0: 0.0,
-                            1: 5.0 * 60.0,
-                            2: 15.0 * 60.0,
-                            3: 20.0 * 60.0
-                        }
+                        cooldown_map = self.machine.config.get("cooldown_map", {})
                         cd_seconds = cooldown_map.get(self.machine.current_dungeon_index, 900.0)
                         self.machine.dungeon_cooldowns[self.machine.current_dungeon_index] = time.time() + cd_seconds
                         logging.info(f"⏳ 貪婪地下城：設定第 {self.machine.current_dungeon_index + 1} 個地下城進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+                        if self.machine.config.get("type") == "mix":
+                            status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                            avail_str = ", ".join(avail_names) if avail_names else "無"
+                            if not avail_names:
+                                logging.info(f"⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。")
+                            else:
+                                logging.info(f"⏳ [混合模式] 地下城通關！各副本冷卻情形: {status_str} ➔ 剩餘可挑戰地下城: [{avail_str}]。")
                         
                     # 通關後回到最外層大廳，轉移至尋路導航狀態重新進副本
+                    self.machine.is_in_dungeon = False
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     time.sleep(0.2)
                     
@@ -119,6 +123,7 @@ class ExploreHandler(BaseStateHandler):
                     # 設定下樓點擊時間與過渡狀態，由冷卻時間屆滿後或在新樓層檢測到事件時重設
                     self.machine.last_godown_click_time = time.time()
                     self.machine.dungeon_floor_transitioning = True
+                    self.machine.dungeon_defeat_count = 0
                     time.sleep(0.04)
                     
                 elif btn_name == "dungeons/dungeon_fight.png":
@@ -210,6 +215,15 @@ class ExploreHandler(BaseStateHandler):
         ok_clicked = False
         last_click_time = 0.0
         
+        bless_mode = self.machine.config.get("bless_mode", "combat")
+        bless_templates = {
+            "combat": "dungeons/bless_combat.png",
+            "life": "dungeons/bless_life.png",
+            "exp": "dungeons/bless_exp.png"
+        }
+        target_tpl = bless_templates.get(bless_mode, "dungeons/bless_combat.png")
+        tpl_path = os.path.join(self.matcher.templates_dir, target_tpl)
+        
         while time.time() - start_time < timeout:
             screen_img = self.machine.capturer.capture(rect)
             if screen_img is None:
@@ -217,14 +231,62 @@ class ExploreHandler(BaseStateHandler):
                 continue
                 
             if not bless_clicked:
-                pos, conf = self.matcher.match(screen_img, "dungeons/choice_bless.png", threshold=0.70)
-                if pos:
-                    logging.info(f"🧭 [子流程] 偵測到選擇祝福按鈕 'dungeons/choice_bless.png'，相似度: {conf:.4f}，進行點擊。")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    bless_clicked = True
-                    last_click_time = time.time()
-                    time.sleep(1.0)  # 等待動畫
-                    continue
+                # 1. 優先嘗試在 1.5 秒內尋找指定祝福卡片
+                pos_tpl = None
+                if os.path.exists(tpl_path):
+                    pos_tpl, conf_tpl = self.matcher.match(screen_img, target_tpl, threshold=0.70, quiet=True)
+                
+                if pos_tpl:
+                    bx = pos_tpl[0]
+                    # 讀取 choice_bless.png 模板以取得其物理寬度，動態調整裁剪區間以防尺寸 mismatch
+                    choice_tpl = self.matcher._load_template("dungeons/choice_bless.png")
+                    choice_w = choice_tpl.shape[1] if isinstance(choice_tpl, np.ndarray) else 391
+                    
+                    # 裁剪寬度必須大於按鈕模板寬度，給予足夠的緩衝空間（如 +60 像素）
+                    crop_w = max(450, choice_w + 60)
+                    half_w = crop_w // 2
+                    
+                    # 以卡片中心 bx 為起點進行裁剪，並實作滑動窗口以防越界
+                    screen_w = screen_img.shape[1]
+                    x_min = bx - half_w
+                    x_max = bx + half_w
+                    
+                    if x_min < 0:
+                        x_max = x_max - x_min  # 左邊越界，區間整體右移
+                        x_min = 0
+                    elif x_max > screen_w:
+                        x_min = x_min - (x_max - screen_w)  # 右邊越界，區間整體左移
+                        x_max = screen_w
+                        
+                    # 安全極限防禦
+                    x_min = int(max(0, x_min))
+                    x_max = int(min(screen_w, x_max))
+                    
+                    cropped_img = screen_img[:, x_min:x_max]
+                    
+                    pos, conf = self.matcher.match(cropped_img, "dungeons/choice_bless.png", threshold=0.70)
+                    if pos:
+                        actual_x = rect["left"] + pos[0] + x_min
+                        actual_y = rect["top"] + pos[1]
+                        logging.info(f"🧭 [子流程] 精確對齊！找到目標祝福 [{target_tpl}] (相似度: {conf_tpl:.4f})，"
+                                     f"在其 X 軸區間內匹配到選擇按鈕，相似度: {conf:.4f}，點擊座標: ({actual_x}, {actual_y})")
+                        self.mouse.click(actual_x, actual_y)
+                        bless_clicked = True
+                        last_click_time = time.time()
+                        time.sleep(1.0)  # 等待動畫
+                        continue
+                
+                # 2. 若超過 1.5 秒未找到指定祝福，或模板不存在，觸發 Fallback 機制點選第一個發現的按鈕
+                elif time.time() - start_time > 1.5 or not os.path.exists(tpl_path):
+                    pos, conf = self.matcher.match(screen_img, "dungeons/choice_bless.png", threshold=0.70)
+                    if pos:
+                        logging.info(f"🧭 [子流程] 未能匹配到指定祝福或已超時，觸發 Fallback 機制，"
+                                     f"直接點擊畫面第一個選擇按鈕 'dungeons/choice_bless.png'，相似度: {conf:.4f}")
+                        self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                        bless_clicked = True
+                        last_click_time = time.time()
+                        time.sleep(1.0)
+                        continue
             elif not ok_clicked:
                 pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.80)
                 if pos_ok:

@@ -2,8 +2,15 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
+from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 
 class DiamondCollectionHandler(BaseStateHandler):
+    def _parse_time_to_seconds(self, time_str):
+        """
+        將 OCR 識別出的時間字串解析為總秒數 (委充自 utils.time_parser 共用模組)。
+        """
+        return parse_time_to_seconds(time_str)
+
     def handle(self, screen_img, rect):
         """
         自動領鑽石狀態處理器。
@@ -54,8 +61,56 @@ class DiamondCollectionHandler(BaseStateHandler):
                     self.machine.diamond_cooldown_confirm_count = cooldown_count
                     logging.info(f"💎 領鑽石：無免費按鈕，累計檢測次數: {cooldown_count}/3...")
                     if cooldown_count >= 3:
-                        logging.info("💎 領鑽石：鑽石視窗已開啟且連續 3 幀無免費按鈕 (處於冷卻)，標記冷卻並準備退出。")
+                        logging.info("💎 領鑽石：鑽石視窗已開啟且連續 3 幀無免費按鈕 (處於冷卻)，開始精確讀取冷卻倒數時間...")
                         self.machine.diamond_cooldown_detected = True
+                        
+                        # 開始精確讀取冷卻時間
+                        try:
+                            import cv2
+                            # 計算 scale (以 1920 寬度為基準)
+                            w_img = screen_img.shape[1]
+                            scale = w_img / 1920.0
+                            
+                            # 退出按鈕頂點
+                            qx, qy = pos_quit
+                            
+                            # 根據偏差計算按鈕中心點 (dx_scaled = -1100.5, dy_scaled = 518.6)
+                            btn_cx = qx + int(-1100.5 * scale)
+                            btn_cy = qy + int(518.6 * scale)
+                            
+                            # 裁切時間按鈕 (寬 150 像素, 高 40 像素)
+                            tx1 = max(0, int(btn_cx - 75 * scale))
+                            tx2 = min(screen_img.shape[1], int(btn_cx + 75 * scale))
+                            ty1 = max(0, int(btn_cy - 20 * scale))
+                            ty2 = min(screen_img.shape[0], int(btn_cy + 20 * scale))
+                            
+                            time_crop = screen_img[ty1:ty2, tx1:tx2]
+                            if time_crop.size > 0:
+                                time_gray = cv2.cvtColor(time_crop, cv2.COLOR_BGR2GRAY)
+                                padded = cv2.copyMakeBorder(time_gray, 15, 15, 30, 30, cv2.BORDER_CONSTANT, value=159)
+                                resized_text = cv2.resize(padded, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+                                
+                                reader = self.machine.get_ocr_reader()
+                                ocr_results = reader.readtext(resized_text, allowlist="0123456789:")
+                                
+                                # 寫入除錯圖片
+                                # cv2.imwrite("debug_diamond_ocr.png", resized_text)
+                                # logging.info(f"📸 [DEBUG] 已將鑽石 OCR 辨識區域寫入 debug_diamond_ocr.png，裁剪範圍 Y 軸: [{ty1}:{ty2}]，X 軸: [{tx1}:{tx2}]")
+                                
+                                if ocr_results:
+                                    raw_text = ocr_results[0][1]
+                                    conf = ocr_results[0][2]
+                                    parsed_secs = self._parse_time_to_seconds(raw_text)
+                                    if parsed_secs is not None and parsed_secs > 0:
+                                        # 計算重置 last_diamond_collection_time
+                                        default_diamond_cd = 7200.0
+                                        diamond_cd = self.machine.config.get("diamond_cd", default_diamond_cd) if self.machine.config else default_diamond_cd
+                                        self.machine.last_diamond_collection_time = time.time() - (diamond_cd - parsed_secs)
+                                        self.machine.diamond_ocr_success = True
+                                        logging.info(f"💎 領鑽石：成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)}，信心度: {conf:.4f})")
+                                        logging.info(f"⏰ 已將下一次自動領鑽石排程推遲到 {parsed_secs} 秒後。")
+                        except Exception as ocr_err:
+                            logging.warning(f"⚠️ 領鑽石：精確冷卻時間讀取失敗 (將使用預設冷卻退避): {ocr_err}")
                 else:
                     self.machine.diamond_cooldown_confirm_count = 0
 
@@ -82,7 +137,10 @@ class DiamondCollectionHandler(BaseStateHandler):
                     self.machine.diamond_free_clicked = False
                     self.machine.diamond_cooldown_confirm_count = 0
                     self.machine.diamond_window_missing_count = 0
-                    self.machine.last_diamond_collection_time = time.time()
+                    if not getattr(self.machine, "diamond_ocr_success", False):
+                        self.machine.last_diamond_collection_time = time.time()
+                    else:
+                        self.machine.diamond_ocr_success = False
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return
  

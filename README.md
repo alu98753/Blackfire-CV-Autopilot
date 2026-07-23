@@ -87,7 +87,7 @@
 ### 0. 獨立一鍵啟動 (CLI 獨立版)
 * 檔案路徑：專案根目錄下的 [run.bat](run.bat)
 * 啟動方式：**滑鼠雙擊 `run.bat` 執行即可**。
-* 注意事項：若要修改掛機模式或參數，可用記事本打開並修改最後一行的 `python main.py --backend --mode dungeon_slime` 命令參數。
+* 注意事項：若要修改掛機模式或參數，可用記事本打開並修改最後一行的 `python main.py --backend --mode dungeon` 命令參數。
 
 
 
@@ -97,7 +97,7 @@
 
 | 參數 | 類型 | 預設值 | 說明 |
 | :--- | :--- | :--- | :--- |
-| `--mode` | 字串 | `dungeon_slime` | **掛機模式**：可選 `stage` (一般關卡)、`dungeon_slime` (史萊姆地下城)、`bag_clean` (單次背包整理分解)。 |
+| `--mode` | 字串 | `dungeon` | **掛機模式**：可選 `stage` (一般關卡)、`dungeon` (史萊姆地下城)、`bag_clean` (單次背包整理分解)。 |
 | `--backend` | 切換旗標 | 關閉 | **啟用後台掛機模式**。滑鼠不會被腳本強行移動，您可以將遊戲放置在延伸大螢幕（DPI=1.0）背景，並在主螢幕繼續您的日常辦公、瀏覽網頁或遠端遙控，點擊完全獨立且不干涉。 |
 | `--interval` | 浮點數 | `0.05` | 畫面偵測的間隔時間（秒）。預設 `0.05` 確保最高回饋速度，若想降低 CPU 佔用可調高（如 `0.2` 或 `0.3`）。 |
 | `--title` | 字串 | `Blackfire Crusade` | 遊戲視窗名稱。如果多開或標題不同時可手動指定。 |
@@ -107,16 +107,16 @@
 
 ### 2. 核心模式執行方法
 
-#### 🔹 模式 A：史萊姆地下城自動探索 (`--mode dungeon_slime`)
+#### 🔹 模式 A：地下城自動探索 (`--mode dungeon`)
 * **功能**：自動在大廳進入地下城、下樓、貪婪模式挑選、接受祝福/開啟寶箱、戰鬥、背包滿時自動銷毀垃圾並收集貴重物、定時自動回城領鑽石與體力。
 * **前置要求**：將遊戲畫面停留在**最外層的大廳/城鎮畫面（能看到右下角 `common/door.png` 傳送門圖標）**。
 * **啟動指令（後台不搶滑鼠模式，推薦）**：
   ```powershell
-  .\.venv\Scripts\python main.py --mode dungeon_slime --backend
+  .\.venv\Scripts\python main.py --mode dungeon --backend
   ```
 * **啟動指令（前台實體滑鼠移動模式）**：
   ```powershell
-  .\.venv\Scripts\python main.py --mode dungeon_slime
+  .\.venv\Scripts\python main.py --mode dungeon
   ```
 
 #### 🔹 模式 B：普通關卡自動刷關 (`--mode stage`)

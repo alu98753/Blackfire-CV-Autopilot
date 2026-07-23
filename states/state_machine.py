@@ -39,6 +39,7 @@ class GameStateMachine:
         self.mouse = mouse
         
         self.current_state = self.STATE_UNKNOWN
+        self.last_state = None
         self.last_state_change = time.time()
         self.battle_start_time = None
         self.run_count = 0
@@ -62,6 +63,7 @@ class GameStateMachine:
         self.last_diamond_collection_time = 0.0
         self.diamond_collected_this_run = False
         self.diamond_window_opened = False
+        self.diamond_ocr_success = False
         
         # 背包清理相關屬性
         self.need_bag_cleaning = False
@@ -79,8 +81,9 @@ class GameStateMachine:
         self.consecutive_stuck_count = 0
         
         # 地下城冷卻與貪婪選關相關屬性
-        self.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
+        self.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0}
         self.current_dungeon_index = 0
+        self.dungeon_defeat_count = 0
         self.fallback_swipe_count = 0
         
         # 使用者手動介入偵測相關屬性
@@ -97,6 +100,7 @@ class GameStateMachine:
         
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"
+        self._ocr_reader = None
         
         # 初始化註冊所有狀態處理器
         self.handlers = {
@@ -113,6 +117,16 @@ class GameStateMachine:
             self.STATE_LOADING: LoadingHandler(self),
         }
 
+    def get_ocr_reader(self):
+        """
+        延遲載入並取得 EasyOCR 讀取器實例，避免啟動延遲。
+        """
+        if self._ocr_reader is None:
+            import easyocr
+            logging.info("⚙️ 正在首次載入 EasyOCR 辨識模型 (使用 CPU)...")
+            self._ocr_reader = easyocr.Reader(['en'], gpu=False)
+        return self._ocr_reader
+
 
 
     def transition_to(self, new_state):
@@ -122,6 +136,7 @@ class GameStateMachine:
 
         if self.current_state != new_state:
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
+            self.last_state = self.current_state
             self.current_state = new_state
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
@@ -374,6 +389,109 @@ class GameStateMachine:
             else:
                 logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")
                 self.transition_to(self.STATE_NAVIGATING)
+
+    def has_available_dungeon(self):
+        """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
+        if not self.config:
+            return False
+
+        # 如果先前已確認所有地下城皆在冷卻中，且尚未超過暫存冷卻時間，直接傳回 False
+        all_cd_until = getattr(self, "all_dungeons_on_cooldown_until", 0.0)
+        if time.time() < all_cd_until:
+            return False
+
+        allowed_indices = self.config.get("greedy_allowed_indices")
+        if allowed_indices is None:
+            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
+
+        now = time.time()
+        is_greedy = self.config.get("greedy_dungeon", False)
+        
+        if is_greedy:
+            for idx in allowed_indices:
+                if now >= self.dungeon_cooldowns.get(idx, 0.0):
+                    return True
+            return False
+        else:
+            # 非貪婪模式 (指定特定副本)：只檢查 navigation_path 中指定的副本索引
+            entry_templates = self.config.get("dungeon_entries")
+            if entry_templates is None:
+                raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
+            nav_path = self.config.get("navigation_path")
+            if nav_path is None:
+                raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
+
+            target_idx = None
+            for idx, temp_name in enumerate(entry_templates):
+                if temp_name in nav_path:
+                    target_idx = idx
+                    break
+            
+            if target_idx is not None:
+                return now >= self.dungeon_cooldowns.get(target_idx, 0.0)
+            
+            return False
+
+    def get_dungeon_cooldown_status(self):
+        """
+        列出當前所有允許地下城的冷卻情形，以及判定可挑戰的地下城列表。
+        :return: (status_summary_str, available_dungeon_names_list)
+        """
+        if not self.config:
+            raise ValueError("配置錯誤：GameStateMachine 尚未設定 config。")
+
+        dungeon_names = self.config.get("dungeon_names")
+        if dungeon_names is None:
+            raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
+
+        allowed_indices = self.config.get("greedy_allowed_indices")
+        if allowed_indices is None:
+            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單。")
+
+        from utils.time_parser import format_seconds_to_readable
+        now = time.time()
+
+        is_greedy = self.config.get("greedy_dungeon", False)
+        if is_greedy:
+            target_indices = allowed_indices
+        else:
+            entry_templates = self.config.get("dungeon_entries")
+            if entry_templates is None:
+                raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
+            nav_path = self.config.get("navigation_path")
+            if nav_path is None:
+                raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
+
+            target_idx = None
+            for idx, temp_name in enumerate(entry_templates):
+                if temp_name in nav_path:
+                    target_idx = idx
+                    break
+            target_indices = [target_idx] if target_idx is not None else []
+
+        cd_details = []
+        available_names = []
+
+        for idx in allowed_indices:
+            if idx >= len(dungeon_names):
+                raise ValueError(f"配置錯誤：greedy_allowed_indices 中的索引 {idx} 超出 dungeon_names 長度 ({len(dungeon_names)})。")
+            name = dungeon_names[idx]
+            cd_until = self.dungeon_cooldowns.get(idx, 0.0)
+            rem = cd_until - now
+            if rem > 0:
+                if cd_until == float('inf'):
+                    cd_details.append(f"[{name}]: 永久不可打")
+                else:
+                    cd_str = format_seconds_to_readable(rem)
+                    cd_details.append(f"[{name}]: 冷卻中 ({cd_str})")
+            else:
+                if idx in target_indices:
+                    cd_details.append(f"[{name}]: 就緒 (可打)")
+                    available_names.append(name)
+                else:
+                    cd_details.append(f"[{name}]: 就緒 (未啟用)")
+
+        return ", ".join(cd_details), available_names
 
     def check_collection_trigger(self, screen_img):
         """
