@@ -1205,7 +1205,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         
         # 驗證觸發了向下的拖曳 (center_x = 600, center_y = 500)
-        self.mock_mouse.drag.assert_called_with(600, 650, 600, 300)
+        self.mock_mouse.drag.assert_called_with(600, 600, 600, 400)
 
     @patch('os.path.exists')
     def test_backpack_full_sorting_custom_disassemble_threshold(self, mock_exists):

@@ -138,8 +138,22 @@ class ExploreHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     time.sleep(0.03) # 點擊後等待短暫動畫
                     
+                self.no_explore_match_count = 0
                 return # 成功處理一個優先級最高的事項後即結束該步，等待下一次截圖
                 
+        # 防卡死救援：若連續多幀沒有比對到任何地下城探險事件，檢查是否根本已經回到普通關卡/大廳/城鎮介面
+        self.no_explore_match_count = getattr(self, "no_explore_match_count", 0) + 1
+        if self.no_explore_match_count >= 6:
+            self.no_explore_match_count = 0
+            for fallback_btn in ["stages/start.png", "common/select_stage.png", "goback_town.png", "common/door.png"]:
+                if os.path.exists(os.path.join("templates", fallback_btn)):
+                    pos_fb, conf_fb = self.matcher.match(screen_img, fallback_btn, threshold=0.8)
+                    if pos_fb:
+                        logging.warning(f"⚠️ 地下城探索中未匹配到事件，但偵測到大廳/關卡介面 [{fallback_btn}] (信心度: {conf_fb:.4f})，判定已非地下城狀態，自動轉移至 NAVIGATING。")
+                        self.machine.is_in_dungeon = False
+                        self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                        return
+
         logging.info("⌛ 地下城探索中，正在等待下一層載入或新的隨機事件按鈕出現...")
 
     def _run_treasure_subflow(self, rect):

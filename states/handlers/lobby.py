@@ -37,7 +37,7 @@ class LobbyHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return
 
-        lobby_btn = self.machine.config["lobby_start_btn"]
+        lobby_btn = self.machine.config.get("lobby_start_btn", "stages/start.png")
         pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
         if pos:
             logging.info(f"👉 偵測到大廳開始按鈕 [{lobby_btn}] (信心度: {conf:.4f})，進行點擊。")

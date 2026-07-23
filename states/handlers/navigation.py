@@ -650,7 +650,8 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.config.get("type") in ["stage", "mix"] and stage_select_open and not in_detail_screen:
             target_level_btn = None
             for btn in nav_path:
-                if "level" in btn and "final" not in btn and "entry" not in btn:
+                is_sub = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
+                if not is_sub and "level" in btn and "entry" not in btn:
                     target_level_btn = btn
                     break
             if target_level_btn and os.path.exists(os.path.join("templates", target_level_btn)):
@@ -727,19 +728,22 @@ class NavigationHandler(BaseStateHandler):
             if btn == "dungeons/dungeon.png" and dungeon_select_open:
                 continue
 
-            # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (小島名稱包含 level 且不含 final 或 entry)
-            if in_detail_screen and "level" in btn and "final" not in btn and "entry" not in btn:
+            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
+
+            # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (僅跳過非目標子關卡的 level 小島)
+            if in_detail_screen and not is_sub_stage_target and "level" in btn and "entry" not in btn:
                 continue
 
-            # 針對尋路按鈕，小關卡/魔王關目標按鈕 (如 first_stage.png, levelX_final.png, level6_middle.png, six_stage.png) 門檻單獨調高至 0.90
-            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
             if is_sub_stage_target:
                 thresh = 0.90
+                b_thresh = 0.0
             elif "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
                 thresh = 0.60
+                b_thresh = 0.70
             else:
                 thresh = 0.80
-            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
+                b_thresh = 0.70
+            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
             if pos:
                 if btn == "stages/stage_label.png":
                     # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
@@ -761,7 +765,7 @@ class NavigationHandler(BaseStateHandler):
                         center_x = rect["left"] + rect["width"] // 2
                         center_y = rect["top"] + rect["height"] // 2
                         # 改為使用拖曳手勢，向上滑動拖曳 350 像素使列表向下滾動，繞過後台滾輪無焦點失效問題
-                        self.mouse.drag(center_x, center_y + 150, center_x, center_y - 200)
+                        self.mouse.drag(center_x, center_y + 100, center_x, center_y - 100)
                         self.machine.last_stage_scroll_time = time.time()
                         clicked_any = True
                         time.sleep(0.3)
@@ -769,14 +773,14 @@ class NavigationHandler(BaseStateHandler):
                 else:
                     click_x = rect["left"] + pos[0]
                     click_y = rect["top"] + pos[1]
-                    if "level" in btn and "final" not in btn and "entry" not in btn:
+                    if not is_sub_stage_target and "level" in btn and "entry" not in btn:
                         height_to_use = rect.get("height") or screen_img.shape[0] or 1080
                         scale_y = height_to_use / 1080.0
                         offset_y = int(160 * scale_y)
                         click_y -= offset_y
                         logging.info(f"🧭 尋路中：在畫面中找到關卡小島按鈕 [{btn}] (信心度: {conf:.4f})，套用向上偏移 {offset_y} 像素點擊島嶼本體。")
                     else:
-                        logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊跳轉。")
+                        logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊按鈕中心座標 ({click_x}, {click_y})。")
                     self.mouse.click(click_x, click_y)
                     clicked_any = True
                     time.sleep(0.03) # 等待跳轉動畫

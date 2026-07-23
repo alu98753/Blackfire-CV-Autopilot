@@ -149,8 +149,10 @@ class BattleHandler(BaseStateHandler):
         if best_match_pos:
             is_dungeon_run = (
                 self.machine.config.get("type") == "dungeon" or
-                getattr(self.machine, "is_in_dungeon", False) or
-                getattr(self.machine, "last_state", None) == self.machine.STATE_DUNGEON_EXPLORING
+                (
+                    getattr(self.machine, "is_in_dungeon", False) and 
+                    getattr(self.machine, "last_state", None) == self.machine.STATE_DUNGEON_EXPLORING
+                )
             )
             if is_dungeon_run:
                 logging.info(f"🏆 戰鬥結束！點擊相似度最高的地下城結算按鈕 [{best_match_temp}]，信心度: {best_match_conf:.4f}")
@@ -159,6 +161,7 @@ class BattleHandler(BaseStateHandler):
                 self.machine.dungeon_defeat_count = 0
             else:
                 logging.info(f"🏆 戰鬥結束！偵測到結算按鈕 [{best_match_temp}] (信心度: {best_match_conf:.4f})，切換至結算狀態。")
+                self.machine.is_in_dungeon = False
                 self.machine.transition_to(self.machine.STATE_RESULT)
             time.sleep(0.15)
             return

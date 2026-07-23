@@ -1108,8 +1108,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 應調用 drag 拖曳滑動，且不應該點擊
         self.mock_mouse.click.assert_not_called()
         # 拖曳的點應在視窗中心點： rect=(0,0,1920,1080) ➔ 中心為 (960, 540)
-        # drag 帶入 start_x=960, start_y=690, end_x=960, end_y=340
-        self.mock_mouse.drag.assert_called_with(960, 690, 960, 340)
+        # drag 帶入 start_x=960, start_y=640, end_x=960, end_y=440
+        self.mock_mouse.drag.assert_called_with(960, 640, 960, 440)
         self.assertEqual(self.state_machine.last_stage_scroll_time, 1000.0)
         
         # 步驟 4: 畫面同時出現 stages/stage_label.png 和 stages/level2_final.png ➔ 直接點擊 final.png

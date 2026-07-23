@@ -67,6 +67,7 @@ class ResultHandler(BaseStateHandler):
                                 logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定地下城 {idx} 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
                                 
                                 self.machine.dungeon_defeat_count = 0
+                                self.machine.is_in_dungeon = False
                                 self.machine.transition_to(self.machine.STATE_NAVIGATING)
                                 time.sleep(0.2)
                                 return True
@@ -125,6 +126,7 @@ class ResultHandler(BaseStateHandler):
                         logging.info(f"⏳ [混合模式] 結算時偵測到可用地下城！各副本冷卻情形: {status_str} | 判定可挑戰: [{avail_str}]")
                     logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
                     self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
+                    self.machine.is_in_dungeon = False
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     time.sleep(0.2)
                     return True
