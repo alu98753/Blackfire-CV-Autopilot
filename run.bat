@@ -31,6 +31,7 @@ echo  1. 貪婪地下城模式 (推薦):  --backend --mode dungeon_slime
 echo  2. 普通關卡模式:           --backend --mode stage
 echo  3. 背包整理模式:           --backend --mode bag_clean
 echo  4. 定時領取體力與鑽石:     --backend --mode collect_only
+echo  5. 查看遊戲理智公約:       顯示防制衝動消費心態指引
 echo ------------------------------------------------------------
 echo 參數說明：
 echo  --mode [名稱]      : 設定運行模式 (dungeon_slime / stage / bag_clean / collect_only)
@@ -42,6 +43,16 @@ echo.
 :: 讓使用者自訂輸入參數
 set "custom_args="
 set /p custom_args="請輸入啟動參數 (直接 Enter 預設為: --backend --mode dungeon_slime): "
+
+:: 如果使用者輸入 5 或 covenant，跳轉至查看公約
+if "%custom_args%"=="5" goto VIEW_COVENANT
+if /i "%custom_args%"=="covenant" goto VIEW_COVENANT
+
+:: 如果使用者輸入 1, 2, 3, 4，則映射為對應參數
+if "%custom_args%"=="1" set custom_args=--backend --mode dungeon_slime
+if "%custom_args%"=="2" set custom_args=--backend --mode stage
+if "%custom_args%"=="3" set custom_args=--backend --mode bag_clean
+if "%custom_args%"=="4" set custom_args=--backend --mode collect_only
 
 :: 如果使用者無輸入，則帶入預設值
 if "%custom_args%"=="" set custom_args=--backend --mode dungeon_slime
@@ -83,6 +94,18 @@ if /i "%retry_choice%"=="q" goto EXIT_BAT
 
 echo.
 echo [*] 重新啟動中...
+cls
+goto MENU_LOOP
+
+:VIEW_COVENANT
+cls
+echo ============================================================
+echo        《黑火遠征》理智掛機與非消費防禦公約 (Gaming Covenant)
+echo ============================================================
+type "%~dp0gaming_covenant.md"
+echo ============================================================
+echo.
+pause
 cls
 goto MENU_LOOP
 
