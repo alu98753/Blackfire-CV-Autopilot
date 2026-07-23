@@ -27,6 +27,7 @@ class BagCleaningHandler(BaseStateHandler):
             pos_text, conf_text = self.matcher.match(screen_img, "common/bag_text.png", threshold=0.70)
             if pos_text:
                 logging.info(f"🎒 背包清理：優先偵測到背包入口文字「物品欄」 [{conf_text:.4f}]，點擊打開背包。")
+                self._save_step_screenshot(screen_img, "1_open")
                 self.mouse.click(rect["left"] + pos_text[0], rect["top"] + pos_text[1] - 45)
                 self.machine.bag_opened_clicked = True
                 time.sleep(0.1)
@@ -53,6 +54,7 @@ class BagCleaningHandler(BaseStateHandler):
                 
                 if r_minus_b > 18.0:
                     logging.info(f"🎒 背包清理：優先使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
+                    self._save_step_screenshot(screen_img, "1_open")
                     self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                     self.machine.bag_opened_clicked = True
                     time.sleep(0.1)
@@ -72,10 +74,11 @@ class BagCleaningHandler(BaseStateHandler):
             logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
             return
 
-                # 1. 優先處理確認與 OK 彈窗 (例如大量分解確認、整理確認等)
+        # 1. 優先處理確認與 OK 彈窗 (例如大量分解確認、整理確認等)
         pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
         if pos_conf:
             logging.info(f"🎒 背包清理：偵測到確認彈窗 [{conf_conf:.4f}]，點擊確認。")
+            self._save_step_screenshot(screen_img, "7_confirm")
             self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
@@ -88,6 +91,7 @@ class BagCleaningHandler(BaseStateHandler):
         pos_ok, conf_ok = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
         if pos_ok:
             logging.info(f"🎒 背包清理：偵測到 OK 彈窗 [{conf_ok:.4f}]，點擊確認。")
+            self._save_step_screenshot(screen_img, "7_ok")
             self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
@@ -105,6 +109,7 @@ class BagCleaningHandler(BaseStateHandler):
                     pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.7)
                     if pos_quit:
                         logging.info(f"🎒 背包清理：已整理完畢，點擊退出按鈕 [{quit_btn}] (信心度: {conf_quit:.4f}) 關閉背包。")
+                        self._save_step_screenshot(screen_img, "9_quit")
                         self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
                         self.machine.need_bag_cleaning = False
                         self.machine.bag_tidied = False
@@ -112,6 +117,7 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_select_all_clicked = False  # 重設全選狀態
                         self.machine.bag_deselected = False # 重設反選狀態
                         self.machine.bag_opened_clicked = False # 重設打開狀態
+                        self.machine.bag_clean_step = 0
                         time.sleep(0.1)
                         
                         # 如果是單獨的背包整理模式，在此完成後直接結束腳本
@@ -133,6 +139,7 @@ class BagCleaningHandler(BaseStateHandler):
                 pos_tidy, conf_tidy = self.matcher.match(screen_img, "common/tidy.png", threshold=0.7)
                 if pos_tidy:
                     logging.info(f"🎒 背包清理：偵測到整理按鈕 [{conf_tidy:.4f}]，點擊整理。")
+                    self._save_step_screenshot(screen_img, "8_tidy")
                     self.mouse.click(rect["left"] + pos_tidy[0], rect["top"] + pos_tidy[1])
                     self.machine.bag_tidied = True
                     time.sleep(0.1)
@@ -146,9 +153,11 @@ class BagCleaningHandler(BaseStateHandler):
                     pos_all, conf_all = self.matcher.match(screen_img, "common/select_all.png", threshold=0.7)
                     if pos_all:
                         logging.info(f"🎒 背包清理：偵測到全選按鈕 [{conf_all:.4f}]，點擊全選。")
+                        self._save_step_screenshot(screen_img, "3_select_all")
                         self.mouse.click(rect["left"] + pos_all[0], rect["top"] + pos_all[1])
                         self.machine.bag_select_all_clicked = True
                         self.machine.bag_deselected = False  # 初始化反選標記
+                        self.machine.bag_deselect_retry_count = 0
                         time.sleep(0.1)
                         return
 
@@ -187,6 +196,7 @@ class BagCleaningHandler(BaseStateHandler):
                     items_found = 0
                     valuable_found = 0
                     target_to_deselect = None
+                    grid_info = []
                     
                     # 6x3 網格掃描
                     for r in range(3):
@@ -216,26 +226,46 @@ class BagCleaningHandler(BaseStateHandler):
                                     check_y = cy - 17
                                     check_zone = screen_img[check_y:check_y+35, check_x:check_x+35]
                                     
-                                    # 判定是否有綠色打勾記號 (使用經過高飽和與高亮度實測調校的純綠篩選條件)
+                                    # 判定是否有綠色打勾記號 (調鬆 HSV 範圍與像素數量要求，門檻降為 12 像素)
                                     hsv_check = cv2.cvtColor(check_zone, cv2.COLOR_BGR2HSV)
-                                    lower_green = np.array([55, 120, 100])
+                                    lower_green = np.array([45, 80, 80])
                                     upper_green = np.array([95, 255, 255])
                                     mask_green = cv2.inRange(hsv_check, lower_green, upper_green)
-                                    has_check_mark = np.sum(mask_green > 0) > 30  # 大於 30 個像素點代表目前有綠色打勾記號
+                                    has_check_mark = np.sum(mask_green > 0) > 12  # 大於 12 個像素點代表目前有綠色打勾記號
+                                    
+                                    grid_info.append((r, c, cx, cy, color, is_valuable, has_check_mark))
                                     
                                     # 只有當它是貴重裝備，且目前是勾選狀態時，我們才進行反選點擊
                                     if is_valuable and has_check_mark:
                                         if target_to_deselect is None:
                                             target_to_deselect = (rect["left"] + cx, rect["top"] + cy, color, r, c)
-                        # 我們在同一個 handle 中只取第一個貴重物品點選，以單步反選防吞指令
-                        # 如果已經找到一個貴重物品需要取消，直接 break 退出網格掃描
-                        if target_to_deselect:
-                            break
-                    
+
+                    # 繪製全網格 Debug 可視化截圖 (debug_bag_{step}_grid_scan.png)
+                    self._draw_bag_grid_debug(screen_img, btn_cx, btn_cy, grid_info)
+
                     # 如果有發現貴重物品，進行單步點擊取消勾選，並直接 return 等待下一影格重新確認
                     if target_to_deselect:
+                        retry_count = getattr(self.machine, "bag_deselect_retry_count", 0) + 1
+                        self.machine.bag_deselect_retry_count = retry_count
+                        
+                        # 極致安全熔斷保護：若反選同一個/多個貴重裝備重試超過 5 次仍無法取消勾選，強制中斷分解！
+                        if retry_count > 5:
+                            logging.error("🚨 [安全熔斷] 背包清理：貴重裝備反選重試達上限！為防誤刪貴重物品，強行取消分解並退出背包！")
+                            pos_quit = None
+                            if os.path.exists(os.path.join("templates", "common/quit.png")):
+                                pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
+                            click_x = rect["left"] + (pos_quit[0] if pos_quit else btn_cx - 738 + 859)
+                            click_y = rect["top"] + (pos_quit[1] if pos_quit else btn_cy - 590 + 38)
+                            self._save_step_screenshot(screen_img, "failsafe_abort_quit")
+                            self.mouse.click(click_x, click_y)
+                            self.machine.bag_deselected = True
+                            self.machine.bag_disassembled = True
+                            time.sleep(0.1)
+                            return
+
                         click_x, click_y, color, r, c = target_to_deselect
-                        logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y})")
+                        logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y}) (重試: {retry_count}/5)")
+                        self._save_step_screenshot(screen_img, f"5_deselect_r{r}_c{c}")
                         self.mouse.click(click_x, click_y)
                         time.sleep(0.25)  # 提供充足的反選彈出/重繪時間
                         return
@@ -252,6 +282,7 @@ class BagCleaningHandler(BaseStateHandler):
                         click_y = rect["top"] + (pos_quit[1] if pos_quit else btn_cy - 590 + 38)
                         
                         logging.info(f"🎒 背包清理：點擊關閉按鈕 ({click_x}, {click_y}) 退出大量分解。")
+                        self._save_step_screenshot(screen_img, "quit_all_valuable")
                         self.mouse.click(click_x, click_y)
                         self.machine.bag_deselected = True
                         self.machine.bag_disassembled = True
@@ -275,6 +306,7 @@ class BagCleaningHandler(BaseStateHandler):
                     pos_dis, conf_dis = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7, brightness_threshold=0.70)
                     if pos_dis:
                         logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
+                        self._save_step_screenshot(screen_img, "6_disassemble_click")
                         self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
                         time.sleep(0.1)
                         return
@@ -284,8 +316,60 @@ class BagCleaningHandler(BaseStateHandler):
                 pos_mass, conf_mass = self.matcher.match(screen_img, "common/Backpack_Disassembly.png", threshold=0.7, brightness_threshold=0.70)
                 if pos_mass:
                     logging.info(f"🎒 背包清理：偵測到大量分解按鈕 [{conf_mass:.4f}]，點擊進入大量分解。")
+                    self._save_step_screenshot(screen_img, "2_disassembly_enter")
                     self.mouse.click(rect["left"] + pos_mass[0], rect["top"] + pos_mass[1])
                     time.sleep(0.1)
                     return
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
+
+    def _save_step_screenshot(self, screen_img, action_name):
+        """
+        全步驟數字遞增截圖保存
+        """
+        step = getattr(self.machine, "bag_clean_step", 0) + 1
+        self.machine.bag_clean_step = step
+        filename = f"debug_bag_{step}_{action_name}.png"
+        try:
+            cv2.imwrite(filename, screen_img)
+            logging.info(f"📸 [步驟截圖] 已寫入: {filename}")
+        except Exception as e:
+            logging.warning(f"⚠️ [步驟截圖] 寫入失敗 ({filename}): {e}")
+
+    def _draw_bag_grid_debug(self, screen_img, btn_cx, btn_cy, grid_info):
+        """
+        網格可視化 Debug 截圖繪製：為 18 個格子標註顏色框、品階文字與打勾狀態
+        """
+        debug_img = screen_img.copy()
+        color_bgr_map = {
+            "purple": (255, 0, 255),
+            "blue": (255, 255, 0),
+            "green": (0, 255, 0),
+            "red": (0, 0, 255),
+            "orange_yellow": (0, 165, 255),
+            "gray_or_empty": (128, 128, 128)
+        }
+        
+        for item in grid_info:
+            r, c, cx, cy, color, is_valuable, has_check = item
+            box_x1 = max(0, cx - 60)
+            box_y1 = max(0, cy - 60)
+            box_x2 = min(screen_img.shape[1], cx + 60)
+            box_y2 = min(screen_img.shape[0], cy + 60)
+            
+            box_color = color_bgr_map.get(color, (255, 255, 255))
+            cv2.rectangle(debug_img, (box_x1, box_y1), (box_x2, box_y2), box_color, 2)
+            
+            check_str = "[✓]" if has_check else "[X]"
+            val_str = "VAL" if is_valuable else "COM"
+            label = f"{color[:4]} {val_str} {check_str}"
+            cv2.putText(debug_img, label, (box_x1 + 5, box_y1 + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+            
+        step = getattr(self.machine, "bag_clean_step", 0) + 1
+        self.machine.bag_clean_step = step
+        filename = f"debug_bag_{step}_grid_scan.png"
+        try:
+            cv2.imwrite(filename, debug_img)
+            logging.info(f"📸 [網格 Debug 可視化圖] 已寫入: {filename}")
+        except Exception as e:
+            logging.warning(f"⚠️ [網格 Debug 截圖] 寫入失敗 ({filename}): {e}")

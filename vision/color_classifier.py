@@ -71,13 +71,13 @@ class GearColorClassifier:
                 if s >= 50 and v >= 20:
                     counts["green"] += 1
                     
-        # 分顏色計數門檻，防禦內圍雜色與背景溢出 (橙色200，紅色200，其餘400)
+        # 分顏色計數門檻，調鬆以精準捕獲暗色或漸變邊框 (橙/紅 100，綠/藍/紫 150)
         color_thresholds = {
-            "red": 200,
-            "orange_yellow": 200,
-            "green": 400,
-            "blue": 400,
-            "purple": 400
+            "red": 100,
+            "orange_yellow": 100,
+            "green": 150,
+            "blue": 150,
+            "purple": 150
         }
         
         max_color = "gray_or_empty"
