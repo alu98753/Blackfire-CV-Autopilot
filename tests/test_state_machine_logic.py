@@ -1920,6 +1920,31 @@ class TestStateMachineLogic(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.state_machine.has_available_dungeon()
 
+    def test_get_dungeon_cooldown_status(self):
+        """
+        測試 get_dungeon_cooldown_status 能正確格式化顯示各地下城冷卻狀態與可挑戰清單。
+        """
+        now = time.time()
+        self.state_machine.config = {
+            "type": "mix",
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [0, 1, 2, 3, 4],
+            "dungeon_names": ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+        }
+        self.state_machine.dungeon_cooldowns = {
+            0: 0.0,
+            1: now + 300.0,
+            2: float('inf'),
+            3: 0.0,
+            4: now + 600.0
+        }
+        status_str, avail = self.state_machine.get_dungeon_cooldown_status()
+        self.assertIn("[黏糊糊的石窟]: 就緒 (可打)", status_str)
+        self.assertIn("[幽影地穴]: 冷卻中", status_str)
+        self.assertIn("[森林迷宮]: 永久不可打", status_str)
+        self.assertIn("[神秘遺跡]: 就緒 (可打)", status_str)
+        self.assertEqual(avail, ["黏糊糊的石窟", "神秘遺跡"])
+
 if __name__ == "__main__":
     unittest.main()
 

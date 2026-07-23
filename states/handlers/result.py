@@ -119,7 +119,11 @@ class ResultHandler(BaseStateHandler):
             if os.path.exists(os.path.join("templates", "exit_battle.png")):
                 pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.9)
                 if pos_exit:
-                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取任務。")
+                    if self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon():
+                        status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                        avail_str = ", ".join(avail_names) if avail_names else "無"
+                        logging.info(f"⏳ [混合模式] 結算時偵測到可用地下城！各副本冷卻情形: {status_str} | 判定可挑戰: [{avail_str}]")
+                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
                     self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     time.sleep(0.2)

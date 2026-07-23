@@ -433,6 +433,61 @@ class GameStateMachine:
             
             return False
 
+    def get_dungeon_cooldown_status(self):
+        """
+        列出當前所有允許地下城的冷卻情形，以及判定可挑戰的地下城列表。
+        :return: (status_summary_str, available_dungeon_names_list)
+        """
+        if not self.config:
+            return "未初始化 config", []
+
+        from utils.time_parser import format_seconds_to_readable
+        
+        dungeon_names = self.config.get("dungeon_names", ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"])
+        allowed_indices = self.config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
+        now = time.time()
+
+        is_greedy = self.config.get("greedy_dungeon", False)
+        if is_greedy:
+            target_indices = allowed_indices
+        else:
+            entry_templates = [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/Ice_entry.png"
+            ]
+            nav_path = self.config.get("navigation_path", [])
+            target_idx = None
+            for idx, temp_name in enumerate(entry_templates):
+                if temp_name in nav_path:
+                    target_idx = idx
+                    break
+            target_indices = [target_idx] if target_idx is not None else []
+
+        cd_details = []
+        available_names = []
+
+        for idx in allowed_indices:
+            name = dungeon_names[idx] if idx < len(dungeon_names) else f"Dungeon #{idx}"
+            cd_until = self.dungeon_cooldowns.get(idx, 0.0)
+            rem = cd_until - now
+            if rem > 0:
+                if cd_until == float('inf'):
+                    cd_details.append(f"[{name}]: 永久不可打")
+                else:
+                    cd_str = format_seconds_to_readable(rem)
+                    cd_details.append(f"[{name}]: 冷卻中 ({cd_str})")
+            else:
+                if idx in target_indices:
+                    cd_details.append(f"[{name}]: 就緒 (可打)")
+                    available_names.append(name)
+                else:
+                    cd_details.append(f"[{name}]: 就緒 (未啟用)")
+
+        return ", ".join(cd_details), available_names
+
     def check_collection_trigger(self, screen_img):
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。

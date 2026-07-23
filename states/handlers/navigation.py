@@ -572,10 +572,12 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
+                status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                avail_str = ", ".join(avail_names) if avail_names else "無"
                 # 若地下城有空位且頁籤尚未開啟，點擊切換至地下城頁籤
                 pos_dg, conf_dg = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
                 if pos_dg and not dungeon_select_open:
-                    logging.info(f"🧭 混合模式：地下城已就緒，在活動大廳偵測到 [dungeons/dungeon.png] ({conf_dg:.4f})，點擊切換至地下城頁籤！")
+                    logging.info(f"🧭 混合模式：地下城已就緒 (冷卻情形: {status_str} | 判定可挑戰: [{avail_str}])，在活動大廳點擊 [dungeons/dungeon.png] ({conf_dg:.4f}) 切換至地下城頁籤！")
                     self.mouse.click(rect["left"] + pos_dg[0], rect["top"] + pos_dg[1])
                     time.sleep(0.3)
                     return
