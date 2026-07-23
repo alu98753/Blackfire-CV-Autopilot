@@ -514,10 +514,19 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
-                # 優先度 2：若在活動大廳已看見 dungeons/dungeon.png 且尚未處於地下城頁面，直接點擊進入！
+                # 判斷地下城頁籤是否已開啟 (利用 dungeons/dungeon_after.png 對比)
+                dungeon_select_open = False
+                if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
+                    pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.58)
+                    pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.58)
+                    if pos_d_after:
+                        if (conf_d_before > 0.58 or conf_d_after > 0.58) and (not pos_d_before or conf_d_after > conf_d_before - 0.05):
+                            dungeon_select_open = True
+
+                # 優先度 2：若在活動大廳且地下城頁籤尚未開啟 (not dungeon_select_open)，直接點擊進入！
                 pos_dg, conf_dg = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
-                if pos_dg and not is_dungeon_page:
-                    logging.info(f"🧭 混合模式：地下城已就緒，在活動大廳偵測到 [dungeons/dungeon.png] ({conf_dg:.4f})，直接點擊進入地下城！")
+                if pos_dg and not dungeon_select_open:
+                    logging.info(f"🧭 混合模式：地下城已就緒，在活動大廳偵測到 [dungeons/dungeon.png] ({conf_dg:.4f})，點擊切換至地下城頁籤！")
                     self.mouse.click(rect["left"] + pos_dg[0], rect["top"] + pos_dg[1])
                     time.sleep(0.3)
                     return
@@ -646,10 +655,13 @@ class NavigationHandler(BaseStateHandler):
             in_detail_screen = True
 
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單 (只在尚未進入細節畫面時執行)
-        if self.machine.config.get("type") == "stage" and stage_select_open and not in_detail_screen:
-            if len(nav_path) > 3:
-                target_level_btn = nav_path[3]
-                if os.path.exists(os.path.join("templates", target_level_btn)):
+        if self.machine.config.get("type") in ["stage", "mix"] and stage_select_open and not in_detail_screen:
+            target_level_btn = None
+            for btn in nav_path:
+                if "level" in btn and "final" not in btn and "entry" not in btn:
+                    target_level_btn = btn
+                    break
+            if target_level_btn and os.path.exists(os.path.join("templates", target_level_btn)):
                     # === 確保地圖滾動完全靜止後才開始進行圖像辨識，避免在動畫中進行錯誤判定 ===
                     # 在單元測試中，我們允許繞過此時間限制，以便連續執行同步模擬
                     import sys
