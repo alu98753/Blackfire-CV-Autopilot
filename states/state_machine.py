@@ -392,7 +392,12 @@ class GameStateMachine:
         """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
         if not self.config:
             return False
-        
+
+        # 如果先前已確認所有地下城皆在冷卻中，且尚未超過暫存冷卻時間，直接傳回 False
+        all_cd_until = getattr(self, "all_dungeons_on_cooldown_until", 0.0)
+        if time.time() < all_cd_until:
+            return False
+
         allowed_indices = self.config.get("greedy_allowed_indices")
         if allowed_indices is None:
             raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")

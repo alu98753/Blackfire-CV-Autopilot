@@ -15,12 +15,39 @@ class NavigationHandler(BaseStateHandler):
 
     def _switch_to_stage_or_back(self, screen_img, rect, reason):
         """
-        在混合模式下當地下城不可用時，優先點擊同頁面的 common/select_stage.png 切換至普通關卡；
-        若未比對到 select_stage，才退而求其次點擊 goback_town.png 返回大廳。
+        在混合模式下當地下城不可用時，設定短暫冷卻防呆標記，
+        列出所有允許地下城的剩餘冷卻時間日誌，並優先點擊同頁面的 common/select_stage.png 切換至普通關卡。
         """
-        logging.info(f"⏳ 混合模式：{reason}，直接切換至普通關卡...")
-        pos_st, _ = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
+        now = time.time()
+        dungeon_names = self.machine.config.get(
+            "dungeon_names",
+            ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+        )
+        allowed_indices = self.machine.config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
+        
+        cd_details = []
+        min_remaining = 180.0
+        for idx in allowed_indices:
+            cd_until = self.machine.dungeon_cooldowns.get(idx, 0.0)
+            rem = cd_until - now
+            if rem > 0:
+                if cd_until == float('inf'):
+                    cd_details.append(f"[{dungeon_names[idx]}]: 永久不可打")
+                else:
+                    cd_str = format_seconds_to_readable(rem)
+                    cd_details.append(f"[{dungeon_names[idx]}]: 冷卻中 ({cd_str})")
+                    if rem < min_remaining:
+                        min_remaining = rem
+            else:
+                cd_details.append(f"[{dungeon_names[idx]}]: 就緒")
+
+        cd_summary = ", ".join(cd_details)
+        self.machine.all_dungeons_on_cooldown_until = now + max(30.0, min_remaining)
+        logging.info(f"⏳ 混合模式：{reason} ➔ 各地下城冷卻狀態: {cd_summary}。設定冷卻緩衝 {int(max(30.0, min_remaining))} 秒並切換至普通關卡！")
+
+        pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
         if pos_st:
+            logging.info(f"👉 點擊 [common/select_stage.png] ({conf_st:.4f}) 切換至普通關卡頁籤！")
             self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
             time.sleep(0.3)
             return
@@ -384,7 +411,11 @@ class NavigationHandler(BaseStateHandler):
                         self.machine.fallback_swipe_count = fallback_count + 1
                         time.sleep(1.2)
                     else:
-                        logging.warning("⚠️ 警告：已執行防呆拉回滑動但仍未發現解鎖卡片，判定目前無可打關卡，嘗試返回大廳...")
+                        logging.warning("⚠️ 警告：已執行防呆拉回滑動但仍未發現解鎖卡片，判定目前無可打關卡...")
+                        if self.machine.config.get("type") == "mix":
+                            self.machine.fallback_swipe_count = 0
+                            self._switch_to_stage_or_back(screen_img, rect, "地下城頁面經防呆滑動後仍無可打關卡")
+                            return
                         pos_back = None
                         if os.path.exists(os.path.join("templates", "goback_town.png")):
                             pos_back, conf_back = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
@@ -494,36 +525,70 @@ class NavigationHandler(BaseStateHandler):
                     # 不在畫面上，進行左右滑動尋找目標地下城
                     any_visible_idx = list(visible_dungeons.keys())[0]
                     if any_visible_idx < target_idx:
-                        # 畫面上的地下城 index 小於目標，說明目標在右側，我們需要向左滑動（拖曳由右至左）
                         logging.info(f"🧭 貪婪地下城：目標 [{dungeon_names[target_idx]}] 在右側，執行較溫和的向左滑動以翻頁...")
                         start_x = rect["left"] + int(rect["width"] * 0.6)
                         end_x = rect["left"] + int(rect["width"] * 0.4)
                         y_pos = rect["top"] + int(rect["height"] * 0.5)
                         self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
                     else:
-                        # 畫面上的地下城 index 大於目標，說明目標在左側，我們需要向右滑動（拖曳由左至右）
                         logging.info(f"🧭 貪婪地下城：目標 [{dungeon_names[target_idx]}] 在左側，執行較溫和的向右滑動以翻頁...")
                         start_x = rect["left"] + int(rect["width"] * 0.4)
                         end_x = rect["left"] + int(rect["width"] * 0.6)
                         y_pos = rect["top"] + int(rect["height"] * 0.5)
                         self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
                     self.machine.last_dungeon_scroll_time = time.time()
-                    time.sleep(1.2)  # 等待滑動動畫
+                    time.sleep(1.2)
                     return
+
+        # 頁籤開啟狀態統一對比檢測 (比較 select_stage_after.png 與 dungeon_after.png)
+        conf_stage_after = 0.0
+        if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
+            _, c_sa = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.70)
+            conf_stage_after = c_sa or 0.0
+
+        conf_dungeon_after = 0.0
+        if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
+            _, c_da = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.70)
+            conf_dungeon_after = c_da or 0.0
+
+        stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
+        dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
+
+        if not stage_select_open and not dungeon_select_open:
+            stage_templates = [
+                "stages/level1_sky_plains.png",
+                "stages/level2_Barren_Rocky_Ground.png",
+                "stages/level2_barren_rocks.png",
+                "stages/level3_ancient_forest.png",
+                "stages/level4_desert_ruins.png",
+                "stages/level5_gloomy_swamp.png"
+            ]
+            for st_temp in stage_templates:
+                if os.path.exists(os.path.join("templates", st_temp)):
+                    pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.60)
+                    if pos:
+                        stage_select_open = True
+                        break
+
+        if not stage_select_open and not dungeon_select_open:
+            dungeon_templates = [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/Ice_entry.png"
+            ]
+            for dg_temp in dungeon_templates:
+                if os.path.exists(os.path.join("templates", dg_temp)):
+                    pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.60)
+                    if pos:
+                        dungeon_select_open = True
+                        break
 
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
-                # 判斷地下城頁籤是否已開啟 (利用 dungeons/dungeon_after.png 對比)
-                dungeon_select_open = False
-                if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-                    pos_d_before, conf_d_before = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.58)
-                    pos_d_after, conf_d_after = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.58)
-                    if pos_d_after:
-                        if (conf_d_before > 0.58 or conf_d_after > 0.58) and (not pos_d_before or conf_d_after > conf_d_before - 0.05):
-                            dungeon_select_open = True
-
-                # 優先度 2：若在活動大廳且地下城頁籤尚未開啟 (not dungeon_select_open)，直接點擊進入！
+                # 若地下城有空位且頁籤尚未開啟，點擊切換至地下城頁籤
                 pos_dg, conf_dg = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
                 if pos_dg and not dungeon_select_open:
                     logging.info(f"🧭 混合模式：地下城已就緒，在活動大廳偵測到 [dungeons/dungeon.png] ({conf_dg:.4f})，點擊切換至地下城頁籤！")
@@ -532,16 +597,7 @@ class NavigationHandler(BaseStateHandler):
                     return
                 nav_path = ["common/door.png", "dungeons/dungeon.png"]
             else:
-                # 判斷普通關卡頁籤是否已開啟 (利用 select_stage_after.png 對比)
-                stage_select_open = False
-                if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-                    pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.58)
-                    pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.58)
-                    if pos_after:
-                        if (conf_before > 0.58 or conf_after > 0.58) and (not pos_before or conf_after > conf_before - 0.05):
-                            stage_select_open = True
-
-                # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤 (not stage_select_open)，點擊 select_stage.png 切換！
+                # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤，點擊 select_stage.png 切換！
                 pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
                 if pos_st and not stage_select_open:
                     logging.info(f"🧭 混合模式：地下城全冷卻，在活動大廳偵測到 [common/select_stage.png] ({conf_st:.4f})，點擊切換至普通關卡頁籤！")
@@ -562,7 +618,6 @@ class NavigationHandler(BaseStateHandler):
             nav_path = self.machine.config.get("navigation_path", [])
 
         if not nav_path:
-            # 如果沒有設定尋路路徑 (例如普通關卡)，直接進入大廳狀態
             self.machine.transition_to(self.machine.STATE_LOBBY)
             return
 
@@ -589,14 +644,14 @@ class NavigationHandler(BaseStateHandler):
 
         # 額外比對關卡島嶼及標籤 (OR-Check)，若比對到任一關卡特徵，判定關卡選擇介面已開啟
         if not stage_select_open:
-            stage_templates = [
+            stage_templates = self.machine.config.get("stage_templates", [
                 "stages/level1_sky_plains.png",
                 "stages/level2_Barren_Rocky_Ground.png",
                 "stages/level2_barren_rocks.png",
                 "stages/level3_ancient_forest.png",
                 "stages/level4_desert_ruins.png",
                 "stages/level5_gloomy_swamp.png"
-            ]
+            ])
             for st_temp in stage_templates:
                 if os.path.exists(os.path.join("templates", st_temp)):
                     pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.60)
@@ -616,13 +671,13 @@ class NavigationHandler(BaseStateHandler):
 
         # 額外比對地下城門扉入口 (OR-Check)，若比對到任一地下城入口特徵，判定地下城選擇介面已開啟
         if not dungeon_select_open:
-            dungeon_templates = [
+            dungeon_templates = self.machine.config.get("dungeon_entries", [
                 "dungeons/Slime_entry.png",
                 "dungeons/Ghost_entry.png",
                 "dungeons/Forest_entry.png",
                 "dungeons/Ruins_entry.png",
                 "dungeons/Ice_entry.png"
-            ]
+            ])
             for dg_temp in dungeon_templates:
                 if os.path.exists(os.path.join("templates", dg_temp)):
                     pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.60)
