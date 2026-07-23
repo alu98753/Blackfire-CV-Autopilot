@@ -392,14 +392,39 @@ class GameStateMachine:
         """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
         if not self.config:
             return False
+        
         allowed_indices = self.config.get("greedy_allowed_indices")
         if allowed_indices is None:
             raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
+
         now = time.time()
-        for idx in allowed_indices:
-            if now >= self.dungeon_cooldowns.get(idx, 0.0):
-                return True
-        return False
+        is_greedy = self.config.get("greedy_dungeon", False)
+        
+        if is_greedy:
+            for idx in allowed_indices:
+                if now >= self.dungeon_cooldowns.get(idx, 0.0):
+                    return True
+            return False
+        else:
+            # 非貪婪模式 (指定特定副本)：只檢查 navigation_path 中指定的副本索引
+            entry_templates = [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/Ice_entry.png"
+            ]
+            nav_path = self.config.get("navigation_path", [])
+            target_idx = None
+            for idx, temp_name in enumerate(entry_templates):
+                if temp_name in nav_path:
+                    target_idx = idx
+                    break
+            
+            if target_idx is not None:
+                return now >= self.dungeon_cooldowns.get(target_idx, 0.0)
+            
+            return False
 
     def check_collection_trigger(self, screen_img):
         """
