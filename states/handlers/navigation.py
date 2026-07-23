@@ -731,15 +731,17 @@ class NavigationHandler(BaseStateHandler):
             if in_detail_screen and "level" in btn and "final" not in btn and "entry" not in btn:
                 continue
 
-            # 針對尋路按鈕，小關卡/魔王關目標按鈕 (如 first_stage.png, levelX_final.png, level6_middle.png, six_stage.png) 門檻單獨調高至 0.90
             is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
             if is_sub_stage_target:
                 thresh = 0.90
+                b_thresh = 0.0
             elif "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
                 thresh = 0.60
+                b_thresh = 0.70
             else:
                 thresh = 0.80
-            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
+                b_thresh = 0.70
+            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
             if pos:
                 if btn == "stages/stage_label.png":
                     # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
