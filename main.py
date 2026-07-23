@@ -193,6 +193,103 @@ def setup_stage_config(config, prompt_prefix=""):
             fight_entrance
         ]
 
+def setup_dungeon_config(config, args):
+    print("請選擇要探索的地下城：")
+    print(" 1) 黏糊糊的石窟 (Slime_entry)")
+    print(" 2) 幽影地穴 (Ghost_entry)")
+    print(" 3) 森林迷宮 (Forest_entry)")
+    print(" 4) 神秘遺跡 (Ruins_entry)")
+    print(" 5) 冰雪洞窟 (Ice_entry)")
+    print(" 6) 自動貪婪挑選 (Greedy Select) - 預設")
+    try:
+        choice = input("請輸入地下城數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
+        if not choice:
+            choice = "6"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        choice = "6"
+
+    dungeon_map = {
+        "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
+        "2": ("dungeons/Ghost_entry.png", "幽影地穴", False),
+        "3": ("dungeons/Forest_entry.png", "森林迷宮", False),
+        "4": ("dungeons/Ruins_entry.png", "神秘遺跡", False),
+        "5": ("dungeons/Ice_entry.png", "冰雪洞窟", False),
+        "6": (None, "自動貪婪挑選", True)
+    }
+    if choice not in dungeon_map:
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [自動貪婪挑選]...")
+        choice = "6"
+
+    entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
+    config["name"] = f"地下城 - {dungeon_name}"
+    config["greedy_dungeon"] = is_greedy
+    if is_greedy:
+        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+        
+        # 自訂貪婪挑選的關卡篩選
+        print("\n你已選擇自動貪婪挑選。請輸入允許打的地下城編號清單（如 135 代表 1、3、5 關；直接 Enter 鍵預設為全部打）：")
+        print(" 1) 黏糊糊的石窟 (Slime)")
+        print(" 2) 幽影地穴 (Ghost)")
+        print(" 3) 森林迷宮 (Forest)")
+        print(" 4) 神秘遺跡 (Ruins)")
+        print(" 5) 冰雪洞窟 (Ice)")
+        try:
+            allowed_input = input("👉 請輸入 [1-5] (直接 Enter 預設全部打): ").strip()
+            if not allowed_input:
+                allowed_indices = [0, 1, 2, 3, 4]
+            else:
+                allowed_indices = []
+                for char in allowed_input:
+                    if char in "12345":
+                        idx = int(char) - 1
+                        if idx not in allowed_indices:
+                            allowed_indices.append(idx)
+                if not allowed_indices:
+                    allowed_indices = [0, 1, 2, 3, 4]
+        except KeyboardInterrupt:
+            print("\n[!] 取消啟動。")
+            sys.exit(0)
+        except Exception:
+            allowed_indices = [0, 1, 2, 3, 4]
+            
+        config["greedy_allowed_indices"] = allowed_indices
+        allowed_names = [dungeon_map[str(idx+1)][1] for idx in allowed_indices]
+        print(f"[*] 貪婪模式允許關卡：{', '.join(allowed_names)}")
+    else:
+        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_btn]
+
+    # 選擇地下城祝福模式
+    bless_mode = args.blessmode
+    if not bless_mode:
+        print("\n請選擇地下城祝福模式：")
+        print(" 1) 戰鬥/傷害祝福 (Combat) - 預設")
+        print(" 2) 生命祝福 (Life)")
+        print(" 3) 經驗祝福 (Exp)")
+        try:
+            bless_choice = input("請輸入數字 [1-3] (直接 Enter 鍵預設為 1): ").strip()
+            if not bless_choice:
+                bless_choice = "1"
+        except KeyboardInterrupt:
+            print("\n[!] 取消啟動。")
+            sys.exit(0)
+        except Exception:
+            bless_choice = "1"
+
+        bless_map = {
+            "1": "combat",
+            "2": "life",
+            "3": "exp"
+        }
+        if bless_choice not in bless_map:
+            print(f"[!] 無效選擇 '{bless_choice}'，已自動使用預設的 [1: 戰鬥/傷害祝福]...")
+            config["bless_mode"] = "combat"
+        else:
+            config["bless_mode"] = bless_map[bless_choice]
+        print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
+
 def main():
     # 建立 ArgumentParser 物件
     is_gui_running = False
@@ -221,106 +318,13 @@ def main():
     if args.mode == "stage":
         setup_stage_config(config)
 
-    elif args.mode in ["dungeon", "mix"]:
-        print("請選擇要探索的地下城：")
-        print(" 1) 黏糊糊的石窟 (Slime_entry)")
-        print(" 2) 幽影地穴 (Ghost_entry)")
-        print(" 3) 森林迷宮 (Forest_entry)")
-        print(" 4) 神秘遺跡 (Ruins_entry)")
-        print(" 5) 冰雪洞窟 (Ice_entry)")
-        print(" 6) 自動貪婪挑選 (Greedy Select) - 預設")
-        try:
-            choice = input("請輸入地下城數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
-            if not choice:
-                choice = "6"
-        except KeyboardInterrupt:
-            print("\n[!] 取消啟動。")
-            sys.exit(0)
-        except Exception:
-            choice = "6"
+    elif args.mode == "dungeon":
+        setup_dungeon_config(config, args)
 
-        dungeon_map = {
-            "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
-            "2": ("dungeons/Ghost_entry.png", "幽影地穴", False),
-            "3": ("dungeons/Forest_entry.png", "森林迷宮", False),
-            "4": ("dungeons/Ruins_entry.png", "神秘遺跡", False),
-            "5": ("dungeons/Ice_entry.png", "冰雪洞窟", False),
-            "6": (None, "自動貪婪挑選", True)
-        }
-        if choice not in dungeon_map:
-            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [自動貪婪挑選]...")
-            choice = "6"
-
-        entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
-        config["name"] = f"地下城 - {dungeon_name}"
-        config["greedy_dungeon"] = is_greedy
-        if is_greedy:
-            config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
-            
-            # 自訂貪婪挑選的關卡篩選
-            print("\n你已選擇自動貪婪挑選。請輸入允許打的地下城編號清單（如 135 代表 1、3、5 關；直接 Enter 鍵預設為全部打）：")
-            print(" 1) 黏糊糊的石窟 (Slime)")
-            print(" 2) 幽影地穴 (Ghost)")
-            print(" 3) 森林迷宮 (Forest)")
-            print(" 4) 神秘遺跡 (Ruins)")
-            print(" 5) 冰雪洞窟 (Ice)")
-            try:
-                allowed_input = input("👉 請輸入 [1-5] (直接 Enter 預設全部打): ").strip()
-                if not allowed_input:
-                    allowed_indices = [0, 1, 2, 3, 4]
-                else:
-                    allowed_indices = []
-                    for char in allowed_input:
-                        if char in "12345":
-                            idx = int(char) - 1
-                            if idx not in allowed_indices:
-                                allowed_indices.append(idx)
-                    if not allowed_indices:
-                        allowed_indices = [0, 1, 2, 3, 4]
-            except KeyboardInterrupt:
-                print("\n[!] 取消啟動。")
-                sys.exit(0)
-            except Exception:
-                allowed_indices = [0, 1, 2, 3, 4]
-                
-            config["greedy_allowed_indices"] = allowed_indices
-            allowed_names = [dungeon_map[str(idx+1)][1] for idx in allowed_indices]
-            print(f"[*] 貪婪模式允許關卡：{', '.join(allowed_names)}")
-        else:
-            config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_btn]
-
-        # 選擇地下城祝福模式
-        bless_mode = args.blessmode
-        if not bless_mode:
-            print("\n請選擇地下城祝福模式：")
-            print(" 1) 戰鬥/傷害祝福 (Combat) - 預設")
-            print(" 2) 生命祝福 (Life)")
-            print(" 3) 經驗祝福 (Exp)")
-            try:
-                bless_choice = input("請輸入數字 [1-3] (直接 Enter 鍵預設為 1): ").strip()
-                if not bless_choice:
-                    bless_choice = "1"
-            except KeyboardInterrupt:
-                print("\n[!] 取消啟動。")
-                sys.exit(0)
-            except Exception:
-                bless_choice = "1"
-
-            bless_map = {
-                "1": "combat",
-                "2": "life",
-                "3": "exp"
-            }
-            if bless_choice not in bless_map:
-                print(f"[!] 無效選擇 '{bless_choice}'，已自動使用預設的 [1: 戰鬥/傷害祝福]...")
-                config["bless_mode"] = "combat"
-            else:
-                config["bless_mode"] = bless_map[bless_choice]
-            print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
-
-        if args.mode == "mix":
-            setup_stage_config(config, prompt_prefix="[地下城冷卻退守] ")
-            print(f"[*] 地下城冷卻時退守普通關卡目標：{config['stage_name']} ({config['stage_target']})")
+    elif args.mode == "mix":
+        setup_dungeon_config(config, args)
+        setup_stage_config(config, prompt_prefix="[地下城冷卻退守] ")
+        print(f"[*] 地下城冷卻時退守普通關卡目標：{config['stage_name']} ({config['stage_target']})")
 
     if args.mode == "collect_only":
         config["keep_colors"] = []
