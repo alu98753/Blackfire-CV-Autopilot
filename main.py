@@ -303,7 +303,7 @@ def setup_mode_config(args):
     return config
 
 def setup_equipment_config(config):
-    if config["type"] == "bag_clean":
+    if config["type"] in ["bag_clean", "collect_only"]:
         config["keep_colors"] = []
         config["disassemble_colors"] = []
         return
@@ -402,6 +402,7 @@ def init_state_machine_system(args, config):
             break
 
     if enable_bread:
+        # 額外檢查收集按鈕，collect.png 或 bread_collection.png 必須至少存在一個
         has_collect = os.path.exists(os.path.join("templates", "common/collect.png")) or \
                       os.path.exists(os.path.join("templates", "common/bread_collection.png"))
         if not has_collect:
@@ -422,6 +423,7 @@ def init_state_machine_system(args, config):
     # 初始化狀態機
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
     state_machine.backend_mode = args.backend
+    # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
     mouse.state_machine = state_machine
     state_machine.config = config
 
@@ -451,6 +453,7 @@ def run_main_loop(state_machine, interval):
                 dx = abs(cur_pos[0] - state_machine.prev_mouse_pos[0])
                 dy = abs(cur_pos[1] - state_machine.prev_mouse_pos[1])
                 
+                # 若滑鼠偏移大於 5 像素且腳本在 1.2 秒內無動作，視為手動介入
                 if dx > 5 or dy > 5:
                     is_inside = True
                     if getattr(state_machine, "backend_mode", False):
@@ -476,7 +479,7 @@ def run_main_loop(state_machine, interval):
                 if time.time() - state_machine.last_user_operation_time > 3.0:
                     logging.info(f"🟢 偵測到使用者已停止手動操作達 3 秒，恢復自動掛機。鎖定狀態: [{state_machine.current_state}]。")
                     state_machine.user_operating = False
-                    state_machine.prev_mouse_pos = pyautogui.position()
+                    state_machine.prev_mouse_pos = pyautogui.position() # 防止瞬間重新觸發
                 else:
                     time.sleep(0.05)
                     continue

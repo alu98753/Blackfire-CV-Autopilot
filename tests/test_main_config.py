@@ -70,5 +70,19 @@ class TestMainConfig(unittest.TestCase):
         missing = check_mode_templates(config)
         self.assertIn("stages/retry.png", missing)
 
+    def test_setup_equipment_config_collect_only_and_bag_clean(self):
+        """測試 setup_equipment_config 在 collect_only 與 bag_clean 模式下跳過選單並清空裝備品質清單"""
+        from main import setup_equipment_config
+        
+        cfg_collect = GAME_CONFIGS["collect_only"].copy()
+        setup_equipment_config(cfg_collect)
+        self.assertEqual(cfg_collect["keep_colors"], [])
+        self.assertEqual(cfg_collect["disassemble_colors"], [])
+
+        cfg_bag = GAME_CONFIGS["bag_clean"].copy()
+        setup_equipment_config(cfg_bag)
+        self.assertEqual(cfg_bag["keep_colors"], [])
+        self.assertEqual(cfg_bag["disassemble_colors"], [])
+
 if __name__ == "__main__":
     unittest.main()
