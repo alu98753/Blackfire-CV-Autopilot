@@ -26,9 +26,9 @@ GAME_CONFIGS = {
         "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
     },
     
-    # ------------------ 史萊姆地下城模式 ------------------
-    "dungeon_slime": {
-        "name": "史萊姆地下城",
+    # ------------------ 地下城模式 ------------------
+    "dungeon": {
+        "name": "地下城",
         "type": "dungeon",
         "bless_mode": "combat",  # 預設為戰鬥/傷害祝福
         "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},

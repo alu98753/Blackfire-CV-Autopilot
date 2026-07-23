@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
     parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
-                        help="掛機模式：stage (普通關卡) 或 dungeon_slime (史萊姆地下城)")
+                        help="掛機模式：stage (普通關卡) 或 dungeon (地下城)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
@@ -185,7 +185,7 @@ def main():
             fight_entrance
         ]
 
-    elif args.mode == "dungeon_slime":
+    elif args.mode == "dungeon":
         print("請選擇要探索的地下城：")
         print(" 1) 黏糊糊的石窟 (Slime_entry)")
         print(" 2) 幽影地穴 (Ghost_entry)")

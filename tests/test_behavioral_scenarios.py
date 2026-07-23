@@ -63,7 +63,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           4. 二次確認領取後關閉視窗，清除鑽石需求，並開始體力領取。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
         self.state_machine.need_diamond_collection = True
@@ -146,7 +146,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         Then: 程式應識別冷卻狀態，直接點擊退出按鈕退出視窗，且重設鑽石領取需求，防止卡在視窗中。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_collected_this_run = False
         self.state_machine.diamond_window_opened = True
@@ -185,7 +185,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           3. 依次執行銷毀 (點擊右側綠色 ➔ 點擊 destroy.png ➔ 點擊 confirm.png) ➔ 收集 (點擊左側黃金 ➔ 點擊 collect.png)。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         mock_exists.return_value = True
         
@@ -240,7 +240,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           3. 若有關閉確認彈窗，應自動點選 confirm.png 確認關閉，回到 STATE_UNKNOWN。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_BACKPACK_FULL_SORTING
         self.state_machine.need_bag_cleaning = True
         mock_exists.return_value = True
@@ -386,7 +386,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           5. 5 秒後 (冷卻結束) ➔ 應重置探索記憶 (`chest_opened_this_floor = False`)。
         """
         # Arrange
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         mock_exists.return_value = True
         
@@ -683,7 +683,7 @@ class TestBehavioralScenarios(unittest.TestCase):
           1. 程式應識別冷卻/已領狀態，點擊退出按鈕 (common/quit.png)。
           2. need_bread_collection 應被設為 False，last_bread_collection_time 應更新，防止無限卡死在視窗內。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
         self.state_machine.bread_window_opened = True
@@ -894,7 +894,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         
         # 情況 B: 地下城模式
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
         self.mock_matcher.match.side_effect = None
         self.mock_matcher.match.return_value = (None, 0.0)
@@ -1604,7 +1604,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         3. 驗證當前地下城被設為 30 分鐘冷卻 (冰雪洞窟 idx=4)，且狀態移轉至 STATE_NAVIGATING。
         """
         # 初始化配置為地下城模式
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.current_dungeon_index = 4  # 冰雪洞窟
         self.state_machine.dungeon_defeat_count = 0
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)

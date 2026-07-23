@@ -127,12 +127,12 @@ class TestStateMachineLogic(unittest.TestCase):
 
     @patch('os.path.exists')
     @patch('states.handlers.explore.time.sleep')
-    def test_dungeon_slime_explore_and_battle_flow(self, mock_sleep, mock_exists):
+    def test_dungeon_explore_and_battle_flow(self, mock_sleep, mock_exists):
         """
         測試史萊姆地下城模式：探索事件 -> 遇怪 -> 戰鬥 -> 結算 -> 繼續探索。
         對齊全新的開啟寶箱與領取祝福子流程。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
@@ -239,7 +239,7 @@ class TestStateMachineLogic(unittest.TestCase):
         測試地下城模式技能事件與下樓流程：
         點擊技能事件 ➔ 點擊選擇 ➔ 點擊確認/OK ➔ 點擊退出 ➔ 點擊下樓 ➔ 點擊下樓確認。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
@@ -455,7 +455,7 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         測試地下城模式下，在 BATTLE 戰鬥結束/結算時偵測到背包滿 ➔ 轉移至 BACKPACK_FULL_SORTING ➔ 模擬回到 EXPLORING ➔ 攔截進入 BAG_CLEANING。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_BATTLE
@@ -483,7 +483,7 @@ class TestStateMachineLogic(unittest.TestCase):
         1. 看到 task_complete.png ➔ 點擊「領取獎勵」(相對 Y+281 的座標)
         2. 在大廳狀態下看到確認/OK 彈窗 ➔ 自動點選確認關閉
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_LOBBY
@@ -524,7 +524,7 @@ class TestStateMachineLogic(unittest.TestCase):
         1. 看到 backpack_full.png ➔ 狀態切換至 STATE_BACKPACK_FULL_SORTING
         2. 在 STATE_BACKPACK_FULL_SORTING 狀態下，若左側無貴重物品 ➔ 點擊右上角關閉 (1540, 240) 且返回 STATE_UNKNOWN
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_LOBBY
@@ -559,7 +559,7 @@ class TestStateMachineLogic(unittest.TestCase):
         2. 執行 BackpackFullSortingHandler，應定位到綠色物品並點擊 ➔ 點擊 destroy.png ➔ 點擊 confirm.png ➔ 點擊左側貴重物品 ➔ 完成本次分選。
         """
         import numpy as np
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
@@ -616,7 +616,7 @@ class TestStateMachineLogic(unittest.TestCase):
         6. 看到 quit_bread.png ➔ 關閉鑽石畫面，結束鑽石流程，並開始體力流程
         7. 看到 common/bread.png ➔ 開始點點進入領體力
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
         self.state_machine.need_diamond_collection = True
@@ -695,7 +695,7 @@ class TestStateMachineLogic(unittest.TestCase):
         2. 畫面上沒有免費鑽石 (free.png 傳回 None)，但有退出按鈕 (common/quit.png) 且大廳入口 (diamond.png) 不在畫面上。
         3. 預期：應自動點擊退出按鈕，並關閉領鑽石流程 (need_diamond_collection 設為 False)。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = False
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_collected_this_run = False
@@ -860,12 +860,12 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
 
     @patch('os.path.exists')
-    def test_dungeon_slime_global_stamina_collection_trigger(self, mock_exists):
+    def test_dungeon_global_stamina_collection_trigger(self, mock_exists):
         """
         測試史萊姆地下城模式：全域定時觸發體力領取邏輯與尋路導航中的退回城鎮。
         """
-        # 1. 設置為 dungeon_slime 配置，啟用領體力
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"]
+        # 1. 設置為 dungeon 配置，啟用領體力
+        self.state_machine.config = GAME_CONFIGS["dungeon"]
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = False
         # 將上次領取時間設為 1900 秒之前，大於 1800 秒的 CD
@@ -903,7 +903,7 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         測試自動貪婪地下城模式下，藉由畫面匹配防禦性跳過正在冷卻的地下城卡片。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.config["greedy_dungeon"] = True
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
@@ -972,7 +972,7 @@ class TestStateMachineLogic(unittest.TestCase):
         2. 模擬畫面中看到 Slime (0)、Ghost (1) 與 Forest (2)。
         3. 驗證：雖然 Ghost (1) 比 Slime (0) 等級高，但因為它不在允許清單中，系統應只考慮 Slime 與 Forest。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.config["greedy_dungeon"] = True
         # 僅允許打 Slime (idx 0) 與 Forest (idx 2)
         self.state_machine.config["greedy_allowed_indices"] = [0, 2]
@@ -1034,7 +1034,7 @@ class TestStateMachineLogic(unittest.TestCase):
         2. 畫面上有冷卻木牌：執行 OCR 時間讀取，寫入記憶體冷卻時間，並不執行任何點擊。
         """
         # 1. 測試記憶體冷卻中
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.config["greedy_dungeon"] = False
         self.state_machine.config["navigation_path"] = ["dungeons/Slime_entry.png"]
         self.state_machine.enable_bread = False
@@ -1582,7 +1582,7 @@ class TestStateMachineLogic(unittest.TestCase):
         1. bread_window_opened = True，但畫面上找不到退出按鈕 quit.png。
         2. 預期：連續 3 幀未偵測到退出按鈕後，自動將 bread_window_opened 重設為 False，以利下一輪重新打開。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.need_bread_collection = True
         self.state_machine.bread_window_opened = True
         self.state_machine.bread_window_missing_count = 0
@@ -1616,7 +1616,7 @@ class TestStateMachineLogic(unittest.TestCase):
         1. diamond_window_opened = True，但畫面上找不到退出按鈕 quit.png。
         2. 預期：連續 3 幀未偵測到退出按鈕後，自動將 diamond_window_opened 重設為 False，以利下一輪重新打開。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.need_diamond_collection = True
         self.state_machine.diamond_window_opened = True
         self.state_machine.diamond_window_missing_count = 0
@@ -1652,7 +1652,7 @@ class TestStateMachineLogic(unittest.TestCase):
         3. 若時間已滿，自動還原原始配置，重置時間，並轉移至 STATE_UNKNOWN 以重新尋路。
         """
         # 設定原始配置為史萊姆地下城
-        orig_config = GAME_CONFIGS["dungeon_slime"].copy()
+        orig_config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.config = orig_config
         self.state_machine.current_state = self.state_machine.STATE_LOBBY
         
@@ -1712,7 +1712,7 @@ class TestStateMachineLogic(unittest.TestCase):
         1. 看到 dungeons/dungeon_fight.png 時，狀態應保持 STATE_NAVIGATING 且執行點擊，不提早轉移。
         2. 只有看到 dungeons/leave.png（或寶箱/祝福等內部按鈕）時，才轉移至 STATE_DUNGEON_EXPLORING。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
         mock_exists.return_value = True
@@ -1793,7 +1793,7 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         測試領鑽石流程中，當偵測到冷卻（無免費按鈕）時，藉由 OCR 讀取時間並精確推遲下一次觸發。
         """
-        self.state_machine.config = GAME_CONFIGS["dungeon_slime"].copy()
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.current_state = self.state_machine.STATE_DIAMOND_COLLECTION
         self.state_machine.diamond_window_opened = True
         self.state_machine.diamond_collected_this_run = False
