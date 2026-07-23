@@ -629,17 +629,17 @@ class NavigationHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
             pos_label, _ = self.matcher.match(screen_img, "stages/stage_label.png", threshold=0.70)
         
-        # 尋找路徑中是否有魔王關 (包含 final) 出現在畫面上
+        # 尋找路徑中是否有魔王關 / 小關卡目標 (包含 final, first, middle, six) 出現在畫面上
         pos_final = None
         target_final_btn = None
         for btn in nav_path:
-            if "final" in btn:
+            if "final" in btn or "first" in btn or "middle" in btn or "six" in btn:
                 target_final_btn = btn
                 if os.path.exists(os.path.join("templates", btn)):
-                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=0.75)
+                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=0.90)
                     if pos_f:
                         pos_final = pos_f
-                        # 成功找到魔王關，重置其缺失計時器
+                        # 成功找到目標小關/魔王關，重置其缺失計時器
                         self.machine.__setattr__(f"missing_time_{btn}", 0.0)
                         break
 
@@ -731,12 +731,14 @@ class NavigationHandler(BaseStateHandler):
             if in_detail_screen and "level" in btn and "final" not in btn and "entry" not in btn:
                 continue
 
-            # 針對尋路按鈕，特別調整匹配閾值 (six_stage 提高至 0.90 以防止誤匹配；大廳跳轉按鈕調降至 0.60 以容忍解析度微幅縮放)
-            if btn == "stages/six_stage.png":
+            # 針對尋路按鈕，小關卡/魔王關目標按鈕 (如 first_stage.png, levelX_final.png, level6_middle.png, six_stage.png) 門檻單獨調高至 0.90
+            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
+            if is_sub_stage_target:
                 thresh = 0.90
+            elif "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
+                thresh = 0.60
             else:
-                is_lobby_btn = "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn or "final" in btn
-                thresh = 0.60 if is_lobby_btn else 0.80
+                thresh = 0.80
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
             if pos:
                 if btn == "stages/stage_label.png":
