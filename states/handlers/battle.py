@@ -54,13 +54,14 @@ class BattleHandler(BaseStateHandler):
             
             # 2.2 檢查當前配置的結算繼續按鈕
             if not has_battle_feature:
-                res_buttons = (self.machine.config["result_buttons"] 
-                               if self.machine.config["type"] == "stage" 
-                               else self.machine.config["dungeon_battle_results"])
+                if self.machine.config.get("type") == "mix":
+                    res_buttons = list(dict.fromkeys(self.machine.config.get("result_buttons", []) + self.machine.config.get("dungeon_battle_results", [])))
+                elif self.machine.config.get("type") == "stage":
+                    res_buttons = self.machine.config.get("result_buttons", [])
+                else:
+                    res_buttons = self.machine.config.get("dungeon_battle_results", [])
                 for btn in res_buttons:
-                    thresh = 0.88 if btn == "common/continue_gray.png" else 0.80
-                    b_thresh = 0.70 if btn in ["common/continue.png", "common/continue_gray.png"] else 0.0
-                    pos, _ = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
+                    pos, _ = self.matcher.match(screen_img, btn, threshold=thresh)
                     if pos:
                         has_battle_feature = True
                         break
@@ -120,48 +121,45 @@ class BattleHandler(BaseStateHandler):
                 time.sleep(0.15)
                 return
 
-        if self.machine.config["type"] == "stage":
-            # 關卡模式：檢查 retry.png 與所有 continue*.png
-            found_result_trigger = False
-            for btn in self.machine.config["result_buttons"]:
-                thresh = 0.88 if btn == "common/continue_gray.png" else 0.8
-                b_thresh = 0.70 if btn in ["common/continue.png", "common/continue_gray.png"] else 0.0
-                pos, _ = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
-                if pos:
-                    logging.info(f"🏆 偵測到結算按鈕 [{btn}]，戰鬥結束！")
-                    found_result_trigger = True
-                    break
-            if found_result_trigger:
-                self.machine.transition_to(self.machine.STATE_RESULT)
-            else:
-                self.log_battle_duration()
-                time.sleep(0.15)
-                
-        elif self.machine.config["type"] == "dungeon":
-            # 地下城模式：檢查 dungeon_battle_results 結算按鈕 (排除 continue3.png)
-            best_match_pos = None
-            best_match_conf = 0.8
-            best_match_temp = None
-            
-            for btn in self.machine.config["dungeon_battle_results"]:
-                thresh = max(best_match_conf, 0.88) if btn == "common/continue_gray.png" else best_match_conf
-                b_thresh = 0.70 if btn in ["common/continue.png", "common/continue_gray.png"] else 0.0
-                pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
-                if pos and conf > best_match_conf:
-                    best_match_conf = conf
-                    best_match_pos = pos
-                    best_match_temp = btn
-                    
-            if best_match_pos:
+        # B2. 檢查結算按鈕以觸發結算狀態或地下城探索復歸
+        res_buttons = self.machine.config.get("result_buttons", [])
+        dungeon_res = self.machine.config.get("dungeon_battle_results", [])
+        
+        if self.machine.config.get("type") == "mix":
+            check_buttons = list(dict.fromkeys(res_buttons + dungeon_res))
+        elif self.machine.config.get("type") == "dungeon":
+            check_buttons = dungeon_res
+        else:
+            check_buttons = res_buttons
+
+        best_match_pos = None
+        best_match_conf = 0.80
+        best_match_temp = None
+
+        for btn in check_buttons:
+            if not os.path.exists(os.path.join("templates", btn)):
+                continue
+            thresh = max(best_match_conf, 0.88) if btn == "common/continue_gray.png" else best_match_conf
+            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh)
+            if pos and conf > best_match_conf:
+                best_match_conf = conf
+                best_match_pos = pos
+                best_match_temp = btn
+
+        if best_match_pos:
+            if self.machine.config.get("type") == "dungeon":
                 logging.info(f"🏆 戰鬥結束！點擊相似度最高的地下城結算按鈕 [{best_match_temp}]，信心度: {best_match_conf:.4f}")
                 self.mouse.click(rect["left"] + best_match_pos[0], rect["top"] + best_match_pos[1])
-                # 點擊完結算後，會回到地下城層與層之間，轉移回探索狀態
                 self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
                 self.machine.dungeon_defeat_count = 0
-                time.sleep(0.15)
             else:
-                self.log_battle_duration()
-                time.sleep(0.15)
+                logging.info(f"🏆 戰鬥結束！偵測到結算按鈕 [{best_match_temp}] (信心度: {best_match_conf:.4f})，切換至結算狀態。")
+                self.machine.transition_to(self.machine.STATE_RESULT)
+            time.sleep(0.15)
+            return
+        else:
+            self.log_battle_duration()
+            time.sleep(0.15)
 
     def log_battle_duration(self):
         if self.machine.battle_start_time:
