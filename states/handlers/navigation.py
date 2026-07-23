@@ -290,14 +290,23 @@ class NavigationHandler(BaseStateHandler):
         # 如果是自動貪婪地下城模式，且畫面上看見任何一個地下城入口，執行貪婪選關邏輯
         # B. 原本的尋路導航邏輯
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
-        is_dungeon_mode = self.machine.config.get("type") in ["dungeon", "mix"]
+        config_type = self.machine.config.get("type") if self.machine.config else "stage"
+        
+        # 判斷是否需要執行地下城卡片掃描：
+        # - dungeon 模式：必然掃描
+        # - mix 模式：只有記憶體判定有可用地下城 (has_available_dungeon() == True) 時才掃描
+        should_scan_dungeons = False
+        if config_type == "dungeon":
+            should_scan_dungeons = True
+        elif config_type == "mix":
+            should_scan_dungeons = self.machine.has_available_dungeon()
         
         # 為了避免在單元測試中使用 MagicMock 時 cv2 運算崩潰，僅在 screen_img 有 shape 屬性時執行 OpenCV 模板匹配
         is_dungeon_page = False
         visible_dungeons = {}
         scale = 1.0
         
-        if is_dungeon_mode and type(screen_img).__name__ == "ndarray":
+        if should_scan_dungeons and type(screen_img).__name__ == "ndarray":
             # === 確保地下城滾動完全靜止後才開始進行圖像辨識，避免在動畫中進行錯誤判定 ===
             # 在單元測試中，我們允許繞過此時間限制，以便連續執行同步模擬
             import sys
@@ -354,11 +363,6 @@ class NavigationHandler(BaseStateHandler):
                     temp_confidences["LockedEntry"] = max_val_l
                     if max_val_l >= 0.75:
                         is_dungeon_page = True
-
-            if not is_dungeon_page:
-                # 僅在真的被判定為非選關介面時印出信心度以供除錯
-                conf_str = ", ".join([f"{k}: {v:.4f}" for k, v in temp_confidences.items()])
-                logging.info(f"🔍 [除錯] 未偵測到地下城選關介面 (is_dungeon_page=False)。各模板信心度: {conf_str}")
 
             if is_dungeon_page:
                 logging.info("🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。")
