@@ -1315,10 +1315,9 @@ class TestStateMachineLogic(unittest.TestCase):
         當在尋路過程中，且地下城入口選單已開啟 (偵測到 dungeons/dungeon_after.png)，
         應自動跳過 dungeons/dungeon.png，只匹配並點擊最深層的 dungeons/Slime_entry.png。
         """
-        self.state_machine.config = {
-            "type": "dungeon",
-            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
-        }
+        config = GAME_CONFIGS["dungeon"].copy()
+        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        self.state_machine.config = config
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         

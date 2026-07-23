@@ -1326,12 +1326,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_exists.return_value = True
         
         # 設定貪婪地下城配置
-        self.state_machine.config = {
-            "type": "dungeon",
-            "greedy_dungeon": True,
-            "greedy_allowed_indices": [0, 1, 2, 3, 4],
-            "navigation_path": ["common/door.png", "dungeons/dungeon.png"]
-        }
+        config = GAME_CONFIGS["dungeon"].copy()
+        config["greedy_dungeon"] = True
+        config["greedy_allowed_indices"] = [0, 1, 2, 3, 4]
+        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+        self.state_machine.config = config
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
         # 設定冷卻時間
@@ -1492,11 +1491,10 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         mock_exists.return_value = True
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.state_machine.config = {
-            "type": "dungeon",
-            "greedy_dungeon": False,
-            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Ruins_entry.png"]
-        }
+        config_a = GAME_CONFIGS["dungeon"].copy()
+        config_a["greedy_dungeon"] = False
+        config_a["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ruins_entry.png"]
+        self.state_machine.config = config_a
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
         # Mock 視窗大小為 1000x800
@@ -1550,10 +1548,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         mock_exists.return_value = True
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.state_machine.config = {
-            "type": "dungeon",
-            "greedy_dungeon": True
-        }
+        config_fb = GAME_CONFIGS["dungeon"].copy()
+        config_fb["greedy_dungeon"] = True
+        self.state_machine.config = config_fb
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         self.state_machine.fallback_swipe_count = 0
         
