@@ -1881,6 +1881,36 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(200, 200)
 
+    @patch('os.path.exists')
+    def test_mix_mode_custom_stage_selection_routing(self, mock_exists):
+        """
+        測試混合模式 (mix) 搭配重構後的通用關卡選擇 (例如選擇 Level 1 Final)：
+        當地下城全冷卻時，正確使用自訂的 stage_navigation_path 導航至目標關卡。
+        """
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.config["stage_target"] = "stages/level1_final.png"
+        self.state_machine.config["stage_navigation_path"] = [
+            "common/door.png",
+            "common/select_stage.png",
+            "stages/level1_sky_plains.png",
+            "stages/stage_label.png",
+            "stages/level1_final.png"
+        ]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.dungeon_cooldowns = {0: time.time() + 1800, 1: time.time() + 1800, 2: time.time() + 1800, 3: time.time() + 1800, 4: time.time() + 1800}
+        mock_exists.return_value = True
+
+        # 模擬在活動大廳匹配到 common/select_stage.png
+        def mock_match(img, name, threshold=0.7, **kwargs):
+            if name == "common/select_stage.png":
+                return (200, 200), 0.85
+            return None, 0.0
+        self.mock_matcher.match.side_effect = mock_match
+
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(200, 200)
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -98,83 +98,91 @@ def main():
     config = GAME_CONFIGS[args.mode].copy()  # 使用 copy 避免影響原始 GAME_CONFIGS 字典
     config["backend_mode"] = args.backend
 
-    if args.mode == "stage":
-        print("請選擇要打的關卡大關：")
-        print(" 1) 蒼穹平原 (Level 1)")
-        print(" 2) 荒蕪岩地 (Level 2)")
-        print(" 3) 古樹森林 (Level 3)")
-        print(" 4) 沙漠廢墟 (Level 4)")
-        print(" 5) 幽暗沼澤 (Level 5)")
-        print(" 6) 冰雪洞窟 (Level 6) - 預設")
+def setup_stage_config(config, prompt_prefix=""):
+    print(f"\n{prompt_prefix}請選擇要打的關卡大關：")
+    print(" 1) 蒼穹平原 (Level 1)")
+    print(" 2) 荒蕪岩地 (Level 2)")
+    print(" 3) 古樹森林 (Level 3)")
+    print(" 4) 沙漠廢墟 (Level 4)")
+    print(" 5) 幽暗沼澤 (Level 5)")
+    print(" 6) 冰雪洞窟 (Level 6) - 預設")
+    try:
+        choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
+        if not choice:
+            choice = "6"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        choice = "6"
+
+    if choice not in STAGE_CONFIGS:
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
+        choice = "6"
+
+    cfg = STAGE_CONFIGS[choice]
+    stage_name = cfg["name"]
+    
+    # 判斷是否有多個子關卡
+    sub_stages = cfg["sub_stages"]
+    sub_choice_key = "final"  # 預設打 Boss / Final
+    
+    if len(sub_stages) > 1:
+        print(f"\n{prompt_prefix}請選擇 [{stage_name}] 要打的小關卡類型：")
+        opts = []
+        if "first" in sub_stages:
+            print(" 1) 第一小關 (First Stage)")
+            opts.append(("1", "first"))
+        if "middle" in sub_stages:
+            print(" 2) 中間小關 (Middle Stage)")
+            opts.append(("2", "middle"))
+        if "six" in sub_stages:
+            print(" 3) 第六小關 (Six Stage)")
+            opts.append(("3", "six"))
+        print(" 4) 魔王關 (Boss / Final) - 預設")
+        opts.append(("4", "final"))
+        
         try:
-            choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
-            if not choice:
-                choice = "6"
+            sub_choice = input("請輸入數字 (直接 Enter 鍵預設為 4): ").strip()
+            if not sub_choice:
+                sub_choice = "4"
         except KeyboardInterrupt:
             print("\n[!] 取消啟動。")
             sys.exit(0)
         except Exception:
-            choice = "6"
-
-        if choice not in STAGE_CONFIGS:
-            print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
-            choice = "6"
-
-        cfg = STAGE_CONFIGS[choice]
-        stage_name = cfg["name"]
-        
-        # 判斷是否有多個子關卡
-        sub_stages = cfg["sub_stages"]
-        sub_choice_key = "final"  # 預設打 Boss / Final
-        
-        if len(sub_stages) > 1:
-            print(f"\n請選擇 [{stage_name}] 要打的小關卡類型：")
-            # 依序印出選項
-            opts = []
-            if "first" in sub_stages:
-                print(" 1) 第一小關 (First Stage)")
-                opts.append(("1", "first"))
-            if "middle" in sub_stages:
-                print(" 2) 中間小關 (Middle Stage)")
-                opts.append(("2", "middle"))
-            if "six" in sub_stages:
-                print(" 3) 第六小關 (Six Stage)")
-                opts.append(("3", "six"))
-            print(" 4) 魔王關 (Boss / Final) - 預設")
-            opts.append(("4", "final"))
+            sub_choice = "4"
             
-            try:
-                sub_choice = input("請輸入數字 (直接 Enter 鍵預設為 4): ").strip()
-                if not sub_choice:
-                    sub_choice = "4"
-            except KeyboardInterrupt:
-                print("\n[!] 取消啟動。")
-                sys.exit(0)
-            except Exception:
-                sub_choice = "4"
-                
-            # 尋找對應的 key
-            matched_key = None
-            for opt_num, opt_key in opts:
-                if sub_choice == opt_num:
-                    matched_key = opt_key
-                    break
-            if matched_key is None:
-                print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [魔王關]...")
-                matched_key = "final"
-            sub_choice_key = matched_key
+        matched_key = None
+        for opt_num, opt_key in opts:
+            if sub_choice == opt_num:
+                matched_key = opt_key
+                break
+        if matched_key is None:
+            print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [魔王關]...")
+            matched_key = "final"
+        sub_choice_key = matched_key
 
-        # 嚴格防禦性退出：檢查子關卡圖片是否存在，如果不存在則說明沒有該截圖並退出
-        if sub_choice_key not in sub_stages:
-            print(f"\n[!] 錯誤：該關卡 [{stage_name}] 未配置小關卡類型 '{sub_choice_key}'，或找不到對應的模板圖片！")
-            sys.exit(1)
-            
-        fight_entrance = sub_stages[sub_choice_key]
-        if not os.path.exists(os.path.join("templates", fight_entrance)):
-            print(f"\n[!] 錯誤：找不到該關卡的模板圖片 'templates/{fight_entrance}'，請先使用 crop_tool 進行裁剪！")
-            sys.exit(1)
+    if sub_choice_key not in sub_stages:
+        print(f"\n[!] 錯誤：該關卡 [{stage_name}] 未配置小關卡類型 '{sub_choice_key}'，或找不到對應的模板圖片！")
+        sys.exit(1)
+        
+    fight_entrance = sub_stages[sub_choice_key]
+    if not os.path.exists(os.path.join("templates", fight_entrance)):
+        print(f"\n[!] 錯誤：找不到該關卡的模板圖片 'templates/{fight_entrance}'，請先使用 crop_tool 進行裁剪！")
+        sys.exit(1)
 
-        level_btn = cfg["entry"]
+    level_btn = cfg["entry"]
+    config["stage_name"] = f"{stage_name} ({sub_choice_key})"
+    config["stage_entry"] = level_btn
+    config["stage_target"] = fight_entrance
+    config["stage_navigation_path"] = [
+        "common/door.png",
+        "common/select_stage.png",
+        level_btn,
+        "stages/stage_label.png",
+        fight_entrance
+    ]
+    if config.get("type") == "stage":
         config["name"] = f"普通關卡 - {stage_name} ({sub_choice_key})"
         config["navigation_path"] = [
             "common/door.png",
@@ -184,6 +192,34 @@ def main():
             "stages/stage_label.png",
             fight_entrance
         ]
+
+def main():
+    # 建立 ArgumentParser 物件
+    is_gui_running = False
+    try:
+        import win32gui
+        hwnd = win32gui.FindWindow(None, "Antigravity")
+        if hwnd:
+            is_gui_running = True
+    except Exception:
+        pass
+            
+    parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
+    parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
+    parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
+    parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
+                        help="掛機模式：stage (普通關卡)、dungeon (地下城) 或 mix (混合模式)")
+    parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
+    parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
+                        help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
+    args = parser.parse_args()
+
+    # 取得當前模式的配置
+    config = GAME_CONFIGS[args.mode].copy()  # 使用 copy 避免影響原始 GAME_CONFIGS 字典
+    config["backend_mode"] = args.backend
+
+    if args.mode == "stage":
+        setup_stage_config(config)
 
     elif args.mode in ["dungeon", "mix"]:
         print("請選擇要探索的地下城：")
@@ -283,18 +319,8 @@ def main():
             print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
 
         if args.mode == "mix":
-            print("\n請選擇地下城冷卻時退守刷的普通關卡：")
-            print(" 1) 第一關魔王關 (Level 1 Final)")
-            print(" 2) 第二關魔王關 (Level 2 Final) - 預設")
-            try:
-                stage_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 2): ").strip()
-                if stage_choice == "1":
-                    config["stage_target"] = "stages/level1_final.png"
-                else:
-                    config["stage_target"] = "stages/level2_final.png"
-            except Exception:
-                config["stage_target"] = "stages/level2_final.png"
-            print(f"[*] 地下城冷卻時退守普通關卡目標：{config['stage_target']}")
+            setup_stage_config(config, prompt_prefix="[地下城冷卻退守] ")
+            print(f"[*] 地下城冷卻時退守普通關卡目標：{config['stage_name']} ({config['stage_target']})")
 
     if args.mode == "collect_only":
         config["keep_colors"] = []
