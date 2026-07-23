@@ -555,7 +555,7 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(0.3)
                     return
                 stage_target = self.machine.config.get("stage_target", "stages/level2_final.png")
-                nav_path = ["common/door.png", "common/select_stage.png", stage_target]
+                nav_path = self.machine.config.get("stage_navigation_path", ["common/door.png", "common/select_stage.png", stage_target])
         else:
             nav_path = self.machine.config.get("navigation_path", [])
 
