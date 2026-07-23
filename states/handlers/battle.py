@@ -150,7 +150,7 @@ class BattleHandler(BaseStateHandler):
             is_dungeon_run = (
                 self.machine.config.get("type") == "dungeon" or
                 getattr(self.machine, "is_in_dungeon", False) or
-                self.machine.last_state == self.machine.STATE_DUNGEON_EXPLORING
+                getattr(self.machine, "last_state", None) == self.machine.STATE_DUNGEON_EXPLORING
             )
             if is_dungeon_run:
                 logging.info(f"🏆 戰鬥結束！點擊相似度最高的地下城結算按鈕 [{best_match_temp}]，信心度: {best_match_conf:.4f}")

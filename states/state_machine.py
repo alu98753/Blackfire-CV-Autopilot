@@ -39,6 +39,7 @@ class GameStateMachine:
         self.mouse = mouse
         
         self.current_state = self.STATE_UNKNOWN
+        self.last_state = None
         self.last_state_change = time.time()
         self.battle_start_time = None
         self.run_count = 0
@@ -135,6 +136,7 @@ class GameStateMachine:
 
         if self.current_state != new_state:
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
+            self.last_state = self.current_state
             self.current_state = new_state
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
