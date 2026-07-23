@@ -1,9 +1,161 @@
 import os
 import time
 import logging
+import re
 from states.handlers.base import BaseStateHandler
 
 class NavigationHandler(BaseStateHandler):
+    def _parse_time_to_seconds(self, time_str):
+        """
+        將 OCR 識別出的時間字串 (如 "00:17:10" 或 "17:10") 解析為總秒數。
+        """
+        cleaned = re.sub(r"[^0-9:]", "", time_str)
+        if not cleaned:
+            return None
+        parts = cleaned.split(":")
+        try:
+            if len(parts) == 3:  # 時:分:秒 (hh:mm:ss)
+                h = int(parts[0])
+                m = int(parts[1])
+                s = int(parts[2])
+                return h * 3600 + m * 60 + s
+            elif len(parts) == 2:  # 分:秒 (mm:ss)
+                m = int(parts[0])
+                s = int(parts[1])
+                return m * 60 + s
+            elif len(parts) == 1 and parts[0]:  # 單純秒數
+                return int(parts[0])
+        except ValueError:
+            pass
+        return None
+
+
+    def _check_dungeon_status(self, screen_img, scale, h_limit, w_limit, i, visible_dungeons):
+        """
+        檢查指定地下城 i 的冷卻與解鎖狀態。
+        如果偵測到冷卻中或未解鎖，會自動更新 self.machine.dungeon_cooldowns[i]，並回傳 True (表示不可打)。
+        如果處於就緒狀態，回傳 False (表示可打)。
+        """
+        import cv2
+        if i not in visible_dungeons:
+            return False
+            
+        max_loc, t_w, t_h = visible_dungeons[i]
+        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+        
+        # 1. 檢查冷卻木牌
+        in_cooldown = False
+        ocr_success = False
+        crop_y1 = max_loc[1]
+        crop_y2 = min(h_limit, max_loc[1] + t_h)
+        crop_x1 = max_loc[0]
+        crop_x2 = min(w_limit, max_loc[0] + t_w)
+        dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
+        
+        for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
+            if os.path.exists(os.path.join("templates", cd_temp)):
+                cd_img = cv2.imread(os.path.join("templates", cd_temp))
+                if cd_img is not None:
+                    cd_w = int(cd_img.shape[1] * scale)
+                    cd_h = int(cd_img.shape[0] * scale)
+                    cd_w = max(5, cd_w)
+                    cd_h = max(5, cd_h)
+                    resized_cd = cv2.resize(cd_img, (cd_w, cd_h))
+                    res_cd = cv2.matchTemplate(dungeon_crop, resized_cd, cv2.TM_CCOEFF_NORMED)
+                    _, max_val_cd, _, max_loc_cd = cv2.minMaxLoc(res_cd)
+                    if max_val_cd >= 0.58:
+                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌 [{cd_temp}] (相似度: {max_val_cd:.4f}，閥值: 0.58)，判定為冷卻中。")
+                        in_cooldown = True
+                        
+                        # 試圖利用 EasyOCR 進行精確時間識別
+                        try:
+                            cd_cx = max_loc_cd[0] + cd_w // 2
+                            cd_cy = max_loc_cd[1] + cd_h // 2
+                            
+                            # 根據匹配到的是左木牌還是右木牌，動態調整 X 軸偏移方向
+                            if "left" in cd_temp:
+                                # 左木牌：木柱在左，文字偏右，因此裁剪框向右偏移 25 像素 (相較於中心點)
+                                tx1 = max(0, cd_cx - 60)
+                                tx2 = min(dungeon_crop.shape[1], cd_cx + 110)
+                            else:
+                                # 右木牌：木柱在右，文字偏左，因此裁剪框向左偏移 25 像素 (相較於中心點)
+                                tx1 = max(0, cd_cx - 110)
+                                tx2 = min(dungeon_crop.shape[1], cd_cx + 60)
+                                
+                            ty1 = max(0, cd_cy - 18)
+                            ty2 = min(dungeon_crop.shape[0], cd_cy + 12)
+                            
+                            # 【新增除錯標記】在卡片上繪製紅點(中心)與綠框(裁剪區)並存檔
+                            try:
+                                debug_match_img = dungeon_crop.copy()
+                                cv2.circle(debug_match_img, (cd_cx, cd_cy), 4, (0, 0, 255), -1) # 畫紅色的中心點
+                                cv2.rectangle(debug_match_img, (tx1, ty1), (tx2, ty2), (0, 255, 0), 2) # 畫綠色裁剪框
+                                cv2.imwrite("debug_cooldown_match.png", debug_match_img)
+                                logging.info("📸 [DEBUG] 已將木牌中心與裁剪框標記寫入 debug_cooldown_match.png")
+                            except Exception as draw_err:
+                                logging.warning(f"⚠️ [DEBUG] 標記圖片寫入失敗: {draw_err}")
+                            
+                            time_crop = dungeon_crop[ty1:ty2, tx1:tx2]
+                            if time_crop.size > 0:
+                                time_gray = cv2.cvtColor(time_crop, cv2.COLOR_BGR2GRAY)
+                                padded = cv2.copyMakeBorder(time_gray, 15, 15, 30, 30, cv2.BORDER_CONSTANT, value=159)
+                                resized_text = cv2.resize(padded, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+                                
+                                reader = self.machine.get_ocr_reader()
+                                ocr_results = reader.readtext(resized_text, allowlist="0123456789:")
+                                
+                                # 將送去辨識的圖片寫入專案目錄
+                                cv2.imwrite("debug_cooldown_ocr.png", resized_text)
+                                logging.info(f"📸 [DEBUG] 已將 OCR 辨識區域寫入 debug_cooldown_ocr.png，裁剪範圍 Y 軸: [{ty1}:{ty2}]，X 軸: [{tx1}:{tx2}]")
+                                
+                                if ocr_results:
+                                    raw_text = ocr_results[0][1]
+                                    conf = ocr_results[0][2]
+                                    parsed_secs = self._parse_time_to_seconds(raw_text)
+                                    if parsed_secs is not None and parsed_secs > 0:
+                                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({parsed_secs // 60} 分 {parsed_secs % 60} 秒，信心度: {conf:.4f})")
+                                        self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
+                                        ocr_success = True
+                                        break
+                        except Exception as ocr_err:
+                            logging.warning(f"⚠️ 貪婪地下城：[{dungeon_names[i]}] OCR 辨識過程發生異常: {ocr_err}")
+                        break
+                        
+        if in_cooldown:
+            if not ocr_success:
+                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 剩餘時間辨識未成功，使用 30 秒臨時冷卻退避...")
+                self.machine.dungeon_cooldowns[i] = time.time() + 30.0
+            return True
+            
+        # 2. 檢查亮骨頭 (解鎖)
+        cx = max_loc[0] + t_w // 2
+        x1 = cx - int(90.0 * scale)
+        y1 = max_loc[1] + int(250.0 * scale)
+        y2 = max_loc[1] + int(520.0 * scale)
+        w_skull = int(200.0 * scale)
+        x2 = x1 + w_skull
+        
+        if 0 <= x1 and x2 <= w_limit and 0 <= y1 and y2 <= h_limit:
+            skull_crop = screen_img[y1:y2, x1:x2]
+            light_t_name = "dungeons/light_skull.png"
+            if os.path.exists(os.path.join("templates", light_t_name)):
+                light_t = cv2.imread(os.path.join("templates", light_t_name))
+                if light_t is not None:
+                    s_w = int(light_t.shape[1] * scale)
+                    s_h = int(light_t.shape[0] * scale)
+                    s_w = max(5, s_w)
+                    s_h = max(5, s_h)
+                    resized_light_t = cv2.resize(light_t, (s_w, s_h))
+                    res_s = cv2.matchTemplate(skull_crop, resized_light_t, cv2.TM_CCOEFF_NORMED)
+                    _, max_val_skull, _, _ = cv2.minMaxLoc(res_s)
+                    logging.info(f"🧭 貪婪地下城：[{dungeon_names[i]}] 亮骨頭匹配相似度: {max_val_skull:.4f} (閾值: 0.75)")
+                    if max_val_skull < 0.75:
+                        logging.warning(f"🔒 貪婪地下城：[{dungeon_names[i]}] 亮骨頭相似度過低 ({max_val_skull:.4f})，判定為未解鎖或無法自動刷，設為無限冷卻。")
+                        self.machine.dungeon_cooldowns[i] = float('inf')
+                        return True
+                        
+        return False
+
     def handle(self, screen_img, rect):
         """
         尋路導航與自動領體力邏輯。
@@ -243,10 +395,14 @@ class NavigationHandler(BaseStateHandler):
                 
                 target_idx = None
                 is_greedy = self.machine.config.get("greedy_dungeon", False)
+                h_limit, w_limit = screen_img.shape[:2]
                 
                 if is_greedy:
+                    allowed_indices = self.machine.config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
                     # 貪婪模式：從高到低遍歷，尋找第一個就緒且解鎖的地下城
                     for i in range(len(entry_templates) - 1, -1, -1):
+                        if i not in allowed_indices:
+                            continue
                         cooldown_until = self.machine.dungeon_cooldowns.get(i, 0.0)
                         if time.time() < cooldown_until:
                             if cooldown_until == float('inf'):
@@ -257,64 +413,13 @@ class NavigationHandler(BaseStateHandler):
                             
                         # 如果目標地下城在畫面上，我們檢測冷卻與解鎖狀態
                         if i in visible_dungeons:
-                            max_loc, t_w, t_h = visible_dungeons[i]
-                            
-                            # 檢查冷卻木牌
-                            in_cooldown = False
-                            h_limit, w_limit = screen_img.shape[:2]
-                            crop_y1 = max_loc[1]
-                            crop_y2 = min(h_limit, max_loc[1] + t_h)
-                            crop_x1 = max_loc[0]
-                            crop_x2 = min(w_limit, max_loc[0] + t_w)
-                            dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
-                            
-                            for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
-                                if os.path.exists(os.path.join("templates", cd_temp)):
-                                    cd_img = cv2.imread(os.path.join("templates", cd_temp))
-                                    if cd_img is not None:
-                                        cd_w = int(cd_img.shape[1] * scale)
-                                        cd_h = int(cd_img.shape[0] * scale)
-                                        cd_w = max(5, cd_w)
-                                        cd_h = max(5, cd_h)
-                                        resized_cd = cv2.resize(cd_img, (cd_w, cd_h))
-                                        res_cd = cv2.matchTemplate(dungeon_crop, resized_cd, cv2.TM_CCOEFF_NORMED)
-                                        _, max_val_cd, _, _ = cv2.minMaxLoc(res_cd)
-                                        if max_val_cd >= 0.75:
-                                            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌 [{cd_temp}] (相似度: {max_val_cd:.4f})，判定為冷卻中。")
-                                            in_cooldown = True
-                                            break
-                            if in_cooldown:
-                                self.machine.dungeon_cooldowns[i] = time.time() + 30.0
+                            # 呼叫提取出的通用檢查函數
+                            is_unavailable = self._check_dungeon_status(
+                                screen_img, scale, h_limit, w_limit, i, visible_dungeons
+                            )
+                            if is_unavailable:
                                 continue
                                 
-                            # 檢查亮骨頭 (解鎖)
-                            cx = max_loc[0] + t_w // 2
-                            x1 = cx - int(90.0 * scale)
-                            # 使用卡片下方較大 Y 軸區間進行骨頭掃描，消除不同模板裁切與高度的影響
-                            y1 = max_loc[1] + int(250.0 * scale)
-                            y2 = max_loc[1] + int(520.0 * scale)
-                            w_skull = int(200.0 * scale)
-                            x2 = x1 + w_skull
-                            
-                            if 0 <= x1 and x2 <= w_limit and 0 <= y1 and y2 <= h_limit:
-                                skull_crop = screen_img[y1:y2, x1:x2]
-                                light_t_name = "dungeons/light_skull.png"
-                                if os.path.exists(os.path.join("templates", light_t_name)):
-                                    light_t = cv2.imread(os.path.join("templates", light_t_name))
-                                    if light_t is not None:
-                                        s_w = int(light_t.shape[1] * scale)
-                                        s_h = int(light_t.shape[0] * scale)
-                                        s_w = max(5, s_w)
-                                        s_h = max(5, s_h)
-                                        resized_light_t = cv2.resize(light_t, (s_w, s_h))
-                                        res_s = cv2.matchTemplate(skull_crop, resized_light_t, cv2.TM_CCOEFF_NORMED)
-                                        _, max_val_skull, _, _ = cv2.minMaxLoc(res_s)
-                                        logging.info(f"🧭 貪婪地下城：[{dungeon_names[i]}] 亮骨頭匹配相似度: {max_val_skull:.4f} (閾值: 0.75)")
-                                        if max_val_skull < 0.75:
-                                            logging.warning(f"🔒 貪婪地下城：[{dungeon_names[i]}] 亮骨頭相似度過低 ({max_val_skull:.4f})，判定為未解鎖或無法自動刷，設為無限冷卻。")
-                                            self.machine.dungeon_cooldowns[i] = float('inf')
-                                            continue
-                                            
                             # 通過所有檢查，該關卡是我們的貪婪目標！
                             target_idx = i
                             break
@@ -329,6 +434,26 @@ class NavigationHandler(BaseStateHandler):
                         if temp_name in nav_path:
                             target_idx = idx
                             break
+                            
+                    if target_idx is not None:
+                        # 1. 優先檢查記憶體冷卻
+                        cooldown_until = self.machine.dungeon_cooldowns.get(target_idx, 0.0)
+                        if time.time() < cooldown_until:
+                            if cooldown_until == float('inf'):
+                                logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於永久不可打狀態，原地等待中...")
+                            else:
+                                logging.info(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，原地等待中...")
+                            time.sleep(1.0)
+                            return
+                            
+                        # 2. 如果已在畫面上，進行即時畫面冷卻木牌與解鎖狀態偵測
+                        if target_idx in visible_dungeons:
+                            is_unavailable = self._check_dungeon_status(
+                                screen_img, scale, h_limit, w_limit, target_idx, visible_dungeons
+                            )
+                            if is_unavailable:
+                                time.sleep(1.0)
+                                return
                             
                 if target_idx is None:
                     logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")

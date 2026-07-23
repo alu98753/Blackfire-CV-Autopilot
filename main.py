@@ -220,6 +220,36 @@ def main():
         config["greedy_dungeon"] = is_greedy
         if is_greedy:
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+            
+            # 自訂貪婪挑選的關卡篩選
+            print("\n你已選擇自動貪婪挑選。請輸入允許打的地下城編號清單（如 135 代表 1、3、5 關；直接 Enter 鍵預設為全部打）：")
+            print(" 1) 黏糊糊的石窟 (Slime)")
+            print(" 2) 幽影地穴 (Ghost)")
+            print(" 3) 森林迷宮 (Forest)")
+            print(" 4) 神秘遺跡 (Ruins)")
+            print(" 5) 冰雪洞窟 (Ice)")
+            try:
+                allowed_input = input("👉 請輸入 [1-5] (直接 Enter 預設全部打): ").strip()
+                if not allowed_input:
+                    allowed_indices = [0, 1, 2, 3, 4]
+                else:
+                    allowed_indices = []
+                    for char in allowed_input:
+                        if char in "12345":
+                            idx = int(char) - 1
+                            if idx not in allowed_indices:
+                                allowed_indices.append(idx)
+                    if not allowed_indices:
+                        allowed_indices = [0, 1, 2, 3, 4]
+            except KeyboardInterrupt:
+                print("\n[!] 取消啟動。")
+                sys.exit(0)
+            except Exception:
+                allowed_indices = [0, 1, 2, 3, 4]
+                
+            config["greedy_allowed_indices"] = allowed_indices
+            allowed_names = [dungeon_map[str(idx+1)][1] for idx in allowed_indices]
+            print(f"[*] 貪婪模式允許關卡：{', '.join(allowed_names)}")
         else:
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_btn]
 
