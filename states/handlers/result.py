@@ -188,7 +188,7 @@ class ResultHandler(BaseStateHandler):
         if is_dungeon:
             idx = getattr(self.machine, "current_dungeon_index", 0)
             cooldown_map = self.machine.config.get("cooldown_map", {})
-            cd_seconds = max(300.0, cooldown_map.get(idx, 300.0))
+            cd_seconds = cooldown_map.get(idx, 900.0)
             self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
             logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定地下城 {idx} 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
         else:
