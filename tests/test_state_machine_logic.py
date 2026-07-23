@@ -1353,10 +1353,9 @@ class TestStateMachineLogic(unittest.TestCase):
         當 `fallback_swipe_count` >= 3，且 visible_dungeons 為空時，
         應自動尋找並點擊返回按鈕 `goback_town.png`，並重置 `fallback_swipe_count` 為 0。
         """
-        self.state_machine.config = {
-            "type": "dungeon",
-            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
-        }
+        config = GAME_CONFIGS["dungeon"].copy()
+        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        self.state_machine.config = config
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         self.state_machine.fallback_swipe_count = 3
