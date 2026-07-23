@@ -504,19 +504,28 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
-                # 優先度 2：若在活動大廳已看見 dungeons/dungeon.png，直接點擊進入！
+                # 優先度 2：若在活動大廳已看見 dungeons/dungeon.png 且尚未處於地下城頁面，直接點擊進入！
                 pos_dg, conf_dg = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
-                if pos_dg:
+                if pos_dg and not is_dungeon_page:
                     logging.info(f"🧭 混合模式：地下城已就緒，在活動大廳偵測到 [dungeons/dungeon.png] ({conf_dg:.4f})，直接點擊進入地下城！")
                     self.mouse.click(rect["left"] + pos_dg[0], rect["top"] + pos_dg[1])
                     time.sleep(0.3)
                     return
                 nav_path = ["common/door.png", "dungeons/dungeon.png"]
             else:
-                # 無可用地下城，退守普通關卡：若已看見 common/select_stage.png，直接點擊進入！
+                # 判斷普通關卡頁籤是否已開啟 (利用 select_stage_after.png 對比)
+                stage_select_open = False
+                if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
+                    pos_before, conf_before = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.58)
+                    pos_after, conf_after = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.58)
+                    if pos_after:
+                        if (conf_before > 0.58 or conf_after > 0.58) and (not pos_before or conf_after > conf_before - 0.05):
+                            stage_select_open = True
+
+                # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤 (not stage_select_open)，點擊 select_stage.png 切換！
                 pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
-                if pos_st:
-                    logging.info(f"🧭 混合模式：地下城全冷卻，在活動大廳偵測到 [common/select_stage.png] ({conf_st:.4f})，直接點擊進入普通關卡！")
+                if pos_st and not stage_select_open:
+                    logging.info(f"🧭 混合模式：地下城全冷卻，在活動大廳偵測到 [common/select_stage.png] ({conf_st:.4f})，點擊切換至普通關卡頁籤！")
                     self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
                     time.sleep(0.3)
                     return
