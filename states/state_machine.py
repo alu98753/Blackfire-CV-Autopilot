@@ -388,6 +388,19 @@ class GameStateMachine:
                 logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")
                 self.transition_to(self.STATE_NAVIGATING)
 
+    def has_available_dungeon(self):
+        """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
+        if not self.config:
+            return False
+        allowed_indices = self.config.get("greedy_allowed_indices")
+        if allowed_indices is None:
+            allowed_indices = [0, 1, 2, 3, 4]
+        now = time.time()
+        for idx in allowed_indices:
+            if now >= self.dungeon_cooldowns.get(idx, 0.0):
+                return True
+        return False
+
     def check_collection_trigger(self, screen_img):
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。

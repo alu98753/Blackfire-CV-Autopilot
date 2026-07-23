@@ -112,7 +112,8 @@ class ResultHandler(BaseStateHandler):
         should_exit_battle = (
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
-            (self.machine.enable_bread and self.machine.need_bread_collection)
+            (self.machine.enable_bread and self.machine.need_bread_collection) or
+            (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon())
         )
         if should_exit_battle:
             if os.path.exists(os.path.join("templates", "exit_battle.png")):

@@ -28,13 +28,14 @@ echo [*] 成功偵測到虛擬環境 Python。
 echo ============================================================
 echo 常用啟動模式選單：
 echo  1. 貪婪地下城模式 (推薦):  --backend --mode dungeon
-echo  2. 普通關卡模式:           --backend --mode stage
-echo  3. 背包整理模式:           --backend --mode bag_clean
-echo  4. 定時領取體力與鑽石:     --backend --mode collect_only
-echo  5. 查看遊戲理智公約:       顯示防制衝動消費心態指引
+echo  2. 混合模式 (地下城+普通關卡): --backend --mode mix
+echo  3. 普通關卡模式:           --backend --mode stage
+echo  4. 背包整理模式:           --backend --mode bag_clean
+echo  5. 定時領取體力與鑽石:     --backend --mode collect_only
+echo  6. 查看遊戲理智公約:       顯示防制衝動消費心態指引
 echo ------------------------------------------------------------
 echo 參數說明：
-echo  --mode [名稱]      : 設定運行模式 (dungeon / stage / bag_clean / collect_only)
+echo  --mode [名稱]      : 設定運行模式 (dungeon / mix / stage / bag_clean / collect_only)
 echo  --backend          : 啟用後台點擊與截圖 (推薦)
 echo  --interval [秒]    : 偵測時間間隔 (預設: 0.5)
 echo ============================================================
@@ -44,21 +45,22 @@ echo.
 set "custom_args="
 set /p custom_args="請輸入啟動參數 (直接 Enter 預設為: --backend --mode dungeon): "
 
-:: 如果使用者輸入 5 或 covenant，跳轉至查看公約
-if "%custom_args%"=="5" goto VIEW_COVENANT
+:: 如果使用者輸入 6 或 covenant，跳轉至查看公約
+if "%custom_args%"=="6" goto VIEW_COVENANT
 if /i "%custom_args%"=="covenant" goto VIEW_COVENANT
 
-:: 如果使用者輸入 1, 2, 3, 4，則映射為對應參數
+:: 如果使用者輸入 1, 2, 3, 4, 5，則映射為對應參數
 if "%custom_args%"=="1" set custom_args=--backend --mode dungeon
-if "%custom_args%"=="2" set custom_args=--backend --mode stage
-if "%custom_args%"=="3" set custom_args=--backend --mode bag_clean
-if "%custom_args%"=="4" set custom_args=--backend --mode collect_only
+if "%custom_args%"=="2" set custom_args=--backend --mode mix
+if "%custom_args%"=="3" set custom_args=--backend --mode stage
+if "%custom_args%"=="4" set custom_args=--backend --mode bag_clean
+if "%custom_args%"=="5" set custom_args=--backend --mode collect_only
 
 :: 如果使用者無輸入，則帶入預設值
 if "%custom_args%"=="" set custom_args=--backend --mode dungeon
 
-:: 偵測是否為 dungeon 模式，若是則引導選擇祝福 (使用 goto 避開括號內變數延遲與特殊字元)
-echo %custom_args% | findstr /i "dungeon" >nul
+:: 偵測是否為 dungeon 或 mix 模式，若是則引導選擇祝福(使用 goto 避開括號內變數延遲與特殊字元)
+echo %custom_args% | findstr /i "dungeon mix" >nul
 if %errorlevel% neq 0 goto SKIP_BLESS
 
 echo ============================================================

@@ -58,6 +58,37 @@ GAME_CONFIGS = {
             "dungeons/gungeon_godown.png"           # 14. 前進下一層 (下樓放到最後，確保本層事件做完後才下樓)
         ]
     },
+
+    # ------------------ 混合模式 (地下城 + 普通關卡動態切換) ------------------
+    "mix": {
+        "name": "混合模式",
+        "type": "mix",
+        "bless_mode": "combat",  # 預設為戰鬥/傷害祝福
+        "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
+        "greedy_dungeon": True,
+        "greedy_allowed_indices": None,  # None 代表允許全部地下城
+        "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
+        "dungeon_fight_btn": "dungeons/dungeon_fight.png",
+        "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
+        "explore_priorities": [
+            "dungeons/dungeons_complete.png",
+            "common/confirm.png",
+            "common/continue.png",
+            "common/continue_gray.png",
+            "dungeons/gungeon_godown_confirm.png",
+            "common/ok.png",
+            "dungeons/dungeon_fight.png",
+            "common/quit.png",
+            "dungeons/Treasure.png",
+            "dungeons/skill_event.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/gungeon_godown.png"
+        ],
+        # 退守普通關卡配置 (預設為第 2 關魔王關)
+        "stage_target": "stages/level2_final.png",
+        "lobby_start_btn": "stages/start.png",
+        "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
+    },
     
     # ------------------ 背包整理模式 ------------------
     "bag_clean": {

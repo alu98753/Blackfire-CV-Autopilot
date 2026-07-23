@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
     parser.add_argument("--mode", type=str, default="stage", choices=list(GAME_CONFIGS.keys()), 
-                        help="掛機模式：stage (普通關卡) 或 dungeon (地下城)")
+                        help="掛機模式：stage (普通關卡)、dungeon (地下城) 或 mix (混合模式)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
@@ -185,7 +185,7 @@ def main():
             fight_entrance
         ]
 
-    elif args.mode == "dungeon":
+    elif args.mode in ["dungeon", "mix"]:
         print("請選擇要探索的地下城：")
         print(" 1) 黏糊糊的石窟 (Slime_entry)")
         print(" 2) 幽影地穴 (Ghost_entry)")
@@ -277,10 +277,24 @@ def main():
             }
             if bless_choice not in bless_map:
                 print(f"[!] 無效選擇 '{bless_choice}'，已自動使用預設的 [1: 戰鬥/傷害祝福]...")
-                bless_choice = "1"
-            bless_mode = bless_map[bless_choice]
+                config["bless_mode"] = "combat"
+            else:
+                config["bless_mode"] = bless_map[bless_choice]
+            print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
 
-        config["bless_mode"] = bless_mode
+        if args.mode == "mix":
+            print("\n請選擇地下城冷卻時退守刷的普通關卡：")
+            print(" 1) 第一關魔王關 (Level 1 Final)")
+            print(" 2) 第二關魔王關 (Level 2 Final) - 預設")
+            try:
+                stage_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 2): ").strip()
+                if stage_choice == "1":
+                    config["stage_target"] = "stages/level1_final.png"
+                else:
+                    config["stage_target"] = "stages/level2_final.png"
+            except Exception:
+                config["stage_target"] = "stages/level2_final.png"
+            print(f"[*] 地下城冷卻時退守普通關卡目標：{config['stage_target']}")
 
     if args.mode == "collect_only":
         config["keep_colors"] = []

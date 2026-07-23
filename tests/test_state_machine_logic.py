@@ -1846,6 +1846,41 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertFalse(self.state_machine.diamond_ocr_success)
         self.assertEqual(self.state_machine.last_diamond_collection_time, saved_cd_time)
 
+    @patch('os.path.exists')
+    def test_mix_mode_navigation_routing(self, mock_exists):
+        """
+        測試混合模式 (mix) 的瀑布式導航優先級：
+        1. 地下城可打時，在大廳看到 dungeons/dungeon.png 優先點擊進入地下城。
+        2. 地下城全冷卻時，在大廳看到 common/select_stage.png 點擊進入普通關卡。
+        """
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        mock_exists.return_value = True
+
+        # 情況 1: 地下城可用，在大廳匹配到 dungeons/dungeon.png
+        self.state_machine.dungeon_cooldowns = {0: 0.0} # 黏糊糊的石窟可用
+        def mock_match_1(img, name, threshold=0.7, **kwargs):
+            if name == "dungeons/dungeon.png":
+                return (100, 100), 0.85
+            return None, 0.0
+        self.mock_matcher.match.side_effect = mock_match_1
+
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(100, 100)
+
+        # 情況 2: 所有地下城皆在冷卻中，在大廳匹配到 common/select_stage.png
+        self.state_machine.dungeon_cooldowns = {0: time.time() + 1800, 1: time.time() + 1800, 2: time.time() + 1800, 3: time.time() + 1800, 4: time.time() + 1800}
+        def mock_match_2(img, name, threshold=0.7, **kwargs):
+            if name == "common/select_stage.png":
+                return (200, 200), 0.85
+            return None, 0.0
+        self.mock_matcher.match.side_effect = mock_match_2
+
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(200, 200)
+
 if __name__ == "__main__":
     unittest.main()
 

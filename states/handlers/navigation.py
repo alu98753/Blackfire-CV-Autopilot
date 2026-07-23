@@ -456,6 +456,13 @@ class NavigationHandler(BaseStateHandler):
                                 return
                             
                 if target_idx is None:
+                    if self.machine.config.get("type") == "mix":
+                        logging.info("⏳ 混合模式：地下城頁面偵測到所有地下城均在冷卻中，點擊返回活動大廳切換至普通關卡...")
+                        pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
+                        if pos_back:
+                            self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                            time.sleep(0.5)
+                        return
                     logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
                     time.sleep(1.0)
                     return
@@ -491,7 +498,30 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(1.2)  # 等待滑動動畫
                     return
 
-        nav_path = self.machine.config.get("navigation_path", [])
+        if self.machine.config.get("type") == "mix":
+            has_dungeon = self.machine.has_available_dungeon()
+            if has_dungeon:
+                # 優先度 2：若在活動大廳已看見 dungeons/dungeon.png，直接點擊進入！
+                pos_dg, conf_dg = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
+                if pos_dg:
+                    logging.info(f"🧭 混合模式：地下城已就緒，在活動大廳偵測到 [dungeons/dungeon.png] ({conf_dg:.4f})，直接點擊進入地下城！")
+                    self.mouse.click(rect["left"] + pos_dg[0], rect["top"] + pos_dg[1])
+                    time.sleep(0.3)
+                    return
+                nav_path = ["common/door.png", "dungeons/dungeon.png"]
+            else:
+                # 無可用地下城，退守普通關卡：若已看見 common/select_stage.png，直接點擊進入！
+                pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
+                if pos_st:
+                    logging.info(f"🧭 混合模式：地下城全冷卻，在活動大廳偵測到 [common/select_stage.png] ({conf_st:.4f})，直接點擊進入普通關卡！")
+                    self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
+                    time.sleep(0.3)
+                    return
+                stage_target = self.machine.config.get("stage_target", "stages/level2_final.png")
+                nav_path = ["common/door.png", "common/select_stage.png", stage_target]
+        else:
+            nav_path = self.machine.config.get("navigation_path", [])
+
         if not nav_path:
             # 如果沒有設定尋路路徑 (例如普通關卡)，直接進入大廳狀態
             self.machine.transition_to(self.machine.STATE_LOBBY)
