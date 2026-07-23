@@ -731,9 +731,12 @@ class NavigationHandler(BaseStateHandler):
             if in_detail_screen and "level" in btn and "final" not in btn and "entry" not in btn:
                 continue
 
-            # 針對尋路按鈕，調降大廳主要功能與跳轉按鈕之匹配閾值至 0.60，以容忍解析度微幅縮放與抖動
-            is_lobby_btn = "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn or "final" in btn
-            thresh = 0.60 if is_lobby_btn else 0.80
+            # 針對尋路按鈕，特別調整匹配閾值 (six_stage 提高至 0.90 以防止誤匹配；大廳跳轉按鈕調降至 0.60 以容忍解析度微幅縮放)
+            if btn == "stages/six_stage.png":
+                thresh = 0.90
+            else:
+                is_lobby_btn = "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn or "final" in btn
+                thresh = 0.60 if is_lobby_btn else 0.80
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=0.70)
             if pos:
                 if btn == "stages/stage_label.png":
