@@ -51,6 +51,22 @@ class NavigationHandler(BaseStateHandler):
         return None
 
 
+    def _switch_to_stage_or_back(self, screen_img, rect, reason):
+        """
+        在混合模式下當地下城不可用時，優先點擊同頁面的 common/select_stage.png 切換至普通關卡；
+        若未比對到 select_stage，才退而求其次點擊 goback_town.png 返回大廳。
+        """
+        logging.info(f"⏳ 混合模式：{reason}，直接切換至普通關卡...")
+        pos_st, _ = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
+        if pos_st:
+            self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
+            time.sleep(0.3)
+            return
+        pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
+        if pos_back:
+            self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+            time.sleep(0.3)
+
     def _check_dungeon_status(self, screen_img, scale, h_limit, w_limit, i, visible_dungeons):
         """
         檢查指定地下城 i 的冷卻與解鎖狀態。
@@ -463,11 +479,7 @@ class NavigationHandler(BaseStateHandler):
                         cooldown_until = self.machine.dungeon_cooldowns.get(target_idx, 0.0)
                         if time.time() < cooldown_until:
                             if self.machine.config.get("type") == "mix":
-                                logging.info(f"⏳ 混合模式：指定副本 [{dungeon_names[target_idx]}] 處於冷卻中，點擊返回活動大廳切換至普通關卡...")
-                                pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
-                                if pos_back:
-                                    self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-                                    time.sleep(0.5)
+                                self._switch_to_stage_or_back(screen_img, rect, f"指定副本 [{dungeon_names[target_idx]}] 處於冷卻中")
                                 return
                             if cooldown_until == float('inf'):
                                 logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於永久不可打狀態，原地等待中...")
@@ -483,22 +495,14 @@ class NavigationHandler(BaseStateHandler):
                             )
                             if is_unavailable:
                                 if self.machine.config.get("type") == "mix":
-                                    logging.info(f"⏳ 混合模式：畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中，點擊返回活動大廳切換至普通關卡...")
-                                    pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
-                                    if pos_back:
-                                        self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-                                        time.sleep(0.5)
+                                    self._switch_to_stage_or_back(screen_img, rect, f"畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中")
                                     return
                                 time.sleep(1.0)
                                 return
                             
                 if target_idx is None:
                     if self.machine.config.get("type") == "mix":
-                        logging.info("⏳ 混合模式：地下城頁面偵測到所有地下城均在冷卻中，點擊返回活動大廳切換至普通關卡...")
-                        pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
-                        if pos_back:
-                            self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-                            time.sleep(0.5)
+                        self._switch_to_stage_or_back(screen_img, rect, "地下城頁面偵測到所有地下城均在冷卻中")
                         return
                     logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
                     time.sleep(1.0)
