@@ -159,39 +159,28 @@ class ResultHandler(BaseStateHandler):
 
     def _run_defeat_giveup_subflow(self, rect, is_dungeon=True):
         """
-        [子流程] 統一戰敗放棄與退避流程（支援地下城與普通關卡）
+        [子流程] 統一戰敗放棄流程（比對 defeat_giveup.png 與 common/confirm.png）
         """
         mode_name = "地下城" if is_dungeon else "普通關卡"
-        logging.warning(f"🚨 戰敗次數已達上限！執行「戰敗放棄與退避」子流程 (當前模式: {mode_name})...")
+        logging.warning(f"🚨 連續戰敗次數已達 {self.machine.defeat_count + 1} 次！執行「放棄挑戰」流程 (當前模式: {mode_name})...")
 
-        giveup_buttons = [
-            ("defeat_giveup.png", 0.75),
-            ("common/quit.png", 0.75),
-            ("goback_town.png", 0.75),
-            ("exit_battle.png", 0.75),
-            ("common/confirm.png", 0.80)
-        ]
+        giveup_temp = "defeat_giveup.png"
+        if os.path.exists(os.path.join("templates", giveup_temp)):
+            cap_img = self.machine.capturer.capture(rect)
+            if cap_img is not None:
+                pos_g, conf_g = self.matcher.match(cap_img, giveup_temp, threshold=0.75)
+                if pos_g:
+                    logging.info(f"👉 偵測到放棄挑戰按鈕 [{giveup_temp}] (信心度: {conf_g:.4f})，進行點擊。")
+                    self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
 
-        clicked_btn = None
-        for btn_name, thresh in giveup_buttons:
-            if os.path.exists(os.path.join("templates", btn_name)):
-                cap_img = self.machine.capturer.capture(rect)
-                if cap_img is not None:
-                    pos, conf = self.matcher.match(cap_img, btn_name, threshold=thresh)
-                    if pos:
-                        logging.info(f"👉 [戰敗放棄子流程] 偵測到放棄/退出按鈕 [{btn_name}] (信心度: {conf:.4f})，進行點擊。")
-                        self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                        clicked_btn = btn_name
-                        break
-
-        # 處理點擊後可能的二次確認彈窗 (common/confirm.png)
+        # 進入確認放棄子流程，等待並點擊 confirm.png
         start_time = time.time()
-        while time.time() - start_time < 3.0:
+        while time.time() - start_time < 5.0:
             loop_screen = self.machine.capturer.capture(rect)
             if loop_screen is not None:
                 pos_c, conf_c = self.matcher.match(loop_screen, "common/confirm.png", threshold=0.80)
                 if pos_c:
-                    logging.info(f"👉 [戰敗放棄子流程] 偵測到確認彈窗 'common/confirm.png' (信心度: {conf_c:.4f})，進行點擊確認。")
+                    logging.info(f"👉 偵測到退出確認按鈕 'common/confirm.png' (相似度: {conf_c:.4f})，進行點擊確認。")
                     self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
                     break
             time.sleep(0.3)
@@ -203,7 +192,7 @@ class ResultHandler(BaseStateHandler):
             self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
             logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定地下城 {idx} 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
         else:
-            logging.warning("⚠️ 普通關卡連續戰敗達上限，重置戰敗計數並安全退回尋路介面。")
+            logging.warning("⚠️ 普通關卡戰敗放棄完成，重置戰敗計數並切換至 NAVIGATING。")
 
         self.machine.defeat_count = 0
         self.machine.is_in_dungeon = False

@@ -1684,7 +1684,7 @@ class TestBehavioralScenarios(unittest.TestCase):
                 return (100, 100), 0.85
             elif name in ["stages/retry.png", "defeat_retry.png"]:
                 return (200, 200), 0.88
-            elif name == "common/quit.png":
+            elif name == "defeat_giveup.png":
                 return (300, 300), 0.88
             elif name == "common/confirm.png":
                 return (400, 400), 0.88
