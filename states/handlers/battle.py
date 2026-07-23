@@ -147,7 +147,12 @@ class BattleHandler(BaseStateHandler):
                 best_match_temp = btn
 
         if best_match_pos:
-            if self.machine.config.get("type") == "dungeon":
+            is_dungeon_run = (
+                self.machine.config.get("type") == "dungeon" or
+                getattr(self.machine, "is_in_dungeon", False) or
+                self.machine.last_state == self.machine.STATE_DUNGEON_EXPLORING
+            )
+            if is_dungeon_run:
                 logging.info(f"🏆 戰鬥結束！點擊相似度最高的地下城結算按鈕 [{best_match_temp}]，信心度: {best_match_conf:.4f}")
                 self.mouse.click(rect["left"] + best_match_pos[0], rect["top"] + best_match_pos[1])
                 self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)

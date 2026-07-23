@@ -347,7 +347,7 @@ class NavigationHandler(BaseStateHandler):
                         res = cv2.matchTemplate(screen_img, resized_t, cv2.TM_CCOEFF_NORMED)
                         _, max_val, _, max_loc = cv2.minMaxLoc(res)
                         temp_confidences[dungeon_names[idx]] = max_val
-                        if max_val >= 0.75:
+                        if max_val >= 0.6:
                             visible_dungeons[idx] = (max_loc, t_w, t_h)
                             is_dungeon_page = True
             
@@ -363,6 +363,11 @@ class NavigationHandler(BaseStateHandler):
                     temp_confidences["LockedEntry"] = max_val_l
                     if max_val_l >= 0.75:
                         is_dungeon_page = True
+
+            if not is_dungeon_page:
+                # 僅在真的被判定為非選關介面時印出信心度以供除錯
+                conf_str = ", ".join([f"{k}: {v:.4f}" for k, v in temp_confidences.items()])
+                logging.info(f"🔍 [除錯] 未偵測到地下城選關介面 (is_dungeon_page=False)。各模板信心度: {conf_str}")
 
             if is_dungeon_page:
                 logging.info("🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。")
@@ -482,6 +487,7 @@ class NavigationHandler(BaseStateHandler):
                     logging.info(f"👉 貪婪地下城：選擇進入 [{dungeon_names[target_idx]}]，點擊座標 ({click_x}, {click_y})。")
                     self.mouse.click(click_x, click_y)
                     self.machine.current_dungeon_index = target_idx
+                    self.machine.is_in_dungeon = True
                     time.sleep(0.2)
                     return
                 else:

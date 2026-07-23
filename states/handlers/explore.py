@@ -78,6 +78,7 @@ class ExploreHandler(BaseStateHandler):
                         logging.info(f"⏳ 貪婪地下城：設定第 {self.machine.current_dungeon_index + 1} 個地下城進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
                         
                     # 通關後回到最外層大廳，轉移至尋路導航狀態重新進副本
+                    self.machine.is_in_dungeon = False
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     time.sleep(0.2)
                     
