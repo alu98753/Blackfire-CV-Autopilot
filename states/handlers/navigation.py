@@ -727,11 +727,12 @@ class NavigationHandler(BaseStateHandler):
             if btn == "dungeons/dungeon.png" and dungeon_select_open:
                 continue
 
-            # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (小島名稱包含 level 且不含 final 或 entry)
-            if in_detail_screen and "level" in btn and "final" not in btn and "entry" not in btn:
+            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
+
+            # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (僅跳過非目標子關卡的 level 小島)
+            if in_detail_screen and not is_sub_stage_target and "level" in btn and "entry" not in btn:
                 continue
 
-            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
             if is_sub_stage_target:
                 thresh = 0.90
                 b_thresh = 0.0
