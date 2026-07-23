@@ -793,6 +793,7 @@ class NavigationHandler(BaseStateHandler):
                 pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
                 if pos_start:
                     logging.info(f"🧭 尋路完成：偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達大廳。")
+                    self.machine.defeat_count = 0
                     self.machine.transition_to(self.machine.STATE_LOBBY)
                     return
 

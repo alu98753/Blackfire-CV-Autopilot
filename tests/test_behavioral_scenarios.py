@@ -1660,6 +1660,53 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         self.assertGreater(self.state_machine.dungeon_cooldowns[4], time.time() + 1790.0)
 
+    @patch('os.path.exists')
+    def test_stage_defeat_loop_protection(self, mock_exists):
+        """
+        [行為測試 27] 測試普通關卡連續戰敗退避保護與子流程：
+        1. 初始化配置為普通關卡 (Stage) 模式。
+        2. 第一次戰敗，點選 retry，defeat_count 遞增為 1。
+        3. 第二次戰敗時 (defeat_count=1 >= max_defeat-1)，觸發 _run_defeat_giveup_subflow。
+        4. 驗證透過子流程搜尋並點擊 common/quit.png 或 goback_town.png， defeat_count 清零並切回 STATE_NAVIGATING。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.config["stage_max_defeat"] = 2
+        self.state_machine.defeat_count = 0
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        dummy_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = dummy_img
+        
+        def mock_match(img_arg, name, threshold=0.7, **kwargs):
+            if name == "defeat.png":
+                return (100, 100), 0.85
+            elif name in ["stages/retry.png", "defeat_retry.png"]:
+                return (200, 200), 0.88
+            elif name == "common/quit.png":
+                return (300, 300), 0.88
+            elif name == "common/confirm.png":
+                return (400, 400), 0.88
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = mock_match
+        
+        # 第一次戰敗
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.defeat_count, 1)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+        
+        # 準備第二次戰敗 (已達上限 2 次)
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        
+        # 驗證戰敗次數清零，狀態切回 NAVIGATING
+        self.assertEqual(self.state_machine.defeat_count, 0)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
     @patch('cv2.minMaxLoc')
     @patch('cv2.matchTemplate')
     @patch('cv2.imread')

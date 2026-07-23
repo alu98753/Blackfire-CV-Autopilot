@@ -80,10 +80,10 @@ class GameStateMachine:
         self.dungeon_floor_transitioning = False
         self.consecutive_stuck_count = 0
         
-        # 地下城冷卻與貪婪選關相關屬性
+        # 地下城與關卡戰敗計數與退避相關屬性
         self.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0}
         self.current_dungeon_index = 0
-        self.dungeon_defeat_count = 0
+        self.defeat_count = 0
         self.fallback_swipe_count = 0
         
         # 使用者手動介入偵測相關屬性
@@ -116,6 +116,14 @@ class GameStateMachine:
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
             self.STATE_LOADING: LoadingHandler(self),
         }
+
+    @property
+    def dungeon_defeat_count(self):
+        return self.defeat_count
+
+    @dungeon_defeat_count.setter
+    def dungeon_defeat_count(self, value):
+        self.defeat_count = value
 
     def get_ocr_reader(self):
         """
