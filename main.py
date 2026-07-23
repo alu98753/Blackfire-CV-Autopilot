@@ -268,7 +268,7 @@ def setup_dungeon_config(config, args):
             config["bless_mode"] = bless_map[bless_choice]
         print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
 
-def main():
+def setup_utf8_encoding():
     if sys.platform.startswith('win'):
         try:
             sys.stdout.reconfigure(encoding='utf-8')
@@ -276,16 +276,7 @@ def main():
         except AttributeError:
             pass
 
-    # 建立 ArgumentParser 物件
-    is_gui_running = False
-    try:
-        import win32gui
-        hwnd = win32gui.FindWindow(None, "Antigravity")
-        if hwnd:
-            is_gui_running = True
-    except Exception:
-        pass
-            
+def parse_arguments():
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
@@ -294,85 +285,88 @@ def main():
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # 取得當前模式的配置
-    config = GAME_CONFIGS[args.mode].copy()  # 使用 copy 避免影響原始 GAME_CONFIGS 字典
+def setup_mode_config(args):
+    config = GAME_CONFIGS[args.mode].copy()
     config["backend_mode"] = args.backend
 
     if args.mode == "stage":
         setup_stage_config(config)
-
     elif args.mode == "dungeon":
         setup_dungeon_config(config, args)
-
     elif args.mode == "mix":
         setup_dungeon_config(config, args)
         setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
         print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
+    
+    return config
 
-    if args.mode == "collect_only":
+def setup_equipment_config(config):
+    if config["type"] == "bag_clean":
         config["keep_colors"] = []
         config["disassemble_colors"] = []
-    else:
-        # 1. 選擇要保留/領取的最低裝備品質
-        print("\n請選擇要【保留/領取】的最低裝備品質（該品質及以上皆會被保留，背包滿時優先拿取）：")
-        print(" 1) 綠色 (優秀)")
-        print(" 2) 藍色 (精良) - 預設")
-        print(" 3) 紫色 (史詩)")
-        print(" 4) 橘黃色 (傳奇)")
-        try:
-            keep_choice = input("請輸入數字 [1-4] (直接 Enter 鍵預設為 2): ").strip()
-            if not keep_choice:
-                keep_choice = "2"
-        except KeyboardInterrupt:
-            print("\n[!] 取消啟動。")
-            sys.exit(0)
-        except Exception:
+        return
+
+    # 1. 選擇要保留/領取的最低裝備品質
+    print("\n請選擇要【保留/領取】的最低裝備品質（該品質及以上皆會被保留，背包滿時優先拿取）：")
+    print(" 1) 綠色 (優秀)")
+    print(" 2) 藍色 (精良) - 預設")
+    print(" 3) 紫色 (史詩)")
+    print(" 4) 橘黃色 (傳奇)")
+    try:
+        keep_choice = input("請輸入數字 [1-4] (直接 Enter 鍵預設為 2): ").strip()
+        if not keep_choice:
             keep_choice = "2"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        keep_choice = "2"
 
-        keep_choices_map = {
-            "1": ["green", "blue", "purple", "orange_yellow", "red"],
-            "2": ["blue", "purple", "orange_yellow", "red"],
-            "3": ["purple", "orange_yellow", "red"],
-            "4": ["orange_yellow", "red"]
-        }
-        if keep_choice not in keep_choices_map:
-            print(f"[!] 無效選擇 '{keep_choice}'，已自動使用預設的 [2: 藍色及以上]...")
-            keep_choice = "2"
+    keep_choices_map = {
+        "1": ["green", "blue", "purple", "orange_yellow", "red"],
+        "2": ["blue", "purple", "orange_yellow", "red"],
+        "3": ["purple", "orange_yellow", "red"],
+        "4": ["orange_yellow", "red"]
+    }
+    if keep_choice not in keep_choices_map:
+        print(f"[!] 無效選擇 '{keep_choice}'，已自動使用預設的 [2: 藍色及以上]...")
+        keep_choice = "2"
 
-        config["keep_colors"] = keep_choices_map[keep_choice]
+    config["keep_colors"] = keep_choices_map[keep_choice]
 
-        # 2. 選擇可大量分解的最高裝備品質
-        print("\n請選擇可【大量分解】的最高裝備品質（該品質及以下在大廳時會被自動大量分解）：")
-        print(" 1) 灰色 (普通)")
-        print(" 2) 綠色 (優秀)")
-        print(" 3) 藍色 (精良) - 預設")
-        print(" 4) 紫色 (史詩)")
-        print(" 5) 橘黃色 (傳奇)")
-        try:
-            disassemble_choice = input("請輸入數字 [1-5] (直接 Enter 鍵預設為 3): ").strip()
-            if not disassemble_choice:
-                disassemble_choice = "3"
-        except KeyboardInterrupt:
-            print("\n[!] 取消啟動。")
-            sys.exit(0)
-        except Exception:
+    # 2. 選擇可大量分解的最高裝備品質
+    print("\n請選擇可【大量分解】的最高裝備品質（該品質及以下在大廳時會被自動大量分解）：")
+    print(" 1) 灰色 (普通)")
+    print(" 2) 綠色 (優秀)")
+    print(" 3) 藍色 (精良) - 預設")
+    print(" 4) 紫色 (史詩)")
+    print(" 5) 橘黃色 (傳奇)")
+    try:
+        disassemble_choice = input("請輸入數字 [1-5] (直接 Enter 鍵預設為 3): ").strip()
+        if not disassemble_choice:
             disassemble_choice = "3"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        disassemble_choice = "3"
 
-        disassemble_choices_map = {
-            "1": ["gray_or_empty"],
-            "2": ["gray_or_empty", "green"],
-            "3": ["gray_or_empty", "green", "blue"],
-            "4": ["gray_or_empty", "green", "blue", "purple"],
-            "5": ["gray_or_empty", "green", "blue", "purple", "orange_yellow"]
-        }
-        if disassemble_choice not in disassemble_choices_map:
-            print(f"[!] 無效選擇 '{disassemble_choice}'，已自動使用預設的 [3: 藍色及以下]...")
-            disassemble_choice = "3"
+    disassemble_choices_map = {
+        "1": ["gray_or_empty"],
+        "2": ["gray_or_empty", "green"],
+        "3": ["gray_or_empty", "green", "blue"],
+        "4": ["gray_or_empty", "green", "blue", "purple"],
+        "5": ["gray_or_empty", "green", "blue", "purple", "orange_yellow"]
+    }
+    if disassemble_choice not in disassemble_choices_map:
+        print(f"[!] 無效選擇 '{disassemble_choice}'，已自動使用預設的 [3: 藍色及以下]...")
+        disassemble_choice = "3"
 
-        config["disassemble_colors"] = disassemble_choices_map[disassemble_choice]
+    config["disassemble_colors"] = disassemble_choices_map[disassemble_choice]
 
+def init_state_machine_system(args, config):
     print("=" * 60)
     print(" 🚀 Blackfire Crusade 自動掛機輔助腳本啟動 🚀")
     print("=" * 60)
@@ -408,7 +402,6 @@ def main():
             break
 
     if enable_bread:
-        # 額外檢查收集按鈕，collect.png 或 bread_collection.png 必須至少存在一個
         has_collect = os.path.exists(os.path.join("templates", "common/collect.png")) or \
                       os.path.exists(os.path.join("templates", "common/bread_collection.png"))
         if not has_collect:
@@ -426,13 +419,12 @@ def main():
     matcher = TemplateMatcher(templates_dir="templates", template_scale=0.8)
     mouse = MouseController(human_like=True, backend_mode=args.backend)
     
-    # 初始化狀態機 (傳入模式配置)
+    # 初始化狀態機
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
     state_machine.backend_mode = args.backend
-    # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
     mouse.state_machine = state_machine
-    # 將當前配置與體力啟用狀態設定至狀態機中
     state_machine.config = config
+
     if config["type"] == "bag_clean":
         state_machine.enable_bread = False
         state_machine.need_diamond_collection = False
@@ -444,24 +436,21 @@ def main():
     print("[+] 按 [Ctrl + C] 可以隨時終止本程式。")
     print("[*] 將在 3 秒後開始偵測...")
     time.sleep(3)
+    return state_machine
 
+def run_main_loop(state_machine, interval):
     try:
-        import pyautogui  # 導入 pyautogui 用於滑鼠座標位置監控
-        
-        # 初始記錄一次滑鼠座標
+        import pyautogui
         state_machine.prev_mouse_pos = pyautogui.position()
         
         while True:
             start_time = time.time()
-            
-            # 1. 偵測使用者手動介入操作 (滑鼠移動檢測)
             cur_pos = pyautogui.position()
             
             if state_machine.prev_mouse_pos is not None:
                 dx = abs(cur_pos[0] - state_machine.prev_mouse_pos[0])
                 dy = abs(cur_pos[1] - state_machine.prev_mouse_pos[1])
                 
-                # 若滑鼠偏移大於 5 像素且腳本在 1.2 秒內無動作，視為手動介入
                 if dx > 5 or dy > 5:
                     is_inside = True
                     if getattr(state_machine, "backend_mode", False):
@@ -481,27 +470,21 @@ def main():
                                 state_machine.user_operating = True
                             state_machine.last_user_operation_time = time.time()
             
-            # 更新滑鼠座標快照
             state_machine.prev_mouse_pos = cur_pos
             
-            # 2. 處理手動操作暫停期
             if state_machine.user_operating:
-                # 使用者停止操作 3.0 秒後恢復自動掛機
                 if time.time() - state_machine.last_user_operation_time > 3.0:
                     logging.info(f"🟢 偵測到使用者已停止手動操作達 3 秒，恢復自動掛機。鎖定狀態: [{state_machine.current_state}]。")
                     state_machine.user_operating = False
-                    state_machine.prev_mouse_pos = pyautogui.position() # 防止瞬間重新觸發
+                    state_machine.prev_mouse_pos = pyautogui.position()
                 else:
-                    # 暫停單步決策，等待 0.05 秒重新檢查
                     time.sleep(0.05)
                     continue
                     
-            # 3. 執行自動掛機單步決策
             state_machine.step()
             
-            # 計算該步所花費時間，若低於設定的偵測間隔，則補足間隔時間
             elapsed = time.time() - start_time
-            sleep_time = max(0.001, args.interval - elapsed)
+            sleep_time = max(0.001, interval - elapsed)
             time.sleep(sleep_time)
             
     except KeyboardInterrupt:
@@ -511,6 +494,14 @@ def main():
         print(f"    - 總共啟動戰鬥場次: {state_machine.run_count} 次")
         print("=" * 60)
         sys.exit(0)
+
+def main():
+    setup_utf8_encoding()
+    args = parse_arguments()
+    config = setup_mode_config(args)
+    setup_equipment_config(config)
+    state_machine = init_state_machine_system(args, config)
+    run_main_loop(state_machine, args.interval)
 
 if __name__ == "__main__":
     main()
