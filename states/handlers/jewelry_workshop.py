@@ -32,6 +32,37 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.goods_scroll_state = "TOP"
         self.item_sub_step = "SEARCH"
 
+    def _get_enabled_goods(self, goods_dir, goods_settings):
+        """
+        掃描 goods_dir (含顏色子資料夾 gray/, green/, blue/, purple/ 或直接平鋪檔案)，
+        並根據 goods_settings 字典中各顏色區塊下每一個商品的 True/False 狀態，
+        整理出需要出售的相對模板路徑清單。
+        """
+        full_dir = os.path.join("templates", goods_dir)
+        if not os.path.exists(full_dir):
+            return []
+
+        if not isinstance(goods_settings, dict):
+            return []
+
+        enabled_goods = []
+        for color, items in goods_settings.items():
+            if isinstance(items, dict):
+                for item_name, is_enabled in items.items():
+                    if is_enabled:
+                        rel_path_sub = os.path.join(color, item_name)
+                        if os.path.exists(os.path.join(full_dir, f"{rel_path_sub}.png")):
+                            enabled_goods.append(rel_path_sub)
+                        elif os.path.exists(os.path.join(full_dir, f"{item_name}.png")):
+                            enabled_goods.append(item_name)
+            elif isinstance(items, bool) and items:
+                # 平鋪格式相容
+                item_name = color
+                if os.path.exists(os.path.join(full_dir, f"{item_name}.png")):
+                    enabled_goods.append(item_name)
+
+        return enabled_goods
+
     def _ensure_in_town(self, screen_img, rect=None):
         """
         獨立導航輔助函式：若目前位於大廳 (看得到 goback_town.png)，點擊返回城鎮。
@@ -78,8 +109,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
             goods_settings = GAME_CONFIGS.get("jewelry_workshop", {}).get("goods_settings", {})
         goods_dir = cfg.get("goods_dir", "town_building/Jewelry_workshop/goods")
 
-        # 整理要出售的商品清單
-        enabled_goods = [g_name for g_name, enabled in goods_settings.items() if enabled]
+        # 整理要出售的商品清單 (支援品質子目錄 gray/green/blue/purple 與特例覆蓋)
+        enabled_goods = self._get_enabled_goods(goods_dir, goods_settings)
 
         # 0. 通用防呆：若出現 common/confirm.png 彈窗，點擊確認
         conf_name = "common/confirm.png"

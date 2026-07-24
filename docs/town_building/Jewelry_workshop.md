@@ -1,6 +1,6 @@
 # 珠寶加工廠 (Jewelry Workshop) 出售功能說明 💎
 
-本文件說明 《Blackfire Crusade》 自動化輔助工具中的 **珠寶加工廠 (Jewelry Workshop) 出售功能** 設計架構、執行模式、商品設定與滑動搜尋比對機制。
+本文件說明 《Blackfire Crusade》 自動化輔助工具中的 **珠寶加工廠 (Jewelry Workshop) 出售功能** 設計架構、顏色品質階層目錄、執行模式、商品個別設定與滑動搜尋比對機制。
 
 ---
 
@@ -10,19 +10,48 @@
 
 ---
 
+## 📂 顏色品質階層目錄結構 (Color-Based Directory Structure)
+
+素材模板依顏色品質等級分門別類收錄於 `templates/town_building/Jewelry_workshop/goods/` 子目錄中：
+
+```
+templates/town_building/Jewelry_workshop/goods/
+├── gray/                                     # 灰色素材 (普通)
+│   ├── Sandworm_scales.png                   # 沙蟲鱗片
+│   ├── Spider_silk.png                       # 蜘蛛絲
+│   ├── Spider_venom_glands.png               # 蜘蛛毒腺
+│   ├── Warcraft_Fang.png                     # 魔獸之牙
+│   ├── lizard_skin.png                       # 蜥蜴皮
+│   └── scrap.png                             # 廢料
+├── green/                                    # 綠色素材 (優秀)
+│   ├── The_cloth_wrapped_around_the_dead.png # 包裹死者的布
+│   └── Giant_Beast_Gold_Tooth.png           # 巨獸金牙
+├── blue/                                     # 藍色素材 (預留)
+└── purple/                                   # 紫色素材 (預留)
+```
+
+---
+
 ## ⚙️ 可配置出售規則 (Configurable Goods Settings)
 
-使用者可在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py) 中的 `goods_settings` 彈性自訂各項商品**要賣 (`True`)** 或是**保留不賣 (`False`)**：
+使用者可在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py) 中的 `goods_settings` 字典內，按顏色品質區分並**個別管理每一個商品是否出售 (`True` / `False`)**：
 
 ```python
 "goods_settings": {
-    "Sandworm_scales": True,                    # 賣出沙蟲鱗片
-    "Spider_silk": True,                        # 賣出蜘蛛絲
-    "Spider_venom_glands": True,                # 賣出蜘蛛毒腺
-    "The_cloth_wrapped_around_the_dead": True,  # 賣出包裹死者的布
-    "Warcraft_Fang": False,                     # 保留魔獸之牙 (設為 False 絕不賣出)
-    "lizard_skin": True,                        # 賣出蜥蜴皮
-    "scrap": True,                              # 賣出廢料
+    "gray": {
+        "Sandworm_scales": True,     # 出售沙蟲鱗片
+        "Spider_silk": True,         # 出售蜘蛛絲
+        "Spider_venom_glands": True, # 出售蜘蛛毒腺
+        "Warcraft_Fang": False,      # 保留魔獸之牙 (不賣)
+        "lizard_skin": True,         # 出售蜥蜴皮
+        "scrap": True,               # 出售廢料
+    },
+    "green": {
+        "The_cloth_wrapped_around_the_dead": True, # 出售包裹死者的布
+        "Giant_Beast_Gold_Tooth": True,            # 出售巨獸金牙
+    },
+    "blue": {},
+    "purple": {},
 }
 ```
 
@@ -42,21 +71,8 @@
 
 - **自動進門與開啟選單**：於城鎮自動辨識並點擊 `Jewelry_workshop.png` ➔ 點擊 `sell_out.png` 開啟出售選單。
 - **商品滑動與還原演算法**：
-  1. 於頂層畫面匹配商品圖示 (信心度 $\ge 0.75$)。
+  1. 於頂層畫面匹配商品圖示 (門檻 $0.90$)。
   2. 若未尋獲 ➔ 執行向下滑動 2 次再次搜尋。
   3. 若仍未尋獲 ➔ 認定未持有該商品 ➔ **向上滑動 2 次還原畫面高度** ➔ 繼續比對下一個商品。
 - **出售與確認**：點擊商品圖示 ➔ 點擊 `sell.png` ➔ 點擊 `sell_max.png` (拉滿) ➔ 點擊 `ok.png` / `confirm.png` 確認出售。
 - **離場**：全數商品處置完畢後，點擊 `exitfromhouse_and_to_town.png` 離開建築回到城鎮並安全退出程式。
-
----
-
-## 📦 出售商品清單 (Goods Templates)
-
-收錄於 `templates/town_building/Jewelry_workshop/goods/`：
-1. `Sandworm_scales.png` (沙蟲鱗片)
-2. `Spider_silk.png` (蜘蛛絲)
-3. `Spider_venom_glands.png` (蜘蛛毒腺)
-4. `The_cloth_wrapped_around_the_dead.png` (包裹死者的布)
-5. `Warcraft_Fang.png` (魔獸之牙)
-6. `lizard_skin.png` (蜥蜴皮)
-7. `scrap.png` (廢料)
