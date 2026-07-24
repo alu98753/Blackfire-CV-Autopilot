@@ -17,7 +17,8 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS, get_stage_configs
+from config import GAME_CONFIGS
+from utils import get_stage_configs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
