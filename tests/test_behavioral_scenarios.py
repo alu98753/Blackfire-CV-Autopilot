@@ -2397,16 +2397,16 @@ class TestBehavioralScenarios(unittest.TestCase):
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_goods
-        self.mock_mouse.scroll.reset_mock()
+        self.mock_mouse.drag.reset_mock()
         self.mock_mouse.click.reset_mock()
 
         import numpy as np
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = self.mock_capturer.get_window_rect()
 
-        # 1. 第一幀：頂層未找到，執行向下滾動
+        # 1. 第一幀：頂層未找到，執行平滑拖曳滑動
         handler.handle(fake_img, rect)
-        self.mock_mouse.scroll.assert_called_with(-600, 960, 540)
+        self.mock_mouse.drag.assert_called_with(960, 648, 960, 432, duration=0.5, inertia=False)
         self.assertEqual(handler.goods_scroll_state, "SCROLLED_DOWN")
 
         # 2. 第二幀：滑動後找到商品，執行點選與賣出

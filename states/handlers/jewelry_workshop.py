@@ -102,11 +102,13 @@ class JewelryWorkshopHandler(BaseStateHandler):
         if self.step_phase == "SELL_MENU_OPEN":
             if self.current_goods_idx >= len(enabled_goods):
                 logging.info("💎 [珠寶加工廠] 所有指定商品清單比對與出售處理完畢！進入退出階段...")
-                # 若當前仍處於向下滾動狀態，滾回頂端
+                # 若當前仍處於向下滾動狀態，平滑拖曳滾回頂端
                 if self.goods_scroll_state == "SCROLLED_DOWN":
                     center_x = left + (rect["width"] // 2 if rect and "width" in rect else 960)
-                    center_y = top + (rect["height"] // 2 if rect and "height" in rect else 540)
-                    self.mouse.scroll(600, center_x, center_y)
+                    height = rect["height"] if rect and "height" in rect else 1080
+                    drag_start_y = top + int(height * 0.6)
+                    drag_end_y = top + int(height * 0.4)
+                    self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
                     self.goods_scroll_state = "TOP"
                     time.sleep(0.3)
                 self.step_phase = "ALL_DONE_EXITING"
@@ -116,27 +118,30 @@ class JewelryWorkshopHandler(BaseStateHandler):
             goods_name = enabled_goods[self.current_goods_idx]
             template_path = os.path.join(goods_dir, f"{goods_name}.png")
 
+            # 滾動與拖曳座標計算 (由畫面 60% 高度拖曳至 40% 高度)
             center_x = left + (rect["width"] // 2 if rect and "width" in rect else 960)
-            center_y = top + (rect["height"] // 2 if rect and "height" in rect else 540)
+            height = rect["height"] if rect and "height" in rect else 1080
+            drag_start_y = top + int(height * 0.6)
+            drag_end_y = top + int(height * 0.4)
 
             # 步驟 A: 嘗試在當前畫面匹配目標商品
             pos_goods = None
             if os.path.exists(os.path.join("templates", template_path)):
                 pos_goods, conf_goods = self.matcher.match(screen_img, template_path, threshold=0.75)
 
-            # 若未找到商品且當前在頂部，執行向下滑動 2 次
+            # 若未找到商品且當前在頂部，執行向下滑動 (向上拖曳 200 像素)
             if not pos_goods and self.goods_scroll_state == "TOP":
-                logging.info(f"💎 [珠寶加工廠] 頂層未找到商品 [{goods_name}]，向下滑動 2 次再次搜尋...")
-                self.mouse.scroll(-600, center_x, center_y)
+                logging.info(f"💎 [珠寶加工廠] 頂層未找到商品 [{goods_name}]，執行平滑拖曳向下滑動再次搜尋...")
+                self.mouse.drag(center_x, drag_start_y, center_x, drag_end_y, duration=0.5, inertia=False)
                 self.goods_scroll_state = "SCROLLED_DOWN"
                 time.sleep(0.3)
                 self.last_action_time = now
                 return
 
-            # 若向下滑動後仍未找到商品 ➔ 認定背包無此商品 ➔ 向上滑動 2 次還原高度 ➔ 繼續下一個商品
+            # 若向下滑動後仍未找到商品 ➔ 認定背包無此商品 ➔ 向上滑動還原高度 (向下拖曳 200 像素) ➔ 繼續下一個商品
             if not pos_goods and self.goods_scroll_state == "SCROLLED_DOWN":
-                logging.info(f"💎 [珠寶加工廠] 滑動後仍未發現商品 [{goods_name}]，判定未持有。向上滾動還原高度並比對下一個商品...")
-                self.mouse.scroll(600, center_x, center_y)
+                logging.info(f"💎 [珠寶加工廠] 滑動後仍未發現商品 [{goods_name}]，判定未持有。平滑拖曳還原原位高度並比對下一個商品...")
+                self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
                 self.goods_scroll_state = "TOP"
                 self.current_goods_idx += 1
                 time.sleep(0.3)
@@ -179,7 +184,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
                 # 若有向下滾動，賣完後向上還原滾動高度
                 if self.goods_scroll_state == "SCROLLED_DOWN":
-                    self.mouse.scroll(600, center_x, center_y)
+                    self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
                     self.goods_scroll_state = "TOP"
                     time.sleep(0.2)
 
