@@ -1,12 +1,34 @@
 # 珠寶加工廠 (Jewelry Workshop) 出售功能說明 💎
 
-本文件說明 《Blackfire Crusade》 自動化輔助工具中的 **珠寶加工廠 (Jewelry Workshop) 出售功能** 設計架構、執行模式與商品滑動搜尋比對機制。
+本文件說明 《Blackfire Crusade》 自動化輔助工具中的 **珠寶加工廠 (Jewelry Workshop) 出售功能** 設計架構、執行模式、商品設定與滑動搜尋比對機制。
 
 ---
 
 ## 🚀 功能概述
 
 珠寶加工廠為城鎮中的核心建築之一，玩家可在出售選單 (`sell_out.png`) 中出售各類素材與商品。腳本自動遍歷商品清單，自動進行向下滑動搜尋、點選商品、賣出 (`sell.png`)、拉滿數量 (`sell_max.png`) 及確認離場。
+
+---
+
+## ⚙️ 可配置出售規則 (Configurable Goods Settings)
+
+使用者可在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py) 中的 `goods_settings` 彈性自訂各項商品**要賣 (`True`)** 或是**保留不賣 (`False`)**：
+
+```python
+"goods_settings": {
+    "Sandworm_scales": True,                    # 賣出沙蟲鱗片
+    "Spider_silk": True,                        # 賣出蜘蛛絲
+    "Spider_venom_glands": True,                # 賣出蜘蛛毒腺
+    "The_cloth_wrapped_around_the_dead": True,  # 賣出包裹死者的布
+    "Warcraft_Fang": False,                     # 保留魔獸之牙 (設為 False 絕不賣出)
+    "lizard_skin": True,                        # 賣出蜥蜴皮
+    "scrap": True,                              # 賣出廢料
+}
+```
+
+### 💡 跨模式全域繼承與連動
+- **獨立 CLI 模式 (`--mode jewelry_workshop`)**：讀取並執行上述商品出售規則。
+- **城鎮任務流水線 (`Town Subflow Pipeline`)**：在 `mix` (混合模式)、`stage` (推圖模式) 或 `dungeon` (地城模式) 自動掛機過程中，若背包滿清理後退回城鎮連動進入珠寶加工廠，系統會 **100% 自動繼承與遵循此設定**。被設為 `False` 的商品（如 `Warcraft_Fang`）在流水線中同樣會被安全保留，絕對不會被誤賣！
 
 ---
 
