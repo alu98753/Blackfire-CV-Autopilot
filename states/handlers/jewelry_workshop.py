@@ -122,7 +122,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
             # 步驟 A: 嘗試在當前畫面匹配目標商品
             pos_goods = None
             conf_goods = 0.0
-            goods_threshold = cfg.get("goods_threshold", 0.60)
+            goods_threshold = cfg.get("goods_threshold", 0.6)
             if os.path.exists(os.path.join("templates", template_path)):
                 pos_goods, conf_goods = self.matcher.match(screen_img, template_path, threshold=goods_threshold)
 
@@ -131,7 +131,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 logging.info(f"💎 [珠寶加工廠] 頂層未找到商品 [{goods_name}] (門檻: {goods_threshold})，執行平滑拖曳向下滑動再次搜尋...")
                 self.mouse.drag(center_x, drag_start_y, center_x, drag_end_y, duration=0.5, inertia=False)
                 self.goods_scroll_state = "SCROLLED_DOWN"
-                time.sleep(0.3)
+                time.sleep(0.8)
                 self.last_action_time = now
                 return
 
@@ -141,7 +141,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
                 self.goods_scroll_state = "TOP"
                 self.current_goods_idx += 1
-                time.sleep(0.3)
+                time.sleep(0.8)
                 self.last_action_time = now
                 return
 
@@ -257,6 +257,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
             self.step_phase = "SELL_MENU_OPEN"
             self.current_goods_idx = 0
             self.goods_scroll_state = "TOP"
+            time.sleep(0.8)
             self.last_action_time = now
             return
 
@@ -276,5 +277,6 @@ class JewelryWorkshopHandler(BaseStateHandler):
             self.step_phase = "SELL_MENU_OPEN"
             self.current_goods_idx = 0
             self.goods_scroll_state = "TOP"
+            time.sleep(0.8)
             self.last_action_time = now
             return
