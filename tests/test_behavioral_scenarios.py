@@ -1949,15 +1949,16 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 斷言：必須點擊 common/door.png (76, 751) 進入大廳！
         self.mock_mouse.click.assert_called_once_with(76, 751)
 
+    @patch('sys.exit')
     @patch('os.path.exists')
-    def test_blood_altar_full_subflow(self, mock_exists):
+    def test_blood_altar_full_subflow(self, mock_exists, mock_sys_exit):
         """
         測試血之祭壇獻祭 (Blood Altar) 完整子流程：
         1. 城鎮 (door.png, Blood_Altar.png) ➔ 點擊 Blood_Altar.png
         2. 建築內 (Sacrifice.png) ➔ 點擊 Sacrifice.png
         3. 獻祭選單 (green_blood.png, alter.png) ➔ 點擊 green_blood.png ➔ 點擊 alter.png
         4. 視窗關閉 (quit.png) ➔ 點擊 quit.png
-        5. 離開建築 (exitfromhouse_and_to_town.png) ➔ 點擊 exitfromhouse_and_to_town.png ➔ 流程結束
+        5. 離開建築 (exitfromhouse_and_to_town.png) ➔ 點擊 exitfromhouse_and_to_town.png ➔ 流程結束 (呼叫 sys.exit(0))
         """
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
@@ -2035,7 +2036,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(1200, 100)
 
-        # Step 5: 點擊 exitfromhouse_and_to_town.png 離開
+        # Step 5: 點擊 exitfromhouse_and_to_town.png 離開 ➔ 觸發 sys.exit(0)
         handler.last_action_time = 0.0
         def mock_match_step5(img, name, **kw):
             if name == "town_building/exitfromhouse_and_to_town.png":
@@ -2048,7 +2049,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(50, 50)
         self.assertEqual(handler.step_phase, "INIT")
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        mock_sys_exit.assert_called_once_with(0)
 
     @patch('os.path.exists')
     def test_blood_altar_returns_to_town_from_lobby(self, mock_exists):

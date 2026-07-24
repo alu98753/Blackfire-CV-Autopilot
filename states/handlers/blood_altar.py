@@ -1,5 +1,6 @@
 import time
 import os
+import sys
 import logging
 from states.handlers.base import BaseStateHandler
 
@@ -161,7 +162,8 @@ class BloodAltarHandler(BaseStateHandler):
                 self.reset_state()
                 self.last_action_time = now
                 if cfg.get("type") == "blood_altar":
-                    self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                    logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
+                    sys.exit(0)
                 return
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
@@ -179,8 +181,8 @@ class BloodAltarHandler(BaseStateHandler):
                 self.last_action_time = now
                 
                 if cfg.get("type") == "blood_altar":
-                    logging.info("✅ [血之祭壇] 獨立單次獻祭流程完成！切換至 UNKNOWN 進行下一輪巡檢...")
-                    self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                    logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
+                    sys.exit(0)
                 return
             return
 
