@@ -121,12 +121,14 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
             # 步驟 A: 嘗試在當前畫面匹配目標商品
             pos_goods = None
+            conf_goods = 0.0
+            goods_threshold = cfg.get("goods_threshold", 0.60)
             if os.path.exists(os.path.join("templates", template_path)):
-                pos_goods, conf_goods = self.matcher.match(screen_img, template_path, threshold=0.75)
+                pos_goods, conf_goods = self.matcher.match(screen_img, template_path, threshold=goods_threshold)
 
             # 若未找到商品且當前在頂部，執行向下滑動 (向上拖曳 200 像素)
             if not pos_goods and self.goods_scroll_state == "TOP":
-                logging.info(f"💎 [珠寶加工廠] 頂層未找到商品 [{goods_name}]，執行平滑拖曳向下滑動再次搜尋...")
+                logging.info(f"💎 [珠寶加工廠] 頂層未找到商品 [{goods_name}] (門檻: {goods_threshold})，執行平滑拖曳向下滑動再次搜尋...")
                 self.mouse.drag(center_x, drag_start_y, center_x, drag_end_y, duration=0.5, inertia=False)
                 self.goods_scroll_state = "SCROLLED_DOWN"
                 time.sleep(0.3)
@@ -145,7 +147,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
             # 若找到商品，執行出售流程
             if pos_goods:
-                logging.info(f"💎 [珠寶加工廠] 發現可出售商品 [{goods_name}]，點擊選擇該商品...")
+                logging.info(f"💎 [珠寶加工廠] 發現可出售商品 [{goods_name}] (信心度: {conf_goods:.4f})，點擊選擇該商品...")
                 self.mouse.click(left + pos_goods[0], top + pos_goods[1])
                 time.sleep(0.3)
 
