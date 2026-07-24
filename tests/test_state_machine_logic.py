@@ -1780,8 +1780,8 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.original_config, orig_config)
         self.assertEqual(self.state_machine.stamina_retreat_start_time, t0) # 起點時間仍為原來的 t0！
         
-        # 階段 3：退避時間達到 4.1 小時 (滿 4 小時)
-        self.state_machine.stamina_retreat_start_time = time.time() - (4.1 * 3600.0)
+        # 階段 3：退避時間達到滿退避時間 (預設 7.0 小時，模擬已過 7.1 小時)
+        self.state_machine.stamina_retreat_start_time = time.time() - (7.1 * 3600.0)
         self.state_machine.step()
         
         # 應徹底恢復 orig_config 並清空退避狀態
