@@ -327,6 +327,11 @@ class NavigationHandler(BaseStateHandler):
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
         config_type = self.machine.config.get("type") if self.machine.config else "stage"
         
+        if config_type == "blood_altar":
+            self.machine.transition_to(self.machine.STATE_BLOOD_ALTAR)
+            self.machine.handlers[self.machine.STATE_BLOOD_ALTAR].handle(screen_img, rect)
+            return
+        
         # 判斷是否需要執行地下城卡片掃描：
         # - dungeon 模式：必然掃描
         # - mix 模式：只有記憶體判定有可用地下城 (has_available_dungeon() == True) 時才掃描

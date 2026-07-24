@@ -519,8 +519,8 @@ class GameStateMachine:
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。
         """
-        if self.config is not None and self.config["type"] == "bag_clean":
-            return  # 背包整理模式不參與領取
+        if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar"]:
+            return  # 背包整理與血之祭壇模式不參與自動領取
 
         from config import GLOBAL_SETTINGS
 
