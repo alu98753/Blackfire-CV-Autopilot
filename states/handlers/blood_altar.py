@@ -92,8 +92,10 @@ class BloodAltarHandler(BaseStateHandler):
         # 1. 嚴格獻祭選單開啟狀態 (SACRIFICE_MENU_OPEN) - 嚴格隔離模式
         # =========================================================================
         if self.step_phase == "SACRIFICE_MENU_OPEN":
-            # 檢查是否有任何啟用的品質血水在畫面上
+            max_btn = cfg.get("max_btn", "town_building/sell_max.png")
             pos_alter, _ = self.matcher.match(screen_img, alter_btn, threshold=0.75)
+            pos_max, _ = self.matcher.match(screen_img, max_btn, threshold=0.75)
+
             matched_blood = None
             for quality, enabled in sacrifice_settings.items():
                 if not enabled:
@@ -111,7 +113,24 @@ class BloodAltarHandler(BaseStateHandler):
                 self.mouse.click(left + q_pos[0], top + q_pos[1])
                 time.sleep(0.3)
                 
-                # 若同時看到 alter.png 按鈕，直接點擊獻祭
+                latest_img = self.capturer.capture(rect) if (self.capturer and rect) else None
+                if latest_img is not None:
+                    pos_max_now, _ = self.matcher.match(latest_img, max_btn, threshold=0.75)
+                    if pos_max_now:
+                        pos_max = pos_max_now
+
+                # 若有 MAX 數量按鈕，點擊拉滿數量
+                if pos_max:
+                    logging.info(f"🩸 [血之祭壇] 點擊 MAX 數量按鈕 [{max_btn}]...")
+                    self.mouse.click(left + pos_max[0], top + pos_max[1])
+                    time.sleep(0.2)
+
+                if latest_img is not None:
+                    pos_alter_now, _ = self.matcher.match(latest_img, alter_btn, threshold=0.75)
+                    if pos_alter_now:
+                        pos_alter = pos_alter_now
+
+                # 若有 alter.png 按鈕，直接點擊獻祭
                 if pos_alter:
                     logging.info(f"🩸 [血之祭壇] 點擊獻祭執行按鈕 [{alter_btn}]...")
                     self.mouse.click(left + pos_alter[0], top + pos_alter[1])

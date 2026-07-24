@@ -1994,11 +1994,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(830, 863)
         self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
 
-        # Step 3: 點選 green_blood 獻祭 ➔ 點擊 alter.png
+        # Step 3: 點選 green_blood 獻祭 ➔ 點擊 sell_max.png ➔ 點擊 alter.png
         handler.last_action_time = 0.0
         def mock_match_step3(img, name, **kw):
             if name == "town_building/Blood_Altar/green_blood.png":
                 return ((706, 303), 0.9)
+            elif name == "town_building/sell_max.png":
+                return ((1173, 539), 0.9)
             elif name == "town_building/Blood_Altar/alter.png":
                 return ((917, 774), 0.9)
             return (None, 0.0)
@@ -2007,7 +2009,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.reset_mock()
 
         handler.handle()
-        self.assertEqual(self.mock_mouse.click.call_count, 2)
+        self.assertEqual(self.mock_mouse.click.call_count, 3)
         self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
 
         # Step 4: 連續 3 幀無任何血水，進到 ALL_DONE_EXITING 階段並點擊 common/quit.png
