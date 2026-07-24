@@ -8,6 +8,21 @@ GLOBAL_SETTINGS = {
     "default_bless_mode": "combat",  # 預設為戰鬥/傷害祝福
     "default_town_subflow_order": ["blood_altar", "jewelry_workshop"],  # 預設背包清理後連動的城鎮建築順序
     "dry_run_bag_clean": False,  # 安全測試開關：設為 True 時，背包清理不真實點擊分解裝備，保護裝備並續行測試城鎮流水線
+    "default_goods_settings": {
+        "Sandworm_scales": True,
+        "Spider_silk": True,
+        "Spider_venom_glands": True,
+        "The_cloth_wrapped_around_the_dead": True,
+        "Warcraft_Fang": False,
+        "lizard_skin": True,
+        "scrap": True,
+    },
+    "default_sacrifice_settings": {
+        "gray": True,
+        "green": True,
+        "blue": True,
+        "purple": False,
+    },
 }
 
 DUNGEON_NAMES = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
