@@ -205,5 +205,63 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 斷言 3: 狀態應正確轉移至 STATE_JEWELRY_WORKSHOP，絕對不能誤轉回 BLOOD_ALTAR！
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
 
+    def test_match_mutually_exclusive_tabs_logic(self):
+        """
+        鎖定測試 1: 驗證 match_mutually_exclusive_tabs 的相對優勢算法 (margin 0.02, threshold 0.70)。
+        """
+        from unittest.mock import MagicMock
+        from vision.matcher import TemplateMatcher
+        matcher = TemplateMatcher()
+        matcher.match = MagicMock()
+
+        # 情況 A: c_a = 0.75, c_b = 0.60 (優勢高於 0.02 且高於 0.70) ➔ is_a=True, is_b=False
+        matcher.match.side_effect = lambda img, temp, **kw: ((0, 0), 0.75) if temp == "temp_a" else (((0, 0), 0.60) if temp == "temp_b" else (None, 0.0))
+        is_a, is_b, ca, cb = matcher.match_mutually_exclusive_tabs(None, "temp_a", "temp_b", margin=0.02, threshold=0.70)
+        self.assertTrue(is_a)
+        self.assertFalse(is_b)
+
+        # 情況 B: c_a = 0.71, c_b = 0.70 (相差 0.01 低於 margin 0.02) ➔ is_a=False, is_b=False (不穩定保護)
+        matcher.match.side_effect = lambda img, temp, **kw: ((0, 0), 0.71) if temp == "temp_a" else (((0, 0), 0.70) if temp == "temp_b" else (None, 0.0))
+        is_a, is_b, ca, cb = matcher.match_mutually_exclusive_tabs(None, "temp_a", "temp_b", margin=0.02, threshold=0.70)
+        self.assertFalse(is_a)
+        self.assertFalse(is_b)
+
+    def test_transition_to_auto_sync_config_context(self):
+        """
+        鎖定測試 2: 驗證當呼叫 transition_to(new_state) 時，全域 self.config 瞬間自動同步為新狀態專屬配置。
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from config import GAME_CONFIGS
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.config = {} # 初始為空字典
+        
+        # 1. 轉移至 BLOOD_ALTAR
+        sm.transition_to(sm.STATE_BLOOD_ALTAR)
+        self.assertEqual(sm.config["type"], "blood_altar")
+        self.assertEqual(sm.config["building_btn"], "town_building/Blood_Altar/Blood_Altar.png")
+
+        # 2. 轉移至 JEWELRY_WORKSHOP
+        sm.transition_to(sm.STATE_JEWELRY_WORKSHOP)
+        self.assertEqual(sm.config["type"], "jewelry_workshop")
+        self.assertEqual(sm.config["building_btn"], "town_building/Jewelry_workshop/Jewelry_workshop.png")
+
+    def test_filter_navigation_path_reentrancy_prevention(self):
+        """
+        鎖定測試 3: 驗證 filter_navigation_path 動態過濾已開啟頁籤之父階按鈕。
+        """
+        from states.handlers.navigation import filter_navigation_path
+
+        nav_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        
+        # 1. 當 active_tabs 包含 "dungeon" 頁籤開啟時 ➔ 自動過濾 "dungeons/dungeon.png"
+        filtered = filter_navigation_path(nav_path, active_tabs=["dungeon"])
+        self.assertEqual(filtered, ["common/door.png", "dungeons/Slime_entry.png"])
+
+        # 2. 當 active_tabs 為空時 ➔ 保持原樣
+        filtered_empty = filter_navigation_path(nav_path, active_tabs=[])
+        self.assertEqual(filtered_empty, nav_path)
+
 if __name__ == "__main__":
     unittest.main()

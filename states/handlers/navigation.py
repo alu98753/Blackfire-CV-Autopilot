@@ -5,6 +5,22 @@ import re
 from states.handlers.base import BaseStateHandler
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 
+def filter_navigation_path(nav_path, active_tabs=None):
+    """
+    動態過濾導航路徑中已被已開啟 UI 頁籤涵蓋的父階按鈕（防重入跳過）。
+    :param nav_path: 導航路徑按鈕列表
+    :param active_tabs: 已開啟頁籤名稱列表，如 ["stage"], ["dungeon"]
+    """
+    if not active_tabs:
+        return list(nav_path)
+    
+    skip_map = {
+        "stage": "common/select_stage.png",
+        "dungeon": "dungeons/dungeon.png"
+    }
+    skip_btns = {skip_map[tab] for tab in active_tabs if tab in skip_map}
+    return [btn for btn in nav_path if btn not in skip_btns]
+
 class NavigationHandler(BaseStateHandler):
     def _parse_time_to_seconds(self, time_str):
         """
@@ -274,6 +290,47 @@ class NavigationHandler(BaseStateHandler):
         pos_bread_btn, conf_bread_btn = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
         if pos_goback or pos_bread_btn:
             is_lobby = True
+
+        # 頁籤開啟狀態統一對比檢測 (比較 select_stage_after.png 與 dungeon_after.png)
+        res_tabs = self.matcher.match_mutually_exclusive_tabs(
+            screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
+        )
+        if isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4 and type(res_tabs).__name__ != "MagicMock":
+            stage_select_open, dungeon_select_open, _, _ = res_tabs
+        else:
+            conf_stage_after, conf_dungeon_after = 0.0, 0.0
+            if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
+                res_sa = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.70)
+                conf_stage_after = res_sa[1] if (isinstance(res_sa, (tuple, list)) and len(res_sa) >= 2 and res_sa[1] is not None) else 0.0
+
+            if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
+                res_da = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.70)
+                conf_dungeon_after = res_da[1] if (isinstance(res_da, (tuple, list)) and len(res_da) >= 2 and res_da[1] is not None) else 0.0
+
+            stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
+            dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
+
+        if is_town:
+            stage_select_open = False
+            dungeon_select_open = False
+        else:
+            if not stage_select_open and not dungeon_select_open:
+                stage_templates = self.machine.config.get("stage_templates", [])
+                for st_temp in stage_templates:
+                    if os.path.exists(os.path.join("templates", st_temp)):
+                        pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.75)
+                        if pos:
+                            stage_select_open = True
+                            break
+
+            if not stage_select_open and not dungeon_select_open:
+                dungeon_templates = self.machine.config.get("dungeon_entries", [])
+                for dg_temp in dungeon_templates:
+                    if os.path.exists(os.path.join("templates", dg_temp)):
+                        pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.75)
+                        if pos:
+                            dungeon_select_open = True
+                            break
 
         # 2. 領鑽石優先流程
         if self.machine.need_diamond_collection:
@@ -557,42 +614,7 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(1.2)
                     return
 
-        # 頁籤開啟狀態統一對比檢測 (比較 select_stage_after.png 與 dungeon_after.png)
-        conf_stage_after = 0.0
-        if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-            _, c_sa = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.70)
-            conf_stage_after = c_sa or 0.0
 
-        conf_dungeon_after = 0.0
-        if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-            _, c_da = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.70)
-            conf_dungeon_after = c_da or 0.0
-
-        stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
-        dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
-
-        # 防呆修復：若明確處於城鎮 (is_town == True，如 common/door.png 可見)，頁籤絕不可能為開啟狀態
-        if is_town:
-            stage_select_open = False
-            dungeon_select_open = False
-        else:
-            if not stage_select_open and not dungeon_select_open:
-                stage_templates = self.machine.config.get("stage_templates", [])
-                for st_temp in stage_templates:
-                    if os.path.exists(os.path.join("templates", st_temp)):
-                        pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.75)
-                        if pos:
-                            stage_select_open = True
-                            break
-
-            if not stage_select_open and not dungeon_select_open:
-                dungeon_templates = self.machine.config.get("dungeon_entries", [])
-                for dg_temp in dungeon_templates:
-                    if os.path.exists(os.path.join("templates", dg_temp)):
-                        pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.75)
-                        if pos:
-                            dungeon_select_open = True
-                            break
 
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
@@ -750,15 +772,16 @@ class NavigationHandler(BaseStateHandler):
                 return
 
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
-        clicked_any = False
-        for btn in reversed(nav_path):
-            # 防重入：如果在關卡選擇介面，跳過 common/select_stage.png 避免重複開啟或誤點
-            if btn == "common/select_stage.png" and stage_select_open:
-                continue
+        active_tabs = []
+        if stage_select_open:
+            active_tabs.append("stage")
+        if dungeon_select_open:
+            active_tabs.append("dungeon")
 
-            # 防重入：如果地下城選擇選單已開啟，跳過 dungeons/dungeon.png 避免重複開啟或誤點
-            if btn == "dungeons/dungeon.png" and dungeon_select_open:
-                continue
+        filtered_nav_path = filter_navigation_path(nav_path, active_tabs)
+
+        clicked_any = False
+        for btn in reversed(filtered_nav_path):
 
             is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
 

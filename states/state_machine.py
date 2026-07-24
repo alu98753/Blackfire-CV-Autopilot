@@ -161,21 +161,34 @@ class GameStateMachine:
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
             self.just_resumed_from_user = False
+            self._on_state_transition_sync_context(new_state)
 
-            # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
-            if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
-                try:
-                    self.handlers[new_state].reset_state()
-                except Exception as e:
-                    logging.debug(f"重置 Handler [{new_state}] 狀態時發生異常: {e}")
+    def _on_state_transition_sync_context(self, new_state):
+        from config import GAME_CONFIGS
+        state_to_config_key = {
+            self.STATE_BLOOD_ALTAR: "blood_altar",
+            self.STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
+        }
+        key = state_to_config_key.get(new_state)
+        if key and key in GAME_CONFIGS:
+            if self.config is None:
+                self.config = {}
+            self.config.update(GAME_CONFIGS[key])
 
-            if new_state == self.STATE_BATTLE:
-                self.last_auto_click_time = 0
-            elif new_state == self.STATE_LOADING:
-                self.loading_start_time = time.time()
-            elif new_state == self.STATE_BACKPACK_FULL_SORTING:
-                self.need_bag_cleaning = True
-                self.handlers[new_state].screenshot_counter = 1
+        # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
+        if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
+            try:
+                self.handlers[new_state].reset_state()
+            except Exception as e:
+                logging.debug(f"重置 Handler [{new_state}] 狀態時發生異常: {e}")
+
+        if new_state == self.STATE_BATTLE:
+            self.last_auto_click_time = 0
+        elif new_state == self.STATE_LOADING:
+            self.loading_start_time = time.time()
+        elif new_state == self.STATE_BACKPACK_FULL_SORTING:
+            self.need_bag_cleaning = True
+            self.handlers[new_state].screenshot_counter = 1
 
     def step(self):
         """

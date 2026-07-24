@@ -331,7 +331,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 3. 畫面回到大廳，看到 stages/start.png。此時因為 need_bag_cleaning 標記，大廳處理器應轉移至 BAG_CLEANING 狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
+            ((300, 300), 0.9) if name in ["stages/start.png", "common/select_stage.png"] else (None, 0.0)
         )
         self.state_machine.step()  # LobbyHandler 攔截轉移 LOBBY -> BAG_CLEANING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
@@ -464,6 +464,7 @@ class TestStateMachineLogic(unittest.TestCase):
         mock_exists.return_value = True
         
         # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png) ➔ 直接轉移至 BACKPACK_FULL_SORTING 並標記 need_bag_cleaning
+        self.state_machine.battle_start_time = time.time() - 10.0
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
@@ -2090,18 +2091,20 @@ class TestStateMachineLogic(unittest.TestCase):
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = self.mock_capturer.get_window_rect()
 
+        self.state_machine.need_jewelry_workshop = True
         self.state_machine.detect_current_state(fake_img, rect)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
 
     @patch('os.path.exists')
     def test_detect_state_blood_altar_mode_forces_blood_altar_state(self, mock_exists):
         """
-        測試當模式為 blood_altar 且在城鎮大門時：
+        測試當需要血之祭壇且在城鎮大門時：
         detect_current_state() 會正確轉移至 STATE_BLOOD_ALTAR 狀態！
         """
         from config import GAME_CONFIGS
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.need_blood_altar = True
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
 
         def mock_match(img, name, **kw):

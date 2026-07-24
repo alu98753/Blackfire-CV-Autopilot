@@ -49,6 +49,27 @@ class TemplateMatcher:
         self._cached_templates[template_name] = template_img
         return template_img
 
+    def match_mutually_exclusive_tabs(self, screen_img, template_a, template_b, margin=0.02, threshold=0.70):
+        """
+        對比兩個互斥 UI 頁籤/按鈕的相對匹配度，回傳 (is_a_active, is_b_active, conf_a, conf_b)。
+        """
+        try:
+            res_a = self.match(screen_img, template_a, threshold)
+        except Exception:
+            res_a = self.match(screen_img, template_a, threshold=threshold)
+
+        try:
+            res_b = self.match(screen_img, template_b, threshold)
+        except Exception:
+            res_b = self.match(screen_img, template_b, threshold=threshold)
+
+        c_a = res_a[1] if (isinstance(res_a, (tuple, list)) and len(res_a) >= 2 and res_a[1] is not None) else 0.0
+        c_b = res_b[1] if (isinstance(res_b, (tuple, list)) and len(res_b) >= 2 and res_b[1] is not None) else 0.0
+        
+        is_a_active = (c_a >= threshold and c_a > c_b + margin)
+        is_b_active = (c_b >= threshold and c_b > c_a + margin)
+        return is_a_active, is_b_active, c_a, c_b
+
     def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0, quiet=False):
         """
         在 screen_img 中尋找與 template_name 匹配度最高的位置。
