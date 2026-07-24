@@ -146,6 +146,30 @@ GAME_CONFIGS = {
         "diamond_cd": 300.0, # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
         "bread_cd": 300.0,   # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
         "stamina_retreat_duration": 7.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
+    },
+
+    # ------------------ 血之祭壇獻祭模式 ------------------
+    "blood_altar": {
+        "name": "血之祭壇獻祭",
+        "type": "blood_altar",
+        "building_btn": "town_building/Blood_Altar/Blood_Altar.png",
+        "sacrifice_btn": "town_building/Blood_Altar/Sacrifice.png",
+        "alter_btn": "town_building/Blood_Altar/alter.png",
+        "exit_building_btn": "town_building/exitfromhouse_and_to_town.png",
+        "sacrifice_settings": {
+            "gray": True,
+            "green": True,
+            "blue": True,
+            "purple": False,  # 預設不獻祭/賣紫色血水 (保留)
+        },
+        "blood_templates": {
+            "gray": "town_building/Blood_Altar/gray_blood.png",
+            "green": "town_building/Blood_Altar/green_blood.png",
+            "blue": "town_building/Blood_Altar/blue_blood.png",
+            "purple": "town_building/Blood_Altar/purple_blood.png",
+        },
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
     }
 }
 

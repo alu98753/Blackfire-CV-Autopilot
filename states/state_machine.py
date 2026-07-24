@@ -13,7 +13,8 @@ from states.handlers import (
     BreadCollectionHandler,
     DiamondCollectionHandler,
     CollectOnlyHandler,
-    LoadingHandler
+    LoadingHandler,
+    BloodAltarHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -32,6 +33,7 @@ class GameStateMachine:
     STATE_DIAMOND_COLLECTION = "DIAMOND_COLLECTION"      # 自動領鑽石流程
     STATE_COLLECT_ONLY = "COLLECT_ONLY"                  # 定時領取麵包與鑽石待機流程
     STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
+    STATE_BLOOD_ALTAR = "BLOOD_ALTAR"                    # 血之祭壇獻祭流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -71,6 +73,9 @@ class GameStateMachine:
         self.bag_disassembled = False
         self.bag_select_all_clicked = False
         self.bag_deselected = False
+        
+        # 血之祭壇獻祭相關屬性
+        self.need_blood_altar = False
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
@@ -115,6 +120,7 @@ class GameStateMachine:
             self.STATE_DIAMOND_COLLECTION: DiamondCollectionHandler(self),
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
             self.STATE_LOADING: LoadingHandler(self),
+            self.STATE_BLOOD_ALTAR: BloodAltarHandler(self),
         }
 
     @property
@@ -148,6 +154,14 @@ class GameStateMachine:
             self.current_state = new_state
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
+
+            # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
+            if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
+                try:
+                    self.handlers[new_state].reset_state()
+                except Exception as e:
+                    logging.debug(f"重置 Handler [{new_state}] 狀態時發生異常: {e}")
+
             if new_state == self.STATE_BATTLE:
                 self.last_auto_click_time = 0
             elif new_state == self.STATE_LOADING:
@@ -319,6 +333,15 @@ class GameStateMachine:
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
                     if pos_t:
                         self.transition_to(self.STATE_BAG_CLEANING)
+                        return
+
+        # 0.06 如果需要血之祭壇獻祭 (need_blood_altar == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
+        if getattr(self, "need_blood_altar", False):
+            for town_btn in ["common/door.png", "goback_town.png", "town_building/Blood_Altar/Blood_Altar.png"]:
+                if os.path.exists(os.path.join("templates", town_btn)):
+                    pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
+                    if pos_t:
+                        self.transition_to(self.STATE_BLOOD_ALTAR)
                         return
 
         # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
@@ -516,8 +539,8 @@ class GameStateMachine:
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。
         """
-        if self.config is not None and self.config["type"] == "bag_clean":
-            return  # 背包整理模式不參與領取
+        if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar"]:
+            return  # 背包整理與血之祭壇模式不參與自動領取
 
         from config import GLOBAL_SETTINGS
 

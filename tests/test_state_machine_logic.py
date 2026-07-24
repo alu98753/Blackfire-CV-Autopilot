@@ -395,7 +395,8 @@ class TestStateMachineLogic(unittest.TestCase):
         
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
 
     @patch('os.path.exists')
     def test_backpack_cleaning_deselect_rare_items(self, mock_exists):
@@ -2054,6 +2055,18 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertIn("[森林迷宮]: 永久不可打", status_str)
         self.assertIn("[神秘遺跡]: 就緒 (可打)", status_str)
         self.assertEqual(avail, ["黏糊糊的石窟", "神秘遺跡"])
+
+    def test_blood_altar_mode_initialization(self):
+        """
+        測試血之祭壇模式初始化與配置。
+        """
+        from config import GAME_CONFIGS
+        cfg = GAME_CONFIGS["blood_altar"].copy()
+        self.assertEqual(cfg["type"], "blood_altar")
+        self.assertTrue(cfg["sacrifice_settings"]["gray"])
+        self.assertTrue(cfg["sacrifice_settings"]["green"])
+        self.assertTrue(cfg["sacrifice_settings"]["blue"])
+        self.assertFalse(cfg["sacrifice_settings"]["purple"]) # 預設紫色不獻祭
 
 if __name__ == "__main__":
     unittest.main()

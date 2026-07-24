@@ -321,6 +321,26 @@ def setup_mode_config(args):
         setup_dungeon_config(config, args)
         setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
         print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
+    elif args.mode == "blood_altar":
+        print("\n請選擇要獻祭/消耗的血水品質（設定為『否/保留』者將不進行點選獻祭）：")
+        print(" 1) 灰、綠、藍獻祭 (紫色保留不賣/不獻祭) - 預設")
+        print(" 2) 全部獻祭 (包含紫色)")
+        try:
+            sac_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
+            if not sac_choice:
+                sac_choice = "1"
+        except KeyboardInterrupt:
+            print("\n[!] 取消啟動。")
+            sys.exit(0)
+        except Exception:
+            sac_choice = "1"
+            
+        if sac_choice == "2":
+            config["sacrifice_settings"] = {"gray": True, "green": True, "blue": True, "purple": True}
+            print("[*] 血水獻祭設定：灰 (✔), 綠 (✔), 藍 (✔), 紫 (✔)")
+        else:
+            config["sacrifice_settings"] = {"gray": True, "green": True, "blue": True, "purple": False}
+            print("[*] 血水獻祭設定：灰 (✔), 綠 (✔), 藍 (✔), 紫 (✖ 保留不獻祭)")
     
     return config
 
@@ -449,7 +469,7 @@ def init_state_machine_system(args, config):
     mouse.state_machine = state_machine
     state_machine.config = config
 
-    if config["type"] == "bag_clean":
+    if config["type"] in ["bag_clean", "blood_altar"]:
         state_machine.enable_bread = False
         state_machine.need_diamond_collection = False
         state_machine.need_bread_collection = False

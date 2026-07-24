@@ -10,4 +10,5 @@ from states.handlers.bread_collection import BreadCollectionHandler
 from states.handlers.diamond_collection import DiamondCollectionHandler
 from states.handlers.collect_only import CollectOnlyHandler
 from states.handlers.loading import LoadingHandler
+from states.handlers.blood_altar import BloodAltarHandler
 
