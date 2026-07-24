@@ -99,6 +99,7 @@ class GameStateMachine:
         self.user_operating = False
         self.last_user_operation_time = 0.0
         self.prev_mouse_pos = None
+        self.just_resumed_from_user = False
         
         # 體力不足退避與還原相關屬性
         self.original_config = None
@@ -159,6 +160,7 @@ class GameStateMachine:
             self.current_state = new_state
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
+            self.just_resumed_from_user = False
 
             # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
             if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):

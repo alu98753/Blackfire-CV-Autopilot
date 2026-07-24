@@ -523,6 +523,7 @@ def run_main_loop(state_machine, interval):
                 if time.time() - state_machine.last_user_operation_time > 3.0:
                     logging.info(f"🟢 偵測到使用者已停止手動操作達 3 秒，恢復自動掛機。鎖定狀態: [{state_machine.current_state}]。")
                     state_machine.user_operating = False
+                    state_machine.just_resumed_from_user = True
                     state_machine.prev_mouse_pos = pyautogui.position() # 防止瞬間重新觸發
                 else:
                     time.sleep(0.05)

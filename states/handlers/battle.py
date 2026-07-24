@@ -14,6 +14,19 @@ class BattleHandler(BaseStateHandler):
         """
         # 0. 由於背包已滿 (backpack_full.png) 已由狀態機進行全域攔截跳轉，此處無需 local 處理
 
+        # 0.1 手動介入恢復專屬檢測：若剛從使用者手動操作 3 秒暫停中恢復，優先檢測是否已回到大廳 (門檻 0.90)
+        if getattr(self.machine, "just_resumed_from_user", False):
+            self.machine.just_resumed_from_user = False  # 單次評估，無論是否命中均立刻重置
+            for lobby_btn in ["common/door.png", "goback_town.png", "common/select_stage.png"]:
+                if os.path.exists(os.path.join("templates", lobby_btn)):
+                    pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.90)
+                    if pos:
+                        logging.info(f"🧭 [手動介入恢復] 偵測到大廳按鈕特徵 [{lobby_btn}] (信心度: {conf:.4f} >= 0.90)，判定已退回大廳，切換至 UNKNOWN 重設定位。")
+                        self.non_battle_feature_start_time = None
+                        self.machine.battle_start_time = None
+                        self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                        return
+
         # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 0.5):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
@@ -52,7 +65,7 @@ class BattleHandler(BaseStateHandler):
                 if pos:
                     has_battle_feature = True
             
-            # 2.2 檢查當前配置的結算繼續按鈕
+            # 2.2 檢查當前配置的結算繼續按鈕 (門檻固定為 0.80，防止大廳背景相似度如 0.7694 產生誤判與防卡死死鎖)
             if not has_battle_feature:
                 if self.machine.config.get("type") == "mix":
                     res_buttons = list(dict.fromkeys(self.machine.config.get("result_buttons", []) + self.machine.config.get("dungeon_battle_results", [])))
@@ -61,10 +74,11 @@ class BattleHandler(BaseStateHandler):
                 else:
                     res_buttons = self.machine.config.get("dungeon_battle_results", [])
                 for btn in res_buttons:
-                    pos, _ = self.matcher.match(screen_img, btn, threshold=thresh)
-                    if pos:
-                        has_battle_feature = True
-                        break
+                    if os.path.exists(os.path.join("templates", btn)):
+                        pos, _ = self.matcher.match(screen_img, btn, threshold=0.80)
+                        if pos:
+                            has_battle_feature = True
+                            break
 
         # 3. 根據特徵有無進行計時
         if not has_battle_feature:
