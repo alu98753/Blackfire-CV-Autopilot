@@ -2047,6 +2047,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match_step5
         self.mock_mouse.click.reset_mock()
 
+        self.state_machine.is_dev_subflow_run = True
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(50, 50)
         self.assertEqual(handler.step_phase, "INIT")
@@ -2254,6 +2255,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["mix"].copy()
         self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0} # 全就緒
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        self.state_machine.is_dev_subflow_run = False
         
         # 1. 模擬獻祭結束退出建築
         altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
@@ -2440,6 +2442,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = self.mock_capturer.get_window_rect()
 
+        self.state_machine.is_dev_subflow_run = True
         handler.handle(fake_img, rect)
         self.mock_mouse.click.assert_called_once_with(74, 744)
         mock_sys_exit.assert_called_once_with(0)
@@ -2563,6 +2566,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match_exit
 
         # 1. 獨立血之祭壇模式
+        self.state_machine.is_dev_subflow_run = True
+        self.state_machine.town_subflow_queue = []
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
         altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         altar_handler.reset_state()
@@ -2571,6 +2576,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_sys_exit.assert_called_with(0)
 
         # 2. 獨立珠寶加工廠模式
+        mock_sys_exit.reset_mock()
+        self.state_machine.is_dev_subflow_run = True
+        self.state_machine.town_subflow_queue = []
         self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
         jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
         jewelry_handler.reset_state()
