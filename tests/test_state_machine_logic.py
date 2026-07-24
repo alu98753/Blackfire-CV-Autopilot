@@ -1736,6 +1736,61 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.stamina_retreat_start_time, initial_retreat_start)
 
     @patch('os.path.exists')
+    def test_auto_resume_dungeon_full_cycle_and_re_retreat(self, mock_exists):
+        """
+        測試完整的退避-復歸-再退避-滿時間徹底離開循環：
+        1. 在 collect_only 退避期間，偵測地下城冷卻結束 ➔ 切回地下城 (STATE_UNKNOWN)
+        2. 在地下城尋路/選關時，若所有地下城再次進入冷卻 ➔ 自動切回 collect_only (STATE_COLLECT_ONLY)
+        3. 驗證 stamina_retreat_start_time 完全未被覆蓋，且退避滿 4 小時後徹底結束退避模式。
+        """
+        mock_exists.return_value = True
+        orig_config = GAME_CONFIGS["dungeon"].copy()
+        orig_config["auto_resume_dungeon_on_cd"] = True
+        
+        # 初始狀態：體力耗盡已轉入 collect_only，並退避了 0.5 小時
+        t0 = time.time() - 1800.0
+        self.state_machine.original_config = orig_config
+        self.state_machine.stamina_retreat_start_time = t0
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.config["stamina_retreat_duration"] = 4.0
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = False
+        
+        # 階段 1：地下城 0 冷卻結束 (0.0) ➔ step() 觸發復歸切回地下城
+        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, t0) # 起點時間未變
+        
+        # 階段 2：切回地下城後進到 NAVIGATING 狀態，但地下城 0 又全數進入冷卻 (t0 + 1800)
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        now = time.time()
+        self.state_machine.dungeon_cooldowns = {0: now + 300, 1: now + 300, 2: now + 300, 3: now + 300, 4: now + 300}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        self.state_machine.step()
+        # 應自動再切回 STATE_COLLECT_ONLY
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, t0) # 起點時間仍為原來的 t0！
+        
+        # 階段 3：退避時間達到 4.1 小時 (滿 4 小時)
+        self.state_machine.stamina_retreat_start_time = time.time() - (4.1 * 3600.0)
+        self.state_machine.step()
+        
+        # 應徹底恢復 orig_config 並清空退避狀態
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertIsNone(self.state_machine.original_config)
+        self.assertIsNone(self.state_machine.stamina_retreat_start_time)
+
+    @patch('os.path.exists')
     def test_dungeon_navigation_transition_corrected(self, mock_exists):
         """
         測試修正後的地下城進入狀態轉移邏輯：
