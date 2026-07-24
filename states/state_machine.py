@@ -16,7 +16,8 @@ from states.handlers import (
     LoadingHandler,
     BloodAltarHandler,
     JewelryWorkshopHandler,
-    LordBossHandler
+    LordBossHandler,
+    ChestHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -38,6 +39,8 @@ class GameStateMachine:
     STATE_BLOOD_ALTAR = "BLOOD_ALTAR"                    # 血之祭壇獻祭流程
     STATE_JEWELRY_WORKSHOP = "JEWELRY_WORKSHOP"          # 珠寶加工廠出售流程
     STATE_LORD_BOSS = "LORD_BOSS"                        # 首領領主討伐流程
+    STATE_CHEST = "CHEST"                                # 神秘寶箱 (開寶箱) 流程
+
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -130,6 +133,7 @@ class GameStateMachine:
             self.STATE_BLOOD_ALTAR: BloodAltarHandler(self),
             self.STATE_JEWELRY_WORKSHOP: JewelryWorkshopHandler(self),
             self.STATE_LORD_BOSS: LordBossHandler(self),
+            self.STATE_CHEST: ChestHandler(self),
         }
 
     @property
@@ -167,6 +171,7 @@ class GameStateMachine:
         STATE_BLOOD_ALTAR: "blood_altar",
         STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
         STATE_LORD_BOSS: "lord_boss",
+        STATE_CHEST: "chest",
     }
 
     def _on_state_transition_sync_context(self, new_state):

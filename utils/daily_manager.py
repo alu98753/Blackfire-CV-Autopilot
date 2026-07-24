@@ -218,3 +218,24 @@ class DailyManager:
         紀錄完成一次 Boss 戰鬥 (別名轉接)。
         """
         return self.record_boss_fight(boss_key, now_ts)
+
+    def is_subflow_completed(self, subflow_key):
+        """
+        檢查指定的通用子流程 (如 chest, hero_draw, blood_altar 等) 今日是否已完成。
+        """
+        sf = self.status.get("subflows", {}).get(subflow_key, {})
+        return sf.get("completed_today", False)
+
+    def record_subflow_completed(self, subflow_key, now_ts=None):
+        """
+        記錄通用子流程 (如 chest, hero_draw 等) 今日已完成。
+        """
+        if now_ts is None:
+            now_ts = time.time()
+        subflows = self.status.setdefault("subflows", {})
+        sf = subflows.setdefault(subflow_key, {"completed_today": False, "last_executed_at": ""})
+        sf["completed_today"] = True
+        sf["last_executed_at"] = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        self.save_status()
+        logging.info(f"✅ [DailyManager] 記錄通用子流程 [{subflow_key}] 今日已完成。")
+

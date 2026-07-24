@@ -229,6 +229,22 @@ SUBFLOW_CONFIGS = {
         "start_btn": "stages/start.png",
         "navigation_path": [],
     },
+
+    # ------------------ 神秘寶箱模式 (開寶箱) ------------------
+    "chest": {
+        "name": "神秘寶箱",
+        "type": "chest",
+        "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
+    "mysterious_treasure": {
+        "name": "神秘寶箱",
+        "type": "chest",
+        "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
 }
 
 # ==================== 3. 統一匯出 (GAME_CONFIGS 向後完全相容) ====================
