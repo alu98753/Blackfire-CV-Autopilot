@@ -122,7 +122,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
             # 步驟 A: 嘗試在當前畫面匹配目標商品
             pos_goods = None
             conf_goods = 0.0
-            goods_threshold = cfg.get("goods_threshold", 0.6)
+            goods_threshold = cfg.get("goods_threshold", 0.9)
             if os.path.exists(os.path.join("templates", template_path)):
                 pos_goods, conf_goods = self.matcher.match(screen_img, template_path, threshold=goods_threshold)
 
