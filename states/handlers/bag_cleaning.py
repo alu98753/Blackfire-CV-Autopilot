@@ -252,26 +252,8 @@ class BagCleaningHandler(BaseStateHandler):
 
                     # 如果有發現貴重物品，進行單步點擊取消勾選，並直接 return 等待下一影格重新確認
                     if target_to_deselect:
-                        retry_count = getattr(self.machine, "bag_deselect_retry_count", 0) + 1
-                        self.machine.bag_deselect_retry_count = retry_count
-                        
-                        # 極致安全熔斷保護：若反選同一個/多個貴重裝備重試超過 5 次仍無法取消勾選，強制中斷分解！
-                        if retry_count > 5:
-                            logging.error("🚨 [安全熔斷] 背包清理：貴重裝備反選重試達上限！為防誤刪貴重物品，強行取消分解並退出背包！")
-                            pos_quit = None
-                            if os.path.exists(os.path.join("templates", "common/quit.png")):
-                                pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
-                            click_x = rect["left"] + (pos_quit[0] if pos_quit else btn_cx - 738 + 859)
-                            click_y = rect["top"] + (pos_quit[1] if pos_quit else btn_cy - 590 + 38)
-                            self._save_step_screenshot(screen_img, "failsafe_abort_quit")
-                            self.mouse.click(click_x, click_y)
-                            self.machine.bag_deselected = True
-                            self.machine.bag_disassembled = True
-                            time.sleep(0.1)
-                            return
-
                         click_x, click_y, color, r, c = target_to_deselect
-                        logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y}) (重試: {retry_count}/5)")
+                        logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y})")
                         self._save_step_screenshot(screen_img, f"5_deselect_r{r}_c{c}")
                         self.mouse.click(click_x, click_y)
                         time.sleep(0.25)
