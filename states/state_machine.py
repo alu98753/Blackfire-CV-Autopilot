@@ -670,10 +670,15 @@ class GameStateMachine:
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
 
-        if self.town_subflow_queue:
+        while self.town_subflow_queue:
             next_flow = self.town_subflow_queue.pop(0)
+            from config import SUBFLOW_CONFIGS, GAME_CONFIGS
+            flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
+            if not flow_cfg.get("enabled", True):
+                logging.info(f"⏭️ [城鎮流水線] 子流程 [{next_flow}] 設定為停用 (enabled=False)，自動跳過...")
+                continue
+
             logging.info(f"🏛️ [城鎮流水線] 彈出下一個城鎮任務 [{next_flow}]，剩餘佇列: {self.town_subflow_queue}")
-            from config import GAME_CONFIGS
             if next_flow in GAME_CONFIGS:
                 self.config = GAME_CONFIGS[next_flow].copy()
 

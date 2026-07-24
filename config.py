@@ -232,6 +232,7 @@ SUBFLOW_CONFIGS = {
 
     # ------------------ 神秘寶箱模式 (開寶箱) ------------------
     "chest": {
+        "enabled": True,  # 設為 False 可暫停 08:30 自動執行此子流程
         "name": "神秘寶箱",
         "type": "chest",
         "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",
@@ -239,6 +240,7 @@ SUBFLOW_CONFIGS = {
         "lobby_start_btn": "stages/start.png",
     },
     "mysterious_treasure": {
+        "enabled": True,  # 別名開關
         "name": "神秘寶箱",
         "type": "chest",
         "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",

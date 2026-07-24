@@ -282,5 +282,24 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         filtered_empty = filter_navigation_path(nav_path, active_tabs=[])
         self.assertEqual(filtered_empty, nav_path)
 
+    def test_disabled_subflow_skipped(self):
+        """測試：當子流程在 SUBFLOW_CONFIGS 被設為 enabled=False 時，pop_and_next_town_subflow 自動跳過它"""
+        from unittest.mock import MagicMock, patch
+        from states.state_machine import GameStateMachine
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.town_subflow_queue = ["test_disabled_flow", "chest"]
+
+        fake_configs = {
+            "test_disabled_flow": {"enabled": False, "type": "disabled"},
+            "chest": {"enabled": True, "type": "chest"}
+        }
+
+        with patch("config.SUBFLOW_CONFIGS", fake_configs):
+            sm.pop_and_next_town_subflow()
+
+        self.assertEqual(sm.current_state, sm.STATE_CHEST)
+
 if __name__ == "__main__":
     unittest.main()
+
