@@ -1,0 +1,115 @@
+import unittest
+import os
+import sys
+import time
+import json
+import shutil
+from datetime import datetime, timedelta
+
+# 將專案根目錄加入系統路徑
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
+from utils.daily_manager import DailyManager
+from main import parse_arguments
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
+TEST_DATA_DIR = "user_data_test_temp"
+
+class TestSubflowAndDailyManager(unittest.TestCase):
+    """
+    單元測試驗證 Clean Code 分層配置 (config.py)、
+    CLI --subflow 參數解析以及 DailyManager (08:30 重置與各 Boss 獨立 CD)。
+    """
+    def setUp(self):
+        if os.path.exists(TEST_DATA_DIR):
+            shutil.rmtree(TEST_DATA_DIR)
+        self.manager = DailyManager(data_dir=TEST_DATA_DIR, status_file="test_daily.json")
+
+    def tearDown(self):
+        if os.path.exists(TEST_DATA_DIR):
+            shutil.rmtree(TEST_DATA_DIR)
+
+    def test_config_clean_architecture_separation(self):
+        """
+        測試 config.py 中的 PRIMARY_MODES 剛好只有 4 個，且 GAME_CONFIGS 完全包含 PRIMARY_MODES 與 SUBFLOW_CONFIGS。
+        """
+        self.assertEqual(len(PRIMARY_MODES), 4)
+        self.assertIn("mix", PRIMARY_MODES)
+        self.assertIn("dungeon", PRIMARY_MODES)
+        self.assertIn("stage", PRIMARY_MODES)
+        self.assertIn("collect_only", PRIMARY_MODES)
+
+        self.assertIn("blood_altar", SUBFLOW_CONFIGS)
+        self.assertIn("jewelry_workshop", SUBFLOW_CONFIGS)
+        self.assertIn("bag_clean", SUBFLOW_CONFIGS)
+
+        # 斷言：GAME_CONFIGS 為解包合併
+        for k in PRIMARY_MODES:
+            self.assertIn(k, GAME_CONFIGS)
+        for k in SUBFLOW_CONFIGS:
+            self.assertIn(k, GAME_CONFIGS)
+
+    def test_daily_manager_reset_at_0830(self):
+        """
+        測試 DailyManager 在時間跨越 08:30 時自動進行重置。
+        """
+        # 1. 模擬昨天的 08:30 標籤
+        yesterday_dt = datetime.now() - timedelta(days=1)
+        self.manager.status["last_daily_reset_date"] = "2020-01-01"
+        self.manager.status["subflows"]["blood_altar"]["completed_today"] = True
+        self.manager.save_status()
+
+        # 2. 觸發重置檢查 (假設當前為今天 09:00 AM)
+        now_dt = datetime.now().replace(hour=9, minute=0, second=0)
+        reset_triggered = self.manager.check_and_reset_daily(now_dt=now_dt)
+
+        self.assertTrue(reset_triggered)
+        self.assertFalse(self.manager.status["subflows"]["blood_altar"]["completed_today"])
+        self.assertEqual(self.manager.status["last_daily_reset_date"], self.manager.get_today_reset_tag(now_dt))
+
+    def test_per_boss_independent_cd_and_limit(self):
+        """
+        測試育母蜘蛛 (lord_spider) 與古代惡靈 (lord_spectre) 的獨立計數與冷卻。
+        """
+        now = time.time()
+        
+        # 剛初始化時，兩個 Boss 都可打
+        avail_spider, msg_s = self.manager.is_boss_available("lord_spider", now_ts=now)
+        avail_spectre, msg_sp = self.manager.is_boss_available("lord_spectre", now_ts=now)
+        self.assertTrue(avail_spider)
+        self.assertTrue(avail_spectre)
+
+        # 1. 擊殺育母蜘蛛 1 次
+        self.manager.record_boss_fight("lord_spider", now_ts=now)
+
+        # 斷言：蜘蛛進入 2 小時 CD
+        avail_spider2, msg_s2 = self.manager.is_boss_available("lord_spider", now_ts=now + 10)
+        self.assertFalse(avail_spider2)
+        self.assertIn("冷卻中", msg_s2)
+
+        # 斷言：古代惡靈完全不受蜘蛛影響，依然可打！
+        avail_spectre2, _ = self.manager.is_boss_available("lord_spectre", now_ts=now + 10)
+        self.assertTrue(avail_spectre2)
+
+        # 2. 模擬 2 小時後 (7205秒)，蜘蛛冷卻完畢
+        avail_spider3, _ = self.manager.is_boss_available("lord_spider", now_ts=now + 7205)
+        self.assertTrue(avail_spider3)
+
+        # 3. 模擬蜘蛛連續打了 5 次滿額
+        spider_info = self.manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
+        spider_info["today_count"] = 5
+        self.manager.save_status()
+
+        avail_spider_full, msg_full = self.manager.is_boss_available("lord_spider", now_ts=now + 99999)
+        self.assertFalse(avail_spider_full)
+        self.assertIn("打滿", msg_full)
+
+if __name__ == "__main__":
+    unittest.main()
