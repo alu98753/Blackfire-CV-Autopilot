@@ -414,14 +414,14 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 建立假的 1080x1920 遊戲截圖
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        # 定位 全選按鈕 在 (121, 628)
-        # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品，使顏色完美落在 2-12 像素的極細邊緣帶中
-        cv2.rectangle(screen, (9, 131), (117, 239), (255, 0, 0), 10)
-        # 模擬打勾狀態：在貴重物品格子內畫上一個綠色實心方塊，代表「綠色打勾記號」
-        cv2.rectangle(screen, (46, 168), (80, 202), (0, 255, 0), -1)
+        # 定位 全選按鈕 在 (676, 808)，算得 Slot A (Col 0, Row 0) 左上角 (549, 288)，中心點為 (616, 358)
+        # 繪製一個藍色邊框 (HSV 藍色為 H=120) 的貴重物品 (crop: 549 to 683, 288 to 428)
+        cv2.rectangle(screen, (549, 288), (683, 428), (255, 0, 0), 10)
+        # 模擬打勾狀態：在貴重物品格子的頂端打勾區 (check_x=599, check_y=332) 畫上綠色實心方塊
+        cv2.rectangle(screen, (599, 332), (633, 362), (0, 255, 0), -1)
         
-        # 繪製一個綠色垃圾裝備，使顏色完美落在 2-12 像素的極細邊緣帶中
-        cv2.rectangle(screen, (144, 131), (252, 239), (0, 255, 0), 10)
+        # 繪製一個綠色垃圾裝備
+        cv2.rectangle(screen, (683, 288), (817, 428), (0, 255, 0), 10)
         
         # 設定可分解最高品質為綠色，使藍色貴重物品不屬於可分解列表，從而觸發反選保護條件
         self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green"]
@@ -430,8 +430,8 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
         # 點擊過全選後，步進會執行反選掃描。此時 matcher 需要匹配 select_all.png 作為定位點
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((121, 628), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold, **kwargs: (
+            ((676, 808), 0.9) if name == "common/select_all.png" else (None, 0.0)
         )
         
         # 清除之前的點擊紀錄
@@ -439,8 +439,8 @@ class TestStateMachineLogic(unittest.TestCase):
         
         self.state_machine.step()
         
-        # 應偵測到貴重物品，並對該 slot 中心點 (63, 185) 進行反向點擊
-        self.mock_mouse.click.assert_any_call(63, 185)
+        # 應偵測到貴重物品，並對該 slot 中心點 (616, 357) 進行反向點擊
+        self.mock_mouse.click.assert_any_call(616, 357)
         self.assertFalse(self.state_machine.bag_deselected)
         
         # 模擬下一影格：清除貴重物品畫像，重新截圖掃描
@@ -781,6 +781,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 3. 再來一次，測試能成功匹配 defeat_retry.png
         self.state_machine.current_state = self.state_machine.STATE_RESULT
         self.state_machine.last_result_retry_click_time = 0.0
+        self.state_machine.defeat_count = 0
         
         def match_side_effect_success(img, name, threshold):
             if name == "defeat.png":
@@ -1702,6 +1703,116 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertIsNone(self.state_machine.original_config)
         self.assertIsNone(self.state_machine.stamina_retreat_start_time)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+    @patch('os.path.exists')
+    def test_auto_resume_dungeon_during_stamina_retreat(self, mock_exists):
+        """
+        測試體力退避期間，若地下城冷卻結束，自動切回地下城，且退避起點時間戳絕不被重置。
+        """
+        mock_exists.return_value = True
+        orig_config = GAME_CONFIGS["mix"].copy()
+        orig_config["auto_resume_dungeon_on_cd"] = True
+        
+        self.state_machine.config = orig_config
+        self.state_machine.original_config = orig_config
+        initial_retreat_start = time.time() - 1800.0 # 已經退避 0.5 小時
+        self.state_machine.stamina_retreat_start_time = initial_retreat_start
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = False
+        
+        # 模擬地下城冷卻已結束 (dungeon 0 可刷)
+        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        self.state_machine.step()
+        
+        # 預期：動態偵測到地下城冷卻結束，恢復配置為 orig_config，並轉移至 STATE_UNKNOWN
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        # 斷言：original_config 與 initial_retreat_start 絕不被重置清空！
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, initial_retreat_start)
+
+    @patch('os.path.exists')
+    def test_auto_resume_dungeon_full_cycle_and_re_retreat(self, mock_exists):
+        """
+        測試完整的退避-復歸-再退避-滿時間徹底離開循環：
+        1. 在 collect_only 退避期間，偵測地下城冷卻結束 ➔ 切回地下城 (STATE_UNKNOWN)
+        2. 在地下城尋路/選關時，若所有地下城再次進入冷卻 ➔ 自動切回 collect_only (STATE_COLLECT_ONLY)
+        3. 驗證 stamina_retreat_start_time 完全未被覆蓋，且退避滿 4 小時後徹底結束退避模式。
+        """
+        mock_exists.return_value = True
+        orig_config = GAME_CONFIGS["dungeon"].copy()
+        orig_config["auto_resume_dungeon_on_cd"] = True
+        
+        # 初始狀態：體力耗盡已轉入 collect_only，並退避了 0.5 小時
+        t0 = time.time() - 1800.0
+        self.state_machine.original_config = orig_config
+        self.state_machine.stamina_retreat_start_time = t0
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.config["stamina_retreat_duration"] = 4.0
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = False
+        
+        # 階段 1：地下城 0 冷卻結束 (0.0) ➔ step() 觸發復歸切回地下城
+        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, t0) # 起點時間未變
+        
+        # 階段 2：切回地下城後進到 NAVIGATING 狀態，但地下城 0 又全數進入冷卻 (t0 + 1800)
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        now = time.time()
+        self.state_machine.dungeon_cooldowns = {0: now + 300, 1: now + 300, 2: now + 300, 3: now + 300, 4: now + 300}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        self.state_machine.step()
+        # 應自動再切回 STATE_COLLECT_ONLY
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, t0) # 起點時間仍為原來的 t0！
+        
+        # 階段 3：退避時間達到 4.1 小時 (滿 4 小時)
+        self.state_machine.stamina_retreat_start_time = time.time() - (4.1 * 3600.0)
+        self.state_machine.step()
+        
+        # 應徹底恢復 orig_config 並清空退避狀態
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertIsNone(self.state_machine.original_config)
+        self.assertIsNone(self.state_machine.stamina_retreat_start_time)
+
+    @patch('os.path.exists')
+    def test_normal_dungeon_mode_ignores_retreat_check(self, mock_exists):
+        """
+        測試單純的地下城/混合模式 (非體力退避狀態下，stamina_retreat_start_time 為 None)：
+        即使所有地下城皆在冷卻中，也不會被誤判切換至 collect_only 模式。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.original_config = None
+        self.state_machine.stamina_retreat_start_time = None
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        # 模擬所有地下城皆在冷卻中
+        now = time.time()
+        self.state_machine.dungeon_cooldowns = {0: now + 300, 1: now + 300, 2: now + 300, 3: now + 300, 4: now + 300}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        self.state_machine.step()
+        
+        # 斷言：非體力退避狀態下，絕不會轉移至 STATE_COLLECT_ONLY！
+        self.assertNotEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "dungeon")
 
     @patch('os.path.exists')
     def test_dungeon_navigation_transition_corrected(self, mock_exists):

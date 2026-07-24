@@ -87,10 +87,12 @@ def handle_insufficient_stamina(state_machine, screen_img, rect):
                 state_machine.mouse.click(rect_current["left"] + pos_back[0], rect_current["top"] + pos_back[1])
                 time.sleep(1.0) # 等待轉場
                 
-    # 4. 回到城鎮後，一律切換為 collect_only 模式
+    # 4. 回到城鎮後，切換為 collect_only 模式
     logging.warning("🔄 體力已耗盡，自動將模式切換為 [collect_only] (定時領取麵包與鑽石模式)！")
-    state_machine.original_config = state_machine.config # 備份原本的模式配置
-    state_machine.stamina_retreat_start_time = time.time() # 紀錄退避開始時間
+    if getattr(state_machine, "original_config", None) is None:
+        state_machine.original_config = state_machine.config # 備份原本的模式配置
+    if getattr(state_machine, "stamina_retreat_start_time", None) is None:
+        state_machine.stamina_retreat_start_time = time.time() # 紀錄退避開始時間 (絕不覆蓋重置)
     state_machine.config = GAME_CONFIGS["collect_only"].copy()
     state_machine.transition_to(state_machine.STATE_COLLECT_ONLY)
     

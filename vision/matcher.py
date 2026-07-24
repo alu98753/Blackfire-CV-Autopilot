@@ -20,9 +20,9 @@ class TemplateMatcher:
 
         # 支援直接傳入檔名或完整路徑
         if os.path.isabs(template_name) or template_name.startswith("."):
-            path = template_name
+            path = os.path.normpath(template_name)
         else:
-            path = os.path.join(self.templates_dir, template_name)
+            path = os.path.normpath(os.path.join(self.templates_dir, template_name))
 
         if not os.path.exists(path):
             logging.error(f"找不到模板圖片檔案: {path}")
@@ -75,9 +75,8 @@ class TemplateMatcher:
             return None, 0.0
 
         # 1. 快速金字塔下採樣初步檢測 (Image Pyramids Acceleration)
-        # 對於大尺寸畫面 (>= 720p)，先以 1/2 縮放圖進行極速預檢
-        # 若 1/2 縮放圖最高相似度小於 (threshold - 0.05)，可 100% 判定無匹配，直接回傳以節省 75% 以上全圖比對時間
-        if screen_h >= 720 and temp_h >= 30 and temp_w >= 30:
+        # 對於大尺寸畫面 (>= 720p)，僅對足夠大的模板 (>= 50x50) 先以 1/2 縮放圖進行極速預檢，避免微小圖標失真
+        if screen_h >= 720 and temp_h >= 50 and temp_w >= 50:
             small_screen = cv2.resize(screen_img, (screen_w // 2, screen_h // 2), interpolation=cv2.INTER_AREA)
             small_temp = cv2.resize(template_img, (max(1, temp_w // 2), max(1, temp_h // 2)), interpolation=cv2.INTER_AREA)
             res_small = cv2.matchTemplate(small_screen, small_temp, cv2.TM_CCOEFF_NORMED)

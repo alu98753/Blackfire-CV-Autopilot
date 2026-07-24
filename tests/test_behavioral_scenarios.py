@@ -629,16 +629,14 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 建立假的 1080x1920 截圖
         screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
         
-        # 定位 全選按鈕 在 (121, 628)
-        # 格子 A (Col 0, Row 0): 中心 (63, 185)。環狀區 (3, 125) 到 (123, 245)。
-        # 在格子 A 的邊緣只畫一個 10x5 的金色 (BGR=[0, 240, 240]) 區域，包含 50 個像素點
-        screen[125:130, 3:13] = [0, 240, 240]
+        # 定位 全選按鈕 在 (676, 808) 算得 Slot A 中心 (616, 358), Slot B 中心 (750, 358)
+        # 格子 A (Col 0, Row 0): 只在邊緣畫一點點金色
+        screen[290:295, 549:559] = [0, 240, 240]
         
-        # 格子 B (Col 1, Row 0): 中心 (198, 185)。邊緣帶為 (140, 127) 到 (256, 243) 之間。
-        # 在格子 B 的邊緣帶中線處 (相對6像素處) 繪製一個金色矩形，包含大量彩色像素點
-        cv2.rectangle(screen, (144, 131), (252, 239), (0, 240, 240), 10)
-        # 模擬打勾狀態：在貴重物品格子內畫上一個綠色實心方塊，代表「綠色打勾記號」
-        cv2.rectangle(screen, (181, 168), (215, 202), (0, 255, 0), -1)
+        # 格子 B (Col 1, Row 0): 中心 (750, 358)。繪製金色矩形 (683 to 817, 288 to 428)
+        cv2.rectangle(screen, (683, 288), (817, 428), (0, 240, 240), 10)
+        # 模擬打勾狀態：在貴重物品格子 B 的頂端打勾區 (check_x=733, check_y=332) 畫綠色實心方塊
+        cv2.rectangle(screen, (733, 332), (767, 362), (0, 255, 0), -1)
         
         # 設定可分解最高品質為紫色，使橘黃色貴重物品不屬於可分解列表，從而觸發反選保護條件
         self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue", "purple"]
@@ -647,8 +645,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
         # 匹配定位點
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((121, 628), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold, **kwargs: (
+            ((676, 808), 0.9) if name == "common/select_all.png" else (None, 0.0)
         )
         self.mock_mouse.click.reset_mock()
         
@@ -657,10 +655,10 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # Assert
         # 1. 必須點擊格子 B 進行反選
-        self.mock_mouse.click.assert_any_call(198, 185)
+        self.mock_mouse.click.assert_any_call(750, 357)
         # 2. 絕對不能點擊格子 A
         for call in self.mock_mouse.click.call_args_list:
-            self.assertNotEqual(call[0], (63, 185))
+            self.assertNotEqual(call[0], (616, 357))
         # 3. 此時由於單步反選，bag_deselected 應為 False
         self.assertFalse(self.state_machine.bag_deselected)
         
@@ -1660,6 +1658,53 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         self.assertGreater(self.state_machine.dungeon_cooldowns[4], time.time() + 1790.0)
 
+    @patch('os.path.exists')
+    def test_stage_defeat_loop_protection(self, mock_exists):
+        """
+        [行為測試 27] 測試普通關卡連續戰敗退避保護與子流程：
+        1. 初始化配置為普通關卡 (Stage) 模式。
+        2. 第一次戰敗，點選 retry，defeat_count 遞增為 1。
+        3. 第二次戰敗時 (defeat_count=1 >= max_defeat-1)，觸發 _run_defeat_giveup_subflow。
+        4. 驗證透過子流程搜尋並點擊 common/quit.png 或 goback_town.png， defeat_count 清零並切回 STATE_NAVIGATING。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.config["stage_max_defeat"] = 2
+        self.state_machine.defeat_count = 0
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        
+        mock_exists.return_value = True
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        dummy_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = dummy_img
+        
+        def mock_match(img_arg, name, threshold=0.7, **kwargs):
+            if name == "defeat.png":
+                return (100, 100), 0.85
+            elif name in ["stages/retry.png", "defeat_retry.png"]:
+                return (200, 200), 0.88
+            elif name == "defeat_giveup.png":
+                return (300, 300), 0.88
+            elif name == "common/confirm.png":
+                return (400, 400), 0.88
+            return None, 0.0
+            
+        self.mock_matcher.match.side_effect = mock_match
+        
+        # 第一次戰敗
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.defeat_count, 1)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
+        
+        # 準備第二次戰敗 (已達上限 2 次)
+        self.state_machine.transition_to(self.state_machine.STATE_RESULT)
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        
+        # 驗證戰敗次數清零，狀態切回 NAVIGATING
+        self.assertEqual(self.state_machine.defeat_count, 0)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
     @patch('cv2.minMaxLoc')
     @patch('cv2.matchTemplate')
     @patch('cv2.imread')
@@ -1870,6 +1915,39 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(650, 750)
+
+    @patch('os.path.exists')
+    def test_navigation_in_town_after_diamond_collection_ignores_false_stage_matches(self, mock_exists):
+        """
+        測試領完鑽石回到城鎮 (TOWN) 時：
+        即使背景圖像雜訊導致 stage_templates (如 level4_desert_ruins) 低信心度誤判 (0.603)，
+        由於在城鎮 (common/door.png 可見)，不得判定為關卡介面已開啟 (stage_select_open 應強制為 False)，
+        亦不可執行滑動，必須點擊 common/door.png 進入大廳！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        def mock_match(img, name, **kw):
+            if name == "common/door.png":
+                return ((76, 751), 0.9521)
+            elif name == "diamond.png":
+                return ((1115, 83), 0.9750)
+            elif name == "stages/level4_desert_ruins.png":
+                return ((194, 795), 0.6030) # 低信心度誤判
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = mock_match
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        self.mock_mouse.drag.reset_mock()
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 斷言：絕不可執行向左/向右拖曳滑動！
+        self.mock_mouse.drag.assert_not_called()
+        # 斷言：必須點擊 common/door.png (76, 751) 進入大廳！
+        self.mock_mouse.click.assert_called_once_with(76, 751)
 
 if __name__ == "__main__":
     unittest.main()

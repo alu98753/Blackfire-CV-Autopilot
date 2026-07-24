@@ -17,7 +17,8 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS, STAGE_CONFIGS
+from config import GAME_CONFIGS
+from utils import get_stage_configs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -77,6 +78,7 @@ def check_mode_templates(config):
     return missing
 
 def setup_stage_config(config, prompt_prefix=""):
+    stage_configs = get_stage_configs()
     print(f"\n{prompt_prefix}請選擇要打的關卡大關：")
     print(" 1) 蒼穹平原 (Level 1)")
     print(" 2) 荒蕪岩地 (Level 2)")
@@ -94,11 +96,11 @@ def setup_stage_config(config, prompt_prefix=""):
     except Exception:
         choice = "6"
 
-    if choice not in STAGE_CONFIGS:
+    if choice not in stage_configs:
         print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
         choice = "6"
 
-    cfg = STAGE_CONFIGS[choice]
+    cfg = stage_configs[choice]
     stage_name = cfg["name"]
     
     # 判斷是否有多個子關卡
@@ -267,6 +269,26 @@ def setup_dungeon_config(config, args):
         else:
             config["bless_mode"] = bless_map[bless_choice]
         print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
+
+    # 選擇體力退避期間是否自動返回地下城
+    print("\n當體力耗盡轉入定時領取 (collect_only) 時，若地下城冷卻結束，是否自動返回去刷地下城？")
+    print(" 1) 是 (地下城與定時領取來回切換) - 預設")
+    print(" 2) 否 (維持定時領取直到滿時間)")
+    try:
+        auto_resume_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
+        if not auto_resume_choice:
+            auto_resume_choice = "1"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        auto_resume_choice = "1"
+
+    config["auto_resume_dungeon_on_cd"] = (auto_resume_choice == "1")
+    if config["auto_resume_dungeon_on_cd"]:
+        print("[*] 已啟用：體力退避期間若地下城冷卻結束，將自動切回刷地下城。")
+    else:
+        print("[*] 未啟用：體力退避期間維持純定時領取，直到滿時間。")
 
 def setup_utf8_encoding():
     if sys.platform.startswith('win'):

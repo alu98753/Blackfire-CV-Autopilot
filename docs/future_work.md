@@ -1,11 +1,41 @@
+
+# 待辦事項與未來優化規劃 (Future Work & Edge Cases)
+
+## 🛡️ 邊界防守與長期掛機防護 (Edge Cases & AFK Stability)
+
+🔴 **Edge Case A: 網路連線中斷 / 伺服器斷線彈窗 (Network / Server Disconnect)**
+- **可能發生的狀況**：網路波動或伺服器斷線，遊戲跳出「連線逾時」、「重新連接」或「回到標題」彈窗。
+- **現有防禦與補強**：雖然目前有 `login_flow.py`，但需確保當斷線彈窗出現時，能自動點擊「重新連線」，或當遊戲崩潰時能嘗試從 Steam 重新開啟遊戲並自動點擊回到遊戲大廳。
+
+🔴 **Edge Case C: 背包清理與彈窗恢復防重入 (Bag Cleaning & Sorting Recovery)**
+- **可能發生的狀況**：當戰鬥獎勵導致背包全滿跳出 `backpack_full.png` 彈窗，狀態轉移至 `BACKPACK_FULL_SORTING` / `BAG_CLEANING` 進行裝備清理後，需要 100% 確保能平滑返回原本的 `mix` 導航狀態。
+
+🔴 **Edge Case D: 長時間運轉資源與記憶體管理 (Long-running Resource Cleanup)**
+- **可能發生的狀況**：腳本連續運行 12 小時以上（如出國 5 天長掛機），Python/OpenCV 的快取或 Windows API 視窗控制代碼可能累積導致記憶體溢位。
+- **補強建議**：
+  1. **定時記憶體回收 (Garbage Collection)**：在狀態機中加入定時記憶體回收與快取清理。
+  2. **診斷截圖自動清理機制**：只保留近 7 天的 `debug_click.png` / `debug_detect.png`。
+  3. **CPU 與效能優化**：參照 [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md) 降低輪詢資源佔用。
+
+- **[待辦] 出國五天長掛機注意事項與維護**：
+  - 血池可能滿出來要清
+  - 特定的灰色物品要賣
+  - 記憶體溢位防禦與快取釋放
+  - 斷線：看能不能從 Steam 重新開啟遊戲
+  - [cpu優化](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)
+
+---
+
+### 🧪 邊界模擬測試套件 (Edge Case Test Suite)
+在 [test_behavioral_scenarios.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_behavioral_scenarios.py) 中，為上述 Edge Cases 寫入自動化模擬測試，確保任何異常彈窗跳出時，狀態機都能 100% 依預期防禦。
+
+
 - **[待辦]** 點錯東西時候的城鎮重來機制
 
 - **[待辦] 地下城防呆容錯機制**：當手動按錯或誤入非目標地下城地圖時，偵測並點擊退出按鈕安全返回大廳重開，避免因地圖模板不符而卡死。
 
 - **[待辦] 在不同模式的時候都會遇到一個問題 就是挑選地下城的時候 按錯了 假設我要刷的是第二個 但卻按到第三個的地圖 會導致 因為我們要刷第二個 那匹配的圖就會都是第二個 因此如果按到第三個 那就會卡死 , 我在想該怎麼辦
    可能寫個發現的方式 發現時 可以按下quit, 再重開 或許用其他方式
-
-- **[待辦] 地下城隨機事件與其子流程**：將地下城其他探險隨機事件包裝為 sub-skill 子流程（如技能選擇與祝福），保持狀態機調度結構清晰。
 
 - **[已擱置] 稀有戰利品自動背包鎖定**：於戰鬥結束畫面同時偵測到「獲得戰利品」與「繼續」時，先前往背包進行特定裝備的鎖定防護（此功能目前已由貴重裝備色彩分類保留機制完整覆蓋，暫予擱置）。
 

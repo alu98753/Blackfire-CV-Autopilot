@@ -314,10 +314,15 @@ class NavigationHandler(BaseStateHandler):
                 return
 
 
-        # B. 原本的尋路導航邏輯
-        # 如果是自動貪婪地下城模式，且畫面上看見第一個地下城入口，執行貪婪選關邏輯
-        # B. 原本的尋路導航邏輯
-        # 如果是自動貪婪地下城模式，且畫面上看見任何一個地下城入口，執行貪婪選關邏輯
+        # 檢查體力退避期間是否所有地下城皆已進入冷卻
+        if getattr(self.machine, "stamina_retreat_start_time", None) is not None and getattr(self.machine, "original_config", None) is not None:
+            if not self.machine.has_available_dungeon():
+                logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
+                from config import GAME_CONFIGS
+                self.machine.config = GAME_CONFIGS["collect_only"].copy()
+                self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                return
+
         # B. 原本的尋路導航邏輯
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
         config_type = self.machine.config.get("type") if self.machine.config else "stage"
@@ -504,6 +509,12 @@ class NavigationHandler(BaseStateHandler):
                                 return
                             
                 if target_idx is None:
+                    if getattr(self.machine, "stamina_retreat_start_time", None) is not None and getattr(self.machine, "original_config", None) is not None:
+                        logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
+                        from config import GAME_CONFIGS
+                        self.machine.config = GAME_CONFIGS["collect_only"].copy()
+                        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                        return
                     if self.machine.config.get("type") == "mix":
                         self._switch_to_stage_or_back(screen_img, rect, "地下城頁面偵測到所有地下城均在冷卻中")
                         return
@@ -555,23 +566,28 @@ class NavigationHandler(BaseStateHandler):
         stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
         dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
 
-        if not stage_select_open and not dungeon_select_open:
-            stage_templates = self.machine.config.get("stage_templates", [])
-            for st_temp in stage_templates:
-                if os.path.exists(os.path.join("templates", st_temp)):
-                    pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.60)
-                    if pos:
-                        stage_select_open = True
-                        break
+        # 防呆修復：若明確處於城鎮 (is_town == True，如 common/door.png 可見)，頁籤絕不可能為開啟狀態
+        if is_town:
+            stage_select_open = False
+            dungeon_select_open = False
+        else:
+            if not stage_select_open and not dungeon_select_open:
+                stage_templates = self.machine.config.get("stage_templates", [])
+                for st_temp in stage_templates:
+                    if os.path.exists(os.path.join("templates", st_temp)):
+                        pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.75)
+                        if pos:
+                            stage_select_open = True
+                            break
 
-        if not stage_select_open and not dungeon_select_open:
-            dungeon_templates = self.machine.config.get("dungeon_entries", [])
-            for dg_temp in dungeon_templates:
-                if os.path.exists(os.path.join("templates", dg_temp)):
-                    pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.60)
-                    if pos:
-                        dungeon_select_open = True
-                        break
+            if not stage_select_open and not dungeon_select_open:
+                dungeon_templates = self.machine.config.get("dungeon_entries", [])
+                for dg_temp in dungeon_templates:
+                    if os.path.exists(os.path.join("templates", dg_temp)):
+                        pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.75)
+                        if pos:
+                            dungeon_select_open = True
+                            break
 
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
@@ -793,6 +809,7 @@ class NavigationHandler(BaseStateHandler):
                 pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
                 if pos_start:
                     logging.info(f"🧭 尋路完成：偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達大廳。")
+                    self.machine.defeat_count = 0
                     self.machine.transition_to(self.machine.STATE_LOBBY)
                     return
 

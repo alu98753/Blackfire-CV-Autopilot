@@ -1,3 +1,5 @@
+from utils.config_helper import get_stage_configs
+
 # ==================== 全域冷卻時間與模板清單設定 ====================
 GLOBAL_SETTINGS = {
     # 非純領取模式下（推圖、刷副本）的資源檢測與領取冷卻時間（秒）
@@ -44,6 +46,8 @@ GAME_CONFIGS = {
         "lobby_start_btn": "stages/start.png",
         # 戰鬥結束按鈕 (PK 相似度，挑選最高的點擊)
         "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
+        # 普通關卡最大戰敗次數限制
+        "stage_max_defeat": 2,
     },
     
     # ------------------ 地下城模式 ------------------
@@ -57,6 +61,7 @@ GAME_CONFIGS = {
         "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
         "greedy_dungeon": True,
         "greedy_allowed_indices": [0, 1, 2, 3, 4],  # 預設允許全部地下城 [0, 1, 2, 3, 4]
+        "auto_resume_dungeon_on_cd": False,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
         # 導航進入路徑：總入口 -> 地下城 -> 史萊姆副本
         "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
         # 進入地下城內每一層戰鬥的入口按鈕
@@ -91,6 +96,7 @@ GAME_CONFIGS = {
         "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
         "greedy_dungeon": True,
         "greedy_allowed_indices": [0, 1, 2, 3, 4],  # 預設允許全部地下城 [0, 1, 2, 3, 4]
+        "auto_resume_dungeon_on_cd": False,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
         "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
         "dungeon_fight_btn": "dungeons/dungeon_fight.png",
         "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
@@ -112,6 +118,7 @@ GAME_CONFIGS = {
         "stage_name": "冰雪洞窟 (first)",
         "stage_entry": "stages/level6_ice_cave.png",
         "stage_target": "stages/first_stage.png",
+        "stage_max_defeat": 2,
         "stage_navigation_path": [
             "common/door.png",
             "common/select_stage.png",
@@ -138,54 +145,20 @@ GAME_CONFIGS = {
         "navigation_path": [],
         "diamond_cd": 300.0, # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
         "bread_cd": 300.0,   # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
-        "stamina_retreat_duration": 4.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
+        "stamina_retreat_duration": 7.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
     }
 }
 
-STAGE_CONFIGS = {
-    "1": {
-        "name": "蒼穹平原",
-        "entry": "stages/level1_sky_plains.png",
-        "sub_stages": {
-            "final": "stages/level1_final.png"
-        }
-    },
-    "2": {
-        "name": "荒蕪岩地",
-        "entry": "stages/level2_barren_rocks.png",
-        "sub_stages": {
-            "final": "stages/level2_final.png"
-        }
-    },
-    "3": {
-        "name": "古樹森林",
-        "entry": "stages/level3_ancient_forest.png",
-        "sub_stages": {
-            "final": "stages/level3_final.png"
-        }
-    },
-    "4": {
-        "name": "沙漠廢墟",
-        "entry": "stages/level4_desert_ruins.png",
-        "sub_stages": {
-            "final": "stages/level4_final.png"
-        }
-    },
-    "5": {
-        "name": "幽暗沼澤",
-        "entry": "stages/level5_gloomy_swamp.png",
-        "sub_stages": {
-            "final": "stages/level5_final.png"
-        }
-    },
-    "6": {
-        "name": "冰雪洞窟",
-        "entry": "stages/level6_ice_cave.png",
-        "sub_stages": {
-            "first": "stages/first_stage.png",
-            "middle": "stages/level6_middle.png",
-            "six": "stages/six_stage.png",
-            "final": "stages/level6_final.png"
-        }
-    }
+BASE_STAGE_LEVELS = {
+    "1": {"name": "蒼穹平原", "entry": "stages/level1_sky_plains.png"},
+    "2": {"name": "荒蕪岩地", "entry": "stages/level2_barren_rocks.png"},
+    "3": {"name": "古樹森林", "entry": "stages/level3_ancient_forest.png"},
+    "4": {"name": "沙漠廢墟", "entry": "stages/level4_desert_ruins.png"},
+    "5": {"name": "幽暗沼澤", "entry": "stages/level5_gloomy_swamp.png"},
+    "6": {"name": "冰雪洞窟", "entry": "stages/level6_ice_cave.png"},
 }
+
+from utils.config_helper import get_stage_configs
+
+# 預設維持匯入時動態讀取 STAGE_CONFIGS
+STAGE_CONFIGS = get_stage_configs(BASE_STAGE_LEVELS)
