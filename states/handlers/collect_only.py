@@ -48,7 +48,7 @@ class CollectOnlyHandler(BaseStateHandler):
                 return
 
             # 檢查是否啟用【體力退避期間地下城冷卻結束自動復歸】
-            auto_resume = self.machine.original_config.get("auto_resume_dungeon_on_cd", True)
+            auto_resume = self.machine.original_config.get("auto_resume_dungeon_on_cd", False)
             if auto_resume and not self.machine.need_diamond_collection:
                 saved_cfg = self.machine.config
                 self.machine.config = self.machine.original_config
