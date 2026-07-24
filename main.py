@@ -17,7 +17,7 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS
+from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
 from utils import get_stage_configs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -302,15 +302,26 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
-    parser.add_argument("--mode", type=str, default="mix", choices=list(GAME_CONFIGS.keys()), 
-                        help="掛機模式：mix (混合模式，預設)、dungeon (地下城) 或 stage (普通關卡)")
+    parser.add_argument("--mode", type=str, default="mix", choices=list(PRIMARY_MODES.keys()), 
+                        help="主掛機模式：mix (混合模式，預設)、dungeon (地下城)、stage (普通關卡)、collect_only (純領取)")
+    parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
+                        help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
     return parser.parse_args()
 
 def setup_mode_config(args):
-    config = GAME_CONFIGS[args.mode].copy()
+    # 若指定了 --subflow，為純城鎮子流程測試，完全不跳出地下城與關卡選單提示！
+    if args.subflow:
+        target_key = args.subflow[0]
+        config = GAME_CONFIGS[target_key].copy()
+        config["backend_mode"] = args.backend
+        print(f"🛠️ [Dev 測試模式] 直接發起城鎮子流程: {args.subflow} (免選關卡，直通城鎮)")
+        return config
+
+    target_key = args.mode
+    config = GAME_CONFIGS[target_key].copy()
     config["backend_mode"] = args.backend
 
     if args.mode == "stage":
@@ -470,6 +481,12 @@ def init_state_machine_system(args, config):
     # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
     mouse.state_machine = state_machine
     state_machine.config = config
+
+    # 若使用 --subflow 發起 Dev 階段獨立測試
+    if hasattr(args, "subflow") and args.subflow:
+        state_machine.town_subflow_queue = list(args.subflow)
+        state_machine.is_dev_subflow_run = True
+        print(f"🛠️ [Dev 測試模式] 成功注入獨立子流程佇列: {state_machine.town_subflow_queue}")
 
     if config["type"] in ["bag_clean", "blood_altar"]:
         state_machine.enable_bread = False

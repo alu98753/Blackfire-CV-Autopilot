@@ -27,7 +27,8 @@ STAGE_TEMPLATES = [
     "stages/level5_gloomy_swamp.png"
 ]
 
-GAME_CONFIGS = {
+# ==================== 1. 主掛機大局模式 (PRIMARY MODES - 僅限 4 個) ====================
+PRIMARY_MODES = {
     # ------------------ 普通關卡模式 ------------------
     "stage": {
         "name": "普通關卡",
@@ -132,22 +133,25 @@ GAME_CONFIGS = {
         "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
     },
     
+    # ------------------ 定時領取麵包與鑽石模式 ------------------
+    "collect_only": {
+        "name": "定時領取麵包與鑽石",
+        "type": "collect_only",
+        "navigation_path": [],
+        "diamond_cd": 300.0,
+        "bread_cd": 300.0,
+        "stamina_retreat_duration": 7.0,
+    }
+}
+
+# ==================== 2. 城鎮子流程獨立配置 (SUBFLOW CONFIGS - 專供 Dev 測試與 08:30 佇列) ====================
+SUBFLOW_CONFIGS = {
     # ------------------ 背包整理模式 ------------------
     "bag_clean": {
         "name": "背包整理",
         "type": "bag_clean",
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
-    },
-    
-    # ------------------ 定時領取麵包與鑽石模式 ------------------
-    "collect_only": {
-        "name": "定時領取麵包與鑽石",
-        "type": "collect_only",
-        "navigation_path": [],
-        "diamond_cd": 300.0, # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
-        "bread_cd": 300.0,   # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
-        "stamina_retreat_duration": 7.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
     },
 
     # ------------------ 血之祭壇獻祭模式 ------------------
@@ -204,6 +208,9 @@ GAME_CONFIGS = {
         "lobby_start_btn": "stages/start.png",
     }
 }
+
+# ==================== 3. 統一匯出 (GAME_CONFIGS 向後完全相容) ====================
+GAME_CONFIGS = {**PRIMARY_MODES, **SUBFLOW_CONFIGS}
 
 BASE_STAGE_LEVELS = {
     "1": {"name": "蒼穹平原", "entry": "stages/level1_sky_plains.png"},
