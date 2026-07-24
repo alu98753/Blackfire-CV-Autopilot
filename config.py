@@ -61,7 +61,7 @@ GAME_CONFIGS = {
         "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
         "greedy_dungeon": True,
         "greedy_allowed_indices": [0, 1, 2, 3, 4],  # 預設允許全部地下城 [0, 1, 2, 3, 4]
-        "auto_resume_dungeon_on_cd": True,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
+        "auto_resume_dungeon_on_cd": False,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
         # 導航進入路徑：總入口 -> 地下城 -> 史萊姆副本
         "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
         # 進入地下城內每一層戰鬥的入口按鈕
@@ -96,7 +96,7 @@ GAME_CONFIGS = {
         "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
         "greedy_dungeon": True,
         "greedy_allowed_indices": [0, 1, 2, 3, 4],  # 預設允許全部地下城 [0, 1, 2, 3, 4]
-        "auto_resume_dungeon_on_cd": True,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
+        "auto_resume_dungeon_on_cd": False,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
         "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
         "dungeon_fight_btn": "dungeons/dungeon_fight.png",
         "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
