@@ -277,10 +277,6 @@ class BagCleaningHandler(BaseStateHandler):
                         self._save_step_screenshot(screen_img, f"5_deselect_r{r}_c{c}")
                         self.mouse.click(click_x, click_y)
                         time.sleep(0.25)
-                        
-                        # 🔴 實機除錯安全中斷：在產出 debug 截圖與完成反選點擊後立即中斷，避免真實點擊分解！
-                        if not hasattr(self.machine.capturer, "return_value"):
-                            raise RuntimeError(f"🛑 [除錯安全中斷] 已觸發 Row {r} Col {c} ({color}) 反選點擊，強行中斷執行以保護真實裝備！")
                         return
 
                     # 如果循環完畢沒有任何貴重物品被選中
@@ -320,9 +316,9 @@ class BagCleaningHandler(BaseStateHandler):
                     if pos_dis:
                         logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
                         self._save_step_screenshot(screen_img, "6_disassemble_click")
-                        # 🔴 雙重實機除錯安全中斷：絕對攔截【大量分解】點擊，防止實機裝備遭分解！
-                        if not hasattr(self.machine.capturer, "return_value"):
-                            raise RuntimeError("🛑 [雙重除錯安全中斷] 已攔截【大量分解】點擊！強行中斷執行以保護真實裝備！")
+                        # # 🔴 實機除錯安全中斷：所有貴重物品均已確認全數反選，攔截【大量分解】點擊，保護真實裝備！
+                        # if not hasattr(self.machine.capturer, "return_value"):
+                        #     raise RuntimeError("🛑 [除錯安全中斷] 背包內所有貴重物品已成功全數取消選取 [X]！已攔截【大量分解】點擊以保護真實裝備！")
                         self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
                         self.machine.bag_disassembled = True
                         time.sleep(0.1)
@@ -367,7 +363,7 @@ class BagCleaningHandler(BaseStateHandler):
             cv2.rectangle(debug_img, (x1, y1), (x2, y2), box_color, 2)
             cv2.circle(debug_img, (cx, cy), 3, (0, 255, 255), -1)
             
-            check_str = "[✓]" if has_check else "[X]"
+            check_str = "[V]" if has_check else "[X]"
             val_str = "VAL" if is_valuable else "COM"
             label = f"{color[:4]} {val_str} {check_str}"
             cv2.putText(debug_img, label, (x1 + 4, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
