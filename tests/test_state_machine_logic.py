@@ -1705,6 +1705,37 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
 
     @patch('os.path.exists')
+    def test_auto_resume_dungeon_during_stamina_retreat(self, mock_exists):
+        """
+        測試體力退避期間，若地下城冷卻結束，自動切回地下城，且退避起點時間戳絕不被重置。
+        """
+        mock_exists.return_value = True
+        orig_config = GAME_CONFIGS["mix"].copy()
+        orig_config["auto_resume_dungeon_on_cd"] = True
+        
+        self.state_machine.config = orig_config
+        self.state_machine.original_config = orig_config
+        initial_retreat_start = time.time() - 1800.0 # 已經退避 0.5 小時
+        self.state_machine.stamina_retreat_start_time = initial_retreat_start
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = False
+        
+        # 模擬地下城冷卻已結束 (dungeon 0 可刷)
+        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        self.state_machine.step()
+        
+        # 預期：動態偵測到地下城冷卻結束，恢復配置為 orig_config，並轉移至 STATE_UNKNOWN
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        # 斷言：original_config 與 initial_retreat_start 絕不被重置清空！
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, initial_retreat_start)
+
+    @patch('os.path.exists')
     def test_dungeon_navigation_transition_corrected(self, mock_exists):
         """
         測試修正後的地下城進入狀態轉移邏輯：

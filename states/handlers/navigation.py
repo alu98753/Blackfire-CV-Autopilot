@@ -503,9 +503,11 @@ class NavigationHandler(BaseStateHandler):
                                 time.sleep(1.0)
                                 return
                             
-                if target_idx is None:
-                    if self.machine.config.get("type") == "mix":
-                        self._switch_to_stage_or_back(screen_img, rect, "地下城頁面偵測到所有地下城均在冷卻中")
+                    if getattr(self.machine, "stamina_retreat_start_time", None) is not None and getattr(self.machine, "original_config", None) is not None:
+                        logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
+                        from config import GAME_CONFIGS
+                        self.machine.config = GAME_CONFIGS["collect_only"].copy()
+                        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
                         return
                     logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
                     time.sleep(1.0)

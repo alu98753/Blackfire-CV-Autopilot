@@ -47,6 +47,30 @@ class CollectOnlyHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_UNKNOWN)
                 return
 
+            # 檢查是否啟用【體力退避期間地下城冷卻結束自動復歸】
+            auto_resume = self.machine.original_config.get("auto_resume_dungeon_on_cd", True)
+            if auto_resume and not self.machine.need_diamond_collection:
+                saved_cfg = self.machine.config
+                self.machine.config = self.machine.original_config
+                dungeon_ready = False
+                try:
+                    dungeon_ready = self.machine.has_available_dungeon()
+                except Exception:
+                    dungeon_ready = False
+                finally:
+                    self.machine.config = saved_cfg
+
+                if dungeon_ready:
+                    # 若又有體力領取任務，先領一次體力/麵包
+                    if self.machine.enable_bread and self.machine.need_bread_collection:
+                        logging.info("🍞 [冷卻結束復歸] 偵測到地下城冷卻結束，先執行體力領取...")
+                    else:
+                        logging.warning(f"🔄 [冷卻結束復歸] 偵測到地下城冷卻結束，暫時離開 collect_only 切回刷地下城！(退避總剩餘時間持續倒數中...)")
+                        self.machine.config = self.machine.original_config
+                        # 保持 self.machine.original_config 與 self.machine.stamina_retreat_start_time 不變
+                        self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                        return
+
         # 1. 取得當前位置狀態
         is_town = False
         is_lobby = False

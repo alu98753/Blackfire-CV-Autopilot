@@ -270,6 +270,26 @@ def setup_dungeon_config(config, args):
             config["bless_mode"] = bless_map[bless_choice]
         print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
 
+    # 選擇體力退避期間是否自動返回地下城
+    print("\n當體力耗盡轉入定時領取 (collect_only) 時，若地下城冷卻結束，是否自動返回去刷地下城？")
+    print(" 1) 是 (地下城與定時領取來回切換) - 預設")
+    print(" 2) 否 (維持定時領取直到滿時間)")
+    try:
+        auto_resume_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
+        if not auto_resume_choice:
+            auto_resume_choice = "1"
+    except KeyboardInterrupt:
+        print("\n[!] 取消啟動。")
+        sys.exit(0)
+    except Exception:
+        auto_resume_choice = "1"
+
+    config["auto_resume_dungeon_on_cd"] = (auto_resume_choice == "1")
+    if config["auto_resume_dungeon_on_cd"]:
+        print("[*] 已啟用：體力退避期間若地下城冷卻結束，將自動切回刷地下城。")
+    else:
+        print("[*] 未啟用：體力退避期間維持純定時領取，直到滿時間。")
+
 def setup_utf8_encoding():
     if sys.platform.startswith('win'):
         try:
