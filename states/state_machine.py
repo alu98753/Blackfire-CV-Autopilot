@@ -687,7 +687,13 @@ class GameStateMachine:
             import sys
             sys.exit(0)
 
-        logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復原模式 續行...")
+        # 若佇列已空！還原主模式配置 (例如 stage / dungeon / mix)
+        if getattr(self, "primary_config", None):
+            self.config = self.primary_config.copy()
+            logging.info(f"🔄 [城鎮流水線] 所有城鎮任務均已完成！恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
+        else:
+            logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復原模式 續行...")
+
         next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
         self.transition_to(next_st)
 

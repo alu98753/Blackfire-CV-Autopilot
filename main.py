@@ -481,6 +481,7 @@ def init_state_machine_system(args, config):
     # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
     mouse.state_machine = state_machine
     state_machine.config = config
+    state_machine.primary_config = config.copy()
 
     # 若使用 --subflow 發起 Dev 階段獨立測試
     if hasattr(args, "subflow") and args.subflow:
