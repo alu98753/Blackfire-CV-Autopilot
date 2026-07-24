@@ -22,11 +22,10 @@ class LordBossHandler(BaseStateHandler):
         dm = getattr(self.machine, "daily_manager", None)
         avail_bosses = dm.get_available_lord_bosses() if dm else []
 
-        # 若當前沒有可討伐的 Boss，結束首領討伐子流程
+        # 若當前沒有可討伐的 Boss，結束首領討伐子流程，彈出下一個城鎮任務或回復原模式
         if not avail_bosses:
-            logging.info("🎉 [首領討伐] 今日所有 Boss 已滿 5 次或均在冷卻中！結束討伐，回到大廳續行... ")
-            next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
-            self.machine.transition_to(next_state)
+            logging.info("🎉 [首領討伐] 今日所有 Boss 已滿 5 次或均在冷卻中！結束討伐，彈出下一城鎮任務或回歸原模式...")
+            self.machine.pop_and_next_town_subflow()
             return True
 
         # 1. 檢查並使用相對優勢 API 比對領主頁籤是否已開啟

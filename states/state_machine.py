@@ -196,6 +196,10 @@ class GameStateMachine:
         """
         執行單步狀態檢索與決策（主調度器）。
         """
+        # 動態檢查 08:30 日常任務/Boss 清零重置線 (全模式適用)
+        if getattr(self, "daily_manager", None):
+            self.daily_manager.check_and_reset_daily()
+
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
             time.sleep(1)
@@ -683,6 +687,7 @@ class GameStateMachine:
             import sys
             sys.exit(0)
 
-        logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復 STATE_NAVIGATING 續行導航...")
-        self.transition_to(self.STATE_NAVIGATING)
+        logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復原模式 續行...")
+        next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+        self.transition_to(next_st)
 

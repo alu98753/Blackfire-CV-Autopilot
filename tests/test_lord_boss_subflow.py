@@ -117,5 +117,18 @@ class TestLordBossSubflow(unittest.TestCase):
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
 
+    def test_lord_boss_exit_returns_to_subflow_queue_or_navigating(self):
+        """測試：當無可用 Boss 時，討伐結束應發起 pop_and_next_town_subflow 回歸佇列或 NAVIGATING"""
+        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"] = 5
+        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["today_count"] = 5
+        
+        handler = LordBossHandler(self.state_machine)
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+        self.state_machine.pop_and_next_town_subflow = MagicMock()
+        
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        self.state_machine.pop_and_next_town_subflow.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()
