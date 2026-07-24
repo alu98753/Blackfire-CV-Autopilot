@@ -53,7 +53,7 @@ class LordBossHandler(BaseStateHandler):
                     time.sleep(0.3)
                     return True
 
-        # 3. 頁籤已開啟 (Lord_entry_after)，依序選擇可用 Boss 發起戰鬥
+        # 3. 頁籤已開啟 (Lord_entry_after)，依序選擇最高優先權可用 Boss 發起戰鬥
         bosses_config = self.machine.config.get("bosses", {})
         for boss_key in avail_bosses:
             b_cfg = bosses_config.get(boss_key, {})
@@ -61,10 +61,11 @@ class LordBossHandler(BaseStateHandler):
             if temp_path and os.path.exists(os.path.join("templates", temp_path)):
                 pos_b, conf_b = self.matcher.match(screen_img, temp_path, threshold=0.75)
                 if pos_b:
-                    logging.info(f"🎯 [首領討伐] 發現可挑戰 Boss [{b_cfg.get('name', boss_key)}] [{conf_b:.4f}]，點擊選擇。")
+                    logging.info(f"🎯 [首領討伐] 發現最高優先權 Boss [{b_cfg.get('name', boss_key)}] [{conf_b:.4f}]，點擊選擇！")
                     self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                     self.current_target_boss = boss_key
-                    time.sleep(0.2)
+                    time.sleep(0.3)
+                    break
 
         # 4. 點擊進入戰鬥按鈕 (stages/start.png)
         start_btn = self.machine.config.get("start_btn", "stages/start.png")

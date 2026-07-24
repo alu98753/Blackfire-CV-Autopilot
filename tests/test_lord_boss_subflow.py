@@ -120,5 +120,23 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
 
+    @patch('os.path.exists')
+    def test_lord_boss_priority_selection(self, mock_exists):
+        """測試：高優先權鎖定測試 (古代惡靈 lord_spectre: 7200s 應優先於 育母蜘蛛 lord_spider: 3600s)"""
+        mock_exists.return_value = True
+        stage_cfg = GAME_CONFIGS["stage"].copy()
+        self.state_machine.primary_config = stage_cfg
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.50)
+        self.state_machine.matcher.match.side_effect = lambda img, temp, **kw: ((100, 100), 0.9)
+        
+        handler = LordBossHandler(self.state_machine)
+        
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        # 斷言：發起戰鬥時鎖定的目標必須是高優先權 Boss (lord_spectre: 7200s)
+        self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spectre")
+
 if __name__ == '__main__':
     unittest.main()
