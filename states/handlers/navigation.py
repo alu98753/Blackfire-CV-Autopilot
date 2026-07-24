@@ -314,10 +314,15 @@ class NavigationHandler(BaseStateHandler):
                 return
 
 
-        # B. 原本的尋路導航邏輯
-        # 如果是自動貪婪地下城模式，且畫面上看見第一個地下城入口，執行貪婪選關邏輯
-        # B. 原本的尋路導航邏輯
-        # 如果是自動貪婪地下城模式，且畫面上看見任何一個地下城入口，執行貪婪選關邏輯
+        # 檢查體力退避期間是否所有地下城皆已進入冷卻
+        if getattr(self.machine, "stamina_retreat_start_time", None) is not None and getattr(self.machine, "original_config", None) is not None:
+            if not self.machine.has_available_dungeon():
+                logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
+                from config import GAME_CONFIGS
+                self.machine.config = GAME_CONFIGS["collect_only"].copy()
+                self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                return
+
         # B. 原本的尋路導航邏輯
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
         config_type = self.machine.config.get("type") if self.machine.config else "stage"

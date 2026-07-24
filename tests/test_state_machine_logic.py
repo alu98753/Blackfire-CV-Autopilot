@@ -1791,6 +1791,30 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertIsNone(self.state_machine.stamina_retreat_start_time)
 
     @patch('os.path.exists')
+    def test_normal_dungeon_mode_ignores_retreat_check(self, mock_exists):
+        """
+        測試單純的地下城/混合模式 (非體力退避狀態下，stamina_retreat_start_time 為 None)：
+        即使所有地下城皆在冷卻中，也不會被誤判切換至 collect_only 模式。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.original_config = None
+        self.state_machine.stamina_retreat_start_time = None
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        # 模擬所有地下城皆在冷卻中
+        now = time.time()
+        self.state_machine.dungeon_cooldowns = {0: now + 300, 1: now + 300, 2: now + 300, 3: now + 300, 4: now + 300}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        self.state_machine.step()
+        
+        # 斷言：非體力退避狀態下，絕不會轉移至 STATE_COLLECT_ONLY！
+        self.assertNotEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "dungeon")
+
+    @patch('os.path.exists')
     def test_dungeon_navigation_transition_corrected(self, mock_exists):
         """
         測試修正後的地下城進入狀態轉移邏輯：
