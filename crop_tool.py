@@ -90,6 +90,9 @@ def main():
             filename += ".png"
             
         save_path = os.path.join("templates", filename)
+        dir_name = os.path.dirname(save_path)
+        if dir_name and not os.path.exists(dir_name):
+            os.makedirs(dir_name, exist_ok=True)
         cv2.imwrite(save_path, cropped_img)
         print(f"[🎉] 模板已成功儲存至: {save_path}")
         print("您可以在接下來的腳本中直接使用此檔案。")
