@@ -469,7 +469,7 @@ def init_state_machine_system(args, config):
     mouse.state_machine = state_machine
     state_machine.config = config
 
-    if config["type"] == "bag_clean":
+    if config["type"] in ["bag_clean", "blood_altar"]:
         state_machine.enable_bread = False
         state_machine.need_diamond_collection = False
         state_machine.need_bread_collection = False

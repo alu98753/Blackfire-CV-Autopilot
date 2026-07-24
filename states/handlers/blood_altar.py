@@ -21,6 +21,19 @@ class BloodAltarHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
 
+    def _ensure_in_town(self, screen_img):
+        """
+        獨立導航輔助函式：若目前位於大廳 (看得到 goback_town.png)，點擊返回城鎮。
+        :return: True 代表目前已在城鎮/建築內；False 代表正在點擊退回城鎮中。
+        """
+        pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
+        if pos_goback:
+            logging.info("🩸 [血之祭壇] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
+            self.mouse.click(pos_goback[0], pos_goback[1])
+            self.last_action_time = time.time()
+            return False
+        return True
+
     def handle(self, screen_img=None, rect=None):
         if screen_img is None and self.capturer:
             rect = rect or self.capturer.get_window_rect()
@@ -31,6 +44,10 @@ class BloodAltarHandler(BaseStateHandler):
 
         now = time.time()
         if now - self.last_action_time < 0.8:
+            return
+
+        # 優先檢查是否需要從小圖示大廳退回城鎮 (Return to Town)
+        if not self._ensure_in_town(screen_img):
             return
 
         cfg = self.machine.config or {}

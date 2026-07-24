@@ -2039,5 +2039,29 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(handler.step_phase, "INIT")
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
 
+    @patch('os.path.exists')
+    def test_blood_altar_returns_to_town_from_lobby(self, mock_exists):
+        """
+        測試當角色在大廳 (goback_town.png 可見) 且處於 STATE_BLOOD_ALTAR 狀態時：
+        BloodAltarHandler 能透過 _ensure_in_town 自動點擊 goback_town.png 返回城鎮！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+
+        def mock_match_in_lobby(img, name, **kw):
+            if name == "goback_town.png":
+                return ((72, 757), 0.92)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_in_lobby
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+        # 斷言：必須自動點擊 goback_town.png (72, 757) 返回城鎮！
+        self.mock_mouse.click.assert_called_once_with(72, 757)
+
 if __name__ == "__main__":
     unittest.main()
