@@ -206,7 +206,29 @@ SUBFLOW_CONFIGS = {
         "goods_dir": "town_building/Jewelry_workshop/goods",
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
-    }
+    },
+
+    # ------------------ 首領領主討伐模式 ------------------
+    "lord_boss": {
+        "name": "首領領主討伐",
+        "type": "lord_boss",
+        "entry_btn": "load/Lord_entry.png",
+        "entry_after_btn": "load/Lord_entry_after.png",
+        "bosses": {
+            "lord_spider": {
+                "name": "育母蜘蛛麗拉西亞",
+                "template": "load/lord_spider.png",
+                "cooldown_seconds": 3600.0,
+            },
+            "lord_spectre": {
+                "name": "古代惡靈伊瑟倫",
+                "template": "load/lord_spectre.png",
+                "cooldown_seconds": 7200.0,
+            }
+        },
+        "start_btn": "stages/start.png",
+        "navigation_path": [],
+    },
 }
 
 # ==================== 3. 統一匯出 (GAME_CONFIGS 向後完全相容) ====================

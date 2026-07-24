@@ -15,7 +15,8 @@ from states.handlers import (
     CollectOnlyHandler,
     LoadingHandler,
     BloodAltarHandler,
-    JewelryWorkshopHandler
+    JewelryWorkshopHandler,
+    LordBossHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -36,6 +37,7 @@ class GameStateMachine:
     STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
     STATE_BLOOD_ALTAR = "BLOOD_ALTAR"                    # 血之祭壇獻祭流程
     STATE_JEWELRY_WORKSHOP = "JEWELRY_WORKSHOP"          # 珠寶加工廠出售流程
+    STATE_LORD_BOSS = "LORD_BOSS"                        # 首領領主討伐流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -127,6 +129,7 @@ class GameStateMachine:
             self.STATE_LOADING: LoadingHandler(self),
             self.STATE_BLOOD_ALTAR: BloodAltarHandler(self),
             self.STATE_JEWELRY_WORKSHOP: JewelryWorkshopHandler(self),
+            self.STATE_LORD_BOSS: LordBossHandler(self),
         }
 
     @property
@@ -163,6 +166,7 @@ class GameStateMachine:
     TOWN_SUBFLOW_CONFIG_MAP = {
         STATE_BLOOD_ALTAR: "blood_altar",
         STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
+        STATE_LORD_BOSS: "lord_boss",
     }
 
     def _on_state_transition_sync_context(self, new_state):

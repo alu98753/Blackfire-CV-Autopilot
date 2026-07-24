@@ -18,7 +18,7 @@ DEFAULT_DAILY_STATUS = {
                     "name": "育母蜘蛛麗拉西亞",
                     "today_count": 0,
                     "max_daily_count": 5,
-                    "cooldown_seconds": 7200,
+                    "cooldown_seconds": 3600,
                     "last_fight_timestamp": 0.0,
                     "completed_today": False
                 },
@@ -163,3 +163,27 @@ class DailyManager:
             
             self.save_status()
             logging.info(f"⚔️ [DailyManager] 記錄 Boss [{b_info['name']}] 戰鬥完成 (今日進度: {b_info['today_count']}/{b_info['max_daily_count']})")
+
+    def get_available_lord_bosses(self, now_ts=None):
+        """
+        取得當前冷卻完畢且次數未滿 5 次的可討伐 Boss 鍵名陣列。
+        """
+        bosses = self.status.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
+        available = []
+        for b_key in bosses.keys():
+            ok, _ = self.is_boss_available(b_key, now_ts)
+            if ok:
+                available.append(b_key)
+        return available
+
+    def has_available_lord_boss(self, now_ts=None):
+        """
+        檢查是否有任何 Boss 當前可進行討伐。
+        """
+        return len(self.get_available_lord_bosses(now_ts)) > 0
+
+    def record_lord_boss_fight(self, boss_key, now_ts=None):
+        """
+        紀錄完成一次 Boss 戰鬥 (別名轉接)。
+        """
+        return self.record_boss_fight(boss_key, now_ts)

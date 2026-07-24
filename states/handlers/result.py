@@ -97,6 +97,13 @@ class ResultHandler(BaseStateHandler):
                     logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
                     self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
                     self.machine.is_in_dungeon = False
+                    
+                    if getattr(self.machine, "current_lord_boss_key", None):
+                        b_key = self.machine.current_lord_boss_key
+                        self.machine.current_lord_boss_key = None
+                        if getattr(self.machine, "daily_manager", None):
+                            self.machine.daily_manager.record_lord_boss_fight(b_key)
+                            
                     next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
                     self.machine.transition_to(next_state)
                     time.sleep(0.2)
