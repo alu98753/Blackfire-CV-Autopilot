@@ -32,11 +32,14 @@ class TestLordBossSubflow(unittest.TestCase):
     # 1. DailyManager 首領討伐 CD 與計數測試
     # ------------------------------------------------------------------
     def test_lord_boss_initial_state(self):
-        """測試：初始化時兩個 Boss 均應為可用狀態"""
+        """測試：初始化時兩個 Boss 均應為可用狀態，且 CD 較大者 (lord_spectre: 7200s) 優先於 (lord_spider: 3600s)"""
         avail = self.daily_manager.get_available_lord_bosses()
         self.assertIn("lord_spider", avail)
         self.assertIn("lord_spectre", avail)
         self.assertTrue(self.daily_manager.has_available_lord_boss())
+        # 斷言優先順序：7200s (lord_spectre) 應排在 3600s (lord_spider) 前面
+        self.assertEqual(avail[0], "lord_spectre")
+        self.assertEqual(avail[1], "lord_spider")
 
     def test_lord_boss_cd_and_max_count(self):
         """測試：戰鬥後記錄 timestamp，CD 未過期前判定不可挑戰，過期後自動恢復"""

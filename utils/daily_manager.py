@@ -167,6 +167,7 @@ class DailyManager:
     def get_available_lord_bosses(self, now_ts=None):
         """
         取得當前冷卻完畢且次數未滿 5 次的可討伐 Boss 鍵名陣列。
+        依冷卻時間 (cooldown_seconds) 由大到小排序 (冷卻時間越大越難打，優先權越高)。
         """
         bosses = self.status.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
         available = []
@@ -174,6 +175,8 @@ class DailyManager:
             ok, _ = self.is_boss_available(b_key, now_ts)
             if ok:
                 available.append(b_key)
+                
+        available.sort(key=lambda k: bosses[k].get("cooldown_seconds", 0), reverse=True)
         return available
 
     def has_available_lord_boss(self, now_ts=None):
