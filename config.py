@@ -6,6 +6,8 @@ GLOBAL_SETTINGS = {
     "default_diamond_cd": 7200.0,  # 預設 2 小時領一次鑽石
     "default_bread_cd": 1800.0,    # 預設 30 分鐘領一次體力
     "default_bless_mode": "combat",  # 預設為戰鬥/傷害祝福
+    "default_town_subflow_order": ["blood_altar", "jewelry_workshop"],  # 預設背包清理後連動的城鎮建築順序
+    "dry_run_bag_clean": False,  # 安全測試開關：設為 True 時，背包清理不真實點擊分解裝備，保護裝備並續行測試城鎮流水線
 }
 
 DUNGEON_NAMES = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
@@ -168,6 +170,36 @@ GAME_CONFIGS = {
             "blue": "town_building/Blood_Altar/blue_blood.png",
             "purple": "town_building/Blood_Altar/purple_blood.png",
         },
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
+
+    # ------------------ 珠寶加工廠出售模式 ------------------
+    "jewelry_workshop": {
+        "name": "珠寶加工廠出售",
+        "type": "jewelry_workshop",
+        "building_btn": "town_building/Jewelry_workshop/Jewelry_workshop.png",
+        "sell_out_btn": "town_building/sell_out.png",
+        "sell_btn": "town_building/sell.png",
+        "sell_max_btn": "town_building/sell_max.png",
+        "exit_building_btn": "town_building/exitfromhouse_and_to_town.png",
+        "goods_settings": {
+            "gray": {
+                "Sandworm_scales": True,
+                "Spider_silk": True,
+                "Spider_venom_glands": True,
+                "Warcraft_Fang": False,
+                "lizard_skin": True,
+                "scrap": True,
+            },
+            "green": {
+                "The_cloth_wrapped_around_the_dead": True,
+                "Giant_Beast_Gold_Tooth": True,
+            },
+            "blue": {},
+            "purple": {},
+        },
+        "goods_dir": "town_building/Jewelry_workshop/goods",
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
     }

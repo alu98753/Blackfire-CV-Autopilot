@@ -68,12 +68,10 @@ class BloodAltarHandler(BaseStateHandler):
         sacrifice_btn = cfg.get("sacrifice_btn", "town_building/Blood_Altar/Sacrifice.png")
         alter_btn = cfg.get("alter_btn", "town_building/Blood_Altar/alter.png")
         exit_building_btn = cfg.get("exit_building_btn", "town_building/exitfromhouse_and_to_town.png")
-        sacrifice_settings = cfg.get("sacrifice_settings", {
-            "gray": True,
-            "green": True,
-            "blue": True,
-            "purple": False,
-        })
+        sacrifice_settings = cfg.get("sacrifice_settings")
+        if sacrifice_settings is None:
+            from config import GAME_CONFIGS
+            sacrifice_settings = GAME_CONFIGS.get("blood_altar", {}).get("sacrifice_settings", {})
         blood_templates = cfg.get("blood_templates", {
             "gray": "town_building/Blood_Altar/gray_blood.png",
             "green": "town_building/Blood_Altar/green_blood.png",
@@ -166,8 +164,8 @@ class BloodAltarHandler(BaseStateHandler):
                     logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
                     sys.exit(0)
                 else:
-                    logging.info("🩸 [血之祭壇] 獻祭流程完成，自動將狀態轉移至 STATE_NAVIGATING 以進行後續導航...")
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    logging.info("🩸 [血之祭壇] 獻祭流程完成，消費城鎮佇列中的下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
                     return
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
@@ -189,8 +187,8 @@ class BloodAltarHandler(BaseStateHandler):
                     logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
                     sys.exit(0)
                 else:
-                    logging.info("🩸 [血之祭壇] 獻祭流程完成，自動將狀態轉移至 STATE_NAVIGATING 以進行後續導航...")
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    logging.info("🩸 [血之祭壇] 獻祭流程完成，消費城鎮佇列中的下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
                     return
             return
 

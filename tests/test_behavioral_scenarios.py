@@ -2341,5 +2341,287 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 斷言 2: 在 mix 模式且全冷卻時，NavigationHandler 發動退守點擊普通關卡入口
         self.mock_mouse.click.assert_called()
 
+    @patch('os.path.exists')
+    def test_jewelry_workshop_enters_building_and_opens_menu(self, mock_exists):
+        """
+        測試當角色在城鎮時 (Jewelry_workshop.png 可見)：
+        JewelryWorkshopHandler 能自動辨識並點擊進入建築物，隨後點擊 sell_out.png 開啟選單！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_JEWELRY_WORKSHOP
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+
+        def mock_match_town(img, name, **kw):
+            if name == "common/door.png":
+                return ((50, 50), 0.90)
+            elif name == "town_building/Jewelry_workshop/Jewelry_workshop.png":
+                return ((400, 500), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_town
+        self.mock_mouse.click.reset_mock()
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        handler.handle(fake_img, rect)
+        self.mock_mouse.click.assert_called_once_with(400, 500)
+        self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
+
+    @patch('os.path.exists')
+    def test_jewelry_workshop_scrolls_down_and_sells_goods(self, mock_exists):
+        """
+        測試在 SELL_MENU_OPEN 階段：
+        當頂層未找到 goods 時，Handler 會向下滑動 2 次尋找，找到商品後順序執行點擊商品 -> sell.png -> sell_max.png -> ok.png 賣出！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_JEWELRY_WORKSHOP
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+        handler.step_phase = "SELL_MENU_OPEN"
+
+        def mock_match_goods(img, name, **kw):
+            if "Sandworm_scales.png" in name:
+                if handler.goods_scroll_state == "SCROLLED_DOWN":
+                    return ((300, 300), 0.90)
+                return (None, 0.0)
+            elif name == "town_building/sell.png":
+                return ((500, 500), 0.90)
+            elif name == "town_building/sell_max.png":
+                return ((600, 500), 0.90)
+            elif name == "common/ok.png":
+                return ((700, 500), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_goods
+        self.mock_mouse.drag.reset_mock()
+        self.mock_mouse.click.reset_mock()
+
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        # 1. 第一幀：頂層未找到，執行平滑拖曳滑動
+        handler.handle(fake_img, rect)
+        self.mock_mouse.drag.assert_called_with(960, 648, 960, 432, duration=0.5, inertia=False)
+        self.assertEqual(handler.goods_scroll_state, "SCROLLED_DOWN")
+
+        # 2. 第二幀：滑動後找到商品，執行點選與賣出
+        handler.last_action_time = 0.0
+        handler.handle(fake_img, rect)
+        self.assertTrue(self.mock_mouse.click.called)
+        self.assertEqual(handler.current_goods_idx, 1)
+
+    @patch('sys.exit')
+    @patch('os.path.exists')
+    def test_jewelry_workshop_exits_building_on_completion(self, mock_exists, mock_sys_exit):
+        """
+        測試當所有 goods 處置完成後進入 ALL_DONE_EXITING：
+        Handler 能自動點擊 exitfromhouse_and_to_town.png 返回城鎮，並在獨立模式呼叫 sys.exit(0)！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_JEWELRY_WORKSHOP
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+        handler.step_phase = "ALL_DONE_EXITING"
+
+        def mock_match_exit(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_exit
+        self.mock_mouse.click.reset_mock()
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        handler.handle(fake_img, rect)
+        self.mock_mouse.click.assert_called_once_with(74, 744)
+        mock_sys_exit.assert_called_once_with(0)
+
+    @patch('os.path.exists')
+    def test_bag_cleaning_triggers_town_subflow_pipeline(self, mock_exists):
+        """
+        測試完整的城鎮流水線 (Town Subflow Pipeline) 連動：
+        1. 背包清理完成 ➔ 觸發 trigger_town_subflow_chain()，建佇列 ["blood_altar", "jewelry_workshop"]。
+        2. 第一站轉移至 STATE_BLOOD_ALTAR 獻祭。
+        3. 獻祭離場 ➔ pop_and_next_town_subflow() 接力進入 STATE_JEWELRY_WORKSHOP 出售。
+        4. 出售離場 ➔ pop_and_next_town_subflow() 佇列已空 ➔ 恢復 STATE_NAVIGATING 續行掛機！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        
+        bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(bag_handler, 'reset_state'):
+            bag_handler.reset_state()
+        self.state_machine.bag_tidied = True
+
+        def mock_match_quit(img, name, **kw):
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
+                return ((74, 744), 0.90)
+            elif name == "common/quit.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_quit
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        # Step 1: 關閉背包 ➔ 觸發流水線
+        bag_handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.town_subflow_queue, ["jewelry_workshop"])
+
+        # Step 2: 血之祭壇離場 ➔ 自動跳轉至珠寶加工廠
+        altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        altar_handler.reset_state()
+        altar_handler.step_phase = "ALL_DONE_EXITING"
+        altar_handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
+        self.assertTrue(self.state_machine.need_jewelry_workshop)
+        self.assertEqual(self.state_machine.town_subflow_queue, [])
+
+        # Step 3: 珠寶加工廠離場 ➔ 佇列已空 ➔ 自動恢復 STATE_NAVIGATING
+        jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        jewelry_handler.reset_state()
+        jewelry_handler.step_phase = "ALL_DONE_EXITING"
+        jewelry_handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertFalse(self.state_machine.need_blood_altar)
+        self.assertFalse(self.state_machine.need_jewelry_workshop)
+
+    @patch('os.path.exists')
+    def test_town_pipeline_in_various_modes_stage_dungeon_mix(self, mock_exists):
+        """
+        驗證城鎮流水線在不同掛機模式 (stage, dungeon, mix) 下：
+        流水線執行完畢後標記 100% 重置為 False，且狀態恢復至 STATE_NAVIGATING 續行該模式！
+        """
+        mock_exists.return_value = True
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        for mode_name in ["stage", "dungeon", "mix"]:
+            self.state_machine.config = GAME_CONFIGS[mode_name].copy()
+            
+            # 手動模擬觸發流水線
+            self.state_machine.trigger_town_subflow_chain()
+            self.assertTrue(self.state_machine.need_blood_altar)
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+
+            # 模擬血之祭壇完成並離場
+            altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+            altar_handler.reset_state()
+            altar_handler.step_phase = "ALL_DONE_EXITING"
+            def mock_match_exit(img, name, **kw):
+                if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
+                    return ((74, 744), 0.90)
+                return (None, 0.0)
+            self.mock_matcher.match.side_effect = mock_match_exit
+            altar_handler.handle(fake_img, rect)
+
+            # 第一站完成 ➔ 切換至珠寶加工廠
+            self.assertFalse(self.state_machine.need_blood_altar)
+            self.assertTrue(self.state_machine.need_jewelry_workshop)
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
+
+            # 模擬珠寶加工廠完成並離場
+            jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+            jewelry_handler.reset_state()
+            jewelry_handler.step_phase = "ALL_DONE_EXITING"
+            jewelry_handler.handle(fake_img, rect)
+
+            # 佇列清空 ➔ 100% 恢復 NAVIGATING 且標記全重置
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+            self.assertFalse(self.state_machine.need_blood_altar)
+            self.assertFalse(self.state_machine.need_jewelry_workshop)
+
+    @patch('sys.exit')
+    @patch('os.path.exists')
+    def test_independent_modes_isolation(self, mock_exists, mock_sys_exit):
+        """
+        驗證獨立 CLI 模式 (jewelry_workshop, blood_altar)：
+        完成後直接 sys.exit(0) 結束程式，絕不誤觸城鎮流水線與 STATE_NAVIGATING！
+        """
+        mock_exists.return_value = True
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        def mock_match_exit(img, name, **kw):
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = mock_match_exit
+
+        # 1. 獨立血之祭壇模式
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        altar_handler.reset_state()
+        altar_handler.step_phase = "ALL_DONE_EXITING"
+        altar_handler.handle(fake_img, rect)
+        mock_sys_exit.assert_called_with(0)
+
+        # 2. 獨立珠寶加工廠模式
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        jewelry_handler.reset_state()
+        jewelry_handler.step_phase = "ALL_DONE_EXITING"
+        jewelry_handler.handle(fake_img, rect)
+        mock_sys_exit.assert_called_with(0)
+
+    @patch('os.path.exists')
+    def test_bag_clean_dry_run_safety(self, mock_exists):
+        """
+        測試當開啟 dry_run_bag_clean = True 時：
+        BagCleaningHandler 偵測到 common/Disassembly.png 不會進行真實分解點擊，
+        而是點擊 quit 關閉視窗並標記 bag_disassembled = True，確保裝備安全且無 error 繼續走完流程！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.config["dry_run_bag_clean"] = True
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        
+        bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(bag_handler, 'reset_state'):
+            bag_handler.reset_state()
+        self.state_machine.bag_select_all_clicked = True
+        self.state_machine.bag_deselected = True
+        self.state_machine.bag_disassembled = False
+
+        dis_pos = (500, 500)
+        quit_pos = (800, 200)
+
+        def mock_match(img, name, **kw):
+            if name == "common/Disassembly.png":
+                return (dis_pos, 0.90)
+            elif name == "common/quit.png":
+                return (quit_pos, 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match
+        self.mock_mouse.click.reset_mock()
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        bag_handler.handle(fake_img, rect)
+        
+        # 驗證沒有點擊分解按鈕 (500, 500)
+        for call_args in self.mock_mouse.click.call_args_list:
+            self.assertNotEqual(call_args[0], dis_pos)
+        
+        # 驗證成功點擊了 quit 按鈕 (800, 200) 且 bag_disassembled 被設為 True
+        self.mock_mouse.click.assert_called_once_with(quit_pos[0], quit_pos[1])
+        self.assertTrue(self.state_machine.bag_disassembled)
+
 if __name__ == "__main__":
     unittest.main()

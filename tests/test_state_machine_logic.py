@@ -2068,6 +2068,55 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertTrue(cfg["sacrifice_settings"]["blue"])
         self.assertFalse(cfg["sacrifice_settings"]["purple"]) # 預設紫色不獻祭
 
+    @patch('os.path.exists')
+    def test_detect_state_jewelry_workshop_mode_forces_jewelry_workshop_state(self, mock_exists):
+        """
+        測試當模式為 jewelry_workshop 且在城鎮大門 (common/door.png 可見) 時：
+        detect_current_state() 會正確轉移至 STATE_JEWELRY_WORKSHOP 狀態，不會誤入 NAVIGATING 或 LOBBY！
+        """
+        from config import GAME_CONFIGS
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+        self.state_machine.need_diamond_collection = True
+
+        def mock_match(img, name, **kw):
+            if name in ["common/door.png", "town_building/Jewelry_workshop/Jewelry_workshop.png"]:
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        self.state_machine.detect_current_state(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
+
+    @patch('os.path.exists')
+    def test_detect_state_blood_altar_mode_forces_blood_altar_state(self, mock_exists):
+        """
+        測試當模式為 blood_altar 且在城鎮大門時：
+        detect_current_state() 會正確轉移至 STATE_BLOOD_ALTAR 狀態！
+        """
+        from config import GAME_CONFIGS
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+
+        def mock_match(img, name, **kw):
+            if name in ["common/door.png", "town_building/Blood_Altar/Blood_Altar.png"]:
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        self.state_machine.detect_current_state(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -14,7 +14,8 @@ from states.handlers import (
     DiamondCollectionHandler,
     CollectOnlyHandler,
     LoadingHandler,
-    BloodAltarHandler
+    BloodAltarHandler,
+    JewelryWorkshopHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -34,6 +35,7 @@ class GameStateMachine:
     STATE_COLLECT_ONLY = "COLLECT_ONLY"                  # 定時領取麵包與鑽石待機流程
     STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
     STATE_BLOOD_ALTAR = "BLOOD_ALTAR"                    # 血之祭壇獻祭流程
+    STATE_JEWELRY_WORKSHOP = "JEWELRY_WORKSHOP"          # 珠寶加工廠出售流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -74,8 +76,10 @@ class GameStateMachine:
         self.bag_select_all_clicked = False
         self.bag_deselected = False
         
-        # 血之祭壇獻祭相關屬性
+        # 城鎮子流程與流水線相關屬性
         self.need_blood_altar = False
+        self.need_jewelry_workshop = False
+        self.town_subflow_queue = []
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
@@ -121,6 +125,7 @@ class GameStateMachine:
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
             self.STATE_LOADING: LoadingHandler(self),
             self.STATE_BLOOD_ALTAR: BloodAltarHandler(self),
+            self.STATE_JEWELRY_WORKSHOP: JewelryWorkshopHandler(self),
         }
 
     @property
@@ -336,7 +341,7 @@ class GameStateMachine:
                         return
 
         # 0.06 如果需要血之祭壇獻祭 (need_blood_altar == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
-        if getattr(self, "need_blood_altar", False):
+        if getattr(self, "need_blood_altar", False) or (self.config is not None and self.config["type"] == "blood_altar"):
             for town_btn in ["common/door.png", "goback_town.png", "town_building/Blood_Altar/Blood_Altar.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
@@ -344,9 +349,19 @@ class GameStateMachine:
                         self.transition_to(self.STATE_BLOOD_ALTAR)
                         return
 
-        # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
-        # logging.info(f"🔍 [除錯] 領取旗標狀態：need_diamond={self.need_diamond_collection}, enable_bread={self.enable_bread}, need_bread={self.need_bread_collection}")
-        if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
+        # 0.07 如果模式為 jewelry_workshop 或需要珠寶加工廠出售，且已回到了大廳/城鎮/建築畫面
+        if getattr(self, "need_jewelry_workshop", False) or (self.config is not None and self.config["type"] == "jewelry_workshop"):
+            for town_btn in ["common/door.png", "goback_town.png", "town_building/Jewelry_workshop/Jewelry_workshop.png", "town_building/sell_out.png"]:
+                if os.path.exists(os.path.join("templates", town_btn)):
+                    pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.75)
+                    if pos_t:
+                        self.transition_to(self.STATE_JEWELRY_WORKSHOP)
+                        return
+
+        # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態 (排除獨立模式與城鎮任務流水線中)
+        if (self.need_diamond_collection or (self.enable_bread and self.need_bread_collection)) and \
+           (self.config is None or self.config["type"] not in ["blood_altar", "jewelry_workshop"]) and \
+           not getattr(self, "need_blood_altar", False) and not getattr(self, "need_jewelry_workshop", False):
             nav_buttons = [
                 "common/door.png", "goback_town.png", "diamond.png", "free.png",
                 "common/bread.png", "common/collect.png", "common/bread_collection.png", "common/quit.png"
@@ -539,8 +554,9 @@ class GameStateMachine:
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。
         """
-        if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar"]:
-            return  # 背包整理與血之祭壇模式不參與自動領取
+        # 以下模式不參與自動領取
+        if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar", "jewelry_workshop"]:
+            return
 
         from config import GLOBAL_SETTINGS
 
@@ -606,4 +622,38 @@ class GameStateMachine:
                     logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，重新點擊領取獎勵座標 ({btn_x}, {btn_y})。")
                     self.mouse.click(btn_x, btn_y)
                     time.sleep(0.5)
+
+    def trigger_town_subflow_chain(self):
+        """
+        當背包清理完成退回城鎮後，構建需在城鎮執行的子流程佇列。
+        """
+        from config import GLOBAL_SETTINGS
+        cfg = self.config or {}
+        order = cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_town_subflow_order", ["blood_altar", "jewelry_workshop"]))
+        self.town_subflow_queue = list(order)
+        logging.info(f"🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列: {self.town_subflow_queue}")
+        self.pop_and_next_town_subflow()
+
+    def pop_and_next_town_subflow(self):
+        """
+        彈出並執行佇列中的下一個城鎮任務。若佇列已空，則回復 STATE_NAVIGATING。
+        """
+        # 切換任務前先重置舊標記，防止舊標記優先權高於新標記
+        self.need_blood_altar = False
+        self.need_jewelry_workshop = False
+
+        if self.town_subflow_queue:
+            next_flow = self.town_subflow_queue.pop(0)
+            logging.info(f"🏛️ [城鎮流水線] 彈出下一個城鎮任務 [{next_flow}]，剩餘佇列: {self.town_subflow_queue}")
+            if next_flow == "blood_altar":
+                self.need_blood_altar = True
+                self.transition_to(self.STATE_BLOOD_ALTAR)
+                return
+            elif next_flow == "jewelry_workshop":
+                self.need_jewelry_workshop = True
+                self.transition_to(self.STATE_JEWELRY_WORKSHOP)
+                return
+
+        logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復 STATE_NAVIGATING 續行導航...")
+        self.transition_to(self.STATE_NAVIGATING)
 

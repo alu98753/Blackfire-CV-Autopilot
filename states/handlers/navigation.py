@@ -738,6 +738,17 @@ class NavigationHandler(BaseStateHandler):
                         time.sleep(1.2)
                         return
 
+        # 優先檢查：若人在城鎮大門 (common/door.png 相似度 >= 0.90)，且尚未開啟關卡/地下城選單，優先點擊大門進入
+        if "common/door.png" in nav_path and not stage_select_open and not dungeon_select_open and not in_detail_screen:
+            pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.90, brightness_threshold=0.70)
+            if pos_door:
+                click_x = rect["left"] + pos_door[0]
+                click_y = rect["top"] + pos_door[1]
+                logging.info(f"🚪 [尋路] 偵測到城鎮大門 [common/door.png] (信心度: {conf_door:.4f})，優先點擊大門進入選單...")
+                self.mouse.click(click_x, click_y)
+                time.sleep(0.3)
+                return
+
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
         clicked_any = False
         for btn in reversed(nav_path):
@@ -758,6 +769,9 @@ class NavigationHandler(BaseStateHandler):
             if is_sub_stage_target:
                 thresh = 0.90
                 b_thresh = 0.0
+            elif btn == "exit_battle.png":
+                thresh = 0.88  # 提高門檻，防範城鎮背景產生 0.8088 的虛假誤匹配
+                b_thresh = 0.70
             elif "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
                 thresh = 0.60
                 b_thresh = 0.70
