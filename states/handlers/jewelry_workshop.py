@@ -72,17 +72,10 @@ class JewelryWorkshopHandler(BaseStateHandler):
         sell_max_btn = cfg.get("sell_max_btn", "town_building/sell_max.png")
         exit_building_btn = cfg.get("exit_building_btn", "town_building/exitfromhouse_and_to_town.png")
 
-        from config import GLOBAL_SETTINGS
-        default_goods = GLOBAL_SETTINGS.get("default_goods_settings", {
-            "Sandworm_scales": True,
-            "Spider_silk": True,
-            "Spider_venom_glands": True,
-            "The_cloth_wrapped_around_the_dead": True,
-            "Warcraft_Fang": False,
-            "lizard_skin": True,
-            "scrap": True,
-        })
-        goods_settings = cfg.get("goods_settings", default_goods)
+        goods_settings = cfg.get("goods_settings")
+        if goods_settings is None:
+            from config import GAME_CONFIGS
+            goods_settings = GAME_CONFIGS.get("jewelry_workshop", {}).get("goods_settings", {})
         goods_dir = cfg.get("goods_dir", "town_building/Jewelry_workshop/goods")
 
         # 整理要出售的商品清單

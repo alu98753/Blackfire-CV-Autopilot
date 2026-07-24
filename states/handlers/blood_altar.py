@@ -68,14 +68,10 @@ class BloodAltarHandler(BaseStateHandler):
         sacrifice_btn = cfg.get("sacrifice_btn", "town_building/Blood_Altar/Sacrifice.png")
         alter_btn = cfg.get("alter_btn", "town_building/Blood_Altar/alter.png")
         exit_building_btn = cfg.get("exit_building_btn", "town_building/exitfromhouse_and_to_town.png")
-        from config import GLOBAL_SETTINGS
-        default_sac = GLOBAL_SETTINGS.get("default_sacrifice_settings", {
-            "gray": True,
-            "green": True,
-            "blue": True,
-            "purple": False,
-        })
-        sacrifice_settings = cfg.get("sacrifice_settings", default_sac)
+        sacrifice_settings = cfg.get("sacrifice_settings")
+        if sacrifice_settings is None:
+            from config import GAME_CONFIGS
+            sacrifice_settings = GAME_CONFIGS.get("blood_altar", {}).get("sacrifice_settings", {})
         blood_templates = cfg.get("blood_templates", {
             "gray": "town_building/Blood_Altar/gray_blood.png",
             "green": "town_building/Blood_Altar/green_blood.png",
