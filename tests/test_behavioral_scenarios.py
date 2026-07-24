@@ -1949,5 +1949,95 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 斷言：必須點擊 common/door.png (76, 751) 進入大廳！
         self.mock_mouse.click.assert_called_once_with(76, 751)
 
+    @patch('os.path.exists')
+    def test_blood_altar_full_subflow(self, mock_exists):
+        """
+        測試血之祭壇獻祭 (Blood Altar) 完整子流程：
+        1. 城鎮 (door.png, Blood_Altar.png) ➔ 點擊 Blood_Altar.png
+        2. 建築內 (Sacrifice.png) ➔ 點擊 Sacrifice.png
+        3. 獻祭選單 (green_blood.png, alter.png) ➔ 點擊 green_blood.png ➔ 點擊 alter.png
+        4. 視窗關閉 (quit.png) ➔ 點擊 quit.png
+        5. 離開建築 (exitfromhouse_and_to_town.png) ➔ 點擊 exitfromhouse_and_to_town.png ➔ 流程結束
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+
+        # Step 1: 城鎮點擊祭壇建築
+        def mock_match_step1(img, name, **kw):
+            if name == "common/door.png":
+                return ((100, 200), 0.9)
+            elif name == "town_building/Blood_Altar/Blood_Altar.png":
+                return ((550, 688), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_step1
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+        self.mock_mouse.click.assert_called_once_with(550, 688)
+        self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
+
+        # Step 2: 點擊 Sacrifice.png 開啟選單
+        handler.last_action_time = 0.0
+        def mock_match_step2(img, name, **kw):
+            if name == "town_building/Blood_Altar/Sacrifice.png":
+                return ((830, 863), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_step2
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+        self.mock_mouse.click.assert_called_once_with(830, 863)
+        self.assertEqual(handler.step_phase, "IN_SACRIFICE_MENU")
+
+        # Step 3: 點選 green_blood 獻祭 ➔ 點擊 alter.png
+        handler.last_action_time = 0.0
+        def mock_match_step3(img, name, **kw):
+            if name == "town_building/Blood_Altar/green_blood.png":
+                return ((706, 303), 0.9)
+            elif name == "town_building/Blood_Altar/alter.png":
+                return ((917, 774), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_step3
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+        self.assertEqual(self.mock_mouse.click.call_count, 2)
+        self.assertEqual(handler.step_phase, "SACRIFICING")
+
+        # Step 4: 點擊 common/quit.png
+        handler.last_action_time = 0.0
+        def mock_match_step4(img, name, **kw):
+            if name == "common/quit.png":
+                return ((1200, 100), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_step4
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+        self.mock_mouse.click.assert_called_once_with(1200, 100)
+        self.assertEqual(handler.step_phase, "EXITING")
+
+        # Step 5: 點擊 exitfromhouse_and_to_town.png 離開
+        handler.last_action_time = 0.0
+        def mock_match_step5(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((50, 50), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_step5
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+        self.mock_mouse.click.assert_called_once_with(50, 50)
+        self.assertEqual(handler.step_phase, "INIT")
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
 if __name__ == "__main__":
     unittest.main()

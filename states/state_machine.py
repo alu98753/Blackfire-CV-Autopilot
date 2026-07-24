@@ -13,7 +13,8 @@ from states.handlers import (
     BreadCollectionHandler,
     DiamondCollectionHandler,
     CollectOnlyHandler,
-    LoadingHandler
+    LoadingHandler,
+    BloodAltarHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -32,6 +33,7 @@ class GameStateMachine:
     STATE_DIAMOND_COLLECTION = "DIAMOND_COLLECTION"      # 自動領鑽石流程
     STATE_COLLECT_ONLY = "COLLECT_ONLY"                  # 定時領取麵包與鑽石待機流程
     STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
+    STATE_BLOOD_ALTAR = "BLOOD_ALTAR"                    # 血之祭壇獻祭流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -115,6 +117,7 @@ class GameStateMachine:
             self.STATE_DIAMOND_COLLECTION: DiamondCollectionHandler(self),
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
             self.STATE_LOADING: LoadingHandler(self),
+            self.STATE_BLOOD_ALTAR: BloodAltarHandler(self),
         }
 
     @property
