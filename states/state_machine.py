@@ -339,7 +339,7 @@ class GameStateMachine:
                         return
 
         # 0.06 如果需要血之祭壇獻祭 (need_blood_altar == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
-        if getattr(self, "need_blood_altar", False):
+        if getattr(self, "need_blood_altar", False) or (self.config is not None and self.config["type"] == "blood_altar"):
             for town_btn in ["common/door.png", "goback_town.png", "town_building/Blood_Altar/Blood_Altar.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
@@ -347,9 +347,17 @@ class GameStateMachine:
                         self.transition_to(self.STATE_BLOOD_ALTAR)
                         return
 
-        # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態
-        # logging.info(f"🔍 [除錯] 領取旗標狀態：need_diamond={self.need_diamond_collection}, enable_bread={self.enable_bread}, need_bread={self.need_bread_collection}")
-        if self.need_diamond_collection or (self.enable_bread and self.need_bread_collection):
+        # 0.07 如果模式為 jewelry_workshop 或需要珠寶加工廠出售，且已回到了大廳/城鎮/建築畫面
+        if getattr(self, "need_jewelry_workshop", False) or (self.config is not None and self.config["type"] == "jewelry_workshop"):
+            for town_btn in ["common/door.png", "goback_town.png", "town_building/Jewelry_workshop/Jewelry_workshop.png", "town_building/sell_out.png"]:
+                if os.path.exists(os.path.join("templates", town_btn)):
+                    pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.75)
+                    if pos_t:
+                        self.transition_to(self.STATE_JEWELRY_WORKSHOP)
+                        return
+
+        # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態 (排除獨立模式)
+        if (self.need_diamond_collection or (self.enable_bread and self.need_bread_collection)) and (self.config is None or self.config["type"] not in ["blood_altar", "jewelry_workshop"]):
             nav_buttons = [
                 "common/door.png", "goback_town.png", "diamond.png", "free.png",
                 "common/bread.png", "common/collect.png", "common/bread_collection.png", "common/quit.png"
