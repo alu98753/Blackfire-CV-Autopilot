@@ -2113,5 +2113,31 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(self.mock_mouse.click.call_count, 0)
         self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
 
+    @patch('os.path.exists')
+    def test_blood_altar_start_inside_building(self, mock_exists):
+        """
+        測試當啟動腳本時，角色已位於血之祭壇建築物內部 (Sacrifice.png 與 exitfromhouse_and_to_town.png 同時存在，conf >= 0.85)：
+        BloodAltarHandler 能自動辨識並點擊 Sacrifice.png 開啟選單！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+
+        def mock_match_inside(img, name, **kw):
+            if name == "town_building/Blood_Altar/Sacrifice.png":
+                return ((718, 745), 0.90)
+            elif name == "town_building/exitfromhouse_and_to_town.png":
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_inside
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+        self.mock_mouse.click.assert_called_once_with(718, 745)
+        self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
+
 if __name__ == "__main__":
     unittest.main()

@@ -187,18 +187,47 @@ class BloodAltarHandler(BaseStateHandler):
             return
 
         # =========================================================================
-        # 3. 城鎮階段 (INIT) ➔ 進入建築 ➔ 點擊 Sacrifice.png
+        # 3. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
         # =========================================================================
+        # 3.1 優先檢查是否在獻祭選單開啟中 (如 alter.png 或任何血水模板已在畫面上)
+        pos_alter_init, _ = self.matcher.match(screen_img, alter_btn, threshold=0.75)
+        has_any_blood = False
+        for q, enabled in sacrifice_settings.items():
+            if enabled:
+                tp = blood_templates.get(q)
+                if tp and os.path.exists(os.path.join("templates", tp)):
+                    p_b, _ = self.matcher.match(screen_img, tp, threshold=0.75)
+                    if p_b:
+                        has_any_blood = True
+                        break
+        if pos_alter_init or has_any_blood:
+            logging.info("🩸 [血之祭壇] 辨識到目前已處於獻祭選單畫面 (alter.png / 血水可見)，直接進入獻祭階段...")
+            self.step_phase = "SACRIFICE_MENU_OPEN"
+            self.empty_blood_scan_count = 0
+            self.last_action_time = now
+            return
+
+        # 3.2 檢查是否已在建築物內部 (Sacrifice.png 與 exitfromhouse_and_to_town.png 同時存在，conf >= 0.85)
+        pos_sac, conf_sac = self.matcher.match(screen_img, sacrifice_btn, threshold=0.85)
+        pos_exit_init, conf_exit_init = self.matcher.match(screen_img, exit_building_btn, threshold=0.85)
+        if pos_sac and pos_exit_init:
+            logging.info(f"🩸 [血之祭壇] 辨識到目前已在建築物內部 (Sacrifice.png 與 {exit_building_btn} 同時可見)，點擊開啟獻祭選單...")
+            self.mouse.click(left + pos_sac[0], top + pos_sac[1])
+            self.step_phase = "SACRIFICE_MENU_OPEN"
+            self.empty_blood_scan_count = 0
+            self.last_action_time = now
+            return
+
+        # 3.3 城鎮點擊祭壇建築 (Blood_Altar.png)
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
         pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
-        if pos_building and (pos_door or self.step_phase == "INIT"):
+        if pos_building and pos_door:
             logging.info(f"🩸 [血之祭壇] 於城鎮發現血之祭壇建築 [{building_btn}]，點擊進入...")
             self.mouse.click(left + pos_building[0], top + pos_building[1])
             self.step_phase = "ENTERED_BUILDING"
             self.last_action_time = now
             return
 
-        pos_sac, _ = self.matcher.match(screen_img, sacrifice_btn, threshold=0.75)
         if pos_sac:
             logging.info(f"🩸 [血之祭壇] 發現獻祭功能選單 [{sacrifice_btn}]，點擊開啟選單...")
             self.mouse.click(left + pos_sac[0], top + pos_sac[1])
