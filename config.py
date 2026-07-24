@@ -156,5 +156,7 @@ BASE_STAGE_LEVELS = {
     "6": {"name": "冰雪洞窟", "entry": "stages/level6_ice_cave.png"},
 }
 
+from utils.config_helper import get_stage_configs
+
 # 預設維持匯入時動態讀取 STAGE_CONFIGS
-STAGE_CONFIGS = get_stage_configs()
+STAGE_CONFIGS = get_stage_configs(BASE_STAGE_LEVELS)
