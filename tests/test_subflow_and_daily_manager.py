@@ -155,5 +155,53 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         sm.pop_and_next_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
 
+    def test_subflow_no_duplicate_execution_and_state_transition(self):
+        """
+        針對性測試：驗證多子流程絕對不會重複執行第一個 subflow (不會二次打血之祭壇)，
+        且在 STATE_UNKNOWN 全域辨識時，不會因 config['type'] 被誤拉回舊的狀態！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from config import GAME_CONFIGS
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        # 模擬 --subflow blood_altar jewelry_workshop
+        sm.town_subflow_queue = ["blood_altar", "jewelry_workshop"]
+        sm.is_dev_subflow_run = True
+        sm.config = GAME_CONFIGS["blood_altar"].copy() # 預設載入首項 config
+
+        # 1. 模擬 main.py 在啟動時彈出首個任務
+        sm.pop_and_next_town_subflow()
+
+        # 斷言 1: 首個任務已被彈出，佇列剩餘 ['jewelry_workshop']
+        self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop"])
+        self.assertEqual(sm.current_state, sm.STATE_BLOOD_ALTAR)
+        self.assertTrue(sm.need_blood_altar)
+        self.assertFalse(sm.need_jewelry_workshop)
+
+        # 2. 模擬第一站血之祭壇完工退回城鎮，呼叫 pop_and_next_town_subflow()
+        sm.pop_and_next_town_subflow()
+
+        # 斷言 2: 佇列已無血之祭壇，切換至 JEWELRY_WORKSHOP！
+        self.assertEqual(sm.town_subflow_queue, [])
+        self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+        self.assertFalse(sm.need_blood_altar) # need_blood_altar 必須已被重置為 False！
+        self.assertTrue(sm.need_jewelry_workshop)
+
+        # 3. 模擬狀態機在第二站突然進入 STATE_UNKNOWN，並看見城鎮/大門按鈕 (common/door.png)
+        # 驗證狀態機絕不會因為 sm.config['type'] == 'blood_altar' 而誤切回 BLOOD_ALTAR！
+        sm.current_state = sm.STATE_UNKNOWN
+        sm.matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.90) if name == "common/door.png" else (None, 0.0)
+        import numpy as np
+        import os
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        # 執行全域掃描 step (在 STATE_UNKNOWN 下)
+        sm.step()
+
+        # 斷言 3: 狀態應正確轉移至 STATE_JEWELRY_WORKSHOP，絕對不能誤轉回 BLOOD_ALTAR！
+        self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+
 if __name__ == "__main__":
     unittest.main()

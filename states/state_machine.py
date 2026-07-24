@@ -343,7 +343,7 @@ class GameStateMachine:
                         return
 
         # 0.06 如果需要血之祭壇獻祭 (need_blood_altar == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
-        if getattr(self, "need_blood_altar", False) or (self.config is not None and self.config["type"] == "blood_altar"):
+        if getattr(self, "need_blood_altar", False):
             for town_btn in ["common/door.png", "goback_town.png", "town_building/Blood_Altar/Blood_Altar.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
@@ -351,8 +351,8 @@ class GameStateMachine:
                         self.transition_to(self.STATE_BLOOD_ALTAR)
                         return
 
-        # 0.07 如果模式為 jewelry_workshop 或需要珠寶加工廠出售，且已回到了大廳/城鎮/建築畫面
-        if getattr(self, "need_jewelry_workshop", False) or (self.config is not None and self.config["type"] == "jewelry_workshop"):
+        # 0.07 如果需要珠寶加工廠出售 (need_jewelry_workshop == True)，且已回到了大廳/城鎮/建築畫面
+        if getattr(self, "need_jewelry_workshop", False):
             for town_btn in ["common/door.png", "goback_town.png", "town_building/Jewelry_workshop/Jewelry_workshop.png", "town_building/sell_out.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.75)
