@@ -1916,5 +1916,38 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(650, 750)
 
+    @patch('os.path.exists')
+    def test_navigation_in_town_after_diamond_collection_ignores_false_stage_matches(self, mock_exists):
+        """
+        測試領完鑽石回到城鎮 (TOWN) 時：
+        即使背景圖像雜訊導致 stage_templates (如 level4_desert_ruins) 低信心度誤判 (0.603)，
+        由於在城鎮 (common/door.png 可見)，不得判定為關卡介面已開啟 (stage_select_open 應強制為 False)，
+        亦不可執行滑動，必須點擊 common/door.png 進入大廳！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        def mock_match(img, name, **kw):
+            if name == "common/door.png":
+                return ((76, 751), 0.9521)
+            elif name == "diamond.png":
+                return ((1115, 83), 0.9750)
+            elif name == "stages/level4_desert_ruins.png":
+                return ((194, 795), 0.6030) # 低信心度誤判
+            return (None, 0.0)
+            
+        self.mock_matcher.match.side_effect = mock_match
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        self.mock_mouse.drag.reset_mock()
+        self.mock_mouse.click.reset_mock()
+        
+        self.state_machine.step()
+        
+        # 斷言：絕不可執行向左/向右拖曳滑動！
+        self.mock_mouse.drag.assert_not_called()
+        # 斷言：必須點擊 common/door.png (76, 751) 進入大廳！
+        self.mock_mouse.click.assert_called_once_with(76, 751)
+
 if __name__ == "__main__":
     unittest.main()

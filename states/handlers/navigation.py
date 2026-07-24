@@ -566,23 +566,28 @@ class NavigationHandler(BaseStateHandler):
         stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
         dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
 
-        if not stage_select_open and not dungeon_select_open:
-            stage_templates = self.machine.config.get("stage_templates", [])
-            for st_temp in stage_templates:
-                if os.path.exists(os.path.join("templates", st_temp)):
-                    pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.60)
-                    if pos:
-                        stage_select_open = True
-                        break
+        # 防呆修復：若明確處於城鎮 (is_town == True，如 common/door.png 可見)，頁籤絕不可能為開啟狀態
+        if is_town:
+            stage_select_open = False
+            dungeon_select_open = False
+        else:
+            if not stage_select_open and not dungeon_select_open:
+                stage_templates = self.machine.config.get("stage_templates", [])
+                for st_temp in stage_templates:
+                    if os.path.exists(os.path.join("templates", st_temp)):
+                        pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.75)
+                        if pos:
+                            stage_select_open = True
+                            break
 
-        if not stage_select_open and not dungeon_select_open:
-            dungeon_templates = self.machine.config.get("dungeon_entries", [])
-            for dg_temp in dungeon_templates:
-                if os.path.exists(os.path.join("templates", dg_temp)):
-                    pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.60)
-                    if pos:
-                        dungeon_select_open = True
-                        break
+            if not stage_select_open and not dungeon_select_open:
+                dungeon_templates = self.machine.config.get("dungeon_entries", [])
+                for dg_temp in dungeon_templates:
+                    if os.path.exists(os.path.join("templates", dg_temp)):
+                        pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.75)
+                        if pos:
+                            dungeon_select_open = True
+                            break
 
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
