@@ -166,8 +166,8 @@ class BloodAltarHandler(BaseStateHandler):
                     logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
                     sys.exit(0)
                 else:
-                    logging.info("🩸 [血之祭壇] 獻祭流程完成，自動將狀態轉移至 STATE_NAVIGATING 以進行後續導航...")
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    logging.info("🩸 [血之祭壇] 獻祭流程完成，消費城鎮佇列中的下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
                     return
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
@@ -189,8 +189,8 @@ class BloodAltarHandler(BaseStateHandler):
                     logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
                     sys.exit(0)
                 else:
-                    logging.info("🩸 [血之祭壇] 獻祭流程完成，自動將狀態轉移至 STATE_NAVIGATING 以進行後續導航...")
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    logging.info("🩸 [血之祭壇] 獻祭流程完成，消費城鎮佇列中的下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
                     return
             return
 

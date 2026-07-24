@@ -2444,5 +2444,59 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(74, 744)
         mock_sys_exit.assert_called_once_with(0)
 
+    @patch('os.path.exists')
+    def test_bag_cleaning_triggers_town_subflow_pipeline(self, mock_exists):
+        """
+        測試完整的城鎮流水線 (Town Subflow Pipeline) 連動：
+        1. 背包清理完成 ➔ 觸發 trigger_town_subflow_chain()，建佇列 ["blood_altar", "jewelry_workshop"]。
+        2. 第一站轉移至 STATE_BLOOD_ALTAR 獻祭。
+        3. 獻祭離場 ➔ pop_and_next_town_subflow() 接力進入 STATE_JEWELRY_WORKSHOP 出售。
+        4. 出售離場 ➔ pop_and_next_town_subflow() 佇列已空 ➔ 恢復 STATE_NAVIGATING 續行掛機！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        
+        bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(bag_handler, 'reset_state'):
+            bag_handler.reset_state()
+        self.state_machine.bag_tidied = True
+
+        def mock_match_quit(img, name, **kw):
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
+                return ((74, 744), 0.90)
+            elif name == "common/quit.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_quit
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        # Step 1: 關閉背包 ➔ 觸發流水線
+        bag_handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.town_subflow_queue, ["jewelry_workshop"])
+
+        # Step 2: 血之祭壇離場 ➔ 自動跳轉至珠寶加工廠
+        altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        altar_handler.reset_state()
+        altar_handler.step_phase = "ALL_DONE_EXITING"
+        altar_handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
+        self.assertTrue(self.state_machine.need_jewelry_workshop)
+        self.assertEqual(self.state_machine.town_subflow_queue, [])
+
+        # Step 3: 珠寶加工廠離場 ➔ 佇列已空 ➔ 自動恢復 STATE_NAVIGATING
+        jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        jewelry_handler.reset_state()
+        jewelry_handler.step_phase = "ALL_DONE_EXITING"
+        jewelry_handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertFalse(self.state_machine.need_blood_altar)
+        self.assertFalse(self.state_machine.need_jewelry_workshop)
+
 if __name__ == "__main__":
     unittest.main()

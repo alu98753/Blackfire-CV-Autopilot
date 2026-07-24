@@ -76,8 +76,10 @@ class GameStateMachine:
         self.bag_select_all_clicked = False
         self.bag_deselected = False
         
-        # 血之祭壇獻祭相關屬性
+        # 城鎮子流程與流水線相關屬性
         self.need_blood_altar = False
+        self.need_jewelry_workshop = False
+        self.town_subflow_queue = []
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
@@ -356,8 +358,10 @@ class GameStateMachine:
                         self.transition_to(self.STATE_JEWELRY_WORKSHOP)
                         return
 
-        # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態 (排除獨立模式)
-        if (self.need_diamond_collection or (self.enable_bread and self.need_bread_collection)) and (self.config is None or self.config["type"] not in ["blood_altar", "jewelry_workshop"]):
+        # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態 (排除獨立模式與城鎮任務流水線中)
+        if (self.need_diamond_collection or (self.enable_bread and self.need_bread_collection)) and \
+           (self.config is None or self.config["type"] not in ["blood_altar", "jewelry_workshop"]) and \
+           not getattr(self, "need_blood_altar", False) and not getattr(self, "need_jewelry_workshop", False):
             nav_buttons = [
                 "common/door.png", "goback_town.png", "diamond.png", "free.png",
                 "common/bread.png", "common/collect.png", "common/bread_collection.png", "common/quit.png"
@@ -618,4 +622,38 @@ class GameStateMachine:
                     logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，重新點擊領取獎勵座標 ({btn_x}, {btn_y})。")
                     self.mouse.click(btn_x, btn_y)
                     time.sleep(0.5)
+
+    def trigger_town_subflow_chain(self):
+        """
+        當背包清理完成退回城鎮後，構建需在城鎮執行的子流程佇列。
+        """
+        from config import GLOBAL_SETTINGS
+        cfg = self.config or {}
+        order = cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_town_subflow_order", ["blood_altar", "jewelry_workshop"]))
+        self.town_subflow_queue = list(order)
+        logging.info(f"🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列: {self.town_subflow_queue}")
+        self.pop_and_next_town_subflow()
+
+    def pop_and_next_town_subflow(self):
+        """
+        彈出並執行佇列中的下一個城鎮任務。若佇列已空，則回復 STATE_NAVIGATING。
+        """
+        # 切換任務前先重置舊標記，防止舊標記優先權高於新標記
+        self.need_blood_altar = False
+        self.need_jewelry_workshop = False
+
+        if self.town_subflow_queue:
+            next_flow = self.town_subflow_queue.pop(0)
+            logging.info(f"🏛️ [城鎮流水線] 彈出下一個城鎮任務 [{next_flow}]，剩餘佇列: {self.town_subflow_queue}")
+            if next_flow == "blood_altar":
+                self.need_blood_altar = True
+                self.transition_to(self.STATE_BLOOD_ALTAR)
+                return
+            elif next_flow == "jewelry_workshop":
+                self.need_jewelry_workshop = True
+                self.transition_to(self.STATE_JEWELRY_WORKSHOP)
+                return
+
+        logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復 STATE_NAVIGATING 續行導航...")
+        self.transition_to(self.STATE_NAVIGATING)
 

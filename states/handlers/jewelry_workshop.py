@@ -203,12 +203,14 @@ class JewelryWorkshopHandler(BaseStateHandler):
             if pos_door or pos_building:
                 logging.info("✅ [珠寶加工廠] 偵測到目前已處於城鎮大門畫面，視為已退回城鎮，完成出售流程！")
                 self.reset_state()
+                self.machine.need_jewelry_workshop = False
                 self.last_action_time = now
                 if cfg.get("type") == "jewelry_workshop":
                     logging.info("🎉 [珠寶加工廠] 獨立單次出售流程 100% 完成！結束程式。")
                     sys.exit(0)
                 else:
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
                     return
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
@@ -223,13 +225,15 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
                 self.reset_state()
+                self.machine.need_jewelry_workshop = False
                 self.last_action_time = now
                 
                 if cfg.get("type") == "jewelry_workshop":
                     logging.info("🎉 [珠寶加工廠] 獨立單次出售流程 100% 完成！結束程式。")
                     sys.exit(0)
                 else:
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
                     return
             return
 

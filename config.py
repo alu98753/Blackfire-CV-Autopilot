@@ -6,6 +6,7 @@ GLOBAL_SETTINGS = {
     "default_diamond_cd": 7200.0,  # 預設 2 小時領一次鑽石
     "default_bread_cd": 1800.0,    # 預設 30 分鐘領一次體力
     "default_bless_mode": "combat",  # 預設為戰鬥/傷害祝福
+    "default_town_subflow_order": ["blood_altar", "jewelry_workshop"],  # 預設背包清理後連動的城鎮建築順序
 }
 
 DUNGEON_NAMES = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]

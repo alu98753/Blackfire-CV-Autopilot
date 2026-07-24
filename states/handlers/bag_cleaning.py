@@ -126,10 +126,9 @@ class BagCleaningHandler(BaseStateHandler):
                             import sys
                             sys.exit(0)
                             
-                        # 背包清理完畢後，觸發血之祭壇獻祭子流程
-                        logging.info("🩸 背包清理完成，準備退回城鎮並觸發血之祭壇獻祭...")
-                        self.machine.need_blood_altar = True
-                        self.machine.transition_to(self.machine.STATE_BLOOD_ALTAR)
+                        # 背包清理完畢後，觸發城鎮子流程流水線佇列 (血之祭壇 ➔ 珠寶加工廠...)
+                        logging.info("🏛️ 背包清理完成，觸發城鎮任務流水線佇列...")
+                        self.machine.trigger_town_subflow_chain()
                         return
 
         # 3. 如果已經分解完畢，則進行「整理」
