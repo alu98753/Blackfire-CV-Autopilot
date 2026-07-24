@@ -21,7 +21,7 @@ class BloodAltarHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
 
-    def _ensure_in_town(self, screen_img):
+    def _ensure_in_town(self, screen_img, rect=None):
         """
         獨立導航輔助函式：若目前位於大廳 (看得到 goback_town.png)，點擊返回城鎮。
         :return: True 代表目前已在城鎮/建築內；False 代表正在點擊退回城鎮中。
@@ -29,7 +29,9 @@ class BloodAltarHandler(BaseStateHandler):
         pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
         if pos_goback:
             logging.info("🩸 [血之祭壇] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
-            self.mouse.click(pos_goback[0], pos_goback[1])
+            left = rect["left"] if rect else 0
+            top = rect["top"] if rect else 0
+            self.mouse.click(left + pos_goback[0], top + pos_goback[1])
             self.last_action_time = time.time()
             return False
         return True
@@ -47,8 +49,11 @@ class BloodAltarHandler(BaseStateHandler):
             return
 
         # 優先檢查是否需要從小圖示大廳退回城鎮 (Return to Town)
-        if not self._ensure_in_town(screen_img):
+        if not self._ensure_in_town(screen_img, rect):
             return
+
+        left = rect["left"] if rect else 0
+        top = rect["top"] if rect else 0
 
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", "town_building/Blood_Altar/Blood_Altar.png")
@@ -72,7 +77,7 @@ class BloodAltarHandler(BaseStateHandler):
         pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
         if pos_confirm:
             logging.info("🩸 [血之祭壇] 點擊通用確認按鈕 [common/confirm.png]...")
-            self.mouse.click(pos_confirm[0], pos_confirm[1])
+            self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
             self.last_action_time = now
             return
 
@@ -81,7 +86,7 @@ class BloodAltarHandler(BaseStateHandler):
         pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
         if pos_building and (pos_door or self.step_phase == "INIT"):
             logging.info(f"🩸 [血之祭壇] 於城鎮發現血之祭壇建築 [{building_btn}]，點擊進入...")
-            self.mouse.click(pos_building[0], pos_building[1])
+            self.mouse.click(left + pos_building[0], top + pos_building[1])
             self.step_phase = "ENTERED_BUILDING"
             self.last_action_time = now
             return
@@ -90,7 +95,7 @@ class BloodAltarHandler(BaseStateHandler):
         pos_sac, _ = self.matcher.match(screen_img, sacrifice_btn, threshold=0.75)
         if pos_sac:
             logging.info(f"🩸 [血之祭壇] 發現獻祭功能選單 [{sacrifice_btn}]，點擊開啟選單...")
-            self.mouse.click(pos_sac[0], pos_sac[1])
+            self.mouse.click(left + pos_sac[0], top + pos_sac[1])
             self.step_phase = "IN_SACRIFICE_MENU"
             self.last_action_time = now
             return
@@ -113,13 +118,13 @@ class BloodAltarHandler(BaseStateHandler):
         if matched_blood:
             q_name, q_path, q_pos = matched_blood
             logging.info(f"🩸 [血之祭壇] 找到可獻祭血水 [{q_name}] ({q_path})，點擊選擇...")
-            self.mouse.click(q_pos[0], q_pos[1])
+            self.mouse.click(left + q_pos[0], top + q_pos[1])
             time.sleep(0.3)
             
             # 若有 alter.png 按鈕，直接點擊獻祭
             if pos_alter:
                 logging.info(f"🩸 [血之祭壇] 點擊獻祭執行按鈕 [{alter_btn}]...")
-                self.mouse.click(pos_alter[0], pos_alter[1])
+                self.mouse.click(left + pos_alter[0], top + pos_alter[1])
             
             self.step_phase = "SACRIFICING"
             self.last_action_time = now
@@ -128,7 +133,7 @@ class BloodAltarHandler(BaseStateHandler):
         # 若 alter.png 存在但畫面已無可獻祭的血水 (或已被點選完畢)，點擊 alter
         if pos_alter and self.step_phase == "SACRIFICING":
             logging.info(f"🩸 [血之祭壇] 點擊獻祭執行按鈕 [{alter_btn}]...")
-            self.mouse.click(pos_alter[0], pos_alter[1])
+            self.mouse.click(left + pos_alter[0], top + pos_alter[1])
             self.last_action_time = now
             return
 
@@ -136,7 +141,7 @@ class BloodAltarHandler(BaseStateHandler):
         pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
         if pos_quit:
             logging.info("🩸 [血之祭壇] 無更多可獻祭血水，點擊關閉視窗 [common/quit.png]...")
-            self.mouse.click(pos_quit[0], pos_quit[1])
+            self.mouse.click(left + pos_quit[0], top + pos_quit[1])
             self.step_phase = "EXITING"
             self.last_action_time = now
             return
@@ -144,7 +149,7 @@ class BloodAltarHandler(BaseStateHandler):
         pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
         if pos_exit:
             logging.info(f"🩸 [血之祭壇] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
-            self.mouse.click(pos_exit[0], pos_exit[1])
+            self.mouse.click(left + pos_exit[0], top + pos_exit[1])
             self.reset_state()
             self.last_action_time = now
             
