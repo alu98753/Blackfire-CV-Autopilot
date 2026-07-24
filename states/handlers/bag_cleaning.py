@@ -120,12 +120,6 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_clean_step = 0
                         time.sleep(0.1)
                         
-                        # 如果是單獨的背包整理模式，在此完成後直接結束腳本
-                        if self.machine.config and self.machine.config.get("type") == "bag_clean":
-                            logging.info("🎒 [背包整理] 整理分解流程已全部完成！退出程式。")
-                            import sys
-                            sys.exit(0)
-                            
                         # 背包清理完畢後，觸發城鎮子流程流水線佇列 (血之祭壇 ➔ 珠寶加工廠...)
                         logging.info("🏛️ 背包清理完成，觸發城鎮任務流水線佇列...")
                         self.machine.trigger_town_subflow_chain()

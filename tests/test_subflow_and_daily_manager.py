@@ -111,5 +111,49 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertFalse(avail_spider_full)
         self.assertIn("打滿", msg_full)
 
+    def test_multiple_subflows_queue_execution_and_outer_exit(self):
+        """
+        測試多個城鎮子流程 (如 ['blood_altar', 'jewelry_workshop']) 依序彈出消費，
+        並驗證佇列全空時，Dev 模式觸發 sys.exit(0)，Prod 模式切回 STATE_NAVIGATING。
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        
+        # 建立模擬狀態機
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer, matcher, mouse)
+        
+        # 1. 模擬 Dev 測試模式注入多個子流程佇列
+        sm.town_subflow_queue = ["blood_altar", "jewelry_workshop"]
+        sm.is_dev_subflow_run = True
+
+        # 第一次彈出 ➔ 應切換至 STATE_BLOOD_ALTAR
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_state, sm.STATE_BLOOD_ALTAR)
+        self.assertTrue(sm.need_blood_altar)
+        self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop"])
+
+        # 第二次彈出 ➔ 應切換至 STATE_JEWELRY_WORKSHOP
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+        self.assertTrue(sm.need_jewelry_workshop)
+        self.assertEqual(sm.town_subflow_queue, [])
+
+        # 第三次彈出 ➔ 佇列全空且為 Dev 模式，應觸發 SystemExit (sys.exit(0))
+        with self.assertRaises(SystemExit) as cm:
+            sm.pop_and_next_town_subflow()
+        self.assertEqual(cm.exception.code, 0)
+
+        # 2. 模擬 Prod 長掛機模式 (is_dev_subflow_run = False)
+        sm.is_dev_subflow_run = False
+        sm.town_subflow_queue = ["blood_altar"]
+        sm.pop_and_next_town_subflow() # 彈出 blood_altar
+        
+        # 佇列全空，Prod 模式應切回 STATE_NAVIGATING 而不拋出 SystemExit！
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+
 if __name__ == "__main__":
     unittest.main()

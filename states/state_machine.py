@@ -656,6 +656,12 @@ class GameStateMachine:
                 self.transition_to(self.STATE_JEWELRY_WORKSHOP)
                 return
 
+        # 若佇列已空！
+        if getattr(self, "is_dev_subflow_run", False):
+            logging.info("🎉 [Dev 測試模式] 所有指定的城鎮子流程已全數執行完畢！結束程式。")
+            import sys
+            sys.exit(0)
+
         logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復 STATE_NAVIGATING 續行導航...")
         self.transition_to(self.STATE_NAVIGATING)
 
