@@ -49,5 +49,6 @@ class LobbyHandler(BaseStateHandler):
             self.machine.dungeon_defeat_count = 0
             time.sleep(0.3)
         else:
-            logging.info("🧭 大廳：未偵測到開始按鈕，判定處於城鎮外圍，轉移至 NAVIGATING 進行尋路跳轉。")
-            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            logging.info("🧭 大廳：未偵測到開始按鈕，判定處於城鎮外圍，轉移至對應模式。")
+            next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+            self.machine.transition_to(next_state)

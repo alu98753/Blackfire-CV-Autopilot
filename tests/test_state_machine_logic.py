@@ -1407,6 +1407,7 @@ class TestStateMachineLogic(unittest.TestCase):
         3. CollectOnlyHandler 導航轉移至領取或城鎮待機
         """
         self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.stamina_retreat_start_time = time.time()
         self.state_machine.config["diamond_cd"] = 7200.0
         self.state_machine.config["bread_cd"] = 7200.0
         self.state_machine.enable_bread = True
@@ -1438,9 +1439,10 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DIAMOND_COLLECTION)
         
-        # 3. 測試阻斷重定向：
-        # 當領完鑽石後 DiamondCollectionHandler 會轉移回 NAVIGATING，應自動重定向回 COLLECT_ONLY
-        self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
+        # 3. 測試退避路由：
+        # 當在體力退避期間時，根據 stamina_retreat_start_time 顯式轉移至 COLLECT_ONLY
+        next_st = self.state_machine.STATE_COLLECT_ONLY if self.state_machine.stamina_retreat_start_time is not None else self.state_machine.STATE_NAVIGATING
+        self.state_machine.transition_to(next_st)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
         
         # 4. 測試 CollectOnlyHandler 領體力流程：

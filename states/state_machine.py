@@ -150,10 +150,6 @@ class GameStateMachine:
 
 
     def transition_to(self, new_state):
-        if self.config is not None and self.config.get("type") == "collect_only":
-            if new_state in [self.STATE_NAVIGATING, self.STATE_LOBBY]:
-                new_state = self.STATE_COLLECT_ONLY
-
         if self.current_state != new_state:
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
             self.last_state = self.current_state
@@ -385,7 +381,8 @@ class GameStateMachine:
                 if os.path.exists(os.path.join("templates", bf)):
                     pos, _ = self.matcher.match(screen_img, bf, threshold=0.8)
                     if pos:
-                        self.transition_to(self.STATE_NAVIGATING)
+                        next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                        self.transition_to(next_state)
                         return
 
         # 1. 檢查是否在戰鬥中 (看到 common/auto.png 必定在戰鬥)
@@ -413,7 +410,8 @@ class GameStateMachine:
             pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
             logging.info(f"🔍 [除錯] 比對尋路按鈕 '{btn}'，最高相似度: {conf:.4f}，座標: {pos}")
             if pos and conf >= 0.8:
-                self.transition_to(self.STATE_NAVIGATING)
+                next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                self.transition_to(next_state)
                 return
                 
         # 4. 檢查是否在地下城探險中

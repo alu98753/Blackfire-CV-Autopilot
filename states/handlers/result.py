@@ -78,8 +78,9 @@ class ResultHandler(BaseStateHandler):
                 return True
 
 
-        # A2. 檢查離開戰鬥/結算退出按鈕 (在背包滿需要清理，或領取時間到了需要去領體力/鑽石時，退出戰鬥回大廳)
+        # A2. 檢查離開戰鬥/結算退出按鈕 (在退避期間、背包滿需要清理，或領取時間到了需要去領體力/鑽石時，退出戰鬥回大廳)
         should_exit_battle = (
+            self.machine.stamina_retreat_start_time is not None or
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
             (self.machine.enable_bread and self.machine.need_bread_collection) or
@@ -96,7 +97,8 @@ class ResultHandler(BaseStateHandler):
                     logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
                     self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
                     self.machine.is_in_dungeon = False
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                    self.machine.transition_to(next_state)
                     time.sleep(0.2)
                     return True
 
@@ -196,6 +198,7 @@ class ResultHandler(BaseStateHandler):
 
         self.machine.defeat_count = 0
         self.machine.is_in_dungeon = False
-        self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+        self.machine.transition_to(next_state)
         time.sleep(0.2)
         return True
