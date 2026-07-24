@@ -32,7 +32,7 @@ class LordBossHandler(BaseStateHandler):
         entry_after = self.machine.config.get("entry_after_btn", "load/Lord_entry_after.png")
         entry_before = self.machine.config.get("entry_btn", "load/Lord_entry.png")
         
-        is_opened, _ = self.match_mutually_exclusive_tabs(screen_img, entry_after, entry_before, margin=0.02, threshold=0.70)
+        is_opened, _, _, _ = self.match_mutually_exclusive_tabs(screen_img, entry_after, entry_before, margin=0.02, threshold=0.70)
 
         # 2. 若頁籤尚未開啟，進行大廳入口與頁籤點擊
         if not is_opened:
