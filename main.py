@@ -19,6 +19,7 @@ from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
 from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
 from utils import get_stage_configs
+from utils.daily_manager import DailyManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -482,6 +483,8 @@ def init_state_machine_system(args, config):
     mouse.state_machine = state_machine
     state_machine.config = config
     state_machine.primary_config = config.copy()
+    daily_manager = DailyManager()
+    state_machine.daily_manager = daily_manager
 
     # 若使用 --subflow 發起 Dev 階段獨立測試
     if hasattr(args, "subflow") and args.subflow:
