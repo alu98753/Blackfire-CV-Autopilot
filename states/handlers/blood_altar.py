@@ -161,6 +161,16 @@ class BloodAltarHandler(BaseStateHandler):
         # 2. 退出階段 (ALL_DONE_EXITING)
         # =========================================================================
         if self.step_phase == "ALL_DONE_EXITING":
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+            pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
+            if pos_door or pos_building:
+                logging.info("✅ [血之祭壇] 偵測到目前已處於城鎮大門畫面，視為已退回城鎮，完成獻祭流程！")
+                self.reset_state()
+                self.last_action_time = now
+                if cfg.get("type") == "blood_altar":
+                    self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                return
+
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
             if pos_quit:
                 logging.info("🩸 [血之祭壇] 獻祭全數完成，點擊關閉視窗 [common/quit.png]...")

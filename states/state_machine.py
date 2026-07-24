@@ -151,6 +151,14 @@ class GameStateMachine:
             self.current_state = new_state
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
+
+            # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
+            if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
+                try:
+                    self.handlers[new_state].reset_state()
+                except Exception as e:
+                    logging.debug(f"重置 Handler [{new_state}] 狀態時發生異常: {e}")
+
             if new_state == self.STATE_BATTLE:
                 self.last_auto_click_time = 0
             elif new_state == self.STATE_LOADING:
