@@ -17,7 +17,7 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS, STAGE_CONFIGS
+from config import GAME_CONFIGS, get_stage_configs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -77,6 +77,7 @@ def check_mode_templates(config):
     return missing
 
 def setup_stage_config(config, prompt_prefix=""):
+    stage_configs = get_stage_configs()
     print(f"\n{prompt_prefix}請選擇要打的關卡大關：")
     print(" 1) 蒼穹平原 (Level 1)")
     print(" 2) 荒蕪岩地 (Level 2)")
@@ -94,11 +95,11 @@ def setup_stage_config(config, prompt_prefix=""):
     except Exception:
         choice = "6"
 
-    if choice not in STAGE_CONFIGS:
+    if choice not in stage_configs:
         print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
         choice = "6"
 
-    cfg = STAGE_CONFIGS[choice]
+    cfg = stage_configs[choice]
     stage_name = cfg["name"]
     
     # 判斷是否有多個子關卡
