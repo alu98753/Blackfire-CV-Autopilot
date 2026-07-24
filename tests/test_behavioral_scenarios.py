@@ -2578,5 +2578,50 @@ class TestBehavioralScenarios(unittest.TestCase):
         jewelry_handler.handle(fake_img, rect)
         mock_sys_exit.assert_called_with(0)
 
+    @patch('os.path.exists')
+    def test_bag_clean_dry_run_safety(self, mock_exists):
+        """
+        測試當開啟 dry_run_bag_clean = True 時：
+        BagCleaningHandler 偵測到 common/Disassembly.png 不會進行真實分解點擊，
+        而是點擊 quit 關閉視窗並標記 bag_disassembled = True，確保裝備安全且無 error 繼續走完流程！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.config["dry_run_bag_clean"] = True
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        
+        bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(bag_handler, 'reset_state'):
+            bag_handler.reset_state()
+        self.state_machine.bag_select_all_clicked = True
+        self.state_machine.bag_deselected = True
+        self.state_machine.bag_disassembled = False
+
+        dis_pos = (500, 500)
+        quit_pos = (800, 200)
+
+        def mock_match(img, name, **kw):
+            if name == "common/Disassembly.png":
+                return (dis_pos, 0.90)
+            elif name == "common/quit.png":
+                return (quit_pos, 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match
+        self.mock_mouse.click.reset_mock()
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        bag_handler.handle(fake_img, rect)
+        
+        # 驗證沒有點擊分解按鈕 (500, 500)
+        for call_args in self.mock_mouse.click.call_args_list:
+            self.assertNotEqual(call_args[0], dis_pos)
+        
+        # 驗證成功點擊了 quit 按鈕 (800, 200) 且 bag_disassembled 被設為 True
+        self.mock_mouse.click.assert_called_once_with(quit_pos[0], quit_pos[1])
+        self.assertTrue(self.state_machine.bag_disassembled)
+
 if __name__ == "__main__":
     unittest.main()

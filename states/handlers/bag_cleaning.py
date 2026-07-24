@@ -312,15 +312,26 @@ class BagCleaningHandler(BaseStateHandler):
                 if os.path.exists(os.path.join("templates", "common/Disassembly.png")):
                     pos_dis, conf_dis = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.7, brightness_threshold=0.70)
                     if pos_dis:
-                        logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
-                        self._save_step_screenshot(screen_img, "6_disassemble_click")
-                        # # 🔴 實機除錯安全中斷：所有貴重物品均已確認全數反選，攔截【大量分解】點擊，保護真實裝備！
-                        # if not hasattr(self.machine.capturer, "return_value"):
-                        #     raise RuntimeError("🛑 [除錯安全中斷] 背包內所有貴重物品已成功全數取消選取 [X]！已攔截【大量分解】點擊以保護真實裝備！")
-                        self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
-                        self.machine.bag_disassembled = True
-                        time.sleep(0.1)
-                        return
+                        from config import GLOBAL_SETTINGS
+                        cfg = self.machine.config or {}
+                        dry_run = cfg.get("dry_run_bag_clean", GLOBAL_SETTINGS.get("dry_run_bag_clean", False))
+                        
+                        if dry_run:
+                            logging.info("🛡️ [安全測試模式] 偵測到分解按鈕 [common/Disassembly.png]，已攔截真實點擊以保護裝備！點擊關閉視窗並標記 bag_disassembled = True...")
+                            self._save_step_screenshot(screen_img, "6_disassemble_dry_run")
+                            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.6)
+                            if pos_quit:
+                                self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                            self.machine.bag_disassembled = True
+                            time.sleep(0.1)
+                            return
+                        else:
+                            logging.info(f"🎒 背包清理：偵測到分解按鈕 [{conf_dis:.4f}]，點擊分解。")
+                            self._save_step_screenshot(screen_img, "6_disassemble_click")
+                            self.mouse.click(rect["left"] + pos_dis[0], rect["top"] + pos_dis[1])
+                            self.machine.bag_disassembled = True
+                            time.sleep(0.1)
+                            return
 
             # 4.4 檢查大量分解按鈕 (打開背包後會看見)
             if os.path.exists(os.path.join("templates", "common/Backpack_Disassembly.png")):
