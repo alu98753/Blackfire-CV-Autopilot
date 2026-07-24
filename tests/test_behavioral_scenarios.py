@@ -2341,5 +2341,108 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 斷言 2: 在 mix 模式且全冷卻時，NavigationHandler 發動退守點擊普通關卡入口
         self.mock_mouse.click.assert_called()
 
+    @patch('os.path.exists')
+    def test_jewelry_workshop_enters_building_and_opens_menu(self, mock_exists):
+        """
+        測試當角色在城鎮時 (Jewelry_workshop.png 可見)：
+        JewelryWorkshopHandler 能自動辨識並點擊進入建築物，隨後點擊 sell_out.png 開啟選單！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_JEWELRY_WORKSHOP
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+
+        def mock_match_town(img, name, **kw):
+            if name == "common/door.png":
+                return ((50, 50), 0.90)
+            elif name == "town_building/Jewelry_workshop/Jewelry_workshop.png":
+                return ((400, 500), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_town
+        self.mock_mouse.click.reset_mock()
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        handler.handle(fake_img, rect)
+        self.mock_mouse.click.assert_called_once_with(400, 500)
+        self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
+
+    @patch('os.path.exists')
+    def test_jewelry_workshop_scrolls_down_and_sells_goods(self, mock_exists):
+        """
+        測試在 SELL_MENU_OPEN 階段：
+        當頂層未找到 goods 時，Handler 會向下滑動 2 次尋找，找到商品後順序執行點擊商品 -> sell.png -> sell_max.png -> ok.png 賣出！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_JEWELRY_WORKSHOP
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+        handler.step_phase = "SELL_MENU_OPEN"
+
+        def mock_match_goods(img, name, **kw):
+            if "Sandworm_scales.png" in name:
+                if handler.goods_scroll_state == "SCROLLED_DOWN":
+                    return ((300, 300), 0.90)
+                return (None, 0.0)
+            elif name == "town_building/sell.png":
+                return ((500, 500), 0.90)
+            elif name == "town_building/sell_max.png":
+                return ((600, 500), 0.90)
+            elif name == "common/ok.png":
+                return ((700, 500), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_goods
+        self.mock_mouse.scroll.reset_mock()
+        self.mock_mouse.click.reset_mock()
+
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        # 1. 第一幀：頂層未找到，執行向下滾動
+        handler.handle(fake_img, rect)
+        self.mock_mouse.scroll.assert_called_with(-600, 960, 540)
+        self.assertEqual(handler.goods_scroll_state, "SCROLLED_DOWN")
+
+        # 2. 第二幀：滑動後找到商品，執行點選與賣出
+        handler.last_action_time = 0.0
+        handler.handle(fake_img, rect)
+        self.assertTrue(self.mock_mouse.click.called)
+        self.assertEqual(handler.current_goods_idx, 1)
+
+    @patch('sys.exit')
+    @patch('os.path.exists')
+    def test_jewelry_workshop_exits_building_on_completion(self, mock_exists, mock_sys_exit):
+        """
+        測試當所有 goods 處置完成後進入 ALL_DONE_EXITING：
+        Handler 能自動點擊 exitfromhouse_and_to_town.png 返回城鎮，並在獨立模式呼叫 sys.exit(0)！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_JEWELRY_WORKSHOP
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+        handler.step_phase = "ALL_DONE_EXITING"
+
+        def mock_match_exit(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_exit
+        self.mock_mouse.click.reset_mock()
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        handler.handle(fake_img, rect)
+        self.mock_mouse.click.assert_called_once_with(74, 744)
+        mock_sys_exit.assert_called_once_with(0)
+
 if __name__ == "__main__":
     unittest.main()

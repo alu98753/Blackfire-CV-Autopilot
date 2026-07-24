@@ -170,6 +170,29 @@ GAME_CONFIGS = {
         },
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
+    },
+
+    # ------------------ 珠寶加工廠出售模式 ------------------
+    "jewelry_workshop": {
+        "name": "珠寶加工廠出售",
+        "type": "jewelry_workshop",
+        "building_btn": "town_building/Jewelry_workshop/Jewelry_workshop.png",
+        "sell_out_btn": "town_building/sell_out.png",
+        "sell_btn": "town_building/sell.png",
+        "sell_max_btn": "town_building/sell_max.png",
+        "exit_building_btn": "town_building/exitfromhouse_and_to_town.png",
+        "goods_settings": {
+            "Sandworm_scales": True,
+            "Spider_silk": True,
+            "Spider_venom_glands": True,
+            "The_cloth_wrapped_around_the_dead": True,
+            "Warcraft_Fang": False,
+            "lizard_skin": True,
+            "scrap": True,
+        },
+        "goods_dir": "town_building/Jewelry_workshop/goods",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
     }
 }
 

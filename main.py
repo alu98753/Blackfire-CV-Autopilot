@@ -341,11 +341,13 @@ def setup_mode_config(args):
         else:
             config["sacrifice_settings"] = {"gray": True, "green": True, "blue": True, "purple": False}
             print("[*] 血水獻祭設定：灰 (✔), 綠 (✔), 藍 (✔), 紫 (✖ 保留不獻祭)")
+    elif args.mode == "jewelry_workshop":
+        print("\n[*] 已選擇 [珠寶加工廠出售] 模式：將自動進入珠寶加工廠並出售所有材料與商品。")
     
     return config
 
 def setup_equipment_config(config):
-    if config["type"] == "collect_only":
+    if config["type"] in ["collect_only", "blood_altar", "jewelry_workshop"]:
         config["keep_colors"] = []
         config["disassemble_colors"] = []
         return

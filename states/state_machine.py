@@ -14,7 +14,8 @@ from states.handlers import (
     DiamondCollectionHandler,
     CollectOnlyHandler,
     LoadingHandler,
-    BloodAltarHandler
+    BloodAltarHandler,
+    JewelryWorkshopHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -34,6 +35,7 @@ class GameStateMachine:
     STATE_COLLECT_ONLY = "COLLECT_ONLY"                  # 定時領取麵包與鑽石待機流程
     STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
     STATE_BLOOD_ALTAR = "BLOOD_ALTAR"                    # 血之祭壇獻祭流程
+    STATE_JEWELRY_WORKSHOP = "JEWELRY_WORKSHOP"          # 珠寶加工廠出售流程
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -121,6 +123,7 @@ class GameStateMachine:
             self.STATE_COLLECT_ONLY: CollectOnlyHandler(self),
             self.STATE_LOADING: LoadingHandler(self),
             self.STATE_BLOOD_ALTAR: BloodAltarHandler(self),
+            self.STATE_JEWELRY_WORKSHOP: JewelryWorkshopHandler(self),
         }
 
     @property
@@ -539,8 +542,9 @@ class GameStateMachine:
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。
         """
-        if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar"]:
-            return  # 背包整理與血之祭壇模式不參與自動領取
+        # 以下模式不參與自動領取
+        if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar", "jewelry_workshop"]:
+            return
 
         from config import GLOBAL_SETTINGS
 
