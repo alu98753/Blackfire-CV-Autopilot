@@ -1992,7 +1992,7 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(830, 863)
-        self.assertEqual(handler.step_phase, "IN_SACRIFICE_MENU")
+        self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
 
         # Step 3: 點選 green_blood 獻祭 ➔ 點擊 alter.png
         handler.last_action_time = 0.0
@@ -2008,9 +2008,19 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         handler.handle()
         self.assertEqual(self.mock_mouse.click.call_count, 2)
-        self.assertEqual(handler.step_phase, "SACRIFICING")
+        self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
 
-        # Step 4: 點擊 common/quit.png
+        # Step 4: 連續 3 幀無任何血水，進到 ALL_DONE_EXITING 階段並點擊 common/quit.png
+        handler.last_action_time = 0.0
+        self.mock_matcher.match.side_effect = None
+        self.mock_matcher.match.return_value = (None, 0.0)
+        handler.handle() # empty count = 1
+        handler.last_action_time = 0.0
+        handler.handle() # empty count = 2
+        handler.last_action_time = 0.0
+        handler.handle() # empty count = 3 ➔ step_phase = "ALL_DONE_EXITING"
+        self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
+
         handler.last_action_time = 0.0
         def mock_match_step4(img, name, **kw):
             if name == "common/quit.png":
@@ -2022,7 +2032,6 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(1200, 100)
-        self.assertEqual(handler.step_phase, "EXITING")
 
         # Step 5: 點擊 exitfromhouse_and_to_town.png 離開
         handler.last_action_time = 0.0
