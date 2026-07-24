@@ -647,6 +647,10 @@ class GameStateMachine:
         if self.town_subflow_queue:
             next_flow = self.town_subflow_queue.pop(0)
             logging.info(f"🏛️ [城鎮流水線] 彈出下一個城鎮任務 [{next_flow}]，剩餘佇列: {self.town_subflow_queue}")
+            from config import GAME_CONFIGS
+            if next_flow in GAME_CONFIGS:
+                self.config = GAME_CONFIGS[next_flow].copy()
+
             if next_flow == "blood_altar":
                 self.need_blood_altar = True
                 self.transition_to(self.STATE_BLOOD_ALTAR)

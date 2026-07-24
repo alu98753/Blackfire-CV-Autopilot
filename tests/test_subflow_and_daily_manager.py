@@ -182,11 +182,13 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 2. 模擬第一站血之祭壇完工退回城鎮，呼叫 pop_and_next_town_subflow()
         sm.pop_and_next_town_subflow()
 
-        # 斷言 2: 佇列已無血之祭壇，切換至 JEWELRY_WORKSHOP！
+        # 斷言 2: 佇列已無血之祭壇，切換至 JEWELRY_WORKSHOP，且 config 100% 同步更新為珠寶店配置！
         self.assertEqual(sm.town_subflow_queue, [])
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
         self.assertFalse(sm.need_blood_altar) # need_blood_altar 必須已被重置為 False！
         self.assertTrue(sm.need_jewelry_workshop)
+        self.assertEqual(sm.config["type"], "jewelry_workshop")
+        self.assertEqual(sm.config["building_btn"], "town_building/Jewelry_workshop/Jewelry_workshop.png")
 
         # 3. 模擬狀態機在第二站突然進入 STATE_UNKNOWN，並看見城鎮/大門按鈕 (common/door.png)
         # 驗證狀態機絕不會因為 sm.config['type'] == 'blood_altar' 而誤切回 BLOOD_ALTAR！
