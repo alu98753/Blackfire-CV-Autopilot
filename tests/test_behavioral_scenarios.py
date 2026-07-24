@@ -2074,5 +2074,43 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 斷言：必須自動點擊 goback_town.png (72, 757) 返回城鎮！
         self.mock_mouse.click.assert_called_once_with(72, 757)
 
+    @patch('os.path.exists')
+    def test_blood_altar_preserves_purple_blood(self, mock_exists):
+        """
+        測試當設定為【紫色保留不獻祭】(purple: False) 且畫面上僅剩紫色血水與 alter.png 時：
+        1. 腳本絕不點擊 alter.png 或 purple_blood.png！
+        2. 連續 3 幀確認後，順利轉移至 ALL_DONE_EXITING 並點擊 common/quit.png 退出！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.config["sacrifice_settings"]["purple"] = False
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+        handler.step_phase = "SACRIFICE_MENU_OPEN"
+
+        def mock_match_only_purple(img, name, **kw):
+            if name == "town_building/Blood_Altar/purple_blood.png":
+                return ((500, 300), 0.9)
+            elif name == "town_building/Blood_Altar/alter.png":
+                return ((776, 660), 0.9)
+            elif name == "town_building/sell_max.png":
+                return ((975, 460), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_only_purple
+        self.mock_mouse.click.reset_mock()
+
+        # 執行 3 幀掃描
+        handler.handle()
+        handler.last_action_time = 0.0
+        handler.handle()
+        handler.last_action_time = 0.0
+        handler.handle()
+
+        # 斷言：在 SACRIFICE_MENU_OPEN 期間，絕未對 purple_blood / sell_max / alter 進行任何點擊！
+        self.assertEqual(self.mock_mouse.click.call_count, 0)
+        self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
+
 if __name__ == "__main__":
     unittest.main()

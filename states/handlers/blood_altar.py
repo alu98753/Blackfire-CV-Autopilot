@@ -139,13 +139,6 @@ class BloodAltarHandler(BaseStateHandler):
                 self.last_action_time = now
                 return
 
-            # 如果單獨看到 alter.png，且剛剛有選擇血水
-            if pos_alter:
-                logging.info(f"🩸 [血之祭壇] 點擊獻祭執行按鈕 [{alter_btn}]...")
-                self.mouse.click(left + pos_alter[0], top + pos_alter[1])
-                self.last_action_time = now
-                return
-
             # 若畫面上完全沒有符合品質的血水，增加計數
             self.empty_blood_scan_count += 1
             logging.info(f"🩸 [血之祭壇] 畫面暫無可獻祭血水 (連續第 {self.empty_blood_scan_count}/3 幀確認)...")
