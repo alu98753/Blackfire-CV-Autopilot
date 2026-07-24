@@ -46,7 +46,23 @@ class DailyManager:
         self.reset_hour = reset_hour
         self.reset_minute = reset_minute
         self.status = {}
+        self.last_check_ts = 0.0
         self.load_status()
+        self.next_reset_timestamp = self.calculate_next_reset_timestamp()
+
+    def calculate_next_reset_timestamp(self, now_dt=None):
+        """
+        [極致省電] 預算下一個 08:30 的 Unix float 時間戳。
+        """
+        if now_dt is None:
+            now_dt = datetime.now()
+        reset_time = dtime(self.reset_hour, self.reset_minute)
+        if now_dt.time() < reset_time:
+            target_dt = datetime.combine(now_dt.date(), reset_time)
+        else:
+            from datetime import timedelta
+            target_dt = datetime.combine(now_dt.date() + timedelta(days=1), reset_time)
+        return target_dt.timestamp()
 
     def load_status(self):
         """
@@ -92,33 +108,45 @@ class DailyManager:
         else:
             return now_dt.date().strftime("%Y-%m-%d")
 
-    def check_and_reset_daily(self, now_dt=None):
+    def check_and_reset_daily(self, now_ts=None, force=False):
         """
-        檢查是否已跨越 08:30 重置線，若跨越則自動進行全域重置。
+        [極致省電] 帶 60s 限流與 08:30 時間戳預算的重置檢查。
+        單次 float 比對僅需 nanosecond，一天最多比對 1440 次，對 CPU/電量負擔趨近於零。
         """
+        if now_ts is None:
+            now_ts = time.time()
+
+        # 1. 60秒限流保護 (除非 force=True)
+        if not force and (now_ts - self.last_check_ts < 60.0):
+            return False
+        self.last_check_ts = now_ts
+
+        # 2. 浮點數極速比對：若當前時間尚未到達預算的時間戳，直接 False
+        if not force and now_ts < self.next_reset_timestamp:
+            return False
+
+        # 3. 超過時間戳，觸發重置並重新預算下一個 08:30 時間戳
+        now_dt = datetime.fromtimestamp(now_ts)
         current_tag = self.get_today_reset_tag(now_dt)
         last_tag = self.status.get("last_daily_reset_date", "")
 
-        if current_tag != last_tag:
-            logging.info(f"🌅 [DailyManager] 偵測到跨越 08:30 重置線 ({last_tag} ➔ {current_tag})！進行日常任務清零。")
-            self.status["last_daily_reset_date"] = current_tag
+        logging.info(f"🌅 [DailyManager] 偵測到跨越 08:30 重置線 ({last_tag} ➔ {current_tag})！進行日常任務清零。")
+        self.status["last_daily_reset_date"] = current_tag
 
-            # 1. 重置一般子流程
-            subflows = self.status.get("subflows", {})
-            for key, sf in subflows.items():
-                if key != "lord_boss":
-                    sf["completed_today"] = False
+        subflows = self.status.get("subflows", {})
+        for key, sf in subflows.items():
+            if key != "lord_boss":
+                sf["completed_today"] = False
 
-            # 2. 重置所有 Boss 計數
-            boss_data = subflows.get("lord_boss", {})
-            boss_data["completed_today"] = False
-            for b_key, b_info in boss_data.get("bosses", {}).items():
-                b_info["today_count"] = 0
-                b_info["completed_today"] = False
+        boss_data = subflows.get("lord_boss", {})
+        boss_data["completed_today"] = False
+        for b_key, b_info in boss_data.get("bosses", {}).items():
+            b_info["today_count"] = 0
+            b_info["completed_today"] = False
 
-            self.save_status()
-            return True
-        return False
+        self.save_status()
+        self.next_reset_timestamp = self.calculate_next_reset_timestamp(now_dt)
+        return True
 
     def is_boss_available(self, boss_key, now_ts=None):
         """

@@ -57,21 +57,24 @@ class TestSubflowAndDailyManager(unittest.TestCase):
             self.assertIn(k, GAME_CONFIGS)
 
     def test_daily_manager_reset_at_0830(self):
-        """
-        測試 DailyManager 在時間跨越 08:30 時自動進行重置。
-        """
-        # 1. 模擬昨天的 08:30 標籤
-        yesterday_dt = datetime.now() - timedelta(days=1)
-        self.manager.status["last_daily_reset_date"] = "2020-01-01"
-        self.manager.status["subflows"]["blood_altar"]["completed_today"] = True
-        self.manager.save_status()
+        """測試：當當前時間戳超過 next_reset_timestamp 時，自動發起清零並預算下一輪重置時間戳"""
+        # 1. 記錄一次戰鬥進度
+        self.manager.record_boss_fight("lord_spider")
+        self.assertEqual(self.manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"], 1)
 
-        # 2. 觸發重置檢查 (假設當前為今天 09:00 AM)
-        now_dt = datetime.now().replace(hour=9, minute=0, second=0)
-        reset_triggered = self.manager.check_and_reset_daily(now_dt=now_dt)
-
-        self.assertTrue(reset_triggered)
-        self.assertFalse(self.manager.status["subflows"]["blood_altar"]["completed_today"])
+        # 2. 模擬當前時間戳已超過 next_reset_timestamp
+        past_next_reset = time.time() - 10.0
+        self.manager.next_reset_timestamp = past_next_reset
+        
+        # 強制跳過 60 秒限流觸發檢查
+        self.manager.last_check_ts = 0.0
+        now_dt = datetime.now()
+        was_reset = self.manager.check_and_reset_daily(force=True)
+        
+        self.assertTrue(was_reset)
+        self.assertEqual(self.manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"], 0)
+        # next_reset_timestamp 應該已自動推算至未來的下一個 08:30
+        self.assertGreater(self.manager.next_reset_timestamp, time.time())
         self.assertEqual(self.manager.status["last_daily_reset_date"], self.manager.get_today_reset_tag(now_dt))
 
     def test_per_boss_independent_cd_and_limit(self):
