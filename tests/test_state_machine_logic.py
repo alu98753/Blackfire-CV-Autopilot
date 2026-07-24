@@ -395,7 +395,8 @@ class TestStateMachineLogic(unittest.TestCase):
         
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
 
     @patch('os.path.exists')
     def test_backpack_cleaning_deselect_rare_items(self, mock_exists):

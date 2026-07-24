@@ -74,6 +74,9 @@ class GameStateMachine:
         self.bag_select_all_clicked = False
         self.bag_deselected = False
         
+        # 血之祭壇獻祭相關屬性
+        self.need_blood_altar = False
+        
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
         self.skill_selected_this_floor = False
@@ -330,6 +333,15 @@ class GameStateMachine:
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
                     if pos_t:
                         self.transition_to(self.STATE_BAG_CLEANING)
+                        return
+
+        # 0.06 如果需要血之祭壇獻祭 (need_blood_altar == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
+        if getattr(self, "need_blood_altar", False):
+            for town_btn in ["common/door.png", "goback_town.png", "town_building/Blood_Altar/Blood_Altar.png"]:
+                if os.path.exists(os.path.join("templates", town_btn)):
+                    pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
+                    if pos_t:
+                        self.transition_to(self.STATE_BLOOD_ALTAR)
                         return
 
         # 0.1 如果需要領鑽石或體力，且畫面上看見入口或功能按鈕，進入導航/領取狀態

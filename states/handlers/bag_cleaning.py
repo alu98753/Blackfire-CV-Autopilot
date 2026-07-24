@@ -121,16 +121,15 @@ class BagCleaningHandler(BaseStateHandler):
                         time.sleep(0.1)
                         
                         # 如果是單獨的背包整理模式，在此完成後直接結束腳本
-                        if self.machine.config["type"] == "bag_clean":
+                        if self.machine.config and self.machine.config.get("type") == "bag_clean":
                             logging.info("🎒 [背包整理] 整理分解流程已全部完成！退出程式。")
                             import sys
                             sys.exit(0)
                             
-                        # 回歸原本的掛機狀態
-                        if self.machine.config["type"] == "dungeon":
-                            self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
-                        else:
-                            self.machine.transition_to(self.machine.STATE_LOBBY)
+                        # 背包清理完畢後，觸發血之祭壇獻祭子流程
+                        logging.info("🩸 背包清理完成，準備退回城鎮並觸發血之祭壇獻祭...")
+                        self.machine.need_blood_altar = True
+                        self.machine.transition_to(self.machine.STATE_BLOOD_ALTAR)
                         return
 
         # 3. 如果已經分解完畢，則進行「整理」

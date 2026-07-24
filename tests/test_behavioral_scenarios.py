@@ -368,10 +368,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1000, 1000)
         
-        # 3. 驗證標記重置與回歸大廳
+        # 3. 驗證標記重置與轉移至血之祭壇獻祭
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
 
     @patch('os.path.exists')
     def test_dungeon_explore_memory_and_godown_cooldown(self, mock_exists):
@@ -2138,6 +2139,207 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(718, 745)
         self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
+
+    @patch('os.path.exists')
+    def test_bag_cleaning_triggers_blood_altar_on_completion(self, mock_exists):
+        """
+        測試在地下城掛機模式下，BagCleaningHandler 完成整理並關閉背包時：
+        自動設置 need_blood_altar = True 並將狀態轉移至 STATE_BLOOD_ALTAR！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_tidied = True
+        self.state_machine.need_bag_cleaning = True
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+
+        def mock_match_quit(img, name, **kw):
+            if name == "common/quit.png":
+                return ((800, 200), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_quit
+        self.mock_mouse.click.reset_mock()
+
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+        handler.handle(fake_img, rect)
+
+        self.mock_mouse.click.assert_called_once_with(800, 200)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+
+    @patch('os.path.exists')
+    def test_blood_altar_returns_to_dungeon_after_sacrifice(self, mock_exists):
+        """
+        測試在地下城掛機模式下觸發的 BloodAltarHandler，完成獻祭並離開建築退回城鎮時：
+        自動重置 need_blood_altar = False 並將狀態切換回 STATE_DUNGEON_EXPLORING！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        self.state_machine.need_blood_altar = True
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.step_phase = "ALL_DONE_EXITING"
+
+        def mock_match_exit_building(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_exit_building
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+
+        self.mock_mouse.click.assert_called_once_with(74, 744)
+        self.assertFalse(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
+    def test_blood_altar_reset_state_on_reentry(self):
+        """
+        測試當 BloodAltarHandler 先前殘留舊狀態 (如 ALL_DONE_EXITING, empty_blood_scan_count=3) 時：
+        呼叫 reset_state() 能夠正確還原為初始狀態 (INIT, 0, 0.0)！
+        """
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.step_phase = "ALL_DONE_EXITING"
+        handler.empty_blood_scan_count = 3
+        handler.last_action_time = 99999.0
+
+        # 執行重置
+        handler.reset_state()
+
+        # 斷言：必須徹底還原
+        self.assertEqual(handler.step_phase, "INIT")
+        self.assertEqual(handler.empty_blood_scan_count, 0)
+        self.assertEqual(handler.last_action_time, 0.0)
+
+    @patch('os.path.exists')
+    def test_blood_altar_retrigger_cycle_integration(self, mock_exists):
+        """
+        測試二次連動觸發情境：
+        第一次獻祭完成 ➔ 自動切換回 STATE_DUNGEON_EXPLORING ➔ 背包再次清理完成 ➔ transition_to(STATE_BLOOD_ALTAR)
+        驗證 handler 的內部狀態會被自動重置為 INIT，準備下一次獻祭！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        
+        # 模擬第一次獻祭完成
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.step_phase = "ALL_DONE_EXITING"
+        handler.empty_blood_scan_count = 3
+        
+        # 轉移回到探索狀態
+        self.state_machine.transition_to(self.state_machine.STATE_DUNGEON_EXPLORING)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
+        # 模擬第二次觸發：背包清理完成後調用 transition_to(STATE_BLOOD_ALTAR)
+        self.state_machine.transition_to(self.state_machine.STATE_BLOOD_ALTAR)
+
+        # 斷言：轉移至 STATE_BLOOD_ALTAR 時，會自動調用 reset_state()，使 step_phase 乾淨還原為 INIT
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertEqual(handler.step_phase, "INIT")
+        self.assertEqual(handler.empty_blood_scan_count, 0)
+
+    @patch('os.path.exists')
+    def test_blood_altar_to_navigating_in_mix_mode_with_available_dungeon(self, mock_exists):
+        """
+        測試在 mix 混合模式下，血之祭壇獻祭完畢退回城鎮轉移至 STATE_NAVIGATING 時：
+        當 has_available_dungeon() == True，NavigationHandler 能自動點擊 dungeons/dungeon.png 導航進入地下城！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0} # 全就緒
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        
+        # 1. 模擬獻祭結束退出建築
+        altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        altar_handler.step_phase = "ALL_DONE_EXITING"
+        
+        def mock_match_exit(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_exit
+        self.mock_mouse.click.reset_mock()
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+        
+        altar_handler.handle(fake_img, rect)
+
+        # 斷言 1: 血之祭壇獻祭完畢後，成功轉移至 STATE_NAVIGATING 且 need_blood_altar = False
+        self.assertFalse(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
+        # 2. 模擬 NavigationHandler 在城鎮進行導航決策 (看見大門與地下城入口)
+        nav_handler = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        
+        def mock_match_dungeon_entry(img, name, **kw):
+            if name == "common/door.png":
+                return ((76, 751), 0.95)
+            elif name == "dungeons/dungeon.png":
+                return ((250, 400), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_dungeon_entry
+        self.mock_mouse.click.reset_mock()
+
+        nav_handler.handle(fake_img, rect)
+
+        # 斷言 2: 在 mix 模式且有可用地下城時，NavigationHandler 自動點擊 [common/door.png] / [dungeons/dungeon.png]
+        self.mock_mouse.click.assert_called()
+
+    @patch('os.path.exists')
+    def test_blood_altar_to_navigating_in_mix_mode_with_all_dungeons_cooldown(self, mock_exists):
+        """
+        測試在 mix 混合模式下，血之祭壇獻祭完畢退回城鎮轉移至 STATE_NAVIGATING 時：
+        當所有地下城皆在冷卻中 (has_available_dungeon() == False)，NavigationHandler 能發動關卡退守，點擊 common/select_stage.png 導航進入普通關卡！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        now = time.time()
+        self.state_machine.dungeon_cooldowns = {0: now+1000, 1: now+1000, 2: now+1000, 3: now+1000, 4: now+1000} # 全冷卻
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        
+        # 1. 模擬獻祭結束退出建築
+        altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        altar_handler.step_phase = "ALL_DONE_EXITING"
+        
+        def mock_match_exit(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_exit
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+        
+        altar_handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
+        # 2. 模擬 NavigationHandler 在城鎮進行導航決策 (看見普通關卡入口)
+        nav_handler = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        
+        def mock_match_stage_entry(img, name, **kw):
+            if name == "common/door.png":
+                return ((76, 751), 0.95)
+            elif name == "common/select_stage.png":
+                return ((300, 400), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_stage_entry
+        self.mock_mouse.click.reset_mock()
+
+        nav_handler.handle(fake_img, rect)
+
+        # 斷言 2: 在 mix 模式且全冷卻時，NavigationHandler 發動退守點擊普通關卡入口
+        self.mock_mouse.click.assert_called()
 
 if __name__ == "__main__":
     unittest.main()

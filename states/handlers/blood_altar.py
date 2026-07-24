@@ -160,11 +160,15 @@ class BloodAltarHandler(BaseStateHandler):
             if pos_door or pos_building:
                 logging.info("✅ [血之祭壇] 偵測到目前已處於城鎮大門畫面，視為已退回城鎮，完成獻祭流程！")
                 self.reset_state()
+                self.machine.need_blood_altar = False
                 self.last_action_time = now
                 if cfg.get("type") == "blood_altar":
                     logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
                     sys.exit(0)
-                return
+                else:
+                    logging.info("🩸 [血之祭壇] 獻祭流程完成，自動將狀態轉移至 STATE_NAVIGATING 以進行後續導航...")
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    return
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
             if pos_quit:
@@ -178,12 +182,16 @@ class BloodAltarHandler(BaseStateHandler):
                 logging.info(f"🩸 [血之祭壇] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
                 self.reset_state()
+                self.machine.need_blood_altar = False
                 self.last_action_time = now
                 
                 if cfg.get("type") == "blood_altar":
                     logging.info("🎉 [血之祭壇] 獨立單次獻祭流程 100% 完成！結束程式。")
                     sys.exit(0)
-                return
+                else:
+                    logging.info("🩸 [血之祭壇] 獻祭流程完成，自動將狀態轉移至 STATE_NAVIGATING 以進行後續導航...")
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    return
             return
 
         # =========================================================================
