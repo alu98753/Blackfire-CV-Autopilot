@@ -674,11 +674,14 @@ class GameStateMachine:
 
             if next_flow == "blood_altar":
                 self.need_blood_altar = True
-                self.transition_to(self.STATE_BLOOD_ALTAR)
-                return
             elif next_flow == "jewelry_workshop":
                 self.need_jewelry_workshop = True
-                self.transition_to(self.STATE_JEWELRY_WORKSHOP)
+
+            # 🏛️ 資料驅動動態派發：依據 TOWN_SUBFLOW_CONFIG_MAP 反向比對目標狀態
+            config_to_state = {v: k for k, v in self.TOWN_SUBFLOW_CONFIG_MAP.items()}
+            target_state = config_to_state.get(next_flow)
+            if target_state:
+                self.transition_to(target_state)
                 return
 
         # 若佇列已空！

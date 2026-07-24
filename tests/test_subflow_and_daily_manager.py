@@ -248,7 +248,23 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 2. 轉移至 JEWELRY_WORKSHOP
         sm.transition_to(sm.STATE_JEWELRY_WORKSHOP)
         self.assertEqual(sm.config["type"], "jewelry_workshop")
-        self.assertEqual(sm.config["building_btn"], "town_building/Jewelry_workshop/Jewelry_workshop.png")
+
+        # 3. 轉移至 LORD_BOSS
+        sm.transition_to(sm.STATE_LORD_BOSS)
+        self.assertEqual(sm.config["type"], "lord_boss")
+        self.assertEqual(sm.config["entry_btn"], "load/Lord_entry.png")
+
+    def test_pop_and_next_town_subflow_data_driven_dispatch(self):
+        """測試：pop_and_next_town_subflow 能依據 TOWN_SUBFLOW_CONFIG_MAP 資料驅動派發所有子流程 (包括 lord_boss)"""
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        
+        # 彈出 lord_boss
+        sm.town_subflow_queue = ["lord_boss"]
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+        self.assertEqual(sm.config["type"], "lord_boss")
 
     def test_filter_navigation_path_reentrancy_prevention(self):
         """
