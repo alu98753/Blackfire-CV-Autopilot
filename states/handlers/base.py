@@ -32,3 +32,12 @@ class BaseStateHandler:
         """
         res = self.color_classifier.classify(crop)
         return res["main_color"]
+
+    def match_mutually_exclusive_tabs(self, screen_img, template_a, template_b, margin=0.02, threshold=0.70):
+        """
+        [專案標準門面 API] 互斥 UI 頁籤相對優勢比對。
+        只有當 c_a >= threshold 且 c_a 高出 c_b 達 margin 以上時才判定頁籤 A 為啟用狀態。
+        """
+        return self.matcher.match_mutually_exclusive_tabs(
+            screen_img, template_a, template_b, margin=margin, threshold=threshold
+        )

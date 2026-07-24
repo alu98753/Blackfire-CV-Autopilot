@@ -159,13 +159,15 @@ class GameStateMachine:
             self.just_resumed_from_user = False
             self._on_state_transition_sync_context(new_state)
 
+    # 🏛️ 城鎮子流程與 Config Key 聲明式對照表 (新增城鎮子流程只需在此註冊對應 Key)
+    TOWN_SUBFLOW_CONFIG_MAP = {
+        STATE_BLOOD_ALTAR: "blood_altar",
+        STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
+    }
+
     def _on_state_transition_sync_context(self, new_state):
         from config import GAME_CONFIGS
-        state_to_config_key = {
-            self.STATE_BLOOD_ALTAR: "blood_altar",
-            self.STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
-        }
-        key = state_to_config_key.get(new_state)
+        key = self.TOWN_SUBFLOW_CONFIG_MAP.get(new_state)
         if key and key in GAME_CONFIGS:
             if self.config is None:
                 self.config = {}
