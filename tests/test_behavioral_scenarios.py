@@ -2498,5 +2498,85 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertFalse(self.state_machine.need_blood_altar)
         self.assertFalse(self.state_machine.need_jewelry_workshop)
 
+    @patch('os.path.exists')
+    def test_town_pipeline_in_various_modes_stage_dungeon_mix(self, mock_exists):
+        """
+        驗證城鎮流水線在不同掛機模式 (stage, dungeon, mix) 下：
+        流水線執行完畢後標記 100% 重置為 False，且狀態恢復至 STATE_NAVIGATING 續行該模式！
+        """
+        mock_exists.return_value = True
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        for mode_name in ["stage", "dungeon", "mix"]:
+            self.state_machine.config = GAME_CONFIGS[mode_name].copy()
+            
+            # 手動模擬觸發流水線
+            self.state_machine.trigger_town_subflow_chain()
+            self.assertTrue(self.state_machine.need_blood_altar)
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+
+            # 模擬血之祭壇完成並離場
+            altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+            altar_handler.reset_state()
+            altar_handler.step_phase = "ALL_DONE_EXITING"
+            def mock_match_exit(img, name, **kw):
+                if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
+                    return ((74, 744), 0.90)
+                return (None, 0.0)
+            self.mock_matcher.match.side_effect = mock_match_exit
+            altar_handler.handle(fake_img, rect)
+
+            # 第一站完成 ➔ 切換至珠寶加工廠
+            self.assertFalse(self.state_machine.need_blood_altar)
+            self.assertTrue(self.state_machine.need_jewelry_workshop)
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
+
+            # 模擬珠寶加工廠完成並離場
+            jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+            jewelry_handler.reset_state()
+            jewelry_handler.step_phase = "ALL_DONE_EXITING"
+            jewelry_handler.handle(fake_img, rect)
+
+            # 佇列清空 ➔ 100% 恢復 NAVIGATING 且標記全重置
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+            self.assertFalse(self.state_machine.need_blood_altar)
+            self.assertFalse(self.state_machine.need_jewelry_workshop)
+
+    @patch('sys.exit')
+    @patch('os.path.exists')
+    def test_independent_modes_isolation(self, mock_exists, mock_sys_exit):
+        """
+        驗證獨立 CLI 模式 (jewelry_workshop, blood_altar)：
+        完成後直接 sys.exit(0) 結束程式，絕不誤觸城鎮流水線與 STATE_NAVIGATING！
+        """
+        mock_exists.return_value = True
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        def mock_match_exit(img, name, **kw):
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
+                return ((74, 744), 0.90)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = mock_match_exit
+
+        # 1. 獨立血之祭壇模式
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        altar_handler.reset_state()
+        altar_handler.step_phase = "ALL_DONE_EXITING"
+        altar_handler.handle(fake_img, rect)
+        mock_sys_exit.assert_called_with(0)
+
+        # 2. 獨立珠寶加工廠模式
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        jewelry_handler.reset_state()
+        jewelry_handler.step_phase = "ALL_DONE_EXITING"
+        jewelry_handler.handle(fake_img, rect)
+        mock_sys_exit.assert_called_with(0)
+
 if __name__ == "__main__":
     unittest.main()

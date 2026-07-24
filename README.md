@@ -44,6 +44,9 @@
 13. **血之祭壇獻祭與城鎮建築連動 (`Blood Altar`)**：
     * 支援獨立 CLI 模式 (`--mode blood_altar`) 選擇品質獻祭（灰/綠/藍獻祭，紫色保留等），亦支援長途掛機中背包滿清理後自動一路退回城鎮進入祭壇獻祭，獻祭完畢自動轉移至動態導航續行掛機。
     * 詳細架構與防誤觸機制請參閱專屬文件：[Blood_Altar.md (血之祭壇說明文件)](docs/town_building/Blood_Altar.md)。
+14. **城鎮任務流水線佇列 (`Town Subflow Pipeline`)**：
+    * 提供無解耦、可高度擴充的城鎮子流程鏈式動態佇列。當背包清理分解完成後，腳本將自動依序在城鎮中執行「血之祭壇獻祭 ➔ 珠寶加工廠出售 ➔ 未來新建築」，任務清空後自動恢復 `mix` / `stage` / `dungeon` 掛機。
+    * 詳細架構請參閱專屬文件：[pipeline.md (城鎮任務流水線說明文件)](docs/town_building/pipeline.md)。
 
 ---
 
