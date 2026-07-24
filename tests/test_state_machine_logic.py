@@ -2117,7 +2117,93 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.detect_current_state(fake_img, rect)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
 
+    @patch('os.path.exists')
+    @patch('states.handlers.battle.time.sleep')
+    def test_battle_handler_result_button_threshold(self, mock_sleep, mock_exists):
+        """
+        測試 BattleHandler 結算按鈕門檻為 0.80：
+        - 若圖案殘影相似度為 0.7694 (< 0.80)，has_battle_feature 為 False，滿 5 秒觸發重設為 STATE_UNKNOWN。
+        - 若圖案相似度為 0.85 (>= 0.80)，觸發點擊並跳轉至 STATE_RESULT。
+        """
+        from config import GAME_CONFIGS
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.battle_start_time = time.time() - 10.0 # 避開前 8 秒保護期
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BATTLE]
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        # 1. 情境 A：結算圖案相似度為 0.7694 (< 0.80) 且無其他戰鬥特徵
+        def mock_match_low(img, name, threshold=0.8, **kw):
+            conf = 0.7694 if name in ["common/continue.png", "stages/retry.png"] else 0.0
+            return ((100, 100), conf) if conf >= threshold else (None, conf)
+
+        self.mock_matcher.match.side_effect = mock_match_low
+        handler.non_battle_feature_start_time = time.time() - 5.1 # 已滿 5.1 秒未偵測到合格特徵
+
+        handler.handle(fake_img, rect)
+        # 應成功判定意外退出並轉移至 UNKNOWN
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+        # 2. 情境 B：真實結算圖案相似度為 0.85 (>= 0.80)
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        handler.non_battle_feature_start_time = None
+        def mock_match_high(img, name, threshold=0.8, **kw):
+            conf = 0.85 if name == "common/continue.png" else 0.0
+            return ((100, 100), conf) if conf >= threshold else (None, conf)
+
+        self.mock_matcher.match.side_effect = mock_match_high
+        handler.handle(fake_img, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
+
+    @patch('os.path.exists')
+    @patch('states.handlers.battle.time.sleep')
+    def test_battle_handler_user_resumed_lobby_detection(self, mock_sleep, mock_exists):
+        """
+        測試手動介入恢復時的大廳按鈕 (門檻 0.90) 檢測與標記重置：
+        - just_resumed_from_user == True 且大廳按鈕相似度 0.92 >= 0.90 ➔ 標記重置為 False，切換至 STATE_UNKNOWN。
+        - just_resumed_from_user == True 但大廳按鈕相似度 0.85 < 0.90 ➔ 標記重置為 False，維持 BATTLE。
+        """
+        from config import GAME_CONFIGS
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["stage"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BATTLE]
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        # 1. 情境 A：標記為 True 且畫面上看見大廳按鈕 (0.92 >= 0.90)
+        self.state_machine.just_resumed_from_user = True
+        def mock_match_lobby_high(img, name, threshold=0.9, **kw):
+            conf = 0.92 if name == "common/door.png" else 0.0
+            return ((100, 100), conf) if conf >= threshold else (None, conf)
+
+        self.mock_matcher.match.side_effect = mock_match_lobby_high
+        handler.handle(fake_img, rect)
+
+        # 斷言標記被重置為 False 且狀態切換為 UNKNOWN
+        self.assertFalse(self.state_machine.just_resumed_from_user)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+
+        # 2. 情境 B：標記為 True 但大廳按鈕為 0.85 (< 0.90)，畫面仍有戰鬥特徵 auto.png (0.90)
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.just_resumed_from_user = True
+        def mock_match_lobby_low(img, name, threshold=0.9, **kw):
+            conf = 0.90 if name == "common/auto.png" else (0.85 if name == "common/door.png" else 0.0)
+            return ((200, 200), conf) if conf >= threshold else (None, conf)
+
+        self.mock_matcher.match.side_effect = mock_match_lobby_low
+        handler.handle(fake_img, rect)
+
+        # 斷言標記被重置為 False 且狀態維持在 BATTLE
+        self.assertFalse(self.state_machine.just_resumed_from_user)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
