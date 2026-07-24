@@ -21,8 +21,11 @@ class BloodAltarHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
 
-    def handle(self):
-        screen_img = self.capturer.get_screen()
+    def handle(self, screen_img=None, rect=None):
+        if screen_img is None and self.capturer:
+            rect = rect or self.capturer.get_window_rect()
+            if rect:
+                screen_img = self.capturer.capture(rect)
         if screen_img is None:
             return
 

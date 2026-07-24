@@ -8,6 +8,7 @@ class BaseStateHandler:
         :param machine: 狀態機實例 (GameStateMachine)
         """
         self.machine = machine
+        self.capturer = machine.capturer
         self.matcher = machine.matcher
         self.mouse = machine.mouse
         self.color_classifier = GearColorClassifier()
