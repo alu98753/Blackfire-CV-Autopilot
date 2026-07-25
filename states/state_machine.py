@@ -151,15 +151,22 @@ class GameStateMachine:
     def dungeon_defeat_count(self, value):
         self.defeat_count = value
 
-    def get_ocr_reader(self):
+    def get_ocr_reader(self, lang_list=None):
         """
-        延遲載入並取得 EasyOCR 讀取器實例，避免啟動延遲。
+        延遲載入並取得 EasyOCR 讀取器實例，預設載入繁體中文與英文 ['ch_tra', 'en']。
         """
-        if self._ocr_reader is None:
+        if lang_list is None:
+            lang_list = ['ch_tra', 'en']
+            
+        key = "_".join(lang_list)
+        if not hasattr(self, "_ocr_readers"):
+            self._ocr_readers = {}
+            
+        if key not in self._ocr_readers:
             import easyocr
-            logging.info("⚙️ 正在首次載入 EasyOCR 辨識模型 (使用 CPU)...")
-            self._ocr_reader = easyocr.Reader(['en'], gpu=False)
-        return self._ocr_reader
+            logging.info(f"⚙️ 正在首次載入 EasyOCR 辨識模型 ({lang_list}) (使用 CPU)...")
+            self._ocr_readers[key] = easyocr.Reader(lang_list, gpu=False)
+        return self._ocr_readers[key]
 
 
 

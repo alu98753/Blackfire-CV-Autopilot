@@ -88,10 +88,26 @@ class QuestOCRExtractor:
                 return ""
 
         try:
-            results = self.ocr_reader.readtext(text_roi)
+            h, w = text_roi.shape[:2]
+            # 取上半部 (避開下方的「懸賞任務」副標與橫線)
+            top_half = text_roi[:int(h * 0.55), :] if h > 30 else text_roi
+            # 放大 2 倍以提升中文字元特徵清晰度
+            scaled = cv2.resize(top_half, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+
+            results = self.ocr_reader.readtext(scaled)
             if results:
-                texts = [res[1].strip() for res in results if res[1].strip()]
-                return "".join(texts)
+                texts = []
+                for res in results:
+                    txt = res[1].strip()
+                    # 過濾純單個符號如 ")", "!", "!" 等雜訊
+                    if len(txt) == 1 and not ('\u4e00' <= txt <= '\u9fff' or txt.isalnum()):
+                        continue
+                    texts.append(txt)
+                final_str = "".join(texts).strip()
+                # 剔除首尾英數雜訊標點
+                import re
+                final_str = re.sub(r'^[^\w\u4e00-\u9fff]+|[^\w\u4e00-\u9fff]+$', '', final_str)
+                return final_str
         except Exception as e:
             logging.error(f"OCR 辨識異常: {e}")
         return ""
