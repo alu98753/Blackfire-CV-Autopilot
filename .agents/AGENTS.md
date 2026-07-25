@@ -53,5 +53,17 @@
    - 當懸賞告示牌出現未對應的全新任務時，系統會自動記錄於 [user_data/daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json) 的 `subflows.bulletin_board.unknown_quests` 列表中 (每日不清空)。
    - 當使用者指示「加入新任務」時，AI 與開發者必須直接開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84) 補充對應正則關鍵字規則與分類全名清單。
 
+---
+
+## 6. 測試執行精準度與效能規範 (Test Execution Efficiency) 🧪
+1. **修改核心業務邏輯 (Core Logic Edit)**：
+   - 當修改 `states/`, `utils/`, `config.py` 或 `main.py` 等核心業務邏輯程式碼時，**必須執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保無 Regression。
+2. **僅新增或微調單一測試檔 (Test-Only Edit)**：
+   - 當未修改核心業務邏輯，**僅新增、補充或微調單一測試檔案/測試方法**時，**只須精準執行該單一測試檔或測試方法**，絕不盲目跑全套測試。
+   - 範例指令：
+     - 精確執行單一測試檔案：`.venv\Scripts\python -m unittest tests.test_state_machine_logic`
+     - 精確執行單一測試方法：`.venv\Scripts\python -m unittest tests.test_state_machine_logic.TestStateMachineLogic.test_multiple_task_complete_popups_sequential_handling`
+
+
 
 
