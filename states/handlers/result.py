@@ -183,7 +183,7 @@ class ResultHandler(BaseStateHandler):
 
         for l_temp in lobby_templates:
             if l_temp and os.path.exists(os.path.join("templates", l_temp)):
-                pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80, check_brightness=True, brightness_threshold=0.70, quiet=True)
+                pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80, brightness_threshold=0.70, quiet=True)
                 if pos_l:
                     logging.info(f"👉 結算辨識：偵測到畫面已切回大廳/頁籤 [{l_temp}] (相似度: {conf_l:.4f})，即時結束結算狀態。")
                     if getattr(self.machine, "current_lord_boss_key", None):
