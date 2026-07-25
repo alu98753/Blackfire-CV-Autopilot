@@ -56,29 +56,37 @@ def diagnose_quest_ocr():
         # 1. 尋找 task.png 錨點 (限定左半邊 cx < w_img // 2，避開右半邊描述區域)
         anchors = matcher.match_all(img, "town_building/bulletin_board/task.png", threshold=0.70, quiet=True)
         anchors = [a for a in anchors if a[0] < w_img // 2]
-        anchors = sorted(anchors, key=lambda a: a[1])  # 按 Y 軸自上而下排序
+        
+        if not anchors:
+            print(f"[*] 圖片 {base_name}: 未發現未接受任務 (task.png)")
+            continue
+
+        # 核心邏輯：永遠鎖定最上方 (Y 座標最小) 的未接受任務 top_anchor
+        top_anchor = sorted(anchors, key=lambda a: a[1])[0]
 
         # 取得模板實際大小 (考慮 match_all 多尺度)
         temp_img = matcher._load_template("town_building/bulletin_board/task.png")
         temp_h, temp_w = temp_img.shape[:2] if temp_img is not None else (40, 40)
-        # 近似縮放
         scale = 0.863
         icon_w = int(temp_w * scale)
         icon_h = int(temp_h * scale)
 
         print(f"------------------------------------------------------------")
-        print(f"[*] 正在診斷圖片: {base_name} ({w_img}x{h_img}) | 發現 {len(anchors)} 個 task.png 錨點")
+        print(f"[*] 診斷圖片: {base_name} ({w_img}x{h_img}) | 發現 {len(anchors)} 個未接受 task.png 錨點")
+        print(f"[★ 最上方鎖定標的 (top_anchor)] X={top_anchor[0]}, Y={top_anchor[1]}")
         print(f"------------------------------------------------------------")
 
         recognized_titles = []
 
-        for idx, (cx, cy, conf) in enumerate(anchors):
-            # 左上角錨點座標
+        for idx, (cx, cy, conf) in enumerate(sorted(anchors, key=lambda a: a[1])):
+            is_top_target = (cx == top_anchor[0] and cy == top_anchor[1])
             x0 = cx - icon_w // 2
             y0 = cy - icon_h // 2
 
-            # 畫出紅色框框 (task.png 圖示錨點)
-            cv2.rectangle(debug_img, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
+            # 若為最上方鎖定標的，畫厚黃框 (255, 255, 0)；其餘畫紅框
+            box_color = (255, 255, 0) if is_top_target else (0, 0, 255)
+            thickness = 4 if is_top_target else 2
+            cv2.rectangle(debug_img, (x0, y0), (x0 + icon_w, y0 + icon_h), box_color, thickness)
 
             # 計算右側文字 ROI
             crop_x = x0 + icon_w + 5
@@ -89,8 +97,9 @@ def diagnose_quest_ocr():
             if crop_w <= 0 or crop_h <= 0:
                 continue
 
-            # 畫出綠色框框 (文字辨識 ROI 範圍)
-            cv2.rectangle(debug_img, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), (0, 255, 0), 2)
+            # 畫出文字辨識 ROI 範圍 (最上方目標以厚青框標示，其餘綠框)
+            roi_color = (255, 255, 0) if is_top_target else (0, 255, 0)
+            cv2.rectangle(debug_img, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), roi_color, thickness)
 
             # 裁切並執行 OCR
             text_roi = img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
@@ -107,11 +116,12 @@ def diagnose_quest_ocr():
                 except Exception as ex:
                     ocr_text = f"Err: {ex}"
 
+            prefix = "[★ 1st 鎖定標的]" if is_top_target else f"   [列 #{idx+1}]"
             if ocr_text:
                 recognized_titles.append(ocr_text)
-                print(f"   [列 #{idx+1}] 座標 (X={cx}, Y={cy}) | 錨點信心度: {conf:.4f} -> 辨識字串: '{ocr_text}' (OCR信心度: {ocr_conf:.2f})")
+                print(f"{prefix} 座標 (X={cx}, Y={cy}) | 錨點信心度: {conf:.4f} -> 辨識字串: '{ocr_text}' (OCR信心度: {ocr_conf:.2f})")
             else:
-                print(f"   [列 #{idx+1}] 座標 (X={cx}, Y={cy}) | 錨點信心度: {conf:.4f} -> 未辨識出文字")
+                print(f"{prefix} 座標 (X={cx}, Y={cy}) | 錨點信心度: {conf:.4f} -> 未辨識出文字")
 
         # 保存診斷調試圖片
         out_filename = f"debug_quest_ocr_{os.path.splitext(base_name)[0]}.png"
