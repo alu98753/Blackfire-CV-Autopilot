@@ -4,7 +4,7 @@ import os
 import sys
 
 from config import GAME_CONFIGS
-from main import setup_stage_config, setup_dungeon_config, check_mode_templates
+from main import setup_stage_config, setup_dungeon_config, setup_mode_config, check_mode_templates
 
 class TestMainConfig(unittest.TestCase):
 
@@ -85,6 +85,41 @@ class TestMainConfig(unittest.TestCase):
         cfg_daily = normalize_config(cfg_daily)
         self.assertEqual(cfg_daily["keep_colors"], ["purple", "orange_yellow", "red"])
         self.assertEqual(cfg_daily["disassemble_colors"], ["gray_or_empty", "green", "blue"])
+
+    @patch('os.path.exists')
+    @patch('builtins.input', return_value="")
+    def test_setup_mode_config_daily_default(self, mock_input, mock_exists):
+        """測試 setup_mode_config 在 daily 模式下預設 Enter 選擇 (自動貪婪地下城 + 冰凍峽谷 6-1 關卡)"""
+        mock_exists.return_value = True
+        mock_args = MagicMock()
+        mock_args.subflow = None
+        mock_args.mode = "daily"
+        mock_args.backend = True
+        mock_args.blessmode = None
+
+        config = setup_mode_config(mock_args)
+        self.assertTrue(config["greedy_dungeon"])
+        self.assertEqual(config["stage_entry"], "stages/level6_ice_cave.png")
+        self.assertEqual(config["stage_target"], "stages/first_stage.png")
+        self.assertEqual(config["bless_mode"], "combat")
+
+    @patch('os.path.exists')
+    @patch('builtins.input', side_effect=["1", "2", "1", "1", "4"])
+    def test_setup_mode_config_daily_custom(self, mock_input, mock_exists):
+        """測試 setup_mode_config 在 daily 模式下自訂選擇 (地下城 1 黏糊糊石窟 + 關卡 1 蒼穹平原魔王關 + 祝福 2 生命)"""
+        mock_exists.return_value = True
+        mock_args = MagicMock()
+        mock_args.subflow = None
+        mock_args.mode = "daily"
+        mock_args.backend = True
+        mock_args.blessmode = None
+
+        config = setup_mode_config(mock_args)
+        self.assertFalse(config["greedy_dungeon"])
+        self.assertIn("dungeons/Slime_entry.png", config["navigation_path"])
+        self.assertEqual(config["stage_entry"], "stages/level1_sky_plains.png")
+        self.assertEqual(config["stage_target"], "stages/level1_final.png")
+        self.assertEqual(config["bless_mode"], "life")
 
 if __name__ == "__main__":
     unittest.main()
