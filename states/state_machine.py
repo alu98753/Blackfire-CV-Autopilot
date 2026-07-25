@@ -185,7 +185,14 @@ class GameStateMachine:
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
             self.just_resumed_from_user = False
+            
+            # 🛡️ 關鍵防護：當轉移至新狀態時，自動重置目標 Handler 內部步驟 phase
+            handler = self.handlers.get(new_state)
+            if handler and hasattr(handler, "reset_state"):
+                handler.reset_state()
+
             self._on_state_transition_sync_context(new_state)
+
 
     # 🏛️ 城鎮子流程與 Config Key 聲明式對照表 (新增城鎮子流程只需在此註冊對應 Key)
     TOWN_SUBFLOW_CONFIG_MAP = {
