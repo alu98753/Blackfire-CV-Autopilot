@@ -187,7 +187,39 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         ]
         self.assertEqual(sorted_quests, expected_order)
 
+    def test_dungeon_cooldown_skipping_and_resumption(self):
+        """
+        驗證地下城冷卻時動態跳過並順延執行次優先任務，且在冷卻結束後自動恢復最高優先任務。
+        - 任務 1: 清除骷髏 (Dungeon 3)
+        - 任務 2: 清除樹人 (Dungeon 2)
+        - 任務 3: 清除蛙人 (Stage 5)
+        """
+        import time
+        quests = ["清除骷髏", "清除樹人", "清除蛙人"]
+        sorted_quests = self.mapper.sort_quests(quests)
+        scheduler = QuestScheduler.from_daily_status(sorted_quests)
+
+        now = time.time()
+        # 1. 初始狀態無冷卻 ➔ 應選取第 1 優先任務 [清除骷髏] (Dungeon 4, index 3)
+        cmd1, msg1 = scheduler.get_next_action_config(dungeon_cooldowns={}, now_ts=now)
+        self.assertIn("--dungeon 4", cmd1)
+
+        # 2. 設 Dungeon 3 (神秘遺跡) 冷卻 1800 秒 ➔ 應自動跳過並選取第 2 優先任務 [清除樹人] (Dungeon 3, index 2)
+        cd_map_1 = {3: now + 1800.0}
+        cmd2, msg2 = scheduler.get_next_action_config(dungeon_cooldowns=cd_map_1, now_ts=now)
+        self.assertIn("--dungeon 3", cmd2)
+
+        # 3. 設 Dungeon 3 與 Dungeon 2 皆在冷卻中 ➔ 應自動跳過所有地下城並選取關卡任務 [清除蛙人] (Stage 5)
+        cd_map_2 = {3: now + 1800.0, 2: now + 1800.0}
+        cmd3, msg3 = scheduler.get_next_action_config(dungeon_cooldowns=cd_map_2, now_ts=now)
+        self.assertIn("--mode stage --stage 5", cmd3)
+
+        # 4. 模擬 1801 秒後，Dungeon 3 冷卻結束 ➔ 再次查詢時應自動搶先恢復選取最高優先任務 [清除骷髏] (Dungeon 4)
+        cmd4, msg4 = scheduler.get_next_action_config(dungeon_cooldowns=cd_map_1, now_ts=now + 1801.0)
+        self.assertIn("--dungeon 4", cmd4)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

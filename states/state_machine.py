@@ -643,9 +643,10 @@ class GameStateMachine:
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！")
             return True
 
-        cli_cmd, msg = self.quest_scheduler.get_next_action_config()
+        cli_cmd, msg = self.quest_scheduler.get_next_action_config(dungeon_cooldowns=self.dungeon_cooldowns)
         logging.info(f"🔄 [GameStateMachine 動態調度] {msg}")
         return False
+
 
     def _run_task_complete_subflow(self, rect):
         logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")

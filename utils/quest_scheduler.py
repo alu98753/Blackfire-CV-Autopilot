@@ -29,22 +29,39 @@ class QuestScheduler:
         """
         return len(self.get_pending_tasks()) == 0
 
-    def get_next_action_config(self):
+    def get_next_action_config(self, dungeon_cooldowns=None, now_ts=None):
         """
         綜合目前所有未完成任務，產出最優的單個 CLI 啟動指令與模式配置。
-        優先度：地下城專屬任務 ➔ 特定普通關卡任務 ➔ 通用首領任務 ➔ 混合模式。
+        優先度：確定性 ➔ 僅憑彈窗核銷；地下城專屬任務 (未在冷卻中) ➔ 特定普通關卡任務 ➔ 通用首領任務 ➔ 混合模式。
+        :param dungeon_cooldowns: dict (例如 {0: timestamp, 1: timestamp, ...})，冷卻字典
+        :param now_ts: float (當前時間戳，預設 time.time())
         """
+        import time
+        from utils.time_parser import format_seconds_to_readable
+
+        if now_ts is None:
+            now_ts = time.time()
+
         pending = self.get_pending_tasks()
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
-        # 1. 優先尋找地下城專屬任務
+        # 1. 優先尋找未處於冷卻中的地下城專屬任務
         dungeon_tasks = [t for t in pending if t.mode_type == "dungeon"]
         if dungeon_tasks:
-            target_task = dungeon_tasks[0]
-            cli_cmd = target_task.to_cli_args()
-            msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return cli_cmd, msg
+            for target_task in dungeon_tasks:
+                idx = target_task.dungeon_index
+                if dungeon_cooldowns and idx is not None:
+                    cd_until = dungeon_cooldowns.get(idx, 0.0)
+                    if now_ts < cd_until:
+                        rem_sec = int(cd_until - now_ts)
+                        rem_str = format_seconds_to_readable(rem_sec) if rem_sec != float('inf') else "∞"
+                        logging.info(f"⏳ [懸賞排程器] 任務 [{target_task.quest_title}] (地下城 #{idx + 1}) 正在冷卻中 (剩餘 {rem_str})，順延尋找下一個可執行任務...")
+                        continue
+
+                cli_cmd = target_task.to_cli_args()
+                msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return cli_cmd, msg
 
         # 2. 次優先尋找特定普通關卡任務
         stage_tasks = [t for t in pending if t.mode_type == "stage"]
@@ -63,6 +80,7 @@ class QuestScheduler:
             return cli_cmd, msg
 
         return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
+
 
     @classmethod
     def from_daily_status(cls, accepted_quests, daily_manager=None):
