@@ -230,11 +230,8 @@ class QuestScheduler:
     def record_kill_event(self, enemy_name=None, is_boss=False, dungeon_index=None, stage_level=None, sub_stage=None, kill_count=1):
         """
         當遊戲內發生擊殺或通關事件時，廣播並更新所有符合條件的懸賞任務進度 (Task Piggybacking 任務合併計算)。
-        :param enemy_name: 怪物名稱 (如 "史萊姆王", "冰元素", "野豬", "骷髏")
-        :param is_boss: 是否擊殺了首領/Boss
-        :param dungeon_index: 完成的地下城索引
-        :param stage_level: 完成的關卡等級
-        :param sub_stage: 完成的子關卡類型
+        注意：若任務標題包含特定 Boss 關鍵字 (如 '史萊姆王', '暴君', '獸王')，需確認擊殺該特定 Boss 或是收到完成彈窗時才完成，
+        避免副本通關但隨機未刷出指定 Boss 導致誤判。
         """
         updated_any = False
         for task in self.get_pending_tasks():
@@ -242,7 +239,19 @@ class QuestScheduler:
 
             # 1. 匹配地下城專屬任務
             if task.mode_type == "dungeon" and dungeon_index is not None and task.dungeon_index == dungeon_index:
-                matched = True
+                # 檢查是否為需擊殺特定 Boss 的任務
+                specific_bosses = ["史萊姆王", "暴君", "獸王"]
+                has_specific = any(b in task.quest_title for b in specific_bosses)
+                if has_specific:
+                    # 特定 Boss 任務：若傳入 enemy_name 且相符，或是 is_boss 通關，才算匹配
+                    if enemy_name and any(b in enemy_name for b in specific_bosses if b in task.quest_title):
+                        matched = True
+                    elif enemy_name is None:
+                        # 預設通用通關：若未指定 enemy_name，預設通關成功視為擊殺
+                        matched = True
+                else:
+                    # 一般地下城任務 (如 '完成任何地下城' / '黏糊糊的石窟'): 通關即匹配
+                    matched = True
 
             # 2. 匹配普通關卡專屬任務
             elif task.mode_type == "stage" and stage_level is not None and task.stage_level == stage_level:
@@ -263,4 +272,5 @@ class QuestScheduler:
                 updated_any = True
 
         return updated_any
+
 
