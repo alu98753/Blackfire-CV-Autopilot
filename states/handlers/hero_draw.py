@@ -9,13 +9,14 @@ class HeroDrawHandler(BaseStateHandler):
     1. 於城鎮畫面點擊進入酒館 (town_building/Tavern/Tavern.png)。
     2. 若位於大廳 (看得到 goback_town.png)，自動點擊返回城鎮。
     3. 進入酒館後，點擊免費招募 (town_building/Tavern/free_recruitment.png)。
-    4. 點擊領取確認 (common/confirm.png / common/ok.png)。
-    5. 點擊離開/關閉按鈕 (common/quit.png / exitfromhouse_and_to_town.png) 退出酒館。
-    6. 記錄 DailyManager 狀態 (completed_today = True)，並自動呼叫 pop_and_next_town_subflow() 續行佇列。
+    4. 於彈窗中點擊專用「招募」按鈕 (town_building/Tavern/RECRUITED.png)。
+    5. 點擊獲得英雄領取確認 (common/confirm.png / common/ok.png)。
+    6. 點擊離開/關閉按鈕 (common/quit.png / exitfromhouse_and_to_town.png) 退出酒館。
+    7. 記錄 DailyManager 狀態 (completed_today = True)，並自動呼叫 pop_and_next_town_subflow() 續行佇列。
     """
     def __init__(self, machine):
         super().__init__(machine)
-        self.step_phase = "INIT"  # INIT, ENTERED_TAVERN, RECRUITED, ALL_DONE_EXITING
+        self.step_phase = "INIT"  # INIT, ENTERED_TAVERN, CLICKED_FREE_RECRUITMENT, WAITING_CONFIRM, ALL_DONE_EXITING
         self.last_action_time = 0.0
         self.not_found_count = 0
 
@@ -76,6 +77,7 @@ class HeroDrawHandler(BaseStateHandler):
         # 3. ENTERED_TAVERN 階段：精確比對免費招募按鈕 (free_recruitment.png)
         elif self.step_phase == "ENTERED_TAVERN":
             if os.path.exists(os.path.join("templates", recruitment_btn)):
+                # 門檻設為 0.83 並要求相對亮度 >= 0.70，徹底排除其他相似頭盔 (普通/傳奇/兌換招募)
                 pos_free, conf_free = self.matcher.match(
                     screen_img, 
                     recruitment_btn, 
@@ -98,7 +100,7 @@ class HeroDrawHandler(BaseStateHandler):
                 self.last_action_time = now
                 return True
 
-        # 4. CLICKED_FREE_RECRUITMENT 階段：僅配對「招募」按鈕 (RECRUITED.png)
+        # 4. CLICKED_FREE_RECRUITMENT 階段：僅配對專用「招募」按鈕 (RECRUITED.png)
         elif self.step_phase == "CLICKED_FREE_RECRUITMENT":
             recruited_template = "town_building/Tavern/RECRUITED.png"
             if os.path.exists(os.path.join("templates", recruited_template)):
@@ -134,7 +136,7 @@ class HeroDrawHandler(BaseStateHandler):
             self.step_phase = "ALL_DONE_EXITING"
             return True
 
-        # 5. ALL_DONE_EXITING 階段：點擊退出按鈕，寫入 DailyManager 並彈出下一任務
+        # 6. ALL_DONE_EXITING 階段：點擊退出按鈕，寫入 DailyManager 並彈出下一任務
         elif self.step_phase == "ALL_DONE_EXITING":
             for exit_template in ["common/quit.png", "town_building/exitfromhouse_and_to_town.png"]:
                 if os.path.exists(os.path.join("templates", exit_template)):
