@@ -1,22 +1,27 @@
 import time
 import os
 import logging
+import numpy as np
 from states.handlers.base import BaseStateHandler
 
 class BulletinBoardHandler(BaseStateHandler):
     """
-    每日懸賞告示牌 (Bulletin Board / Bounty) 處理器 - 第一階段：
-    1. 確認於城鎮 (INIT)：
-       - 先以 _ensure_in_town 確保在城鎮介面。
+    每日懸賞告示牌 (Bulletin Board) 處理器 - 第一階段：
+    1. 確認與進入城鎮 (INIT)：
+       - 以 _ensure_in_town 確保在城鎮介面。
        - 專精限制於螢幕左上 1/4 區域 (screen_img[0:h//2, 0:w//2]) 匹配並點擊告示牌 (bulletin_board.png)。
-    2. 點擊重置按鈕 (ENTERED_BUILDING)：
-       - 進入告示牌後，匹配並點擊重置按鈕 (reset.png)。
-    3. 第一階段完成 (ALL_DONE_EXITING)：
-       - 於 DailyManager 記錄 bulletin_board 完成，重置 Handler 狀態並呼叫 pop_and_next_town_subflow()。
+    2. 等待開窗確認 (WAIT_BOARD_OPEN)：
+       - 必須先等待並確認 common/quit.png 出現，作為 100% 成功進入告示牌的憑據。
+    3. 條件式重置檢查 (CHECK_RESET)：
+       - 若看得到 reset.png 則點擊重置；若未看到則記錄日誌並跳過該步驟。
+    4. 最終退出步驟 (EXIT_BOARD)：
+       - 點擊 common/quit.png 退出告示牌視窗。
+    5. 階段完成與佇列連動 (ALL_DONE_EXITING)：
+       - 於 DailyManager 記錄 bulletin_board 完成，重置狀態並呼叫 pop_and_next_town_subflow()。
     """
     def __init__(self, machine):
         super().__init__(machine)
-        self.step_phase = "INIT"  # INIT, ENTERED_BUILDING, ALL_DONE_EXITING
+        self.step_phase = "INIT"  # INIT, WAIT_BOARD_OPEN, CHECK_RESET, EXIT_BOARD, ALL_DONE_EXITING
         self.last_action_time = 0.0
 
     def reset_state(self):
@@ -46,7 +51,7 @@ class BulletinBoardHandler(BaseStateHandler):
         dm = getattr(self.machine, "daily_manager", None)
         if dm and hasattr(dm, "record_subflow_completed"):
             dm.record_subflow_completed("bulletin_board")
-        logging.info("📋 [懸賞告示牌] 第一階段重置流程完成，消費城鎮佇列中的下一個任務...")
+        logging.info("📋 [懸賞告示牌] 第一階段重置與退出流程完成，消費城鎮佇列中的下一個任務...")
         self.machine.pop_and_next_town_subflow()
 
     def handle(self, screen_img=None, rect=None):
@@ -71,9 +76,10 @@ class BulletinBoardHandler(BaseStateHandler):
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", "town_building/bulletin_board/bulletin_board.png")
         reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
+        quit_btn = cfg.get("quit_btn", "common/quit.png")
 
         # =========================================================================
-        # 1. 退出與紀錄階段 (ALL_DONE_EXITING)
+        # 1. 紀錄與階段完成 (ALL_DONE_EXITING)
         # =========================================================================
         if self.step_phase == "ALL_DONE_EXITING":
             self._record_completion()
@@ -81,36 +87,63 @@ class BulletinBoardHandler(BaseStateHandler):
             return
 
         # =========================================================================
-        # 2. 告示牌介面內點擊重置按鈕 (ENTERED_BUILDING)
+        # 2. 最終退出步驟：點擊 quit.png (EXIT_BOARD)
         # =========================================================================
-        if self.step_phase == "ENTERED_BUILDING":
-            pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
-            if pos_reset:
-                logging.info(f"📋 [懸賞告示牌] 發現重置按鈕 [{reset_btn}]，點擊執行重置！")
-                self.mouse.click(left + pos_reset[0], top + pos_reset[1])
+        if self.step_phase == "EXIT_BOARD":
+            pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.75)
+            if pos_quit:
+                logging.info(f"📋 [懸賞告示牌] 點擊關閉視窗按鈕 [{quit_btn}] 退出告示牌介面...")
+                self.mouse.click(left + pos_quit[0], top + pos_quit[1])
                 self.step_phase = "ALL_DONE_EXITING"
                 self.last_action_time = now
                 return
             
-            # 若已經找不到 reset 按鈕，可能重置已點擊，直接進入完成階段
+            # 若已看不到 quit.png，說明已離開告示牌介面
+            logging.info("📋 [懸賞告示牌] 已無視窗退出按鈕 (回到城鎮)，完成離場步驟。")
             self.step_phase = "ALL_DONE_EXITING"
+            self.last_action_time = now
             return
 
         # =========================================================================
-        # 3. 城鎮點擊告示牌建築 (INIT / 左上 1/4 區域精確比對)
+        # 3. 條件式重置檢查：若無 reset.png 則自動跳過 (CHECK_RESET)
         # =========================================================================
-        pos_reset_check, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
-        if pos_reset_check:
-            logging.info(f"📋 [懸賞告示牌] 辨識到目前已在告示牌介面，點擊重置按鈕 [{reset_btn}]...")
-            self.mouse.click(left + pos_reset_check[0], top + pos_reset_check[1])
-            self.step_phase = "ALL_DONE_EXITING"
+        if self.step_phase == "CHECK_RESET":
+            pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
+            if pos_reset:
+                logging.info(f"📋 [懸賞告示牌] 發現重置按鈕 [{reset_btn}]，點擊執行重置！")
+                self.mouse.click(left + pos_reset[0], top + pos_reset[1])
+                self.step_phase = "EXIT_BOARD"
+                self.last_action_time = now
+                return
+            else:
+                logging.info(f"📋 [懸賞告示牌] 未發現重置按鈕 [{reset_btn}] (無需重新整理或已重置)，跳過該步驟！")
+                self.step_phase = "EXIT_BOARD"
+                self.last_action_time = now
+                return
+
+        # =========================================================================
+        # 4. 等待開窗：先確認 quit.png 出現才算真正進入告示牌 (WAIT_BOARD_OPEN)
+        # =========================================================================
+        pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.75)
+        if self.step_phase == "WAIT_BOARD_OPEN":
+            if pos_quit:
+                logging.info(f"📋 [懸賞告示牌] 偵測到 [{quit_btn}]，確認已成功進入告示牌介面！進行重置判斷...")
+                self.step_phase = "CHECK_RESET"
+                self.last_action_time = now
+                return
+            return
+
+        # =========================================================================
+        # 5. 城鎮點擊告示牌建築 (INIT / 左上 1/4 區域 Scoped Crop 精確比對)
+        # =========================================================================
+        if pos_quit:
+            logging.info(f"📋 [懸賞告示牌] 辨識到目前已在告示牌介面 (發現 {quit_btn})，準備進行重置判斷...")
+            self.step_phase = "CHECK_RESET"
             self.last_action_time = now
             return
 
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
         if pos_door:
-            # 專精優化：螢幕左上 1/4 區域 (screen_img[0:h//2, 0:w//2]) Scoped Crop 局部比對
-            import numpy as np
             h = rect["height"] if rect else (screen_img.shape[0] if isinstance(screen_img, np.ndarray) else 600)
             w = rect["width"] if rect else (screen_img.shape[1] if isinstance(screen_img, np.ndarray) else 800)
             top_left_crop = screen_img[0:h // 2, 0:w // 2] if isinstance(screen_img, np.ndarray) else screen_img
@@ -119,7 +152,6 @@ class BulletinBoardHandler(BaseStateHandler):
             if pos_bb:
                 logging.info(f"📋 [懸賞告示牌] 於左上 1/4 區域精確發現告示牌建築 [{building_btn}] (信心度: {conf_bb:.4f})，點擊進入...")
                 self.mouse.click(left + pos_bb[0], top + pos_bb[1])
-                self.step_phase = "ENTERED_BUILDING"
+                self.step_phase = "WAIT_BOARD_OPEN"
                 self.last_action_time = now
                 return
-
