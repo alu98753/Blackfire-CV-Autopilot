@@ -721,14 +721,28 @@ class GameStateMachine:
                 logging.info("🟢 [子流程] 任務完成彈窗已全數確認關閉，成功領取獎勵！")
                 return
 
-            # 2. 對當前彈窗進行 OCR 辨識任務完成標題並核銷
-            if self.quest_scheduler:
-                try:
-                    self.quest_scheduler.process_task_complete_banner(screen_img, pos_task, ocr_reader=self._ocr_reader)
-                except Exception as e:
-                    logging.debug(f"OCR 辨識完成彈窗時發生異常: {e}")
+            # 2. 🛡️ 嚴格順序：先判斷任務標題，確認判斷出來後才允許點擊！
+            task_recognized = False
+            ocr_attempts = 0
+            while ocr_attempts < 3 and not task_recognized:
+                ocr_attempts += 1
+                if self.quest_scheduler:
+                    try:
+                        recognized_title = self.quest_scheduler.process_task_complete_banner(screen_img, pos_task, ocr_reader=self._ocr_reader)
+                        if recognized_title:
+                            logging.info(f"✅ [子流程] 已成功辨識核銷任務: [{recognized_title}]，準備點擊確認離場。")
+                            task_recognized = True
+                            break
+                    except Exception as e:
+                        logging.debug(f"OCR 辨識完成彈窗時發生異常: {e}")
+                
+                if not task_recognized and ocr_attempts < 3:
+                    time.sleep(0.3)
+                    screen_img = self.capturer.capture(rect)
+                    if screen_img is None:
+                        break
 
-            # 3. 尋找並點擊確認按鈕
+            # 3. 確認判斷出任務後，才進行點擊確認按鈕關閉
             matched_confirm = False
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
@@ -750,6 +764,7 @@ class GameStateMachine:
                 logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，點擊領取獎勵座標 ({btn_x}, {btn_y})。")
                 self.mouse.click(btn_x, btn_y)
                 time.sleep(0.6)
+
 
 
 
