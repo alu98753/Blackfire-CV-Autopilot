@@ -154,19 +154,33 @@
 * **手動介入暫停**：掛機時若手動移動滑鼠，程式會偵測到使用者介入並自動暫停（鎖定當前狀態），滑鼠靜止 3 秒後自動恢復。
 * **安全終止**：在 PowerShell 視窗中隨時按下 `Ctrl + C`，即可安全退出掛機並在畫面輸出本次掛機的戰鬥場次統計資訊。
 
----
+## 💻 開發者與貢獻者指南 (Developer Guide)
 
-## 🤖 AI 開發者指南 (AI Developer Guide)
+如果您是本專案的開發者或使用 AI Coding Agent 進行 Pair-Programming 協同開發：
 
-如果您是協同開發的 AI Coding Agent：
-1. **工作規範**：在進行任何代碼修改前，請務必先閱讀工作區自訂技能規範檔案：[SKILL.md (開發規範)](../.agents/skills/state_machine_development/SKILL.md)。
-2. **決策樹文件**：可透過讀取 [dungeon_flow.md (流程圖)](docs/dungeon_flow.md) 來快速了解地下城探索與體力領取的比對決策邏輯。
-3. **迴歸測試**：重構或修改狀態機代碼後，請**必須執行**以下測試以確保邏輯無損：
+### 1. 專案架構與 AI 規範 (.agents)
+本專案採用 `.agents` 結構化 Prompt 與 Skill 規範進行自動化輔助開發：
+* **狀態機規範 Skill**：位於 [.agents/skills/state_machine_development/SKILL.md](.agents/skills/state_machine_development/SKILL.md)，定義了狀態模式設計原則、Handler 職責分離與點擊防護規範。
+* **全域 Rules**：位於 [.agents/AGENTS.md](.agents/AGENTS.md)，定義全域代碼風格與驗證要求。
+
+### 2. 核心架構文檔 (Docs)
+* **決策流程圖**：[dungeon_flow.md (地下城探索與體力領取邏輯)](docs/dungeon_flow.md)
+* **城鎮流水線架構**：[pipeline.md (城鎮子流程佇列說明)](docs/town_building/pipeline.md)
+* **每日懸賞排程器**：[daily8.md (懸賞任務多階梯優先級)](docs/storys/daily_task/daily8.md)
+
+### 3. 自動化單元測試 (Unit Tests)
+在進行任何代碼重構或新 Feature 開發後，請務必執行全套單元測試以確保邏輯綠燈通過：
+
 ```powershell
-.\.venv\Scripts\python tests/test_state_machine_logic.py
+# 執行全套單元測試 (共 217+ 項測試)
+.\.venv\Scripts\python.exe -m unittest discover tests
+
+# 單獨執行懸賞任務與狀態機整合測試
+.\.venv\Scripts\python.exe -m unittest tests/test_quest_statemachine_integration.py
 ```
 
+---
 
-## 開發中與待辦功能 (TODOs)
+## 📋 開發中與待辦功能 (TODOs)
 
 請參考：[future_work.md](docs/future_work.md)
