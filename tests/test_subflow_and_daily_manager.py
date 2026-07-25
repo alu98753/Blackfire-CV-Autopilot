@@ -420,6 +420,31 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
         self.assertNotEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
+    def test_dynamic_lord_boss_cooldown_calculation(self):
+        """
+        [動態冷卻計時測試] 驗證 set_lord_boss_cooldown 能精確讀取 daily_status.json 中的 
+        (last_fight_timestamp + cooldown_seconds - now_ts) 計算最快可挑戰的 Boss 冷卻解鎖時間！
+        """
+        dm = DailyManager(data_dir=TEST_DATA_DIR, status_file="test_daily_dynamic.json")
+        now = time.time()
+        
+        # 1. 設置 蜘蛛 (3600s CD) 剛打完 (剩 3600s)，惡靈 (7200s CD) 3000s 前打完 (剩 4200s)
+        dm.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["last_fight_timestamp"] = now
+        dm.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["last_fight_timestamp"] = now - 3000.0
+
+        # 動態計算最快解鎖秒數：最快解鎖的蜘蛛為 3600 秒
+        sec = dm.get_next_lord_boss_available_seconds(now_ts=now)
+        self.assertAlmostEqual(sec, 3600.0, delta=2.0)
+
+        # 呼叫 set_lord_boss_cooldown()，驗證避退時間精確被鎖定為 3600 秒
+        dm.set_lord_boss_cooldown(now_ts=now)
+        self.assertAlmostEqual(dm.lord_boss_cooldown_until, now + 3600.0, delta=2.0)
+        self.assertFalse(dm.has_available_lord_boss(now_ts=now))
+
+        # 模擬 3601 秒後，驗證冷卻解鎖，has_available_lord_boss 傳回 True
+        future_now = now + 3601.0
+        self.assertTrue(dm.has_available_lord_boss(now_ts=future_now))
+
 if __name__ == "__main__":
     unittest.main()
 

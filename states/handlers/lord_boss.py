@@ -75,12 +75,12 @@ class LordBossHandler(BaseStateHandler):
         dm = getattr(self.machine, "daily_manager", None)
         avail_bosses = dm.get_available_lord_bosses() if dm else []
 
-        # 若當前沒有可討伐的 Boss，結束首領討伐子流程，設定 180 秒冷卻保護並彈出下一個城鎮任務
+        # 若當前沒有可討伐的 Boss，結束首領討伐子流程，動態計算最快解鎖秒數並彈出下一個城鎮任務
         if not avail_bosses:
-            logging.info("🎉 [首領討伐] 今日所有 Boss 已滿 5 次或均在冷卻中！結束討伐，設定冷卻緩衝並彈出下一城鎮任務...")
+            logging.info("🎉 [首領討伐] 今日所有 Boss 已滿 5 次或均在冷卻中！結束討伐，動態設定冷卻緩衝並彈出下一城鎮任務...")
             if dm:
                 if hasattr(dm, "set_lord_boss_cooldown"):
-                    dm.set_lord_boss_cooldown(180)
+                    dm.set_lord_boss_cooldown()
                 if hasattr(dm, "record_subflow_completed"):
                     dm.record_subflow_completed("lord_boss")
             self.machine.pop_and_next_town_subflow()

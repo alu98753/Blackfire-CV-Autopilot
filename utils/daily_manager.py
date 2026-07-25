@@ -216,14 +216,57 @@ class DailyManager:
             self.save_status()
             logging.info(f"💾 [DailyManager] 根據 OCR 即時更新 Boss [{b_info.get('name', boss_key)}] 冷卻時間: 剩餘 {int(remaining_seconds)} 秒。")
 
-    def set_lord_boss_cooldown(self, cooldown_seconds=180, now_ts=None):
+    def get_next_lord_boss_available_seconds(self, now_ts=None):
         """
-        設定首領討伐子流程整體冷卻避退時間，防止短時間內無可用 Boss 時頻繁重複被全域觸發。
+        精確計算 user_data/daily_status.json 中，下一次最快可以挑戰的 Boss 剩餘冷卻秒數。
+        若所有 Boss 均已打滿 5 次，傳回 None (代表今日完全完成)。
         """
         if now_ts is None:
             now_ts = time.time()
-        self.lord_boss_cooldown_until = now_ts + cooldown_seconds
-        logging.info(f"⏳ [DailyManager] 設定首領討伐 (lord_boss) 子流程冷卻緩衝 {cooldown_seconds} 秒。")
+
+        bosses = self.status.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
+        min_remain = None
+
+        for b_key, b_info in bosses.items():
+            if b_info.get("today_count", 0) >= b_info.get("max_daily_count", 5):
+                continue
+
+            last_ts = b_info.get("last_fight_timestamp", 0)
+            cd_sec = b_info.get("cooldown_seconds", 3600.0)
+            next_avail_ts = last_ts + cd_sec
+
+            if next_avail_ts <= now_ts:
+                remain = 0.0
+            else:
+                remain = next_avail_ts - now_ts
+
+            if min_remain is None or remain < min_remain:
+                min_remain = remain
+
+        return min_remain
+
+    def set_lord_boss_cooldown(self, cooldown_seconds=None, now_ts=None):
+        """
+        動態計算下一次最快 Boss 解鎖的倒數時間 (last_fight_timestamp + cooldown_seconds - now_ts)，
+        將 lord_boss 子流程冷卻緩衝設定為該精確剩餘時間。
+        """
+        if now_ts is None:
+            now_ts = time.time()
+
+        min_remain = self.get_next_lord_boss_available_seconds(now_ts=now_ts)
+        if min_remain is None:
+            self.status.get("subflows", {}).get("lord_boss", {})["completed_today"] = True
+            self.save_status()
+            logging.info("🎉 [DailyManager] 今日所有 Boss 均已打滿 5 次！標記 lord_boss 今日完全完成。")
+            return
+
+        if cooldown_seconds is not None and min_remain == 0:
+            cd_sec = cooldown_seconds
+        else:
+            cd_sec = max(30.0, min_remain)
+
+        self.lord_boss_cooldown_until = now_ts + cd_sec
+        logging.info(f"⏳ [DailyManager] 動態計算最快 Boss 冷卻恢復時間: 剩餘 {int(cd_sec)} 秒 ({cd_sec / 60:.1f} 分鐘)，設定首領討伐避退冷卻。")
 
     def get_available_lord_bosses(self, now_ts=None):
         """
