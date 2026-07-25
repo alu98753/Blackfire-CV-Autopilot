@@ -56,10 +56,8 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
-        # 1. 優先尋找未處於冷卻中的地下城專屬任務
-        dungeon_tasks = [t for t in pending if t.mode_type == "dungeon"]
-        if dungeon_tasks:
-            for target_task in dungeon_tasks:
+        for target_task in pending:
+            if target_task.mode_type == "dungeon":
                 idx = target_task.dungeon_index
                 if dungeon_cooldowns and idx is not None:
                     cd_until = dungeon_cooldowns.get(idx, 0.0)
@@ -73,27 +71,21 @@ class QuestScheduler:
                 msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
                 return cli_cmd, msg
 
-        # 2. 次優先尋找特定普通關卡任務
-        stage_tasks = [t for t in pending if t.mode_type == "stage"]
-        if stage_tasks:
-            target_task = stage_tasks[0]
-            cli_cmd = target_task.to_cli_args()
-            msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return cli_cmd, msg
+            elif target_task.mode_type == "stage":
+                cli_cmd = target_task.to_cli_args()
+                msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return cli_cmd, msg
 
-        # 3. 尋找通用首領任務
-        boss_tasks = [t for t in pending if t.mode_type == "generic_boss"]
-        if boss_tasks:
-            target_task = boss_tasks[0]
-            cli_cmd = target_task.to_cli_args()
-            msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return cli_cmd, msg
+            elif target_task.mode_type == "generic_boss":
+                cli_cmd = target_task.to_cli_args()
+                msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return cli_cmd, msg
 
         return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
 
     def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None):
         """
-        傳回目前最優的單個未完成 TaskNode 實例。
+        傳回目前最優的單個未完成 TaskNode 實例 (嚴格遵循 sort_quests 多階梯排序)。
         """
         import time
         from utils.time_parser import format_seconds_to_readable
@@ -105,9 +97,8 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
-        dungeon_tasks = [t for t in pending if t.mode_type == "dungeon"]
-        if dungeon_tasks:
-            for target_task in dungeon_tasks:
+        for target_task in pending:
+            if target_task.mode_type == "dungeon":
                 idx = target_task.dungeon_index
                 if dungeon_cooldowns and idx is not None:
                     cd_until = dungeon_cooldowns.get(idx, 0.0)
@@ -120,17 +111,13 @@ class QuestScheduler:
                 msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
                 return target_task, msg
 
-        stage_tasks = [t for t in pending if t.mode_type == "stage"]
-        if stage_tasks:
-            target_task = stage_tasks[0]
-            msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return target_task, msg
+            elif target_task.mode_type == "stage":
+                msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return target_task, msg
 
-        boss_tasks = [t for t in pending if t.mode_type == "generic_boss"]
-        if boss_tasks:
-            target_task = boss_tasks[0]
-            msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return target_task, msg
+            elif target_task.mode_type == "generic_boss":
+                msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return target_task, msg
 
         return None, "🔄 執行預設混合模式"
 
