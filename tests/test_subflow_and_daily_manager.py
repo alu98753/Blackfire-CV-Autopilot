@@ -11,6 +11,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
 from utils.daily_manager import DailyManager
+from states.handlers.base import BaseStateHandler
+from states.handlers.result import ResultHandler
 from main import parse_arguments
 
 if sys.platform.startswith('win'):
@@ -612,34 +614,31 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 斷言初始步驟為 INIT_DELAY
         self.assertEqual(handler.subflow_step, "INIT_DELAY")
 
-        # 1. 測試 Step 1: INIT_DELAY 轉為 CONTINUE_LOOP (無 continue.png 時)
+        # 1. 測試 Step 1: INIT_DELAY 轉為 CONTINUE_LOOP (無 continue.png 且無終局按鈕時，維持 CONTINUE_LOOP 等待動畫過場)
         matcher.match.return_value = (None, 0.0)
         with patch("time.sleep") as mock_sleep:
             handler._handle_impl(fake_img, rect)
             mock_sleep.assert_called_with(1.5) # 斷言精確觸發 1.5 秒初始沉澱休眠
-            self.assertEqual(handler.subflow_step, "FINAL_MATCH")
+            self.assertEqual(handler.subflow_step, "CONTINUE_LOOP") # 防過場誤判：維持 CONTINUE_LOOP
 
         # 重置回 CONTINUE_LOOP 測試 continue 點擊
         handler.subflow_step = "CONTINUE_LOOP"
         handler.continue_click_count = 0
 
-        # 2. 測試 Step 2: 點擊 continue.png
+        # 2. 測試 Step 2: 點擊 continue.png 並呼叫 click_and_wait_until_gone 配對確認直到消失
         def mock_match_continue(img, name, **kw):
             if name == "common/continue.png":
                 return ((770, 550), 0.95)
             return (None, 0.0)
 
         matcher.match.side_effect = mock_match_continue
-        with patch("time.sleep") as mock_sleep:
+        with patch.object(BaseStateHandler, "click_and_wait_until_gone") as mock_wait_gone:
             res_c1 = handler._handle_impl(fake_img, rect)
             self.assertTrue(res_c1)
-            self.assertEqual(handler.continue_click_count, 1)
-            mock_sleep.assert_called_with(1.0) # 斷言點擊 continue 後觸發 1.0 秒休眠
-
-            res_c2 = handler._handle_impl(fake_img, rect)
-            self.assertTrue(res_c2)
-            self.assertEqual(handler.continue_click_count, 2)
-            self.assertEqual(handler.subflow_step, "FINAL_MATCH") # 滿 2 次自動切為 FINAL_MATCH
+            mock_wait_gone.assert_called_with(
+                "common/continue.png", 770, 550, rect,
+                timeout=5.0, threshold=0.75, check_interval=0.5, post_delay=0.8
+            )
 
         # 3. 測試 Step 3: 續戰點擊 retry.png 後重置狀態
         def mock_match_retry(img, name, **kw):
@@ -647,14 +646,16 @@ class TestSubflowAndDailyManager(unittest.TestCase):
                 return ((500, 500), 0.90)
             return (None, 0.0)
 
+        handler.subflow_step = "FINAL_MATCH"
         matcher.match.side_effect = mock_match_retry
-        with patch("time.sleep") as mock_sleep:
+        with patch.object(BaseStateHandler, "click_and_wait_until_gone") as mock_wait_gone:
             res_retry = handler._handle_impl(fake_img, rect)
             self.assertTrue(res_retry)
             self.assertEqual(sm.current_state, sm.STATE_LOADING)
             self.assertEqual(handler.subflow_step, "INIT_DELAY") # 斷言子流程已重置回 INIT_DELAY
-            self.assertEqual(handler.continue_click_count, 0)
-            mock_sleep.assert_called_with(1.0) # 斷言點擊 retry 後觸發 1.0 秒過渡休眠
+            mock_wait_gone.assert_called_with(
+                "stages/retry.png", 500, 500, rect, post_delay=0.8
+            )
 
         # 4. 測試大廳獨有特徵 (select_stage.png) 攔截
         handler.subflow_step = "CONTINUE_LOOP"

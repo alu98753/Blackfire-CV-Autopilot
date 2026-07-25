@@ -15,6 +15,22 @@ class ResultHandler(BaseStateHandler):
         self.continue_click_count = 0
         self.no_match_count = 0
 
+    def _check_final_buttons_exist(self, screen_img, should_exit_battle):
+        """檢查終局離場或再戰按鈕是否已經出現在畫面上"""
+        if should_exit_battle:
+            exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
+            for exit_btn in exit_candidates:
+                if os.path.exists(os.path.join("templates", exit_btn)):
+                    pos, _ = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
+                    if pos:
+                        return True
+        else:
+            if os.path.exists(os.path.join("templates", "stages/retry.png")):
+                pos, _ = self.matcher.match(screen_img, "stages/retry.png", threshold=0.80, quiet=True)
+                if pos:
+                    return True
+        return False
+
     def handle(self, screen_img, rect):
         matched = self._handle_impl(screen_img, rect)
         if matched:
@@ -59,7 +75,7 @@ class ResultHandler(BaseStateHandler):
             logging.info("⏳ [結算子流程 Step 1] 戰鬥剛結束，執行初次登場沉澱 (休眠 1.5 秒)，等待勝負畫面與第一層彈窗定格...")
             time.sleep(1.5)
             self.subflow_step = "CONTINUE_LOOP"
-            # 重新擷取第一層定格後的最新畫面
+            # 重新擷取第一層定格後的最新畫面，隨後貫穿向下執行 CONTINUE_LOOP
             if self.machine.capturer:
                 cap_fresh = self.machine.capturer.capture(rect)
                 if cap_fresh is not None:
@@ -139,44 +155,60 @@ class ResultHandler(BaseStateHandler):
         # 步驟 2：Continue 推進閉環 (CONTINUE_LOOP)
         # =========================================================================
         if self.subflow_step == "CONTINUE_LOOP":
-            if self.continue_click_count < 2:
-                continue_configs = [
-                    (self.machine.continue_template, 0.80, 0.0),
-                    ("common/continue1.png", 0.80, 0.0),
-                    ("common/continue2.png", 0.80, 0.0),
-                    ("common/continue_gray.png", 0.88, 0.70)
-                ]
-                for c_temp, thresh, b_thresh in continue_configs:
-                    if c_temp and os.path.exists(os.path.join("templates", c_temp)):
-                        pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=thresh, brightness_threshold=b_thresh, quiet=True)
-                        if pos_c:
-                            self.continue_click_count += 1
-                            logging.info(f"👉 [結算子流程 Step 2] 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f}，第 {self.continue_click_count}/2 次點擊)，點擊並休眠 1.0 秒...")
-                            self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+            continue_configs = [
+                (self.machine.continue_template, 0.80, 0.0),
+                ("common/continue1.png", 0.80, 0.0),
+                ("common/continue2.png", 0.80, 0.0),
+                ("common/continue_gray.png", 0.88, 0.70)
+            ]
+            
+            # 1. 嘗試配對畫面上現存的 continue 按鈕
+            matched_c_temp, pos_c = None, None
+            for c_temp, thresh, b_thresh in continue_configs:
+                if c_temp and os.path.exists(os.path.join("templates", c_temp)):
+                    pos, conf = self.matcher.match(screen_img, c_temp, threshold=thresh, brightness_threshold=b_thresh, quiet=True)
+                    if pos:
+                        matched_c_temp, pos_c = c_temp, pos
+                        break
 
-                            if getattr(self.machine, "current_lord_boss_key", None):
-                                b_key = self.machine.current_lord_boss_key
-                                self.machine.current_lord_boss_key = None
-                                dm = getattr(self.machine, "daily_manager", None)
-                                if dm:
-                                    dm.record_lord_boss_fight(b_key)
+            if matched_c_temp and pos_c:
+                # 🎯 核心真理：發起點擊，並 WHILE 輪詢直到該 continue 按鈕徹底從畫面上消失！
+                click_x = rect["left"] + pos_c[0]
+                click_y = rect["top"] + pos_c[1]
+                logging.info(f"👉 [結算 Step 2] 偵測到『繼續』按鈕 ({matched_c_temp})，發起點擊並 WHILE 輪詢直到消失...")
+                
+                self.click_and_wait_until_gone(
+                    matched_c_temp, click_x, click_y, rect,
+                    timeout=5.0, threshold=0.75, check_interval=0.5, post_delay=0.8
+                )
 
-                            if self.continue_click_count >= 2:
-                                self.subflow_step = "FINAL_MATCH"
+                if getattr(self.machine, "current_lord_boss_key", None):
+                    b_key = self.machine.current_lord_boss_key
+                    self.machine.current_lord_boss_key = None
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm:
+                        dm.record_lord_boss_fight(b_key)
 
-                            time.sleep(1.0)  # 每次點擊繼續按鈕後，固定休眠 1.0 秒
-                            return True
-
-            # 通用確認彈窗 (common/confirm.png)
-            pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8, quiet=True)
-            if pos_conf:
-                logging.info(f"👉 [結算子流程 Step 2] 偵測到通用確認按鈕，點擊並休眠 1.0 秒。信心度: {conf_conf:.4f}")
-                self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-                time.sleep(1.0)
                 return True
 
-            # 若此處掃描未比對到 continue 彈窗，代表 continue 階段結束，轉移至 FINAL_MATCH 階段
-            self.subflow_step = "FINAL_MATCH"
+            # 2. 若畫面上已無 continue 按鈕，檢查是否有通用 confirm.png
+            pos_conf, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8, quiet=True)
+            if pos_conf:
+                logging.info("👉 [結算 Step 2] 偵測到通用確認按鈕，點擊並 WHILE 輪詢直到消失...")
+                self.click_and_wait_until_gone(
+                    "common/confirm.png", rect["left"] + pos_conf[0], rect["top"] + pos_conf[1], rect,
+                    timeout=5.0, threshold=0.75, check_interval=0.5, post_delay=0.8
+                )
+                return True
+
+            # 3. 只有當 continue 與 confirm 均徹底消失，且終局按鈕 (retry/exit) 已顯現時，才轉移至 FINAL_MATCH
+            final_btn_found = self._check_final_buttons_exist(screen_img, should_exit_battle)
+            if final_btn_found:
+                logging.info("👉 [結算 Step 2] 畫面上已無 continue/confirm，且終局按鈕 (retry/exit) 已顯現，確信 continue 階段結束，切換至 FINAL_MATCH！")
+                self.subflow_step = "FINAL_MATCH"
+            else:
+                logging.info("⌛ [結算 Step 2] continue 按鈕淡出/過場中，等待下一個 continue 或終局按鈕顯現...")
+                return False
 
         # =========================================================================
         # 步驟 3：終局白名單嚴格配對 (FINAL_MATCH)

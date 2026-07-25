@@ -1334,10 +1334,9 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_matcher.match.side_effect = match_side_effect
         rect = {"left": 10, "top": 20, "width": 800, "height": 600}
 
-        with patch('states.state_machine.time.sleep') as mock_sleep:
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
             self.state_machine._run_task_complete_subflow(rect)
-
-        self.assertEqual(self.mock_mouse.click.call_count, 2)
+            mock_wait_gone.assert_called_once()
 
 
     @patch('os.path.exists')
