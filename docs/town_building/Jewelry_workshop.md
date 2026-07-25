@@ -20,9 +20,12 @@ templates/town_building/Jewelry_workshop/goods/
 │   ├── Sandworm_scales.png                   # 沙蟲鱗片
 │   ├── Spider_silk.png                       # 蜘蛛絲
 │   ├── Spider_venom_glands.png               # 蜘蛛毒腺
-│   ├── Warcraft_Fang.png                     # 魔獸之牙
+│   ├── Warcraft_Fang.png                     # 魔獸之牙 (預設不賣)
 │   ├── lizard_skin.png                       # 蜥蜴皮
-│   └── scrap.png                             # 廢料
+│   ├── scrap.png                             # 廢料
+│   ├── Frog_Skin.png                         # 青蛙皮
+│   ├── Purple_Spore.png                      # 紫色孢子
+│   └── Slime_Mucus.png                       # 史萊姆黏液
 ├── green/                                    # 綠色素材 (優秀)
 │   ├── The_cloth_wrapped_around_the_dead.png # 包裹死者的布
 │   └── Giant_Beast_Gold_Tooth.png           # 巨獸金牙
@@ -34,7 +37,7 @@ templates/town_building/Jewelry_workshop/goods/
 
 ## ⚙️ 可配置出售規則 (Configurable Goods Settings)
 
-使用者可在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py) 中的 `goods_settings` 字典內，按顏色品質區分並**個別管理每一個商品是否出售 (`True` / `False`)**：
+使用者可在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py#L255) 中的 `goods_settings` 字典內，按顏色品質區分並**個別管理每一個商品是否出售 (`True` / `False`)**：
 
 ```python
 "goods_settings": {
@@ -45,6 +48,9 @@ templates/town_building/Jewelry_workshop/goods/
         "Warcraft_Fang": False,      # 保留魔獸之牙 (不賣)
         "lizard_skin": True,         # 出售蜥蜴皮
         "scrap": True,               # 出售廢料
+        "Frog_Skin": True,           # 出售青蛙皮
+        "Purple_Spore": True,        # 出售紫色孢子
+        "Slime_Mucus": True,         # 出售史萊姆黏液
     },
     "green": {
         "The_cloth_wrapped_around_the_dead": True, # 出售包裹死者的布
@@ -55,9 +61,18 @@ templates/town_building/Jewelry_workshop/goods/
 }
 ```
 
-### 💡 跨模式全域繼承與連動
-- **獨立 CLI 模式 (`--mode jewelry_workshop`)**：讀取並執行上述商品出售規則。
-- **城鎮任務流水線 (`Town Subflow Pipeline`)**：在 `mix` (混合模式)、`stage` (推圖模式) 或 `dungeon` (地城模式) 自動掛機過程中，若背包滿清理後退回城鎮連動進入珠寶加工廠，系統會 **100% 自動繼承與遵循此設定**。被設為 `False` 的商品（如 `Warcraft_Fang`）在流水線中同樣會被安全保留，絕對不會被誤賣！
+> ⚠️ **注意事項**：新增任何商品截圖至 `goods/` 資料夾時，必須同步在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py#L255) 的 `goods_settings` 白名單設定為 `True`，系統才會發起比對與出售！
+
+---
+
+## 🔄 同一商品多堆/多次連續出售機制 (Multi-Stack Repeat Sell)
+
+當背包內擁有同一個商品的**多堆/多格**（如 2 堆 `Spider_silk`）時：
+1. **彈窗消失閉環 (`click_and_wait_until_gone`)**：發起點擊 `sell.png` ➔ `sell_max.png` ➔ `ok.png` / `confirm.png` 後，系統會持續輪詢確認彈窗徹底從畫面上消失。
+2. **多層彈窗自動清理**：若點擊 `ok.png` 後緊接着跳出第二層 `confirm.png`，會連續清理閉環。
+3. **乾淨二次比對**：彈窗清空並沉澱 `0.4` 秒後，重新比對畫面 `post_sell_img`：
+   - 若畫面上**仍有同名商品** 且重複次數 $< 5$ 堆上限 ➔ 繼續對該商品發射出售，不推進至下一個商品。
+   - 若商品**已售罄**或達到 5 堆安全上限 ➔ 才清零計數器並推進至下一個商品。
 
 ---
 
@@ -71,8 +86,8 @@ templates/town_building/Jewelry_workshop/goods/
 
 - **自動進門與開啟選單**：於城鎮自動辨識並點擊 `Jewelry_workshop.png` ➔ 點擊 `sell_out.png` 開啟出售選單。
 - **商品滑動與還原演算法**：
-  1. 於頂層畫面匹配商品圖示 (門檻 $0.90$)。
+  1. 於頂層畫面匹配商品圖示 (門檻 $0.75$)。
   2. 若未尋獲 ➔ 執行向下滑動 2 次再次搜尋。
   3. 若仍未尋獲 ➔ 認定未持有該商品 ➔ **向上滑動 2 次還原畫面高度** ➔ 繼續比對下一個商品。
-- **出售與確認**：點擊商品圖示 ➔ 點擊 `sell.png` ➔ 點擊 `sell_max.png` (拉滿) ➔ 點擊 `ok.png` / `confirm.png` 確認出售。
+- **出售與確認**：點擊商品圖示 ➔ 點擊 `sell.png` ➔ 點擊 `sell_max.png` (拉滿) ➔ `click_and_wait_until_gone` 雙層 `ok.png` / `confirm.png` 閉環確認。
 - **離場**：全數商品處置完畢後，點擊 `exitfromhouse_and_to_town.png` 離開建築回到城鎮並安全退出程式。
