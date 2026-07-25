@@ -70,18 +70,32 @@ class ChestHandler(BaseStateHandler):
                 self.machine.pop_and_next_town_subflow()
                 return True
 
-        # Step 2: CLICK_FREE_CHEST 階段（比對並點擊免費寶箱按鈕 free_treasure.png）
+        # Step 2: CLICK_FREE_CHEST 階段（優先比對免費按鈕 free.png / free_treasure.png）
         elif self.step_phase == "CLICK_FREE_CHEST":
-            if os.path.exists(os.path.join("templates", free_btn)):
-                pos_free, conf_free = self.matcher.match(screen_img, free_btn, threshold=0.70)
-                if pos_free:
-                    logging.info(f"🎁 [神秘寶箱 Step 2] 發現免費寶箱領取按鈕 [{free_btn}] [{conf_free:.4f}]，進行點擊領取！")
-                    self.mouse.click(left + pos_free[0], top + pos_free[1])
-                    self.last_action_time = now
-                    self.step_phase = "WAITING_CONFIRM"
-                    self.not_found_count = 0
-                    time.sleep(0.3)
-                    return True
+            free_templates = [
+                free_btn,
+                "free.png",
+                "town_building/mysterious_treasure/free_treasure.png"
+            ]
+            for f_temp in free_templates:
+                if f_temp and os.path.exists(os.path.join("templates", f_temp)):
+                    pos_free, conf_free = self.matcher.match(screen_img, f_temp, threshold=0.70)
+                    if pos_free:
+                        click_x = left + pos_free[0]
+                        click_y = top + pos_free[1]
+                        # 若匹配到的是整體大彈窗圖 (free_treasure.png)，自動向下偏移至底部「免費」按鈕位置
+                        if "free_treasure" in f_temp:
+                            t_img = cv2.imread(os.path.join("templates", f_temp))
+                            if t_img is not None:
+                                click_y = top + pos_free[1] + (t_img.shape[0] // 2) - 35
+
+                        logging.info(f"🎁 [神秘寶箱 Step 2] 發現免費寶箱按鈕 [{f_temp}] [{conf_free:.4f}]，點擊座標 ({click_x}, {click_y})！")
+                        self.mouse.click(click_x, click_y)
+                        self.last_action_time = now
+                        self.step_phase = "WAITING_CONFIRM"
+                        self.not_found_count = 0
+                        time.sleep(0.3)
+                        return True
 
             self.not_found_count += 1
             if self.not_found_count >= 5:
@@ -98,7 +112,6 @@ class ChestHandler(BaseStateHandler):
                 "common/confirm.png", 
                 "common/ok.png", 
                 "common/quit.png", 
-                "town_building/exitfromhouse_and_to_town.png"
             ]
             for confirm_template in confirm_list:
                 if os.path.exists(os.path.join("templates", confirm_template)):

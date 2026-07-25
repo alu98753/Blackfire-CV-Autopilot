@@ -242,7 +242,7 @@ SUBFLOW_CONFIGS = {
         "name": "神秘寶箱",
         "type": "chest",
         "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",
-        "free_btn": "town_building/mysterious_treasure/free_treasure.png",
+        "free_btn": "free.png",
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
     },
