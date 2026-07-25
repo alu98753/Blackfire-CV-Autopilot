@@ -183,18 +183,37 @@ class BulletinBoardHandler(BaseStateHandler):
                 extractor = self._get_ocr_extractor()
                 temp_img = self.matcher._load_template(task_tpl)
                 temp_h, temp_w = (temp_img.shape[0], temp_img.shape[1]) if isinstance(temp_img, np.ndarray) else (40, 40)
-                scale = 0.863 if w_img > 800 else 1.0
-                icon_w, icon_h = int(temp_w * scale), int(temp_h * scale)
+                
+                scale = getattr(self.matcher, "template_scale", 1.0)
+                if scale == 1.0 and w_img < 1500:
+                    scale = w_img / 1940.0
+
+                icon_w = max(20, int(temp_w * scale))
+                icon_h = max(20, int(temp_h * scale))
 
                 x0 = cx - icon_w // 2
                 y0 = cy - icon_h // 2
                 crop_x = x0 + icon_w + 5
                 crop_y = max(0, y0 - 5)
-                crop_w = min(360, w_img - crop_x)
+                crop_w = min(max(200, int(360 * scale)), w_img - crop_x)
                 crop_h = min(icon_h + 10, h_img - crop_y)
 
                 if crop_w > 0 and crop_h > 0:
                     text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+                    
+                    # 💾 保存視覺化偵錯圖 (debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png)
+                    try:
+                        cv2.imwrite("debug_bulletin_board_roi.png", text_roi)
+                        debug_full = screen_img.copy()
+                        # 紅框: task.png 錨點圖示
+                        cv2.rectangle(debug_full, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
+                        # 綠框: 送交 EasyOCR 辨識之標題 ROI 區域
+                        cv2.rectangle(debug_full, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), (0, 255, 0), 2)
+                        cv2.imwrite("debug_bulletin_board_ocr.png", debug_full)
+                        logging.info(f"📸 [懸賞告示牌 Debug] 已將 OCR 文字裁切區域寫入 debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png (ROI: X=[{crop_x}:{crop_x+crop_w}], Y=[{crop_y}:{crop_y+crop_h}])")
+                    except Exception as ex:
+                        pass
+
                     title_name = extractor._ocr_crop(text_roi)
                     if title_name and title_name not in self.accepted_quest_titles:
                         self.accepted_quest_titles.append(title_name)

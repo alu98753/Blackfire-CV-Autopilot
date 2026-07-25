@@ -40,22 +40,29 @@ class QuestOCRExtractor:
         # 按 Y 座標排序 (自上而下)
         anchors = sorted(anchors, key=lambda a: a[1])
 
-        # 取得模板寬高
+        # 取得模板實際大小與縮放比
         temp_img = self.matcher._load_template(template_name)
         temp_h, temp_w = (temp_img.shape[0], temp_img.shape[1]) if temp_img is not None else (40, 40)
+        
+        scale = getattr(self.matcher, "template_scale", 1.0)
+        if scale == 1.0 and w_img < 1500:
+            scale = w_img / 1940.0
+
+        icon_w = max(20, int(temp_w * scale))
+        icon_h = max(20, int(temp_h * scale))
 
         extracted_names = []
 
         for idx, (cx, cy, conf) in enumerate(anchors):
             # 左上角座標
-            x0 = cx - temp_w // 2
-            y0 = cy - temp_h // 2
+            x0 = cx - icon_w // 2
+            y0 = cy - icon_h // 2
 
             # 計算右側文字 ROI 範圍
-            crop_x = x0 + temp_w + 5
+            crop_x = x0 + icon_w + 5
             crop_y = max(0, y0 - 5)
-            crop_w = min(360, w_img - crop_x)
-            crop_h = min(temp_h + 10, h_img - crop_y)
+            crop_w = min(max(200, int(360 * scale)), w_img - crop_x)
+            crop_h = min(icon_h + 10, h_img - crop_y)
 
             if crop_w <= 0 or crop_h <= 0:
                 continue
