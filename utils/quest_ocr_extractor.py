@@ -39,6 +39,11 @@ class QuestOCRExtractor:
 
         # 按 Y 座標排序 (自上而下)
         anchors = sorted(anchors, key=lambda a: a[1])
+
+        # 取得模板寬高
+        temp_img = self.matcher._load_template(template_name)
+        temp_h, temp_w = (temp_img.shape[0], temp_img.shape[1]) if temp_img is not None else (40, 40)
+
         extracted_names = []
 
         for idx, (cx, cy, conf) in enumerate(anchors):
