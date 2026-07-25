@@ -77,11 +77,11 @@ class HeroDrawHandler(BaseStateHandler):
         # 3. ENTERED_TAVERN 階段：精確比對免費招募按鈕 (free_recruitment.png)
         elif self.step_phase == "ENTERED_TAVERN":
             if os.path.exists(os.path.join("templates", recruitment_btn)):
-                # 門檻設為 0.83 並要求相對亮度 >= 0.70，徹底排除其他相似頭盔 (普通/傳奇/兌換招募)
+                # 配合包含「❶免費招募」紅色驚嘆號的獨特模板，門檻設定為 0.75 即可 100% 辨識
                 pos_free, conf_free = self.matcher.match(
                     screen_img, 
                     recruitment_btn, 
-                    threshold=0.83, 
+                    threshold=0.75, 
                     brightness_threshold=0.70
                 )
                 if pos_free:
