@@ -159,16 +159,16 @@ class HeroDrawHandler(BaseStateHandler):
             self.last_action_time = now
             return True
 
-        # 6. ALL_DONE_EXITING 階段：點擊退出按鈕，寫入 DailyManager 並彈出下一任務
+        # 6. ALL_DONE_EXITING 階段：點擊房屋退出按鈕 (僅配對 town_building/exitfromhouse_and_to_town.png)
         elif self.step_phase == "ALL_DONE_EXITING":
-            for exit_template in ["common/quit.png", "town_building/exitfromhouse_and_to_town.png"]:
-                if os.path.exists(os.path.join("templates", exit_template)):
-                    pos_exit, conf_exit = self.matcher.match(screen_img, exit_template, threshold=0.75)
-                    if pos_exit:
-                        logging.info(f"🍺 [抽英雄] 點擊退出酒館按鈕 [{exit_template}] [{conf_exit:.4f}] 返回城鎮...")
-                        self.mouse.click(left + pos_exit[0], top + pos_exit[1])
-                        time.sleep(0.3)
-                        break
+            exit_template = "town_building/exitfromhouse_and_to_town.png"
+            if os.path.exists(os.path.join("templates", exit_template)):
+                pos_exit, conf_exit = self.matcher.match(screen_img, exit_template, threshold=0.75)
+                if pos_exit:
+                    logging.info(f"🍺 [抽英雄] 點擊退出酒館按鈕 [{exit_template}] [{conf_exit:.4f}] 返回城鎮...")
+                    self.mouse.click(left + pos_exit[0], top + pos_exit[1])
+                    self.last_action_time = now
+                    time.sleep(0.3)
 
             dm = getattr(self.machine, "daily_manager", None)
             if dm and hasattr(dm, "record_subflow_completed"):

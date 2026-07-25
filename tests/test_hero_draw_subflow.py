@@ -61,9 +61,9 @@ class TestHeroDrawSubflow(unittest.TestCase):
                 return ((300, 300), 0.85)
             if self.handler.step_phase == "CLICKED_FREE_RECRUITMENT" and template == "town_building/Tavern/RECRUITED.png":
                 return ((350, 350), 0.85)
-            if self.handler.step_phase == "WAITING_CONFIRM" and template in ["common/confirm.png", "common/ok.png"]:
+            if self.handler.step_phase == "WAITING_CONFIRM" and template == "common/ok.png":
                 return ((400, 400), 0.85)
-            if self.handler.step_phase == "ALL_DONE_EXITING" and template in ["common/quit.png", "town_building/exitfromhouse_and_to_town.png"]:
+            if self.handler.step_phase == "ALL_DONE_EXITING" and template == "town_building/exitfromhouse_and_to_town.png":
                 return ((500, 500), 0.85)
             return (None, 0.0)
 
