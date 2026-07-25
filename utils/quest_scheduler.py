@@ -110,36 +110,50 @@ class QuestScheduler:
     def record_task_complete(self, ocr_text):
         """
         根據任務標題或 OCR 解析結果將指定任務標記為已完成。
-        支援標題包含、描述包含、與核心關鍵字 (如 史萊姆, 骷髏, 野豬, 冰元素, 敵人, 首領) 模糊匹配。
+        支援錯別字清洗 (normalize)、標題包含、描述包含、核心關鍵字與字串相似度 (>70%) 模糊匹配。
         """
         if not ocr_text:
             return False
 
+        from utils.quest_mapper import normalize_quest_title
+        norm_ocr = normalize_quest_title(ocr_text)
+
+        import difflib
+
         for t in self.tasks:
             title = t.quest_title
+            norm_title = normalize_quest_title(title)
             desc = getattr(t, "raw_desc", "")
 
-            # 1. 標題與辨識文字直接互相包含
-            if title in ocr_text or ocr_text in title:
+            # 1. 標題與辨識文字 (含清洗後) 互相包含
+            if title in ocr_text or ocr_text in title or norm_title in norm_ocr or norm_ocr in norm_title:
                 t.completed_count = t.target_count
-                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題匹配) 已標記為完全完成！")
+                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題精確匹配) 已標記為完全完成！")
                 return True
 
             # 2. 原始描述文字包含
-            if desc and (desc in ocr_text or ocr_text in desc):
+            if desc and (desc in ocr_text or ocr_text in desc or desc in norm_ocr or norm_ocr in desc):
                 t.completed_count = t.target_count
                 logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (描述匹配) 已標記為完全完成！")
                 return True
 
             # 3. 核心關鍵字比對
-            keywords = ["史萊姆", "骷髏", "野豬", "冰元素", "敵人", "首領", "鬼魂", "熊", "蛙人", "樹人", "石窟", "洞窟", "遺跡"]
+            keywords = ["史萊姆", "骷髏", "野豬", "冰元素", "敵人", "首領", "鬼魂", "熊", "蛙人", "樹人", "石窟", "洞窟", "遺跡", "枷鎖", "詛咒", "暴君", "獸王"]
             for kw in keywords:
-                if kw in title and kw in ocr_text:
+                if kw in norm_title and kw in norm_ocr:
                     t.completed_count = t.target_count
                     logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (關鍵字 '{kw}' 匹配) 已標記為完全完成！")
                     return True
 
+            # 4. 模糊字串相似度比對 (>70% 相似度，相容 1~2 個錯別字)
+            ratio = difflib.SequenceMatcher(None, norm_ocr, norm_title).ratio()
+            if ratio >= 0.70:
+                t.completed_count = t.target_count
+                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (模糊相似度 {ratio:.2f} 匹配) 已標記為完全完成！")
+                return True
+
         return False
+
 
 
     def process_task_complete_banner(self, screen_img, pos_task, ocr_reader=None, matcher=None):

@@ -40,7 +40,30 @@ class TaskNode:
                 f"progress={self.completed_count}/{self.target_count} "
                 f"dungeon_idx={self.dungeon_index} stage_lvl={self.stage_level} sub='{self.sub_stage}'>")
 
+# ------------------ 常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 ------------------
+OCR_TYPO_MAP = {
+    "毀減": "毀滅",
+    "野瀦": "野豬", "野玫": "野豬", "野猞": "野豬",
+    "擎敗": "擊敗", "肇敗": "擊敗", "望敗": "擊敗", "堅敗": "擊敗",
+    "骷饌": "骷髏", "枯樓": "骷髏", "骷饞": "骷髏",
+    "苜領": "首領", "苜貊": "首領", "苜項": "首領",
+    "逍跡": "遺跡", "祺跡": "遺跡",
+    "景君": "暴君", "默王": "獸王",
+}
+
+def normalize_quest_title(title):
+    """
+    自動校正 EasyOCR 易誤判的中文字（如 '毀減'➔'毀滅'、'野瀦'➔'野豬'、'擎敗'➔'擊敗'）。
+    """
+    if not title:
+        return ""
+    cleaned = title
+    for typo, correct in OCR_TYPO_MAP.items():
+        cleaned = cleaned.replace(typo, correct)
+    return cleaned
+
 class QuestMapper:
+
     """
     懸賞任務與指令映射器 (Quest-to-CLI Mapper) [全域對照字典唯一定義檔]。
 
@@ -48,6 +71,8 @@ class QuestMapper:
     1. 地下城任務：新增至 self.dungeon_rules 陣列 (r"正則關鍵字", 地下城索引 0~4)
     2. 普通關卡任務：新增至 self.stage_rules 陣列 (r"正則關鍵字", 關卡等級 1~6, 子關卡類型 "first"/"final" 等)
     3. 未定義任務參考檔：user_data/daily_status.json 內的 unknown_quests 陣列。
+    未來如何請 AI 加入新任務？之後您只要直接對我說：「daily_status.json 的 unknown_quests 裡有一個新任務 XXX，幫我加進去，這個任務要打 Level 2 第一關 / 地下城 3」
+
     """
     def __init__(self):
 
@@ -82,7 +107,9 @@ class QuestMapper:
         :param requirement_text: 擊殺目標文字 (例如 "擊殺: [史萊姆王] x 1" 或 "擊殺: 冰元素 x 10")
         :return: TaskNode 實例
         """
-        combined_text = f"{title} {description} {requirement_text}"
+        norm_title = normalize_quest_title(title)
+        combined_text = f"{norm_title} {description} {requirement_text}"
+
         
         # 1. 解析目標數量 (x 10, x 5, x 1)
         target_count = 1
