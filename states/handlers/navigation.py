@@ -155,16 +155,24 @@ class NavigationHandler(BaseStateHandler):
         if rect is None:
             rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
             
-        # 安全取得寬度與高度，相容實體執行與單體測試 mock 格式
         width = rect.get("width") or (rect.get("right", 0) - rect.get("left", 0)) or 1920
         height = rect.get("height") or (rect.get("bottom", 0) - rect.get("top", 0)) or 1080
-        
-        # 回寫至 rect 中，確保後續呼叫 rect["width"] 與 rect["height"] 不會報 KeyError
         rect["width"] = width
         rect["height"] = height
 
+
+        # 0. 全域最高優先防護：檢查畫面上是否有任務完成彈窗 (task_complete.png) 阻擋
+        if os.path.exists(os.path.join("templates", "task_complete.png")):
+            pos_task_chk, conf_task_chk = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
+            if pos_task_chk:
+                logging.info(f"🎉 尋路中偵測到【任務完成】彈窗 (信心度: {conf_task_chk:.4f})，啟動「領取任務獎勵」子流程清理彈窗。")
+                self.machine._run_task_complete_subflow(rect)
+                return
+
+
         # 優先判定：如果我們已經看到地下城內部的離開按鈕或其他探索按鈕，說明點擊已經成功並進入內部，轉移狀態！
         if self.machine.config.get("type") in ["dungeon", "mix"]:
+
             # 移出 dungeons/dungeon_fight.png，改由 dungeons/leave.png 判定已正式進入
             for check_btn in ["dungeons/leave.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png"]:
                 if os.path.exists(os.path.join("templates", check_btn)):

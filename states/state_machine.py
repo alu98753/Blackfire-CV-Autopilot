@@ -702,14 +702,12 @@ class GameStateMachine:
     def _run_task_complete_subflow(self, rect):
         logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")
         start_time = time.time()
-        timeout = 5.0  # 最多執行 5 秒
+        timeout = 10.0  # 最多執行 10 秒，相容多個任務連續完成彈窗
 
         subflow_templates = [
             ("common/confirm.png", 0.80),
             ("common/ok.png", 0.80)
         ]
-
-        ocr_done = False
 
         while time.time() - start_time < timeout:
             screen_img = self.capturer.capture(rect)
@@ -717,16 +715,21 @@ class GameStateMachine:
                 time.sleep(0.2)
                 continue
 
-            # 進行 OCR 辨識任務完成標題 (僅辨識一次)
-            if not ocr_done and self.quest_scheduler:
-                pos_task_ocr, _ = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
-                if pos_task_ocr:
-                    self.quest_scheduler.process_task_complete_banner(screen_img, pos_task_ocr, ocr_reader=self._ocr_reader)
-                    ocr_done = True
+            # 1. 檢查任務完成主彈窗是否存在，若已無彈窗則直接成功結束
+            pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
+            if not pos_task:
+                logging.info("🟢 [子流程] 任務完成彈窗已全數確認關閉，成功領取獎勵！")
+                return
 
+            # 2. 對當前彈窗進行 OCR 辨識任務完成標題並核銷
+            if self.quest_scheduler:
+                try:
+                    self.quest_scheduler.process_task_complete_banner(screen_img, pos_task, ocr_reader=self._ocr_reader)
+                except Exception as e:
+                    logging.debug(f"OCR 辨識完成彈窗時發生異常: {e}")
 
-
-            matched_any = False
+            # 3. 尋找並點擊確認按鈕
+            matched_confirm = False
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
                     continue
@@ -734,25 +737,20 @@ class GameStateMachine:
                 if pos:
                     logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊...")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    matched_any = True
-                    time.sleep(0.5) # 等待彈窗關閉動畫
-                    break # 重新擷取畫面以確認是否消失
+                    matched_confirm = True
+                    time.sleep(0.6) # 等待當前彈窗關閉/下一個彈窗出現
+                    break
 
-            if not matched_any:
-                # 2. 如果無任何確認按鈕，檢查任務完成主彈窗是否消失
-                pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
-                if not pos_task:
-                    logging.info("🟢 [子流程] 任務完成彈窗已確認關閉，成功領取獎勵！")
-                    return
-                else:
-                    # 3. 若任務彈窗仍存在且無確認按鈕，說明第一步點選「領取獎勵」失效，進行重新點擊！
-                    height_to_use = rect.get("height") or screen_img.shape[0] or 1080
-                    scale_y = height_to_use / 1080.0
-                    btn_x = rect["left"] + pos_task[0]
-                    btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
-                    logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，重新點擊領取獎勵座標 ({btn_x}, {btn_y})。")
-                    self.mouse.click(btn_x, btn_y)
-                    time.sleep(0.5)
+            # 4. 若無確認按鈕，點擊彈窗內領獎位置
+            if not matched_confirm:
+                height_to_use = rect.get("height") or screen_img.shape[0] or 1080
+                scale_y = height_to_use / 1080.0
+                btn_x = rect["left"] + pos_task[0]
+                btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
+                logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，點擊領取獎勵座標 ({btn_x}, {btn_y})。")
+                self.mouse.click(btn_x, btn_y)
+                time.sleep(0.6)
+
 
 
     def start_subflow_queue(self, queue):
