@@ -220,8 +220,13 @@ class GameStateMachine:
             self.need_bag_cleaning = True
             self.handlers[new_state].screenshot_counter = 1
         elif new_state in [self.STATE_NAVIGATING, self.STATE_COLLECT_ONLY]:
-            if self.is_daily_pipeline_active():
+            if getattr(self, "pending_town_subflows", False):
+                self.pending_town_subflows = False
+                logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
+                self.trigger_town_subflow_chain()
+            elif self.is_daily_pipeline_active():
                 self.evaluate_and_schedule_daily_pipeline()
+
 
 
     def step(self):

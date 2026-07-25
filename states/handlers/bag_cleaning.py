@@ -120,10 +120,23 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_clean_step = 0
                         time.sleep(0.1)
                         
-                        # 背包清理完畢後，觸發城鎮子流程流水線佇列 (血之祭壇 ➔ 珠寶加工廠...)
-                        logging.info("🏛️ 背包清理完成，觸發城鎮任務流水線佇列...")
-                        self.machine.trigger_town_subflow_chain()
+                        # 背包清理完畢後，嚴格區分【地下城探索】與【普通關卡/城鎮】之流水線觸發時機
+                        is_dungeon_context = (
+                            getattr(self.machine, "is_in_dungeon", False) or
+                            self.machine.config.get("type") == "dungeon" or
+                            getattr(self.machine, "previous_state", None) == self.machine.STATE_DUNGEON_EXPLORING
+                        )
+
+                        if is_dungeon_context:
+                            logging.info("🏰 [地下城背包清理] 已清理完畢，暫緩城鎮流水線，標記 pending_town_subflows，恢復地下城探索打完本趟副本...")
+                            self.machine.pending_town_subflows = True
+                            target_state = self.machine.previous_state if getattr(self.machine, "previous_state", None) else self.machine.STATE_DUNGEON_EXPLORING
+                            self.machine.transition_to(target_state)
+                        else:
+                            logging.info("🏛️ [城鎮/關卡背包清理] 背包清理完成，立即觸發城鎮任務流水線佇列...")
+                            self.machine.trigger_town_subflow_chain()
                         return
+
 
         # 3. 如果已經分解完畢，則進行「整理」
         if getattr(self.machine, "bag_disassembled", False):
