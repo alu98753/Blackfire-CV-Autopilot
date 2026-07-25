@@ -248,7 +248,7 @@ class QuestMapper:
         # 1. 梯隊一：確定性優先
         policy_score = 0 if node.counting_policy == TaskNode.POLICY_DETERMINISTIC else 1
 
-        # 2. 梯隊二：模式優先 & 梯隊三：索引/等級大小
+        # 2. 梯隊二：模式優先 (地下城 0 > 普通關卡 1 > 通用首領 2)
         if node.mode_type == "dungeon":
             mode_score = 0
             idx_score = -node.dungeon_index if node.dungeon_index is not None else 0
