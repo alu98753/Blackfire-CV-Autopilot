@@ -81,7 +81,9 @@ class ResultHandler(BaseStateHandler):
         is_daily = self.machine.is_daily_pipeline_active()
         boss_available = False
         if is_daily and getattr(self.machine, "daily_manager", None):
-            boss_available = self.machine.daily_manager.has_available_lord_boss()
+            dm = self.machine.daily_manager
+            if hasattr(dm, "is_subflow_completed") and not dm.is_subflow_completed("lord_boss"):
+                boss_available = dm.has_available_lord_boss()
 
         quest_batch_completed = False
         if is_daily and getattr(self.machine, "quest_scheduler", None):
@@ -181,7 +183,7 @@ class ResultHandler(BaseStateHandler):
 
         for l_temp in lobby_templates:
             if l_temp and os.path.exists(os.path.join("templates", l_temp)):
-                pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80)
+                pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80, check_brightness=True, brightness_threshold=0.70, quiet=True)
                 if pos_l:
                     logging.info(f"👉 結算辨識：偵測到畫面已切回大廳/頁籤 [{l_temp}] (相似度: {conf_l:.4f})，即時結束結算狀態。")
                     if getattr(self.machine, "current_lord_boss_key", None):
@@ -192,7 +194,8 @@ class ResultHandler(BaseStateHandler):
                             dm.record_lord_boss_fight(b_key)
 
                     dev_subs = getattr(self.machine, "dev_subflows", None) or []
-                    if "lord_boss" in dev_subs or l_temp == "load/Lord_entry_after.png":
+                    cur_type = self.machine.config.get("type") if self.machine.config else None
+                    if (cur_type == "lord_boss" or "lord_boss" in dev_subs) and l_temp == "load/Lord_entry_after.png":
                         self.machine.transition_to(self.machine.STATE_LORD_BOSS)
                     elif self.machine.stamina_retreat_start_time is not None:
                         self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)

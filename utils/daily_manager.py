@@ -216,11 +216,25 @@ class DailyManager:
             self.save_status()
             logging.info(f"💾 [DailyManager] 根據 OCR 即時更新 Boss [{b_info.get('name', boss_key)}] 冷卻時間: 剩餘 {int(remaining_seconds)} 秒。")
 
+    def set_lord_boss_cooldown(self, cooldown_seconds=180, now_ts=None):
+        """
+        設定首領討伐子流程整體冷卻避退時間，防止短時間內無可用 Boss 時頻繁重複被全域觸發。
+        """
+        if now_ts is None:
+            now_ts = time.time()
+        self.lord_boss_cooldown_until = now_ts + cooldown_seconds
+        logging.info(f"⏳ [DailyManager] 設定首領討伐 (lord_boss) 子流程冷卻緩衝 {cooldown_seconds} 秒。")
+
     def get_available_lord_bosses(self, now_ts=None):
         """
         取得當前冷卻完畢且次數未滿 5 次的可討伐 Boss 鍵名陣列。
         依冷卻時間 (cooldown_seconds) 由大到小排序 (冷卻時間越大越難打，優先權越高)。
         """
+        if now_ts is None:
+            now_ts = time.time()
+        if now_ts < getattr(self, "lord_boss_cooldown_until", 0):
+            return []
+
         bosses = self.status.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
         available = []
         for b_key in bosses.keys():

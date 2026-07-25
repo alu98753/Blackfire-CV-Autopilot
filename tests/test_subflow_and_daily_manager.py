@@ -382,6 +382,44 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         expected_2 = ["史萊姆王的毀滅", "擊敗冰元素", "清除野豬", "擊殺首領"]
         self.assertEqual(updated_2, expected_2)
 
+    def test_lord_boss_cooldown_buffer_prevents_infinite_triggering(self):
+        """
+        [防跳離與死循環測試] 驗證：
+        1. set_lord_boss_cooldown 能在無可用 Boss 時有效阻斷 has_available_lord_boss 被重複發起。
+        2. ResultHandler 在普通 stage/dungeon 模式下，即使掃描到 load/Lord_entry_after.png 也絕對不會誤轉移至 STATE_LORD_BOSS！
+        """
+        dm = DailyManager(data_dir=TEST_DATA_DIR, status_file="test_daily.json")
+        
+        # 測試 1: 設定冷卻計時 180 秒，驗證 has_available_lord_boss 傳回 False
+        dm.set_lord_boss_cooldown(180)
+        self.assertFalse(dm.has_available_lord_boss())
+
+        # 測試 2: 模擬 ResultHandler 在 stage 模式結算，畫面上看到 Lord_entry_after.png
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from states.handlers.result import ResultHandler
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.config = {"name": "測試懸賞關卡", "type": "stage"}
+        sm.daily_manager = dm
+
+        handler = ResultHandler(sm)
+        
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # Mock 比對到了 Lord_entry_after.png
+        matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.85) if name == "load/Lord_entry_after.png" else (None, 0.0)
+
+        # 執行 handle，斷言狀態轉移為 STATE_NAVIGATING，絕對不是 STATE_LORD_BOSS！
+        handler.handle(fake_img, rect)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+        self.assertNotEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
 if __name__ == "__main__":
     unittest.main()
 
