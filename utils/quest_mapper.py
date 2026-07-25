@@ -85,26 +85,25 @@ class QuestMapper:
     def __init__(self):
 
         # 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4)
+        # 0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 冰雪洞窟
         self.dungeon_rules = [
-            (r"(史萊姆王|黏糊糊的石窟)", 0),
-            (r"(幽影地穴|鬼魂)", 1),
-            (r"(森林迷宮|破除遺跡|破除森林的枷鎖)", 2),
-            (r"(神秘遺跡|遺跡的詛咒)", 3),
-            (r"(冰雪洞窟的暴君|終結寒冰獸王|冰雪洞窟)", 4),
-            (r"(完成任何地下城)", 0),
+            (r"(史萊姆王|史萊姆|黏糊糊的石窟)", 0),                 # 地下城 #1 (greedy_allowed_indices 0 黏糊糊的石窟)
+            (r"(幽影地穴|鬼魂)", 1),                               # 地下城 #2 (greedy_allowed_indices 1 幽影地穴)
+            (r"(森林迷宮|破除森林的枷鎖|樹人)", 2),                   # 地下城 #3 (greedy_allowed_indices 2 森林迷宮)
+            (r"(神秘遺跡|破除遺跡|遺跡的詛咒|枯樓|骷髏)", 3),        # 地下城 #4 (greedy_allowed_indices 3 神秘遺跡)
+            (r"(冰雪洞窟的暴君|終結寒冰獸王|冰雪洞窟|完成任何地下城)", 4),  # 地下城 #5 (greedy_allowed_indices 4 冰雪洞窟)
         ]
 
         # 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型)
+        # Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷
         self.stage_rules = [
-            (r"(野豬)", 1, "final"),
-            (r"(枯樓|骷髏)", 1, "first"),
-            (r"(史萊姆)", 1, "first"),
-            (r"(樹人)", 3, "first"),
-            (r"(熊)", 3, "first"),
-            (r"(蛙人)", 5, "first"),
-            (r"(冰元素)", 6, "first"),
-            (r"(敵人剿滅|獵金之蟲)", 1, "first"),
+            (r"(野豬)", 1, "final"),       # Level 1 蒼穹平原 (魔王關)
+            (r"(熊)", 3, "first"),         # Level 3 古樹森林 (第一關)
+            (r"(沙蟲)", 4, "middle"),      # Level 4 沙漠廢墟 (中間關)
+            (r"(蛙人)", 5, "first"),       # Level 5 幽暗沼澤 (第一關)
+            (r"(冰元素)", 6, "first"),     # Level 6 冰凍峽谷 (第一關)
         ]
+
 
 
     def parse_quest(self, title, description="", requirement_text=""):

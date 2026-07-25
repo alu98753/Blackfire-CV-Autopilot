@@ -147,6 +147,37 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertTrue(removed)
         self.assertNotIn("史萊姆王的毀滅", self.daily_mgr.status["subflows"]["bulletin_board"]["accepted_quests"])
 
+    def test_new_one_to_one_quest_mapping_rules(self):
+        """驗證最新一對一懸賞任務映射規則與禁用項目"""
+        mapper = QuestMapper()
+
+        # 1. 沙蟲 -> Level 4 middle
+        node_worm = mapper.parse_quest("清除沙蟲")
+        self.assertIsNotNone(node_worm)
+        self.assertEqual(node_worm.stage_level, 4)
+        self.assertEqual(node_worm.sub_stage, "middle")
+
+        # 2. 地下城規則對照
+        # 完成任何地下城 -> dungeon 4
+        self.assertEqual(mapper.parse_quest("完成任何地下城").dungeon_index, 4)
+        # 冰雪洞窟的暴君 -> dungeon 4
+        self.assertEqual(mapper.parse_quest("冰雪洞窟的暴君").dungeon_index, 4)
+        # 史萊姆王 -> dungeon 0
+        self.assertEqual(mapper.parse_quest("史萊姆王的毀滅").dungeon_index, 0)
+        # 史萊姆 -> dungeon 0
+        self.assertEqual(mapper.parse_quest("清除史萊姆").dungeon_index, 0)
+        # 破除森林的枷鎖 -> dungeon 2
+        self.assertEqual(mapper.parse_quest("破除森林的枷鎖").dungeon_index, 2)
+        # 樹人 -> dungeon 2
+        self.assertEqual(mapper.parse_quest("清除樹人").dungeon_index, 2)
+        # 骷髏 -> dungeon 3 (神秘遺跡)
+        self.assertEqual(mapper.parse_quest("清除骷髏").dungeon_index, 3)
+
+        # 3. 不要做 / 已停用項目 -> 回傳 None (未知任務寫入 unknown_quests)
+        self.assertIsNone(mapper.parse_quest("敵人剿滅"))
+        self.assertIsNone(mapper.parse_quest("獵金之蟲"))
+
+
 if __name__ == "__main__":
     unittest.main()
 
