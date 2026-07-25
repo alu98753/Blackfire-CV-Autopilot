@@ -54,7 +54,9 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         scheduler.record_kill_event(enemy_name="史萊姆王", is_boss=True, dungeon_index=0)
         
         tasks_map = {t.quest_title: t for t in scheduler.tasks}
-        self.assertTrue(tasks_map["史萊姆王的毀滅"].is_completed)
+        # 史萊姆王的毀滅 屬於 BANNER_VERIFY_QUESTS，record_kill_event 絕不自動加算進度
+        self.assertFalse(tasks_map["史萊姆王的毀滅"].is_completed)
+        # 通用首領擊殺屬於確定性任務/通用任務，自動加算完成
         self.assertTrue(tasks_map["擊殺首領"].is_completed)
 
     def test_remove_accepted_quest_from_json(self):
@@ -158,10 +160,11 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertEqual(node_worm.sub_stage, "middle")
 
         # 2. 地下城規則對照
-        # 完成任何地下城 -> dungeon 4
-        self.assertEqual(mapper.parse_quest("完成任何地下城").dungeon_index, 4)
+        # 完成任何地下城 -> ignored (不執行)
+        self.assertEqual(mapper.parse_quest("完成任何地下城").mode_type, "ignored")
         # 冰雪洞窟的暴君 -> dungeon 4
         self.assertEqual(mapper.parse_quest("冰雪洞窟的暴君").dungeon_index, 4)
+
         # 史萊姆王 -> dungeon 0
         self.assertEqual(mapper.parse_quest("史萊姆王的毀滅").dungeon_index, 0)
         # 史萊姆 -> dungeon 0
