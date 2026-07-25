@@ -189,6 +189,7 @@ class GameStateMachine:
 
     # 🏛️ 城鎮子流程與 Config Key 聲明式對照表 (新增城鎮子流程只需在此註冊對應 Key)
     TOWN_SUBFLOW_CONFIG_MAP = {
+        STATE_BAG_CLEANING: "bag_clean",
         STATE_BLOOD_ALTAR: "blood_altar",
         STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
         STATE_LORD_BOSS: "lord_boss",
@@ -196,6 +197,7 @@ class GameStateMachine:
         STATE_HERO_DRAW: "hero_draw",
         STATE_BULLETIN_BOARD: "bulletin_board",
     }
+
 
     def _on_state_transition_sync_context(self, new_state):
         from config import GAME_CONFIGS
@@ -849,10 +851,13 @@ class GameStateMachine:
             if next_flow in GAME_CONFIGS:
                 self.config = GAME_CONFIGS[next_flow].copy()
 
-            if next_flow == "blood_altar":
+            if next_flow == "bag_clean":
+                self.need_bag_cleaning = True
+            elif next_flow == "blood_altar":
                 self.need_blood_altar = True
             elif next_flow == "jewelry_workshop":
                 self.need_jewelry_workshop = True
+
 
             # 🏛️ 資料驅動動態派發：依據 TOWN_SUBFLOW_CONFIG_MAP 反向比對目標狀態
             config_to_state = {v: k for k, v in self.TOWN_SUBFLOW_CONFIG_MAP.items()}

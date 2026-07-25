@@ -163,6 +163,7 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_select_all_clicked = True
                         self.machine.bag_deselected = False  # 初始化反選標記
                         self.machine.bag_deselect_retry_count = 0
+                        self.machine.bag_deselected_slots = set()  # 初始化已反選格子記錄集
                         time.sleep(0.1)
                         return
 
@@ -249,8 +250,9 @@ class BagCleaningHandler(BaseStateHandler):
                             
                             grid_info.append((r, c, cx, cy, x1, y1, x2, y2, color, is_valuable, has_check_mark))
                             
-                            # 只有當它是貴重裝備，且目前是勾選狀態時，我們才進行反選點擊
-                            if is_valuable and has_check_mark:
+                            # 只有當它是貴重裝備，且目前是勾選狀態，且該 (r, c) 格子尚未被單步反選點擊過時
+                            deselected_slots = getattr(self.machine, "bag_deselected_slots", set())
+                            if is_valuable and has_check_mark and ((r, c) not in deselected_slots):
                                 if target_to_deselect is None:
                                     target_to_deselect = (rect["left"] + cx, rect["top"] + cy, color, r, c)
 
@@ -262,9 +264,13 @@ class BagCleaningHandler(BaseStateHandler):
                         click_x, click_y, color, r, c = target_to_deselect
                         logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y})")
                         self._save_step_screenshot(screen_img, f"5_deselect_r{r}_c{c}")
+                        if not hasattr(self.machine, "bag_deselected_slots"):
+                            self.machine.bag_deselected_slots = set()
+                        self.machine.bag_deselected_slots.add((r, c))
                         self.mouse.click(click_x, click_y)
-                        time.sleep(0.25)
+                        time.sleep(0.35)
                         return
+
 
                     # 如果循環完畢沒有任何貴重物品被選中
                     # 檢查是否所有物品都被反選了（即全選後全反選，代表無可分解物品），此時直接點擊關閉退出
