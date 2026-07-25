@@ -267,6 +267,8 @@ SUBFLOW_CONFIGS = {
         "type": "bulletin_board",
         "building_btn": "town_building/bulletin_board/bulletin_board.png",
         "reset_btn": "town_building/bulletin_board/reset.png",
+        "accept_btn": "town_building/bulletin_board/accept_task.png",
+        "task_already_full_btn": "town_building/bulletin_board/task_already_full.png",
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
     },

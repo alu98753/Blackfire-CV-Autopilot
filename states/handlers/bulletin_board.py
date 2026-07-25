@@ -132,11 +132,31 @@ class BulletinBoardHandler(BaseStateHandler):
         # 3. 逐一接取懸賞任務與 OCR 標題記錄 (PROCESS_ACCEPT_QUESTS)
         # =========================================================================
         if self.step_phase == "PROCESS_ACCEPT_QUESTS":
-            # 優先處理彈窗確認 (若有 confirm.png / ok.png / confirm1.png)
+            full_btn = cfg.get("task_already_full_btn", "town_building/bulletin_board/task_already_full.png")
+
+            # 優先檢查是否彈出「任務已滿 (task_already_full.png)」無法接取提示彈窗
+            pos_full, conf_full = self.matcher.match(screen_img, full_btn, threshold=0.75)
+            if pos_full:
+                logging.warning(f"⚠️ [懸賞告示牌] 偵測到任務已滿彈窗 [{full_btn}] (信心度: {conf_full:.4f})！無法再接受新任務。")
+                pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.75)
+                pos_ok, _ = self.matcher.match(screen_img, "common/ok.png", threshold=0.75)
+                pos_pop = pos_confirm or pos_ok
+                if pos_pop:
+                    btn_name = "common/confirm.png" if pos_confirm else "common/ok.png"
+                    logging.info(f"📋 [懸賞告示牌] 點擊任務已滿確認彈窗 [{btn_name}]...")
+                    self.mouse.click(left + pos_pop[0], top + pos_pop[1])
+                
+                # 轉移至 EXIT_BOARD 準備點擊 quit.png 退出離場
+                logging.info(f"📋 [懸賞告示牌] 任務數量已滿，準備保存已接取之 {len(self.accepted_quest_titles)} 項任務並退出...")
+                self.step_phase = "EXIT_BOARD"
+                self.last_action_time = now
+                return
+
+            # 處理一般接取成功彈窗確認 (confirm.png / ok.png)
             pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.75)
             pos_ok, _ = self.matcher.match(screen_img, "common/ok.png", threshold=0.75)
             pos_pop = pos_confirm or pos_ok
-            if pos_pop:
+            if pos_pop and self.accept_sub_phase == "CLICK_CONFIRM_POPUP":
                 btn_name = "common/confirm.png" if pos_confirm else "common/ok.png"
                 logging.info(f"📋 [懸賞告示牌] 發現接取成功確認彈窗 [{btn_name}]，點擊確認...")
                 self.mouse.click(left + pos_pop[0], top + pos_pop[1])
@@ -192,21 +212,17 @@ class BulletinBoardHandler(BaseStateHandler):
                 if pos_accept:
                     logging.info(f"📋 [懸賞告示牌] 於右半邊發現接受任務按鈕 [{accept_btn}]，點擊接受！")
                     self.mouse.click(left + pos_accept[0], top + pos_accept[1])
+                    time.sleep(1.0)  # 點擊接受後等待 1 秒，供系統判定 task_already_full.png 或成功彈窗
                     self.accept_sub_phase = "CLICK_CONFIRM_POPUP"
-                    self.last_action_time = now
+                    self.last_action_time = time.time()
                     return
                 
-                # 若未在右半邊找到 accept_task.png，可能已點擊或需要彈窗確認，嘗試繼續進入 CLICK_CONFIRM_POPUP
+                # 若未在右半邊找到 accept_task.png，轉移至 CLICK_CONFIRM_POPUP 檢查
                 self.accept_sub_phase = "CLICK_CONFIRM_POPUP"
                 self.last_action_time = now
                 return
 
             if self.accept_sub_phase == "CLICK_CONFIRM_POPUP":
-                # 重新檢查是否有 confirm.png
-                pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.75)
-                if pos_confirm:
-                    logging.info(f"📋 [懸賞告示牌] 點擊確認彈窗 [common/confirm.png]...")
-                    self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
                 self.accept_sub_phase = "FIND_TOP_TASK"
                 self.last_action_time = now
                 return

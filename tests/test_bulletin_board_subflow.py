@@ -193,5 +193,34 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         # 應維持在 INIT 階段並等待回到城鎮
         self.assertEqual(handler.step_phase, "INIT")
 
+    @patch('os.path.exists')
+    def test_bulletin_board_task_already_full_intercept(self, mock_exists):
+        """
+        邊界測試 3：點擊接受後偵測到任務已滿 (task_already_full.png) 彈窗，
+        點擊 CONFIRM、寫入 DailyManager 並轉移至 EXIT_BOARD 準備 QUIT 離場。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.reset_state()
+        handler.step_phase = "PROCESS_ACCEPT_QUESTS"
+        handler.accepted_quest_titles = ["任務1", "任務2"]
+
+        def fake_match_full(img, name, **kw):
+            if name == "town_building/bulletin_board/task_already_full.png":
+                return ((400, 300), 0.90)
+            if name == "common/confirm.png":
+                return ((400, 400), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match_full
+        handler.handle()
+
+        # 斷言點擊了 confirm 按鈕 (400, 400) 並轉移至 EXIT_BOARD 離場
+        self.mock_mouse.click.assert_called_once_with(400, 400)
+        self.assertEqual(handler.step_phase, "EXIT_BOARD")
+
 if __name__ == "__main__":
     unittest.main()
