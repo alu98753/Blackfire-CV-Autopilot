@@ -248,20 +248,40 @@ class DailyManager:
         更新懸賞任務佇列 (Prepending Strategy)：
         將今日新抓取的任務 (today_new_quests) 置於前端優先執行，
         並保留過去未完成的舊任務在後端，避免跨日遺失。
+        自動剔除 ignored (顯式忽略跳過) 的任務。
         """
+        from utils.quest_mapper import QuestMapper
+        mapper = QuestMapper()
+
         subflows = self.status.setdefault("subflows", {})
         bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": []})
         old_quests = bb.get("accepted_quests", [])
 
-        updated = list(today_new_quests)
+        updated = []
+        for q in today_new_quests:
+            if not q:
+                continue
+            node = mapper.parse_quest(q)
+            if node is not None and node.mode_type == "ignored":
+                logging.info(f"🚫 [DailyManager] 新抓取任務 [{q}] 為顯式忽略任務，不寫入 accepted_quests。")
+                continue
+            if q not in updated:
+                updated.append(q)
+
         for q in old_quests:
-            if q and q not in updated:
+            if not q:
+                continue
+            node = mapper.parse_quest(q)
+            if node is not None and node.mode_type == "ignored":
+                continue
+            if q not in updated:
                 updated.append(q)
 
         bb["accepted_quests"] = updated
         self.save_status()
-        logging.info(f"📋 [DailyManager] 懸賞任務佇列更新完成 (今日新任務插在最前面): {updated}")
+        logging.info(f"📋 [DailyManager] 懸賞任務佇列更新完成 (已自動剔除 ignored 任務): {updated}")
         return updated
+
 
     def is_subflow_completed(self, subflow_key):
         """
