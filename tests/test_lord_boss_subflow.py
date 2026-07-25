@@ -24,6 +24,7 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         mock_mouse = MagicMock()
         self.state_machine = GameStateMachine(capturer=mock_capturer, matcher=mock_matcher, mouse=mock_mouse)
         self.state_machine.daily_manager = self.daily_manager
+        os.environ["DEBUG_PAUSE_BOSS"] = "0"
 
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)

@@ -111,6 +111,13 @@ class LordBossHandler(BaseStateHandler):
                         continue  # 有木牌冷卻中：跳過點擊，續行比對佇列中下一個 Boss！
 
                     logging.info(f"🎯 [首領討伐] 確認 Boss [{b_name}] 無冷卻木牌！進行點擊選擇討伐！")
+                    if getattr(self.machine, "debug_pause_boss_click", False) or os.environ.get("DEBUG_PAUSE_BOSS", "1") == "1":
+                        logging.info("🛑 [DEBUG 安全暫停] 已產出 debug_cooldown_match.png / ocr.png 截圖，安全暫停（不發射點擊）！")
+                        self.current_target_boss = boss_key
+                        selected_boss = boss_key
+                        time.sleep(0.5)
+                        return True
+
                     self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                     self.current_target_boss = boss_key
                     selected_boss = boss_key
