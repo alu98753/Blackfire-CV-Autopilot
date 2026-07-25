@@ -54,9 +54,10 @@ class TaskNode:
             return f".venv\\Scripts\\python main.py --backend --mode dungeon --dungeon 1"
         return f".venv\\Scripts\\python main.py --backend --mode mix"
 
-    def to_config_dict(self):
+    def to_config_dict(self, base_config=None):
         """
         將 TaskNode 轉換為 GameStateMachine 專用的 config 字典。
+        若傳入 base_config，自動傳承其中的裝備品質與獻祭偏好 (keep_colors, disassemble_colors, sacrifice_settings)。
         """
         from config import PRIMARY_MODES
         dungeon_entries = [
@@ -86,6 +87,16 @@ class TaskNode:
             "final": "stages/final_boss_stage.png"
         }
 
+        def _apply_base_preferences(cfg):
+            if base_config:
+                if "keep_colors" in base_config:
+                    cfg["keep_colors"] = base_config["keep_colors"]
+                if "disassemble_colors" in base_config:
+                    cfg["disassemble_colors"] = base_config["disassemble_colors"]
+                if "sacrifice_settings" in base_config:
+                    cfg["sacrifice_settings"] = base_config["sacrifice_settings"]
+            return cfg
+
         if self.mode_type == "dungeon" and self.dungeon_index is not None:
             idx = self.dungeon_index
             entry_img = dungeon_entries[idx] if 0 <= idx < len(dungeon_entries) else "dungeons/Ice_entry.png"
@@ -95,7 +106,7 @@ class TaskNode:
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
-            return cfg
+            return _apply_base_preferences(cfg)
 
         elif self.mode_type == "stage" and self.stage_level is not None:
             import os
@@ -130,16 +141,16 @@ class TaskNode:
             ]
             cfg["navigation_path"] = stage_path
             cfg["stage_navigation_path"] = stage_path
-            return cfg
+            return _apply_base_preferences(cfg)
 
         elif self.mode_type == "generic_boss":
             cfg = PRIMARY_MODES["dungeon"].copy()
             cfg["name"] = f"懸賞任務 - 史萊姆石窟 (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
-            return cfg
+            return _apply_base_preferences(cfg)
 
-        return PRIMARY_MODES["mix"].copy()
+        return _apply_base_preferences(PRIMARY_MODES["mix"].copy())
 
     def __repr__(self):
 

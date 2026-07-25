@@ -650,12 +650,27 @@ class GameStateMachine:
         self.quest_scheduler = scheduler
         logging.info("🔗 [GameStateMachine] 已成功連結懸賞任務排程器 (QuestScheduler)。")
 
+    def set_config(self, new_config):
+        """
+        統一設定 GameStateMachine 的模式配置，自動繼承舊配置中由使用者設定的品質偏好 (keep_colors & disassemble_colors)。
+        """
+        if new_config:
+            if getattr(self, "config", None):
+                if "keep_colors" in self.config and "keep_colors" not in new_config:
+                    new_config["keep_colors"] = self.config["keep_colors"]
+                if "disassemble_colors" in self.config and "disassemble_colors" not in new_config:
+                    new_config["disassemble_colors"] = self.config["disassemble_colors"]
+                if "sacrifice_settings" in self.config and "sacrifice_settings" not in new_config:
+                    new_config["sacrifice_settings"] = self.config["sacrifice_settings"]
+
+        self.config = new_config
+
     def apply_mix_fallback_config(self):
         """
         當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
         """
         if getattr(self, "primary_config", None):
-            self.config = self.primary_config.copy()
+            self.set_config(self.primary_config.copy())
             logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
         else:
             from config import PRIMARY_MODES
@@ -665,7 +680,7 @@ class GameStateMachine:
             if hasattr(self, "backend_mode"):
                 mix_config["backend_mode"] = self.backend_mode
 
-            self.config = mix_config
+            self.set_config(mix_config)
             self.primary_config = mix_config.copy()
             logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至預設退守混合模式: {mix_config['name']} (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
 
@@ -697,7 +712,7 @@ class GameStateMachine:
             quest_cfg = target_task.to_config_dict()
             if hasattr(self, "backend_mode"):
                 quest_cfg["backend_mode"] = self.backend_mode
-            self.config = quest_cfg
+            self.set_config(quest_cfg)
             logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
             return False
 
@@ -857,7 +872,7 @@ class GameStateMachine:
             logging.info("=" * 60)
 
             if next_flow in GAME_CONFIGS:
-                self.config = GAME_CONFIGS[next_flow].copy()
+                self.set_config(GAME_CONFIGS[next_flow].copy())
 
             if next_flow == "bag_clean":
                 self.need_bag_cleaning = True
@@ -891,7 +906,7 @@ class GameStateMachine:
             sys.exit(0)
 
         if getattr(self, "primary_config", None):
-            self.config = self.primary_config.copy()
+            self.set_config(self.primary_config.copy())
             logging.info(f"恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
         else:
             logging.info("重置旗標並回復原模式續行...")

@@ -311,6 +311,41 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         scheduler.add_task(node_dungeon)
         scheduler.print_task_summary()
 
+    def test_equipment_quality_preferences_propagation(self):
+        """
+        [品質偏好傳承測試] 驗證在 GameStateMachine 動態切換懸賞關卡時，
+        使用者選擇的 keep_colors 與 disassemble_colors 能被 100% 精確繼承傳承！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        
+        # 模擬使用者在 main.py 輸入的偏好：紫色及以上保留，藍色及以下分解
+        user_config = {
+            "name": "每日懸賞任務",
+            "type": "daily",
+            "keep_colors": ["purple", "orange_yellow", "red"],
+            "disassemble_colors": ["gray_or_empty", "green", "blue"]
+        }
+        sm.config = user_config
+
+        # 模擬切換懸賞任務 (至清除沙蟲 Stage 4 middle)
+        node_sandworm = self.mapper.parse_quest("清除沙蟲")
+        scheduler = QuestScheduler()
+        scheduler.add_task(node_sandworm)
+        sm.attach_quest_scheduler(scheduler)
+
+        # 觸發動態切換
+        sm.check_and_advance_quest_target()
+
+        # 斷言切換後的 sm.config 依然 100% 保存著使用者的品質偏好！
+        self.assertEqual(sm.config["keep_colors"], ["purple", "orange_yellow", "red"])
+        self.assertEqual(sm.config["disassemble_colors"], ["gray_or_empty", "green", "blue"])
+
 
 if __name__ == "__main__":
     unittest.main()
