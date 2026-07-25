@@ -242,6 +242,26 @@ class DailyManager:
         """
         return self.record_boss_fight(boss_key, now_ts)
 
+    def update_bulletin_board_quests(self, today_new_quests):
+        """
+        更新懸賞任務佇列 (Prepending Strategy)：
+        將今日新抓取的任務 (today_new_quests) 置於前端優先執行，
+        並保留過去未完成的舊任務在後端，避免跨日遺失。
+        """
+        subflows = self.status.setdefault("subflows", {})
+        bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": []})
+        old_quests = bb.get("accepted_quests", [])
+
+        updated = list(today_new_quests)
+        for q in old_quests:
+            if q and q not in updated:
+                updated.append(q)
+
+        bb["accepted_quests"] = updated
+        self.save_status()
+        logging.info(f"📋 [DailyManager] 懸賞任務佇列更新完成 (今日新任務插在最前面): {updated}")
+        return updated
+
     def is_subflow_completed(self, subflow_key):
         """
         檢查指定的通用子流程 (如 chest, hero_draw, blood_altar 等) 今日是否已完成。
@@ -252,6 +272,7 @@ class DailyManager:
     def record_subflow_completed(self, subflow_key, now_ts=None, extra_data=None):
         """
         記錄通用子流程 (如 chest, hero_draw 等) 今日已完成。
+        針對 bulletin_board，將 extra_data 的 accepted_quests 以【今日新任務插在前】的策略更新。
         """
         if now_ts is None:
             now_ts = time.time()
@@ -259,8 +280,13 @@ class DailyManager:
         sf = subflows.setdefault(subflow_key, {"completed_today": False, "last_executed_at": ""})
         sf["completed_today"] = True
         sf["last_executed_at"] = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        
         if isinstance(extra_data, dict):
-            sf.update(extra_data)
+            if subflow_key == "bulletin_board" and "accepted_quests" in extra_data:
+                self.update_bulletin_board_quests(extra_data["accepted_quests"])
+            else:
+                sf.update(extra_data)
+
         self.save_status()
         logging.info(f"✅ [DailyManager] 記錄通用子流程 [{subflow_key}] 今日已完成。")
 

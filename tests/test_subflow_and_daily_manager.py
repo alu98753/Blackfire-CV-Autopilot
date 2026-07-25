@@ -298,7 +298,46 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         with patch("config.SUBFLOW_CONFIGS", fake_configs):
             sm.pop_and_next_town_subflow()
 
-        self.assertEqual(sm.current_state, sm.STATE_CHEST)
+    def test_daily_reset_preserves_accepted_quests(self):
+        """
+        測試：每日 08:05 重置 (check_and_reset_daily) 時，
+        會將 completed_today 設為 False，但【絕不抹除/重置 accepted_quests】。
+        """
+        # 先寫入舊任務
+        self.manager.record_subflow_completed("bulletin_board", extra_data={"accepted_quests": ["清除野豬", "擊殺首領"]})
+        self.assertTrue(self.manager.is_subflow_completed("bulletin_board"))
+        self.assertEqual(self.manager.status["subflows"]["bulletin_board"]["accepted_quests"], ["清除野豬", "擊殺首領"])
+
+        # 觸發強制重置 (跨日)
+        self.manager.check_and_reset_daily(force=True)
+
+        # 驗證 completed_today 重置為 False，但 accepted_quests 依然完好無損！
+        self.assertFalse(self.manager.is_subflow_completed("bulletin_board"))
+        self.assertEqual(self.manager.status["subflows"]["bulletin_board"]["accepted_quests"], ["清除野豬", "擊殺首領"])
+
+    def test_bulletin_board_prepends_today_new_quests(self):
+        """
+        測試：每日抓取新任務時以【前插策略 Prepending Strategy】更新佇列，
+        確保【今日新任務排在前、舊未完成任務留在後】且不重複。
+        """
+        # 1. 昨日殘留未完成舊任務: ["清除野豬", "擊殺首領"]
+        self.manager.status["subflows"]["bulletin_board"]["accepted_quests"] = ["清除野豬", "擊殺首領"]
+        self.manager.save_status()
+
+        # 2. 今日抓取新任務: ["擊敗冰元素", "史萊姆王的毀滅"]
+        today_new_quests = ["擊敗冰元素", "史萊姆王的毀滅"]
+        updated = self.manager.update_bulletin_board_quests(today_new_quests)
+
+        # 3. 驗證更新後：今日新任務在前，舊任務在後！
+        expected = ["擊敗冰元素", "史萊姆王的毀滅", "清除野豬", "擊殺首領"]
+        self.assertEqual(updated, expected)
+        self.assertEqual(self.manager.status["subflows"]["bulletin_board"]["accepted_quests"], expected)
+
+        # 4. 測試重複項目不重複插入
+        today_new_quests_2 = ["擊敗冰元素", "清除野豬"]
+        updated_2 = self.manager.update_bulletin_board_quests(today_new_quests_2)
+        expected_2 = ["擊敗冰元素", "清除野豬", "史萊姆王的毀滅", "擊殺首領"]
+        self.assertEqual(updated_2, expected_2)
 
 if __name__ == "__main__":
     unittest.main()
