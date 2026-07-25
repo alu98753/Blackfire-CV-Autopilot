@@ -8,7 +8,7 @@ class TaskNode:
     POLICY_DETERMINISTIC = "deterministic_count" # 可精準計數任務
     POLICY_BANNER_VERIFY = "banner_verify_only"  # 無法自動累計/僅憑彈窗核銷任務
 
-    def __init__(self, quest_title, mode_type, target_count=1, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC):
+    def __init__(self, quest_title, mode_type, target_count=10, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC):
         self.quest_title = quest_title
         self.mode_type = mode_type          # "dungeon", "stage", "generic_boss", "ignored"
         self.target_count = target_count
@@ -175,13 +175,8 @@ class QuestMapper:
                     counting_policy=TaskNode.POLICY_BANNER_VERIFY
                 )
 
-        # 解析目標數量 (x 10, x 5, x 1)
-        target_count = 1
-        count_match = re.search(r"x\s*(\d+)", requirement_text)
-        if not count_match:
-            count_match = re.search(r"x\s*(\d+)", combined_text)
-        if count_match:
-            target_count = int(count_match.group(1))
+        # 目標總次數固定預設為 10 次
+        target_count = 10
 
         # 判定預設政策 (若在 BANNER_VERIFY_QUESTS 全名清單中)
         default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in BANNER_VERIFY_QUESTS else TaskNode.POLICY_DETERMINISTIC

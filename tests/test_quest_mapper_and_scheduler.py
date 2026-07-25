@@ -50,10 +50,10 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node2.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode stage --stage 6 --sub first", node2.to_cli_args())
 
-        # 3. 圖片 3: 擊殺首領
+        # 3. 圖片 3: 擊殺首領 (預設固定 10 次)
         node3 = self.mapper.parse_quest("擊殺首領", "各種強大的首領在附近地區活動...", "擊殺: 首領 x 5")
         self.assertEqual(node3.mode_type, "generic_boss")
-        self.assertEqual(node3.target_count, 5)
+        self.assertEqual(node3.target_count, 10)
 
         # 4. 圖片 4: 清除野豬 (可精確計數)
         node4 = self.mapper.parse_quest("清除野豬", "野豬在肆意橫行...", "擊殺: 野豬 x 10")
@@ -64,11 +64,11 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node4.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode stage --stage 1 --sub final", node4.to_cli_args())
 
-        # 5. 圖片 5: 史萊姆王的毀滅 (不確定 Boss 任務 -> POLICY_BANNER_VERIFY)
+        # 5. 圖片 5: 史萊姆王的毀滅 (不確定 Boss 任務 -> POLICY_BANNER_VERIFY, 固定 10 次)
         node5 = self.mapper.parse_quest("史萊姆王的毀滅", "在地下城黏糊糊的石窟最深處...", "擊殺: [史萊姆王] x 1")
         self.assertEqual(node5.mode_type, "dungeon")
         self.assertEqual(node5.dungeon_index, 0)
-        self.assertEqual(node5.target_count, 1)
+        self.assertEqual(node5.target_count, 10)
         self.assertEqual(node5.counting_policy, TaskNode.POLICY_BANNER_VERIFY)
         self.assertIn("--mode dungeon --dungeon 1", node5.to_cli_args())
 
@@ -137,15 +137,16 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertIn("--mode stage --stage 1 --sub final", cmd4)
         print(f"[動態排程 step 4] 指令: {cmd4} | 說明: {msg4}")
 
-        # 模擬打野豬魔王關 4 次 (每次算 1 隻野豬與 1 個 Boss)
-        for _ in range(4):
+        # 模擬打野豬魔王關 9 次 (每次算 1 隻野豬與 1 個 Boss，加算前次史萊姆 1 次共 10 次 Boss)
+        for _ in range(9):
             self.scheduler.record_kill_event(enemy_name="野豬", is_boss=True, stage_level=1, sub_stage="final", kill_count=1)
 
-        # 剩餘野豬 6 隻，首領已累積 1(史萊姆) + 4(野豬) = 5 隻！首領任務自動完成！
+        # 首領已累積 1(史萊姆) + 9(野豬) = 10 隻！首領任務自動完成！
         self.assertTrue(boss_task.is_completed)
 
-        # 模擬打完剩下的 6 隻野豬
-        self.scheduler.record_kill_event(enemy_name="野豬", stage_level=1, sub_stage="final", kill_count=6)
+        # 模擬打完剩下的 1 隻野豬 (累計 10 隻野豬)
+        self.scheduler.record_kill_event(enemy_name="野豬", stage_level=1, sub_stage="final", kill_count=1)
+
 
         # 7. 最終斷言：所有懸賞任務 100% 完成！
         self.assertTrue(self.scheduler.is_all_completed())
