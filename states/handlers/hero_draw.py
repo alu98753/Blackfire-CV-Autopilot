@@ -73,12 +73,18 @@ class HeroDrawHandler(BaseStateHandler):
                 self.machine.pop_and_next_town_subflow()
                 return True
 
-        # 3. ENTERED_TAVERN 階段：尋找免費招募按鈕 (free_recruitment.png)
+        # 3. ENTERED_TAVERN 階段：精確比對免費招募按鈕 (free_recruitment.png)
         elif self.step_phase == "ENTERED_TAVERN":
             if os.path.exists(os.path.join("templates", recruitment_btn)):
-                pos_free, conf_free = self.matcher.match(screen_img, recruitment_btn, threshold=0.75)
+                # 門檻設為 0.83 並要求相對亮度 >= 0.70，徹底排除其他相似頭盔 (普通/傳奇/兌換招募)
+                pos_free, conf_free = self.matcher.match(
+                    screen_img, 
+                    recruitment_btn, 
+                    threshold=0.83, 
+                    brightness_threshold=0.70
+                )
                 if pos_free:
-                    logging.info(f"🍺 [抽英雄] 於酒館發現免費招募按鈕 [{recruitment_btn}] [{conf_free:.4f}]，進行點擊！")
+                    logging.info(f"🍺 [抽英雄] 於酒館精確匹配到免費招募按鈕 [{recruitment_btn}] [{conf_free:.4f}]，進行點擊！")
                     self.mouse.click(left + pos_free[0], top + pos_free[1])
                     self.last_action_time = now
                     self.step_phase = "RECRUITED"
@@ -94,6 +100,7 @@ class HeroDrawHandler(BaseStateHandler):
 
         # 4. RECRUITED 階段：點擊領取/招募確認按鈕
         elif self.step_phase == "RECRUITED":
+            
             for confirm_template in ["common/confirm.png", "common/ok.png"]:
                 if os.path.exists(os.path.join("templates", confirm_template)):
                     pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)

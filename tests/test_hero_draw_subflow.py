@@ -39,7 +39,7 @@ class TestHeroDrawSubflow(unittest.TestCase):
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
-        def fake_match(img, template, threshold=0.75):
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
             if template == "town_building/Tavern/Tavern.png":
                 return ((200, 200), 0.85)
             if template == "town_building/Tavern/free_recruitment.png":
