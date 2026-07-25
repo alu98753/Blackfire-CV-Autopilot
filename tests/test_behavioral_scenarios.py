@@ -2229,7 +2229,10 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.reset_state()
 
         # 模擬 DailyManager 紀錄今日已完成
-        self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=True)
+        mock_dm = MagicMock()
+        mock_dm.is_subflow_completed.return_value = True
+        self.state_machine.daily_manager = mock_dm
+
 
         def mock_match_entry(img, name, **kw):
             if name == "town_building/Blood_Altar/receive_entry.png":

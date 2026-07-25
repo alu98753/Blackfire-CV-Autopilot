@@ -243,8 +243,9 @@ class BloodAltarHandler(BaseStateHandler):
         """檢查 DailyManager 中 blood_altar 是否今日已領取過免費血水"""
         dm = getattr(self.machine, "daily_manager", None)
         if dm and hasattr(dm, "is_subflow_completed"):
-            return dm.is_subflow_completed("blood_altar")
+            return dm.is_subflow_completed("blood_altar") is True
         return False
+
 
         # =========================================================================
         # 4. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
