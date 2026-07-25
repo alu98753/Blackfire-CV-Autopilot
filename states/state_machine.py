@@ -2,6 +2,7 @@ import time
 import os
 import cv2
 import logging
+from config import GAME_CONFIGS, normalize_config
 from states.handlers import (
     NavigationHandler,
     LobbyHandler,

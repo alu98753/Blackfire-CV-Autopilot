@@ -70,20 +70,21 @@ class TestMainConfig(unittest.TestCase):
         missing = check_mode_templates(config)
         self.assertIn("stages/retry.png", missing)
 
-    @patch('builtins.input', side_effect=["2", "3"])
-    def test_setup_equipment_config_collect_only_and_bag_clean(self, mock_input):
-        """測試 setup_equipment_config 在 collect_only 跳過選單，而 bag_clean 進行選單設定"""
+    def test_setup_equipment_config_and_normalize_config(self):
+        """測試 normalize_config 能夠在任何模式下補充完整的 disassemble_colors 與 keep_colors"""
         from main import setup_equipment_config
+        from config import normalize_config, GAME_CONFIGS
         
         cfg_collect = GAME_CONFIGS["collect_only"].copy()
         setup_equipment_config(cfg_collect)
-        self.assertEqual(cfg_collect["keep_colors"], [])
-        self.assertEqual(cfg_collect["disassemble_colors"], [])
+        cfg_collect = normalize_config(cfg_collect)
+        self.assertEqual(cfg_collect["keep_colors"], ["blue", "purple", "orange_yellow", "red"])
+        self.assertEqual(cfg_collect["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
-        cfg_bag = GAME_CONFIGS["bag_clean"].copy()
-        setup_equipment_config(cfg_bag)
-        self.assertEqual(cfg_bag["keep_colors"], ["blue", "purple", "orange_yellow", "red"])
-        self.assertEqual(cfg_bag["disassemble_colors"], ["gray_or_empty", "green", "blue"])
+        cfg_daily = GAME_CONFIGS["daily"].copy()
+        cfg_daily = normalize_config(cfg_daily)
+        self.assertEqual(cfg_daily["keep_colors"], ["blue", "purple", "orange_yellow", "red"])
+        self.assertEqual(cfg_daily["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
 if __name__ == "__main__":
     unittest.main()

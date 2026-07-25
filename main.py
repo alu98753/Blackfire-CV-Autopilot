@@ -17,7 +17,7 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
+from config import GAME_CONFIGS, PRIMARY_MODES, STAGE_CONFIGS, normalize_config, SUBFLOW_CONFIGS
 from utils import get_stage_configs
 from utils.daily_manager import DailyManager
 
@@ -382,9 +382,7 @@ def setup_mode_config(args):
     return config
 
 def setup_equipment_config(config):
-    if config["type"] in ["collect_only", "blood_altar", "jewelry_workshop", "chest", "lord_boss", "hero_draw"]:
-        config["keep_colors"] = []
-        config["disassemble_colors"] = []
+    if config.get("type") in ["collect_only", "blood_altar", "jewelry_workshop", "chest", "lord_boss", "hero_draw"]:
         return
 
     # 1. 選擇要保留/領取的最低裝備品質
@@ -502,6 +500,7 @@ def init_state_machine_system(args, config):
     # 初始化狀態機
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
     state_machine.backend_mode = args.backend
+    config = normalize_config(config)
     # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
     mouse.state_machine = state_machine
     state_machine.config = config
