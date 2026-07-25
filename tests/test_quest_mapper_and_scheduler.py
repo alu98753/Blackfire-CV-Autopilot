@@ -257,6 +257,8 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
                     os.path.exists(entry_path),
                     f"任務 [{quest}] 映射的 stage_entry 圖片檔案不存在: {entry_path}"
                 )
+                self.assertIn("navigation_path", cfg)
+                self.assertIn(cfg["stage_entry"], cfg["navigation_path"])
 
 
 if __name__ == "__main__":

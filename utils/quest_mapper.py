@@ -109,13 +109,15 @@ class TaskNode:
             cfg["stage_name"] = f"{sname} ({sub})"
             cfg["stage_entry"] = entry_img
             cfg["stage_target"] = target_img
-            cfg["stage_navigation_path"] = [
+            stage_path = [
                 "common/door.png",
                 "common/select_stage.png",
                 entry_img,
                 "stages/stage_label.png",
                 target_img
             ]
+            cfg["navigation_path"] = stage_path
+            cfg["stage_navigation_path"] = stage_path
             return cfg
 
         elif self.mode_type == "generic_boss":
