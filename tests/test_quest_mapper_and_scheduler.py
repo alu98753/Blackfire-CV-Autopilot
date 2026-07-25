@@ -242,6 +242,22 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertTrue(node.is_batch_completed())
         self.assertTrue(node.is_completed)
 
+    def test_all_stage_quest_templates_exist_on_disk(self):
+        """
+        [防呆門禁測試] 驗證全關卡懸賞任務 (包含沙蟲 Level 4、蛙人 Level 5、野豬 Level 1)
+        轉換產出的 stage_entry 圖片檔案 100% 存在於硬碟 templates/ 資料夾中，防範無效檔名退守。
+        """
+        import os
+        for quest in ["清除沙蟲", "清除蛙人", "清除骷髏", "清除史萊姆", "清除樹人"]:
+            node = self.mapper.parse_quest(quest)
+            cfg = node.to_config_dict()
+            if "stage_entry" in cfg:
+                entry_path = os.path.join("templates", cfg["stage_entry"])
+                self.assertTrue(
+                    os.path.exists(entry_path),
+                    f"任務 [{quest}] 映射的 stage_entry 圖片檔案不存在: {entry_path}"
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
