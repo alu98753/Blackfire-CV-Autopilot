@@ -36,6 +36,44 @@
 
 ---
 
+## 🧮 懸賞任務多階梯優先級排序與自動持久化機制 (`sort_quests` & Persistence)
+
+在 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L145) 的 `QuestMapper` 中實作了 `sort_quests(quest_titles)` 方法，並於 [utils/daily_manager.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py#L279) 的 `update_bulletin_board_quests()` 中自動調用。
+
+### 1. 🥇 多階梯排序優先級規則 (Sorting Hierarchy)
+當告示牌接取任務或更新佇列時，任務會依照四元組 Key `(policy_score, mode_score, idx_score, sub_score)` 進行排序：
+
+- **第一梯隊：確定性優先 (`policy_score`)**
+  `DETERMINISTIC_QUESTS` (確定性可計數) ➔ **最優先 (0)** > `BANNER_VERIFY_QUESTS` (僅憑彈窗核銷) ➔ **次之 (1)**
+- **第二梯隊：模式優先 (`mode_score`)**
+  `dungeon` (地下城) ➔ **優先 (0)** > `stage` (普通關卡) ➔ **次之 (1)** > `generic_boss` (通用 Boss) ➔ **(2)**
+- **第三梯隊：索引與等級大者優先 (`idx_score`)**
+  - **地下城 (`dungeon_index`)**：`index` 大者優先 (`dungeon 4 (冰雪洞窟)` > `dungeon 3 (神秘遺跡)` > `dungeon 2 (森林迷宮)` > `dungeon 1` > `dungeon 0 (黏糊糊的石窟)`).
+  - **普通關卡 (`stage_level`)**：`level` 大者優先 (`Level 6 (冰凍峽谷)` > `Level 5 (幽暗沼澤)` > `Level 4 (沙漠廢墟)` > `Level 3` > `Level 1`).
+  - **子關卡類型**：`final` (魔王關) > `middle` (中間關) > `first` (第一關).
+
+---
+
+### 2. 📋 排序示範與 JSON 硬碟寫入樣貌
+
+當告示牌抓取到隨機任務佇列時，寫入 [user_data/daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json) 的 `accepted_quests` 實際呈現順序為：
+
+```json
+"accepted_quests": [
+  "清除骷髏",        // 1. DETERMINISTIC, 地下城 #4 (神秘遺跡)
+  "清除樹人",        // 2. DETERMINISTIC, 地下城 #3 (森林迷宮)
+  "清除史萊姆",      // 3. DETERMINISTIC, 地下城 #1 (黏糊糊的石窟)
+  "清除蛙人",        // 4. DETERMINISTIC, 關卡 Level 5 (幽暗沼澤 第一關)
+  "清除沙蟲",        // 5. DETERMINISTIC, 關卡 Level 4 (沙漠廢墟 中間關)
+  "冰雪洞窟的暴君",  // 6. BANNER_VERIFY, 地下城 #5 (冰雪洞窟)
+  "破除森林的枷鎖",  // 7. BANNER_VERIFY, 地下城 #3 (森林迷宮)
+  "史萊姆王的毀滅"   // 8. BANNER_VERIFY, 地下城 #1 (黏糊糊的石窟)
+]
+```
+
+*(註：`獵金之蟲`、`完成任何地下城` 與 `敵人剿滅` 命中 `IGNORED_QUESTS`，在排序寫入前已被自動剔除)*
+
+---
 
 ## 🛡️ OCR 錯別字自動加強防護
 不論是告示牌讀取還是完成彈窗，輸入的標題均會自動經過 `normalize_quest_title()` 清洗（如 `野瀦`➔`野豬`、`毀減`➔`毀滅`、`肇敗`➔`擊敗`、`枯樓`➔`骷髏`），確保精確命中上述字典。
@@ -43,19 +81,15 @@
 
 ## 🔍 未來發現 unknown_quests 時的檢查與處理 SOP
 📌 具體三種處置方式：
-情況 A：要打的新任務 開啟 
-
-utils/quest_mapper.py
-：
-若打地下城 ➔ 加入 self.dungeon_rules（指定 0~4 索引）。
-若打普通關卡 ➔ 加入 self.stage_rules（指定 1~6 等級與 first/middle/final 子關卡）。
-情況 B：不要打的任務（如敵人剿滅、獵金之蟲） 開啟 
-
-utils/quest_mapper.py
-：
-加入 self.ignored_rules 正則匹配，系統會識別為 ignored 模式，直接跳過不接取，且不上報 unknown_quests。
-情況 C：EasyOCR 錯別字誤判（如 野猾 ➔ 野豬） 開啟 
-
-utils/quest_mapper.py
-：
-加入 OCR_TYPO_MAP 對照字典，自動清洗為標準繁體字。
+1. **情況 A：要打的新任務**
+   開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84)：
+   - 若為確定性通關/擊殺 ➔ 加入 `DETERMINISTIC_QUESTS` 全名清單。
+   - 若為不確定隨機 Boss ➔ 加入 `BANNER_VERIFY_QUESTS` 全名清單。
+   - 若打地下城 ➔ 加入 `self.dungeon_rules`（指定 0~4 索引）。
+   - 若打普通關卡 ➔ 加入 `self.stage_rules`（指定 1~6 等級與 `first/middle/final` 子關卡）。
+2. **情況 B：不要打的任務**（如`敵人剿滅`、`獵金之蟲`、`完成任何地下城`）
+   開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L86)：
+   - 加入 `IGNORED_QUESTS` 全名清單與 `self.ignored_rules` 正則匹配，系統會識別為 `ignored` 模式，直接跳過不接取，且**不上報 `unknown_quests`**。
+3. **情況 C：EasyOCR 錯別字誤判**（如 `野猾` ➔ `野豬`）
+   開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L44)：
+   - 加入 `OCR_TYPO_MAP` 對照字典，自動清洗為標準繁體字。
