@@ -132,7 +132,7 @@ class LordBossHandler(BaseStateHandler):
                     # 過濾動畫尚未穩定的模糊卡片 (信心度需 >= 0.82)
                     if conf_b < 0.82:
                         logging.info(f"⌛ [首領討伐] 發現 Boss 卡片 [{b_name}] (信心度 {conf_b:.4f} < 0.82)，等待過場動畫穩定...")
-                        time.sleep(0.2)
+                        time.sleep(1)
                         return True
 
                     logging.info(f"🔍 [首領討伐] 於畫面發現 Boss 卡片 [{b_name}] [{conf_b:.4f}]，檢查是否有冷卻木牌...")
