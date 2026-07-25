@@ -54,6 +54,18 @@ class HeroDrawHandler(BaseStateHandler):
 
         # 2. INIT 階段：在城鎮尋找並進入酒館 (Tavern.png)
         if self.step_phase == "INIT":
+            # 2.1 防呆：若目前已在酒館內部 (看得到免費招募/招募按鈕/房屋退出按鈕)，直接切換至 ENTERED_TAVERN 階段
+            pos_free_check, _ = self.matcher.match(screen_img, recruitment_btn, threshold=0.75, brightness_threshold=0.70)
+            pos_rec_check, _ = self.matcher.match(screen_img, "town_building/Tavern/RECRUITED.png", threshold=0.75)
+            pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.75)
+
+            if pos_free_check or pos_rec_check or pos_exit_check:
+                logging.info("🍺 [抽英雄] 辨識到目前已在酒館內部，直接切換至酒館招募階段...")
+                self.step_phase = "ENTERED_TAVERN"
+                self.not_found_count = 0
+                return True
+
+            # 2.2 在城鎮尋找並點擊酒館建築 (Tavern.png)
             if os.path.exists(os.path.join("templates", building_btn)):
                 pos_tavern, conf_tavern = self.matcher.match(screen_img, building_btn, threshold=0.75)
                 if pos_tavern:
