@@ -90,6 +90,8 @@ class GameStateMachine:
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
         self.town_subflow_queue = []
+        self.quest_scheduler = None
+
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
@@ -623,22 +625,55 @@ class GameStateMachine:
                 self.bread_collected_this_run = False
                 self.bread_click_attempted = False
 
+    def attach_quest_scheduler(self, scheduler):
+        """
+        將實例化的 QuestScheduler 動態掛載至 GameStateMachine。
+        """
+        self.quest_scheduler = scheduler
+        logging.info("🔗 [GameStateMachine] 已成功連結懸賞任務排程器 (QuestScheduler)。")
+
+    def check_and_advance_quest_target(self):
+        """
+        當當前任務目標完成時，動態查詢下一個懸賞任務目標並切換模式配置。
+        """
+        if self.quest_scheduler is None:
+            return False
+
+        if self.quest_scheduler.is_all_completed():
+            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！")
+            return True
+
+        cli_cmd, msg = self.quest_scheduler.get_next_action_config()
+        logging.info(f"🔄 [GameStateMachine 動態調度] {msg}")
+        return False
+
     def _run_task_complete_subflow(self, rect):
         logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")
         start_time = time.time()
         timeout = 5.0  # 最多執行 5 秒
-        
+
         subflow_templates = [
             ("common/confirm.png", 0.80),
             ("common/ok.png", 0.80)
         ]
-        
+
+        ocr_done = False
+
         while time.time() - start_time < timeout:
             screen_img = self.capturer.capture(rect)
             if screen_img is None:
                 time.sleep(0.2)
                 continue
-                
+
+            # 進行 OCR 辨識任務完成標題 (僅辨識一次)
+            if not ocr_done and self.quest_scheduler:
+                pos_task_ocr, _ = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
+                if pos_task_ocr:
+                    self.quest_scheduler.process_task_complete_banner(screen_img, pos_task_ocr, ocr_reader=self._ocr_reader)
+                    ocr_done = True
+
+
+
             matched_any = False
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
@@ -650,7 +685,7 @@ class GameStateMachine:
                     matched_any = True
                     time.sleep(0.5) # 等待彈窗關閉動畫
                     break # 重新擷取畫面以確認是否消失
-                    
+
             if not matched_any:
                 # 2. 如果無任何確認按鈕，檢查任務完成主彈窗是否消失
                 pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
@@ -666,6 +701,7 @@ class GameStateMachine:
                     logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，重新點擊領取獎勵座標 ({btn_x}, {btn_y})。")
                     self.mouse.click(btn_x, btn_y)
                     time.sleep(0.5)
+
 
     def start_subflow_queue(self, queue):
         """

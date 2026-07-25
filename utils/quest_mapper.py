@@ -50,18 +50,24 @@ class QuestMapper:
         self.dungeon_rules = [
             (r"(史萊姆王|黏糊糊的石窟)", 0),
             (r"(幽影地穴|鬼魂)", 1),
-            (r"(森林迷宮|破除遺跡)", 2),
+            (r"(森林迷宮|破除遺跡|破除森林的枷鎖)", 2),
             (r"(神秘遺跡|遺跡的詛咒)", 3),
             (r"(冰雪洞窟的暴君|終結寒冰獸王|冰雪洞窟)", 4),
+            (r"(完成任何地下城)", 0),
         ]
 
         # 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型)
         self.stage_rules = [
             (r"(野豬)", 1, "final"),
             (r"(枯樓|骷髏)", 1, "first"),
+            (r"(史萊姆)", 1, "first"),
+            (r"(樹人)", 3, "first"),
             (r"(熊)", 3, "first"),
+            (r"(蛙人)", 5, "first"),
             (r"(冰元素)", 6, "first"),
+            (r"(敵人剿滅|獵金之蟲)", 1, "first"),
         ]
+
 
     def parse_quest(self, title, description="", requirement_text=""):
         """
@@ -113,13 +119,7 @@ class QuestMapper:
                     raw_desc=combined_text
                 )
 
-        # 5. 預設 Fallback: 轉為混合模式
-        logging.warning(f"⚠️ 無法精確映射懸賞任務 '{title}'，將使用預設 mix 模式預設推進。")
-        return TaskNode(
-            quest_title=title,
-            mode_type="stage",
-            target_count=target_count,
-            stage_level=6,
-            sub_stage="first",
-            raw_desc=combined_text
-        )
+        # 5. 無法精確映射：移除預設保底 Fallback，回傳 None 供系統寫入 unknown_quests
+        logging.warning(f"⚠️ 懸賞任務 '{title}' 無法對應到已知規則庫 (未定義任務)，回傳 None 紀錄至 unknown_quests。")
+        return None
+

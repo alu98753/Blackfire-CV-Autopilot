@@ -27,7 +27,8 @@ STAGE_TEMPLATES = [
     "stages/level5_gloomy_swamp.png"
 ]
 
-# ==================== 1. 主掛機大局模式 (PRIMARY MODES - 僅限 4 個) ====================
+# ==================== 1. 主掛機大局模式 (PRIMARY MODES - 5 個) ====================
+
 PRIMARY_MODES = {
     # ------------------ 普通關卡模式 ------------------
     "stage": {
@@ -141,8 +142,43 @@ PRIMARY_MODES = {
         "diamond_cd": 300.0,
         "bread_cd": 300.0,
         "stamina_retreat_duration": 7.0,
+    },
+
+    # ------------------ 每日懸賞任務動態調度模式 ------------------
+    "quest": {
+        "name": "每日懸賞任務",
+        "type": "mix",
+        "dungeon_names": DUNGEON_NAMES,
+        "dungeon_entries": DUNGEON_ENTRY_TEMPLATES,
+        "stage_templates": STAGE_TEMPLATES,
+        "bless_mode": "combat",
+        "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
+        "greedy_dungeon": True,
+        "greedy_allowed_indices": [0, 1, 2, 3, 4],
+        "auto_resume_dungeon_on_cd": False,
+        "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
+        "dungeon_fight_btn": "dungeons/dungeon_fight.png",
+        "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
+        "explore_priorities": [
+            "dungeons/dungeons_complete.png",
+            "common/confirm.png",
+            "common/continue.png",
+            "common/continue_gray.png",
+            "dungeons/gungeon_godown_confirm.png",
+            "common/ok.png",
+            "dungeons/dungeon_fight.png",
+            "common/quit.png",
+            "dungeons/Treasure.png",
+            "dungeons/skill_event.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/gungeon_godown.png"
+        ],
+        "lobby_start_btn": "stages/start.png",
+        "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
     }
 }
+
+
 
 # ==================== 2. 城鎮子流程獨立配置 (SUBFLOW CONFIGS - 專供 Dev 測試與 08:05 佇列) ====================
 # ------------------ 以下為 08:05 每日任務城鎮子流程 (Daily Subflows) ------------------

@@ -10,7 +10,8 @@ DEFAULT_DAILY_STATUS = {
         "chest": {"completed_today": False, "last_executed_at": ""},
         "hero_draw": {"completed_today": False, "last_executed_at": ""},
         "blood_altar": {"completed_today": False, "last_executed_at": ""},
-        "bulletin_board": {"completed_today": False, "last_executed_at": "", "accepted_quests": []},
+        "bulletin_board": {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []},
+
         "lord_boss": {
             "completed_today": False,
             "bosses": {
@@ -289,4 +290,47 @@ class DailyManager:
 
         self.save_status()
         logging.info(f"✅ [DailyManager] 記錄通用子流程 [{subflow_key}] 今日已完成。")
+
+    def load_quest_scheduler(self):
+        """
+        讀取當前 accepted_quests 並呼叫 QuestScheduler.from_daily_status 建立動態排程器。
+        """
+        from utils.quest_scheduler import QuestScheduler
+        accepted = self.status.get("subflows", {}).get("bulletin_board", {}).get("accepted_quests", [])
+        return QuestScheduler.from_daily_status(accepted, daily_manager=self)
+
+    def record_unknown_quest(self, quest_title):
+        """
+        將無法映射的未定義懸賞任務寫入 unknown_quests 列表 (僅 append，每日不重置清空)。
+        同時將該任務從 accepted_quests 中移除。
+        """
+        subflows = self.status.setdefault("subflows", {})
+        bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []})
+        unknowns = bb.setdefault("unknown_quests", [])
+
+        if quest_title and quest_title not in unknowns:
+            unknowns.append(quest_title)
+            logging.warning(f"⚠️ [DailyManager] 懸賞任務 [{quest_title}] 未能映射，已新增至 unknown_quests 歷史清單！")
+
+        # 從 accepted_quests 中一併移除，避免重複解析
+        old_accepted = bb.get("accepted_quests", [])
+        bb["accepted_quests"] = [q for q in old_accepted if q != quest_title]
+        self.save_status()
+
+    def remove_accepted_quest(self, quest_title):
+
+        """
+        將已完成的懸賞任務從 accepted_quests 列表中剔除並儲存 JSON。
+        """
+        subflows = self.status.setdefault("subflows", {})
+        bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": []})
+        old_quests = bb.get("accepted_quests", [])
+        new_quests = [q for q in old_quests if not (quest_title in q or q in quest_title)]
+        if len(new_quests) != len(old_quests):
+            bb["accepted_quests"] = new_quests
+            self.save_status()
+            logging.info(f"🗑️ [DailyManager] 已將懸賞任務 [{quest_title}] 從持久化 json 的 accepted_quests 中移除。")
+            return True
+        return False
+
 
