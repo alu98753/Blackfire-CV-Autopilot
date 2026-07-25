@@ -491,10 +491,11 @@ def init_state_machine_system(args, config):
         state_machine.is_dev_subflow_run = True
         state_machine.start_subflow_queue(args.subflow)
 
-    # 懸賞任務模式：載入 accepted_quests 並掛載 QuestScheduler
-    if getattr(args, "mode", None) == "quest":
+    # 懸賞任務模式 / 混合模式：載入 accepted_quests 並掛載 QuestScheduler
+    if getattr(args, "mode", None) in ["mix", "quest"]:
         quest_scheduler = daily_manager.load_quest_scheduler()
         state_machine.attach_quest_scheduler(quest_scheduler)
+
 
 
     if config["type"] in ["bag_clean", "blood_altar"]:
