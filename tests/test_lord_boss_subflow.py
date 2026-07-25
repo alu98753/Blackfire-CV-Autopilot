@@ -151,7 +151,7 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         """測試：點擊前若經 OCR 判定冷卻中，跳過點擊並自動更新 DailyManager，繼續檢查下一個可用 Boss"""
         mock_exists.return_value = True
         # 模擬第一個 Boss (lord_spectre) 在點擊前經 OCR 判讀為冷卻中 (剩餘 1800 秒)
-        mock_ocr.side_effect = lambda img, pos: (1800.0, "00:30:00") if pos == (100, 100) else (None, None)
+        mock_ocr.side_effect = lambda img, pos, *args, **kwargs: (1800.0, "00:30:00") if pos == (100, 100) else (None, None)
         
         stage_cfg = GAME_CONFIGS["stage"].copy()
         self.state_machine.primary_config = stage_cfg

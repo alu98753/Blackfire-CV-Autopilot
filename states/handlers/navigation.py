@@ -4,6 +4,7 @@ import logging
 import re
 from states.handlers.base import BaseStateHandler
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
+from utils.cooldown_detector import detect_cooldown_sign_and_time
 
 def filter_navigation_path(nav_path, active_tabs=None):
     """
