@@ -789,30 +789,31 @@ class GameStateMachine:
                 self.mouse.click(btn_x, btn_y)
                 time.sleep(0.6)
 
-            # 5. 🛡️ 確定消失防護：點擊發射後，連續兩幀驗證 task_complete.png 徹底消失並補點確認
+            # 5. 🛡️ 確定消失防護：每次配對固定間隔 1.0 秒，配對確認直到 task_complete.png 徹底消失
             disappeared_streak = 0
-            for retry in range(5):
+            for retry in range(6):
+                time.sleep(1.0)  # 每次配對均精確間隔 1.0 秒，相容動畫過場
                 chk_img = self.capturer.capture(rect)
                 if chk_img is None:
                     break
-                pos_still, conf_still = self.matcher.match(chk_img, "task_complete.png", threshold=0.70)
+                pos_still, conf_still = self.matcher.match(chk_img, "task_complete.png", threshold=0.70, quiet=True)
                 if not pos_still:
                     disappeared_streak += 1
                     if disappeared_streak >= 2:
-                        logging.info("🟢 [子流程] 已連續兩幀確認【任務完成】彈窗徹底關閉消失，畫面動畫恢復完畢！")
-                        time.sleep(1)
+                        logging.info("🟢 [子流程] 已連續兩幀 (每幀間隔 1.0s) 確認【任務完成】彈窗徹底關閉消失，畫面動畫恢復完畢！")
+                        time.sleep(1.0)
                         return
                 else:
                     disappeared_streak = 0
-                    logging.info(f"⏳ [子流程] 彈窗尚未完全關閉 (殘留信心度: {conf_still:.4f})，進行補點確認關閉 (嘗試 {retry+1}/5)...")
-                    pos_c, _ = self.matcher.match(chk_img, "common/confirm.png", threshold=0.80)
+                    logging.info(f"⏳ [子流程] 任務完成彈窗動畫仍存在 (信心度: {conf_still:.4f})，進行補點確認關閉 (嘗試 {retry+1}/6)...")
+                    pos_c, _ = self.matcher.match(chk_img, "common/confirm.png", threshold=0.80, quiet=True)
                     if pos_c:
                         self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
                     else:
                         target_x = btn_x if 'btn_x' in locals() else rect["left"] + pos_task[0]
                         target_y = btn_y if 'btn_y' in locals() else rect["top"] + pos_task[1] + int(281 * (rect.get("height", 1080) / 1080.0))
                         self.mouse.click(target_x, target_y)
-                    time.sleep(1)
+                    time.sleep(1.0)
 
 
 
