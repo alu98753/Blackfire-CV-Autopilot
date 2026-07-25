@@ -1290,9 +1290,13 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         mock_exists.return_value = True
         
-        # 模擬 matcher.match 尋找到 confirm.png 隨後消失
+        # 模擬 matcher.match 尋找到 task_complete.png 與 confirm.png 隨後消失
         confirm_matched = [False]
         def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                if not confirm_matched[0]:
+                    return ((100, 100), 0.90)
+                return (None, 0.0)
             if name == "common/confirm.png":
                 if not confirm_matched[0]:
                     confirm_matched[0] = True
@@ -1310,6 +1314,36 @@ class TestStateMachineLogic(unittest.TestCase):
             
         # 驗證是否點擊了確認按鈕，且座標加上 rect["left"] / rect["top"]
         self.mock_mouse.click.assert_called_once_with(160, 170)  # 10 + 150, 20 + 150
+
+    @patch('os.path.exists')
+    def test_multiple_task_complete_popups_sequential_handling(self, mock_exists):
+        """
+        測試連續多個任務完成彈窗 (例如完成 2 個任務) 被連貫點擊確認清理完畢
+        """
+        mock_exists.return_value = True
+
+        popups_cleared = 0
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            nonlocal popups_cleared
+            if name == "task_complete.png":
+                if popups_cleared < 2:
+                    return ((100, 100), 0.90)
+                return (None, 0.0)
+            if name == "common/confirm.png":
+                if popups_cleared < 2:
+                    popups_cleared += 1
+                    return ((150, 150), 0.92)
+                return (None, 0.0)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        with patch('states.state_machine.time.sleep') as mock_sleep:
+            self.state_machine._run_task_complete_subflow(rect)
+
+        self.assertEqual(self.mock_mouse.click.call_count, 2)
+
 
     @patch('os.path.exists')
     def test_dungeon_navigation_anti_reentry(self, mock_exists):
