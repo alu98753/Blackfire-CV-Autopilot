@@ -25,7 +25,12 @@ class TestBagCleaningDualModeBehavior(unittest.TestCase):
         self.mock_machine.previous_state = "DUNGEON_EXPLORING"
         self.mock_machine.config = {"type": "dungeon"}
 
-        self.handler.matcher.match.return_value = ((100, 100), 0.90)
+        def mock_match_quit(img, name, **kw):
+            if name == "common/quit.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_match_quit
 
         screen_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
@@ -49,7 +54,13 @@ class TestBagCleaningDualModeBehavior(unittest.TestCase):
         self.mock_machine.config = {"type": "stage"}
         self.mock_machine.pending_town_subflows = False
 
-        self.handler.matcher.match.return_value = ((100, 100), 0.90)
+        def mock_match_quit(img, name, **kw):
+            if name == "common/quit.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_match_quit
+
 
         screen_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
