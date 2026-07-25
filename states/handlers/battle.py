@@ -53,7 +53,7 @@ class BattleHandler(BaseStateHandler):
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
             if os.path.exists(os.path.join("templates", feat)):
                 thresh = 0.65 if feat == "common/auto.png" else 0.70
-                pos, _ = self.matcher.match(screen_img, feat, threshold=thresh)
+                pos, _ = self.matcher.match(screen_img, feat, threshold=thresh, quiet=True)
                 if pos:
                     has_battle_feature = True
                     break
@@ -62,7 +62,7 @@ class BattleHandler(BaseStateHandler):
         if not has_battle_feature:
             # 2.1 檢查戰敗
             if os.path.exists(os.path.join("templates", "defeat.png")):
-                pos, _ = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
+                pos, _ = self.matcher.match(screen_img, "defeat.png", threshold=0.75, quiet=True)
                 if pos:
                     has_battle_feature = True
             
@@ -76,7 +76,7 @@ class BattleHandler(BaseStateHandler):
                     res_buttons = self.machine.config.get("dungeon_battle_results", [])
                 for btn in res_buttons:
                     if os.path.exists(os.path.join("templates", btn)):
-                        pos, _ = self.matcher.match(screen_img, btn, threshold=0.80)
+                        pos, _ = self.matcher.match(screen_img, btn, threshold=0.80, quiet=True)
                         if pos:
                             has_battle_feature = True
                             break

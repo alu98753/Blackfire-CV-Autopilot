@@ -5,12 +5,15 @@ import time
 import json
 import shutil
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 # 將專案根目錄加入系統路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
 from utils.daily_manager import DailyManager
+from states.handlers.base import BaseStateHandler
+from states.handlers.result import ResultHandler
 from main import parse_arguments
 
 if sys.platform.startswith('win'):
@@ -211,6 +214,46 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 斷言 3: 狀態應正確轉移至 STATE_JEWELRY_WORKSHOP，絕對不能誤轉回 BLOOD_ALTAR！
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
 
+    def test_town_pipeline_flags_cleared_on_empty_queue(self):
+        """
+        [防死循環測試] 驗證城鎮流水線當最後一個子流程 (jewelry_workshop) 完成且佇列清空時，
+        pop_and_next_town_subflow 能 100% 清空 need_jewelry_workshop 殘留旗標，切回 NAVIGATING 後絕不再次死循環轉移回 JEWELRY_WORKSHOP！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+
+        sm.primary_config = {"name": "測試懸賞關卡", "type": "stage"}
+        sm.town_subflow_queue = ["jewelry_workshop"]
+        sm.pop_and_next_town_subflow()
+
+        # 斷言 1: 切換至 JEWELRY_WORKSHOP，旗標被立起
+        self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+        self.assertTrue(sm.need_jewelry_workshop)
+
+        # 模擬珠寶店完成，再次呼叫 pop_and_next_town_subflow() (此時佇列為空 [])
+        sm.pop_and_next_town_subflow()
+
+        # 斷言 2: 佇列已空，所有城鎮旗標必須被強制清零！
+        self.assertFalse(sm.need_jewelry_workshop)
+        self.assertFalse(sm.need_blood_altar)
+        self.assertFalse(sm.need_bag_cleaning)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+
+        # 模擬在大廳畫面看到 goback_town.png (全域掃描)
+        sm.matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.90) if name == "goback_town.png" else (None, 0.0)
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        sm.capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        sm.capturer.capture.return_value = fake_img
+
+        # 執行 step()，斷言絕不再次被拽回 STATE_JEWELRY_WORKSHOP 死循環！
+        sm.step()
+        self.assertNotEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+
     def test_match_mutually_exclusive_tabs_logic(self):
         """
         鎖定測試 1: 驗證 match_mutually_exclusive_tabs 的相對優勢算法 (margin 0.02, threshold 0.70)。
@@ -331,16 +374,333 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         today_new_quests = ["擊敗冰元素", "史萊姆王的毀滅"]
         updated = self.manager.update_bulletin_board_quests(today_new_quests)
 
-        # 3. 驗證更新後按 sort_quests 排序：擊敗冰元素 (Stage 6) ➔ 清除野豬 (Stage 1) ➔ 擊殺首領 ➔ 史萊姆王的毀滅 (BANNER_VERIFY)
-        expected = ["擊敗冰元素", "清除野豬", "擊殺首領", "史萊姆王的毀滅"]
+        # 3. 驗證更新後按 sort_quests 排序：史萊姆王的毀滅 (dungeon) ➔ 擊敗冰元素 (Stage 6) ➔ 清除野豬 (Stage 1) ➔ 擊殺首領
+        expected = ["史萊姆王的毀滅", "擊敗冰元素", "清除野豬", "擊殺首領"]
         self.assertEqual(updated, expected)
         self.assertEqual(self.manager.status["subflows"]["bulletin_board"]["accepted_quests"], expected)
 
         # 4. 測試重複項目不重複插入
         today_new_quests_2 = ["擊敗冰元素", "清除野豬"]
         updated_2 = self.manager.update_bulletin_board_quests(today_new_quests_2)
-        expected_2 = ["擊敗冰元素", "清除野豬", "擊殺首領", "史萊姆王的毀滅"]
+        expected_2 = ["史萊姆王的毀滅", "擊敗冰元素", "清除野豬", "擊殺首領"]
         self.assertEqual(updated_2, expected_2)
+
+    def test_daily_reset_resets_statemachine_scheduler_and_defeat_count(self):
+        """
+        [08:05 重置鏈條測試] 驗證：
+        1. 每日 08:05 重置時保留已接受任務 (accepted_quests)，新任務可合併與排序。
+        2. 當 08:05 跨日重置時，GameStateMachine 上的 quest_scheduler 物件被清空為 None。
+        3. 戰敗計數器 defeat_count 重置為 0。
+        4. 體力退避時間戳 stamina_retreat_start_time 重置為 None。
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.quest_scheduler import QuestScheduler
+        from states.state_machine import GameStateMachine
+
+        # 模擬狀態機並設置舊狀態
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.set_config({"name": "test", "type": "stage"})
+        sm.daily_manager = self.manager
+        sm.quest_scheduler = QuestScheduler()
+        sm.defeat_count = 3
+        sm.stamina_retreat_start_time = time.time() - 1000.0
+
+        # 手動觸發 08:05 強制跨日重置
+        was_reset = self.manager.check_and_reset_daily(force=True)
+        self.assertTrue(was_reset)
+
+        # 模擬 step() 執行時觸發重置鏈條
+        with patch.object(self.manager, "check_and_reset_daily", return_value=True):
+            with patch.object(sm.capturer, "get_window_rect", return_value={"left": 0, "top": 0, "width": 1920, "height": 1080}):
+                with patch.object(sm.capturer, "capture", return_value=None):
+                    sm.step()
+
+        # 斷言 StateMachine 上的殘留狀態已全數清空/重置 (quest_scheduler 設為 None, defeat_count 設為 0)
+        self.assertIsNone(sm.quest_scheduler)
+        self.assertEqual(sm.defeat_count, 0)
+
+    def test_lord_boss_cooldown_buffer_prevents_infinite_triggering(self):
+        """
+        [防跳離與死循環測試] 驗證：
+        1. set_lord_boss_cooldown 能在無可用 Boss 時有效阻斷 has_available_lord_boss 被重複發起。
+        2. ResultHandler 在普通 stage/dungeon 模式下，即使掃描到 load/Lord_entry_after.png 也絕對不會誤轉移至 STATE_LORD_BOSS！
+        """
+        dm = DailyManager(data_dir=TEST_DATA_DIR, status_file="test_daily.json")
+        
+        # 測試 1: 設定冷卻計時 180 秒，驗證 has_available_lord_boss 傳回 False
+        dm.set_lord_boss_cooldown(180)
+        self.assertFalse(dm.has_available_lord_boss())
+
+        # 測試 2: 模擬 ResultHandler 在 stage 模式結算，畫面上看到 Lord_entry_after.png
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from states.handlers.result import ResultHandler
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.config = {"name": "測試懸賞關卡", "type": "stage"}
+        sm.daily_manager = dm
+
+        handler = ResultHandler(sm)
+        
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # Mock 比對到了離場按鈕 goback_town.png，並設定需離場條件
+        sm.need_bag_cleaning = True
+        matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.85) if name == "goback_town.png" else (None, 0.0)
+
+        # 執行 handle，斷言狀態轉移為 STATE_NAVIGATING，絕對不是 STATE_LORD_BOSS！
+        handler.handle(fake_img, rect)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+        self.assertNotEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
+    def test_dynamic_lord_boss_cooldown_calculation(self):
+        """
+        [動態冷卻計時測試] 驗證 set_lord_boss_cooldown 能精確讀取 daily_status.json 中的 
+        (last_fight_timestamp + cooldown_seconds - now_ts) 計算最快可挑戰的 Boss 冷卻解鎖時間！
+        """
+        dm = DailyManager(data_dir=TEST_DATA_DIR, status_file="test_daily_dynamic.json")
+        now = time.time()
+        
+        # 1. 設置 蜘蛛 (3600s CD) 剛打完 (剩 3600s)，惡靈 (7200s CD) 3000s 前打完 (剩 4200s)
+        dm.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["last_fight_timestamp"] = now
+        dm.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["last_fight_timestamp"] = now - 3000.0
+
+        # 動態計算最快解鎖秒數：最快解鎖的蜘蛛為 3600 秒
+        sec = dm.get_next_lord_boss_available_seconds(now_ts=now)
+        self.assertAlmostEqual(sec, 3600.0, delta=2.0)
+
+        # 呼叫 set_lord_boss_cooldown()，驗證避退時間精確被鎖定為 3600 秒
+        dm.set_lord_boss_cooldown(now_ts=now)
+        self.assertAlmostEqual(dm.lord_boss_cooldown_until, now + 3600.0, delta=2.0)
+        self.assertFalse(dm.has_available_lord_boss(now_ts=now))
+
+        # 模擬 3601 秒後，驗證冷卻解鎖，has_available_lord_boss 傳回 True
+        future_now = now + 3601.0
+        self.assertTrue(dm.has_available_lord_boss(now_ts=future_now))
+
+    def test_cross_tier_quality_preference_propagation(self):
+        """
+        [跨 Tier 躍遷品質傳承測試] 驗證在 Tier 1 (城鎮速領) ➔ Tier 2 (領主 Boss) ➔ Tier 3 (懸賞任務) ➔ Tier 4 (退守模式)
+        全生命週期跳動切換中，使用者的 keep_colors, disassemble_colors 與 sacrifice_settings 100% 不遺失！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from utils.quest_scheduler import QuestScheduler
+        from utils.quest_mapper import QuestMapper
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+
+        # 初始：使用者啟動設定
+        user_keep = ["purple", "orange_yellow", "red"]
+        user_dis = ["gray_or_empty", "green", "blue"]
+        user_sac = {"gray": True, "green": True, "blue": True, "purple": False}
+
+        sm.config = {
+            "name": "每日全域模式",
+            "type": "daily",
+            "keep_colors": user_keep,
+            "disassemble_colors": user_dis,
+            "sacrifice_settings": user_sac
+        }
+
+        # 1. 跳動至 Tier 1 (城鎮速領 blood_altar & jewelry_workshop)
+        sm.town_subflow_queue = ["blood_altar", "jewelry_workshop"]
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        # 2. 跳動至 Tier 2 (領主討伐 lord_boss)
+        sm.town_subflow_queue = ["lord_boss"]
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        # 3. 跳動至 Tier 3 (懸賞任務)
+        mapper = QuestMapper()
+        node = mapper.parse_quest("清除沙蟲")
+        scheduler = QuestScheduler()
+        scheduler.add_task(node)
+        sm.attach_quest_scheduler(scheduler)
+
+        sm.check_and_advance_quest_target()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        # 4. 跳動至 Tier 4 (退守混合模式)
+        scheduler.tasks = [] # 模擬所有任務完成
+        sm.check_and_advance_quest_target()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+    def test_jewelry_and_altar_handlers_do_not_reenter_when_not_needed(self):
+        """
+        [防重複進出測試] 驗證：當 need_jewelry_workshop 或 need_blood_altar 為 False 且處於 INIT 階段時，
+        即使畫面上同時偵測到大門與建築圖片，處理器也 100% 阻斷點擊，絕不重複走進建築！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from states.handlers.jewelry_workshop import JewelryWorkshopHandler
+        from states.handlers.blood_altar import BloodAltarHandler
+        import numpy as np
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.need_jewelry_workshop = False
+        sm.need_blood_altar = False
+
+        j_handler = JewelryWorkshopHandler(sm)
+        b_handler = BloodAltarHandler(sm)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        matcher.match.side_effect = lambda img, name, **kw: ((100, 100), 0.90)
+
+        # 執行 handler，斷言 mouse.click 呼叫次數為 0！
+        j_handler.handle(fake_img, rect)
+        b_handler.handle(fake_img, rect)
+        mouse.click.assert_not_called()
+
+    def test_result_handler_whitelist_isolation(self):
+        """
+        [結算二分法白名單測試] 驗證 ResultHandler：
+        1. 在非離場場次 (should_exit_battle==False) 且看到 stages/retry.png 時，直接點擊 retry 續戰，絕對不匹配 exit_battle 或 goback_town。
+        2. 在離場場次 (should_exit_battle==True) 且看到 goback_town.png 時，點擊離場，絕對不上當點擊 retry。
+        3. continue.png 點擊次數超過 2 次後自動封鎖，不盲目重複點擊。
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from states.handlers.result import ResultHandler
+        import numpy as np
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.config = {"type": "stage"}
+        handler = ResultHandler(sm)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        # 1. 測試非離場場次：畫面上同時有 goback_town.png (離場) 與 stages/retry.png (再戰)
+        # 由於 should_exit_battle==False，ResultHandler 必須選擇 stages/retry.png！
+        def mock_match_non_exit(img, name, **kw):
+            if name == "stages/retry.png":
+                return ((500, 500), 0.90)
+            if name == "goback_town.png":
+                return ((100, 100), 0.95)
+            return (None, 0.0)
+
+        matcher.match.side_effect = mock_match_non_exit
+        res = handler._handle_impl(fake_img, rect)
+
+        self.assertTrue(res)
+        self.assertEqual(sm.current_state, sm.STATE_LOADING) # 轉移至 LOADING 再戰
+
+        # 2. 測試離場場次：設 need_bag_cleaning=True (離場條件成立)
+        # 畫面上同時有 stages/retry.png (再戰) 與 goback_town.png (離場)
+        # ResultHandler 必須選擇 goback_town.png 離場，絕不點擊 retry！
+        sm.need_bag_cleaning = True
+        sm.current_state = sm.STATE_UNKNOWN
+        mouse.reset_mock()
+
+        res_exit = handler._handle_impl(fake_img, rect)
+        self.assertTrue(res_exit)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING) # 轉移至 NAVIGATING 離場
+
+    def test_result_subflow_full_pipeline_step_by_step(self):
+        """
+        [結算子流程全步驟深度測試] 充分驗證 ResultHandler 子流程：
+        1. 步驟 1 (INIT_DELAY): 初始進入休眠沉澱 1.5s，並平滑過渡至 CONTINUE_LOOP。
+        2. 步驟 2 (CONTINUE_LOOP): 點擊 2 次 continue.png (每次沉澱 1.0s)，自動切換至 FINAL_MATCH。
+        3. 步驟 3 (FINAL_MATCH): 點擊 retry/exit_battle 後自動 reset_state 重置子流程步驟為 INIT_DELAY。
+        4. 大廳特徵攔截 (select_stage.png): 隨時能即時中斷結算並轉移至 NAVIGATING。
+        """
+        from unittest.mock import MagicMock, patch
+        from states.state_machine import GameStateMachine
+        from states.handlers.result import ResultHandler
+        import numpy as np
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.config = {"type": "stage"}
+        handler = ResultHandler(sm)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        # 斷言初始步驟為 INIT_DELAY
+        self.assertEqual(handler.subflow_step, "INIT_DELAY")
+
+        # 1. 測試 Step 1: INIT_DELAY 轉為 CONTINUE_LOOP (無 continue.png 且無終局按鈕時，維持 CONTINUE_LOOP 等待動畫過場)
+        matcher.match.return_value = (None, 0.0)
+        with patch("time.sleep") as mock_sleep:
+            handler._handle_impl(fake_img, rect)
+            mock_sleep.assert_called_with(1.5) # 斷言精確觸發 1.5 秒初始沉澱休眠
+            self.assertEqual(handler.subflow_step, "CONTINUE_LOOP") # 防過場誤判：維持 CONTINUE_LOOP
+
+        # 重置回 CONTINUE_LOOP 測試 continue 點擊
+        handler.subflow_step = "CONTINUE_LOOP"
+        handler.continue_click_count = 0
+
+        # 2. 測試 Step 2: 點擊 continue.png 並呼叫 click_and_wait_until_gone 配對確認直到消失
+        def mock_match_continue(img, name, **kw):
+            if name == "common/continue.png":
+                return ((770, 550), 0.95)
+            return (None, 0.0)
+
+        matcher.match.side_effect = mock_match_continue
+        with patch.object(BaseStateHandler, "click_and_wait_until_gone") as mock_wait_gone:
+            res_c1 = handler._handle_impl(fake_img, rect)
+            self.assertTrue(res_c1)
+            mock_wait_gone.assert_called_with(
+                "common/continue.png", 770, 550, rect,
+                timeout=5.0, threshold=0.9, brightness_threshold=0.70, check_interval=0.25, post_delay=0.8, retry_interval=1.0
+            )
+
+        # 3. 測試 Step 3: 續戰點擊 retry.png 後重置狀態
+        def mock_match_retry(img, name, **kw):
+            if name == "stages/retry.png":
+                return ((500, 500), 0.90)
+            return (None, 0.0)
+
+        handler.subflow_step = "FINAL_MATCH"
+        matcher.match.side_effect = mock_match_retry
+        with patch.object(BaseStateHandler, "click_and_wait_until_gone") as mock_wait_gone:
+            res_retry = handler._handle_impl(fake_img, rect)
+            self.assertTrue(res_retry)
+            self.assertEqual(sm.current_state, sm.STATE_LOADING)
+            self.assertEqual(handler.subflow_step, "INIT_DELAY") # 斷言子流程已重置回 INIT_DELAY
+            mock_wait_gone.assert_called_with(
+                "stages/retry.png", 500, 500, rect, post_delay=0.8
+            )
+
+        # 4. 測試大廳獨有特徵 (select_stage.png) 攔截
+        handler.subflow_step = "CONTINUE_LOOP"
+        handler.continue_click_count = 1
+        matcher.match.side_effect = lambda img, name, **kw: ((100, 100), 0.90) if name == "common/select_stage.png" else (None, 0.0)
+
+        res_lobby = handler._handle_impl(fake_img, rect)
+        self.assertTrue(res_lobby)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+        self.assertEqual(handler.subflow_step, "INIT_DELAY") # 斷言大廳攔截後子流程已安全重置
 
 if __name__ == "__main__":
     unittest.main()

@@ -89,7 +89,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
             cv2.putText(debug_img, f"TARGET CLICK: {label}", (tx+30, ty+10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
         # 存檔
-        filename = f"feature_destroyandget_{self.screenshot_counter}.png"
+        filename = f"debug_feature_destroyandget_{self.screenshot_counter}.png"
         cv2.imwrite(filename, debug_img)
         logging.info(f"📸 [背包分選] 已存檔診斷截圖 {filename}。")
         self.screenshot_counter += 1

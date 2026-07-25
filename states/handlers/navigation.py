@@ -5,6 +5,7 @@ import re
 from states.handlers.base import BaseStateHandler
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
+from utils.card_navigator import CardListNavigator
 
 def filter_navigation_path(nav_path, active_tabs=None):
     """
@@ -61,7 +62,12 @@ class NavigationHandler(BaseStateHandler):
 
         cd_summary = ", ".join(cd_details)
         self.machine.all_dungeons_on_cooldown_until = now + max(30.0, min_remaining)
-        logging.info(f"⏳ 混合模式：{reason} ➔ 各地下城冷卻狀態: {cd_summary}。設定冷卻緩衝 {int(max(30.0, min_remaining))} 秒並切換至普通關卡！")
+        logging.info(f"⏳ 混合模式：{reason} ➔ 各地下城冷卻狀態: {cd_summary}。設定冷卻緩衝 {int(max(30.0, min_remaining))} 秒！")
+
+        if self.machine.is_daily_pipeline_active():
+            logging.info("⏳ [每日懸賞動態調度] 偵測到當前懸賞目標地下城冷卻中，立即觸發動態重新排程，順延切換下一個任務...")
+            self.machine.evaluate_and_schedule_daily_pipeline()
+            return
 
         pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
         if pos_st:
@@ -426,10 +432,7 @@ class NavigationHandler(BaseStateHandler):
                     fallback_count = getattr(self.machine, "fallback_swipe_count", 0)
                     if fallback_count < 3:
                         logging.info("🧭 貪婪地下城：未見任何解鎖的卡片，執行防呆向右滑動拉回左側關卡...")
-                        start_x = rect["left"] + int(rect["width"] * 0.2)
-                        end_x = rect["left"] + int(rect["width"] * 0.8)
-                        y_pos = rect["top"] + int(rect["height"] * 0.5)
-                        self.mouse.drag(start_x, y_pos, end_x, y_pos)
+                        CardListNavigator.reset_to_left(self.mouse, rect)
                         self.machine.last_dungeon_scroll_time = time.time()
                         self.machine.fallback_swipe_count = fallback_count + 1
                         time.sleep(1.2)
@@ -554,18 +557,7 @@ class NavigationHandler(BaseStateHandler):
                 else:
                     # 不在畫面上，進行左右滑動尋找目標地下城
                     any_visible_idx = list(visible_dungeons.keys())[0]
-                    if any_visible_idx < target_idx:
-                        logging.info(f"🧭 貪婪地下城：目標 [{dungeon_names[target_idx]}] 在右側，執行較溫和的向左滑動以翻頁...")
-                        start_x = rect["left"] + int(rect["width"] * 0.6)
-                        end_x = rect["left"] + int(rect["width"] * 0.4)
-                        y_pos = rect["top"] + int(rect["height"] * 0.5)
-                        self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
-                    else:
-                        logging.info(f"🧭 貪婪地下城：目標 [{dungeon_names[target_idx]}] 在左側，執行較溫和的向右滑動以翻頁...")
-                        start_x = rect["left"] + int(rect["width"] * 0.4)
-                        end_x = rect["left"] + int(rect["width"] * 0.6)
-                        y_pos = rect["top"] + int(rect["height"] * 0.5)
-                        self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
+                    CardListNavigator.swipe_towards_target(self.mouse, rect, any_visible_idx, target_idx, duration=0.8, inertia=False)
                     self.machine.last_dungeon_scroll_time = time.time()
                     time.sleep(1.2)
                     return

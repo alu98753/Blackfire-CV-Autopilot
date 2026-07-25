@@ -13,12 +13,15 @@ description: 指引 AI 協同開發人員維護與擴充本專案的模組化 Ga
 
 進行狀態機與 Handler 開發時，**必須優先遵循專案核心架構與各專題規範**：
 
-- 🏛️ **5 大 Clean Architecture 規範** ➔ [references/core_design_patterns.md](file:///e:/Side_Project/BlackfireCrusade_tool/.agents/skills/state_machine_development/references/core_design_patterns.md)
+- 🏛️ **8 大 Clean Architecture 與 CLI 規範** ➔ [references/core_design_patterns.md](file:///e:/Side_Project/BlackfireCrusade_tool/.agents/skills/state_machine_development/references/core_design_patterns.md)
   - 互斥頁籤比對 (`match_mutually_exclusive_tabs`)
   - 生命週期 Context 自動 Hook (`TOWN_SUBFLOW_CONFIG_MAP`)
   - 導航路徑防重入過濾器 (`filter_navigation_path`)
   - 體力退避狀態顯式路由 (`stamina_retreat_start_time`)
   - 鎖定測試保護網 (`test_stamina_retreat_routing.py`)
+  - Handler 極速 Phase 流轉 (`Fast Phase-driven Flow`)
+  - 中央配置規範化 (`normalize_config`)
+  - Windows CLI 啟動器與 `.bat` CRLF 編碼規範 (`run.bat`)
 - 🎒 **裝備自適應分選技術規格** ➔ [references/backpack_sorting_spec.md](file:///e:/Side_Project/BlackfireCrusade_tool/.agents/skills/state_machine_development/references/backpack_sorting_spec.md)
 - ⚔️ **地下城探索優先級與冷卻** ➔ [references/explore_priorities.md](file:///e:/Side_Project/BlackfireCrusade_tool/.agents/skills/state_machine_development/references/explore_priorities.md)
 - 📖 **領取體力/鑽石城鎮邊界規範** ➔ [docs/knowledge.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/knowledge.md)

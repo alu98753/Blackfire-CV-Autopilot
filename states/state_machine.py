@@ -2,6 +2,7 @@ import time
 import os
 import cv2
 import logging
+from config import GAME_CONFIGS, normalize_config
 from states.handlers import (
     NavigationHandler,
     LobbyHandler,
@@ -242,9 +243,14 @@ class GameStateMachine:
         """
         執行單步狀態檢索與決策（主調度器）。
         """
-        # 動態檢查 08:30 日常任務/Boss 清零重置線 (全模式適用)
+        # 動態檢查 08:05 日常任務/Boss 清零重置線 (全模式適用)
         if getattr(self, "daily_manager", None):
-            self.daily_manager.check_and_reset_daily()
+            reset_occurred = self.daily_manager.check_and_reset_daily()
+            if reset_occurred:
+                logging.info("🌅 [GameStateMachine] 跨越 08:05 重置線！重置狀態機掛載的 QuestScheduler、戰敗計數與體力退避狀態。")
+                self.quest_scheduler = None
+                self.defeat_count = 0
+                self.original_config = None
 
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
@@ -649,12 +655,27 @@ class GameStateMachine:
         self.quest_scheduler = scheduler
         logging.info("🔗 [GameStateMachine] 已成功連結懸賞任務排程器 (QuestScheduler)。")
 
+    def set_config(self, new_config):
+        """
+        統一設定 GameStateMachine 的模式配置，自動繼承舊配置中由使用者設定的品質偏好 (keep_colors & disassemble_colors)。
+        """
+        if new_config:
+            if getattr(self, "config", None):
+                if "keep_colors" in self.config and "keep_colors" not in new_config:
+                    new_config["keep_colors"] = self.config["keep_colors"]
+                if "disassemble_colors" in self.config and "disassemble_colors" not in new_config:
+                    new_config["disassemble_colors"] = self.config["disassemble_colors"]
+                if "sacrifice_settings" in self.config and "sacrifice_settings" not in new_config:
+                    new_config["sacrifice_settings"] = self.config["sacrifice_settings"]
+
+        self.config = new_config
+
     def apply_mix_fallback_config(self):
         """
         當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
         """
         if getattr(self, "primary_config", None):
-            self.config = self.primary_config.copy()
+            self.set_config(self.primary_config.copy())
             logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
         else:
             from config import PRIMARY_MODES
@@ -664,7 +685,7 @@ class GameStateMachine:
             if hasattr(self, "backend_mode"):
                 mix_config["backend_mode"] = self.backend_mode
 
-            self.config = mix_config
+            self.set_config(mix_config)
             self.primary_config = mix_config.copy()
             logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至預設退守混合模式: {mix_config['name']} (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
 
@@ -696,7 +717,7 @@ class GameStateMachine:
             quest_cfg = target_task.to_config_dict()
             if hasattr(self, "backend_mode"):
                 quest_cfg["backend_mode"] = self.backend_mode
-            self.config = quest_cfg
+            self.set_config(quest_cfg)
             logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
             return False
 
@@ -706,6 +727,35 @@ class GameStateMachine:
 
 
 
+
+    def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=6.0, threshold=0.75, brightness_threshold=0.0, check_interval=1.0, post_delay=1.0, retry_interval=1.0):
+        """
+        [配對確認直到消失 - 專案級輔助 API]
+        點擊 (click_x, click_y)，並以 check_interval 輪詢比對 template_name，直到其從畫面上 100% 消失。
+        若超過 retry_interval 秒模板仍未消失，則發起補點擊 (Re-click)。
+        """
+        logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環 (輪詢間隔 {check_interval}s)...")
+        self.mouse.click(click_x, click_y)
+
+        start_t = time.time()
+        last_click_t = start_t
+        while time.time() - start_t < timeout:
+            time.sleep(check_interval)
+            if self.capturer:
+                fresh_img = self.capturer.capture(rect)
+                if fresh_img is not None and os.path.exists(os.path.join("templates", template_name)):
+                    pos, conf = self.matcher.match(fresh_img, template_name, threshold=threshold, brightness_threshold=brightness_threshold, quiet=True)
+                    if pos is None:
+                        logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {time.time() - start_t:.2f} 秒。")
+                        break
+                    else:
+                        logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
+                        if time.time() - last_click_t >= retry_interval:
+                            logging.info(f"🔄 [自動補點] 模板 [{template_name}] 在 {retry_interval} 秒內未消失，重新發起點擊 ({click_x}, {click_y})...")
+                            self.mouse.click(click_x, click_y)
+                            last_click_t = time.time()
+
+        time.sleep(post_delay)
 
     def _run_task_complete_subflow(self, rect):
         logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")
@@ -750,57 +800,31 @@ class GameStateMachine:
                     if screen_img is None:
                         break
 
-            # 3. 確認判斷出任務後，才進行點擊確認按鈕關閉
-            matched_confirm = False
+            # 3. 找出確認按鈕或領獎目標座標
+            click_x, click_y = None, None
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
                     continue
                 pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
                 if pos:
-                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊...")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    matched_confirm = True
-                    time.sleep(0.6) # 等待當前彈窗關閉/下一個彈窗出現
+                    click_x = rect["left"] + pos[0]
+                    click_y = rect["top"] + pos[1]
+                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}。")
                     break
 
-            # 4. 若無確認按鈕，點擊彈窗內領獎位置
-            if not matched_confirm:
+            if click_x is None:
                 height_to_use = rect.get("height") or screen_img.shape[0] or 1080
                 scale_y = height_to_use / 1080.0
-                btn_x = rect["left"] + pos_task[0]
-                btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
-                logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，點擊領取獎勵座標 ({btn_x}, {btn_y})。")
-                self.mouse.click(btn_x, btn_y)
-                time.sleep(0.6)
+                click_x = rect["left"] + pos_task[0]
+                click_y = rect["top"] + pos_task[1] + int(281 * scale_y)
+                logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，使用彈窗內領獎座標 ({click_x}, {click_y})。")
 
-            # 5. 🛡️ 確定消失防護：點擊發射後，連續兩幀驗證 task_complete.png 徹底消失並補點確認
-            disappeared_streak = 0
-            for retry in range(5):
-                chk_img = self.capturer.capture(rect)
-                if chk_img is None:
-                    break
-                pos_still, conf_still = self.matcher.match(chk_img, "task_complete.png", threshold=0.70)
-                if not pos_still:
-                    disappeared_streak += 1
-                    if disappeared_streak >= 2:
-                        logging.info("🟢 [子流程] 已連續兩幀確認【任務完成】彈窗徹底關閉消失，畫面動畫恢復完畢！")
-                        time.sleep(1)
-                        return
-                else:
-                    disappeared_streak = 0
-                    logging.info(f"⏳ [子流程] 彈窗尚未完全關閉 (殘留信心度: {conf_still:.4f})，進行補點確認關閉 (嘗試 {retry+1}/5)...")
-                    pos_c, _ = self.matcher.match(chk_img, "common/confirm.png", threshold=0.80)
-                    if pos_c:
-                        self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
-                    else:
-                        target_x = btn_x if 'btn_x' in locals() else rect["left"] + pos_task[0]
-                        target_y = btn_y if 'btn_y' in locals() else rect["top"] + pos_task[1] + int(281 * (rect.get("height", 1080) / 1080.0))
-                        self.mouse.click(target_x, target_y)
-                    time.sleep(1)
-
-
-
-
+            # 4. 呼叫專案統一 API: 配對確認直到 task_complete.png 徹底消失 (每次檢查間隔 1.0 秒)
+            self.click_and_wait_until_gone(
+                "task_complete.png", click_x, click_y, rect,
+                timeout=6.0, threshold=0.70, check_interval=1.0, post_delay=1.0
+            )
+            return
 
     def start_subflow_queue(self, queue):
         """
@@ -856,7 +880,7 @@ class GameStateMachine:
             logging.info("=" * 60)
 
             if next_flow in GAME_CONFIGS:
-                self.config = GAME_CONFIGS[next_flow].copy()
+                self.set_config(GAME_CONFIGS[next_flow].copy())
 
             if next_flow == "bag_clean":
                 self.need_bag_cleaning = True
@@ -876,7 +900,11 @@ class GameStateMachine:
                 self.transition_to(target_state)
                 return
 
-        # 若佇列已空！
+        # 若佇列已空！無條件強制重置所有城鎮子流程旗標，防止殘留旗標導致死循環
+        self.need_blood_altar = False
+        self.need_jewelry_workshop = False
+        self.need_bag_cleaning = False
+
         logging.info("=" * 60)
         logging.info("🎉 【城鎮流水線 - 全部完成】 🎉")
         if getattr(self, "is_dev_subflow_run", False):
@@ -886,7 +914,7 @@ class GameStateMachine:
             sys.exit(0)
 
         if getattr(self, "primary_config", None):
-            self.config = self.primary_config.copy()
+            self.set_config(self.primary_config.copy())
             logging.info(f"恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
         else:
             logging.info("重置旗標並回復原模式續行...")

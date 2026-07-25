@@ -6,8 +6,9 @@ class QuestScheduler:
     每日懸賞任務動態排程器 (Quest Scheduler & Task Maintainer)。
     負責管理全套每日任務佇列，並動態生成與調整 CLI 啟動指令。
     """
-    def __init__(self):
+    def __init__(self, daily_manager=None):
         self.tasks = []
+        self.daily_manager = daily_manager
 
     def add_task(self, task_node):
         """
@@ -56,10 +57,8 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
-        # 1. 優先尋找未處於冷卻中的地下城專屬任務
-        dungeon_tasks = [t for t in pending if t.mode_type == "dungeon"]
-        if dungeon_tasks:
-            for target_task in dungeon_tasks:
+        for target_task in pending:
+            if target_task.mode_type == "dungeon":
                 idx = target_task.dungeon_index
                 if dungeon_cooldowns and idx is not None:
                     cd_until = dungeon_cooldowns.get(idx, 0.0)
@@ -73,27 +72,21 @@ class QuestScheduler:
                 msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
                 return cli_cmd, msg
 
-        # 2. 次優先尋找特定普通關卡任務
-        stage_tasks = [t for t in pending if t.mode_type == "stage"]
-        if stage_tasks:
-            target_task = stage_tasks[0]
-            cli_cmd = target_task.to_cli_args()
-            msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return cli_cmd, msg
+            elif target_task.mode_type == "stage":
+                cli_cmd = target_task.to_cli_args()
+                msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return cli_cmd, msg
 
-        # 3. 尋找通用首領任務
-        boss_tasks = [t for t in pending if t.mode_type == "generic_boss"]
-        if boss_tasks:
-            target_task = boss_tasks[0]
-            cli_cmd = target_task.to_cli_args()
-            msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return cli_cmd, msg
+            elif target_task.mode_type == "generic_boss":
+                cli_cmd = target_task.to_cli_args()
+                msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return cli_cmd, msg
 
         return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
 
     def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None):
         """
-        傳回目前最優的單個未完成 TaskNode 實例。
+        傳回目前最優的單個未完成 TaskNode 實例 (嚴格遵循 sort_quests 多階梯排序)。
         """
         import time
         from utils.time_parser import format_seconds_to_readable
@@ -105,9 +98,8 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
-        dungeon_tasks = [t for t in pending if t.mode_type == "dungeon"]
-        if dungeon_tasks:
-            for target_task in dungeon_tasks:
+        for target_task in pending:
+            if target_task.mode_type == "dungeon":
                 idx = target_task.dungeon_index
                 if dungeon_cooldowns and idx is not None:
                     cd_until = dungeon_cooldowns.get(idx, 0.0)
@@ -120,17 +112,13 @@ class QuestScheduler:
                 msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
                 return target_task, msg
 
-        stage_tasks = [t for t in pending if t.mode_type == "stage"]
-        if stage_tasks:
-            target_task = stage_tasks[0]
-            msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return target_task, msg
+            elif target_task.mode_type == "stage":
+                msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return target_task, msg
 
-        boss_tasks = [t for t in pending if t.mode_type == "generic_boss"]
-        if boss_tasks:
-            target_task = boss_tasks[0]
-            msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-            return target_task, msg
+            elif target_task.mode_type == "generic_boss":
+                msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return target_task, msg
 
         return None, "🔄 執行預設混合模式"
 
@@ -145,10 +133,11 @@ class QuestScheduler:
         """
         from utils.quest_mapper import QuestMapper
         mapper = QuestMapper()
-        scheduler = cls()
+        scheduler = cls(daily_manager=daily_manager)
         unknown_titles = []
 
-        for q_title in accepted_quests:
+        sorted_quests = mapper.sort_quests(accepted_quests)
+        for q_title in sorted_quests:
             if q_title:
                 task_node = mapper.parse_quest(q_title)
                 if task_node is not None:
@@ -180,16 +169,19 @@ class QuestScheduler:
             mode_desc = f"地下城 #{t.dungeon_index + 1}" if t.mode_type == "dungeon" else (
                 f"關卡 Lvl {t.stage_level} ({t.sub_stage})" if t.mode_type == "stage" else "通用首領"
             )
+            cli_cmd = t.to_cli_args()
             logging.info(f"  {idx:2d}. {status_icon} [{t.quest_title}] ➔ 模式: {mode_desc} | 進度: {t.completed_count}/{t.target_count}")
+            logging.info(f"      👉 啟動指令: `{cli_cmd}`")
         logging.info("=" * 60)
 
     def record_task_complete(self, ocr_text):
         """
         根據任務標題或 OCR 解析結果將指定任務標記為已完成。
         支援錯別字清洗 (normalize)、標題包含、描述包含、核心關鍵字與字串相似度 (>70%) 模糊匹配。
+        回傳成功匹配並標記完成的乾淨 TaskNode 標題字串；未匹配到則回傳 None。
         """
         if not ocr_text:
-            return False
+            return None
 
         from utils.quest_mapper import normalize_quest_title
         norm_ocr = normalize_quest_title(ocr_text)
@@ -205,13 +197,13 @@ class QuestScheduler:
             if title in ocr_text or ocr_text in title or norm_title in norm_ocr or norm_ocr in norm_title:
                 t.completed_count = t.target_count
                 logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題精確匹配) 已標記為完全完成！")
-                return True
+                return t.quest_title
 
             # 2. 原始描述文字包含
             if desc and (desc in ocr_text or ocr_text in desc or desc in norm_ocr or norm_ocr in desc):
                 t.completed_count = t.target_count
                 logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (描述匹配) 已標記為完全完成！")
-                return True
+                return t.quest_title
 
             # 3. 核心關鍵字比對
             keywords = ["史萊姆", "骷髏", "野豬", "冰元素", "敵人", "首領", "鬼魂", "熊", "蛙人", "樹人", "石窟", "洞窟", "遺跡", "枷鎖", "詛咒", "暴君", "獸王"]
@@ -219,16 +211,16 @@ class QuestScheduler:
                 if kw in norm_title and kw in norm_ocr:
                     t.completed_count = t.target_count
                     logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (關鍵字 '{kw}' 匹配) 已標記為完全完成！")
-                    return True
+                    return t.quest_title
 
             # 4. 模糊字串相似度比對 (>70% 相似度，相容 1~2 個錯別字)
             ratio = difflib.SequenceMatcher(None, norm_ocr, norm_title).ratio()
             if ratio >= 0.70:
                 t.completed_count = t.target_count
                 logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (模糊相似度 {ratio:.2f} 匹配) 已標記為完全完成！")
-                return True
+                return t.quest_title
 
-        return False
+        return None
 
 
 
@@ -283,10 +275,19 @@ class QuestScheduler:
             title = extractor._ocr_crop(crop_roi)
             if title:
                 logging.info(f"🔍 [OCR 懸賞完成辨識] 成功從完成彈窗標題區讀取任務標題: '{title}'")
-                self.record_task_complete(title)
-                from utils.daily_manager import DailyManager
-                DailyManager().remove_accepted_quest(title)
-                return title
+                matched_title = self.record_task_complete(title)
+
+                from utils.quest_mapper import normalize_quest_title
+                clean_title = matched_title if matched_title else normalize_quest_title(title)
+
+                dm = getattr(self, "daily_manager", None)
+                if dm is None:
+                    from utils.daily_manager import DailyManager
+                    dm = DailyManager()
+
+                dm.remove_accepted_quest(clean_title)
+                self.remove_completed_quest(clean_title)
+                return clean_title
         except Exception as e:
             logging.error(f"⚠️ [OCR 懸賞完成辨識] 辨識過程發生例外: {e}")
         return None

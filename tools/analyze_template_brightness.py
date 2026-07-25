@@ -20,8 +20,8 @@ def save_diagnostic_images(screen_img, template_img, top_left, temp_w, temp_h, m
     full_out = os.path.join(output_dir, f"debug_{base}_dim_full.png")
     crop_out = os.path.join(output_dir, f"debug_{base}_dim_crop.png")
 
-    cv2.imwrite(full_out, marked_screen)
-    cv2.imwrite(crop_out, crop)
+    # cv2.imwrite(full_out, marked_screen)
+    # cv2.imwrite(crop_out, crop)
     return full_out, crop_out
 
 def analyze_brightness(screen_path, template_path, output_dir="."):

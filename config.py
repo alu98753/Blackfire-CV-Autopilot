@@ -334,8 +334,33 @@ SUBFLOW_CONFIGS = {
     },
 }
 
+# ==================== 中央配置規範化 (Centralized Config Normalization) ====================
+DEFAULT_DISASSEMBLE_COLORS = ["gray_or_empty", "green", "blue"]
+DEFAULT_KEEP_COLORS = ["purple", "orange_yellow", "red"]
+
+def normalize_config(config):
+    """
+    中央配置規範化器 (Centralized Config Normalizer)
+    確保在任何模式 (daily, mix, dungeon, stage, subflow 等) 與啟動管道下，
+    config 字典都 100% 擁有精準的 disassemble_colors 與 keep_colors 狀態。
+    """
+    if not isinstance(config, dict):
+        return config
+
+    cfg = config.copy()
+
+    # 特定只做領取/戰鬥不分解裝備的非刷關子流程，保持 disassemble_colors 生效
+    if "disassemble_colors" not in cfg or cfg["disassemble_colors"] is None or len(cfg["disassemble_colors"]) == 0:
+        cfg["disassemble_colors"] = list(DEFAULT_DISASSEMBLE_COLORS)
+
+    if "keep_colors" not in cfg or cfg["keep_colors"] is None or len(cfg["keep_colors"]) == 0:
+        cfg["keep_colors"] = list(DEFAULT_KEEP_COLORS)
+
+    return cfg
+
 # ==================== 3. 統一匯出 (GAME_CONFIGS 向後完全相容) ====================
-GAME_CONFIGS = {**PRIMARY_MODES, **SUBFLOW_CONFIGS}
+RAW_GAME_CONFIGS = {**PRIMARY_MODES, **SUBFLOW_CONFIGS}
+GAME_CONFIGS = {k: normalize_config(v) for k, v in RAW_GAME_CONFIGS.items()}
 
 BASE_STAGE_LEVELS = {
     "1": {"name": "蒼穹平原", "entry": "stages/level1_sky_plains.png"},
@@ -349,5 +374,5 @@ BASE_STAGE_LEVELS = {
 
 from utils.config_helper import get_stage_configs
 
-# 預設維持匯入時動態讀取 STAGE_CONFIGS
-STAGE_CONFIGS = get_stage_configs(BASE_STAGE_LEVELS)
+# 預設維護匯入時動態讀取 STAGE_CONFIGS 並自動進行 normalize_config
+STAGE_CONFIGS = {k: normalize_config(v) for k, v in get_stage_configs(BASE_STAGE_LEVELS).items()}

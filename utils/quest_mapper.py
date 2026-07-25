@@ -54,9 +54,10 @@ class TaskNode:
             return f".venv\\Scripts\\python main.py --backend --mode dungeon --dungeon 1"
         return f".venv\\Scripts\\python main.py --backend --mode mix"
 
-    def to_config_dict(self):
+    def to_config_dict(self, base_config=None):
         """
         將 TaskNode 轉換為 GameStateMachine 專用的 config 字典。
+        若傳入 base_config，自動傳承其中的裝備品質與獻祭偏好 (keep_colors, disassemble_colors, sacrifice_settings)。
         """
         from config import PRIMARY_MODES
         dungeon_entries = [
@@ -69,11 +70,11 @@ class TaskNode:
         dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
 
         stage_entries = {
-            1: "stages/level1_plain.png",
+            1: "stages/level1_sky_plains.png",
             2: "stages/level2_barren_rocks.png",
             3: "stages/level3_ancient_forest.png",
-            4: "stages/level4_desert.png",
-            5: "stages/level5_swamp.png",
+            4: "stages/level4_desert_ruins.png",
+            5: "stages/level5_gloomy_swamp.png",
             6: "stages/level6_ice_cave.png"
         }
         stage_names = {
@@ -86,6 +87,16 @@ class TaskNode:
             "final": "stages/final_boss_stage.png"
         }
 
+        def _apply_base_preferences(cfg):
+            if base_config:
+                if "keep_colors" in base_config:
+                    cfg["keep_colors"] = base_config["keep_colors"]
+                if "disassemble_colors" in base_config:
+                    cfg["disassemble_colors"] = base_config["disassemble_colors"]
+                if "sacrifice_settings" in base_config:
+                    cfg["sacrifice_settings"] = base_config["sacrifice_settings"]
+            return cfg
+
         if self.mode_type == "dungeon" and self.dungeon_index is not None:
             idx = self.dungeon_index
             entry_img = dungeon_entries[idx] if 0 <= idx < len(dungeon_entries) else "dungeons/Ice_entry.png"
@@ -95,37 +106,51 @@ class TaskNode:
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
-            return cfg
+            return _apply_base_preferences(cfg)
 
         elif self.mode_type == "stage" and self.stage_level is not None:
+            import os
             lvl = self.stage_level
             sub = self.sub_stage or "first"
             entry_img = stage_entries.get(lvl, "stages/level6_ice_cave.png")
             sname = stage_names.get(lvl, f"關卡 Lvl {lvl}")
-            target_img = stage_targets.get(sub, "stages/first_stage.png")
+
+            # 動態匹配各關卡專屬的中間關/魔王關圖檔 (如 level4_middle.png, level4_final.png)
+            if sub == "middle":
+                candidate = f"stages/level{lvl}_middle.png"
+                target_img = candidate if os.path.exists(os.path.join("templates", candidate)) else "stages/first_stage.png"
+            elif sub in ["final", "boss"]:
+                candidate = f"stages/level{lvl}_final.png"
+                target_img = candidate if os.path.exists(os.path.join("templates", candidate)) else "stages/first_stage.png"
+            elif sub == "six":
+                target_img = "stages/six_stage.png"
+            else:
+                target_img = "stages/first_stage.png"
 
             cfg = PRIMARY_MODES["stage"].copy()
             cfg["name"] = f"懸賞任務 - {sname} ({sub}) (任務: {self.quest_title})"
             cfg["stage_name"] = f"{sname} ({sub})"
             cfg["stage_entry"] = entry_img
             cfg["stage_target"] = target_img
-            cfg["stage_navigation_path"] = [
+            stage_path = [
                 "common/door.png",
                 "common/select_stage.png",
                 entry_img,
                 "stages/stage_label.png",
                 target_img
             ]
-            return cfg
+            cfg["navigation_path"] = stage_path
+            cfg["stage_navigation_path"] = stage_path
+            return _apply_base_preferences(cfg)
 
         elif self.mode_type == "generic_boss":
             cfg = PRIMARY_MODES["dungeon"].copy()
             cfg["name"] = f"懸賞任務 - 史萊姆石窟 (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
-            return cfg
+            return _apply_base_preferences(cfg)
 
-        return PRIMARY_MODES["mix"].copy()
+        return _apply_base_preferences(PRIMARY_MODES["mix"].copy())
 
     def __repr__(self):
 
@@ -234,8 +259,8 @@ class QuestMapper:
     def get_quest_sort_key(self, title):
         """
         計算單個懸賞任務標題的多階梯排序 Key (4 元組)。
-        1. policy_score: DETERMINISTIC = 0 (最優先), BANNER_VERIFY = 1, IGNORED = 9
-        2. mode_score: dungeon = 0 (地下城優先), stage = 1, generic_boss = 2, ignored = 9
+        1. mode_score: dungeon = 0 (地下城最高優先), stage = 1, generic_boss = 2, ignored = 9
+        2. policy_score: DETERMINISTIC = 0, BANNER_VERIFY = 1, IGNORED = 9
         3. idx_score: -dungeon_index 或 -stage_level (數字大者排在最前面)
         4. sub_score: final = 0, middle = 1, first = 2
         """
@@ -243,10 +268,7 @@ class QuestMapper:
         if node is None or node.mode_type == "ignored":
             return (9, 9, 0, 0)
 
-        # 1. 梯隊一：確定性優先
-        policy_score = 0 if node.counting_policy == TaskNode.POLICY_DETERMINISTIC else 1
-
-        # 2. 梯隊二：模式優先 & 梯隊三：索引/等級大小
+        # 1. 梯隊一：模式優先 (地下城 0 > 普通關卡 1 > 通用首領 2)
         if node.mode_type == "dungeon":
             mode_score = 0
             idx_score = -node.dungeon_index if node.dungeon_index is not None else 0
@@ -261,7 +283,10 @@ class QuestMapper:
             idx_score = 0
             sub_score = 0
 
-        return (policy_score, mode_score, idx_score, sub_score)
+        # 2. 梯隊二：確定性優先
+        policy_score = 0 if node.counting_policy == TaskNode.POLICY_DETERMINISTIC else 1
+
+        return (mode_score, policy_score, idx_score, sub_score)
 
     def sort_quests(self, quest_titles):
         """

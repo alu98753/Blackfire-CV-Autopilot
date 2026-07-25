@@ -5,23 +5,30 @@ import logging
 from states.handlers.base import BaseStateHandler
 from utils.time_parser import format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
+from utils.card_navigator import CardListNavigator
 
 class LordBossHandler(BaseStateHandler):
     """
     首領領主討伐 (Lord Boss Subflow) 狀態處理器。
     負責大廳領主頁籤比對、點擊前卡片 OCR 冷卻防護、選擇可挑戰 Boss (育母蜘蛛/古代惡靈) 與發起戰鬥。
+    整合 CardListNavigator 實現選關前先復位拉至最左側起點與跨頁滑動搜尋能力。
     """
     def __init__(self, machine):
         super().__init__(machine)
         self.step_phase = "INIT"
         self.current_target_boss = None
         self.last_card_click_time = 0.0
+        self.has_reset_to_left = False
+        self.last_lord_scroll_time = 0.0
 
     def reset_state(self):
         """狀態重置與子流程生命週期初始化"""
         self.step_phase = "INIT"
         self.current_target_boss = None
         self.last_card_click_time = 0.0
+        self.has_reset_to_left = False
+        self.reset_swipe_count = 0
+        self.last_lord_scroll_time = 0.0
 
     def _check_card_cooldown_ocr(self, screen_img, pos_b, temp_path, max_allowed_seconds=7200.0):
         """
@@ -68,11 +75,14 @@ class LordBossHandler(BaseStateHandler):
         dm = getattr(self.machine, "daily_manager", None)
         avail_bosses = dm.get_available_lord_bosses() if dm else []
 
-        # 若當前沒有可討伐的 Boss，結束首領討伐子流程，標記完成並彈出下一個城鎮任務
+        # 若當前沒有可討伐的 Boss，結束首領討伐子流程，動態計算最快解鎖秒數並彈出下一個城鎮任務
         if not avail_bosses:
-            logging.info("🎉 [首領討伐] 今日所有 Boss 已滿 5 次或均在冷卻中！結束討伐，彈出下一城鎮任務...")
-            if dm and hasattr(dm, "record_subflow_completed"):
-                dm.record_subflow_completed("lord_boss")
+            logging.info("🎉 [首領討伐] 今日所有 Boss 已滿 5 次或均在冷卻中！結束討伐，動態設定冷卻緩衝並彈出下一城鎮任務...")
+            if dm:
+                if hasattr(dm, "set_lord_boss_cooldown"):
+                    dm.set_lord_boss_cooldown()
+                if hasattr(dm, "record_subflow_completed"):
+                    dm.record_subflow_completed("lord_boss")
             self.machine.pop_and_next_town_subflow()
             return True
 
@@ -84,6 +94,7 @@ class LordBossHandler(BaseStateHandler):
 
         # 2. 若頁籤尚未開啟，進行大廳入口與頁籤點擊
         if not is_opened:
+            self.has_reset_to_left = False  # 頁籤未開啟前重置拉左旗標
             # 先檢查是否在城鎮，需要點擊門進入大廳
             pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.85)
             if pos_door:
@@ -117,8 +128,43 @@ class LordBossHandler(BaseStateHandler):
         if now - self.last_card_click_time < 1.5:
             return True
 
-        # 5. 頁籤已開啟 (Lord_entry_after)，依序選擇可用 Boss 發起戰鬥
+        # 5. 特化邏輯：每次進入選關介面 (Lord_entry_after) 時，持續向右滑動拉回，直到看見「第一個 Boss (起點)」
+        if is_opened and not self.has_reset_to_left and not self.current_target_boss:
+            bosses_config = self.machine.config.get("bosses", {})
+            first_boss_key = list(bosses_config.keys())[0] if bosses_config else None
+            first_template = bosses_config.get(first_boss_key, {}).get("template") if first_boss_key else None
+            
+            # 檢查第一個 Boss (起點) 是否已經在畫面上
+            is_start_visible = False
+            conf_first = 0.0
+            if first_template:
+                is_start_visible, _, conf_first = CardListNavigator.is_first_card_visible(screen_img, self.matcher, first_template, threshold=0.78)
+            
+            if is_start_visible:
+                logging.info(f"🎯 [首領討伐] 偵測到第一個 Boss (起點) [{first_boss_key}] (信心度: {conf_first:.4f})，已確立回歸最左側起點！")
+                self.has_reset_to_left = True
+                self.reset_swipe_count = 0
+            else:
+                reset_count = getattr(self, "reset_swipe_count", 0)
+                if reset_count < 4:
+                    logging.info(f"🧭 [首領討伐] 未見第一個 Boss [{first_boss_key}] (起點)，執行向右滑動拖曳拉回第 {reset_count + 1}/4 次...")
+                    CardListNavigator.reset_to_left(self.mouse, rect)
+                    self.reset_swipe_count = reset_count + 1
+                    self.last_lord_scroll_time = now
+                    time.sleep(1.2)
+                    return True
+                else:
+                    logging.warning("⚠️ [首領討伐] 已連續向右拉動 4 次仍未見第一個 Boss，預設已達極限，停止拉回。")
+                    self.has_reset_to_left = True
+                    self.reset_swipe_count = 0
+
+        # 滑動冷卻保護：若剛執行過滾動滑動，等待動畫完全靜止
+        if now - self.last_lord_scroll_time < 1.2:
+            return True
+
+        # 6. 頁籤已開啟 (Lord_entry_after)，依序選擇可用 Boss 發起戰鬥
         bosses_config = self.machine.config.get("bosses", {})
+        boss_matched = False
 
         for boss_key in avail_bosses:
             b_cfg = bosses_config.get(boss_key, {})
@@ -126,6 +172,7 @@ class LordBossHandler(BaseStateHandler):
             if temp_path and os.path.exists(os.path.join("templates", temp_path)):
                 pos_b, conf_b = self.matcher.match(screen_img, temp_path, threshold=0.78)
                 if pos_b:
+                    boss_matched = True
                     b_name = b_cfg.get("name", boss_key)
                     max_cd = b_cfg.get("cooldown_seconds", 7200.0)
                     
@@ -162,5 +209,12 @@ class LordBossHandler(BaseStateHandler):
                             self.machine.current_lord_boss_key = boss_key
                             self.machine.transition_to(self.machine.STATE_BATTLE)
                     break
+
+        # 7. 若在畫面上未能匹配到當前欲尋找的 Boss 卡片，發動向左滑動翻頁
+        if is_opened and not boss_matched and not self.current_target_boss:
+            logging.info("🧭 [首領討伐] 當前畫面未發現可用 Boss 卡片，執行向左滑動翻頁搜尋...")
+            CardListNavigator.swipe_left_page(self.mouse, rect, duration=0.8, inertia=False)
+            self.last_lord_scroll_time = now
+            time.sleep(1.2)
 
         return False

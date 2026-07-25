@@ -29,6 +29,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         def patched_mock_call(*args, **kwargs):
             kwargs.pop('check_brightness', None)
             kwargs.pop('brightness_threshold', None)
+            kwargs.pop('quiet', None)
             return orig_call(*args, **kwargs)
         self.mock_matcher.match._mock_call = patched_mock_call
         
@@ -45,6 +46,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         )
         mock_dm = MagicMock()
         mock_dm.is_subflow_completed.return_value = False
+        mock_dm.check_and_reset_daily.return_value = False
         self.state_machine.daily_manager = mock_dm
 
         
@@ -2072,9 +2074,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
 
+        calls = [0]
         def mock_match_in_lobby(img, name, **kw):
             if name == "goback_town.png":
-                return ((72, 757), 0.92)
+                calls[0] += 1
+                return ((72, 757), 0.92) if calls[0] <= 1 else (None, 0.0)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_in_lobby

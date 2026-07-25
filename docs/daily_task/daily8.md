@@ -31,8 +31,8 @@
                              │
                              ▼
 🥉 Tier 3: 三極優先 (懸賞告示牌與動態任務 bulletin_board)
-   👉 告示牌取卡與 accepted_quests 多階梯排序 (確定性 ➔ 地下城/關卡 ➔ idx/level 大者優先)
-   👉 依據 QuestScheduler 產出最高優先懸賞目標 (清除骷髏/樹人/史萊姆...)
+   👉 告示牌取卡與 accepted_quests 多階梯排序 (地下城懸賞優先 ➔ 關卡懸賞 ➔ 確定性/Level大者優先)
+   👉 依據 QuestScheduler 產出最高優先懸賞目標 (破除森林的枷鎖/清除骷髏/蛙人...)
    ⚡ 戰鬥途中若 Tier 2 Boss 冷卻結束 ➔ 打完該場戰鬥後立刻搶先切回打 Boss！
                              │
                              ▼

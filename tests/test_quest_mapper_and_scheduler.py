@@ -179,11 +179,11 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
             "清除骷髏",       # DETERMINISTIC, dungeon 3
             "清除樹人",       # DETERMINISTIC, dungeon 2
             "清除史萊姆",     # DETERMINISTIC, dungeon 0
-            "清除蛙人",       # DETERMINISTIC, stage 5
-            "清除沙蟲",       # DETERMINISTIC, stage 4
             "冰雪洞窟的暴君",  # BANNER_VERIFY, dungeon 4
             "破除森林的枷鎖",  # BANNER_VERIFY, dungeon 2
             "史萊姆王的毀滅",  # BANNER_VERIFY, dungeon 0
+            "清除蛙人",       # DETERMINISTIC, stage 5
+            "清除沙蟲",       # DETERMINISTIC, stage 4
         ]
         self.assertEqual(sorted_quests, expected_order)
 
@@ -241,6 +241,110 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         node.completed_count = 10
         self.assertTrue(node.is_batch_completed())
         self.assertTrue(node.is_completed)
+
+    def test_all_stage_quest_templates_exist_on_disk(self):
+        """
+        [防呆門禁測試] 驗證全關卡懸賞任務 (包含沙蟲 Level 4、蛙人 Level 5、野豬 Level 1)
+        轉換產出的 stage_entry 圖片檔案 100% 存在於硬碟 templates/ 資料夾中，防範無效檔名退守。
+        """
+        import os
+        for quest in ["清除沙蟲", "清除蛙人", "清除骷髏", "清除史萊姆", "清除樹人"]:
+            node = self.mapper.parse_quest(quest)
+            cfg = node.to_config_dict()
+            if "stage_entry" in cfg:
+                entry_path = os.path.join("templates", cfg["stage_entry"])
+                self.assertTrue(
+                    os.path.exists(entry_path),
+                    f"任務 [{quest}] 映射的 stage_entry 圖片檔案不存在: {entry_path}"
+                )
+                self.assertIn("navigation_path", cfg)
+                self.assertIn(cfg["stage_entry"], cfg["navigation_path"])
+
+    def test_from_daily_status_applies_four_tier_sorting(self):
+        """
+        [防呆門禁測試] 驗證由亂序的 accepted_quests (包含沙蟲 L4, 森林枷鎖, 蛙人 L5)
+        經由 from_daily_status 建立的 QuestScheduler 會自動進行四階梯排序：
+        1. 破除森林的枷鎖 (Dungeon 3) ➔ 2. 清除蛙人 (Stage 5) ➔ 3. 清除沙蟲 (Stage 4)
+        """
+        unordered_input = ["清除沙蟲", "破除森林的枷鎖", "清除蛙人"]
+        scheduler = QuestScheduler.from_daily_status(unordered_input)
+        titles_in_queue = [t.quest_title for t in scheduler.tasks]
+        self.assertEqual(titles_in_queue, ["破除森林的枷鎖", "清除蛙人", "清除沙蟲"])
+
+    def test_stage_target_image_existence_and_dynamic_mapping(self):
+        """
+        [動態圖片對應測試] 驗證『清除沙蟲』(Level 4 middle) 能精確映射至 level4_middle.png，且圖片在 templates 下實體存在！
+        """
+        import os
+        node_sandworm = self.mapper.parse_quest("清除沙蟲")
+        self.assertIsNotNone(node_sandworm)
+        
+        cfg = node_sandworm.to_config_dict()
+        # 斷言 stage_target 為 stages/level4_middle.png (絕非找不到的 middle_stage.png)
+        self.assertEqual(cfg["stage_target"], "stages/level4_middle.png")
+        
+        # 斷言實體圖檔存在
+        full_path = os.path.join("templates", cfg["stage_target"])
+        self.assertTrue(os.path.exists(full_path), f"圖檔不存在: {full_path}")
+        
+        # 斷言導航路徑最後一個圖標為 level4_middle.png
+        self.assertEqual(cfg["navigation_path"][-1], "stages/level4_middle.png")
+
+    def test_task_node_to_cli_args_and_summary_output(self):
+        """
+        [CLI 指令生成測試] 驗證 TaskNode.to_cli_args 能精確產出 CLI 啟動命令，並能在 summary 中成功格式化輸出！
+        """
+        node_sandworm = self.mapper.parse_quest("清除沙蟲")
+        cli_sandworm = node_sandworm.to_cli_args()
+        self.assertIn("--mode stage", cli_sandworm)
+        self.assertIn("--stage 4", cli_sandworm)
+        self.assertIn("--sub middle", cli_sandworm)
+
+        node_dungeon = self.mapper.parse_quest("破除森林的枷鎖")
+        cli_dungeon = node_dungeon.to_cli_args()
+        self.assertIn("--mode dungeon", cli_dungeon)
+        self.assertIn("--dungeon 3", cli_dungeon)
+
+        # 驗證排程器 print_task_summary 不拋出例外
+        scheduler = QuestScheduler()
+        scheduler.add_task(node_sandworm)
+        scheduler.add_task(node_dungeon)
+        scheduler.print_task_summary()
+
+    def test_equipment_quality_preferences_propagation(self):
+        """
+        [品質偏好傳承測試] 驗證在 GameStateMachine 動態切換懸賞關卡時，
+        使用者選擇的 keep_colors 與 disassemble_colors 能被 100% 精確繼承傳承！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        
+        # 模擬使用者在 main.py 輸入的偏好：紫色及以上保留，藍色及以下分解
+        user_config = {
+            "name": "每日懸賞任務",
+            "type": "daily",
+            "keep_colors": ["purple", "orange_yellow", "red"],
+            "disassemble_colors": ["gray_or_empty", "green", "blue"]
+        }
+        sm.config = user_config
+
+        # 模擬切換懸賞任務 (至清除沙蟲 Stage 4 middle)
+        node_sandworm = self.mapper.parse_quest("清除沙蟲")
+        scheduler = QuestScheduler()
+        scheduler.add_task(node_sandworm)
+        sm.attach_quest_scheduler(scheduler)
+
+        # 觸發動態切換
+        sm.check_and_advance_quest_target()
+
+        # 斷言切換後的 sm.config 依然 100% 保存著使用者的品質偏好！
+        self.assertEqual(sm.config["keep_colors"], ["purple", "orange_yellow", "red"])
+        self.assertEqual(sm.config["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
 
 if __name__ == "__main__":

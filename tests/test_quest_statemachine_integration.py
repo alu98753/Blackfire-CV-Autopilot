@@ -72,6 +72,71 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
             data = json.load(f)
         self.assertNotIn("清除樹人", data["subflows"]["bulletin_board"]["accepted_quests"])
 
+    def test_ocr_noisy_title_cleaning(self):
+        """[三者測試 1: 能否正確清洗] 驗證帶有錯別字、尾巴雜訊與符號的 OCR 任務名稱能被正確清洗對齊"""
+        from utils.quest_mapper import normalize_quest_title
+        
+        # 測試 1: 帶尾巴雜字與符號 '清除蛙人玉[2' -> '清除蛙人'
+        self.assertEqual(normalize_quest_title("清除蛙人玉[2"), "清除蛙人")
+        
+        # 測試 2: 帶底線與數字 '史萊姆王的毀滅_123' -> '史萊姆王的毀滅'
+        self.assertEqual(normalize_quest_title("史萊姆王的毀滅_123"), "史萊姆王的毀滅")
+        
+        # 測試 3: 錯別字替換 '野瀦' -> '野豬'，並對齊全名
+        self.assertEqual(normalize_quest_title("清除野瀦"), "清除野豬")
+
+    def test_ocr_noisy_title_matching(self):
+        """[三者測試 2: 能否正確匹配] 驗證傳入帶雜訊的 OCR 辨識結果能正確匹配 TaskNode 並回傳清洗後的標準標題"""
+        self.daily_mgr.status["subflows"]["bulletin_board"]["accepted_quests"] = ["清除蛙人", "清除沙蟲"]
+        self.daily_mgr.save_status()
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        
+        # 傳入帶雜訊的 OCR 標題 '清除蛙人玉[2'
+        matched_title = scheduler.record_task_complete("清除蛙人玉[2")
+        
+        # 斷言：成功匹配並回傳乾淨的標準標題 '清除蛙人'
+        self.assertEqual(matched_title, "清除蛙人")
+        
+        # 斷言：對應的 TaskNode 已被標記為完成
+        frog_task = next(t for t in scheduler.tasks if t.quest_title == "清除蛙人")
+        self.assertTrue(frog_task.is_completed)
+
+    def test_ocr_noisy_title_deletion_and_persistence(self):
+        """[三者測試 3: 能否正確刪除] 驗證傳入帶雜訊標題或呼叫 process_task_complete_banner 能正確將任務從 daily_status.json 移除並寫回硬碟"""
+        # 在 accepted_quests 中預先塞入包含 "清除蛙人" 的狀態
+        self.daily_mgr.status["subflows"]["bulletin_board"]["accepted_quests"] = ["清除蛙人", "清除沙蟲"]
+        self.daily_mgr.save_status()
+        
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        
+        # 模擬傳入帶雜訊的 OCR 標題進行刪除
+        matched_title = scheduler.record_task_complete("清除蛙人玉[2")
+        clean_title = matched_title if matched_title else "清除蛙人"
+        
+        removed = self.daily_mgr.remove_accepted_quest(clean_title)
+        self.assertTrue(removed)
+        
+        # 重新讀取硬碟檔，確認 "清除蛙人" 已從 JSON 硬碟檔中徹底被剔除！
+        with open(self.test_json_path, "r", encoding="utf-8") as f:
+            disk_data = json.load(f)
+            
+        remaining_quests = disk_data["subflows"]["bulletin_board"]["accepted_quests"]
+        self.assertNotIn("清除蛙人", remaining_quests)
+        self.assertIn("清除沙蟲", remaining_quests)
+
+    def test_dungeon_quest_always_prioritized_over_stage_quest(self):
+        """[排序優先級測試] 驗證地下城懸賞任務 (即使為 banner_verify_only) 100% 優先於普通關卡任務 (即使為 deterministic)"""
+        from utils.quest_mapper import QuestMapper
+        mapper = QuestMapper()
+        
+        # 傳入：關卡任務 (清除沙蟲, deterministic) 與 地下城任務 (破除森林的枷鎖, banner_verify)
+        quests = ["清除沙蟲", "破除森林的枷鎖"]
+        sorted_quests = mapper.sort_quests(quests)
+        
+        # 斷言：地下城任務 '破除森林的枷鎖' 必須排在第 1 位！
+        self.assertEqual(sorted_quests[0], "破除森林的枷鎖")
+        self.assertEqual(sorted_quests[1], "清除沙蟲")
+
     def test_state_machine_attach_and_advance(self):
         """驗證 GameStateMachine 掛載 QuestScheduler 與目標推進"""
         capturer = MagicMock()

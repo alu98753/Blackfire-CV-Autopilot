@@ -65,14 +65,14 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
     def _ensure_in_town(self, screen_img, rect=None):
         """
-        獨立導航輔助函式：若目前位於大廳 (看得到 goback_town.png)，點擊返回城鎮。
+        獨立導航輔助函式：若目前位於大廳 (看得到 goback_town.png)，點擊返回城鎮 (配對確認直到消失)。
         """
         pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
         if pos_goback:
-            logging.info("💎 [珠寶加工廠] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
+            logging.info("💎 [珠寶加工廠] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮 (配對確認直到消失)...")
             left = rect["left"] if rect else 0
             top = rect["top"] if rect else 0
-            self.mouse.click(left + pos_goback[0], top + pos_goback[1])
+            self.click_and_wait_until_gone("goback_town.png", left + pos_goback[0], top + pos_goback[1], rect)
             self.last_action_time = time.time()
             return False
         return True
@@ -83,6 +83,12 @@ class JewelryWorkshopHandler(BaseStateHandler):
             if rect:
                 screen_img = self.capturer.capture(rect)
         if screen_img is None:
+            return
+
+        # 防死鎖門禁：若獨立模式或城鎮流水線已不需要珠寶加工廠出售 且處於 INIT 階段，直接 return！
+        cfg_type = self.machine.config.get("type") if getattr(self.machine, "config", None) else None
+        is_needed = getattr(self.machine, "need_jewelry_workshop", False) or cfg_type == "jewelry_workshop"
+        if not is_needed and self.step_phase == "INIT":
             return
 
         now = time.time()
@@ -284,14 +290,15 @@ class JewelryWorkshopHandler(BaseStateHandler):
             return
 
         # 3.3 城鎮點擊珠寶加工廠建築 (Jewelry_workshop.png)
-        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-        pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65)
-        if pos_building and pos_door:
-            logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
-            self.mouse.click(left + pos_building[0], top + pos_building[1])
-            self.step_phase = "ENTERED_BUILDING"
-            self.last_action_time = now
-            return
+        if is_needed:
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+            pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
+            if pos_building and pos_door:
+                logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
+                self.mouse.click(left + pos_building[0], top + pos_building[1])
+                self.step_phase = "ENTERED_BUILDING"
+                self.last_action_time = now
+                return
 
         if pos_sell_out:
             logging.info(f"💎 [珠寶加工廠] 發現出售選單按鈕 [{sell_out_btn}]，點擊開啟選單...")
