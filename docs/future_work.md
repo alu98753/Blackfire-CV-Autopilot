@@ -14,8 +14,8 @@
       要有true,false 在config中 因為有些有時很費 但是有時會需要,因此有時要賣有時不賣
   - [已驗證無風險] 長時間運轉資源與記憶體管理 (實測 1,000 次循環淨增量僅 1.09MB，無洩漏)，確定無需額外處理。
   - 斷線：看能不能從 Steam 重新開啟遊戲
-  - 每天打首領
-  - 每天領任務 抽獎
+  - [已經完成]每天打首領
+  - [已經完成 待驗證]每天領任務 抽獎
   - [cpu優化](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)
 
 ---
