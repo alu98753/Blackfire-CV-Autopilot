@@ -242,23 +242,22 @@ class BloodAltarHandler(BaseStateHandler):
         # =========================================================================
         # 4. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
         # =========================================================================
-        # 4.1 檢查是否在建築物內部 (可看到 receive_entry.png / receive_daily.png 或 Sacrifice.png)
+        # 4.1 檢查是否在建築物內部 (若尚未領取且看得到領水頁籤，優先點擊頁籤)
         pos_rec_entry, _ = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
         pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
-        if pos_rec_entry or pos_rec_daily:
-            if not self.has_claimed_daily and pos_rec_entry and not pos_rec_daily:
-                logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}]，點擊切換至領血介面...")
-                self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
-                self.step_phase = "RECEIVE_TAB_OPEN"
-                self.last_action_time = now
-                return
-            elif not self.has_claimed_daily and pos_rec_daily:
-                logging.info(f"🩸 [血之祭壇] 已在領血介面，點擊每日領取按鈕 [{receive_daily_btn}]...")
-                self.mouse.click(left + pos_rec_daily[0], top + pos_rec_daily[1])
-                self.has_claimed_daily = True
-                self.step_phase = "HANDLING_RECEIVE_POPUPS"
-                self.last_action_time = now
-                return
+        if not self.has_claimed_daily and pos_rec_entry:
+            logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}]，點擊切換至領血介面...")
+            self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
+            self.step_phase = "RECEIVE_TAB_OPEN"
+            self.last_action_time = now
+            return
+        elif not self.has_claimed_daily and pos_rec_daily and self.step_phase == "RECEIVE_TAB_OPEN":
+            logging.info(f"🩸 [血之祭壇] 已在領血介面，點擊每日領取按鈕 [{receive_daily_btn}]...")
+            self.mouse.click(left + pos_rec_daily[0], top + pos_rec_daily[1])
+            self.has_claimed_daily = True
+            self.step_phase = "HANDLING_RECEIVE_POPUPS"
+            self.last_action_time = now
+            return
 
         pos_sac, conf_sac = self.matcher.match(screen_img, sacrifice_btn, threshold=0.85)
         pos_exit_init, conf_exit_init = self.matcher.match(screen_img, exit_building_btn, threshold=0.85)
