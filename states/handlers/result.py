@@ -163,7 +163,7 @@ class ResultHandler(BaseStateHandler):
                 if os.path.exists(os.path.join("templates", exit_btn)):
                     pos_exit, conf_exit = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
                     if pos_exit:
-                        logging.info(f"👉 離場條件成立 (第 4/8/10 場或需領獎)，發現離場按鈕 [{exit_btn}] ({conf_exit:.4f})，點擊退出戰鬥。")
+                        logging.info(f"👉 離場條件成立 (第 4/8/10 場或需領獎)，發現離場按鈕 [{exit_btn}] ({conf_exit:.4f})，點擊退出戰鬥 (固定 1.0 秒過渡等待)...")
                         self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
                         self.machine.is_in_dungeon = False
                         self.continue_click_count = 0
@@ -174,22 +174,22 @@ class ResultHandler(BaseStateHandler):
                             if getattr(self.machine, "daily_manager", None):
                                 self.machine.daily_manager.record_lord_boss_fight(b_key)
 
+                        time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗畫面順暢漸變淡出
                         next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
                         self.machine.transition_to(next_state)
-                        time.sleep(0.5)
                         return True
         else:
             # 情況 A：非第 4、8、10 場 ➔ 僅能配對 RETRY 再戰按鈕 (絕不點擊任何離場/大廳按鈕)
             pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8, quiet=True)
             if pos_retry:
-                logging.info(f"👉 非離場場次，偵測到「再戰」按鈕 [{conf_retry:.4f}]，點擊繼續下一場戰鬥！")
+                logging.info(f"👉 非離場場次，偵測到「再戰」按鈕 [{conf_retry:.4f}]，點擊繼續下一場戰鬥 (固定 1.0 秒過渡等待)...")
                 self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
                 self.machine.last_result_retry_click_time = time.time()
                 self.machine.run_count += 1
                 self.continue_click_count = 0
+                time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗響應點擊並啟動載入
                 logging.info(f"🚀 點擊再戰按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
                 self.machine.transition_to(self.machine.STATE_LOADING)
-                time.sleep(0.35)
                 return True
 
         # 結算如果看到 Lord_entry_after 且屬於 lord_boss 模式
