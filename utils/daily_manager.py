@@ -38,9 +38,9 @@ DEFAULT_DAILY_STATUS = {
 class DailyManager:
     """
     每日任務與 Boss 持久化狀態管理器。
-    支援每日 08:30 自動重置、各 Boss 獨立 5 次上限與 2 小時 CD 計算。
+    支援每日 08:05 自動重置、各 Boss 獨立 5 次上限與 2 小時 CD 計算。
     """
-    def __init__(self, data_dir="user_data", status_file="daily_status.json", reset_hour=8, reset_minute=30):
+    def __init__(self, data_dir="user_data", status_file="daily_status.json", reset_hour=8, reset_minute=5):
         self.data_dir = data_dir
         self.file_path = os.path.join(data_dir, status_file)
         self.reset_hour = reset_hour
@@ -52,7 +52,7 @@ class DailyManager:
 
     def calculate_next_reset_timestamp(self, now_dt=None):
         """
-        [極致省電] 預算下一個 08:30 的 Unix float 時間戳。
+        [極致省電] 預算下一個 08:05 的 Unix float 時間戳。
         """
         if now_dt is None:
             now_dt = datetime.now()
@@ -95,14 +95,14 @@ class DailyManager:
 
     def get_today_reset_tag(self, now_dt=None):
         """
-        計算當前時間對應的 08:30 週期日期標籤 (YYYY-MM-DD)。
-        若當前時間在 08:30 之前，則歸屬於昨天的週期；若在 08:30 之後，則為今天。
+        計算當前時間對應的 08:05 週期日期標籤 (YYYY-MM-DD)。
+        若當前時間在 08:05 之前，則歸屬於昨天的週期；若在 08:05 之後，則為今天。
         """
         if now_dt is None:
             now_dt = datetime.now()
         reset_time = dtime(self.reset_hour, self.reset_minute)
         if now_dt.time() < reset_time:
-            # 還沒到今天的 08:30，屬於上一週期的日期
+            # 還沒到今天的 08:05，屬於上一週期的日期
             from datetime import timedelta
             return (now_dt.date() - timedelta(days=1)).strftime("%Y-%m-%d")
         else:
@@ -110,7 +110,7 @@ class DailyManager:
 
     def check_and_reset_daily(self, now_ts=None, force=False):
         """
-        [極致省電] 帶 60s 限流與 08:30 時間戳預算的重置檢查。
+        [極致省電] 帶 60s 限流與 08:05 時間戳預算的重置檢查。
         單次 float 比對僅需 nanosecond，一天最多比對 1440 次，對 CPU/電量負擔趨近於零。
         """
         if now_ts is None:
@@ -125,12 +125,12 @@ class DailyManager:
         if not force and now_ts < self.next_reset_timestamp:
             return False
 
-        # 3. 超過時間戳，觸發重置並重新預算下一個 08:30 時間戳
+        # 3. 超過時間戳，觸發重置並重新預算下一個 08:05 時間戳
         now_dt = datetime.fromtimestamp(now_ts)
         current_tag = self.get_today_reset_tag(now_dt)
         last_tag = self.status.get("last_daily_reset_date", "")
 
-        logging.info(f"🌅 [DailyManager] 偵測到跨越 08:30 重置線 ({last_tag} ➔ {current_tag})！進行日常任務清零。")
+        logging.info(f"🌅 [DailyManager] 偵測到跨越 08:05 重置線 ({last_tag} ➔ {current_tag})！進行日常任務清零。")
         self.status["last_daily_reset_date"] = current_tag
 
         subflows = self.status.get("subflows", {})

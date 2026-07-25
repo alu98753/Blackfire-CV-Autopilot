@@ -144,10 +144,12 @@ PRIMARY_MODES = {
     }
 }
 
-# ==================== 2. 城鎮子流程獨立配置 (SUBFLOW CONFIGS - 專供 Dev 測試與 08:30 佇列) ====================
+# ==================== 2. 城鎮子流程獨立配置 (SUBFLOW CONFIGS - 專供 Dev 測試與 08:05 佇列) ====================
+# ------------------ 以下為 08:05 每日任務城鎮子流程 (Daily Subflows) ------------------
 SUBFLOW_CONFIGS = {
     # ------------------ 背包整理模式 ------------------
     "bag_clean": {
+        "enabled": True,
         "name": "背包整理",
         "type": "bag_clean",
         "navigation_path": [],
@@ -156,6 +158,7 @@ SUBFLOW_CONFIGS = {
 
     # ------------------ 血之祭壇獻祭模式 ------------------
     "blood_altar": {
+        "enabled": True,
         "name": "血之祭壇獻祭",
         "type": "blood_altar",
         "building_btn": "town_building/Blood_Altar/Blood_Altar.png",
@@ -180,6 +183,7 @@ SUBFLOW_CONFIGS = {
 
     # ------------------ 珠寶加工廠出售模式 ------------------
     "jewelry_workshop": {
+        "enabled": True,
         "name": "珠寶加工廠出售",
         "type": "jewelry_workshop",
         "building_btn": "town_building/Jewelry_workshop/Jewelry_workshop.png",
@@ -210,6 +214,7 @@ SUBFLOW_CONFIGS = {
 
     # ------------------ 首領領主討伐模式 ------------------
     "lord_boss": {
+        "enabled": True,
         "name": "首領領主討伐",
         "type": "lord_boss",
         "entry_btn": "load/Lord_entry.png",
@@ -232,15 +237,7 @@ SUBFLOW_CONFIGS = {
 
     # ------------------ 神秘寶箱模式 (開寶箱) ------------------
     "chest": {
-        "enabled": True,  # 設為 False 可暫停 08:30 自動執行此子流程
-        "name": "神秘寶箱",
-        "type": "chest",
-        "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",
-        "navigation_path": [],
-        "lobby_start_btn": "stages/start.png",
-    },
-    "mysterious_treasure": {
-        "enabled": True,  # 別名開關
+        "enabled": False,  # 僅開寶箱暫停啟用 (設為 False，待開發完成再切換為 True)
         "name": "神秘寶箱",
         "type": "chest",
         "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",

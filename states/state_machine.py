@@ -672,6 +672,9 @@ class GameStateMachine:
 
         while self.town_subflow_queue:
             next_flow = self.town_subflow_queue.pop(0)
+            if next_flow == "mysterious_treasure":
+                next_flow = "chest"
+
             from config import SUBFLOW_CONFIGS, GAME_CONFIGS
             flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
             if not flow_cfg.get("enabled", True):

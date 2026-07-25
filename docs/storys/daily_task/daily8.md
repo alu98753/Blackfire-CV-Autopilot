@@ -1,14 +1,14 @@
-現在我這個分之 想要做每天8點30 要自己去做的任務( 假設在collect only , 或戰鬥 任何情況都要跳轉 戰鬥的話舊等戰鬥結束後
+現在我這個分之 想要做每天8點05 要自己去做的任務( 假設在collect only , 或戰鬥 任何情況都要跳轉 戰鬥的話舊等戰鬥結束後
 
 然後要有config 判斷今天領了沒(每個子任務都設定 因為可能有些可以一次做完 有些不行) 避免腳本每次開的時候都重新判斷
-具體而言 每天早上8:30 把config 重製為false, 然後每天8:30 trigger他
+具體而言 每天早上8:05 把config 重製為false, 然後每天8:05 trigger他
 
 以下是要做的事情 接著 因為某些圖片還沒辦法截圖 所以 先暫時把大家的功能做個半成品出來
 
 1. 開寶箱 (神秘寶箱 `chest` / `mysterious_treasure`)
    - **城鎮自動導航**：若處於大廳等非城鎮畫面，自動比對並點擊 `goback_town.png` 退回城鎮。
    - **寶箱比對與領取**：於城鎮掃描並點擊 `town_building/mysterious_treasure/mysterious_treasure.png`；若有確認彈窗自動點擊領取。
-   - **狀態持久化與 08:30 重置**：透過 `DailyManager` 記錄 `chest` 的 `completed_today = True`（於 `user_data/daily_status.json` 中保存），每日 08:30 自動重置。
+   - **狀態持久化與 08:05 重置**：透過 `DailyManager` 記錄 `chest` 的 `completed_today = True`（於 `user_data/daily_status.json` 中保存），每日 08:05 自動重置。
    - **連動佇列**：完成領取後自動呼叫 `pop_and_next_town_subflow()` 續行下一個城鎮任務。
 
 2. 抽英雄
@@ -27,11 +27,11 @@
 ===
 
 5. 打boss (首領領主討伐)
-   - **規則與冷卻**：每個 Boss 每日上限 5 次，戰鬥完成後寫入獨立 CD（08:30 自動清零）。
+   - **規則與冷卻**：每個 Boss 每日上限 5 次，戰鬥完成後寫入獨立 CD（08:05 自動清零）。
      - **古代惡靈伊瑟倫** (`lord_spectre`): 冷卻時間 2 小時 (7200 秒)。
      - **育母蜘蛛麗拉西亞** (`lord_spider`): 冷卻時間 1 小時 (3600 秒)。
    - **討伐優先權策略**：依 CD 秒數降序排序 ($7200s > 3600s$)，系統優先鎖定挑戰難度更高、CD 更長的 Boss，匹配並點擊後立刻 `break` 鎖定。
-   - **極致省電 08:30 重置**：進度與時間戳紀錄於 `user_data/daily_status.json`（已 gitignore 隔離）。主迴圈具備 60 秒限流與浮點數時間戳預算，對 CPU/電量 0 負擔。
+   - **極致省電 08:05 重置**：進度與時間戳紀錄於 `user_data/daily_status.json`（已 gitignore 隔離）。主迴圈具備 60 秒限流與浮點數時間戳預算，對 CPU/電量 0 負擔。
    - **UI 頁籤與原模式自動回歸**：採用 `match_mutually_exclusive_tabs` 比對 `load/Lord_entry_after.png`；討伐完畢自動恢復 `primary_config` 回歸原模式 (`mix` / `stage` / `dungeon` / `collect_only`) 繼續刷怪。
 
 ---
