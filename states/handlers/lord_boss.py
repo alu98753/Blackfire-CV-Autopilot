@@ -97,18 +97,20 @@ class LordBossHandler(BaseStateHandler):
                 if pos_b:
                     b_name = b_cfg.get("name", boss_key)
                     max_cd = b_cfg.get("cooldown_seconds", 7200.0)
-                    # 點擊前防護：先不進行點擊，重用 detect_cooldown_sign_and_time 進行卡片木牌 / OCR 冷卻時間辨識
+                    logging.info(f"🔍 [首領討伐] 於畫面發現 Boss 卡片 [{b_name}] [{conf_b:.4f}]，檢查是否有冷卻木牌...")
+                    
+                    # 點擊前防護：先不進行點擊，進行卡片木牌 / OCR 冷卻時間辨識
                     rem_secs, raw_text = self._check_card_cooldown_ocr(screen_img, pos_b, max_allowed_seconds=max_cd)
                     if rem_secs is not None and rem_secs > 0:
                         logging.info(
-                            f"⏳ [首領討伐] 點擊前經 OCR 偵測到 Boss [{b_name}] 尚在冷卻中: \"{raw_text}\" "
-                            f"({format_seconds_to_readable(rem_secs)})！更新 DailyManager 並跳過點擊。"
+                            f"⏳ [首領討伐] 偵測到 Boss [{b_name}] 設有冷卻木牌！倒數時間: \"{raw_text}\" "
+                            f"({format_seconds_to_readable(rem_secs)})，更新 DailyManager 並跳過點擊。"
                         )
                         if dm and hasattr(dm, "update_boss_cooldown"):
                             dm.update_boss_cooldown(boss_key, rem_secs)
-                        continue  # 跳過點擊，續行比對下一個 Boss！
+                        continue  # 有木牌冷卻中：跳過點擊，續行比對佇列中下一個 Boss！
 
-                    logging.info(f"🎯 [首領討伐] 發現可挑戰 Boss [{b_name}] [{conf_b:.4f}]，點擊選擇！")
+                    logging.info(f"🎯 [首領討伐] 確認 Boss [{b_name}] 無冷卻木牌！進行點擊選擇討伐！")
                     self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                     self.current_target_boss = boss_key
                     selected_boss = boss_key
