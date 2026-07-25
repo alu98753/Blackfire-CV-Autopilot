@@ -111,7 +111,8 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertFalse(scheduled)
         self.assertIsNone(sm.quest_scheduler)
         self.assertEqual(sm.config["type"], "mix")
-        self.assertEqual(sm.config["stage_name"], "冰雪洞窟 (first)")
+        self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
+
         self.assertIn("Ice_entry.png", sm.config["navigation_path"][-1])
 
 

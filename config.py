@@ -120,7 +120,8 @@ PRIMARY_MODES = {
             "dungeons/gungeon_godown.png"
         ],
         # 退守普通關卡配置 (預設為第 6 關第一小關)
-        "stage_name": "冰雪洞窟 (first)",
+        "stage_name": "冰凍峽谷 (first)",
+
         "stage_entry": "stages/level6_ice_cave.png",
         "stage_target": "stages/first_stage.png",
         "stage_max_defeat": 2,
@@ -342,7 +343,8 @@ BASE_STAGE_LEVELS = {
     "3": {"name": "古樹森林", "entry": "stages/level3_ancient_forest.png"},
     "4": {"name": "沙漠廢墟", "entry": "stages/level4_desert_ruins.png"},
     "5": {"name": "幽暗沼澤", "entry": "stages/level5_gloomy_swamp.png"},
-    "6": {"name": "冰雪洞窟", "entry": "stages/level6_ice_cave.png"},
+    "6": {"name": "冰凍峽谷", "entry": "stages/level6_ice_cave.png"},
+
 }
 
 from utils.config_helper import get_stage_configs

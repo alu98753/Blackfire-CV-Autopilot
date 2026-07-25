@@ -86,7 +86,7 @@ def setup_stage_config(config, prompt_prefix=""):
     print(" 3) 古樹森林 (Level 3)")
     print(" 4) 沙漠廢墟 (Level 4)")
     print(" 5) 幽暗沼澤 (Level 5)")
-    print(" 6) 冰雪洞窟 (Level 6) - 預設")
+    print(" 6) 冰凍峽谷 (Level 6) - 預設")
     try:
         choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
         if not choice:
@@ -98,7 +98,8 @@ def setup_stage_config(config, prompt_prefix=""):
         choice = "6"
 
     if choice not in stage_configs:
-        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰凍峽谷]...")
+
         choice = "6"
 
     cfg = stage_configs[choice]
@@ -334,11 +335,11 @@ def setup_mode_config(args):
         setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
         print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
     elif args.mode == "daily":
-        # 懸賞任務全數完成時，預設退守 mix 標的：地下城 5) 冰雪洞窟，關卡 第六關第一小關
-        config["name"] = "每日懸賞任務 (退守: 冰雪洞窟 + 關卡 6-1)"
+        # 懸賞任務全數完成時，預設退守 mix 標的：地下城 5) 冰雪洞窟，關卡 第六關第一小關 (冰凍峽谷)
+        config["name"] = "每日懸賞任務 (退守: 冰雪洞窟 + 冰凍峽谷 6-1)"
         config["greedy_dungeon"] = False
         config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
-        config["stage_name"] = "冰雪洞窟 (first)"
+        config["stage_name"] = "冰凍峽谷 (first)"
         config["stage_entry"] = "stages/level6_ice_cave.png"
         config["stage_target"] = "stages/first_stage.png"
         config["stage_navigation_path"] = [
@@ -350,7 +351,8 @@ def setup_mode_config(args):
         ]
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
-        print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行 [冰雪洞窟] 與 [關卡 6-1]。")
+        print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行 [冰雪洞窟] 與 [冰凍峽谷 6-1]。")
+
 
 
 
