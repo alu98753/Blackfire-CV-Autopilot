@@ -62,7 +62,12 @@ class NavigationHandler(BaseStateHandler):
 
         cd_summary = ", ".join(cd_details)
         self.machine.all_dungeons_on_cooldown_until = now + max(30.0, min_remaining)
-        logging.info(f"⏳ 混合模式：{reason} ➔ 各地下城冷卻狀態: {cd_summary}。設定冷卻緩衝 {int(max(30.0, min_remaining))} 秒並切換至普通關卡！")
+        logging.info(f"⏳ 混合模式：{reason} ➔ 各地下城冷卻狀態: {cd_summary}。設定冷卻緩衝 {int(max(30.0, min_remaining))} 秒！")
+
+        if self.machine.is_daily_pipeline_active():
+            logging.info("⏳ [每日懸賞動態調度] 偵測到當前懸賞目標地下城冷卻中，立即觸發動態重新排程，順延切換下一個任務...")
+            self.machine.evaluate_and_schedule_daily_pipeline()
+            return
 
         pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
         if pos_st:

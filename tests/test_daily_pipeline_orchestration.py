@@ -142,6 +142,34 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         # 斷言已自動跳過冷卻中的地下城 3 (神秘遺跡)，切換為下一個任務 (清除樹人 - 森林迷宮 index 2)
         self.assertIn("森林迷宮", sm.config["name"])
 
+    def test_navigation_dungeon_cooldown_triggers_pipeline_reevaluation(self):
+        """驗證當導航模組偵測到地下城冷卻時，會在 daily 模式下自動喚起動態重新排程，防範死結乒乓對點"""
+        from states.handlers.navigation import NavigationHandler
+        from config import GAME_CONFIGS, DUNGEON_NAMES
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        sm.attach_quest_scheduler(scheduler)
+
+        # 模擬正處於每日懸賞模式，當前任務為森林迷宮
+        sm.evaluate_and_schedule_daily_pipeline()
+        sm.config["dungeon_names"] = DUNGEON_NAMES
+        sm.config["greedy_allowed_indices"] = [0, 1, 2, 3, 4]
+
+        nav_handler = NavigationHandler(sm)
+        nav_handler.matcher.match.return_value = ((500, 700), 0.95)
+
+        # 模擬 2 號地下城 (森林迷宮) 冷卻 10 分鐘
+        now_ts = time.time()
+        sm.dungeon_cooldowns[2] = now_ts + 600.0
+
+        # 呼叫 _switch_to_stage_or_back 模擬冷卻發現
+        nav_handler._switch_to_stage_or_back(screen_img=MagicMock(), rect={"left": 0, "top": 0}, reason="森林迷宮冷卻中")
+
+        # 斷言 daily pipeline 被重新動態排程，任務順延切換，config 已不再是原本冷卻中的森林迷宮
+        self.assertNotIn("森林迷宮", sm.config.get("name", ""))
+
 
 if __name__ == "__main__":
     unittest.main()
