@@ -98,9 +98,10 @@ class NavigationHandler(BaseStateHandler):
         crop_x2 = min(w_limit, max_loc[0] + t_w)
         dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
         
+        cd_seconds = 7200.0
         has_cd, parsed_secs, raw_text = detect_cooldown_sign_and_time(
             dungeon_crop,
-            self.machine.get_ocr_reader(),
+            self.machine.get_ocr_reader,
             max_allowed_seconds=cd_seconds,
             threshold=0.58,
             scale=scale
@@ -111,6 +112,7 @@ class NavigationHandler(BaseStateHandler):
             if parsed_secs is not None and 0 < parsed_secs < cd_seconds:
                 logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)})")
                 self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
+                ocr_success = True
         if in_cooldown:
             if not ocr_success:
                 logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 剩餘時間辨識未成功，使用 30 秒臨時冷卻退避...")

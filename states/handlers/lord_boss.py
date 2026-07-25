@@ -35,11 +35,10 @@ class LordBossHandler(BaseStateHandler):
             y2 = min(h, cy + 300)
 
             crop_img = screen_img[y1:y2, x1:x2]
-            ocr_reader = self.machine.get_ocr_reader()
             
             has_cd, rem_secs, raw_text = detect_cooldown_sign_and_time(
                 crop_img, 
-                ocr_reader, 
+                self.machine.get_ocr_reader, 
                 max_allowed_seconds=max_allowed_seconds, 
                 threshold=0.58
             )

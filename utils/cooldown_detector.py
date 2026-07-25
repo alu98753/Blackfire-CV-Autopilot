@@ -46,6 +46,8 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
 
     # 已成功比對到冷卻木牌！進行文字區域切割、4倍放大與 EasyOCR 讀取
     try:
+        if callable(ocr_reader):
+            ocr_reader = ocr_reader()
         cd_cx = max_loc_cd[0] + cd_w // 2
         cd_cy = max_loc_cd[1] + cd_h // 2
 
