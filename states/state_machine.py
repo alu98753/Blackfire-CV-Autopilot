@@ -91,8 +91,10 @@ class GameStateMachine:
         self.need_jewelry_workshop = False
         self.town_subflow_queue = []
         self.quest_scheduler = None
+        self.daily_manager = None
         self.config = {}
         self.primary_config = {}
+
 
 
         
@@ -816,14 +818,24 @@ class GameStateMachine:
             logging.info("重置旗標並回復原模式續行...")
         logging.info("=" * 60)
 
-        # 全域每日大流水線自動排程檢查
-        if self.daily_manager:
+        # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
+        if self.is_daily_pipeline_active():
             scheduled = self.evaluate_and_schedule_daily_pipeline()
             if scheduled:
                 return
 
         next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
         self.transition_to(next_st)
+
+    def is_daily_pipeline_active(self):
+        """
+        檢查目前是否處於每日全域流水線 (--mode daily) 運作模式中。
+        """
+        if not getattr(self, "daily_manager", None):
+            return False
+        mode_type = self.config.get("type") if getattr(self, "config", None) else None
+        return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
+
 
     def evaluate_and_schedule_daily_pipeline(self):
         """
@@ -853,13 +865,14 @@ class GameStateMachine:
 
         # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
         if self.quest_scheduler:
-            if not self.quest_scheduler.is_all_completed():
-                advance_res = self.check_and_advance_quest_target()
-                return not advance_res
+            self.check_and_advance_quest_target()
+            if self.quest_scheduler:
+                return True
 
         # 4. 退守 Tier 4 Mix 模式 (冰雪洞窟 + 關卡 6-1)
         self.apply_mix_fallback_config()
         return False
+
 
 
 

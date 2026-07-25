@@ -61,9 +61,9 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         # 觸發大流水線調度
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
-        # 斷言優先發起 lord_boss 流水線
+        # 斷言優先發起 lord_boss 流水線並切換至 STATE_LORD_BOSS
         self.assertEqual(sm.town_subflow_queue, [])
-        self.assertEqual(getattr(sm, "current_town_subflow", None), "lord_boss")
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
     def test_lord_boss_preemptive_interruption_during_quests(self):
         """驗證當懸賞戰鬥完成後，若 Lord Boss 冷卻結束，會立刻搶先插隊執行 lord_boss"""
@@ -82,7 +82,8 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
-        self.assertEqual(getattr(sm, "current_town_subflow", None), "lord_boss")
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
 
     def test_tier4_fallback_mix_mode_when_all_daily_completed(self):
         """驗證當速領、Boss (已滿5次) 與 8 個懸賞全完成時，退守 mix 模式 (冰雪洞窟 + 關卡 6-1)"""
