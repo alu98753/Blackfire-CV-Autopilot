@@ -35,7 +35,7 @@ class TestBloodAltarReceive(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
         self.state_machine.need_blood_altar = True
-        self.state_machine.town_subflow_queue = ["blood_altar"]
+        self.state_machine.town_subflow_queue = []
 
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
