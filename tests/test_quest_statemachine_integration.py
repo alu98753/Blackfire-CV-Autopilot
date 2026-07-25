@@ -173,9 +173,22 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         # 骷髏 -> dungeon 3 (神秘遺跡)
         self.assertEqual(mapper.parse_quest("清除骷髏").dungeon_index, 3)
 
-        # 3. 不要做 / 已停用項目 -> 回傳 None (未知任務寫入 unknown_quests)
-        self.assertIsNone(mapper.parse_quest("敵人剿滅"))
-        self.assertIsNone(mapper.parse_quest("獵金之蟲"))
+        # 3. 不要做 / 顯式跳過項目 -> 回傳 mode_type == "ignored"，不上報 unknown_quests
+        node_ignored1 = mapper.parse_quest("敵人剿滅")
+        self.assertIsNotNone(node_ignored1)
+        self.assertEqual(node_ignored1.mode_type, "ignored")
+
+        node_ignored2 = mapper.parse_quest("獵金之蟲")
+        self.assertIsNotNone(node_ignored2)
+        self.assertEqual(node_ignored2.mode_type, "ignored")
+
+        # 4. 驗證 record_unknown_quest 不會將 ignored 任務記錄至 unknown_quests
+        self.daily_mgr.record_unknown_quest("敵人剿滅")
+        self.daily_mgr.record_unknown_quest("獵金之蟲")
+        bb = self.daily_mgr.status["subflows"]["bulletin_board"]
+        self.assertNotIn("敵人剿滅", bb.get("unknown_quests", []))
+        self.assertNotIn("獵金之蟲", bb.get("unknown_quests", []))
+
 
 
 if __name__ == "__main__":

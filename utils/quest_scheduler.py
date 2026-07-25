@@ -80,9 +80,13 @@ class QuestScheduler:
             if q_title:
                 task_node = mapper.parse_quest(q_title)
                 if task_node is not None:
+                    if task_node.mode_type == "ignored":
+                        logging.info(f"🚫 [懸賞排程器] 任務 [{q_title}] 屬於明確設定跳過/忽略執行的任務，不上報 unknown_quests，不加入執行佇列。")
+                        continue
                     scheduler.add_task(task_node)
                 else:
                     unknown_titles.append(q_title)
+
 
         if unknown_titles and daily_manager:
             for u_title in unknown_titles:

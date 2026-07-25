@@ -301,9 +301,23 @@ class DailyManager:
 
     def record_unknown_quest(self, quest_title):
         """
-        將無法映射的未定義懸賞任務寫入 unknown_quests 列表 (僅 append，每日不重置清空)。
+        將無法映射且非 ignored 的未定義懸賞任務標題記錄至 json 檔中的 unknown_quests (不重複 append，每日不清空)。
         同時將該任務從 accepted_quests 中移除。
         """
+        if not quest_title:
+            return
+
+        from utils.quest_mapper import QuestMapper
+        mapper = QuestMapper()
+        node = mapper.parse_quest(quest_title)
+        if node is not None and node.mode_type == "ignored":
+            logging.info(f"🚫 [DailyManager] 任務 [{quest_title}] 為顯式忽略/跳過任務，不上報至 unknown_quests。")
+            subflows = self.status.setdefault("subflows", {})
+            bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []})
+            bb["accepted_quests"] = [q for q in bb.get("accepted_quests", []) if q != quest_title]
+            self.save_status()
+            return
+
         subflows = self.status.setdefault("subflows", {})
         bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []})
         unknowns = bb.setdefault("unknown_quests", [])
@@ -316,6 +330,7 @@ class DailyManager:
         old_accepted = bb.get("accepted_quests", [])
         bb["accepted_quests"] = [q for q in old_accepted if q != quest_title]
         self.save_status()
+
 
     def remove_accepted_quest(self, quest_title):
         """

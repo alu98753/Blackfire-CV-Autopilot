@@ -84,7 +84,12 @@ class QuestMapper:
     """
     def __init__(self):
 
-        # 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4)
+        # 1. 顯式忽略/跳過執行的任務關鍵字 (不執行、不上報 unknown_quests、不加入 accepted_quests 佇列)
+        self.ignored_rules = [
+            r"(敵人剿滅|獵金之蟲)",
+        ]
+
+        # 2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4)
         # 0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 冰雪洞窟
         self.dungeon_rules = [
             (r"(史萊姆王|史萊姆|黏糊糊的石窟)", 0),                 # 地下城 #1 (greedy_allowed_indices 0 黏糊糊的石窟)
@@ -94,11 +99,11 @@ class QuestMapper:
             (r"(冰雪洞窟的暴君|終結寒冰獸王|冰雪洞窟|完成任何地下城)", 4),  # 地下城 #5 (greedy_allowed_indices 4 冰雪洞窟)
         ]
 
-        # 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型)
+        # 3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型)
         # Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷
         self.stage_rules = [
             (r"(野豬)", 1, "final"),       # Level 1 蒼穹平原 (魔王關)
-            (r"(熊)", 3, "first"),         # Level 3 古樹森林 (第一關)
+            (r"(熊)", 3, "final"),         # Level 3 古樹森林 (魔王關)
             (r"(沙蟲)", 4, "middle"),      # Level 4 沙漠廢墟 (中間關)
             (r"(蛙人)", 5, "first"),       # Level 5 幽暗沼澤 (第一關)
             (r"(冰元素)", 6, "first"),     # Level 6 冰凍峽谷 (第一關)
@@ -116,6 +121,18 @@ class QuestMapper:
         """
         norm_title = normalize_quest_title(title)
         combined_text = f"{norm_title} {description} {requirement_text}"
+
+        # 1. 檢查是否命中明確設定「跳過/不執行 (ignored)」的任務規則
+        for pattern in self.ignored_rules:
+            if re.search(pattern, combined_text):
+                logging.info(f"🚫 懸賞任務 '{title}' 命中忽略規則 '{pattern}' (顯式跳過，不上報 unknown_quests)。")
+                return TaskNode(
+                    quest_title=title,
+                    mode_type="ignored",
+                    target_count=0,
+                    raw_desc=combined_text
+                )
+
 
         
         # 1. 解析目標數量 (x 10, x 5, x 1)
