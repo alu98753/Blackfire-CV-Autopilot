@@ -86,7 +86,8 @@ class QuestOCRExtractor:
             text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
 
             # 進行 OCR 辨識
-            name = self._ocr_crop(text_roi)
+            name = self._ocr_crop(text_roi, crop_top_half=True)
+
             if name:
                 logging.info(f"📋 [QuestOCRExtractor] 任務列 #{idx+1} (Y={cy}) 辨識出標題: '{name}' (錨點信心度: {conf:.4f})")
                 extracted_names.append(name)
@@ -94,7 +95,7 @@ class QuestOCRExtractor:
         comma_str = ", ".join(extracted_names)
         return extracted_names, comma_str
 
-    def _ocr_crop(self, text_roi):
+    def _ocr_crop(self, text_roi, crop_top_half=False):
         if self.ocr_reader is None:
             try:
                 import easyocr
@@ -105,10 +106,11 @@ class QuestOCRExtractor:
 
         try:
             h, w = text_roi.shape[:2]
-            # 取上半部 (避開下方的「懸賞任務」副標與橫線)
-            top_half = text_roi[:int(h * 0.55), :] if h > 30 else text_roi
+            # 僅在顯式指定 crop_top_half=True 時二次切除上半部
+            target_img = text_roi[:int(h * 0.55), :] if (crop_top_half and h > 30) else text_roi
             # 放大 2 倍以提升中文字元特徵清晰度
-            scaled = cv2.resize(top_half, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+            scaled = cv2.resize(target_img, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+
 
             results = self.ocr_reader.readtext(scaled)
             if results:

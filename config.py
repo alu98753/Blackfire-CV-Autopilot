@@ -181,9 +181,9 @@ PRIMARY_MODES = {
 # ------------------ 懸賞完成彈窗 (task_complete.png) OCR 裁切框自訂配置 ------------------
 # 相對於卷軸圖示 (task.png) 中心的偏移與框大小 (使用者可自由微調)
 TASK_BANNER_OCR_OFFSET = {
-    "offset_x": 35,     # X 軸水平右移像素 (正數為往右)
-    "offset_y": -40,    # Y 軸垂直上移像素 (負數為向上)
-    "box_width": 285,   # 裁切框寬度 (像素)
+    "offset_x": 100,     # X 軸水平右移像素 (正數為往右)
+    "offset_y": -50,    # Y 軸垂直上移像素 (負數為向上)
+    "box_width": 400,   # 裁切框寬度 (像素)
     "box_height": 60,   # 裁切框高度 (像素)
 }
 
