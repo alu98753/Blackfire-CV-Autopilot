@@ -57,4 +57,47 @@
 * **執行測試套件**：`tests/test_stamina_retreat_routing.py`
 * **規範**：
   - 每當修改 Handler 的退出或狀態轉移邏輯時，**必須**同步在 `test_stamina_retreat_routing.py` 或對應單元測試中補充專屬的雙向行為測試（退避期間 ➔ `COLLECT_ONLY`；正常期間 ➔ `NAVIGATING`）。
-  - 在發起 Git Commit 前，**必須**確保全套 118 個門禁測試 100% 綠燈 PASS。
+  - 在發起 Git Commit 前，**必須**確保全套測試 100% 綠燈 PASS。
+
+---
+
+## F. Handler 極速 Phase 流轉與單點比對規範 (Fast Phase-driven Handler Flow)
+* **規範**：
+  - ⚠️ **嚴禁**在 `handle()` 的每一幀中，不分階段強行對全套範本圖做盲掃或檔案存檔（避免導致每幀 10+ 秒卡頓與 Console 洗屏）。
+  - ✅ **必須**採用「當前 Phase 優先判定」單向結構。將後續/退出階段擺在前面，`INIT / ENTERED_BUILDING` 擺在末尾：
+    ```python
+    # 1. 退出與全數完成階段 (ALL_DONE_EXITING)
+    if self.step_phase == "ALL_DONE_EXITING": ...
+    
+    # 2. 功能操作階段 (SACRIFICE_MENU_OPEN / HANDLING_RECEIVE_POPUPS)
+    if self.step_phase == "SACRIFICE_MENU_OPEN": ...
+
+    # 3. 初始與建築進入階段 (INIT / ENTERED_BUILDING)
+    if pos_building and pos_door:
+        self.mouse.click(...)
+        self.step_phase = "ENTERED_BUILDING"
+        return
+    ```
+  - ✅ 點擊建築進入時，必須精確更新 `self.step_phase = "ENTERED_BUILDING"`，確保狀態機 phase 可追蹤與單元測試相容。
+
+---
+
+## G. 中央配置規範化規範 (Centralized Config Normalization)
+* **核心 API**：`config.normalize_config(config)`
+* **規範**：
+  - ⚠️ **嚴禁**在 Handler 內部使用過低降級硬編碼（例如 fallback 為僅分解綠色），以免丟失預設品質狀態。
+  - ✅ **必須**在全入口 (CLI `--backend`, `--subflow`, `main.py` 與 `GameStateMachine`) 設定 config 時，一律呼叫 `normalize_config(config)`，確保 `disassemble_colors` (`["gray_or_empty", "green", "blue"]`) 與 `keep_colors` 在任何啟動與切換時都 100% 精準。
+
+---
+
+## H. Windows CLI 啟動器與 `.bat` 換行編碼規範 (Windows CLI Batch Launcher Spec)
+* **核心檔案**：[run.bat](file:///e:/Side_Project/BlackfireCrusade_tool/run.bat)
+* **規範**：
+  - ⚠️ **CRLF 換行符鐵律**：Windows `.bat` 批次檔**必須**採用 CRLF (`\r\n`) 換行與無 BOM 的 UTF-8 編碼。絕不可存為 LF (`\n`)，否則 CMD 讀取時會把整檔黏成單行，導致語法解析出大批無效指令。
+  - ✅ **`chcp 65001` 重載**：檔案頭必須包含自適應拉起 `chcp 65001` 與 `cmd /c` utf8 重載機制，確保控制台繁中顯示無亂碼。
+  - ✅ **主選單 + Subflow 子選單**：
+    - 主選單：1. `--mode daily` (推薦首選), 2-6 (各主模式), 7 (Dev Subflow 選單)。
+    - Subflow 子選單：1-7 數字快捷鍵、8 (三大速領組合 `chest blood_altar jewelry_workshop`)、9 (自訂名稱輸入)。
+  - ✅ **平鋪 `if` 與二向相容**：平鋪所有 `if /i "%choice%"=="name"` 判斷，既能選數字、又能直接輸入 `bag_clean` / `blood_altar` 等字串啟動。
+
+

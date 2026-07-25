@@ -239,7 +239,7 @@ class BloodAltarHandler(BaseStateHandler):
                 return
 
         # =========================================================================
-        # 4. 城鎮進入建築與選單預備階段 (INIT)
+        # 4. 城鎮進入建築與選單預備階段 (INIT / ENTERED_BUILDING)
         # =========================================================================
         is_claimed_today = self.has_claimed_daily or self._is_blood_altar_claimed_today()
 
@@ -266,5 +266,6 @@ class BloodAltarHandler(BaseStateHandler):
         if pos_building and pos_door:
             logging.info(f"🩸 [血之祭壇] 於城鎮發現血之祭壇建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
             self.mouse.click(left + pos_building[0], top + pos_building[1])
+            self.step_phase = "ENTERED_BUILDING"
             self.last_action_time = now
             return
