@@ -41,3 +41,28 @@ class BaseStateHandler:
         return self.matcher.match_mutually_exclusive_tabs(
             screen_img, template_a, template_b, margin=margin, threshold=threshold
         )
+
+    def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=4.0, threshold=0.75, brightness_threshold=0.0, check_interval=0.25, post_delay=1.0):
+        """
+        [配對確認直到消失]
+        發起點擊後，持續輪詢比對畫面，直到指定模板 template_name 從畫面上 100% 消失 (pos is None) 才解鎖返回。
+        防止因過場動畫或顯存未淡出導致的重複盲目點擊。
+        """
+        import time, logging, os
+        logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環...")
+        self.mouse.click(click_x, click_y)
+
+        start_t = time.time()
+        while time.time() - start_t < timeout:
+            time.sleep(check_interval)
+            if self.capturer:
+                fresh_img = self.capturer.capture(rect)
+                if fresh_img is not None and os.path.exists(os.path.join("templates", template_name)):
+                    pos, conf = self.matcher.match(fresh_img, template_name, threshold=threshold, brightness_threshold=brightness_threshold, quiet=True)
+                    if pos is None:
+                        logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {time.time() - start_t:.2f} 秒。")
+                        break
+                    else:
+                        logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
+
+        time.sleep(post_delay)

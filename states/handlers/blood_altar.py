@@ -31,13 +31,13 @@ class BloodAltarHandler(BaseStateHandler):
         self.has_claimed_daily = False
 
     def _ensure_in_town(self, screen_img, rect=None):
-        """若處於大廳選單，點擊 goback_town 返回城鎮"""
+        """若處於大廳選單，點擊 goback_town 返回城鎮 (配對確認直到消失)"""
         pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
         if pos_goback:
-            logging.info("🩸 [血之祭壇] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
+            logging.info("🩸 [血之祭壇] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮 (配對確認直到消失)...")
             left = rect["left"] if rect else 0
             top = rect["top"] if rect else 0
-            self.mouse.click(left + pos_goback[0], top + pos_goback[1])
+            self.click_and_wait_until_gone("goback_town.png", left + pos_goback[0], top + pos_goback[1], rect)
             self.last_action_time = time.time()
             return False
         return True
