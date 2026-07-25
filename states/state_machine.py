@@ -667,9 +667,8 @@ class GameStateMachine:
         logging.info("🏛️ 【城鎮任務流水線 - 任務總覽儀表板】 🏛️")
         logging.info("=" * 60)
         for idx, flow_key in enumerate(queue, 1):
-            normalized_key = "hero_draw" if flow_key == "tavern" else ("chest" if flow_key == "mysterious_treasure" else flow_key)
-            cfg = SUBFLOW_CONFIGS.get(normalized_key, {})
-            name = cfg.get("name", normalized_key)
+            cfg = SUBFLOW_CONFIGS.get(flow_key, {})
+            name = cfg.get("name", flow_key)
             is_enabled = cfg.get("enabled", True)
             status_str = "🟢 待執行 (Enabled)" if is_enabled else "🔴 停用 (enabled=False)"
             logging.info(f"  {idx}. [{flow_key}] {name:<12} : {status_str}")
@@ -697,10 +696,6 @@ class GameStateMachine:
 
         while self.town_subflow_queue:
             next_flow = self.town_subflow_queue.pop(0)
-            if next_flow == "mysterious_treasure":
-                next_flow = "chest"
-            elif next_flow == "tavern":
-                next_flow = "hero_draw"
 
             from config import SUBFLOW_CONFIGS, GAME_CONFIGS
             flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
