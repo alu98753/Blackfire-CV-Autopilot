@@ -42,10 +42,13 @@ class BloodAltarHandler(BaseStateHandler):
         pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
         if pos_goback:
             logging.info("🩸 [血之祭壇] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
+            left = rect["left"] if rect else 0
+            top = rect["top"] if rect else 0
             self.mouse.click(left + pos_goback[0], top + pos_goback[1])
             self.last_action_time = time.time()
             return False
         return True
+
 
     def _record_completion(self):
 
