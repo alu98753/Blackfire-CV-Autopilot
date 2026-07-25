@@ -50,14 +50,15 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         """驗證事件廣播同步更新多個相關任務 (Piggybacking)"""
         scheduler = self.daily_mgr.load_quest_scheduler()
         
-        # 模擬擊殺史萊姆王 (同時滿足史萊姆王的毀滅與通用首領擊殺)
-        scheduler.record_kill_event(enemy_name="史萊姆王", is_boss=True, dungeon_index=0)
+        # 模擬擊殺 10 次史萊姆王 (同時滿足史萊姆王的毀滅與通用首領擊殺)
+        scheduler.record_kill_event(enemy_name="史萊姆王", is_boss=True, dungeon_index=0, kill_count=10)
         
         tasks_map = {t.quest_title: t for t in scheduler.tasks}
         # 史萊姆王的毀滅 屬於 BANNER_VERIFY_QUESTS，record_kill_event 絕不自動加算進度
         self.assertFalse(tasks_map["史萊姆王的毀滅"].is_completed)
-        # 通用首領擊殺屬於確定性任務/通用任務，自動加算完成
+        # 通用首領擊殺屬於確定性任務/通用任務，自動加算完成 (10/10)
         self.assertTrue(tasks_map["擊殺首領"].is_completed)
+
 
     def test_remove_accepted_quest_from_json(self):
         """驗證 completed 任務從 daily_status.json 的 accepted_quests 中成功移除"""
