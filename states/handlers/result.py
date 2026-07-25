@@ -33,17 +33,16 @@ class ResultHandler(BaseStateHandler):
         - 非離場場次 (非 4/8/10 場): 僅允許 2 次 continue 推進 + retry 再戰，絕不比對離場與大廳圖案。
         - 離場場次 (4/8/10 場): 僅允許 2 次 continue 推進 + exit_battle/goback_town 離場，絕不比對 retry 再戰。
         """
-        # 0. 優先檢查是否已回到準備大廳/關卡選單 (出現 select_stage, select_stage_after, goback_town 代表戰鬥結算已結束)
+        # 0. 優先檢查是否已回到準備大廳/關卡選單 (出現 select_stage 或 select_stage_after 代表戰鬥結算已結束)
         lobby_features = [
             "common/select_stage.png",
-            "common/select_stage_after.png",
-            "goback_town.png"
+            "common/select_stage_after.png"
         ]
         for l_temp in lobby_features:
             if os.path.exists(os.path.join("templates", l_temp)):
                 pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80, brightness_threshold=0.70, quiet=True)
                 if pos_l:
-                    logging.info(f"👉 結算辨識：偵測到關卡大廳特徵 [{l_temp}] (相似度: {conf_l:.4f})，代表戰鬥結算已結束並已回到大廳，轉移至 NAVIGATING。")
+                    logging.info(f"👉 結算辨識：偵測到關卡大廳獨有特徵 [{l_temp}] (相似度: {conf_l:.4f})，代表戰鬥結算已結束並已回到大廳，轉移至 NAVIGATING。")
                     self.continue_click_count = 0
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return True
