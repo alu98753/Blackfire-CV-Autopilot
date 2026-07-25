@@ -138,5 +138,43 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         # 斷言：發起戰鬥時鎖定的目標必須是高優先權 Boss (lord_spectre: 7200s)
         self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spectre")
 
+    def test_update_boss_cooldown_in_daily_manager(self):
+        """測試：DailyManager.update_boss_cooldown 依據剩餘秒數即時修復時間戳"""
+        self.daily_manager.update_boss_cooldown("lord_spider", 1800.0)
+        ok, reason = self.daily_manager.is_boss_available("lord_spider")
+        self.assertFalse(ok)
+        self.assertIn("冷卻中", reason)
+
+    @patch('states.handlers.lord_boss.LordBossHandler._check_card_cooldown_ocr')
+    @patch('os.path.exists')
+    def test_pre_click_cooldown_ocr_intercept(self, mock_exists, mock_ocr):
+        """測試：點擊前若經 OCR 判定冷卻中，跳過點擊並自動更新 DailyManager，繼續檢查下一個可用 Boss"""
+        mock_exists.return_value = True
+        # 模擬第一個 Boss (lord_spectre) 在點擊前經 OCR 判讀為冷卻中 (剩餘 1800 秒)
+        mock_ocr.side_effect = lambda img, pos: (1800.0, "00:30:00") if pos == (100, 100) else (None, None)
+        
+        stage_cfg = GAME_CONFIGS["stage"].copy()
+        self.state_machine.primary_config = stage_cfg
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.50)
+
+        def fake_match(img, temp, **kw):
+            if temp == "load/lord_spectre.png":
+                return ((100, 100), 0.90)
+            if temp == "load/lord_spider.png":
+                return ((200, 200), 0.90)
+            if temp == "stages/start.png":
+                return ((300, 300), 0.90)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        handler = LordBossHandler(self.state_machine)
+        
+        # 執行 handle，預期 lord_spectre 被 pre-click OCR 攔截跳過，選擇 lord_spider 進入戰鬥
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spider")
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+
 if __name__ == '__main__':
     unittest.main()

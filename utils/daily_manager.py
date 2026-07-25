@@ -201,6 +201,20 @@ class DailyManager:
             self.save_status()
             logging.info(f"⚔️ [DailyManager] 記錄 Boss [{b_info['name']}] 戰鬥完成 (今日進度: {b_info['today_count']}/{b_info['max_daily_count']})")
 
+    def update_boss_cooldown(self, boss_key, remaining_seconds, now_ts=None):
+        """
+        當在 UI/OCR 上讀取到 Boss 冷卻時間時，自動修復/更新 DailyManager 狀態。
+        """
+        if now_ts is None:
+            now_ts = time.time()
+        bosses = self.status.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
+        if boss_key in bosses:
+            b_info = bosses[boss_key]
+            cooldown_seconds = b_info.get("cooldown_seconds", 3600.0)
+            b_info["last_fight_timestamp"] = now_ts - max(0.0, cooldown_seconds - remaining_seconds)
+            self.save_status()
+            logging.info(f"💾 [DailyManager] 根據 OCR 即時更新 Boss [{b_info.get('name', boss_key)}] 冷卻時間: 剩餘 {int(remaining_seconds)} 秒。")
+
     def get_available_lord_bosses(self, now_ts=None):
         """
         取得當前冷卻完畢且次數未滿 5 次的可討伐 Boss 鍵名陣列。
