@@ -445,6 +445,67 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         future_now = now + 3601.0
         self.assertTrue(dm.has_available_lord_boss(now_ts=future_now))
 
+    def test_cross_tier_quality_preference_propagation(self):
+        """
+        [跨 Tier 躍遷品質傳承測試] 驗證在 Tier 1 (城鎮速領) ➔ Tier 2 (領主 Boss) ➔ Tier 3 (懸賞任務) ➔ Tier 4 (退守模式)
+        全生命週期跳動切換中，使用者的 keep_colors, disassemble_colors 與 sacrifice_settings 100% 不遺失！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from utils.quest_scheduler import QuestScheduler
+        from utils.quest_mapper import QuestMapper
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+
+        # 初始：使用者啟動設定
+        user_keep = ["purple", "orange_yellow", "red"]
+        user_dis = ["gray_or_empty", "green", "blue"]
+        user_sac = {"gray": True, "green": True, "blue": True, "purple": False}
+
+        sm.config = {
+            "name": "每日全域模式",
+            "type": "daily",
+            "keep_colors": user_keep,
+            "disassemble_colors": user_dis,
+            "sacrifice_settings": user_sac
+        }
+
+        # 1. 跳動至 Tier 1 (城鎮速領 blood_altar & jewelry_workshop)
+        sm.town_subflow_queue = ["blood_altar", "jewelry_workshop"]
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        # 2. 跳動至 Tier 2 (領主討伐 lord_boss)
+        sm.town_subflow_queue = ["lord_boss"]
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        # 3. 跳動至 Tier 3 (懸賞任務)
+        mapper = QuestMapper()
+        node = mapper.parse_quest("清除沙蟲")
+        scheduler = QuestScheduler()
+        scheduler.add_task(node)
+        sm.attach_quest_scheduler(scheduler)
+
+        sm.check_and_advance_quest_target()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
+        # 4. 跳動至 Tier 4 (退守混合模式)
+        scheduler.tasks = [] # 模擬所有任務完成
+        sm.check_and_advance_quest_target()
+        self.assertEqual(sm.config["keep_colors"], user_keep)
+        self.assertEqual(sm.config["disassemble_colors"], user_dis)
+
 if __name__ == "__main__":
     unittest.main()
 
