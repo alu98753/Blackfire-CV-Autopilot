@@ -679,7 +679,8 @@ class GameStateMachine:
         target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
         if target_task:
             if target_task.completed_count >= target_task.max_run_limit:
-                logging.warning(f"⚠️ [防呆保護] 懸賞任務 [{target_task.quest_title}] 已達到最多 {target_task.max_run_limit} 次戰鬥上限，自動將該任務完結離場並剔除，避免無限重複戰鬥！")
+                logging.warning(f"⚠️ [10次上限統一刪除] 懸賞任務 [{target_task.quest_title}] 已達到最多 {target_task.max_run_limit} 次戰鬥上限，強制將該任務從排程佇列與 JSON 中刪除！")
+                self.quest_scheduler.tasks = [t for t in self.quest_scheduler.tasks if t != target_task]
                 if getattr(self, "daily_manager", None):
                     self.daily_manager.remove_accepted_quest(target_task.quest_title)
                 return self.check_and_advance_quest_target()
@@ -690,6 +691,7 @@ class GameStateMachine:
             self.config = quest_cfg
             logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
             return False
+
 
 
         return False
