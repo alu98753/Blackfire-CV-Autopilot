@@ -271,6 +271,46 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         titles_in_queue = [t.quest_title for t in scheduler.tasks]
         self.assertEqual(titles_in_queue, ["破除森林的枷鎖", "清除蛙人", "清除沙蟲"])
 
+    def test_stage_target_image_existence_and_dynamic_mapping(self):
+        """
+        [動態圖片對應測試] 驗證『清除沙蟲』(Level 4 middle) 能精確映射至 level4_middle.png，且圖片在 templates 下實體存在！
+        """
+        import os
+        node_sandworm = self.mapper.parse_quest("清除沙蟲")
+        self.assertIsNotNone(node_sandworm)
+        
+        cfg = node_sandworm.to_config_dict()
+        # 斷言 stage_target 為 stages/level4_middle.png (絕非找不到的 middle_stage.png)
+        self.assertEqual(cfg["stage_target"], "stages/level4_middle.png")
+        
+        # 斷言實體圖檔存在
+        full_path = os.path.join("templates", cfg["stage_target"])
+        self.assertTrue(os.path.exists(full_path), f"圖檔不存在: {full_path}")
+        
+        # 斷言導航路徑最後一個圖標為 level4_middle.png
+        self.assertEqual(cfg["navigation_path"][-1], "stages/level4_middle.png")
+
+    def test_task_node_to_cli_args_and_summary_output(self):
+        """
+        [CLI 指令生成測試] 驗證 TaskNode.to_cli_args 能精確產出 CLI 啟動命令，並能在 summary 中成功格式化輸出！
+        """
+        node_sandworm = self.mapper.parse_quest("清除沙蟲")
+        cli_sandworm = node_sandworm.to_cli_args()
+        self.assertIn("--mode stage", cli_sandworm)
+        self.assertIn("--stage 4", cli_sandworm)
+        self.assertIn("--sub middle", cli_sandworm)
+
+        node_dungeon = self.mapper.parse_quest("破除森林的枷鎖")
+        cli_dungeon = node_dungeon.to_cli_args()
+        self.assertIn("--mode dungeon", cli_dungeon)
+        self.assertIn("--dungeon 3", cli_dungeon)
+
+        # 驗證排程器 print_task_summary 不拋出例外
+        scheduler = QuestScheduler()
+        scheduler.add_task(node_sandworm)
+        scheduler.add_task(node_dungeon)
+        scheduler.print_task_summary()
+
 
 if __name__ == "__main__":
     unittest.main()
