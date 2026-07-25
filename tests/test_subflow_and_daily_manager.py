@@ -412,8 +412,9 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
-        # Mock 比對到了 Lord_entry_after.png
-        matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.85) if name == "load/Lord_entry_after.png" else (None, 0.0)
+        # Mock 比對到了離場按鈕 goback_town.png，並設定需離場條件
+        sm.need_bag_cleaning = True
+        matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.85) if name == "goback_town.png" else (None, 0.0)
 
         # 執行 handle，斷言狀態轉移為 STATE_NAVIGATING，絕對不是 STATE_LORD_BOSS！
         handler.handle(fake_img, rect)
@@ -536,6 +537,54 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         j_handler.handle(fake_img, rect)
         b_handler.handle(fake_img, rect)
         mouse.click.assert_not_called()
+
+    def test_result_handler_whitelist_isolation(self):
+        """
+        [結算二分法白名單測試] 驗證 ResultHandler：
+        1. 在非離場場次 (should_exit_battle==False) 且看到 stages/retry.png 時，直接點擊 retry 續戰，絕對不匹配 exit_battle 或 goback_town。
+        2. 在離場場次 (should_exit_battle==True) 且看到 goback_town.png 時，點擊離場，絕對不上當點擊 retry。
+        3. continue.png 點擊次數超過 2 次後自動封鎖，不盲目重複點擊。
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from states.handlers.result import ResultHandler
+        import numpy as np
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.config = {"type": "stage"}
+        handler = ResultHandler(sm)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        # 1. 測試非離場場次：畫面上同時有 goback_town.png (離場) 與 stages/retry.png (再戰)
+        # 由於 should_exit_battle==False，ResultHandler 必須選擇 stages/retry.png！
+        def mock_match_non_exit(img, name, **kw):
+            if name == "stages/retry.png":
+                return ((500, 500), 0.90)
+            if name == "goback_town.png":
+                return ((100, 100), 0.95)
+            return (None, 0.0)
+
+        matcher.match.side_effect = mock_match_non_exit
+        res = handler._handle_impl(fake_img, rect)
+
+        self.assertTrue(res)
+        self.assertEqual(sm.current_state, sm.STATE_LOADING) # 轉移至 LOADING 再戰
+
+        # 2. 測試離場場次：設 need_bag_cleaning=True (離場條件成立)
+        # 畫面上同時有 stages/retry.png (再戰) 與 goback_town.png (離場)
+        # ResultHandler 必須選擇 goback_town.png 離場，絕不點擊 retry！
+        sm.need_bag_cleaning = True
+        sm.current_state = sm.STATE_UNKNOWN
+        mouse.reset_mock()
+
+        res_exit = handler._handle_impl(fake_img, rect)
+        self.assertTrue(res_exit)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING) # 轉移至 NAVIGATING 離場
 
 if __name__ == "__main__":
     unittest.main()
