@@ -166,12 +166,28 @@ class BulletinBoardHandler(BaseStateHandler):
                 return
 
             if self.accept_sub_phase == "FIND_TOP_TASK":
-                # 掃描左半邊 (cx < w_img // 2) 所有未接受任務錨點 (task.png)
-                anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, quiet=True)
-                anchors = [a for a in anchors if a[0] < w_img // 2]
+                task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
+                # 掃描左半邊 (cx < w_img // 2) 所有潛在任務錨點 (task.png)
+                raw_anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, quiet=True)
+                raw_anchors = [a for a in raw_anchors if a[0] < w_img // 2]
+
+                # 相對優勢比對：精確過濾已接取任務 (task_after.png)
+                anchors = []
+                for (cx, cy, conf_before) in raw_anchors:
+                    x1 = max(0, cx - 60)
+                    x2 = min(w_img, cx + 60)
+                    y1 = max(0, cy - 60)
+                    y2 = min(h_img, cy + 60)
+                    roi = screen_img[y1:y2, x1:x2]
+                    
+                    pos_after, conf_after = self.matcher.match(roi, task_after_tpl, threshold=0.65, quiet=True)
+                    if pos_after and conf_after >= conf_before - 0.02:
+                        # 該處已呈現 task_after.png 樣式（已接取），自動過濾
+                        continue
+                    anchors.append((cx, cy, conf_before))
 
                 if not anchors:
-                    logging.info(f"📋 [懸賞告示牌] 已無視窗內未接取任務 (task.png)，共成功接取 {len(self.accepted_quest_titles)} 項任務: {self.accepted_quest_titles}")
+                    logging.info(f"📋 [懸賞告示牌] 畫面上所有任務均已接取 (task_after.png)！共成功接取 {len(self.accepted_quest_titles)} 項任務: {self.accepted_quest_titles}")
                     self.step_phase = "EXIT_BOARD"
                     self.last_action_time = now
                     return

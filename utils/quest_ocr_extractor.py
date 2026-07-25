@@ -31,10 +31,26 @@ class QuestOCRExtractor:
 
         h_img, w_img = screen_img.shape[:2]
 
-        # 專精優化：過濾只保留螢幕左半邊 (cx < w_img // 2) 的 task.png 錨點 (避開右半邊任務描述區的圖示)
-        anchors = [a for a in anchors if a[0] < w_img // 2]
+        # 專精優化：過濾只保留螢幕左半邊 (cx < w_img // 2) 的 task.png 錨點，並透過相對優勢過濾 task_after.png
+        task_after_tpl = "town_building/bulletin_board/task_after.png"
+        filtered_anchors = []
+        for (cx, cy, conf_b) in anchors:
+            if cx >= w_img // 2:
+                continue
+            x1 = max(0, cx - 60)
+            x2 = min(w_img, cx + 60)
+            y1 = max(0, cy - 60)
+            y2 = min(h_img, cy + 60)
+            roi = screen_img[y1:y2, x1:x2]
+            pos_a, conf_a = self.matcher.match(roi, task_after_tpl, threshold=0.65, quiet=True)
+            if pos_a and conf_a >= conf_b - 0.02:
+                # 已接取
+                continue
+            filtered_anchors.append((cx, cy, conf_b))
+
+        anchors = filtered_anchors
         if not anchors:
-            logging.warning("⚠️ [QuestOCRExtractor] 左半邊未找到任何 task.png 錨點！")
+            logging.warning("⚠️ [QuestOCRExtractor] 左半邊未找到任何未接取的 task.png 錨點 (全數為已接取 task_after.png)！")
             return [], ""
 
         # 按 Y 座標排序 (自上而下)
