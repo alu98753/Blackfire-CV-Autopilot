@@ -218,8 +218,33 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         cmd4, msg4 = scheduler.get_next_action_config(dungeon_cooldowns=cd_map_1, now_ts=now + 1801.0)
         self.assertIn("--dungeon 4", cmd4)
 
+    def test_task_node_batch_completion_and_max_limit(self):
+        """驗證每 4 次戰鬥 (mod 4 == 0) 觸發離場領獎批次，且最多 10 次上限自動 completed"""
+        node = self.mapper.parse_quest("清除野豬")
+        self.assertFalse(node.is_batch_completed())
+        self.assertFalse(node.is_completed)
+
+        node.completed_count = 1
+        self.assertFalse(node.is_batch_completed())
+
+        node.completed_count = 4
+        self.assertTrue(node.is_batch_completed())
+        self.assertFalse(node.is_completed)
+
+        node.completed_count = 5
+        self.assertFalse(node.is_batch_completed())
+
+        node.completed_count = 8
+        self.assertTrue(node.is_batch_completed())
+        self.assertFalse(node.is_completed)
+
+        node.completed_count = 10
+        self.assertTrue(node.is_batch_completed())
+        self.assertTrue(node.is_completed)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

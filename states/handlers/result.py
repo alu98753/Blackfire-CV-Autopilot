@@ -83,14 +83,20 @@ class ResultHandler(BaseStateHandler):
         if is_daily and getattr(self.machine, "daily_manager", None):
             boss_available = self.machine.daily_manager.has_available_lord_boss()
 
+        quest_batch_completed = False
+        if is_daily and getattr(self.machine, "quest_scheduler", None):
+            quest_batch_completed = self.machine.quest_scheduler.is_current_task_batch_completed(dungeon_cooldowns=self.machine.dungeon_cooldowns)
+
         should_exit_battle = (
             self.machine.stamina_retreat_start_time is not None or
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
             (self.machine.enable_bread and self.machine.need_bread_collection) or
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
-            (is_daily and boss_available)
+            (is_daily and boss_available) or
+            (is_daily and quest_batch_completed)
         )
+
 
         if should_exit_battle:
             if os.path.exists(os.path.join("templates", "exit_battle.png")):

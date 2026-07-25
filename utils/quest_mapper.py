@@ -8,7 +8,10 @@ class TaskNode:
     POLICY_DETERMINISTIC = "deterministic_count" # 可精準計數任務
     POLICY_BANNER_VERIFY = "banner_verify_only"  # 無法自動累計/僅憑彈窗核銷任務
 
-    def __init__(self, quest_title, mode_type, target_count=10, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC):
+    BATCH_SIZE = 4       # 每 4 次戰鬥離場退回大廳/告示牌領獎
+    MAX_RUN_LIMIT = 10   # 最多打 10 次上限，避免極端情況無限卡關
+
+    def __init__(self, quest_title, mode_type, target_count=10, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC, batch_size=4, max_run_limit=10):
         self.quest_title = quest_title
         self.mode_type = mode_type          # "dungeon", "stage", "generic_boss", "ignored"
         self.target_count = target_count
@@ -18,10 +21,22 @@ class TaskNode:
         self.sub_stage = sub_stage          # "first", "middle", "six", "final"
         self.raw_desc = raw_desc
         self.counting_policy = counting_policy
+        self.batch_size = batch_size
+        self.max_run_limit = max_run_limit
 
     @property
     def is_completed(self):
-        return self.completed_count >= self.target_count
+        # 達到上限 10 次自動視為完成防呆
+        return self.completed_count >= self.max_run_limit
+
+    def is_batch_completed(self):
+        """
+        每滿 4 次 (4, 8) 或達到上限 10 次，觸發退出戰鬥返回城鎮/大廳領獎。
+        """
+        if self.completed_count == 0:
+            return False
+        return (self.completed_count % self.batch_size == 0) or (self.completed_count >= self.max_run_limit)
+
 
     def to_cli_args(self):
         """

@@ -29,6 +29,16 @@ class QuestScheduler:
         """
         return len(self.get_pending_tasks()) == 0
 
+    def is_current_task_batch_completed(self, dungeon_cooldowns=None, now_ts=None):
+        """
+        傳回當前正在執行的最優懸賞任務是否已打滿批次 (每 4 次) 或達到 10 次上限。
+        """
+        task, _ = self.get_next_action_node(dungeon_cooldowns=dungeon_cooldowns, now_ts=now_ts)
+        if task:
+            return task.is_batch_completed()
+        return False
+
+
     def get_next_action_config(self, dungeon_cooldowns=None, now_ts=None):
         """
         綜合目前所有未完成任務，產出最優的單個 CLI 啟動指令與模式配置。
