@@ -10,7 +10,7 @@ DEFAULT_DAILY_STATUS = {
         "chest": {"completed_today": False, "last_executed_at": ""},
         "hero_draw": {"completed_today": False, "last_executed_at": ""},
         "blood_altar": {"completed_today": False, "last_executed_at": ""},
-        "bounty": {"completed_today": False, "last_executed_at": ""},
+        "bulletin_board": {"completed_today": False, "last_executed_at": ""},
         "lord_boss": {
             "completed_today": False,
             "bosses": {

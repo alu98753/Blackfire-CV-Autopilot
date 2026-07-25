@@ -26,7 +26,10 @@
    - **連動佇列與 (選用) 獻祭續行**：領取完成後呼叫 `pop_and_next_town_subflow()` 消費下一個城鎮任務。
 
 
-4. 領任務 (每日懸賞告示牌自動化與動態排程)
+4. 領任務 (每日懸賞告示牌 `bulletin_board`)
+   - **城鎮自動導航與左上 1/4 ROI 鎖定**：若處於大廳畫面，優先點擊 `goback_town.png` 退回城鎮；於城鎮對螢幕左上 $1/4$ 區域 (`screen_img[0:h//2, 0:w//2]`) 進行 `town_building/bulletin_board/bulletin_board.png` 精確比對與點擊進入。
+   - **重置按鈕**：進入告示牌後比對並點擊重置按鈕 `town_building/bulletin_board/reset.png`。
+   - **狀態持久化與 08:30 重置**：透過 `DailyManager` 記錄 `bulletin_board` 的 `completed_today = True`（於 `user_data/daily_status.json` 中保存），每日 08:30 自動重置。
    - **詳細架構報告與研究**：參見 [daily_task_architecture_report.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily_task_architecture_report.md)
    - **懸賞任務模板圖片**：[templates/town_building/bulletin_board/Daily_task/](file:///e:/Side_Project/BlackfireCrusade_tool/templates/town_building/bulletin_board/Daily_task/)
 

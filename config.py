@@ -259,6 +259,17 @@ SUBFLOW_CONFIGS = {
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
     },
+
+    # ------------------ 懸賞告示牌模式 (領任務) ------------------
+    "bulletin_board": {
+        "enabled": True,
+        "name": "懸賞告示牌",
+        "type": "bulletin_board",
+        "building_btn": "town_building/bulletin_board/bulletin_board.png",
+        "reset_btn": "town_building/bulletin_board/reset.png",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
 }
 
 # ==================== 3. 統一匯出 (GAME_CONFIGS 向後完全相容) ====================

@@ -18,7 +18,8 @@ from states.handlers import (
     JewelryWorkshopHandler,
     LordBossHandler,
     ChestHandler,
-    HeroDrawHandler
+    HeroDrawHandler,
+    BulletinBoardHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -42,6 +43,7 @@ class GameStateMachine:
     STATE_LORD_BOSS = "LORD_BOSS"                        # 首領領主討伐流程
     STATE_CHEST = "CHEST"                                # 神秘寶箱 (開寶箱) 流程
     STATE_HERO_DRAW = "HERO_DRAW"                        # 抽英雄 (酒館招募) 流程
+    STATE_BULLETIN_BOARD = "BULLETIN_BOARD"              # 懸賞告示牌 (領任務) 流程
 
 
     
@@ -138,6 +140,7 @@ class GameStateMachine:
             self.STATE_LORD_BOSS: LordBossHandler(self),
             self.STATE_CHEST: ChestHandler(self),
             self.STATE_HERO_DRAW: HeroDrawHandler(self),
+            self.STATE_BULLETIN_BOARD: BulletinBoardHandler(self),
         }
 
     @property
@@ -177,6 +180,7 @@ class GameStateMachine:
         STATE_LORD_BOSS: "lord_boss",
         STATE_CHEST: "chest",
         STATE_HERO_DRAW: "hero_draw",
+        STATE_BULLETIN_BOARD: "bulletin_board",
     }
 
     def _on_state_transition_sync_context(self, new_state):
