@@ -3,11 +3,11 @@ import cv2
 import logging
 from utils.time_parser import parse_time_to_seconds
 
-def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200.0, threshold=0.58, scale=1.0):
+def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200.0, threshold=0.70, scale=1.0):
     """
     [ Clean Code 重用模組 ]
     在傳入的卡片/選單圖像中優先比對冷卻木牌範本 (cooldown_left.png / cooldown_right.png)。
-    - 若無冷卻木牌 (max_val_cd < threshold)：回傳 (False, None, None)，零 OCR 開銷。
+    - 若無冷卻木牌 (max_val_cd < threshold 0.70)：回傳 (False, None, None)，代表卡片無木牌、可挑戰，零 OCR 開銷。
     - 若發現冷卻木牌：對木牌區域進行文字切割、補邊與 4 倍放大預處理，呼叫 EasyOCR 讀取倒數時間。
       嚴格驗證 (0 < parsed_secs <= max_allowed_seconds)，避免花紋雜訊誤讀。
       回傳 (True, parsed_secs, raw_text)。
@@ -21,7 +21,7 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
     cd_w = 0
     cd_h = 0
 
-    for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png", "load/cooldown_sign.png"]:
+    for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
         template_path = os.path.join("templates", cd_temp)
         if os.path.exists(template_path):
             cd_img = cv2.imread(template_path)
@@ -52,12 +52,7 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
         cd_cx = max_loc_cd[0] + cd_w // 2
         cd_cy = max_loc_cd[1] + cd_h // 2
 
-        if "sign" in matched_sign:
-            tx1 = max(0, cd_cx - 20)
-            tx2 = min(crop_img.shape[1], cd_cx + 140)
-            ty1 = max(0, cd_cy - 20)
-            ty2 = min(crop_img.shape[0], cd_cy + 25)
-        elif "left" in matched_sign:
+        if "left" in matched_sign:
             tx1 = max(0, cd_cx - 60)
             tx2 = min(crop_img.shape[1], cd_cx + 110)
             ty1 = max(0, cd_cy - 18)
