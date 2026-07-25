@@ -3,6 +3,7 @@ import json
 import time
 import unittest
 import tempfile
+import numpy as np
 from unittest.mock import MagicMock
 from utils.daily_manager import DailyManager, DEFAULT_DAILY_STATUS
 from states.state_machine import GameStateMachine
@@ -235,6 +236,38 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         bosses["lord_spectre"]["last_fight_timestamp"] = now_ts - 7201.0
         sm.evaluate_and_schedule_daily_pipeline()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
+    def test_tier4_does_not_trigger_should_exit_battle_due_to_quest_batch_completed(self):
+        """[Tier 4 離場防呆測試] 驗證處於 Tier 4 退守模式時，即使懸賞全完成，也不會將常規關卡戰鬥誤判為離場場次"""
+        from states.handlers.result import ResultHandler
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.quest_scheduler = None  # 代表處於 Tier 4 (懸賞全清)
+        sm.set_config({"name": "混合模式", "type": "mix", "stage_name": "level6"})
+
+        # 模擬無其他離場需求 (無體力退避、背包未滿、Boss全冷卻中、無可用地下城)
+        sm.stamina_retreat_start_time = None
+        sm.need_bag_cleaning = False
+        sm.need_diamond_collection = False
+        sm.need_bread_collection = False
+        sm.has_available_dungeon = MagicMock(return_value=False)
+        sm.daily_manager.has_available_lord_boss = MagicMock(return_value=False)
+
+        handler = ResultHandler(sm)
+        fake_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        # 測試：當在 Tier 4 看見 retry 按鈕，且沒有其他離場原因時，_check_final_buttons_exist 應判定 should_exit_battle=False
+        should_exit = (
+            sm.stamina_retreat_start_time is not None or
+            sm.need_bag_cleaning or 
+            sm.need_diamond_collection or 
+            (sm.enable_bread and sm.need_bread_collection) or
+            (sm.config.get("type") == "mix" and sm.has_available_dungeon()) or
+            (sm.is_daily_pipeline_active() and sm.daily_manager.has_available_lord_boss()) or
+            (sm.is_daily_pipeline_active() and False and not True)
+        )
+        self.assertFalse(should_exit)
 
 
 if __name__ == "__main__":

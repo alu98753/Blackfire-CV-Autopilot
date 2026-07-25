@@ -141,6 +141,8 @@ class ResultHandler(BaseStateHandler):
         if is_daily and getattr(self.machine, "quest_scheduler", None):
             quest_batch_completed = self.machine.quest_scheduler.is_current_task_batch_completed(dungeon_cooldowns=self.machine.dungeon_cooldowns)
 
+        is_in_tier4 = is_daily and (getattr(self.machine, "quest_scheduler", None) is None or self.machine.quest_scheduler.is_all_completed())
+
         should_exit_battle = (
             self.machine.stamina_retreat_start_time is not None or
             self.machine.need_bag_cleaning or 
@@ -148,17 +150,25 @@ class ResultHandler(BaseStateHandler):
             (self.machine.enable_bread and self.machine.need_bread_collection) or
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
             (is_daily and boss_available) or
-            (is_daily and quest_batch_completed)
+            (is_daily and quest_batch_completed and not is_in_tier4)
         )
 
         # =========================================================================
         # 步驟 2：Continue 推進閉環 (CONTINUE_LOOP)
         # =========================================================================
         if self.subflow_step == "CONTINUE_LOOP":
+            # 0. 若非離場場次，優先檢查再戰按鈕是否已經出現，避免無效點擊繼續按鈕導致誤退回大廳
+            if not should_exit_battle and os.path.exists(os.path.join("templates", "stages/retry.png")):
+                pos_r, conf_r = self.matcher.match(screen_img, "stages/retry.png", threshold=0.80, quiet=True)
+                if pos_r:
+                    logging.info(f"👉 [結算 Step 2] 續戰場次且偵測到「再戰」按鈕 [stages/retry.png] ({conf_r:.4f})，切換至 FINAL_MATCH！")
+                    self.subflow_step = "FINAL_MATCH"
+
+        if self.subflow_step == "CONTINUE_LOOP":
             continue_configs = [
-                (self.machine.continue_template, 0.80, 0.0),
-                ("common/continue1.png", 0.80, 0.0),
-                ("common/continue2.png", 0.80, 0.0),
+                (self.machine.continue_template, 0.9, 0.70),
+                ("common/continue1.png", 0.9, 0.70),
+                ("common/continue2.png", 0.9, 0.70),
                 ("common/continue_gray.png", 0.88, 0.70)
             ]
             
@@ -172,14 +182,14 @@ class ResultHandler(BaseStateHandler):
                         break
 
             if matched_c_temp and pos_c:
-                # 🎯 核心真理：發起點擊，並 WHILE 輪詢直到該 continue 按鈕徹底從畫面上消失！
+                # 🎯 核心真理：發起點擊，並 WHILE 輪詢直到該 continue 按鈕徹底從畫面上消失 (1.0 秒未消失自動補點)！
                 click_x = rect["left"] + pos_c[0]
                 click_y = rect["top"] + pos_c[1]
                 logging.info(f"👉 [結算 Step 2] 偵測到『繼續』按鈕 ({matched_c_temp})，發起點擊並 WHILE 輪詢直到消失...")
                 
                 self.click_and_wait_until_gone(
                     matched_c_temp, click_x, click_y, rect,
-                    timeout=5.0, threshold=0.75, check_interval=0.5, post_delay=0.8
+                    timeout=5.0, threshold=0.9, brightness_threshold=0.70, check_interval=0.25, post_delay=0.8, retry_interval=1.0
                 )
 
                 if getattr(self.machine, "current_lord_boss_key", None):
@@ -197,7 +207,7 @@ class ResultHandler(BaseStateHandler):
                 logging.info("👉 [結算 Step 2] 偵測到通用確認按鈕，點擊並 WHILE 輪詢直到消失...")
                 self.click_and_wait_until_gone(
                     "common/confirm.png", rect["left"] + pos_conf[0], rect["top"] + pos_conf[1], rect,
-                    timeout=5.0, threshold=0.75, check_interval=0.5, post_delay=0.8
+                    timeout=5.0, threshold=0.9, check_interval=0.25, post_delay=0.8, retry_interval=1.0
                 )
                 return True
 
