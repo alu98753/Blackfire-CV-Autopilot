@@ -18,7 +18,7 @@ def handle_insufficient_stamina(state_machine, screen_img, rect):
     if not os.path.exists(no_bread_template):
         return False
         
-    pos_nobread, conf_nobread = state_machine.matcher.match(screen_img, "no_bread/no_bread.png", threshold=0.8)
+    pos_nobread, conf_nobread = state_machine.matcher.match(screen_img, "no_bread/no_bread.png", threshold=0.90)
     if not pos_nobread:
         return False
         
