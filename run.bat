@@ -60,7 +60,7 @@ if "%custom_args%"=="6" set custom_args=--backend --mode collect_only
 
 if "%custom_args%"=="" set custom_args=--backend --mode daily
 
-echo %custom_args% | findstr /i "dungeon mix" >nul
+echo %custom_args% | findstr /i "dungeon mix daily" >nul
 if %errorlevel% neq 0 goto RUN_SCRIPT
 
 echo ============================================================

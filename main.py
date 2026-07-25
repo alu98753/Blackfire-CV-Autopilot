@@ -335,23 +335,13 @@ def setup_mode_config(args):
         setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
         print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
     elif args.mode == "daily":
-        # 懸賞任務全數完成時，預設退守 mix 標的：地下城 5) 冰雪洞窟，關卡 第六關第一小關 (冰凍峽谷)
-        config["name"] = "每日懸賞任務 (退守: 冰雪洞窟 + 冰凍峽谷 6-1)"
-        config["greedy_dungeon"] = False
-        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
-        config["stage_name"] = "冰凍峽谷 (first)"
-        config["stage_entry"] = "stages/level6_ice_cave.png"
-        config["stage_target"] = "stages/first_stage.png"
-        config["stage_navigation_path"] = [
-            "common/door.png",
-            "common/select_stage.png",
-            "stages/level6_ice_cave.png",
-            "stages/stage_label.png",
-            "stages/first_stage.png"
-        ]
+        print("\n[*] 【每日懸賞任務模式】設定 Tier 4 退守目標 (當懸賞全清且無 Boss 可打時)：")
+        setup_dungeon_config(config, args)
+        setup_stage_config(config, prompt_prefix="[Tier 4 退守關卡] ")
+        config["name"] = f"每日懸賞任務 (Tier 4 退守: {config.get('name', '')} + {config.get('stage_name', '')})"
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
-        print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行 [冰雪洞窟] 與 [冰凍峽谷 6-1]。")
+        print(f"[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行【{config.get('stage_name', '')}】。")
 
 
 

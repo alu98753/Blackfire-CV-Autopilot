@@ -694,13 +694,13 @@ class GameStateMachine:
     def check_and_advance_quest_target(self):
         """
         當當前任務目標完成時，動態查詢下一個懸賞任務目標並切換模式配置。
-        若所有懸賞任務已全數完成，自動解除懸賞排程器並切換為預設 mix 模式。
+        若所有懸賞任務已全數完成，自動解除懸賞排程器並切換為 mix 模式。
         """
         if self.quest_scheduler is None:
             return False
 
         if self.quest_scheduler.is_all_completed():
-            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為退守混合模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為混合模式")
             self.quest_scheduler = None
             self.apply_mix_fallback_config()
             return True
