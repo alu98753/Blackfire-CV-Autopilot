@@ -79,6 +79,7 @@ class ChestHandler(BaseStateHandler):
                 if pos_ft:
                     t_img = cv2.imread(os.path.join("templates", dialog_template))
                     t_h, t_w = t_img.shape[:2] if t_img is not None else (350, 400)
+                    h, w = screen_img.shape[:2] if hasattr(screen_img, "shape") else (600, 800)
 
                     cx, cy = pos_ft
                     x1 = max(0, cx - t_w // 2)
