@@ -44,11 +44,14 @@
 ---
 
 ## 5. 懸賞任務對應規則維護與擴充規範 (Quest Rules Maintenance) 📋
-1. **任務規則唯一定義檔 (Master Definition)**：
-   - 所有的懸賞任務對應規則（將任務標題/關鍵字映射至關卡或地下城）皆集中定義在 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L48) 的 `QuestMapper` 類別中。
+1. **任務規則唯一定義檔與參考報告**：
+   - 所有的懸賞任務對應規則（將任務標題/關鍵字映射至關卡或地下城）皆集中定義在 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84) 的 `QuestMapper` 類別中。
+   - 一對一完整對照報告請參閱 [quest_mapping_rules_report.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/quest_mapping_rules_report.md)。
    - **地下城任務**：定義於 `self.dungeon_rules` 陣列（`語意關鍵字` ➔ 地下城編號 0~4）。
    - **普通關卡任務**：定義於 `self.stage_rules` 陣列（`語意關鍵字` ➔ 關卡等級 1~6, 子關卡類型 `"first"`/`"final"`）。
+   - **顯式忽略任務**：定義於 `self.ignored_rules` 陣列（`語意關鍵字` ➔ 不執行、不上報 unknown_quests）。
 2. **未定義任務新增加載流程 (Adding New Quests)**：
    - 當懸賞告示牌出現未對應的全新任務時，系統會自動記錄於 [user_data/daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json) 的 `subflows.bulletin_board.unknown_quests` 列表中 (每日不清空)。
-   - 當使用者指示「加入新任務」時，AI 與開發者必須直接開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L48) 補充對應正則關鍵字規則。
+   - 當使用者指示「加入新任務」時，AI 與開發者必須直接開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84) 補充對應正則關鍵字規則。
+
 
