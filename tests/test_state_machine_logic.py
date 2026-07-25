@@ -482,7 +482,7 @@ class TestStateMachineLogic(unittest.TestCase):
     def test_global_task_complete_and_confirm_interception(self, mock_exists):
         """
         測試全域彈窗攔截器：
-        1. 看到 task_complete.png ➔ 點擊「領取獎勵」(相對 Y+281 的座標)
+        1. 看到 task_complete.png ➔ 轉交 _run_task_complete_subflow 進行 OCR 與核銷
         2. 在大廳狀態下看到確認/OK 彈窗 ➔ 自動點選確認關閉
         """
         self.state_machine.config = GAME_CONFIGS["dungeon"]
@@ -495,29 +495,23 @@ class TestStateMachineLogic(unittest.TestCase):
         # 模擬擷取視窗大小 (1920x1080)
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
-        # 1. 偵測到 task_complete.png 位於中心 (960, 540)
-        # 預計點擊 Claim Rewards 按鈕中心: X=960, Y=540+281 = 821
-        task_complete_matched = [False]
-        def match_side_effect_1(img, name, threshold=None, **kwargs):
-            if name == "task_complete.png":
-                if not task_complete_matched[0]:
-                    task_complete_matched[0] = True
-                    return ((960, 540), 0.9)
-                return (None, 0.0)
-            return (None, 0.0)
-            
-        self.mock_matcher.match.side_effect = match_side_effect_1
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(960, 821)
+        # 1. 偵測到 task_complete.png 位於中心 (960, 540)，應調用 _run_task_complete_subflow
+        with patch.object(self.state_machine, '_run_task_complete_subflow') as mock_subflow:
+            self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kw: (
+                ((960, 540), 0.9) if name == "task_complete.png" else (None, 0.0)
+            )
+            self.state_machine.step()
+            mock_subflow.assert_called_once()
         
         # 2. 點擊完領取獎勵後，畫面彈出 confirm.png
         # 此時在大廳狀態，通用確認攔截器應點選確認關閉
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kw: (
             ((960, 600), 0.9) if name == "common/confirm.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(960, 600)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+
 
     @patch('os.path.exists')
     def test_global_backpack_full_interception(self, mock_exists):

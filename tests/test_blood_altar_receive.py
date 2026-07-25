@@ -19,7 +19,9 @@ class TestBloodAltarReceive(unittest.TestCase):
             matcher=self.mock_matcher,
             mouse=self.mock_mouse
         )
+        self.mock_daily_manager.is_subflow_completed.return_value = False
         self.state_machine.daily_manager = self.mock_daily_manager
+
 
     @patch('os.path.exists')
     def test_blood_altar_receive_daily_full_flow(self, mock_exists):
