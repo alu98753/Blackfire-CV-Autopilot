@@ -43,6 +43,10 @@ class TestBehavioralScenarios(unittest.TestCase):
             matcher=self.mock_matcher,
             mouse=self.mock_mouse
         )
+        mock_dm = MagicMock()
+        mock_dm.is_subflow_completed.return_value = False
+        self.state_machine.daily_manager = mock_dm
+
         
         # 初始化定時器變數以隔離實際時間干擾
         self.state_machine.need_diamond_collection = False
@@ -2127,8 +2131,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        if self.state_machine.daily_manager:
+            self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=False)
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
+
 
         def mock_match_inside(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
