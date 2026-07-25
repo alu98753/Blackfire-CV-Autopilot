@@ -31,21 +31,23 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
     def test_parse_five_user_quests(self):
         """
-        測試解析用戶圖片中的 5 個每日懸賞任務條件與指令產生。
+        測試解析用戶圖片中的 5 個每日懸賞任務條件、指令與計數策略 (counting_policy)。
         """
-        # 1. 圖片 1: 清除骷髏 (現在一對一對應至地下城 #4 神秘遺跡)
+        # 1. 圖片 1: 清除骷髏 (可精確計數)
         node1 = self.mapper.parse_quest("清除骷髏", "骷髏在戰場上肆虐...", "擊殺: 骷髏 x 10")
         self.assertEqual(node1.mode_type, "dungeon")
         self.assertEqual(node1.dungeon_index, 3)
         self.assertEqual(node1.target_count, 10)
+        self.assertEqual(node1.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode dungeon --dungeon 4", node1.to_cli_args())
 
-        # 2. 圖片 2: 擊敗冰元素
+        # 2. 圖片 2: 擊敗冰元素 (可精確計數)
         node2 = self.mapper.parse_quest("擊敗冰元素", "冰元素棲息在寒冷地區...", "擊殺: 冰元素 x 10")
         self.assertEqual(node2.mode_type, "stage")
         self.assertEqual(node2.stage_level, 6)
         self.assertEqual(node2.sub_stage, "first")
         self.assertEqual(node2.target_count, 10)
+        self.assertEqual(node2.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode stage --stage 6 --sub first", node2.to_cli_args())
 
         # 3. 圖片 3: 擊殺首領
@@ -53,30 +55,37 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node3.mode_type, "generic_boss")
         self.assertEqual(node3.target_count, 5)
 
-        # 4. 圖片 4: 清除野豬
+        # 4. 圖片 4: 清除野豬 (可精確計數)
         node4 = self.mapper.parse_quest("清除野豬", "野豬在肆意橫行...", "擊殺: 野豬 x 10")
         self.assertEqual(node4.mode_type, "stage")
         self.assertEqual(node4.stage_level, 1)
         self.assertEqual(node4.sub_stage, "final")
         self.assertEqual(node4.target_count, 10)
+        self.assertEqual(node4.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode stage --stage 1 --sub final", node4.to_cli_args())
 
-        # 5. 圖片 5: 史萊姆王的毀滅
+        # 5. 圖片 5: 史萊姆王的毀滅 (不確定 Boss 任務 -> POLICY_BANNER_VERIFY)
         node5 = self.mapper.parse_quest("史萊姆王的毀滅", "在地下城黏糊糊的石窟最深處...", "擊殺: [史萊姆王] x 1")
         self.assertEqual(node5.mode_type, "dungeon")
         self.assertEqual(node5.dungeon_index, 0)
         self.assertEqual(node5.target_count, 1)
+        self.assertEqual(node5.counting_policy, TaskNode.POLICY_BANNER_VERIFY)
         self.assertIn("--mode dungeon --dungeon 1", node5.to_cli_args())
+
+        # 6. 不打的任務 (IGNORED_QUESTS): 測試 完成任何地下城 / 敵人剿滅 / 獵金之蟲
+        node_ignore1 = self.mapper.parse_quest("完成任何地下城", "", "")
+        node_ignore2 = self.mapper.parse_quest("獵金之蟲", "", "")
+        self.assertEqual(node_ignore1.mode_type, "ignored")
+        self.assertEqual(node_ignore2.mode_type, "ignored")
 
     def test_dynamic_scheduler_workflow_and_task_piggybacking(self):
         """
         測試 QuestScheduler 的動態 Maintain 流程：
         - 納入 5 個任務。
         - 優先產出地下城專屬指令。
-        - 完成地下城史萊姆王時，自動併行更新「擊殺首領」進度 (Piggybacking)！
-        - 依序完成所有任務直至 is_all_completed == True。
+        - 通過 counting_policy 保障：POLICY_BANNER_VERIFY 任務不會被 record_kill_event 誤計數。
         """
-        # 1. 載入 5 個任務 (史萊姆王放在第一個)
+        # 1. 載入 5 個任務
         quests = [
             ("史萊姆王的毀滅", "黏糊糊的石窟...", "擊殺: [史萊姆王] x 1"),
             ("清除骷髏", "骷髏在戰場上...", "擊殺: 骷髏 x 10"),
@@ -93,30 +102,31 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         # 2. 第一次取得啟動指令 ➔ 應優先傳回地下城 1 (史萊姆王)
         cmd1, msg1 = self.scheduler.get_next_action_config()
         self.assertIn("--mode dungeon --dungeon 1", cmd1)
-
         print(f"\n[動態排程 step 1] 指令: {cmd1} | 說明: {msg1}")
 
-        # 3. 模擬通關地下城 1 (黏糊糊的石窟, 擊殺史萊姆王 x 1)
+        # 3. 模擬通關地下城 1
         self.scheduler.record_kill_event(enemy_name="史萊姆王", is_boss=True, dungeon_index=0, kill_count=1)
 
-        # 斷言：史萊姆王任務已完成！且首領任務計數自動增為 1/5 (Task Piggybacking)！
+        # 斷言：史萊姆王的毀滅屬於 POLICY_BANNER_VERIFY，record_kill_event 絕不自動加算進度！
         slime_task = [t for t in self.scheduler.tasks if t.quest_title == "史萊姆王的毀滅"][0]
         boss_task = [t for t in self.scheduler.tasks if t.quest_title == "擊殺首領"][0]
-        self.assertTrue(slime_task.is_completed)
+        self.assertFalse(slime_task.is_completed)
         self.assertEqual(boss_task.completed_count, 1)
+
+        # 模擬彈窗領獎成功核銷史萊姆王任務
+        self.scheduler.remove_completed_quest("史萊姆王的毀滅")
 
         # 4. 第二次取得啟動指令 ➔ 應傳回地下城 4 (神秘遺跡 - 清除骷髏)
         cmd2, msg2 = self.scheduler.get_next_action_config()
         self.assertIn("--mode dungeon --dungeon 4", cmd2)
         print(f"[動態排程 step 2] 指令: {cmd2} | 說明: {msg2}")
 
-        # 模擬打完地下城 4 清除骷髏任務
+        # 模擬打完地下城 4 清除骷髏任務 (DETERMINISTIC_QUESTS 自動加算完成)
         self.scheduler.record_kill_event(enemy_name="骷髏", dungeon_index=3, kill_count=10)
 
         # 5. 第三次取得啟動指令 ➔ 應傳回關卡 6 第一關 (冰元素)
         cmd3, msg3 = self.scheduler.get_next_action_config()
         self.assertIn("--mode stage --stage 6 --sub first", cmd3)
-
         print(f"[動態排程 step 3] 指令: {cmd3} | 說明: {msg3}")
 
         # 模擬擊殺 10 隻冰元素完成任務
@@ -143,6 +153,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertIsNone(cmd_end)
         self.assertIn("100% 完成", msg_end)
         print(f"[動態排程 最終狀態] {msg_end}")
+
 
 if __name__ == "__main__":
     unittest.main()

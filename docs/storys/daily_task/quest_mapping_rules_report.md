@@ -9,40 +9,33 @@
 
 ---
 
-## 🚫 1. 顯式忽略/跳過執行的任務 (`ignored_rules`)
-- **機制**：已剔除不執行的任務（如 `敵人剿滅` 與 `獵金之蟲`）屬於已知且使用者選擇**顯式跳過 (ignored)** 的任務，**絕不上報至 `unknown_quests`**。
-- **對照規則**：`self.ignored_rules = [r"(敵人剿滅|獵金之蟲)"]`
-- **行為處理**：在告示牌掃描時，解析為 `mode_type = "ignored"` 的 `TaskNode`，直接跳過不安裝至執行佇列，且 `DailyManager.record_unknown_quest()` 亦不會將其寫入 `unknown_quests` 歷史清單。
+## 📋 三大懸賞任務全名與計數策略對照清單 (`counting_policy`)
+
+### 1. ✅ 確定性可計數任務 (`DETERMINISTIC_QUESTS`)
+- **機制**：通關或擊殺 100% 必然累加進度。允許 `record_kill_event()` 在記憶體中自動算次數，達標即停止重複派發。
+- **完整任務名稱清單**：
+  1. `"清除沙蟲"` ➔ 普通關卡 Level 4 middle (沙漠廢墟 中間關)
+  2. `"清除蛙人"` ➔ 普通關卡 Level 5 first (幽暗沼澤 第一關)
+  3. `"清除骷髏"` ➔ 地下城 #4 【神秘遺跡】 (Ruins)
+  4. `"清除史萊姆"` ➔ 地下城 #1 【黏糊糊的石窟】 (Slime)
+  5. `"清除樹人"` ➔ 地下城 #3 【森林迷宮】 (Forest)
+
+### 2. ❓ 僅彈窗/告示牌核銷任務 (`BANNER_VERIFY_QUESTS`)
+- **機制**：Boss 隨機刷新或完成條件不透明。**絕對禁止**背景自動累加記憶體進度。唯有畫面跳出 `task_complete.png` 領獎彈窗（EasyOCR 辨識）或告示牌點擊 `task_after.png` 綠色勾勾時方可核銷剔除。
+- **完整任務名稱清單**：
+  1. `"冰雪洞窟的暴君"` ➔ 地下城 #5 【冰雪洞窟】 (Ice)
+  2. `"史萊姆王的毀滅"` ➔ 地下城 #1 【黏糊糊的石窟】 (Slime)
+  3. `"破除森林的枷鎖"` ➔ 地下城 #3 【森林迷宮】 (Forest)
+
+### 3. 🚫 顯式忽略/跳過執行的任務 (`IGNORED_QUESTS`)
+- **機制**：使用者指示不打的任務。告示牌掃描時直接跳過不接取，不上報至 `unknown_quests`，亦不加入 `accepted_quests` JSON 佇列。
+- **完整任務名稱清單**：
+  1. `"獵金之蟲"`
+  2. `"完成任何地下城"`
+  3. `"敵人剿滅"`
 
 ---
 
-## 🏰 2. 地下城任務字典 (`dungeon_rules`) 一對一對照表
-
-地下城任務內部以 0-indexed 索引 (`0~4`) 表示，對應 `greedy_allowed_indices` 的 `[0, 1, 2, 3, 4]`，轉換成 CLI 指令時自動 `+1` 轉為 `--dungeon 1~5`。
-
-| 懸賞任務名稱 / 關鍵字 | 對應 greedy_allowed_indices | 對應地下城名稱 | 產生的 CLI 自動掛機指令 |
-| :--- | :---: | :--- | :--- |
-| **`史萊姆王`** (史萊姆王的毀滅)<br>**`史萊姆`** (清除史萊姆)<br>**`黏糊糊的石窟`** | **0** | 地下城 #1<br>【黏糊糊的石窟】 (Slime) | `.venv\Scripts\python main.py --backend --mode dungeon --dungeon 1` |
-| **`幽影地穴`**<br>**`鬼魂`** (清除鬼魂) | **1** | 地下城 #2<br>【幽影地穴】 (Ghost) | `.venv\Scripts\python main.py --backend --mode dungeon --dungeon 2` |
-| **`破除森林的枷鎖`**<br>**`樹人`** (清除樹人)<br>**`森林迷宮`** | **2** | 地下城 #3<br>【森林迷宮】 (Forest) | `.venv\Scripts\python main.py --backend --mode dungeon --dungeon 3` |
-| **`骷髏`** (清除骷髏)<br>**`枯樓`**<br>**`神秘遺跡`** (破除遺跡/遺跡的詛咒) | **3** | 地下城 #4<br>【神秘遺跡】 (Ruins) | `.venv\Scripts\python main.py --backend --mode dungeon --dungeon 4` |
-| **`完成任何地下城`**<br>**`冰雪洞窟的暴君`**<br>**`終結寒冰獸王`**<br>**`冰雪洞窟`** | **4** | 地下城 #5<br>【冰雪洞窟】 (Ice) | `.venv\Scripts\python main.py --backend --mode dungeon --dungeon 5` |
-
----
-
-## ⚔️ 3. 普通關卡怪物字典 (`stage_rules`) 一對一對照表
-
-普通關卡任務會指定大關等級 `--stage 1~6` 與子關卡種類 `--sub first/middle/six/final`。
-
-| 懸賞任務名稱 / 關鍵字 | 關卡等級 (`--stage`) | 子關卡類型 (`--sub`) | 對應普通關卡名稱 | 產生的 CLI 自動掛機指令 |
-| :--- | :---: | :---: | :--- | :--- |
-| **`野豬`** (清除野豬) | **Level 1** | `final` | 蒼穹平原 (魔王關) | `.venv\Scripts\python main.py --backend --mode stage --stage 1 --sub final` |
-| **`熊`** (清除熊) | **Level 3** | `final` | 古樹森林 (魔王關) | `.venv\Scripts\python main.py --backend --mode stage --stage 3 --sub final` |
-| **`沙蟲`** (清除沙蟲) | **Level 4** | `middle` | 沙漠廢墟 (中間關) | `.venv\Scripts\python main.py --backend --mode stage --stage 4 --sub middle` |
-| **`蛙人`** (清除蛙人) | **Level 5** | `first` | 幽暗沼澤 (第一關) | `.venv\Scripts\python main.py --backend --mode stage --stage 5 --sub first` |
-| **`冰元素`** (擊敗冰元素) | **Level 6** | `first` | **冰凍峽谷** (第一關) | `.venv\Scripts\python main.py --backend --mode stage --stage 6 --sub first` |
-
----
 
 ## 🛡️ OCR 錯別字自動加強防護
 不論是告示牌讀取還是完成彈窗，輸入的標題均會自動經過 `normalize_quest_title()` 清洗（如 `野瀦`➔`野豬`、`毀減`➔`毀滅`、`肇敗`➔`擊敗`、`枯樓`➔`骷髏`），確保精確命中上述字典。
