@@ -31,11 +31,30 @@ class LobbyHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
             return
 
-        # 如果需要領鑽石或體力，優先轉移至 NAVIGATING 狀態進行領取
-        if self.machine.need_diamond_collection or (self.machine.enable_bread and self.machine.need_bread_collection):
-            logging.info("💎/🍞 大廳：偵測到需要領取鑽石或體力，優先轉移至 NAVIGATING 狀態。")
-            self.machine.transition_to(self.machine.STATE_NAVIGATING)
-            return
+        # 檢查是否處於首領領主討伐 (lord_boss) 模式或城鎮子流程
+        is_lord_boss_mode = (
+            self.machine.config.get("type") == "lord_boss" or 
+            getattr(self.machine, "current_town_subflow", None) == "lord_boss"
+        )
+        if is_lord_boss_mode:
+            dm = getattr(self.machine, "daily_manager", None)
+            if dm and dm.has_available_lord_boss():
+                logging.info("👑 大廳：偵測到首領討伐模式且尚有可用 Boss，切換至 LORD_BOSS 繼續討伐...")
+                self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+                return
+            else:
+                logging.info("🎉 大廳：首領討伐今日已全數完成或均在冷卻中，彈出下一城鎮任務...")
+                if dm and hasattr(dm, "record_subflow_completed"):
+                    dm.record_subflow_completed("lord_boss")
+                self.machine.pop_and_next_town_subflow()
+                return
+
+        # 如果需要領鑽石或體力，優先轉移至 NAVIGATING 狀態進行領取 (在非 dev_subflows 單獨測試時)
+        if not getattr(self.machine, "dev_subflows", None):
+            if self.machine.need_diamond_collection or (self.machine.enable_bread and self.machine.need_bread_collection):
+                logging.info("💎/🍞 大廳：偵測到需要領取鑽石或體力，優先轉移至 NAVIGATING 狀態。")
+                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return
 
         lobby_btn = self.machine.config.get("lobby_start_btn", "stages/start.png")
         pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.8)

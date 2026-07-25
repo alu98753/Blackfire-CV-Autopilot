@@ -129,10 +129,12 @@ class ResultHandler(BaseStateHandler):
             time.sleep(0.1)
             return True
 
-        # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如金黃色與灰色繼續按鈕）
+        # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如 common/continue.png, continue1.png, continue2.png, continue_gray.png）
         # 繼續按鈕亮度門檻調鬆為 0.0，避免勝場動畫漸變影響匹配
         continue_configs = [
             (self.machine.continue_template, 0.80, 0.0),
+            ("common/continue1.png", 0.80, 0.0),
+            ("common/continue2.png", 0.80, 0.0),
             ("common/continue_gray.png", 0.88, 0.70)
         ]
         for c_temp, thresh, b_thresh in continue_configs:
@@ -141,6 +143,14 @@ class ResultHandler(BaseStateHandler):
                 if pos_c:
                     logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f})，進行點擊。")
                     self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+
+                    if getattr(self.machine, "current_lord_boss_key", None):
+                        b_key = self.machine.current_lord_boss_key
+                        self.machine.current_lord_boss_key = None
+                        dm = getattr(self.machine, "daily_manager", None)
+                        if dm:
+                            dm.record_lord_boss_fight(b_key)
+
                     time.sleep(0.1)
                     return True
 
@@ -150,6 +160,12 @@ class ResultHandler(BaseStateHandler):
             pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
             if pos_start:
                 logging.info(f"👉 偵測到已回到大廳 ({lobby_btn})，將狀態轉回 LOBBY。")
+                if getattr(self.machine, "current_lord_boss_key", None):
+                    b_key = self.machine.current_lord_boss_key
+                    self.machine.current_lord_boss_key = None
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm:
+                        dm.record_lord_boss_fight(b_key)
                 self.machine.transition_to(self.machine.STATE_LOBBY)
                 return True
             

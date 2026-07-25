@@ -232,6 +232,7 @@ SUBFLOW_CONFIGS = {
             }
         },
         "start_btn": "stages/start.png",
+        "result_buttons": ["common/continue.png", "common/continue1.png", "common/continue2.png", "common/continue_gray.png"],
         "navigation_path": [],
     },
 
