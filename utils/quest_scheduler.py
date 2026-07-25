@@ -142,27 +142,51 @@ class QuestScheduler:
         return False
 
 
-    def process_task_complete_banner(self, screen_img, pos_task, ocr_reader=None):
+    def process_task_complete_banner(self, screen_img, pos_task, ocr_reader=None, matcher=None):
         """
-        對 task_complete.png 標題區域進行 Scoped Crop 並由 EasyOCR 辨識完成的任務名稱，同步從 daily_status.json 移除。
+        對 task_complete.png 彈窗內部匹配卷軸圖示 (task.png)，
+        向右精準裁切任務標題區域 (例如 '敵人剿滅') 並由 EasyOCR 辨識完成的任務名稱，同步從 daily_status.json 移除。
         """
-        if screen_img is None or pos_task is None:
+        if screen_img is None:
             return None
 
         try:
-            cx, cy = pos_task
             h_img, w_img = screen_img.shape[:2]
-            y1 = max(0, cy - 140)
-            y2 = min(h_img, cy + 60)
-            x1 = max(0, cx - 250)
-            x2 = min(w_img, cx + 250)
+
+            # 1. 優先搜尋彈窗內的卷軸圖示 (task.png) 錨點
+            pos_icon = None
+            if matcher is None:
+                from vision.matcher import TemplateMatcher
+                matcher = TemplateMatcher(templates_dir="templates")
+
+            pos_icon, _ = matcher.match(screen_img, "town_building/bulletin_board/task.png", threshold=0.60, quiet=True)
+            if not pos_icon:
+                pos_icon, _ = matcher.match(screen_img, "task.png", threshold=0.60, quiet=True)
+
+            if pos_icon:
+                icon_x, icon_y = pos_icon
+                # 往右 35px ~ 320px，上下各 -40px ~ +20px 切出標題區 (如 '敵人剿滅')
+                x1 = max(0, icon_x + 35)
+                x2 = min(w_img, icon_x + 320)
+                y1 = max(0, icon_y - 40)
+                y2 = min(h_img, icon_y + 20)
+            elif pos_task:
+                # 備用方案：若未辨識出卷軸圖示，以彈窗中心偏左上方切出標題區
+                cx, cy = pos_task
+                x1 = max(0, cx - 100)
+                x2 = min(w_img, cx + 220)
+                y1 = max(0, cy - 240)
+                y2 = min(h_img, cy - 160)
+            else:
+                return None
+
             crop_roi = screen_img[y1:y2, x1:x2]
 
             from utils.quest_ocr_extractor import QuestOCRExtractor
             extractor = QuestOCRExtractor(ocr_reader=ocr_reader)
             title = extractor._ocr_crop(crop_roi)
             if title:
-                logging.info(f"🔍 [OCR 懸賞完成辨識] 成功從完成彈窗讀取任務標題: '{title}'")
+                logging.info(f"🔍 [OCR 懸賞完成辨識] 成功從完成彈窗標題區讀取任務標題: '{title}'")
                 self.record_task_complete(title)
                 from utils.daily_manager import DailyManager
                 DailyManager().remove_accepted_quest(title)
@@ -170,6 +194,7 @@ class QuestScheduler:
         except Exception as e:
             logging.error(f"⚠️ [OCR 懸賞完成辨識] 辨識過程發生例外: {e}")
         return None
+
 
     def remove_completed_quest(self, quest_title):
 

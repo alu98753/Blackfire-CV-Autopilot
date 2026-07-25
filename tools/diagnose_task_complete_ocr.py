@@ -54,45 +54,64 @@ def test_task_complete_ocr():
         h_img, w_img = img.shape[:2]
         print(f"\n📸 [測試圖片] {file_path} ({w_img}x{h_img})")
 
-        pos_task, conf = matcher.match(img, "task_complete.png", threshold=0.60, quiet=True)
-        if pos_task:
-            cx, cy = pos_task
-            print(f"  👉 成功定位 task_complete.png 中心座標: ({cx}, {cy}) (信心度: {conf:.4f})")
-        else:
-            # 若直接對模板圖檔進行測試，以圖檔中心作為 (cx, cy)
-            cx, cy = w_img // 2, h_img // 2
-            print(f"  ℹ️ 未匹配到 task_complete.png 錨點，使用圖片中心點: ({cx}, {cy})")
+        # 1. 先匹配 task.png (卷軸圖示)
+        pos_icon, conf_icon = matcher.match(img, "town_building/bulletin_board/task.png", threshold=0.60, quiet=True)
+        if not pos_icon:
+            pos_icon, conf_icon = matcher.match(img, "task.png", threshold=0.60, quiet=True)
 
-        # 執行 Scoped Crop 裁切
-        y1 = max(0, cy - 140)
-        y2 = min(h_img, cy + 60)
-        x1 = max(0, cx - 250)
-        x2 = min(w_img, cx + 250)
+        pos_task, conf_task = matcher.match(img, "task_complete.png", threshold=0.60, quiet=True)
+
+        if pos_icon:
+            icon_x, icon_y = pos_icon
+            print(f"  👉 成功定位 task.png (卷軸圖示) 座標: ({icon_x}, {icon_y}) (信心度: {conf_icon:.4f})")
+            # 從卷軸圖示中心往右 35px, 上下各 40/20px 切出標題區
+            x1 = max(0, icon_x + 35)
+            x2 = min(w_img, icon_x + 320)
+            y1 = max(0, icon_y - 40)
+            y2 = min(h_img, icon_y + 20)
+        elif pos_task:
+            cx, cy = pos_task
+            print(f"  👉 定位 task_complete.png 彈窗中心座標: ({cx}, {cy}) (信心度: {conf_task:.4f})")
+            # 備用彈窗相對標題位移
+            x1 = max(0, cx - 100)
+            x2 = min(w_img, cx + 220)
+            y1 = max(0, cy - 240)
+            y2 = min(h_img, cy - 160)
+        else:
+            cx, cy = w_img // 2, h_img // 2
+            print(f"  ℹ️ 未匹配到錨點，使用圖片預設標題區: ({cx}, {cy})")
+            x1 = max(0, cx - 100)
+            x2 = min(w_img, cx + 220)
+            y1 = max(0, cy - 240)
+            y2 = min(h_img, cy - 160)
 
         crop_roi = img[y1:y2, x1:x2]
 
-        # 繪製可視化 Debug 圖標標出辨識區域
+        # 繪製可視化 Debug 圖
         debug_img = img.copy()
         cv2.rectangle(debug_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
-        cv2.circle(debug_img, (cx, cy), 8, (0, 0, 255), -1)
-        
+        if pos_icon:
+            cv2.circle(debug_img, pos_icon, 8, (255, 0, 0), -1)
+        if pos_task:
+            cv2.circle(debug_img, pos_task, 8, (0, 0, 255), -1)
+
         save_name = f"debug_ocr_{os.path.basename(file_path)}"
         cv2.imwrite(save_name, debug_img)
         cv2.imwrite(f"crop_roi_{os.path.basename(file_path)}", crop_roi)
 
-        print(f"  📌 裁切 ROI 範圍: X=[{x1}:{x2}], Y=[{y1}:{y2}] (尺寸: {crop_roi.shape[1]}x{crop_roi.shape[0]})")
-        print(f"  📸 可視化 Debug 裁切圖已寫入: {save_name} 與 crop_roi_{os.path.basename(file_path)}")
+        print(f"  📌 標題精確裁切 ROI: X=[{x1}:{x2}], Y=[{y1}:{y2}] (尺寸: {crop_roi.shape[1]}x{crop_roi.shape[0]})")
+        print(f"  📸 Debug 圖已寫入: {save_name}")
 
         # 進行 OCR 辨識
         ocr_text = extractor._ocr_crop(crop_roi)
-        print(f"  🔤 EasyOCR 辨識出的文字: '{ocr_text}'")
+        print(f"  🔤 EasyOCR 精確辨識結果: '{ocr_text}'")
 
-        # 驗證 record_task_complete() 邏輯
         if ocr_text:
             matched = scheduler.record_task_complete(ocr_text)
             print(f"  🎯 record_task_complete('{ocr_text}') 匹配結果: {'✅ 成功匹配標記完成' if matched else '⚠️ 無匹配任務'}")
         else:
             print("  ⚠️ EasyOCR 未識別出有效標題字串。")
+
 
     print("\n" + "=" * 60)
     scheduler.print_task_summary()
