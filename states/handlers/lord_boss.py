@@ -23,16 +23,17 @@ class LordBossHandler(BaseStateHandler):
     def _check_card_cooldown_ocr(self, screen_img, pos_b, max_allowed_seconds=7200.0):
         """
         [ Clean Code 重用 utils.cooldown_detector ]
-        在點擊卡片前，截取卡片及其周邊區域圖像並呼叫 detect_cooldown_sign_and_time。
+        在點擊卡片前，僅截取卡片「上半部繪圖區域」(排除底部名稱框與5圓點區)，呼叫 detect_cooldown_sign_and_time。
         若優先比對到冷卻木牌且解出合法倒數時間，回傳 (parsed_seconds, raw_text)；否則回傳 (None, None)。
         """
         try:
             h, w = screen_img.shape[:2]
             cx, cy = pos_b
-            x1 = max(0, cx - 160)
-            x2 = min(w, cx + 160)
-            y1 = max(0, cy - 100)
-            y2 = min(h, cy + 300)
+            # 嚴格限制：僅截取卡片「上半部繪圖區域」(寬 300, 高 220)，完全排除下方名稱框 (cy + 60 以下)
+            x1 = max(0, cx - 150)
+            x2 = min(w, cx + 150)
+            y1 = max(0, cy - 160)
+            y2 = min(h, cy + 60)
 
             crop_img = screen_img[y1:y2, x1:x2]
             
@@ -40,7 +41,7 @@ class LordBossHandler(BaseStateHandler):
                 crop_img, 
                 self.machine.get_ocr_reader, 
                 max_allowed_seconds=max_allowed_seconds, 
-                threshold=0.55
+                threshold=0.58
             )
             if has_cd:
                 return rem_secs, raw_text
