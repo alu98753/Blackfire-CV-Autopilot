@@ -34,44 +34,56 @@ class TestChestSubflow(unittest.TestCase):
         self.mock_machine.mouse.click.assert_called_once_with(150, 150)
 
     def test_handler_claims_chest_when_found(self):
-        """測試：當在城鎮發現 mysterious_treasure.png 時，點擊領取並記錄 DailyManager"""
+        """測試：Step 1 點擊寶箱建築 ➔ Step 2 點擊免費寶箱 ➔ Step 3 確認彈窗並記錄完成"""
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
-        def fake_match(img, template, threshold=0.75):
+        def fake_match(img, template, threshold=0.75, **kwargs):
             if template == "goback_town.png":
                 return (None, 0.0)
             if template == "town_building/mysterious_treasure/mysterious_treasure.png":
                 return ((200, 300), 0.88)
+            if template == "town_building/mysterious_treasure/free_treasure.png":
+                return ((400, 500), 0.90)
+            if template == "common/confirm.png":
+                return ((400, 550), 0.85)
             return (None, 0.0)
 
         self.mock_machine.matcher.match.side_effect = fake_match
 
         with patch("os.path.exists", return_value=True):
-            result = self.handler.handle(mock_img, rect)
+            # Step 1: INIT ➔ CLICK_FREE_CHEST
+            res1 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res1)
+            self.assertEqual(self.handler.step_phase, "CLICK_FREE_CHEST")
 
-        self.assertTrue(result)
-        self.mock_machine.mouse.click.assert_called_once_with(200, 300)
-        self.mock_daily_manager.record_subflow_completed.assert_called_once_with("chest")
-        self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+            # Step 2: CLICK_FREE_CHEST ➔ WAITING_CONFIRM
+            self.handler.last_action_time = 0.0
+            res2 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res2)
+            self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+
+            # Step 3: WAITING_CONFIRM ➔ Complete
+            self.handler.last_action_time = 0.0
+            res3 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res3)
+            self.mock_daily_manager.record_subflow_completed.assert_called_with("chest")
+            self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
     def test_handler_pops_subflow_when_chest_not_found(self):
-        """測試：當連續 3 幀未發現寶箱時，標記完成並呼叫 pop_and_next_town_subflow()"""
+        """測試：當連續 5 輪未發現寶箱建築時，標記完成並呼叫 pop_and_next_town_subflow()"""
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
         self.mock_machine.matcher.match.return_value = (None, 0.0)
 
         with patch("os.path.exists", return_value=True):
-            # 1st & 2nd scan
-            self.handler.handle(mock_img, rect)
-            self.handler.last_action_time = 0.0
-            self.handler.handle(mock_img, rect)
-            self.handler.last_action_time = 0.0
-            # 3rd scan triggers completion
-            res3 = self.handler.handle(mock_img, rect)
+            for _ in range(4):
+                self.handler.handle(mock_img, rect)
+                self.handler.last_action_time = 0.0
+            res_last = self.handler.handle(mock_img, rect)
 
-        self.assertTrue(res3)
+        self.assertTrue(res_last)
         self.mock_daily_manager.record_subflow_completed.assert_called_with("chest")
         self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
