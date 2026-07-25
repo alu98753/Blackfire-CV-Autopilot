@@ -99,27 +99,29 @@ class ResultHandler(BaseStateHandler):
 
 
         if should_exit_battle:
-            if os.path.exists(os.path.join("templates", "exit_battle.png")):
-                pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.9)
-                if pos_exit:
-                    if self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon():
-                        status_str, avail_names = self.machine.get_dungeon_cooldown_status()
-                        avail_str = ", ".join(avail_names) if avail_names else "無"
-                        logging.info(f"⏳ [混合模式] 結算時偵測到可用地下城！各副本冷卻情形: {status_str} | 判定可挑戰: [{avail_str}]")
-                    logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
-                    self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
-                    self.machine.is_in_dungeon = False
-                    
-                    if getattr(self.machine, "current_lord_boss_key", None):
-                        b_key = self.machine.current_lord_boss_key
-                        self.machine.current_lord_boss_key = None
-                        if getattr(self.machine, "daily_manager", None):
-                            self.machine.daily_manager.record_lord_boss_fight(b_key)
-                            
-                    next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
-                    self.machine.transition_to(next_state)
-                    time.sleep(0.2)
-                    return True
+            exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
+            for exit_btn in exit_candidates:
+                if os.path.exists(os.path.join("templates", exit_btn)):
+                    pos_exit, conf_exit = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
+                    if pos_exit:
+                        if self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon():
+                            status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                            avail_str = ", ".join(avail_names) if avail_names else "無"
+                            logging.info(f"⏳ [混合模式] 結算時偵測到可用地下城！各副本冷卻情形: {status_str} | 判定可挑戰: [{avail_str}]")
+                        logging.info(f"👉 偵測到離開戰鬥/返回按鈕 [{exit_btn}] ({conf_exit:.4f})，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
+                        self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
+                        self.machine.is_in_dungeon = False
+                        
+                        if getattr(self.machine, "current_lord_boss_key", None):
+                            b_key = self.machine.current_lord_boss_key
+                            self.machine.current_lord_boss_key = None
+                            if getattr(self.machine, "daily_manager", None):
+                                self.machine.daily_manager.record_lord_boss_fight(b_key)
+                                
+                        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                        self.machine.transition_to(next_state)
+                        time.sleep(0.2)
+                        return True
 
         # A2. 檢查結算通用確認彈窗 (例如關卡結算確認)
         pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
@@ -130,6 +132,10 @@ class ResultHandler(BaseStateHandler):
             return True
 
         # A3. 檢查「再戰」
+        if should_exit_battle:
+            logging.info("⏳ [離場防護] 判定當前已滿足離場條件 (已打滿 4 次批次或需切換任務)，攔截「再戰」點擊，等待離開按鈕出現...")
+            return True
+
         pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8)
         if pos_retry:
             logging.info("👉 點擊「再戰」！")
