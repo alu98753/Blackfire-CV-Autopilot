@@ -91,6 +91,9 @@ class GameStateMachine:
         self.need_jewelry_workshop = False
         self.town_subflow_queue = []
         self.quest_scheduler = None
+        self.config = {}
+        self.primary_config = {}
+
 
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
@@ -634,20 +637,23 @@ class GameStateMachine:
 
     def apply_mix_fallback_config(self):
         """
-        當懸賞任務全數完成時，自動載入並切換至使用者啟動時配置的退守 mix 模式 (地下城 + 關卡)。
+        當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
         """
-        if self.primary_config:
+        if getattr(self, "primary_config", None):
             self.config = self.primary_config.copy()
-            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至使用者設定的退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
+            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
         else:
             from config import PRIMARY_MODES
             mix_config = PRIMARY_MODES["mix"].copy()
+            mix_config["greedy_dungeon"] = False
+            mix_config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
             if hasattr(self, "backend_mode"):
                 mix_config["backend_mode"] = self.backend_mode
 
             self.config = mix_config
             self.primary_config = mix_config.copy()
-            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至預設退守混合模式: {mix_config['name']}")
+            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至預設退守混合模式: {mix_config['name']} (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+
 
 
     def check_and_advance_quest_target(self):
