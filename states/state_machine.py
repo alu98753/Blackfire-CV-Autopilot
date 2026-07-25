@@ -723,6 +723,29 @@ class GameStateMachine:
 
 
 
+    def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=6.0, threshold=0.75, brightness_threshold=0.0, check_interval=1.0, post_delay=1.0):
+        """
+        [配對確認直到消失 - 專案級輔助 API]
+        點擊 (click_x, click_y)，並以 check_interval 輪詢比對 template_name，直到其從畫面上 100% 消失。
+        """
+        logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環 (輪詢間隔 {check_interval}s)...")
+        self.mouse.click(click_x, click_y)
+
+        start_t = time.time()
+        while time.time() - start_t < timeout:
+            time.sleep(check_interval)
+            if self.capturer:
+                fresh_img = self.capturer.capture(rect)
+                if fresh_img is not None and os.path.exists(os.path.join("templates", template_name)):
+                    pos, conf = self.matcher.match(fresh_img, template_name, threshold=threshold, brightness_threshold=brightness_threshold, quiet=True)
+                    if pos is None:
+                        logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {time.time() - start_t:.2f} 秒。")
+                        break
+                    else:
+                        logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
+
+        time.sleep(post_delay)
+
     def _run_task_complete_subflow(self, rect):
         logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")
         start_time = time.time()
@@ -766,54 +789,31 @@ class GameStateMachine:
                     if screen_img is None:
                         break
 
-            # 3. 確認判斷出任務後，才進行點擊確認按鈕關閉
-            matched_confirm = False
+            # 3. 找出確認按鈕或領獎目標座標
+            click_x, click_y = None, None
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
                     continue
                 pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
                 if pos:
-                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊...")
-                    self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    matched_confirm = True
-                    time.sleep(0.6) # 等待當前彈窗關閉/下一個彈窗出現
+                    click_x = rect["left"] + pos[0]
+                    click_y = rect["top"] + pos[1]
+                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}。")
                     break
 
-            # 4. 若無確認按鈕，點擊彈窗內領獎位置
-            if not matched_confirm:
+            if click_x is None:
                 height_to_use = rect.get("height") or screen_img.shape[0] or 1080
                 scale_y = height_to_use / 1080.0
-                btn_x = rect["left"] + pos_task[0]
-                btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
-                logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，點擊領取獎勵座標 ({btn_x}, {btn_y})。")
-                self.mouse.click(btn_x, btn_y)
-                time.sleep(0.6)
+                click_x = rect["left"] + pos_task[0]
+                click_y = rect["top"] + pos_task[1] + int(281 * scale_y)
+                logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，使用彈窗內領獎座標 ({click_x}, {click_y})。")
 
-            # 5. 🛡️ 確定消失防護：每次配對固定間隔 1.0 秒，配對確認直到 task_complete.png 徹底消失
-            disappeared_streak = 0
-            for retry in range(6):
-                time.sleep(1.0)  # 每次配對均精確間隔 1.0 秒，相容動畫過場
-                chk_img = self.capturer.capture(rect)
-                if chk_img is None:
-                    break
-                pos_still, conf_still = self.matcher.match(chk_img, "task_complete.png", threshold=0.70, quiet=True)
-                if not pos_still:
-                    disappeared_streak += 1
-                    if disappeared_streak >= 2:
-                        logging.info("🟢 [子流程] 已連續兩幀 (每幀間隔 1.0s) 確認【任務完成】彈窗徹底關閉消失，畫面動畫恢復完畢！")
-                        time.sleep(1.0)
-                        return
-                else:
-                    disappeared_streak = 0
-                    logging.info(f"⏳ [子流程] 任務完成彈窗動畫仍存在 (信心度: {conf_still:.4f})，進行補點確認關閉 (嘗試 {retry+1}/6)...")
-                    pos_c, _ = self.matcher.match(chk_img, "common/confirm.png", threshold=0.80, quiet=True)
-                    if pos_c:
-                        self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
-                    else:
-                        target_x = btn_x if 'btn_x' in locals() else rect["left"] + pos_task[0]
-                        target_y = btn_y if 'btn_y' in locals() else rect["top"] + pos_task[1] + int(281 * (rect.get("height", 1080) / 1080.0))
-                        self.mouse.click(target_x, target_y)
-                    time.sleep(1.0)
+            # 4. 呼叫專案統一 API: 配對確認直到 task_complete.png 徹底消失 (每次檢查間隔 1.0 秒)
+            self.click_and_wait_until_gone(
+                "task_complete.png", click_x, click_y, rect,
+                timeout=6.0, threshold=0.70, check_interval=1.0, post_delay=1.0
+            )
+            return
 
 
 
