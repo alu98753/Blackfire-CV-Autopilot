@@ -21,6 +21,7 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
     cd_w = 0
     cd_h = 0
 
+    best_val_cd = 0.0
     for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
         template_path = os.path.join("templates", cd_temp)
         if os.path.exists(template_path):
@@ -33,6 +34,8 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
                 if crop_img.shape[0] >= cur_h and crop_img.shape[1] >= cur_w:
                     res_cd = cv2.matchTemplate(crop_img, resized_cd, cv2.TM_CCOEFF_NORMED)
                     _, max_val_cd, _, loc = cv2.minMaxLoc(res_cd)
+                    if max_val_cd > best_val_cd:
+                        best_val_cd = max_val_cd
                     if max_val_cd >= threshold:
                         has_cooldown = True
                         matched_sign = cd_temp
@@ -42,7 +45,10 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
                         break
 
     if not has_cooldown:
+        logging.info(f"ℹ️ [CooldownDetector] 木牌模板最高匹配分數: {best_val_cd:.4f} (門檻: {threshold:.2f}) ➔ 判定無冷卻木牌")
         return False, None, None
+
+    logging.info(f"⏳ [CooldownDetector] 成功匹配冷卻木牌 [{matched_sign}] (相似度: {max_val_cd:.4f} >= 門檻 {threshold:.2f})")
 
     # 已成功比對到冷卻木牌！進行文字區域切割、4倍放大與 EasyOCR 讀取
     try:

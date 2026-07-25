@@ -40,7 +40,7 @@ class LordBossHandler(BaseStateHandler):
                 crop_img, 
                 self.machine.get_ocr_reader, 
                 max_allowed_seconds=max_allowed_seconds, 
-                threshold=0.70
+                threshold=0.55
             )
             if has_cd:
                 return rem_secs, raw_text
