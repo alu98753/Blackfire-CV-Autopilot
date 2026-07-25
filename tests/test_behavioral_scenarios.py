@@ -2430,9 +2430,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.reset_state()
         handler.step_phase = "SELL_MENU_OPEN"
 
+        scales_match_count = [0]
         def mock_match_goods(img, name, **kw):
             if "Sandworm_scales.png" in name:
-                if handler.goods_scroll_state == "SCROLLED_DOWN":
+                if handler.goods_scroll_state == "SCROLLED_DOWN" and scales_match_count[0] == 0:
+                    scales_match_count[0] += 1
                     return ((300, 300), 0.90)
                 return (None, 0.0)
             elif name == "town_building/sell.png":
@@ -2675,6 +2677,58 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 驗證成功點擊了 quit 按鈕 (800, 200) 且 bag_disassembled 被設為 True
         self.mock_mouse.click.assert_called_once_with(quit_pos[0], quit_pos[1])
         self.assertTrue(self.state_machine.bag_disassembled)
+
+    @patch('os.path.exists')
+    def test_jewelry_workshop_multiple_sales_same_item(self, mock_exists):
+        """
+        驗證珠寶加工廠 (JewelryWorkshopHandler) 同一商品有多堆時，
+        會在第一堆賣出後繼續二次比對並出售第二堆，售罄後才進位至下一個商品。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_JEWELRY_WORKSHOP
+        self.state_machine.need_jewelry_workshop = True
+        
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+        handler.step_phase = "SELL_MENU_OPEN"
+
+        # 假設 goods_settings 中啟用 gray/Sandworm_scales 與 gray/Spider_silk
+        handler._get_enabled_goods = MagicMock(return_value=["gray/Sandworm_scales", "gray/Spider_silk"])
+
+        match_call_count = {"Sandworm_scales": 0}
+
+        def mock_match(img, name, **kw):
+            if "Sandworm_scales" in name:
+                match_call_count["Sandworm_scales"] += 1
+                # 前 3 次比對 (初始搜尋、賣完1後 post_sell 檢查、第 2 輪搜尋) 回傳找到
+                if match_call_count["Sandworm_scales"] <= 3:
+                    return ((100, 100), 0.90)
+                return (None, 0.0)
+            elif name == "town_building/sell.png":
+                return ((200, 200), 0.90)
+            elif name == "town_building/sell_max.png":
+                return ((300, 300), 0.90)
+            elif name == "common/confirm.png" or name == "common/ok.png":
+                if img is not fake_img:
+                    return ((400, 400), 0.90)
+                return (None, 0.0)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+        rect = self.mock_capturer.get_window_rect()
+
+        # Step 1: 處理第一堆 Sandworm_scales 出售
+        handler.handle(fake_img, rect)
+        self.assertEqual(handler.current_goods_idx, 0)  # 仍保留在商品 0
+        self.assertEqual(handler.repeat_sell_count, 1)
+
+        # Step 2: 處理第二堆 Sandworm_scales 出售
+        handler.handle(fake_img, rect)
+        self.assertEqual(handler.current_goods_idx, 1)  # 第二堆售罄後進位至商品 1
+        self.assertEqual(handler.repeat_sell_count, 0)
 
 if __name__ == "__main__":
     unittest.main()
