@@ -8,6 +8,12 @@ class ResultHandler(BaseStateHandler):
         super().__init__(machine)
         self.no_match_count = 0
         self.continue_click_count = 0
+        self.subflow_step = "INIT_DELAY"  # INIT_DELAY -> CONTINUE_LOOP -> FINAL_MATCH
+
+    def reset_state(self):
+        self.subflow_step = "INIT_DELAY"
+        self.continue_click_count = 0
+        self.no_match_count = 0
 
     def handle(self, screen_img, rect):
         matched = self._handle_impl(screen_img, rect)
@@ -19,8 +25,7 @@ class ResultHandler(BaseStateHandler):
         self.no_match_count += 1
         if self.no_match_count >= 5:
             logging.warning("⚠️ 結算畫面連續 5 次未偵測到任何結算按鈕，判定可能已退出或跳轉，重設狀態為 UNKNOWN 進行重新定位。")
-            self.no_match_count = 0
-            self.continue_click_count = 0
+            self.reset_state()
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
             
@@ -28,10 +33,10 @@ class ResultHandler(BaseStateHandler):
 
     def _handle_impl(self, screen_img, rect):
         """
-        處理結算點擊。若成功點擊任何按鈕，回傳 True；否則回傳 False。
-        使用【僅能配對】白名單隔離邏輯：
-        - 非離場場次 (非 4/8/10 場): 僅允許 2 次 continue 推進 + retry 再戰，絕不比對離場與大廳圖案。
-        - 離場場次 (4/8/10 場): 僅允許 2 次 continue 推進 + exit_battle/goback_town 離場，絕不比對 retry 再戰。
+        戰鬥結算獨立子流程 (Result Subflow):
+        1. 步驟 1 (INIT_DELAY): 剛進入結算時，固定休眠 1.5 秒讓勝利特效與第一層動畫完全繪製與定格。
+        2. 步驟 2 (CONTINUE_LOOP): 輪詢 continue.png，每次點擊成功後固定休眠 1.0 秒。若連續沒點到或滿 2 次則轉移至 FINAL_MATCH。
+        3. 步驟 3 (FINAL_MATCH): 白名單二分法配對。續戰場次僅點擊 retry (1.0s 休眠)，離場場次僅點擊 exit_battle (1.0s 休眠)。
         """
         # 0. 優先檢查是否已回到準備大廳/關卡選單 (出現 select_stage 或 select_stage_after 代表戰鬥結算已結束)
         lobby_features = [
@@ -43,11 +48,24 @@ class ResultHandler(BaseStateHandler):
                 pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80, brightness_threshold=0.70, quiet=True)
                 if pos_l:
                     logging.info(f"👉 結算辨識：偵測到關卡大廳獨有特徵 [{l_temp}] (相似度: {conf_l:.4f})，代表戰鬥結算已結束並已回到大廳，轉移至 NAVIGATING。")
-                    self.continue_click_count = 0
+                    self.reset_state()
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return True
 
-        # A1. 優先檢查是否戰敗 (defeat.png)
+        # =========================================================================
+        # 步驟 1：結算初登場沉澱 (INIT_DELAY)
+        # =========================================================================
+        if self.subflow_step == "INIT_DELAY":
+            logging.info("⏳ [結算子流程 Step 1] 戰鬥剛結束，執行初次登場沉澱 (休眠 1.5 秒)，等待勝負畫面與第一層彈窗定格...")
+            time.sleep(1.5)
+            self.subflow_step = "CONTINUE_LOOP"
+            # 重新擷取第一層定格後的最新畫面
+            if self.machine.capturer:
+                cap_fresh = self.machine.capturer.capture(rect)
+                if cap_fresh is not None:
+                    screen_img = cap_fresh
+
+        # A1. 戰敗防護 (defeat.png)
         if os.path.exists(os.path.join("templates", "defeat.png")):
             pos_defeat, conf_defeat = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
             if pos_defeat:
@@ -60,7 +78,7 @@ class ResultHandler(BaseStateHandler):
                 max_defeat = 2 if is_dungeon else self.machine.config.get("stage_max_defeat", 2)
                 
                 if self.machine.defeat_count >= (max_defeat - 1):
-                    self.continue_click_count = 0
+                    self.reset_state()
                     return self._run_defeat_giveup_subflow(rect, is_dungeon=is_dungeon)
 
                 pos_retry = None
@@ -86,13 +104,13 @@ class ResultHandler(BaseStateHandler):
                     self.mouse.click(click_x, click_y)
                     
                 self.machine.defeat_count += 1
-                self.continue_click_count = 0
+                self.reset_state()
                 logging.info(f"🚀 已點擊重新開始按鈕，累計戰敗次數: {self.machine.defeat_count}")
                 self.machine.last_result_retry_click_time = time.time()
                 self.machine.run_count += 1
+                time.sleep(1.0)
                 logging.info(f"🚀 點擊重新開始按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
                 self.machine.transition_to(self.machine.STATE_LOADING)
-                time.sleep(0.1)
                 return True
 
         # 計算是否滿足離場條件 (第 4、8、10 場 / 滿背包 / 體力退避等)
@@ -118,79 +136,84 @@ class ResultHandler(BaseStateHandler):
         )
 
         # =========================================================================
-        # 第一階段：比對「繼續」過渡按鈕 (最多允許點擊 2 次，推進結算動畫與獎勵頁)
+        # 步驟 2：Continue 推進閉環 (CONTINUE_LOOP)
         # =========================================================================
-        if self.continue_click_count < 2:
-            continue_configs = [
-                (self.machine.continue_template, 0.80, 0.0),
-                ("common/continue1.png", 0.80, 0.0),
-                ("common/continue2.png", 0.80, 0.0),
-                ("common/continue_gray.png", 0.88, 0.70)
-            ]
-            for c_temp, thresh, b_thresh in continue_configs:
-                if c_temp and os.path.exists(os.path.join("templates", c_temp)):
-                    pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=thresh, brightness_threshold=b_thresh, quiet=True)
-                    if pos_c:
-                        self.continue_click_count += 1
-                        logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f}，第 {self.continue_click_count}/2 次點擊)，進行點擊推進結算過渡。")
-                        self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+        if self.subflow_step == "CONTINUE_LOOP":
+            if self.continue_click_count < 2:
+                continue_configs = [
+                    (self.machine.continue_template, 0.80, 0.0),
+                    ("common/continue1.png", 0.80, 0.0),
+                    ("common/continue2.png", 0.80, 0.0),
+                    ("common/continue_gray.png", 0.88, 0.70)
+                ]
+                for c_temp, thresh, b_thresh in continue_configs:
+                    if c_temp and os.path.exists(os.path.join("templates", c_temp)):
+                        pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=thresh, brightness_threshold=b_thresh, quiet=True)
+                        if pos_c:
+                            self.continue_click_count += 1
+                            logging.info(f"👉 [結算子流程 Step 2] 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f}，第 {self.continue_click_count}/2 次點擊)，點擊並休眠 1.0 秒...")
+                            self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
 
-                        if getattr(self.machine, "current_lord_boss_key", None):
-                            b_key = self.machine.current_lord_boss_key
-                            self.machine.current_lord_boss_key = None
-                            dm = getattr(self.machine, "daily_manager", None)
-                            if dm:
-                                dm.record_lord_boss_fight(b_key)
+                            if getattr(self.machine, "current_lord_boss_key", None):
+                                b_key = self.machine.current_lord_boss_key
+                                self.machine.current_lord_boss_key = None
+                                dm = getattr(self.machine, "daily_manager", None)
+                                if dm:
+                                    dm.record_lord_boss_fight(b_key)
 
-                        time.sleep(0.35)
-                        return True
+                            time.sleep(1.0)  # 每次點擊繼續按鈕後，固定休眠 1.0 秒
+                            return True
 
-        # 通用確認彈窗 (common/confirm.png)
-        pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8, quiet=True)
-        if pos_conf:
-            logging.info(f"👉 偵測到結算通用確認按鈕，進行點擊。信心度: {conf_conf:.4f}")
-            self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
-            time.sleep(0.3)
-            return True
-
-        # =========================================================================
-        # 第二階段：【白名單嚴格二分法】
-        # =========================================================================
-        if should_exit_battle:
-            # 情況 B：第 4、8、10 場 ➔ 僅能配對離場按鈕
-            exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
-            for exit_btn in exit_candidates:
-                if os.path.exists(os.path.join("templates", exit_btn)):
-                    pos_exit, conf_exit = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
-                    if pos_exit:
-                        logging.info(f"👉 離場條件成立 (第 4/8/10 場或需領獎)，發現離場按鈕 [{exit_btn}] ({conf_exit:.4f})，點擊退出戰鬥 (固定 1.0 秒過渡等待)...")
-                        self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
-                        self.machine.is_in_dungeon = False
-                        self.continue_click_count = 0
-
-                        if getattr(self.machine, "current_lord_boss_key", None):
-                            b_key = self.machine.current_lord_boss_key
-                            self.machine.current_lord_boss_key = None
-                            if getattr(self.machine, "daily_manager", None):
-                                self.machine.daily_manager.record_lord_boss_fight(b_key)
-
-                        time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗畫面順暢漸變淡出
-                        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
-                        self.machine.transition_to(next_state)
-                        return True
-        else:
-            # 情況 A：非第 4、8、10 場 ➔ 僅能配對 RETRY 再戰按鈕 (絕不點擊任何離場/大廳按鈕)
-            pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8, quiet=True)
-            if pos_retry:
-                logging.info(f"👉 非離場場次，偵測到「再戰」按鈕 [{conf_retry:.4f}]，點擊繼續下一場戰鬥 (固定 1.0 秒過渡等待)...")
-                self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
-                self.machine.last_result_retry_click_time = time.time()
-                self.machine.run_count += 1
-                self.continue_click_count = 0
-                time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗響應點擊並啟動載入
-                logging.info(f"🚀 點擊再戰按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
-                self.machine.transition_to(self.machine.STATE_LOADING)
+            # 通用確認彈窗 (common/confirm.png)
+            pos_conf, conf_conf = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8, quiet=True)
+            if pos_conf:
+                logging.info(f"👉 [結算子流程 Step 2] 偵測到通用確認按鈕，點擊並休眠 1.0 秒。信心度: {conf_conf:.4f}")
+                self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
+                time.sleep(1.0)
                 return True
+
+            # 若此處掃描未比對到 continue 彈窗，代表 continue 階段結束，轉移至 FINAL_MATCH 階段
+            self.subflow_step = "FINAL_MATCH"
+
+        # =========================================================================
+        # 步驟 3：終局白名單嚴格配對 (FINAL_MATCH)
+        # =========================================================================
+        if self.subflow_step == "FINAL_MATCH":
+            if should_exit_battle:
+                # 情況 B：第 4、8、10 場 ➔ 僅能配對離場按鈕
+                exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
+                for exit_btn in exit_candidates:
+                    if os.path.exists(os.path.join("templates", exit_btn)):
+                        pos_exit, conf_exit = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
+                        if pos_exit:
+                            logging.info(f"👉 [結算子流程 Step 3] 離場條件成立 (第 4/8/10 場或需領獎)，發現離場按鈕 [{exit_btn}] ({conf_exit:.4f})，點擊退出戰鬥 (固定 1.0 秒過渡等待)...")
+                            self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
+                            self.machine.is_in_dungeon = False
+                            self.reset_state()
+
+                            if getattr(self.machine, "current_lord_boss_key", None):
+                                b_key = self.machine.current_lord_boss_key
+                                self.machine.current_lord_boss_key = None
+                                if getattr(self.machine, "daily_manager", None):
+                                    self.machine.daily_manager.record_lord_boss_fight(b_key)
+
+                            time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗畫面順暢漸變淡出
+                            next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                            self.machine.transition_to(next_state)
+                            return True
+            else:
+                # 情況 A：非第 4、8、10 場 ➔ 僅能配對 RETRY 再戰按鈕 (絕不點擊任何離場/大廳按鈕)
+                pos_retry, conf_retry = self.matcher.match(screen_img, "stages/retry.png", threshold=0.8, quiet=True)
+                if pos_retry:
+                    logging.info(f"👉 [結算子流程 Step 3] 非離場場次，偵測到「再戰」按鈕 [{conf_retry:.4f}]，點擊繼續下一場戰鬥 (固定 1.0 秒過渡等待)...")
+                    self.mouse.click(rect["left"] + pos_retry[0], rect["top"] + pos_retry[1])
+                    self.machine.last_result_retry_click_time = time.time()
+                    self.machine.run_count += 1
+                    self.reset_state()
+                    time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗響應點擊並啟動載入
+                    logging.info(f"🚀 點擊再戰按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
+                    self.machine.transition_to(self.machine.STATE_LOADING)
+                    return True
 
         # 結算如果看到 Lord_entry_after 且屬於 lord_boss 模式
         cur_type = self.machine.config.get("type") if self.machine.config else None
@@ -200,7 +223,7 @@ class ResultHandler(BaseStateHandler):
                 pos_l, conf_l = self.matcher.match(screen_img, "load/Lord_entry_after.png", threshold=0.80, brightness_threshold=0.70, quiet=True)
                 if pos_l:
                     logging.info(f"👉 結算辨識 (Lord Boss 模式)：偵測到已切回大廳 [load/Lord_entry_after.png] (相似度: {conf_l:.4f})，結束結算。")
-                    self.continue_click_count = 0
+                    self.reset_state()
                     self.machine.transition_to(self.machine.STATE_LORD_BOSS)
                     return True
             
