@@ -64,12 +64,19 @@ def test_task_complete_ocr():
         if pos_icon:
             icon_x, icon_y = pos_icon
             print(f"  👉 成功定位 task.png (卷軸圖示) 座標: ({icon_x}, {icon_y}) (信心度: {conf_icon:.4f})")
-            # 從卷軸圖示中心往右 35px, 上下各 40/20px 切出標題區
-            x1 = max(0, icon_x + 35)
-            x2 = min(w_img, icon_x + 320)
-            y1 = max(0, icon_y - 40)
-            y2 = min(h_img, icon_y + 20)
+            from config import TASK_BANNER_OCR_OFFSET
+            off_x = TASK_BANNER_OCR_OFFSET.get("offset_x", 35)
+            off_y = TASK_BANNER_OCR_OFFSET.get("offset_y", -40)
+            box_w = TASK_BANNER_OCR_OFFSET.get("box_width", 285)
+            box_h = TASK_BANNER_OCR_OFFSET.get("box_height", 60)
+
+            print(f"  ⚙️ [當前裁切參數 (可於 config.py 自行修改)] offset_x={off_x}, offset_y={off_y}, width={box_w}, height={box_h}")
+            x1 = max(0, icon_x + off_x)
+            x2 = min(w_img, icon_x + off_x + box_w)
+            y1 = max(0, icon_y + off_y)
+            y2 = min(h_img, icon_y + off_y + box_h)
         elif pos_task:
+
             cx, cy = pos_task
             print(f"  👉 定位 task_complete.png 彈窗中心座標: ({cx}, {cy}) (信心度: {conf_task:.4f})")
             # 備用彈窗相對標題位移

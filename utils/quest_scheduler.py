@@ -165,12 +165,18 @@ class QuestScheduler:
 
             if pos_icon:
                 icon_x, icon_y = pos_icon
-                # 往右 35px ~ 320px，上下各 -40px ~ +20px 切出標題區 (如 '敵人剿滅')
-                x1 = max(0, icon_x + 35)
-                x2 = min(w_img, icon_x + 320)
-                y1 = max(0, icon_y - 40)
-                y2 = min(h_img, icon_y + 20)
+                from config import TASK_BANNER_OCR_OFFSET
+                off_x = TASK_BANNER_OCR_OFFSET.get("offset_x", 35)
+                off_y = TASK_BANNER_OCR_OFFSET.get("offset_y", -40)
+                box_w = TASK_BANNER_OCR_OFFSET.get("box_width", 285)
+                box_h = TASK_BANNER_OCR_OFFSET.get("box_height", 60)
+
+                x1 = max(0, icon_x + off_x)
+                x2 = min(w_img, icon_x + off_x + box_w)
+                y1 = max(0, icon_y + off_y)
+                y2 = min(h_img, icon_y + off_y + box_h)
             elif pos_task:
+
                 # 備用方案：若未辨識出卷軸圖示，以彈窗中心偏左上方切出標題區
                 cx, cy = pos_task
                 x1 = max(0, cx - 100)
