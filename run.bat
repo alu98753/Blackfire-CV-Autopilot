@@ -5,7 +5,6 @@ cmd /c "%~f0" utf8 %*
 exit /b
 
 :UTF8_START
-:: 自動修復 Windows 環境變數 PATH 以免 chcp 或其他命令找不到
 set "PATH=%SystemRoot%\system32;%SystemRoot%;%SystemRoot%\System32\Wbem;%PATH%"
 
 title Blackfire Crusade 自動掛機輔助 (CLI 啟動器)
@@ -14,7 +13,6 @@ echo ============================================================
 echo   Blackfire Crusade 自動掛機輔助 (CLI 啟動器) 
 echo ============================================================
 
-:: 檢測虛擬環境
 if exist "%~dp0.venv\Scripts\python.exe" goto VENV_OK
 echo [!] 找不到虛擬環境中的 Python (%~dp0.venv\Scripts\python.exe)！
 echo [!] 請確認此 bat 檔案放於 BlackfireCrusade_tool 專案根目錄下。
@@ -44,19 +42,15 @@ echo  --interval [秒]    : 偵測時間間隔 (預設: 0.5)
 echo ============================================================
 echo.
 
-:: 讓使用者自訂輸入參數
 set "custom_args="
 set /p custom_args="請輸入選單編號 [1-8] 或自訂參數 (直接 Enter 預設為 1: Daily Master): "
 
-:: 如果使用者輸入 8 或 covenant，跳轉至查看公約
 if "%custom_args%"=="8" goto VIEW_COVENANT
 if /i "%custom_args%"=="covenant" goto VIEW_COVENANT
 
-:: 如果使用者輸入 7 或 subflow，跳轉至 Dev Subflow 選單
 if "%custom_args%"=="7" goto SUBFLOW_MENU
 if /i "%custom_args%"=="subflow" goto SUBFLOW_MENU
 
-:: 如果使用者輸入 1-6，映射為對應參數
 if "%custom_args%"=="1" set custom_args=--backend --mode daily
 if "%custom_args%"=="2" set custom_args=--backend --mode mix
 if "%custom_args%"=="3" set custom_args=--backend --mode dungeon
@@ -64,10 +58,8 @@ if "%custom_args%"=="4" set custom_args=--backend --mode stage
 if "%custom_args%"=="5" set custom_args=--backend --mode bag_clean
 if "%custom_args%"=="6" set custom_args=--backend --mode collect_only
 
-:: 如果使用者無輸入，預設為 1 (Daily Master Pipeline)
 if "%custom_args%"=="" set custom_args=--backend --mode daily
 
-:: 偵測是否為 dungeon 或 mix 模式，若是則引導選擇祝福
 echo %custom_args% | findstr /i "dungeon mix" >nul
 if %errorlevel% neq 0 goto RUN_SCRIPT
 
@@ -87,13 +79,10 @@ if "%bless_choice%"=="3" set custom_args=%custom_args% --blessmode exp
 
 goto RUN_SCRIPT
 
-:: ============================================================
-:: Dev 城鎮子流程獨立測試選單 (--subflow)
-:: ============================================================
 :SUBFLOW_MENU
 cls
 echo ============================================================
-echo 🛠️ Dev 城鎮子流程獨立測試選單 (--subflow)
+echo Dev 城鎮子流程獨立測試選單 (--subflow)
 echo ============================================================
 echo  1. 神秘寶箱 (chest):                     --backend --subflow chest
 echo  2. 抽英雄招募 (hero_draw):               --backend --subflow hero_draw
@@ -119,11 +108,15 @@ if "%sub_choice%"=="4" set custom_args=--backend --subflow jewelry_workshop
 if "%sub_choice%"=="5" set custom_args=--backend --subflow bulletin_board
 if "%sub_choice%"=="6" set custom_args=--backend --subflow lord_boss
 if "%sub_choice%"=="7" set custom_args=--backend --subflow chest blood_altar jewelry_workshop
-if "%sub_choice%"=="8" (
-    set "custom_subflow="
-    set /p custom_subflow="請輸入 subflow 名稱 (例如 blood_altar lord_boss): "
-    set custom_args=--backend --subflow !custom_subflow!
-)
+if "%sub_choice%"=="8" goto CUSTOM_SUBFLOW_INPUT
+
+goto RUN_SCRIPT
+
+:CUSTOM_SUBFLOW_INPUT
+set "custom_subflow="
+set /p custom_subflow="請輸入 subflow 名稱 (例如 blood_altar lord_boss): "
+set custom_args=--backend --subflow %custom_subflow%
+goto RUN_SCRIPT
 
 :RUN_SCRIPT
 echo.
@@ -134,7 +127,6 @@ echo ------------------------------------------------------------
 echo [!] 執行結束。
 echo.
 
-:: 詢問是否重啟
 set "retry_choice="
 set /p retry_choice="[?] 是否要重新啟動腳本？(直接 Enter 鍵重新啟動，輸入 Q 退出): "
 
