@@ -9,7 +9,9 @@ class TestBagCleaningDualModeBehavior(unittest.TestCase):
         self.mock_machine.STATE_BATTLE = "BATTLE"
         self.mock_machine.STATE_NAVIGATING = "NAVIGATING"
         self.mock_machine.STATE_BAG_CLEANING = "BAG_CLEANING"
+        self.mock_machine.bag_opened_clicked = True
         self.mock_machine.config = {}
+
 
         self.handler = BagCleaningHandler(self.mock_machine)
         self.handler.matcher = MagicMock()

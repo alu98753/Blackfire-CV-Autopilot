@@ -2169,8 +2169,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.handle(fake_img, rect)
 
         self.mock_mouse.click.assert_called_once_with(800, 200)
-        self.assertTrue(self.state_machine.need_blood_altar)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertTrue(self.state_machine.pending_town_subflows)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
 
     @patch('os.path.exists')
     def test_blood_altar_returns_to_dungeon_after_sacrifice(self, mock_exists):
