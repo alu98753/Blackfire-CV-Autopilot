@@ -27,3 +27,16 @@
 3. **Result (結果)**: 成效與測試驗證結果。
 4. **So What (核心價值)**: 提煉出最核心的工程價值。
 5. **Influence (影響)**: 對後續架構與其他模組的借鑑。
+
+---
+
+## 4. 通用卡片/彈窗局部比對與 Scale 視務規範 (Scoped Crop & Scale Guidelines) 🎯
+1. **禁止全螢幕盲目比對 (Scoped Crop Only)**：
+   - 涉及卡片狀態（如冷卻木牌 `cooldown_left.png` / `cooldown_right.png`）或大彈窗內部按鈕（如 `free_treasure.png` 內的 `free.png`）比對時，**絕對禁止直接對全螢幕 `screen_img` 進行全局掃描**。
+   - 必須先透過範本匹配取得主體（卡片或彈窗）中心座標與邊界，切割局部區域 `crop = screen_img[y1:y2, x1:x2]` 後，僅在 `crop` 內部進行木牌比對、按鈕定位或 OCR 解析。
+2. **解析度 Scale 自適應 (Template Scale Adaptation)**：
+   - 在計算卡片/彈窗裁切邊界時，必須考量不同遊戲視窗尺寸與解析度縮放。
+   - 透過 `scale_x = w / base_w` 縮放範本寬高 `t_w, t_h`，避免因螢幕縮放導致裁切座標偏離或木牌/按鈕漏檢。
+3. **無木牌預先防呆機制 (Pre-Click Sign Verification)**：
+   - 比對出 `cooldown_left.png` 或 `cooldown_right.png` ➔ 代表冷卻中，啟動 OCR 解析剩餘時間。
+   - **無木牌** ➔ 代表可挑戰，方可發射點擊。
