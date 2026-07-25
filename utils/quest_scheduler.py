@@ -148,7 +148,8 @@ class QuestScheduler:
         scheduler = cls()
         unknown_titles = []
 
-        for q_title in accepted_quests:
+        sorted_quests = mapper.sort_quests(accepted_quests)
+        for q_title in sorted_quests:
             if q_title:
                 task_node = mapper.parse_quest(q_title)
                 if task_node is not None:

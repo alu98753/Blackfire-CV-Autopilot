@@ -260,6 +260,17 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
                 self.assertIn("navigation_path", cfg)
                 self.assertIn(cfg["stage_entry"], cfg["navigation_path"])
 
+    def test_from_daily_status_applies_four_tier_sorting(self):
+        """
+        [防呆門禁測試] 驗證由亂序的 accepted_quests (包含沙蟲 L4, 森林枷鎖, 蛙人 L5)
+        經由 from_daily_status 建立的 QuestScheduler 會自動進行四階梯排序：
+        1. 清除蛙人 (Level 5 確定性) ➔ 2. 清除沙蟲 (Level 4 確定性) ➔ 3. 破除森林的枷鎖 (Banner Verify)
+        """
+        unordered_input = ["清除沙蟲", "破除森林的枷鎖", "清除蛙人"]
+        scheduler = QuestScheduler.from_daily_status(unordered_input)
+        titles_in_queue = [t.quest_title for t in scheduler.tasks]
+        self.assertEqual(titles_in_queue, ["清除蛙人", "清除沙蟲", "破除森林的枷鎖"])
+
 
 if __name__ == "__main__":
     unittest.main()
