@@ -23,6 +23,7 @@ class TestStateMachineLogic(unittest.TestCase):
         def patched_mock_call(*args, **kwargs):
             kwargs.pop('check_brightness', None)
             kwargs.pop('brightness_threshold', None)
+            kwargs.pop('quiet', None)
             return orig_call(*args, **kwargs)
         self.mock_matcher.match._mock_call = patched_mock_call
         
