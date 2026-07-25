@@ -260,6 +260,9 @@ SUBFLOW_CONFIGS = {
                 "Warcraft_Fang": False,
                 "lizard_skin": True,
                 "scrap": True,
+                "Frog_Skin": True,
+                "Purple_Spore": True,
+                "Slime_Mucus": True,
             },
             "green": {
                 "The_cloth_wrapped_around_the_dead": True,
