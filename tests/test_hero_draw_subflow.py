@@ -35,7 +35,7 @@ class TestHeroDrawSubflow(unittest.TestCase):
         self.mock_machine.mouse.click.assert_called_once_with(100, 100)
 
     def test_handler_full_recruitment_flow(self):
-        """測試：完整的進入酒館 ➔ 免費招募 ➔ 點擊確認 ➔ 點擊退出 ➔ 寫入 DailyManager"""
+        """測試：完整的進入酒館 ➔ 免費招募 ➔ 點擊招募 (RECRUITED.png) ➔ 點擊確認 ➔ 點擊退出 ➔ 寫入 DailyManager"""
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
@@ -44,6 +44,8 @@ class TestHeroDrawSubflow(unittest.TestCase):
                 return ((200, 200), 0.85)
             if template == "town_building/Tavern/free_recruitment.png":
                 return ((300, 300), 0.85)
+            if template == "town_building/Tavern/RECRUITED.png":
+                return ((350, 350), 0.85)
             if template in ["common/confirm.png", "common/ok.png"]:
                 return ((400, 400), 0.85)
             if template in ["common/quit.png", "town_building/exitfromhouse_and_to_town.png"]:
@@ -63,19 +65,26 @@ class TestHeroDrawSubflow(unittest.TestCase):
             self.handler.last_action_time = 0.0
             res2 = self.handler.handle(mock_img, rect)
             self.assertTrue(res2)
-            self.assertEqual(self.handler.step_phase, "RECRUITED")
+            self.assertEqual(self.handler.step_phase, "CLICKED_FREE_RECRUITMENT")
             self.mock_machine.mouse.click.assert_called_with(300, 300)
 
-            # 3. Step 3: RECRUITED 點擊 confirm.png
+            # 3. Step 3: CLICKED_FREE_RECRUITMENT 點擊 RECRUITED.png (專用「招募」按鈕)
             self.handler.last_action_time = 0.0
             res3 = self.handler.handle(mock_img, rect)
             self.assertTrue(res3)
-            self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
+            self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+            self.mock_machine.mouse.click.assert_called_with(350, 350)
 
-            # 4. Step 4: ALL_DONE_EXITING 點擊 quit.png 退出並彈出下一任務
+            # 4. Step 4: WAITING_CONFIRM 點擊 confirm.png
             self.handler.last_action_time = 0.0
             res4 = self.handler.handle(mock_img, rect)
             self.assertTrue(res4)
+            self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
+
+            # 5. Step 5: ALL_DONE_EXITING 點擊 quit.png 退出並彈出下一任務
+            self.handler.last_action_time = 0.0
+            res5 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res5)
             self.mock_daily_manager.record_subflow_completed.assert_called_with("hero_draw")
             self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 

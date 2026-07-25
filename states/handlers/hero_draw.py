@@ -76,7 +76,6 @@ class HeroDrawHandler(BaseStateHandler):
         # 3. ENTERED_TAVERN 階段：精確比對免費招募按鈕 (free_recruitment.png)
         elif self.step_phase == "ENTERED_TAVERN":
             if os.path.exists(os.path.join("templates", recruitment_btn)):
-                # 門檻設為 0.83 並要求相對亮度 >= 0.70，徹底排除其他相似頭盔 (普通/傳奇/兌換招募)
                 pos_free, conf_free = self.matcher.match(
                     screen_img, 
                     recruitment_btn, 
@@ -87,7 +86,8 @@ class HeroDrawHandler(BaseStateHandler):
                     logging.info(f"🍺 [抽英雄] 於酒館精確匹配到免費招募按鈕 [{recruitment_btn}] [{conf_free:.4f}]，進行點擊！")
                     self.mouse.click(left + pos_free[0], top + pos_free[1])
                     self.last_action_time = now
-                    self.step_phase = "RECRUITED"
+                    self.step_phase = "CLICKED_FREE_RECRUITMENT"
+                    self.not_found_count = 0
                     time.sleep(0.3)
                     return True
 
@@ -98,13 +98,34 @@ class HeroDrawHandler(BaseStateHandler):
                 self.last_action_time = now
                 return True
 
-        # 4. RECRUITED 階段：點擊領取/招募確認按鈕 ("招募" 彈窗按鈕)
-        elif self.step_phase == "RECRUITED":
-            for confirm_template in ["town_building/Tavern/RECRUITED.png", "common/confirm.png", "common/ok.png"]:
+        # 4. CLICKED_FREE_RECRUITMENT 階段：僅配對「招募」按鈕 (RECRUITED.png)
+        elif self.step_phase == "CLICKED_FREE_RECRUITMENT":
+            recruited_template = "town_building/Tavern/RECRUITED.png"
+            if os.path.exists(os.path.join("templates", recruited_template)):
+                pos_r, conf_r = self.matcher.match(screen_img, recruited_template, threshold=0.75)
+                if pos_r:
+                    logging.info(f"🍺 [抽英雄] 於彈窗中發現專用「招募」按鈕 [{recruited_template}] [{conf_r:.4f}]，進行點擊！")
+                    self.mouse.click(left + pos_r[0], top + pos_r[1])
+                    self.last_action_time = now
+                    self.step_phase = "WAITING_CONFIRM"
+                    self.not_found_count = 0
+                    time.sleep(0.3)
+                    return True
+
+            self.not_found_count += 1
+            if self.not_found_count >= 3:
+                logging.info("🍺 [抽英雄] 未發現專用招募按鈕，直接進入確認檢查階段...")
+                self.step_phase = "WAITING_CONFIRM"
+                self.last_action_time = now
+                return True
+
+        # 5. WAITING_CONFIRM 階段：點擊獲得英雄確認/確定按鈕 (confirm.png / ok.png)
+        elif self.step_phase == "WAITING_CONFIRM":
+            for confirm_template in ["common/confirm.png", "common/ok.png"]:
                 if os.path.exists(os.path.join("templates", confirm_template)):
                     pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
                     if pos_c:
-                        logging.info(f"🍺 [抽英雄] 發現招募確認按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊...")
+                        logging.info(f"🍺 [抽英雄] 發現獲得英雄確認按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊...")
                         self.mouse.click(left + pos_c[0], top + pos_c[1])
                         self.last_action_time = now
                         time.sleep(0.3)
