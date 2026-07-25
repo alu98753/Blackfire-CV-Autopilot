@@ -170,6 +170,72 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         # 斷言 daily pipeline 被重新動態排程，任務順延切換，config 已不再是原本冷卻中的森林迷宮
         self.assertNotIn("森林迷宮", sm.config.get("name", ""))
 
+    def test_tier1_resume_after_partial_completion(self):
+        """[Tier 1 檢驗] 驗證城鎮速領中途斷開重新啟動時，會自動接續剩餘未完成項目 (如只留 blood_altar)"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        pending = self.daily_mgr.get_pending_town_subflows()
+        self.assertEqual(pending, ["blood_altar", "jewelry_workshop"])
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.evaluate_and_schedule_daily_pipeline()
+        self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop"])
+        self.assertEqual(sm.current_state, sm.STATE_BLOOD_ALTAR)
+
+    def test_tier2_boss_preemption_over_tier3_and_tier4(self):
+        """[Tier 2 檢驗] 驗證即使在 Tier 3/4 刷關期間，只要 Boss CD 結束且未滿 5 次，必定搶先插隊"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        sm.attach_quest_scheduler(scheduler)
+
+        # 模擬原本正處於 Tier 3 懸賞戰鬥
+        sm.transition_to(sm.STATE_BATTLE)
+
+        # 模擬 Lord Boss 剛冷卻完畢 (未滿5次)
+        now_ts = time.time()
+        self.daily_mgr.update_boss_cooldown("lord_spider", 0.0, now_ts=now_ts)
+
+        # 戰鬥結束回到大廳重新評估
+        sm.evaluate_and_schedule_daily_pipeline()
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
+    def test_tier4_fallback_mix_mode_and_repreemption_by_tier2(self):
+        """[Tier 4 檢驗] 驗證懸賞全清且 Boss 滿次時退守 Mix 模式，當 Boss 次數未滿且 CD 到時可再次插隊"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+
+        # 設蜘蛛今日 5 次全滿
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        bosses["lord_spider"]["today_count"] = 5
+        bosses["lord_spider"]["completed_today"] = True
+
+        # 設惡靈 4 次且處於冷卻中
+        now_ts = time.time()
+        bosses["lord_spectre"]["today_count"] = 4
+        bosses["lord_spectre"]["completed_today"] = False
+        bosses["lord_spectre"]["last_fight_timestamp"] = now_ts
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        # 無懸賞任務
+        sm.quest_scheduler = None
+
+        # 評估應落入 Tier 4 Mix 退守
+        sm.evaluate_and_schedule_daily_pipeline()
+        self.assertEqual(sm.config["name"], "混合模式")
+
+        # 模擬 7201 秒後惡靈冷卻時間結束，再次評估時應被 Tier 2 搶占插隊打 Boss！
+        bosses["lord_spectre"]["last_fight_timestamp"] = now_ts - 7201.0
+        sm.evaluate_and_schedule_daily_pipeline()
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
 
 if __name__ == "__main__":
     unittest.main()
