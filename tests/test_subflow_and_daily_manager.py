@@ -211,6 +211,46 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 斷言 3: 狀態應正確轉移至 STATE_JEWELRY_WORKSHOP，絕對不能誤轉回 BLOOD_ALTAR！
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
 
+    def test_town_pipeline_flags_cleared_on_empty_queue(self):
+        """
+        [防死循環測試] 驗證城鎮流水線當最後一個子流程 (jewelry_workshop) 完成且佇列清空時，
+        pop_and_next_town_subflow 能 100% 清空 need_jewelry_workshop 殘留旗標，切回 NAVIGATING 後絕不再次死循環轉移回 JEWELRY_WORKSHOP！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+
+        sm.primary_config = {"name": "測試懸賞關卡", "type": "stage"}
+        sm.town_subflow_queue = ["jewelry_workshop"]
+        sm.pop_and_next_town_subflow()
+
+        # 斷言 1: 切換至 JEWELRY_WORKSHOP，旗標被立起
+        self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+        self.assertTrue(sm.need_jewelry_workshop)
+
+        # 模擬珠寶店完成，再次呼叫 pop_and_next_town_subflow() (此時佇列為空 [])
+        sm.pop_and_next_town_subflow()
+
+        # 斷言 2: 佇列已空，所有城鎮旗標必須被強制清零！
+        self.assertFalse(sm.need_jewelry_workshop)
+        self.assertFalse(sm.need_blood_altar)
+        self.assertFalse(sm.need_bag_cleaning)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+
+        # 模擬在大廳畫面看到 goback_town.png (全域掃描)
+        sm.matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.90) if name == "goback_town.png" else (None, 0.0)
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        sm.capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        sm.capturer.capture.return_value = fake_img
+
+        # 執行 step()，斷言絕不再次被拽回 STATE_JEWELRY_WORKSHOP 死循環！
+        sm.step()
+        self.assertNotEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+
     def test_match_mutually_exclusive_tabs_logic(self):
         """
         鎖定測試 1: 驗證 match_mutually_exclusive_tabs 的相對優勢算法 (margin 0.02, threshold 0.70)。

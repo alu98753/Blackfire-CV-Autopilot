@@ -877,7 +877,11 @@ class GameStateMachine:
                 self.transition_to(target_state)
                 return
 
-        # 若佇列已空！
+        # 若佇列已空！無條件強制重置所有城鎮子流程旗標，防止殘留旗標導致死循環
+        self.need_blood_altar = False
+        self.need_jewelry_workshop = False
+        self.need_bag_cleaning = False
+
         logging.info("=" * 60)
         logging.info("🎉 【城鎮流水線 - 全部完成】 🎉")
         if getattr(self, "is_dev_subflow_run", False):
