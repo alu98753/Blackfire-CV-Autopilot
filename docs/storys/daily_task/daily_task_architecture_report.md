@@ -94,3 +94,5 @@ flowchart TD
 - [x] **Phase 3: 端到端自動化閉環整合 (End-to-End Integration)**
   - [x] **佇列接管與調度**：領取任務後自動寫入 `user_data/daily_status.json` 的 `accepted_quests`，供 `QuestScheduler` 生成動態任務佇列。
   - [x] **持久化與單元測試閉環**：完全整合至 `DailyManager` 08:05 重置機制與單元測試套件 (100% PASS)。
+  - [ ] **佇列接管與調度**：領取任務後將產出的 `QuestScheduler` 動態佇列連結至 `GameStateMachine`。
+  - [ ] **任務完成交接**：每完成一個懸賞目標自動返城領獎並消費下一個懸賞任務。
