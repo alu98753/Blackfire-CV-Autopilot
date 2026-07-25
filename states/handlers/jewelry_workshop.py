@@ -85,6 +85,11 @@ class JewelryWorkshopHandler(BaseStateHandler):
         if screen_img is None:
             return
 
+        # 防死鎖門禁：若獨立模式或城鎮流水線已不需要珠寶加工廠出售 (need_jewelry_workshop == False) 且處於 INIT 階段，直接 return！
+        is_needed = getattr(self.machine, "need_jewelry_workshop", False)
+        if not is_needed and self.step_phase == "INIT":
+            return
+
         now = time.time()
         if now - self.last_action_time < 0.6:
             return
@@ -284,14 +289,15 @@ class JewelryWorkshopHandler(BaseStateHandler):
             return
 
         # 3.3 城鎮點擊珠寶加工廠建築 (Jewelry_workshop.png)
-        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-        pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65)
-        if pos_building and pos_door:
-            logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
-            self.mouse.click(left + pos_building[0], top + pos_building[1])
-            self.step_phase = "ENTERED_BUILDING"
-            self.last_action_time = now
-            return
+        if is_needed:
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+            pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
+            if pos_building and pos_door:
+                logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
+                self.mouse.click(left + pos_building[0], top + pos_building[1])
+                self.step_phase = "ENTERED_BUILDING"
+                self.last_action_time = now
+                return
 
         if pos_sell_out:
             logging.info(f"💎 [珠寶加工廠] 發現出售選單按鈕 [{sell_out_btn}]，點擊開啟選單...")

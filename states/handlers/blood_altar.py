@@ -67,6 +67,11 @@ class BloodAltarHandler(BaseStateHandler):
         if screen_img is None:
             return
 
+        # 防死鎖門禁：若獨立模式或城鎮流水線已不需要血之祭壇獻祭 (need_blood_altar == False) 且處於 INIT 階段，直接 return！
+        is_needed = getattr(self.machine, "need_blood_altar", False)
+        if not is_needed and self.step_phase == "INIT":
+            return
+
         now = time.time()
         if now - self.last_action_time < 0.6:
             return
@@ -261,11 +266,12 @@ class BloodAltarHandler(BaseStateHandler):
             return
 
         # 4.2 於城鎮點擊祭壇建築 (Blood_Altar.png)
-        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-        pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65)
-        if pos_building and pos_door:
-            logging.info(f"🩸 [血之祭壇] 於城鎮發現血之祭壇建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
-            self.mouse.click(left + pos_building[0], top + pos_building[1])
-            self.step_phase = "ENTERED_BUILDING"
-            self.last_action_time = now
-            return
+        if is_needed:
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+            pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
+            if pos_building and pos_door:
+                logging.info(f"🩸 [血之祭壇] 於城鎮發現血之祭壇建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
+                self.mouse.click(left + pos_building[0], top + pos_building[1])
+                self.step_phase = "ENTERED_BUILDING"
+                self.last_action_time = now
+                return

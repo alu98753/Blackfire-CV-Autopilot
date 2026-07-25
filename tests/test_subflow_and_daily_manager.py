@@ -506,6 +506,37 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertEqual(sm.config["keep_colors"], user_keep)
         self.assertEqual(sm.config["disassemble_colors"], user_dis)
 
+    def test_jewelry_and_altar_handlers_do_not_reenter_when_not_needed(self):
+        """
+        [防重複進出測試] 驗證：當 need_jewelry_workshop 或 need_blood_altar 為 False 且處於 INIT 階段時，
+        即使畫面上同時偵測到大門與建築圖片，處理器也 100% 阻斷點擊，絕不重複走進建築！
+        """
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+        from states.handlers.jewelry_workshop import JewelryWorkshopHandler
+        from states.handlers.blood_altar import BloodAltarHandler
+        import numpy as np
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.need_jewelry_workshop = False
+        sm.need_blood_altar = False
+
+        j_handler = JewelryWorkshopHandler(sm)
+        b_handler = BloodAltarHandler(sm)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        matcher.match.side_effect = lambda img, name, **kw: ((100, 100), 0.90)
+
+        # 執行 handler，斷言 mouse.click 呼叫次數為 0！
+        j_handler.handle(fake_img, rect)
+        b_handler.handle(fake_img, rect)
+        mouse.click.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
 
