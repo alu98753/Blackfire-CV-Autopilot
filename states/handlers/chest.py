@@ -1,4 +1,5 @@
 import os
+import cv2
 import time
 import logging
 from states.handlers.base import BaseStateHandler
