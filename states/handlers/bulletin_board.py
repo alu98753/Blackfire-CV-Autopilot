@@ -1,6 +1,7 @@
 import time
 import os
 import logging
+import cv2
 import numpy as np
 from states.handlers.base import BaseStateHandler
 from utils.quest_ocr_extractor import QuestOCRExtractor
@@ -202,17 +203,18 @@ class BulletinBoardHandler(BaseStateHandler):
                     text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
                     
                     # 💾 保存視覺化偵錯圖 (debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png)
-                    try:
-                        cv2.imwrite("debug_bulletin_board_roi.png", text_roi)
-                        debug_full = screen_img.copy()
-                        # 紅框: task.png 錨點圖示
-                        cv2.rectangle(debug_full, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
-                        # 綠框: 送交 EasyOCR 辨識之標題 ROI 區域
-                        cv2.rectangle(debug_full, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), (0, 255, 0), 2)
-                        cv2.imwrite("debug_bulletin_board_ocr.png", debug_full)
-                        logging.info(f"📸 [懸賞告示牌 Debug] 已將 OCR 文字裁切區域寫入 debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png (ROI: X=[{crop_x}:{crop_x+crop_w}], Y=[{crop_y}:{crop_y+crop_h}])")
-                    except Exception as ex:
-                        pass
+                    if isinstance(screen_img, np.ndarray):
+                        try:
+                            cv2.imwrite("debug_bulletin_board_roi.png", text_roi)
+                            debug_full = screen_img.copy()
+                            # 紅框: task.png 錨點圖示
+                            cv2.rectangle(debug_full, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
+                            # 綠框: 送交 EasyOCR 辨識之標題 ROI 區域
+                            cv2.rectangle(debug_full, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), (0, 255, 0), 2)
+                            cv2.imwrite("debug_bulletin_board_ocr.png", debug_full)
+                            logging.info(f"📸 [懸賞告示牌 Debug] 已將 OCR 文字裁切區域寫入 debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png (ROI: X=[{crop_x}:{crop_x+crop_w}], Y=[{crop_y}:{crop_y+crop_h}])")
+                        except Exception as ex:
+                            logging.warning(f"⚠️ [懸賞告示牌 Debug] 保存圖片時發生異常: {ex}")
 
                     title_name = extractor._ocr_crop(text_roi)
                     if title_name and title_name not in self.accepted_quest_titles:
