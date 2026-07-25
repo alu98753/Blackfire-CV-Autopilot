@@ -41,8 +41,12 @@ class DailyManager:
     支援每日 08:05 自動重置、各 Boss 獨立 5 次上限與 2 小時 CD 計算。
     """
     def __init__(self, data_dir="user_data", status_file="daily_status.json", reset_hour=8, reset_minute=5):
-        self.data_dir = data_dir
-        self.file_path = os.path.join(data_dir, status_file)
+        if os.path.isabs(status_file):
+            self.file_path = status_file
+            self.data_dir = os.path.dirname(status_file)
+        else:
+            self.data_dir = data_dir
+            self.file_path = os.path.join(data_dir, status_file)
         self.reset_hour = reset_hour
         self.reset_minute = reset_minute
         self.status = {}
@@ -79,6 +83,11 @@ class DailyManager:
                 self.status = json.loads(json.dumps(DEFAULT_DAILY_STATUS))
         else:
             self.status = json.loads(json.dumps(DEFAULT_DAILY_STATUS))
+            self.status["last_daily_reset_date"] = self.get_today_reset_tag()
+            self.save_status()
+
+        if not self.status.get("last_daily_reset_date"):
+            self.status["last_daily_reset_date"] = self.get_today_reset_tag()
             self.save_status()
 
     def save_status(self):
@@ -125,12 +134,12 @@ class DailyManager:
         if not force and now_ts < self.next_reset_timestamp:
             return False
 
-        # 3. 超過時間戳，觸發重置並重新預算下一個 08:05 時間戳
+        # 3. 超過時間戳，觸發重置並重新預算下一天時間戳
         now_dt = datetime.fromtimestamp(now_ts)
         current_tag = self.get_today_reset_tag(now_dt)
         last_tag = self.status.get("last_daily_reset_date", "")
 
-        logging.info(f"🌅 [DailyManager] 偵測到跨越 08:05 重置線 ({last_tag} ➔ {current_tag})！進行日常任務清零。")
+        logging.info(f"🌅 [DailyManager] 偵測到跨越每日重置線 ({last_tag} ➔ {current_tag})！進行日常任務清零。")
         self.status["last_daily_reset_date"] = current_tag
 
         subflows = self.status.get("subflows", {})
