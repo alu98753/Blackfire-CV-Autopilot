@@ -512,10 +512,12 @@ def init_state_machine_system(args, config):
         state_machine.is_dev_subflow_run = True
         state_machine.start_subflow_queue(args.subflow)
 
-    # 懸賞任務模式：載入 accepted_quests 並掛載 QuestScheduler
+    # 每日任務主模式：載入 accepted_quests、掛載 QuestScheduler 並啟動 Daily Master Pipeline 全域流水線
     if getattr(args, "mode", None) == "daily":
         quest_scheduler = daily_manager.load_quest_scheduler()
         state_machine.attach_quest_scheduler(quest_scheduler)
+        state_machine.evaluate_and_schedule_daily_pipeline()
+
 
 
 

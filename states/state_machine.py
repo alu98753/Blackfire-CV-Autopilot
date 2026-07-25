@@ -816,7 +816,50 @@ class GameStateMachine:
             logging.info("重置旗標並回復原模式續行...")
         logging.info("=" * 60)
 
+        # 全域每日大流水線自動排程檢查
+        if self.daily_manager:
+            scheduled = self.evaluate_and_schedule_daily_pipeline()
+            if scheduled:
+                return
+
         next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
         self.transition_to(next_st)
+
+    def evaluate_and_schedule_daily_pipeline(self):
+        """
+        全域每日大流水線動態調度器 (Daily Master Pipeline Scheduler)。
+        依據四階梯全域優先級自動判斷與發起：
+        - Tier 1: 一極優先 (每日一次性城鎮速領: chest ➔ hero_draw ➔ blood_altar + jewelry_workshop)
+        - Tier 2: 二極優先 (領主 Boss 討伐 lord_boss 計時器調度，優先級 > bulletin_board)
+        - Tier 3: 三極優先 (懸賞告示牌與動態任務 bulletin_board)
+        - Tier 4: 四極退守 (預設 mix 模式: 冰雪洞窟 + 關卡 6-1)
+        """
+        if not self.daily_manager:
+            return False
+
+        # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar)
+        pending_town = self.daily_manager.get_pending_town_subflows()
+        if pending_town:
+            logging.info(f"🏛️ [Daily Master Pipeline] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
+            self.start_subflow_queue(pending_town)
+            return True
+
+        # 2. 檢查 Tier 2 領主 Boss 討伐 (lord_boss)
+        if self.daily_manager.has_available_lord_boss():
+            avail_bosses = self.daily_manager.get_available_lord_bosses()
+            logging.info(f"⚔️ [Daily Master Pipeline] 觸發 Tier 2 領主 Boss 討伐 (可用 Boss: {avail_bosses}) ➔ 優先插隊討伐！")
+            self.start_subflow_queue(["lord_boss"])
+            return True
+
+        # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
+        if self.quest_scheduler:
+            if not self.quest_scheduler.is_all_completed():
+                advance_res = self.check_and_advance_quest_target()
+                return not advance_res
+
+        # 4. 退守 Tier 4 Mix 模式 (冰雪洞窟 + 關卡 6-1)
+        self.apply_mix_fallback_config()
+        return False
+
 
 
