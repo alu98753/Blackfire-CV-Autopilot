@@ -191,9 +191,9 @@ TASK_BANNER_OCR_OFFSET = {
 # 相對於卷軸圖示 (task.png) 右上角的偏移與框大小 (使用者可自由微調)
 BULLETIN_BOARD_OCR_OFFSET = {
     "offset_x": 5,      # X 軸水平右移像素
-    "offset_y": -5,     # Y 軸垂直上移像素 (負數為向上)
+    "offset_y": -10,     # Y 軸垂直上移像素 (負數為向上)
     "box_width": 360,   # 裁切框寬度 (像素)
-    "box_height": 40,   # 裁切框高度 (像素)
+    "box_height": 57,   # 裁切框高度 (像素)
 }
 
 

@@ -49,8 +49,15 @@ def diagnose_bulletin_board():
             print("  ⚠️ 未辨識到任何 task.png 錨點。")
             continue
 
+        # 專精優化：過濾只保留螢幕左半邊 (cx < w_img // 2) 的 task.png 錨點
+        anchors = [a for a in anchors if a[0] < w_img // 2]
+        if not anchors:
+            print("  ⚠️ 左半邊未辨識到任何 task.png 錨點。")
+            continue
+
         # 按 Y 座標排序
         anchors = sorted(anchors, key=lambda a: a[1])
+
         debug_img = img.copy()
 
         temp_img = matcher._load_template("town_building/bulletin_board/task.png")
