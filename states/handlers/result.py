@@ -121,7 +121,7 @@ class ResultHandler(BaseStateHandler):
                                 
                         next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
                         self.machine.transition_to(next_state)
-                        time.sleep(0.35)
+                        time.sleep(0.5)
                         return True
 
         # 2. 第二順位：比對「繼續」過渡按鈕 (推進結算流程，使離場按鈕或下一次畫面顯現)
