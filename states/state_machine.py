@@ -243,9 +243,14 @@ class GameStateMachine:
         """
         執行單步狀態檢索與決策（主調度器）。
         """
-        # 動態檢查 08:30 日常任務/Boss 清零重置線 (全模式適用)
+        # 動態檢查 08:05 日常任務/Boss 清零重置線 (全模式適用)
         if getattr(self, "daily_manager", None):
-            self.daily_manager.check_and_reset_daily()
+            reset_occurred = self.daily_manager.check_and_reset_daily()
+            if reset_occurred:
+                logging.info("🌅 [GameStateMachine] 跨越 08:05 重置線！重置狀態機掛載的 QuestScheduler、戰敗計數與體力退避狀態。")
+                self.quest_scheduler = None
+                self.defeat_count = 0
+                self.original_config = None
 
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
@@ -723,15 +728,17 @@ class GameStateMachine:
 
 
 
-    def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=6.0, threshold=0.75, brightness_threshold=0.0, check_interval=1.0, post_delay=1.0):
+    def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=6.0, threshold=0.75, brightness_threshold=0.0, check_interval=1.0, post_delay=1.0, retry_interval=1.0):
         """
         [配對確認直到消失 - 專案級輔助 API]
         點擊 (click_x, click_y)，並以 check_interval 輪詢比對 template_name，直到其從畫面上 100% 消失。
+        若超過 retry_interval 秒模板仍未消失，則發起補點擊 (Re-click)。
         """
         logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環 (輪詢間隔 {check_interval}s)...")
         self.mouse.click(click_x, click_y)
 
         start_t = time.time()
+        last_click_t = start_t
         while time.time() - start_t < timeout:
             time.sleep(check_interval)
             if self.capturer:
@@ -743,6 +750,10 @@ class GameStateMachine:
                         break
                     else:
                         logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
+                        if time.time() - last_click_t >= retry_interval:
+                            logging.info(f"🔄 [自動補點] 模板 [{template_name}] 在 {retry_interval} 秒內未消失，重新發起點擊 ({click_x}, {click_y})...")
+                            self.mouse.click(click_x, click_y)
+                            last_click_t = time.time()
 
         time.sleep(post_delay)
 

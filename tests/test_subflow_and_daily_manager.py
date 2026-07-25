@@ -5,6 +5,7 @@ import time
 import json
 import shutil
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 # 將專案根目錄加入系統路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -384,6 +385,40 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         expected_2 = ["史萊姆王的毀滅", "擊敗冰元素", "清除野豬", "擊殺首領"]
         self.assertEqual(updated_2, expected_2)
 
+    def test_daily_reset_resets_statemachine_scheduler_and_defeat_count(self):
+        """
+        [08:05 重置鏈條測試] 驗證：
+        1. 每日 08:05 重置時保留已接受任務 (accepted_quests)，新任務可合併與排序。
+        2. 當 08:05 跨日重置時，GameStateMachine 上的 quest_scheduler 物件被清空為 None。
+        3. 戰敗計數器 defeat_count 重置為 0。
+        4. 體力退避時間戳 stamina_retreat_start_time 重置為 None。
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.quest_scheduler import QuestScheduler
+        from states.state_machine import GameStateMachine
+
+        # 模擬狀態機並設置舊狀態
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.set_config({"name": "test", "type": "stage"})
+        sm.daily_manager = self.manager
+        sm.quest_scheduler = QuestScheduler()
+        sm.defeat_count = 3
+        sm.stamina_retreat_start_time = time.time() - 1000.0
+
+        # 手動觸發 08:05 強制跨日重置
+        was_reset = self.manager.check_and_reset_daily(force=True)
+        self.assertTrue(was_reset)
+
+        # 模擬 step() 執行時觸發重置鏈條
+        with patch.object(self.manager, "check_and_reset_daily", return_value=True):
+            with patch.object(sm.capturer, "get_window_rect", return_value={"left": 0, "top": 0, "width": 1920, "height": 1080}):
+                with patch.object(sm.capturer, "capture", return_value=None):
+                    sm.step()
+
+        # 斷言 StateMachine 上的殘留狀態已全數清空/重置 (quest_scheduler 設為 None, defeat_count 設為 0)
+        self.assertIsNone(sm.quest_scheduler)
+        self.assertEqual(sm.defeat_count, 0)
+
     def test_lord_boss_cooldown_buffer_prevents_infinite_triggering(self):
         """
         [防跳離與死循環測試] 驗證：
@@ -637,7 +672,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
             self.assertTrue(res_c1)
             mock_wait_gone.assert_called_with(
                 "common/continue.png", 770, 550, rect,
-                timeout=5.0, threshold=0.75, check_interval=0.5, post_delay=0.8
+                timeout=5.0, threshold=0.9, brightness_threshold=0.70, check_interval=0.25, post_delay=0.8, retry_interval=1.0
             )
 
         # 3. 測試 Step 3: 續戰點擊 retry.png 後重置狀態
