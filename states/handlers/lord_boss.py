@@ -15,17 +15,18 @@ class LordBossHandler(BaseStateHandler):
         super().__init__(machine)
         self.step_phase = "INIT"
         self.current_target_boss = None
+        self.last_card_click_time = 0.0
 
     def reset_state(self):
         """狀態重置與子流程生命週期初始化"""
         self.step_phase = "INIT"
         self.current_target_boss = None
+        self.last_card_click_time = 0.0
 
     def _check_card_cooldown_ocr(self, screen_img, pos_b, temp_path, max_allowed_seconds=7200.0):
         """
         [ Clean Code 專比單張卡片 + Scale 自適應 ]
-        依據匹配出的 Boss 單張卡片範本 (如 lord_spectre.png / lord_spider.png) 尺寸，
-        在螢幕截圖中精確切出該「單張卡片區域」(整張 single_card_img，不進行人為比例硬裁)，
+        依據匹配出的 Boss 單張卡片範本尺寸，在螢幕截圖中精確切出該「單張卡片區域」，
         並傳遞當前 scale 供 detect_cooldown_sign_and_time 進行等比例木牌比對。
         """
         try:
@@ -33,7 +34,6 @@ class LordBossHandler(BaseStateHandler):
             if not full_path or not os.path.exists(full_path):
                 return None, None
 
-            # 優先透過 matcher 的 _load_template 取得已套用 template_scale 之單張卡片範本尺寸
             t_img = self.matcher._load_template(temp_path) if hasattr(self, "matcher") and self.matcher else cv2.imread(full_path)
             if t_img is None:
                 return None, None
@@ -42,7 +42,6 @@ class LordBossHandler(BaseStateHandler):
             h, w = screen_img.shape[:2]
             cx, cy = pos_b
 
-            # 依單張卡片縮放後尺寸，精確切割該卡片於螢幕上的完整畫面
             x1 = max(0, cx - t_w // 2)
             x2 = min(w, cx + t_w // 2)
             y1 = max(0, cy - t_h // 2)
@@ -65,6 +64,7 @@ class LordBossHandler(BaseStateHandler):
         return None, None
 
     def handle(self, screen_img, rect):
+        now = time.time()
         dm = getattr(self.machine, "daily_manager", None)
         avail_bosses = dm.get_available_lord_bosses() if dm else []
 
@@ -101,18 +101,40 @@ class LordBossHandler(BaseStateHandler):
                     time.sleep(0.3)
                     return True
 
-        # 3. 頁籤已開啟 (Lord_entry_after)，依序選擇最高優先權可用 Boss 發起戰鬥
+        # 3. 檢查「開始戰鬥」按鈕 (stages/start.png)，僅於已選取 Boss 時優先點擊
+        start_btn = self.machine.config.get("start_btn", "stages/start.png")
+        if self.current_target_boss and os.path.exists(os.path.join("templates", start_btn)):
+            pos_start, conf_start = self.matcher.match(screen_img, start_btn, threshold=0.80)
+            if pos_start:
+                logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，轉移至 STATE_BATTLE 發起討伐 [{self.current_target_boss}]！")
+                self.mouse.click(rect["left"] + pos_start[0], rect["top"] + pos_start[1])
+                self.machine.current_lord_boss_key = self.current_target_boss
+                self.machine.transition_to(self.machine.STATE_BATTLE)
+                time.sleep(0.3)
+                return True
+
+        # 4. 若最近 1.5 秒內剛點擊過 Boss 卡片，冷卻等待進入戰鬥頁面，避免重複或連續點擊不同 Boss
+        if now - self.last_card_click_time < 1.5:
+            return True
+
+        # 5. 頁籤已開啟 (Lord_entry_after)，依序選擇可用 Boss 發起戰鬥
         bosses_config = self.machine.config.get("bosses", {})
-        selected_boss = None
 
         for boss_key in avail_bosses:
             b_cfg = bosses_config.get(boss_key, {})
             temp_path = b_cfg.get("template")
             if temp_path and os.path.exists(os.path.join("templates", temp_path)):
-                pos_b, conf_b = self.matcher.match(screen_img, temp_path, threshold=0.75)
+                pos_b, conf_b = self.matcher.match(screen_img, temp_path, threshold=0.78)
                 if pos_b:
                     b_name = b_cfg.get("name", boss_key)
                     max_cd = b_cfg.get("cooldown_seconds", 7200.0)
+                    
+                    # 過濾動畫尚未穩定的模糊卡片 (信心度需 >= 0.82)
+                    if conf_b < 0.82:
+                        logging.info(f"⌛ [首領討伐] 發現 Boss 卡片 [{b_name}] (信心度 {conf_b:.4f} < 0.82)，等待過場動畫穩定...")
+                        time.sleep(0.2)
+                        return True
+
                     logging.info(f"🔍 [首領討伐] 於畫面發現 Boss 卡片 [{b_name}] [{conf_b:.4f}]，檢查是否有冷卻木牌...")
                     
                     # 點擊前防護：專比單張卡片範本圖畫區，進行卡片木牌 / OCR 冷卻時間辨識
@@ -129,20 +151,16 @@ class LordBossHandler(BaseStateHandler):
                     logging.info(f"🎯 [首領討伐] 確認 Boss [{b_name}] 無冷卻木牌！進行點擊選擇討伐！")
                     self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                     self.current_target_boss = boss_key
-                    selected_boss = boss_key
-                    time.sleep(0.3)
-                    break
+                    self.last_card_click_time = now
 
-        # 4. 若成功選取到可點擊 Boss，檢查點擊進入戰鬥按鈕 (stages/start.png)
-        start_btn = self.machine.config.get("start_btn", "stages/start.png")
-        if os.path.exists(os.path.join("templates", start_btn)):
-            pos_start, conf_start = self.matcher.match(screen_img, start_btn, threshold=0.80)
-            if pos_start:
-                logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，轉移至 STATE_BATTLE 發起討伐！")
-                self.mouse.click(rect["left"] + pos_start[0], rect["top"] + pos_start[1])
-                self.machine.current_lord_boss_key = self.current_target_boss or selected_boss or avail_bosses[0]
-                self.machine.transition_to(self.machine.STATE_BATTLE)
-                time.sleep(0.3)
-                return True
+                    # 若畫面上已存在「開始戰鬥」按鈕 (stages/start.png)，直接發起戰鬥
+                    if os.path.exists(os.path.join("templates", start_btn)):
+                        pos_start, conf_start = self.matcher.match(screen_img, start_btn, threshold=0.80)
+                        if pos_start:
+                            logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，轉移至 STATE_BATTLE 發起討伐！")
+                            self.mouse.click(rect["left"] + pos_start[0], rect["top"] + pos_start[1])
+                            self.machine.current_lord_boss_key = boss_key
+                            self.machine.transition_to(self.machine.STATE_BATTLE)
+                    break
 
         return False
