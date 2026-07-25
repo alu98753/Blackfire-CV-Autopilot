@@ -115,6 +115,34 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         self.assertIn("Ice_entry.png", sm.config["navigation_path"][-1])
 
+    def test_dungeon_cooldown_reschedules_in_daily_mode(self):
+        """驗證當在 daily 模式下地下城 #4 冷卻時，不會原地等待，而是跳過冷卻地下城切換至下一個未冷卻懸賞任務"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+        self.daily_mgr.status["subflows"]["lord_boss"]["completed_today"] = True
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        sm.attach_quest_scheduler(scheduler)
+
+        # 模擬地下城 3 (index 3 神秘遺跡: 清除骷髏) 正在冷卻中
+        now_ts = time.time()
+        sm.dungeon_cooldowns[3] = now_ts + 600.0
+
+        # 在 daily 模式觸發動態重排
+        sm.evaluate_and_schedule_daily_pipeline()
+
+        # 斷言已自動跳過冷卻中的地下城 3 (神秘遺跡)，切換為下一個任務 (清除樹人 - 森林迷宮 index 2)
+        self.assertIn("森林迷宮", sm.config["name"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

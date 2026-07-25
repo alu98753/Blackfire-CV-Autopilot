@@ -495,7 +495,7 @@ class NavigationHandler(BaseStateHandler):
                         # 1. 優先檢查記憶體冷卻
                         cooldown_until = self.machine.dungeon_cooldowns.get(target_idx, 0.0)
                         if time.time() < cooldown_until:
-                            if self.machine.config.get("type") == "mix":
+                            if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                 self._switch_to_stage_or_back(screen_img, rect, f"指定副本 [{dungeon_names[target_idx]}] 處於冷卻中")
                                 return
                             if cooldown_until == float('inf'):
@@ -511,7 +511,7 @@ class NavigationHandler(BaseStateHandler):
                                 screen_img, scale, h_limit, w_limit, target_idx, visible_dungeons
                             )
                             if is_unavailable:
-                                if self.machine.config.get("type") == "mix":
+                                if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                     self._switch_to_stage_or_back(screen_img, rect, f"畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中")
                                     return
                                 time.sleep(1.0)
@@ -524,9 +524,10 @@ class NavigationHandler(BaseStateHandler):
                         self.machine.config = GAME_CONFIGS["collect_only"].copy()
                         self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
                         return
-                    if self.machine.config.get("type") == "mix":
+                    if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                         self._switch_to_stage_or_back(screen_img, rect, "地下城頁面偵測到所有地下城均在冷卻中")
                         return
+
                     logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
                     time.sleep(1.0)
                     return

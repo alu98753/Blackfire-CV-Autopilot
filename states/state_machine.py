@@ -219,6 +219,10 @@ class GameStateMachine:
         elif new_state == self.STATE_BACKPACK_FULL_SORTING:
             self.need_bag_cleaning = True
             self.handlers[new_state].screenshot_counter = 1
+        elif new_state in [self.STATE_NAVIGATING, self.STATE_COLLECT_ONLY]:
+            if self.is_daily_pipeline_active():
+                self.evaluate_and_schedule_daily_pipeline()
+
 
     def step(self):
         """

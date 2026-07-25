@@ -78,14 +78,20 @@ class ResultHandler(BaseStateHandler):
                 return True
 
 
-        # A2. 檢查離開戰鬥/結算退出按鈕 (在退避期間、背包滿需要清理，或領取時間到了需要去領體力/鑽石時，退出戰鬥回大廳)
+        is_daily = self.machine.is_daily_pipeline_active()
+        boss_available = False
+        if is_daily and getattr(self.machine, "daily_manager", None):
+            boss_available = self.machine.daily_manager.has_available_lord_boss()
+
         should_exit_battle = (
             self.machine.stamina_retreat_start_time is not None or
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
             (self.machine.enable_bread and self.machine.need_bread_collection) or
-            (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon())
+            (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
+            (is_daily and boss_available)
         )
+
         if should_exit_battle:
             if os.path.exists(os.path.join("templates", "exit_battle.png")):
                 pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.9)
