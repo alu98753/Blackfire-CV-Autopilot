@@ -14,5 +14,4 @@ from states.handlers.blood_altar import BloodAltarHandler
 from states.handlers.jewelry_workshop import JewelryWorkshopHandler
 from states.handlers.lord_boss import LordBossHandler
 from states.handlers.chest import ChestHandler
-
-
+from states.handlers.hero_draw import HeroDrawHandler

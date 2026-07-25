@@ -11,7 +11,12 @@
    - **狀態持久化與 08:05 重置**：透過 `DailyManager` 記錄 `chest` 的 `completed_today = True`（於 `user_data/daily_status.json` 中保存），每日 08:05 自動重置。
    - **連動佇列**：完成領取後自動呼叫 `pop_and_next_town_subflow()` 續行下一個城鎮任務。
 
-2. 抽英雄
+2. 抽英雄 (酒館免費招募 `hero_draw` / `tavern`)
+   - **進入酒館**：於城鎮掃描並點擊 `town_building/Tavern/Tavern.png` 進入酒館。
+   - **免費招募**：進入酒館後比對並點擊 `town_building/Tavern/free_recruitment.png` 進行免費招募。
+   - **領取與退出**：點擊 `common/confirm.png` / `common/ok.png` 確認領取 ➔ 點擊 `common/quit.png` / `exitfromhouse_and_to_town.png` 退出酒館。
+   - **狀態持久化與 08:05 重置**：透過 `DailyManager` 記錄 `hero_draw` 的 `completed_today = True`，每日 08:05 自動重置。
+   - **連動佇列**：招募完成後自動呼叫 `pop_and_next_town_subflow()` 續行下一個城鎮任務。
 
 3. 領血
 [Blood_Altar.png](file;file:///e%3A/Side_Project/BlackfireCrusade_tool/templates/town_building/Blood_Altar/Blood_Altar.png) 

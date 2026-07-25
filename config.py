@@ -244,6 +244,17 @@ SUBFLOW_CONFIGS = {
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
     },
+
+    # ------------------ 抽英雄模式 (酒館招募) ------------------
+    "hero_draw": {
+        "enabled": True,  # 抽英雄子流程開關
+        "name": "抽英雄",
+        "type": "hero_draw",
+        "building_btn": "town_building/Tavern/Tavern.png",
+        "recruitment_btn": "town_building/Tavern/free_recruitment.png",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
 }
 
 # ==================== 3. 統一匯出 (GAME_CONFIGS 向後完全相容) ====================

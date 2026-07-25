@@ -17,7 +17,8 @@ from states.handlers import (
     BloodAltarHandler,
     JewelryWorkshopHandler,
     LordBossHandler,
-    ChestHandler
+    ChestHandler,
+    HeroDrawHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -40,6 +41,8 @@ class GameStateMachine:
     STATE_JEWELRY_WORKSHOP = "JEWELRY_WORKSHOP"          # 珠寶加工廠出售流程
     STATE_LORD_BOSS = "LORD_BOSS"                        # 首領領主討伐流程
     STATE_CHEST = "CHEST"                                # 神秘寶箱 (開寶箱) 流程
+    STATE_HERO_DRAW = "HERO_DRAW"                        # 抽英雄 (酒館招募) 流程
+
 
     
     def __init__(self, capturer, matcher, mouse):
@@ -134,6 +137,7 @@ class GameStateMachine:
             self.STATE_JEWELRY_WORKSHOP: JewelryWorkshopHandler(self),
             self.STATE_LORD_BOSS: LordBossHandler(self),
             self.STATE_CHEST: ChestHandler(self),
+            self.STATE_HERO_DRAW: HeroDrawHandler(self),
         }
 
     @property
@@ -172,6 +176,7 @@ class GameStateMachine:
         STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
         STATE_LORD_BOSS: "lord_boss",
         STATE_CHEST: "chest",
+        STATE_HERO_DRAW: "hero_draw",
     }
 
     def _on_state_transition_sync_context(self, new_state):
@@ -662,7 +667,7 @@ class GameStateMachine:
         logging.info("🏛️ 【城鎮任務流水線 - 任務總覽儀表板】 🏛️")
         logging.info("=" * 60)
         for idx, flow_key in enumerate(queue, 1):
-            normalized_key = "chest" if flow_key == "mysterious_treasure" else flow_key
+            normalized_key = "hero_draw" if flow_key == "tavern" else ("chest" if flow_key == "mysterious_treasure" else flow_key)
             cfg = SUBFLOW_CONFIGS.get(normalized_key, {})
             name = cfg.get("name", normalized_key)
             is_enabled = cfg.get("enabled", True)
@@ -694,6 +699,8 @@ class GameStateMachine:
             next_flow = self.town_subflow_queue.pop(0)
             if next_flow == "mysterious_treasure":
                 next_flow = "chest"
+            elif next_flow == "tavern":
+                next_flow = "hero_draw"
 
             from config import SUBFLOW_CONFIGS, GAME_CONFIGS
             flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})

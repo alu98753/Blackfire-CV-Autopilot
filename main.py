@@ -359,7 +359,7 @@ def setup_mode_config(args):
     return config
 
 def setup_equipment_config(config):
-    if config["type"] in ["collect_only", "blood_altar", "jewelry_workshop", "chest", "lord_boss"]:
+    if config["type"] in ["collect_only", "blood_altar", "jewelry_workshop", "chest", "lord_boss", "hero_draw"]:
         config["keep_colors"] = []
         config["disassemble_colors"] = []
         return
