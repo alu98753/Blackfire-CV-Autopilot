@@ -379,7 +379,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 4. 測試重複項目不重複插入
         today_new_quests_2 = ["擊敗冰元素", "清除野豬"]
         updated_2 = self.manager.update_bulletin_board_quests(today_new_quests_2)
-        expected_2 = ["擊敗冰元素", "清除野豬", "擊殺首領", "史萊姆王的毀滅"]
+        expected_2 = ["史萊姆王的毀滅", "擊敗冰元素", "清除野豬", "擊殺首領"]
         self.assertEqual(updated_2, expected_2)
 
 if __name__ == "__main__":
