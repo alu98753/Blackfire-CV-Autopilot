@@ -74,16 +74,23 @@ class QuestOCRExtractor:
             x0 = cx - icon_w // 2
             y0 = cy - icon_h // 2
 
-            # 計算右側文字 ROI 範圍
-            crop_x = x0 + icon_w + 5
-            crop_y = max(0, y0 - 5)
-            crop_w = min(max(200, int(360 * scale)), w_img - crop_x)
-            crop_h = min(icon_h + 10, h_img - crop_y)
+            from config import BULLETIN_BOARD_OCR_OFFSET
+            off_x = BULLETIN_BOARD_OCR_OFFSET.get("offset_x", 5)
+            off_y = BULLETIN_BOARD_OCR_OFFSET.get("offset_y", -5)
+            box_w = BULLETIN_BOARD_OCR_OFFSET.get("box_width", 360)
+            box_h = BULLETIN_BOARD_OCR_OFFSET.get("box_height", 40)
+
+            # 計算右側文字 ROI 範圍 (相對於卷軸圖示右上角)
+            crop_x = max(0, x0 + icon_w + int(off_x * scale))
+            crop_y = max(0, y0 + int(off_y * scale))
+            crop_w = min(max(20, int(box_w * scale)), w_img - crop_x)
+            crop_h = min(max(10, int(box_h * scale)), h_img - crop_y)
 
             if crop_w <= 0 or crop_h <= 0:
                 continue
 
             text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+
 
             # 進行 OCR 辨識
             name = self._ocr_crop(text_roi, crop_top_half=True)
