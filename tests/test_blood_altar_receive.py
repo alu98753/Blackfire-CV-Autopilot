@@ -17,9 +17,9 @@ class TestBloodAltarReceive(unittest.TestCase):
         self.state_machine = GameStateMachine(
             capturer=self.mock_capturer,
             matcher=self.mock_matcher,
-            mouse=self.mock_mouse,
-            daily_manager=self.mock_daily_manager
+            mouse=self.mock_mouse
         )
+        self.state_machine.daily_manager = self.mock_daily_manager
 
     @patch('os.path.exists')
     def test_blood_altar_receive_daily_full_flow(self, mock_exists):
