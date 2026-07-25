@@ -48,6 +48,7 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
     try:
         if callable(ocr_reader) and not hasattr(ocr_reader, "readtext"):
             ocr_reader = ocr_reader()
+
         cd_cx = max_loc_cd[0] + cd_w // 2
         cd_cy = max_loc_cd[1] + cd_h // 2
 
@@ -61,11 +62,27 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
         ty1 = max(0, cd_cy - 18)
         ty2 = min(crop_img.shape[0], cd_cy + 12)
 
+        # 【DEBUG 可視化標記】在畫面/卡片上記錄木牌中心點(紅)與 OCR 裁剪框(綠)
+        try:
+            debug_match_img = crop_img.copy()
+            cv2.circle(debug_match_img, (cd_cx, cd_cy), 4, (0, 0, 255), -1)  # 紅點: 木牌中心
+            cv2.rectangle(debug_match_img, (tx1, ty1), (tx2, ty2), (0, 255, 0), 2)  # 綠框: OCR 裁剪框
+            cv2.imwrite("debug_cooldown_match.png", debug_match_img)
+            logging.info(f"📸 [DEBUG] 已將木牌中心與 OCR 裁剪框標記寫入 debug_cooldown_match.png (中心: {cd_cx}, {cd_cy})")
+        except Exception as draw_err:
+            logging.warning(f"⚠️ [DEBUG] 標記圖片寫入失敗: {draw_err}")
+
         time_crop = crop_img[ty1:ty2, tx1:tx2]
         if time_crop.size > 0:
             time_gray = cv2.cvtColor(time_crop, cv2.COLOR_BGR2GRAY)
             padded = cv2.copyMakeBorder(time_gray, 15, 15, 30, 30, cv2.BORDER_CONSTANT, value=159)
             resized_text = cv2.resize(padded, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+
+            try:
+                cv2.imwrite("debug_cooldown_ocr.png", resized_text)
+                logging.info(f"📸 [DEBUG] 已將送交 EasyOCR 之放大影像寫入 debug_cooldown_ocr.png (範圍 Y:[{ty1}:{ty2}], X:[{tx1}:{tx2}])")
+            except Exception as draw_err:
+                logging.warning(f"⚠️ [DEBUG] OCR 圖片寫入失敗: {draw_err}")
 
             if ocr_reader:
                 ocr_results = ocr_reader.readtext(resized_text, allowlist="0123456789:")
