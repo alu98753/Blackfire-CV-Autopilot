@@ -2219,6 +2219,33 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(handler.empty_blood_scan_count, 0)
         self.assertEqual(handler.last_action_time, 0.0)
 
+    @patch('os.path.exists', return_value=True)
+    def test_blood_altar_skips_free_claim_when_completed_today(self, mock_exists):
+        """
+        測試當 DailyManager 中 blood_altar 今日已完成 (completed_today=True) 時：
+        進入 BloodAltarHandler 會自動跳過點擊領血頁籤與領取按鈕！
+        """
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+
+        # 模擬 DailyManager 紀錄今日已完成
+        self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=True)
+
+        def mock_match_entry(img, name, **kw):
+            if name == "town_building/Blood_Altar/receive_entry.png":
+                return ((500, 200), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_entry
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+
+        # 驗證絕對沒有點擊領水頁籤
+        self.mock_mouse.click.assert_not_called()
+        self.assertNotEqual(handler.step_phase, "RECEIVE_TAB_OPEN")
+
+
     @patch('os.path.exists')
     def test_blood_altar_retrigger_cycle_integration(self, mock_exists):
         """

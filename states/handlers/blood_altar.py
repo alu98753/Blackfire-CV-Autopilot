@@ -239,19 +239,28 @@ class BloodAltarHandler(BaseStateHandler):
                 return
             return
 
+    def _is_blood_altar_claimed_today(self):
+        """檢查 DailyManager 中 blood_altar 是否今日已領取過免費血水"""
+        dm = getattr(self.machine, "daily_manager", None)
+        if dm and hasattr(dm, "is_subflow_completed"):
+            return dm.is_subflow_completed("blood_altar")
+        return False
+
         # =========================================================================
         # 4. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
         # =========================================================================
         # 4.1 檢查是否在建築物內部 (若尚未領取且看得到領水頁籤，優先點擊頁籤)
+        is_claimed_today = self.has_claimed_daily or self._is_blood_altar_claimed_today()
         pos_rec_entry, _ = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
         pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
-        if not self.has_claimed_daily and pos_rec_entry:
+
+        if not is_claimed_today and pos_rec_entry:
             logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}]，點擊切換至領血介面...")
             self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
             self.step_phase = "RECEIVE_TAB_OPEN"
             self.last_action_time = now
             return
-        elif not self.has_claimed_daily and pos_rec_daily and self.step_phase == "RECEIVE_TAB_OPEN":
+        elif not is_claimed_today and pos_rec_daily and self.step_phase == "RECEIVE_TAB_OPEN":
             logging.info(f"🩸 [血之祭壇] 已在領血介面，點擊每日領取按鈕 [{receive_daily_btn}]...")
             self.mouse.click(left + pos_rec_daily[0], top + pos_rec_daily[1])
             self.has_claimed_daily = True
@@ -262,7 +271,7 @@ class BloodAltarHandler(BaseStateHandler):
         pos_sac, conf_sac = self.matcher.match(screen_img, sacrifice_btn, threshold=0.85)
         pos_exit_init, conf_exit_init = self.matcher.match(screen_img, exit_building_btn, threshold=0.85)
         if pos_sac and pos_exit_init:
-            if not self.has_claimed_daily and pos_rec_entry:
+            if not is_claimed_today and pos_rec_entry:
                 logging.info(f"🩸 [血之祭壇] 已在建築物內部，優先點擊領水頁籤 [{receive_entry_btn}]...")
                 self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
                 self.step_phase = "RECEIVE_TAB_OPEN"
@@ -280,9 +289,10 @@ class BloodAltarHandler(BaseStateHandler):
             return
 
         if pos_sac:
-            if not self.has_claimed_daily and pos_rec_entry:
+            if not is_claimed_today and pos_rec_entry:
                 logging.info(f"🩸 [血之祭壇] 點擊領水頁籤 [{receive_entry_btn}]...")
                 self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
+
                 self.step_phase = "RECEIVE_TAB_OPEN"
             else:
                 logging.info(f"🩸 [血之祭壇] 點擊獻祭功能選單 [{sacrifice_btn}]...")
