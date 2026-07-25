@@ -651,6 +651,27 @@ class GameStateMachine:
                     self.mouse.click(btn_x, btn_y)
                     time.sleep(0.5)
 
+    def start_subflow_queue(self, queue):
+        """
+        初始化並啟動城鎮子流程佇列，並單次列印任務總覽儀表板。
+        """
+        from config import SUBFLOW_CONFIGS
+        self.town_subflow_queue = list(queue)
+
+        logging.info("=" * 60)
+        logging.info("🏛️ 【城鎮任務流水線 - 任務總覽儀表板】 🏛️")
+        logging.info("=" * 60)
+        for idx, flow_key in enumerate(queue, 1):
+            normalized_key = "chest" if flow_key == "mysterious_treasure" else flow_key
+            cfg = SUBFLOW_CONFIGS.get(normalized_key, {})
+            name = cfg.get("name", normalized_key)
+            is_enabled = cfg.get("enabled", True)
+            status_str = "🟢 待執行 (Enabled)" if is_enabled else "🔴 停用 (enabled=False)"
+            logging.info(f"  {idx}. [{flow_key}] {name:<12} : {status_str}")
+        logging.info("=" * 60)
+
+        self.pop_and_next_town_subflow()
+
     def trigger_town_subflow_chain(self):
         """
         當背包清理完成退回城鎮後，構建需在城鎮執行的子流程佇列。
@@ -658,9 +679,8 @@ class GameStateMachine:
         from config import GLOBAL_SETTINGS
         cfg = self.config or {}
         order = cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_town_subflow_order", ["blood_altar", "jewelry_workshop"]))
-        self.town_subflow_queue = list(order)
-        logging.info(f"🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列: {self.town_subflow_queue}")
-        self.pop_and_next_town_subflow()
+        logging.info("🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列...")
+        self.start_subflow_queue(order)
 
     def pop_and_next_town_subflow(self):
         """
@@ -678,10 +698,15 @@ class GameStateMachine:
             from config import SUBFLOW_CONFIGS, GAME_CONFIGS
             flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
             if not flow_cfg.get("enabled", True):
-                logging.info(f"⏭️ [城鎮流水線] 子流程 [{next_flow}] 設定為停用 (enabled=False)，自動跳過...")
+                logging.info(f"⏭️ [城鎮流水線] 子流程 [{next_flow}] 設定為停用 (enabled=False) ➔ 自動跳過！剩餘佇列 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
                 continue
 
-            logging.info(f"🏛️ [城鎮流水線] 彈出下一個城鎮任務 [{next_flow}]，剩餘佇列: {self.town_subflow_queue}")
+            flow_name = flow_cfg.get("name", next_flow)
+            logging.info("=" * 60)
+            logging.info(f"🎯 [城鎮流水線進度] 彈出並切換至任務: [{next_flow}] ({flow_name})")
+            logging.info(f"📌 剩餘待執行子流程 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
+            logging.info("=" * 60)
+
             if next_flow in GAME_CONFIGS:
                 self.config = GAME_CONFIGS[next_flow].copy()
 
@@ -698,18 +723,22 @@ class GameStateMachine:
                 return
 
         # 若佇列已空！
+        logging.info("=" * 60)
+        logging.info("🎉 【城鎮流水線 - 全部完成】 🎉")
         if getattr(self, "is_dev_subflow_run", False):
-            logging.info("🎉 [Dev 測試模式] 所有指定的城鎮子流程已全數執行完畢！結束程式。")
+            logging.info("Dev 測試模式：所有指定的城鎮子流程已全數執行完畢！結束程式。")
+            logging.info("=" * 60)
             import sys
             sys.exit(0)
 
-        # 若佇列已空！還原主模式配置 (例如 stage / dungeon / mix)
         if getattr(self, "primary_config", None):
             self.config = self.primary_config.copy()
-            logging.info(f"🔄 [城鎮流水線] 所有城鎮任務均已完成！恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
+            logging.info(f"恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
         else:
-            logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復原模式 續行...")
+            logging.info("重置旗標並回復原模式續行...")
+        logging.info("=" * 60)
 
         next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
         self.transition_to(next_st)
+
 

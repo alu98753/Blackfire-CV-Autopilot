@@ -488,10 +488,8 @@ def init_state_machine_system(args, config):
 
     # 若使用 --subflow 發起 Dev 階段獨立測試
     if hasattr(args, "subflow") and args.subflow:
-        state_machine.town_subflow_queue = list(args.subflow)
         state_machine.is_dev_subflow_run = True
-        print(f"🛠️ [Dev 測試模式] 成功注入獨立子流程佇列: {state_machine.town_subflow_queue}")
-        state_machine.pop_and_next_town_subflow()
+        state_machine.start_subflow_queue(args.subflow)
 
     if config["type"] in ["bag_clean", "blood_altar"]:
         state_machine.enable_bread = False
