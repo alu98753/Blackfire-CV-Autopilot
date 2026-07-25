@@ -2,7 +2,9 @@ import time
 import os
 import sys
 import logging
+import cv2
 from states.handlers.base import BaseStateHandler
+
 
 class BloodAltarHandler(BaseStateHandler):
     """
@@ -40,14 +42,13 @@ class BloodAltarHandler(BaseStateHandler):
         pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
         if pos_goback:
             logging.info("🩸 [血之祭壇] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
-            left = rect["left"] if rect else 0
-            top = rect["top"] if rect else 0
             self.mouse.click(left + pos_goback[0], top + pos_goback[1])
             self.last_action_time = time.time()
             return False
         return True
 
     def _record_completion(self):
+
         """記錄 DailyManager 完成狀態並自動切換至下一個城鎮任務"""
         self.reset_state()
         self.machine.need_blood_altar = False
@@ -57,7 +58,16 @@ class BloodAltarHandler(BaseStateHandler):
         logging.info("🩸 [血之祭壇] 領血與獻祭流程完成，消費城鎮佇列中的下一個任務...")
         self.machine.pop_and_next_town_subflow()
 
+    def _is_blood_altar_claimed_today(self):
+        """檢查 DailyManager 中 blood_altar 是否今日已領取過免費血水"""
+        dm = getattr(self.machine, "daily_manager", None)
+        if dm and hasattr(dm, "is_subflow_completed"):
+            return dm.is_subflow_completed("blood_altar") is True
+        return False
+
     def handle(self, screen_img=None, rect=None):
+
+
         if screen_img is None and self.capturer:
             rect = rect or self.capturer.get_window_rect()
             if rect:
@@ -94,9 +104,34 @@ class BloodAltarHandler(BaseStateHandler):
             "purple": "town_building/Blood_Altar/purple_blood.png",
         })
 
+        # 🔍 視覺化除錯：對當前畫面比對所有相關模板，印出最高相似度與座標，並畫圖存為 debug_blood_altar_detect.png
+        try:
+            debug_img = screen_img.copy()
+            debug_templates = [
+                ("building", building_btn),
+                ("door", "common/door.png"),
+                ("sacrifice", sacrifice_btn),
+                ("rec_entry", receive_entry_btn),
+                ("rec_daily", receive_daily_btn),
+                ("exit", exit_building_btn),
+            ]
+            for label, temp_name in debug_templates:
+                pos, conf = self.matcher.match(screen_img, temp_name, threshold=0.1, quiet=True)
+                if pos:
+                    cx, cy = pos
+                    cv2.circle(debug_img, (cx, cy), 6, (0, 255, 0), -1)
+                    cv2.putText(debug_img, f"{label}:{conf:.3f}", (cx + 10, cy + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    logging.info(f"🩸 [血之祭壇 Debug 掃描] 模板 [{label} -> {temp_name}] 最高相似度: {conf:.4f} @ 座標 ({cx}, {cy})")
+                else:
+                    logging.info(f"🩸 [血之祭壇 Debug 掃描] 模板 [{label} -> {temp_name}] 最高相似度: {conf:.4f} (未能匹配)")
+            cv2.imwrite("debug_blood_altar_detect.png", debug_img)
+        except Exception as debug_err:
+            logging.debug(f"無法寫入 debug_blood_altar_detect.png: {debug_err}")
+
         # =========================================================================
         # 1. 領取每日免費血水階段 (RECEIVE_TAB_OPEN / HANDLING_RECEIVE_POPUPS)
         # =========================================================================
+
         if self.step_phase == "RECEIVE_TAB_OPEN":
             pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
             if pos_rec_daily:
@@ -237,15 +272,6 @@ class BloodAltarHandler(BaseStateHandler):
                 self._record_completion()
                 self.last_action_time = now
                 return
-            return
-
-    def _is_blood_altar_claimed_today(self):
-        """檢查 DailyManager 中 blood_altar 是否今日已領取過免費血水"""
-        dm = getattr(self.machine, "daily_manager", None)
-        if dm and hasattr(dm, "is_subflow_completed"):
-            return dm.is_subflow_completed("blood_altar") is True
-        return False
-
 
         # =========================================================================
         # 4. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
@@ -253,6 +279,7 @@ class BloodAltarHandler(BaseStateHandler):
         # 4.1 檢查是否在建築物內部 (若尚未領取且看得到領水頁籤，優先點擊頁籤)
         is_claimed_today = self.has_claimed_daily or self._is_blood_altar_claimed_today()
         pos_rec_entry, _ = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
+
         pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
 
         if not is_claimed_today and pos_rec_entry:
