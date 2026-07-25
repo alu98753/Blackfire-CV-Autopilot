@@ -277,10 +277,14 @@ class DailyManager:
             if q not in updated:
                 updated.append(q)
 
-        bb["accepted_quests"] = updated
+        # 使用 mapper.sort_quests 進行多階梯優先級排序 (確定性 ➔ 地下城/關卡 ➔ idx/level大者優先)
+        sorted_quests = mapper.sort_quests(updated)
+
+        bb["accepted_quests"] = sorted_quests
         self.save_status()
-        logging.info(f"📋 [DailyManager] 懸賞任務佇列更新完成 (已自動剔除 ignored 任務): {updated}")
-        return updated
+        logging.info(f"📋 [DailyManager] 懸賞任務佇列更新完成 (已自動排序與剔除 ignored 任務): {sorted_quests}")
+        return sorted_quests
+
 
 
     def is_subflow_completed(self, subflow_key):

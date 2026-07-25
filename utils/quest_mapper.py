@@ -142,7 +142,61 @@ class QuestMapper:
             (r"(冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
         ]
 
+    def get_quest_sort_key(self, title):
+        """
+        計算單個懸賞任務標題的多階梯排序 Key (4 元組)。
+        1. policy_score: DETERMINISTIC = 0 (最優先), BANNER_VERIFY = 1, IGNORED = 9
+        2. mode_score: dungeon = 0 (地下城優先), stage = 1, generic_boss = 2, ignored = 9
+        3. idx_score: -dungeon_index 或 -stage_level (數字大者排在最前面)
+        4. sub_score: final = 0, middle = 1, first = 2
+        """
+        node = self.parse_quest(title)
+        if node is None or node.mode_type == "ignored":
+            return (9, 9, 0, 0)
+
+        # 1. 梯隊一：確定性優先
+        policy_score = 0 if node.counting_policy == TaskNode.POLICY_DETERMINISTIC else 1
+
+        # 2. 梯隊二：模式優先 & 梯隊三：索引/等級大小
+        if node.mode_type == "dungeon":
+            mode_score = 0
+            idx_score = -node.dungeon_index if node.dungeon_index is not None else 0
+            sub_score = 0
+        elif node.mode_type == "stage":
+            mode_score = 1
+            idx_score = -node.stage_level if node.stage_level is not None else 0
+            sub_map = {"final": 0, "middle": 1, "first": 2}
+            sub_score = sub_map.get(node.sub_stage, 3)
+        else:
+            mode_score = 2
+            idx_score = 0
+            sub_score = 0
+
+        return (policy_score, mode_score, idx_score, sub_score)
+
+    def sort_quests(self, quest_titles):
+        """
+        對懸賞任務標題陣列進行多階梯優先級排序。
+        過濾掉 ignored 任務，並按 [確定性 ➔ 地下城/關卡 ➔ idx/level大者優先] 排序。
+        """
+        if not quest_titles:
+            return []
+        valid_titles = []
+        for t in quest_titles:
+            if not t:
+                continue
+            norm = normalize_quest_title(t)
+            node = self.parse_quest(norm)
+            if node is not None and node.mode_type == "ignored":
+                continue
+            if norm not in valid_titles:
+                valid_titles.append(norm)
+
+        valid_titles.sort(key=self.get_quest_sort_key)
+        return valid_titles
+
     def parse_quest(self, title, description="", requirement_text=""):
+
         """
         將任務標題、描述與目標需求解析為 TaskNode。
         :param title: 懸賞任務標題 (例如 "史萊姆王的毀滅")

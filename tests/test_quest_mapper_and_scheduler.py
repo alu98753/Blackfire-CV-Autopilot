@@ -155,6 +155,39 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertIn("100% 完成", msg_end)
         print(f"[動態排程 最終狀態] {msg_end}")
 
+    def test_quest_sorting_priority(self):
+        """
+        驗證 QuestMapper.sort_quests 排序演算法：
+        - 確定性 (DETERMINISTIC) > 彈窗核銷 (BANNER_VERIFY) > 忽略 (IGNORED).
+        - 地下城 (dungeon) > 關卡 (stage).
+        - idx / stage_level 大者排前面 (dungeon 3 > 2 > 0; stage 5 > 4).
+        """
+        unordered_quests = [
+            "史萊姆王的毀滅",  # BANNER_VERIFY (dungeon 0)
+            "清除沙蟲",       # DETERMINISTIC (stage 4)
+            "破除森林的枷鎖",  # BANNER_VERIFY (dungeon 2)
+            "清除樹人",       # DETERMINISTIC (dungeon 2)
+            "清除蛙人",       # DETERMINISTIC (stage 5)
+            "清除骷髏",       # DETERMINISTIC (dungeon 3)
+            "清除史萊姆",     # DETERMINISTIC (dungeon 0)
+            "敵人剿滅",       # IGNORED
+            "冰雪洞窟的暴君",  # BANNER_VERIFY (dungeon 4)
+        ]
+        sorted_quests = self.mapper.sort_quests(unordered_quests)
+
+        expected_order = [
+            "清除骷髏",       # DETERMINISTIC, dungeon 3
+            "清除樹人",       # DETERMINISTIC, dungeon 2
+            "清除史萊姆",     # DETERMINISTIC, dungeon 0
+            "清除蛙人",       # DETERMINISTIC, stage 5
+            "清除沙蟲",       # DETERMINISTIC, stage 4
+            "冰雪洞窟的暴君",  # BANNER_VERIFY, dungeon 4
+            "破除森林的枷鎖",  # BANNER_VERIFY, dungeon 2
+            "史萊姆王的毀滅",  # BANNER_VERIFY, dungeon 0
+        ]
+        self.assertEqual(sorted_quests, expected_order)
+
 
 if __name__ == "__main__":
     unittest.main()
+
