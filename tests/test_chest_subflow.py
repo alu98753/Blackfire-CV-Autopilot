@@ -43,6 +43,8 @@ class TestChestSubflow(unittest.TestCase):
                 return (None, 0.0)
             if template == "town_building/mysterious_treasure/mysterious_treasure.png":
                 return ((200, 300), 0.88)
+            if template == "town_building/mysterious_treasure/free_treasure.png":
+                return ((400, 400), 0.92)
             if template == "free.png":
                 return ((400, 500), 0.90)
             if template == "common/confirm.png":
