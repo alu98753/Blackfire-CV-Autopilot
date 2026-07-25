@@ -133,19 +133,30 @@ class HeroDrawHandler(BaseStateHandler):
                 self.last_action_time = now
                 return True
 
-        # 5. WAITING_CONFIRM 階段：點擊獲得英雄確認/確定按鈕 (confirm.png / ok.png)
+        # 5. WAITING_CONFIRM 階段：點擊獲得英雄 OK 按鈕 (僅匹配 common/ok.png，支援多幀動畫等待)
         elif self.step_phase == "WAITING_CONFIRM":
-            for confirm_template in ["common/confirm.png", "common/ok.png"]:
-                if os.path.exists(os.path.join("templates", confirm_template)):
-                    pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
-                    if pos_c:
-                        logging.info(f"🍺 [抽英雄] 發現獲得英雄確認按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊...")
-                        self.mouse.click(left + pos_c[0], top + pos_c[1])
-                        self.last_action_time = now
-                        time.sleep(0.3)
-                        break
+            confirm_template = "common/ok.png"
+            if os.path.exists(os.path.join("templates", confirm_template)):
+                pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
+                if pos_c:
+                    logging.info(f"🍺 [抽英雄] 發現獲得英雄 OK 按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊！")
+                    self.mouse.click(left + pos_c[0], top + pos_c[1])
+                    self.last_action_time = now
+                    self.step_phase = "ALL_DONE_EXITING"
+                    self.not_found_count = 0
+                    time.sleep(0.3)
+                    return True
 
+            self.not_found_count += 1
+            if self.not_found_count < 5:
+                logging.info(f"🍺 [抽英雄] 等待 OK 按鈕 [{confirm_template}] 彈出中... (第 {self.not_found_count}/5 幀嘗試)")
+                self.last_action_time = now
+                return True
+
+            logging.info("🍺 [抽英雄] 未偵測到 OK 按鈕 (可能無動畫彈窗)，準備退出酒館...")
             self.step_phase = "ALL_DONE_EXITING"
+            self.not_found_count = 0
+            self.last_action_time = now
             return True
 
         # 6. ALL_DONE_EXITING 階段：點擊退出按鈕，寫入 DailyManager 並彈出下一任務
