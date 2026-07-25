@@ -920,15 +920,23 @@ class GameStateMachine:
         - Tier 3: 三極優先 (懸賞告示牌與動態任務 bulletin_board)
         - Tier 4: 四極退守 (預設 mix 模式: 冰雪洞窟 + 關卡 6-1)
         """
-        if not self.daily_manager:
+        if getattr(self, "_in_scheduling_pipeline", False):
             return False
+        self._in_scheduling_pipeline = True
 
-        # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar)
-        pending_town = self.daily_manager.get_pending_town_subflows()
-        if pending_town:
-            logging.info(f"🏛️ [Daily Master Pipeline] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
-            self.start_subflow_queue(pending_town)
-            return True
+        try:
+            if not self.daily_manager:
+                return False
+
+            # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar)
+            pending_town = self.daily_manager.get_pending_town_subflows()
+            if pending_town and not self.town_subflow_queue:
+                logging.info(f"🏛️ [Daily Master Pipeline] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
+                self.start_subflow_queue(pending_town)
+                return True
+        finally:
+            self._in_scheduling_pipeline = False
+
 
         # 2. 檢查 Tier 2 領主 Boss 討伐 (lord_boss)
         if self.daily_manager.has_available_lord_boss():
