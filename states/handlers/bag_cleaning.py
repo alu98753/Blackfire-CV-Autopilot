@@ -268,7 +268,7 @@ class BagCleaningHandler(BaseStateHandler):
                             self.machine.bag_deselected_slots = set()
                         self.machine.bag_deselected_slots.add((r, c))
                         self.mouse.click(click_x, click_y)
-                        time.sleep(0.35)
+                        time.sleep(0.5)
                         return
 
 
