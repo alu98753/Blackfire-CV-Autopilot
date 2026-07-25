@@ -1964,8 +1964,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        if self.state_machine.daily_manager:
+            self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=False)
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
+
 
         # Step 1: 城鎮點擊祭壇建築
         def mock_match_step1(img, name, **kw):

@@ -285,13 +285,25 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
         # 3.3 城鎮點擊珠寶加工廠建築 (Jewelry_workshop.png)
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-        pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
+        pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65)
         if pos_building and pos_door:
-            logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}]，點擊進入...")
+            logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
             self.mouse.click(left + pos_building[0], top + pos_building[1])
             self.step_phase = "ENTERED_BUILDING"
+            self.building_search_count = 0
             self.last_action_time = now
             return
+
+        if pos_door:
+            self.building_search_count = getattr(self, "building_search_count", 0) + 1
+            if self.building_search_count >= 5:
+                logging.info("💎 [珠寶加工廠] 城鎮畫面中未見珠寶加工廠建築，自動跳過並切換至下一個城鎮任務！")
+                self.reset_state()
+                self.machine.need_jewelry_workshop = False
+                self.machine.pop_and_next_town_subflow()
+                self.last_action_time = now
+                return
+
 
         if pos_sell_out:
             logging.info(f"💎 [珠寶加工廠] 發現出售選單按鈕 [{sell_out_btn}]，點擊開啟選單...")

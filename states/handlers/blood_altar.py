@@ -281,18 +281,30 @@ class BloodAltarHandler(BaseStateHandler):
 
         # 4.2 城鎮點擊祭壇建築 (Blood_Altar.png)
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-        pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
+        pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65)
         if pos_building and pos_door:
-            logging.info(f"🩸 [血之祭壇] 於城鎮發現血之祭壇建築 [{building_btn}]，點擊進入...")
+            logging.info(f"🩸 [血之祭壇] 於城鎮發現血之祭壇建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
             self.mouse.click(left + pos_building[0], top + pos_building[1])
             self.step_phase = "ENTERED_BUILDING"
+            self.building_search_count = 0
             self.last_action_time = now
             return
+
+        # 4.3 若位於城鎮，且連續 5 幀未見建築，自動跳過並進入下一個任務
+        if pos_door:
+            self.building_search_count = getattr(self, "building_search_count", 0) + 1
+            if self.building_search_count >= 5:
+                logging.info("🩸 [血之祭壇] 連續 5 幀城鎮畫面中未見祭壇建築，自動跳過並切換至下一個城鎮任務！")
+                self._record_completion()
+                self.last_action_time = now
+                return
+
 
         if pos_sac:
             if not is_claimed_today and pos_rec_entry:
                 logging.info(f"🩸 [血之祭壇] 點擊領水頁籤 [{receive_entry_btn}]...")
                 self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
+
 
                 self.step_phase = "RECEIVE_TAB_OPEN"
             else:
