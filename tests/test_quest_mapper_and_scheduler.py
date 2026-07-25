@@ -105,17 +105,18 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertTrue(slime_task.is_completed)
         self.assertEqual(boss_task.completed_count, 1)
 
-        # 4. 第二次取得啟動指令 ➔ 應傳回關卡 1 (清除骷髏)
+        # 4. 第二次取得啟動指令 ➔ 應傳回地下城 4 (神秘遺跡 - 清除骷髏)
         cmd2, msg2 = self.scheduler.get_next_action_config()
-        self.assertIn("--mode stage --stage 1 --sub first", cmd2)
+        self.assertIn("--mode dungeon --dungeon 4", cmd2)
         print(f"[動態排程 step 2] 指令: {cmd2} | 說明: {msg2}")
 
-        # 模擬擊殺 10 隻骷髏完成任務
-        self.scheduler.record_kill_event(enemy_name="骷髏", stage_level=1, sub_stage="first", kill_count=10)
+        # 模擬打完地下城 4 清除骷髏任務
+        self.scheduler.record_kill_event(enemy_name="骷髏", dungeon_index=3, kill_count=10)
 
         # 5. 第三次取得啟動指令 ➔ 應傳回關卡 6 第一關 (冰元素)
         cmd3, msg3 = self.scheduler.get_next_action_config()
         self.assertIn("--mode stage --stage 6 --sub first", cmd3)
+
         print(f"[動態排程 step 3] 指令: {cmd3} | 說明: {msg3}")
 
         # 模擬擊殺 10 隻冰元素完成任務
