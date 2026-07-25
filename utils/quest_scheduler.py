@@ -107,16 +107,40 @@ class QuestScheduler:
             logging.info(f"  {idx:2d}. {status_icon} [{t.quest_title}] ➔ 模式: {mode_desc} | 進度: {t.completed_count}/{t.target_count}")
         logging.info("=" * 60)
 
-    def record_task_complete(self, quest_title):
+    def record_task_complete(self, ocr_text):
         """
         根據任務標題或 OCR 解析結果將指定任務標記為已完成。
+        支援標題包含、描述包含、與核心關鍵字 (如 史萊姆, 骷髏, 野豬, 冰元素, 敵人, 首領) 模糊匹配。
         """
+        if not ocr_text:
+            return False
+
         for t in self.tasks:
-            if quest_title in t.quest_title or t.quest_title in quest_title:
+            title = t.quest_title
+            desc = getattr(t, "raw_desc", "")
+
+            # 1. 標題與辨識文字直接互相包含
+            if title in ocr_text or ocr_text in title:
                 t.completed_count = t.target_count
-                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] 已標記為完全完成！")
+                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題匹配) 已標記為完全完成！")
                 return True
+
+            # 2. 原始描述文字包含
+            if desc and (desc in ocr_text or ocr_text in desc):
+                t.completed_count = t.target_count
+                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (描述匹配) 已標記為完全完成！")
+                return True
+
+            # 3. 核心關鍵字比對
+            keywords = ["史萊姆", "骷髏", "野豬", "冰元素", "敵人", "首領", "鬼魂", "熊", "蛙人", "樹人", "石窟", "洞窟", "遺跡"]
+            for kw in keywords:
+                if kw in title and kw in ocr_text:
+                    t.completed_count = t.target_count
+                    logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (關鍵字 '{kw}' 匹配) 已標記為完全完成！")
+                    return True
+
         return False
+
 
     def process_task_complete_banner(self, screen_img, pos_task, ocr_reader=None):
         """
