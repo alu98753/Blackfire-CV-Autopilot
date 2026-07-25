@@ -329,12 +329,14 @@ class QuestMapper:
             return TaskNode(
                 quest_title=norm_title,
                 mode_type="generic_boss",
-                target_count=target_count,
+                target_count=5,
+                batch_size=1,
+                max_run_limit=5,
                 raw_desc=combined_text,
                 counting_policy=default_policy
             )
 
-        # 3. 檢查地下城專屬任務
+        # 3. 檢查地下城專屬任務 (地下城探索 1 趟即進入冷卻，故次數為 1 趟離場)
         for rule in self.dungeon_rules:
             pattern = rule[0]
             dungeon_idx = rule[1]
@@ -344,13 +346,15 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="dungeon",
-                    target_count=target_count,
+                    target_count=1,
+                    batch_size=1,
+                    max_run_limit=1,
                     dungeon_index=dungeon_idx,
                     raw_desc=combined_text,
                     counting_policy=policy
                 )
 
-        # 4. 檢查普通關卡專屬任務
+        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 10 次)
         for rule in self.stage_rules:
             pattern = rule[0]
             stage_lvl = rule[1]
@@ -361,12 +365,15 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="stage",
-                    target_count=target_count,
+                    target_count=4,
+                    batch_size=4,
+                    max_run_limit=10,
                     stage_level=stage_lvl,
                     sub_stage=sub_stage,
                     raw_desc=combined_text,
                     counting_policy=policy
                 )
+
 
         # 5. 無法精確映射：未定義任務預設為 BANNER_VERIFY_QUESTS 防呆保護
         logging.warning(f"⚠️ 懸賞任務 '{title}' 無法對應到已知規則庫 (未定義任務)，回傳 None 紀錄至 unknown_quests。")
