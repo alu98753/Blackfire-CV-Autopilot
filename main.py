@@ -333,7 +333,7 @@ def setup_mode_config(args):
         setup_dungeon_config(config, args)
         setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
         print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
-    elif args.mode == "quest":
+    elif args.mode == "daily":
         # 懸賞任務全數完成時，預設退守 mix 標的：地下城 5) 冰雪洞窟，關卡 第六關第一小關
         config["name"] = "每日懸賞任務 (退守: 冰雪洞窟 + 關卡 6-1)"
         config["greedy_dungeon"] = False
@@ -351,6 +351,7 @@ def setup_mode_config(args):
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
         print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行 [冰雪洞窟] 與 [關卡 6-1]。")
+
 
 
     elif args.mode == "blood_altar":
@@ -512,9 +513,10 @@ def init_state_machine_system(args, config):
         state_machine.start_subflow_queue(args.subflow)
 
     # 懸賞任務模式：載入 accepted_quests 並掛載 QuestScheduler
-    if getattr(args, "mode", None) == "quest":
+    if getattr(args, "mode", None) == "daily":
         quest_scheduler = daily_manager.load_quest_scheduler()
         state_machine.attach_quest_scheduler(quest_scheduler)
+
 
 
     if config["type"] in ["bag_clean", "blood_altar"]:

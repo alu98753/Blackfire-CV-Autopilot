@@ -146,8 +146,9 @@ PRIMARY_MODES = {
     },
 
     # ------------------ 每日懸賞任務動態調度模式 ------------------
-    "quest": {
+    "daily": {
         "name": "每日懸賞任務",
+
         "type": "mix",
         "dungeon_names": DUNGEON_NAMES,
         "dungeon_entries": DUNGEON_ENTRY_TEMPLATES,

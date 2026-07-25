@@ -45,7 +45,8 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertIn("dungeon", PRIMARY_MODES)
         self.assertIn("stage", PRIMARY_MODES)
         self.assertIn("collect_only", PRIMARY_MODES)
-        self.assertIn("quest", PRIMARY_MODES)
+        self.assertIn("daily", PRIMARY_MODES)
+
 
 
         self.assertIn("blood_altar", SUBFLOW_CONFIGS)
