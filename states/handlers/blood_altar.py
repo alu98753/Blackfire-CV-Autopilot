@@ -67,8 +67,9 @@ class BloodAltarHandler(BaseStateHandler):
         if screen_img is None:
             return
 
-        # 防死鎖門禁：若獨立模式或城鎮流水線已不需要血之祭壇獻祭 (need_blood_altar == False) 且處於 INIT 階段，直接 return！
-        is_needed = getattr(self.machine, "need_blood_altar", False)
+        # 防死鎖門禁：若獨立模式或城鎮流水線已不需要血之祭壇獻祭 且處於 INIT 階段，直接 return！
+        cfg_type = self.machine.config.get("type") if getattr(self.machine, "config", None) else None
+        is_needed = getattr(self.machine, "need_blood_altar", False) or cfg_type == "blood_altar"
         if not is_needed and self.step_phase == "INIT":
             return
 

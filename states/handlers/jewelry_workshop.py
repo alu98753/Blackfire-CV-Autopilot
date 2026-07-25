@@ -85,8 +85,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
         if screen_img is None:
             return
 
-        # 防死鎖門禁：若獨立模式或城鎮流水線已不需要珠寶加工廠出售 (need_jewelry_workshop == False) 且處於 INIT 階段，直接 return！
-        is_needed = getattr(self.machine, "need_jewelry_workshop", False)
+        # 防死鎖門禁：若獨立模式或城鎮流水線已不需要珠寶加工廠出售 且處於 INIT 階段，直接 return！
+        cfg_type = self.machine.config.get("type") if getattr(self.machine, "config", None) else None
+        is_needed = getattr(self.machine, "need_jewelry_workshop", False) or cfg_type == "jewelry_workshop"
         if not is_needed and self.step_phase == "INIT":
             return
 

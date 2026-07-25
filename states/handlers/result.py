@@ -33,15 +33,20 @@ class ResultHandler(BaseStateHandler):
         - 非離場場次 (非 4/8/10 場): 僅允許 2 次 continue 推進 + retry 再戰，絕不比對離場與大廳圖案。
         - 離場場次 (4/8/10 場): 僅允許 2 次 continue 推進 + exit_battle/goback_town 離場，絕不比對 retry 再戰。
         """
-        # 0. 優先檢查是否已經默默回到了準備大廳/關卡選單
-        lobby_start_btn = self.machine.config.get("lobby_start_btn", "stages/start.png")
-        if os.path.exists(os.path.join("templates", lobby_start_btn)):
-            pos_start, conf_start = self.matcher.match(screen_img, lobby_start_btn, threshold=0.85, brightness_threshold=0.70, quiet=True)
-            if pos_start:
-                logging.info(f"👉 結算辨識：偵測到已回到關卡準備大廳 [{lobby_start_btn}] (相似度: {conf_start:.4f})，即時結束結算狀態轉移至 LOBBY。")
-                self.continue_click_count = 0
-                self.machine.transition_to(self.machine.STATE_LOBBY)
-                return True
+        # 0. 優先檢查是否已回到準備大廳/關卡選單 (出現 select_stage, select_stage_after, goback_town 代表戰鬥結算已結束)
+        lobby_features = [
+            "common/select_stage.png",
+            "common/select_stage_after.png",
+            "goback_town.png"
+        ]
+        for l_temp in lobby_features:
+            if os.path.exists(os.path.join("templates", l_temp)):
+                pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80, brightness_threshold=0.70, quiet=True)
+                if pos_l:
+                    logging.info(f"👉 結算辨識：偵測到關卡大廳特徵 [{l_temp}] (相似度: {conf_l:.4f})，代表戰鬥結算已結束並已回到大廳，轉移至 NAVIGATING。")
+                    self.continue_click_count = 0
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    return True
 
         # A1. 優先檢查是否戰敗 (defeat.png)
         if os.path.exists(os.path.join("templates", "defeat.png")):
