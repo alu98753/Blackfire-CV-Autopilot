@@ -161,6 +161,9 @@ class ResultHandler(BaseStateHandler):
                                 if dm:
                                     dm.record_lord_boss_fight(b_key)
 
+                            if self.continue_click_count >= 2:
+                                self.subflow_step = "FINAL_MATCH"
+
                             time.sleep(1.0)  # 每次點擊繼續按鈕後，固定休眠 1.0 秒
                             return True
 

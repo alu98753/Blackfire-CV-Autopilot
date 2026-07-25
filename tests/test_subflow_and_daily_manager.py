@@ -586,6 +586,86 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertTrue(res_exit)
         self.assertEqual(sm.current_state, sm.STATE_NAVIGATING) # 轉移至 NAVIGATING 離場
 
+    def test_result_subflow_full_pipeline_step_by_step(self):
+        """
+        [結算子流程全步驟深度測試] 充分驗證 ResultHandler 子流程：
+        1. 步驟 1 (INIT_DELAY): 初始進入休眠沉澱 1.5s，並平滑過渡至 CONTINUE_LOOP。
+        2. 步驟 2 (CONTINUE_LOOP): 點擊 2 次 continue.png (每次沉澱 1.0s)，自動切換至 FINAL_MATCH。
+        3. 步驟 3 (FINAL_MATCH): 點擊 retry/exit_battle 後自動 reset_state 重置子流程步驟為 INIT_DELAY。
+        4. 大廳特徵攔截 (select_stage.png): 隨時能即時中斷結算並轉移至 NAVIGATING。
+        """
+        from unittest.mock import MagicMock, patch
+        from states.state_machine import GameStateMachine
+        from states.handlers.result import ResultHandler
+        import numpy as np
+
+        capturer = MagicMock()
+        matcher = MagicMock()
+        mouse = MagicMock()
+        sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+        sm.config = {"type": "stage"}
+        handler = ResultHandler(sm)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        # 斷言初始步驟為 INIT_DELAY
+        self.assertEqual(handler.subflow_step, "INIT_DELAY")
+
+        # 1. 測試 Step 1: INIT_DELAY 轉為 CONTINUE_LOOP (無 continue.png 時)
+        matcher.match.return_value = (None, 0.0)
+        with patch("time.sleep") as mock_sleep:
+            handler._handle_impl(fake_img, rect)
+            mock_sleep.assert_called_with(1.5) # 斷言精確觸發 1.5 秒初始沉澱休眠
+            self.assertEqual(handler.subflow_step, "FINAL_MATCH")
+
+        # 重置回 CONTINUE_LOOP 測試 continue 點擊
+        handler.subflow_step = "CONTINUE_LOOP"
+        handler.continue_click_count = 0
+
+        # 2. 測試 Step 2: 點擊 continue.png
+        def mock_match_continue(img, name, **kw):
+            if name == "common/continue.png":
+                return ((770, 550), 0.95)
+            return (None, 0.0)
+
+        matcher.match.side_effect = mock_match_continue
+        with patch("time.sleep") as mock_sleep:
+            res_c1 = handler._handle_impl(fake_img, rect)
+            self.assertTrue(res_c1)
+            self.assertEqual(handler.continue_click_count, 1)
+            mock_sleep.assert_called_with(1.0) # 斷言點擊 continue 後觸發 1.0 秒休眠
+
+            res_c2 = handler._handle_impl(fake_img, rect)
+            self.assertTrue(res_c2)
+            self.assertEqual(handler.continue_click_count, 2)
+            self.assertEqual(handler.subflow_step, "FINAL_MATCH") # 滿 2 次自動切為 FINAL_MATCH
+
+        # 3. 測試 Step 3: 續戰點擊 retry.png 後重置狀態
+        def mock_match_retry(img, name, **kw):
+            if name == "stages/retry.png":
+                return ((500, 500), 0.90)
+            return (None, 0.0)
+
+        matcher.match.side_effect = mock_match_retry
+        with patch("time.sleep") as mock_sleep:
+            res_retry = handler._handle_impl(fake_img, rect)
+            self.assertTrue(res_retry)
+            self.assertEqual(sm.current_state, sm.STATE_LOADING)
+            self.assertEqual(handler.subflow_step, "INIT_DELAY") # 斷言子流程已重置回 INIT_DELAY
+            self.assertEqual(handler.continue_click_count, 0)
+            mock_sleep.assert_called_with(1.0) # 斷言點擊 retry 後觸發 1.0 秒過渡休眠
+
+        # 4. 測試大廳獨有特徵 (select_stage.png) 攔截
+        handler.subflow_step = "CONTINUE_LOOP"
+        handler.continue_click_count = 1
+        matcher.match.side_effect = lambda img, name, **kw: ((100, 100), 0.90) if name == "common/select_stage.png" else (None, 0.0)
+
+        res_lobby = handler._handle_impl(fake_img, rect)
+        self.assertTrue(res_lobby)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+        self.assertEqual(handler.subflow_step, "INIT_DELAY") # 斷言大廳攔截後子流程已安全重置
+
 if __name__ == "__main__":
     unittest.main()
 
