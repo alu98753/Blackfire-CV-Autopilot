@@ -233,13 +233,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
                 self.last_action_time = now
-                if cfg.get("type") == "jewelry_workshop":
-                    logging.info("🎉 [珠寶加工廠] 獨立單次出售流程 100% 完成！結束程式。")
-                    sys.exit(0)
-                else:
-                    logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
-                    self.machine.pop_and_next_town_subflow()
-                    return
+                logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
+                self.machine.pop_and_next_town_subflow()
+                return
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
             if pos_quit:
@@ -255,14 +251,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
                 self.last_action_time = now
-                
-                if cfg.get("type") == "jewelry_workshop":
-                    logging.info("🎉 [珠寶加工廠] 獨立單次出售流程 100% 完成！結束程式。")
-                    sys.exit(0)
-                else:
-                    logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
-                    self.machine.pop_and_next_town_subflow()
-                    return
+                logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
+                self.machine.pop_and_next_town_subflow()
+                return
             return
 
         # =========================================================================
@@ -294,9 +285,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
         # 3.3 城鎮點擊珠寶加工廠建築 (Jewelry_workshop.png)
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-        pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
+        pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65)
         if pos_building and pos_door:
-            logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}]，點擊進入...")
+            logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
             self.mouse.click(left + pos_building[0], top + pos_building[1])
             self.step_phase = "ENTERED_BUILDING"
             self.last_action_time = now

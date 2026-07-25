@@ -4,6 +4,23 @@ import logging
 import re
 from states.handlers.base import BaseStateHandler
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
+from utils.cooldown_detector import detect_cooldown_sign_and_time
+
+def filter_navigation_path(nav_path, active_tabs=None):
+    """
+    動態過濾導航路徑中已被已開啟 UI 頁籤涵蓋的父階按鈕（防重入跳過）。
+    :param nav_path: 導航路徑按鈕列表
+    :param active_tabs: 已開啟頁籤名稱列表，如 ["stage"], ["dungeon"]
+    """
+    if not active_tabs:
+        return list(nav_path)
+    
+    skip_map = {
+        "stage": "common/select_stage.png",
+        "dungeon": "dungeons/dungeon.png"
+    }
+    skip_btns = {skip_map[tab] for tab in active_tabs if tab in skip_map}
+    return [btn for btn in nav_path if btn not in skip_btns]
 
 class NavigationHandler(BaseStateHandler):
     def _parse_time_to_seconds(self, time_str):
@@ -81,75 +98,21 @@ class NavigationHandler(BaseStateHandler):
         crop_x2 = min(w_limit, max_loc[0] + t_w)
         dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
         
-        for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
-            if os.path.exists(os.path.join("templates", cd_temp)):
-                cd_img = cv2.imread(os.path.join("templates", cd_temp))
-                if cd_img is not None:
-                    cd_w = int(cd_img.shape[1] * scale)
-                    cd_h = int(cd_img.shape[0] * scale)
-                    cd_w = max(5, cd_w)
-                    cd_h = max(5, cd_h)
-                    resized_cd = cv2.resize(cd_img, (cd_w, cd_h))
-                    res_cd = cv2.matchTemplate(dungeon_crop, resized_cd, cv2.TM_CCOEFF_NORMED)
-                    _, max_val_cd, _, max_loc_cd = cv2.minMaxLoc(res_cd)
-                    if max_val_cd >= 0.58:
-                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌 [{cd_temp}] (相似度: {max_val_cd:.4f}，閥值: 0.58)，判定為冷卻中。")
-                        in_cooldown = True
-                        
-                        # 試圖利用 EasyOCR 進行精確時間識別
-                        try:
-                            cd_cx = max_loc_cd[0] + cd_w // 2
-                            cd_cy = max_loc_cd[1] + cd_h // 2
-                            
-                            # 根據匹配到的是左木牌還是右木牌，動態調整 X 軸偏移方向
-                            if "left" in cd_temp:
-                                # 左木牌：木柱在左，文字偏右，因此裁剪框向右偏移 25 像素 (相較於中心點)
-                                tx1 = max(0, cd_cx - 60)
-                                tx2 = min(dungeon_crop.shape[1], cd_cx + 110)
-                            else:
-                                # 右木牌：木柱在右，文字偏左，因此裁剪框向左偏移 25 像素 (相較於中心點)
-                                tx1 = max(0, cd_cx - 110)
-                                tx2 = min(dungeon_crop.shape[1], cd_cx + 60)
-                                
-                            ty1 = max(0, cd_cy - 18)
-                            ty2 = min(dungeon_crop.shape[0], cd_cy + 12)
-                            
-                            # 【新增除錯標記】在卡片上繪製紅點(中心)與綠框(裁剪區)並存檔
-                            try:
-                                debug_match_img = dungeon_crop.copy()
-                                cv2.circle(debug_match_img, (cd_cx, cd_cy), 4, (0, 0, 255), -1) # 畫紅色的中心點
-                                cv2.rectangle(debug_match_img, (tx1, ty1), (tx2, ty2), (0, 255, 0), 2) # 畫綠色裁剪框
-                                cv2.imwrite("debug_cooldown_match.png", debug_match_img)
-                                logging.info("📸 [DEBUG] 已將木牌中心與裁剪框標記寫入 debug_cooldown_match.png")
-                            except Exception as draw_err:
-                                logging.warning(f"⚠️ [DEBUG] 標記圖片寫入失敗: {draw_err}")
-                            
-                            time_crop = dungeon_crop[ty1:ty2, tx1:tx2]
-                            if time_crop.size > 0:
-                                time_gray = cv2.cvtColor(time_crop, cv2.COLOR_BGR2GRAY)
-                                padded = cv2.copyMakeBorder(time_gray, 15, 15, 30, 30, cv2.BORDER_CONSTANT, value=159)
-                                resized_text = cv2.resize(padded, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-                                
-                                reader = self.machine.get_ocr_reader()
-                                ocr_results = reader.readtext(resized_text, allowlist="0123456789:")
-                                
-                                # 將送去辨識的圖片寫入專案目錄
-                                cv2.imwrite("debug_cooldown_ocr.png", resized_text)
-                                logging.info(f"📸 [DEBUG] 已將 OCR 辨識區域寫入 debug_cooldown_ocr.png，裁剪範圍 Y 軸: [{ty1}:{ty2}]，X 軸: [{tx1}:{tx2}]")
-                                
-                                if ocr_results:
-                                    raw_text = ocr_results[0][1]
-                                    conf = ocr_results[0][2]
-                                    parsed_secs = self._parse_time_to_seconds(raw_text)
-                                    if parsed_secs is not None and parsed_secs > 0:
-                                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)}，信心度: {conf:.4f})")
-                                        self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
-                                        ocr_success = True
-                                        break
-                        except Exception as ocr_err:
-                            logging.warning(f"⚠️ 貪婪地下城：[{dungeon_names[i]}] OCR 辨識過程發生異常: {ocr_err}")
-                        break
-                        
+        cd_seconds = 7200.0
+        has_cd, parsed_secs, raw_text = detect_cooldown_sign_and_time(
+            dungeon_crop,
+            self.machine.get_ocr_reader,
+            max_allowed_seconds=cd_seconds,
+            threshold=0.58,
+            scale=scale
+        )
+        if has_cd:
+            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌，判定為冷卻中。")
+            in_cooldown = True
+            if parsed_secs is not None and 0 < parsed_secs < cd_seconds:
+                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)})")
+                self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
+                ocr_success = True
         if in_cooldown:
             if not ocr_success:
                 logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 剩餘時間辨識未成功，使用 30 秒臨時冷卻退避...")
@@ -192,16 +155,24 @@ class NavigationHandler(BaseStateHandler):
         if rect is None:
             rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
             
-        # 安全取得寬度與高度，相容實體執行與單體測試 mock 格式
         width = rect.get("width") or (rect.get("right", 0) - rect.get("left", 0)) or 1920
         height = rect.get("height") or (rect.get("bottom", 0) - rect.get("top", 0)) or 1080
-        
-        # 回寫至 rect 中，確保後續呼叫 rect["width"] 與 rect["height"] 不會報 KeyError
         rect["width"] = width
         rect["height"] = height
 
+
+        # 0. 全域最高優先防護：檢查畫面上是否有任務完成彈窗 (task_complete.png) 阻擋
+        if os.path.exists(os.path.join("templates", "task_complete.png")):
+            pos_task_chk, conf_task_chk = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
+            if pos_task_chk:
+                logging.info(f"🎉 尋路中偵測到【任務完成】彈窗 (信心度: {conf_task_chk:.4f})，啟動「領取任務獎勵」子流程清理彈窗。")
+                self.machine._run_task_complete_subflow(rect)
+                return
+
+
         # 優先判定：如果我們已經看到地下城內部的離開按鈕或其他探索按鈕，說明點擊已經成功並進入內部，轉移狀態！
         if self.machine.config.get("type") in ["dungeon", "mix"]:
+
             # 移出 dungeons/dungeon_fight.png，改由 dungeons/leave.png 判定已正式進入
             for check_btn in ["dungeons/leave.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png"]:
                 if os.path.exists(os.path.join("templates", check_btn)):
@@ -274,6 +245,47 @@ class NavigationHandler(BaseStateHandler):
         pos_bread_btn, conf_bread_btn = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
         if pos_goback or pos_bread_btn:
             is_lobby = True
+
+        # 頁籤開啟狀態統一對比檢測 (比較 select_stage_after.png 與 dungeon_after.png)
+        res_tabs = self.matcher.match_mutually_exclusive_tabs(
+            screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
+        )
+        if isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4 and type(res_tabs).__name__ != "MagicMock":
+            stage_select_open, dungeon_select_open, _, _ = res_tabs
+        else:
+            conf_stage_after, conf_dungeon_after = 0.0, 0.0
+            if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
+                res_sa = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.70)
+                conf_stage_after = res_sa[1] if (isinstance(res_sa, (tuple, list)) and len(res_sa) >= 2 and res_sa[1] is not None) else 0.0
+
+            if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
+                res_da = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.70)
+                conf_dungeon_after = res_da[1] if (isinstance(res_da, (tuple, list)) and len(res_da) >= 2 and res_da[1] is not None) else 0.0
+
+            stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
+            dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
+
+        if is_town:
+            stage_select_open = False
+            dungeon_select_open = False
+        else:
+            if not stage_select_open and not dungeon_select_open:
+                stage_templates = self.machine.config.get("stage_templates", [])
+                for st_temp in stage_templates:
+                    if os.path.exists(os.path.join("templates", st_temp)):
+                        pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.75)
+                        if pos:
+                            stage_select_open = True
+                            break
+
+            if not stage_select_open and not dungeon_select_open:
+                dungeon_templates = self.machine.config.get("dungeon_entries", [])
+                for dg_temp in dungeon_templates:
+                    if os.path.exists(os.path.join("templates", dg_temp)):
+                        pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.75)
+                        if pos:
+                            dungeon_select_open = True
+                            break
 
         # 2. 領鑽石優先流程
         if self.machine.need_diamond_collection:
@@ -491,7 +503,7 @@ class NavigationHandler(BaseStateHandler):
                         # 1. 優先檢查記憶體冷卻
                         cooldown_until = self.machine.dungeon_cooldowns.get(target_idx, 0.0)
                         if time.time() < cooldown_until:
-                            if self.machine.config.get("type") == "mix":
+                            if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                 self._switch_to_stage_or_back(screen_img, rect, f"指定副本 [{dungeon_names[target_idx]}] 處於冷卻中")
                                 return
                             if cooldown_until == float('inf'):
@@ -507,7 +519,7 @@ class NavigationHandler(BaseStateHandler):
                                 screen_img, scale, h_limit, w_limit, target_idx, visible_dungeons
                             )
                             if is_unavailable:
-                                if self.machine.config.get("type") == "mix":
+                                if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                     self._switch_to_stage_or_back(screen_img, rect, f"畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中")
                                     return
                                 time.sleep(1.0)
@@ -520,9 +532,10 @@ class NavigationHandler(BaseStateHandler):
                         self.machine.config = GAME_CONFIGS["collect_only"].copy()
                         self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
                         return
-                    if self.machine.config.get("type") == "mix":
+                    if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                         self._switch_to_stage_or_back(screen_img, rect, "地下城頁面偵測到所有地下城均在冷卻中")
                         return
+
                     logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
                     time.sleep(1.0)
                     return
@@ -557,42 +570,7 @@ class NavigationHandler(BaseStateHandler):
                     time.sleep(1.2)
                     return
 
-        # 頁籤開啟狀態統一對比檢測 (比較 select_stage_after.png 與 dungeon_after.png)
-        conf_stage_after = 0.0
-        if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-            _, c_sa = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.70)
-            conf_stage_after = c_sa or 0.0
 
-        conf_dungeon_after = 0.0
-        if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-            _, c_da = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.70)
-            conf_dungeon_after = c_da or 0.0
-
-        stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
-        dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
-
-        # 防呆修復：若明確處於城鎮 (is_town == True，如 common/door.png 可見)，頁籤絕不可能為開啟狀態
-        if is_town:
-            stage_select_open = False
-            dungeon_select_open = False
-        else:
-            if not stage_select_open and not dungeon_select_open:
-                stage_templates = self.machine.config.get("stage_templates", [])
-                for st_temp in stage_templates:
-                    if os.path.exists(os.path.join("templates", st_temp)):
-                        pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.75)
-                        if pos:
-                            stage_select_open = True
-                            break
-
-            if not stage_select_open and not dungeon_select_open:
-                dungeon_templates = self.machine.config.get("dungeon_entries", [])
-                for dg_temp in dungeon_templates:
-                    if os.path.exists(os.path.join("templates", dg_temp)):
-                        pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.75)
-                        if pos:
-                            dungeon_select_open = True
-                            break
 
         if self.machine.config.get("type") == "mix":
             has_dungeon = self.machine.has_available_dungeon()
@@ -750,15 +728,16 @@ class NavigationHandler(BaseStateHandler):
                 return
 
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
-        clicked_any = False
-        for btn in reversed(nav_path):
-            # 防重入：如果在關卡選擇介面，跳過 common/select_stage.png 避免重複開啟或誤點
-            if btn == "common/select_stage.png" and stage_select_open:
-                continue
+        active_tabs = []
+        if stage_select_open:
+            active_tabs.append("stage")
+        if dungeon_select_open:
+            active_tabs.append("dungeon")
 
-            # 防重入：如果地下城選擇選單已開啟，跳過 dungeons/dungeon.png 避免重複開啟或誤點
-            if btn == "dungeons/dungeon.png" and dungeon_select_open:
-                continue
+        filtered_nav_path = filter_navigation_path(nav_path, active_tabs)
+
+        clicked_any = False
+        for btn in reversed(filtered_nav_path):
 
             is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
 

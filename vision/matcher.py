@@ -49,6 +49,27 @@ class TemplateMatcher:
         self._cached_templates[template_name] = template_img
         return template_img
 
+    def match_mutually_exclusive_tabs(self, screen_img, template_a, template_b, margin=0.02, threshold=0.70):
+        """
+        對比兩個互斥 UI 頁籤/按鈕的相對匹配度，回傳 (is_a_active, is_b_active, conf_a, conf_b)。
+        """
+        try:
+            res_a = self.match(screen_img, template_a, threshold)
+        except Exception:
+            res_a = self.match(screen_img, template_a, threshold=threshold)
+
+        try:
+            res_b = self.match(screen_img, template_b, threshold)
+        except Exception:
+            res_b = self.match(screen_img, template_b, threshold=threshold)
+
+        c_a = res_a[1] if (isinstance(res_a, (tuple, list)) and len(res_a) >= 2 and res_a[1] is not None) else 0.0
+        c_b = res_b[1] if (isinstance(res_b, (tuple, list)) and len(res_b) >= 2 and res_b[1] is not None) else 0.0
+        
+        is_a_active = (c_a >= threshold and c_a > c_b + margin)
+        is_b_active = (c_b >= threshold and c_b > c_a + margin)
+        return is_a_active, is_b_active, c_a, c_b
+
     def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0, quiet=False):
         """
         在 screen_img 中尋找與 template_name 匹配度最高的位置。
@@ -156,6 +177,64 @@ class TemplateMatcher:
         if not quiet:
             logging.info(f"成功匹配模板 '{template_name}'！相似度: {final_conf:.4f}，相對亮度比: {final_ratio:.2f}，座標: ({center_x}, {center_y})")
         return (center_x, center_y), final_conf
+
+    def match_all(self, screen_img, template_name, threshold=0.7, scales=None, quiet=False):
+        """
+        在 screen_img 中尋找所有與 template_name 匹配度高於 threshold 的位置 (支援自適應多尺度測試)。
+        :return: [(center_x, center_y, confidence), ...]
+        """
+        base_template = self._load_template(template_name)
+        if base_template is None or screen_img is None:
+            return []
+
+        screen_h, screen_w = screen_img.shape[:2]
+        scales_to_try = scales or [1.0, 0.863, 0.75]
+
+        for s in scales_to_try:
+            if s == 1.0:
+                template_img = base_template
+            else:
+                nw = int(base_template.shape[1] * s)
+                nh = int(base_template.shape[0] * s)
+                if nw <= 0 or nh <= 0 or nh > screen_h or nw > screen_w:
+                    continue
+                template_img = cv2.resize(base_template, (nw, nh), interpolation=cv2.INTER_AREA)
+
+            temp_h, temp_w = template_img.shape[:2]
+            if temp_h > screen_h or temp_w > screen_w:
+                continue
+
+            res = cv2.matchTemplate(screen_img, template_img, cv2.TM_CCOEFF_NORMED)
+            loc = np.where(res >= threshold)
+            pts = list(zip(*loc[::-1]))
+            if not pts:
+                continue
+
+            raw_candidates = [(pt[0], pt[1], float(res[pt[1], pt[0]])) for pt in pts]
+            raw_candidates.sort(key=lambda x: x[2], reverse=True)
+
+            candidates = []
+            for x, y, conf in raw_candidates:
+                too_close = False
+                for cx, cy, _ in candidates:
+                    if abs(x - cx) < temp_w // 2 and abs(y - cy) < temp_h // 2:
+                        too_close = True
+                        break
+                if not too_close:
+                    candidates.append((x, y, conf))
+
+            results = []
+            for x, y, conf in candidates:
+                center_x = x + temp_w // 2
+                center_y = y + temp_h // 2
+                results.append((center_x, center_y, conf))
+
+            if results:
+                if not quiet:
+                    logging.info(f"🔍 [match_all] 在 Scale={s:.3f} 找到 {len(results)} 個模板 [{template_name}] 匹配項 (threshold={threshold})")
+                return results
+
+        return []
 
 if __name__ == "__main__":
     # 簡單單體測試

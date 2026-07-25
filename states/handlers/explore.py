@@ -151,7 +151,8 @@ class ExploreHandler(BaseStateHandler):
                     if pos_fb:
                         logging.warning(f"⚠️ 地下城探索中未匹配到事件，但偵測到大廳/關卡介面 [{fallback_btn}] (信心度: {conf_fb:.4f})，判定已非地下城狀態，自動轉移至 NAVIGATING。")
                         self.machine.is_in_dungeon = False
-                        self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                        self.machine.transition_to(next_state)
                         return
 
         logging.info("⌛ 地下城探索中，正在等待下一層載入或新的隨機事件按鈕出現...")

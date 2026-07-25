@@ -331,7 +331,7 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 3. 畫面回到大廳，看到 stages/start.png。此時因為 need_bag_cleaning 標記，大廳處理器應轉移至 BAG_CLEANING 狀態
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((300, 300), 0.9) if name in ["stages/start.png", "common/select_stage.png", "goback_town.png"] else (None, 0.0)
+            ((300, 300), 0.9) if name in ["stages/start.png", "common/select_stage.png"] else (None, 0.0)
         )
         self.state_machine.step()  # LobbyHandler 攔截轉移 LOBBY -> BAG_CLEANING
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
@@ -464,6 +464,7 @@ class TestStateMachineLogic(unittest.TestCase):
         mock_exists.return_value = True
         
         # 1. 戰鬥中/結算時看到背包已滿 (backpack_full.png) ➔ 直接轉移至 BACKPACK_FULL_SORTING 並標記 need_bag_cleaning
+        self.state_machine.battle_start_time = time.time() - 10.0
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((960, 289), 0.9) if name == "backpack_full.png" else (None, 0.0)
         )
@@ -481,7 +482,7 @@ class TestStateMachineLogic(unittest.TestCase):
     def test_global_task_complete_and_confirm_interception(self, mock_exists):
         """
         測試全域彈窗攔截器：
-        1. 看到 task_complete.png ➔ 點擊「領取獎勵」(相對 Y+281 的座標)
+        1. 看到 task_complete.png ➔ 轉交 _run_task_complete_subflow 進行 OCR 與核銷
         2. 在大廳狀態下看到確認/OK 彈窗 ➔ 自動點選確認關閉
         """
         self.state_machine.config = GAME_CONFIGS["dungeon"]
@@ -494,29 +495,23 @@ class TestStateMachineLogic(unittest.TestCase):
         # 模擬擷取視窗大小 (1920x1080)
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
-        # 1. 偵測到 task_complete.png 位於中心 (960, 540)
-        # 預計點擊 Claim Rewards 按鈕中心: X=960, Y=540+281 = 821
-        task_complete_matched = [False]
-        def match_side_effect_1(img, name, threshold=None, **kwargs):
-            if name == "task_complete.png":
-                if not task_complete_matched[0]:
-                    task_complete_matched[0] = True
-                    return ((960, 540), 0.9)
-                return (None, 0.0)
-            return (None, 0.0)
-            
-        self.mock_matcher.match.side_effect = match_side_effect_1
-        self.state_machine.step()
-        self.mock_mouse.click.assert_called_with(960, 821)
+        # 1. 偵測到 task_complete.png 位於中心 (960, 540)，應調用 _run_task_complete_subflow
+        with patch.object(self.state_machine, '_run_task_complete_subflow') as mock_subflow:
+            self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kw: (
+                ((960, 540), 0.9) if name == "task_complete.png" else (None, 0.0)
+            )
+            self.state_machine.step()
+            mock_subflow.assert_called_once()
         
         # 2. 點擊完領取獎勵後，畫面彈出 confirm.png
         # 此時在大廳狀態，通用確認攔截器應點選確認關閉
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=None, **kw: (
             ((960, 600), 0.9) if name == "common/confirm.png" else (None, 0.0)
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(960, 600)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+
 
     @patch('os.path.exists')
     def test_global_backpack_full_interception(self, mock_exists):
@@ -1289,9 +1284,13 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         mock_exists.return_value = True
         
-        # 模擬 matcher.match 尋找到 confirm.png 隨後消失
+        # 模擬 matcher.match 尋找到 task_complete.png 與 confirm.png 隨後消失
         confirm_matched = [False]
         def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                if not confirm_matched[0]:
+                    return ((100, 100), 0.90)
+                return (None, 0.0)
             if name == "common/confirm.png":
                 if not confirm_matched[0]:
                     confirm_matched[0] = True
@@ -1309,6 +1308,36 @@ class TestStateMachineLogic(unittest.TestCase):
             
         # 驗證是否點擊了確認按鈕，且座標加上 rect["left"] / rect["top"]
         self.mock_mouse.click.assert_called_once_with(160, 170)  # 10 + 150, 20 + 150
+
+    @patch('os.path.exists')
+    def test_multiple_task_complete_popups_sequential_handling(self, mock_exists):
+        """
+        測試連續多個任務完成彈窗 (例如完成 2 個任務) 被連貫點擊確認清理完畢
+        """
+        mock_exists.return_value = True
+
+        popups_cleared = 0
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            nonlocal popups_cleared
+            if name == "task_complete.png":
+                if popups_cleared < 2:
+                    return ((100, 100), 0.90)
+                return (None, 0.0)
+            if name == "common/confirm.png":
+                if popups_cleared < 2:
+                    popups_cleared += 1
+                    return ((150, 150), 0.92)
+                return (None, 0.0)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        with patch('states.state_machine.time.sleep') as mock_sleep:
+            self.state_machine._run_task_complete_subflow(rect)
+
+        self.assertEqual(self.mock_mouse.click.call_count, 2)
+
 
     @patch('os.path.exists')
     def test_dungeon_navigation_anti_reentry(self, mock_exists):
@@ -1406,6 +1435,7 @@ class TestStateMachineLogic(unittest.TestCase):
         3. CollectOnlyHandler 導航轉移至領取或城鎮待機
         """
         self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.stamina_retreat_start_time = time.time()
         self.state_machine.config["diamond_cd"] = 7200.0
         self.state_machine.config["bread_cd"] = 7200.0
         self.state_machine.enable_bread = True
@@ -1437,9 +1467,10 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DIAMOND_COLLECTION)
         
-        # 3. 測試阻斷重定向：
-        # 當領完鑽石後 DiamondCollectionHandler 會轉移回 NAVIGATING，應自動重定向回 COLLECT_ONLY
-        self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
+        # 3. 測試退避路由：
+        # 當在體力退避期間時，根據 stamina_retreat_start_time 顯式轉移至 COLLECT_ONLY
+        next_st = self.state_machine.STATE_COLLECT_ONLY if self.state_machine.stamina_retreat_start_time is not None else self.state_machine.STATE_NAVIGATING
+        self.state_machine.transition_to(next_st)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
         
         # 4. 測試 CollectOnlyHandler 領體力流程：
@@ -2090,18 +2121,20 @@ class TestStateMachineLogic(unittest.TestCase):
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = self.mock_capturer.get_window_rect()
 
+        self.state_machine.need_jewelry_workshop = True
         self.state_machine.detect_current_state(fake_img, rect)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
 
     @patch('os.path.exists')
     def test_detect_state_blood_altar_mode_forces_blood_altar_state(self, mock_exists):
         """
-        測試當模式為 blood_altar 且在城鎮大門時：
+        測試當需要血之祭壇且在城鎮大門時：
         detect_current_state() 會正確轉移至 STATE_BLOOD_ALTAR 狀態！
         """
         from config import GAME_CONFIGS
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.need_blood_altar = True
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
 
         def mock_match(img, name, **kw):

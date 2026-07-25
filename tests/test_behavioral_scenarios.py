@@ -43,6 +43,10 @@ class TestBehavioralScenarios(unittest.TestCase):
             matcher=self.mock_matcher,
             mouse=self.mock_mouse
         )
+        mock_dm = MagicMock()
+        mock_dm.is_subflow_completed.return_value = False
+        self.state_machine.daily_manager = mock_dm
+
         
         # 初始化定時器變數以隔離實際時間干擾
         self.state_machine.need_diamond_collection = False
@@ -1964,8 +1968,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        if self.state_machine.daily_manager:
+            self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=False)
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
+
 
         # Step 1: 城鎮點擊祭壇建築
         def mock_match_step1(img, name, **kw):
@@ -2047,6 +2054,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match_step5
         self.mock_mouse.click.reset_mock()
 
+        self.state_machine.is_dev_subflow_run = True
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(50, 50)
         self.assertEqual(handler.step_phase, "INIT")
@@ -2123,8 +2131,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        if self.state_machine.daily_manager:
+            self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=False)
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
+
 
         def mock_match_inside(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
@@ -2168,8 +2179,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.handle(fake_img, rect)
 
         self.mock_mouse.click.assert_called_once_with(800, 200)
-        self.assertTrue(self.state_machine.need_blood_altar)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertTrue(self.state_machine.pending_town_subflows)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+
 
     @patch('os.path.exists')
     def test_blood_altar_returns_to_dungeon_after_sacrifice(self, mock_exists):
@@ -2217,6 +2229,36 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(handler.empty_blood_scan_count, 0)
         self.assertEqual(handler.last_action_time, 0.0)
 
+    @patch('os.path.exists', return_value=True)
+    def test_blood_altar_skips_free_claim_when_completed_today(self, mock_exists):
+        """
+        測試當 DailyManager 中 blood_altar 今日已完成 (completed_today=True) 時：
+        進入 BloodAltarHandler 會自動跳過點擊領血頁籤與領取按鈕！
+        """
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+
+        # 模擬 DailyManager 紀錄今日已完成
+        mock_dm = MagicMock()
+        mock_dm.is_subflow_completed.return_value = True
+        self.state_machine.daily_manager = mock_dm
+
+
+        def mock_match_entry(img, name, **kw):
+            if name == "town_building/Blood_Altar/receive_entry.png":
+                return ((500, 200), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_entry
+        self.mock_mouse.click.reset_mock()
+
+        handler.handle()
+
+        # 驗證絕對沒有點擊領水頁籤
+        self.mock_mouse.click.assert_not_called()
+        self.assertNotEqual(handler.step_phase, "RECEIVE_TAB_OPEN")
+
+
     @patch('os.path.exists')
     def test_blood_altar_retrigger_cycle_integration(self, mock_exists):
         """
@@ -2254,6 +2296,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["mix"].copy()
         self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0} # 全就緒
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        self.state_machine.is_dev_subflow_run = False
         
         # 1. 模擬獻祭結束退出建築
         altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
@@ -2440,6 +2483,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = self.mock_capturer.get_window_rect()
 
+        self.state_machine.is_dev_subflow_run = True
         handler.handle(fake_img, rect)
         self.mock_mouse.click.assert_called_once_with(74, 744)
         mock_sys_exit.assert_called_once_with(0)
@@ -2563,6 +2607,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match_exit
 
         # 1. 獨立血之祭壇模式
+        self.state_machine.is_dev_subflow_run = True
+        self.state_machine.town_subflow_queue = []
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
         altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         altar_handler.reset_state()
@@ -2571,6 +2617,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         mock_sys_exit.assert_called_with(0)
 
         # 2. 獨立珠寶加工廠模式
+        mock_sys_exit.reset_mock()
+        self.state_machine.is_dev_subflow_run = True
+        self.state_machine.town_subflow_queue = []
         self.state_machine.config = GAME_CONFIGS["jewelry_workshop"].copy()
         jewelry_handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
         jewelry_handler.reset_state()

@@ -27,7 +27,9 @@ STAGE_TEMPLATES = [
     "stages/level5_gloomy_swamp.png"
 ]
 
-GAME_CONFIGS = {
+# ==================== 1. 主掛機大局模式 (PRIMARY MODES - 5 個) ====================
+
+PRIMARY_MODES = {
     # ------------------ 普通關卡模式 ------------------
     "stage": {
         "name": "普通關卡",
@@ -99,7 +101,8 @@ GAME_CONFIGS = {
         "greedy_dungeon": True,
         "greedy_allowed_indices": [0, 1, 2, 3, 4],  # 預設允許全部地下城 [0, 1, 2, 3, 4]
         "auto_resume_dungeon_on_cd": False,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
-        "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
+        "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"],
+
         "dungeon_fight_btn": "dungeons/dungeon_fight.png",
         "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
         "explore_priorities": [
@@ -117,7 +120,8 @@ GAME_CONFIGS = {
             "dungeons/gungeon_godown.png"
         ],
         # 退守普通關卡配置 (預設為第 6 關第一小關)
-        "stage_name": "冰雪洞窟 (first)",
+        "stage_name": "冰凍峽谷 (first)",
+
         "stage_entry": "stages/level6_ice_cave.png",
         "stage_target": "stages/first_stage.png",
         "stage_max_defeat": 2,
@@ -132,29 +136,93 @@ GAME_CONFIGS = {
         "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
     },
     
-    # ------------------ 背包整理模式 ------------------
-    "bag_clean": {
-        "name": "背包整理",
-        "type": "bag_clean",
-        "navigation_path": [],
-        "lobby_start_btn": "stages/start.png",
-    },
-    
     # ------------------ 定時領取麵包與鑽石模式 ------------------
     "collect_only": {
         "name": "定時領取麵包與鑽石",
         "type": "collect_only",
         "navigation_path": [],
-        "diamond_cd": 300.0, # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
-        "bread_cd": 300.0,   # 預設 2 小時 (7200秒) 可改為 60.0 進行 1 分鐘測試
-        "stamina_retreat_duration": 7.0, # 體力不足退避後，在 collect_only 模式下執行的時間 (小時)
+        "diamond_cd": 300.0,
+        "bread_cd": 300.0,
+        "stamina_retreat_duration": 7.0,
+    },
+
+    # ------------------ 每日懸賞任務動態調度模式 ------------------
+    "daily": {
+        "name": "每日懸賞任務",
+
+        "type": "mix",
+        "dungeon_names": DUNGEON_NAMES,
+        "dungeon_entries": DUNGEON_ENTRY_TEMPLATES,
+        "stage_templates": STAGE_TEMPLATES,
+        "bless_mode": "combat",
+        "cooldown_map": {0: 0.0, 1: 300.0, 2: 900.0, 3: 1200.0, 4: 1800.0},
+        "greedy_dungeon": True,
+        "greedy_allowed_indices": [0, 1, 2, 3, 4],
+        "auto_resume_dungeon_on_cd": False,
+        "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
+        "dungeon_fight_btn": "dungeons/dungeon_fight.png",
+        "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
+        "explore_priorities": [
+            "dungeons/dungeons_complete.png",
+            "common/confirm.png",
+            "common/continue.png",
+            "common/continue_gray.png",
+            "dungeons/gungeon_godown_confirm.png",
+            "common/ok.png",
+            "dungeons/dungeon_fight.png",
+            "common/quit.png",
+            "dungeons/Treasure.png",
+            "dungeons/skill_event.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/gungeon_godown.png"
+        ],
+        "lobby_start_btn": "stages/start.png",
+        "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
+    }
+}
+
+# ------------------ 懸賞完成彈窗 (task_complete.png) OCR 裁切框自訂配置 ------------------
+# 相對於卷軸圖示 (task.png) 中心的偏移與框大小 (使用者可自由微調)
+TASK_BANNER_OCR_OFFSET = {
+    "offset_x": 100,    # X 軸水平右移像素 (正數為往右)
+    "offset_y": -50,    # Y 軸垂直上移像素 (負數為向上)
+    "box_width": 400,   # 裁切框寬度 (像素)
+    "box_height": 60,   # 裁切框高度 (像素)
+}
+
+# ------------------ 懸賞告示牌清單 (bulletin_board) OCR 裁切框自訂配置 ------------------
+# 相對於卷軸圖示 (task.png) 右上角的偏移與框大小 (使用者可自由微調)
+BULLETIN_BOARD_OCR_OFFSET = {
+    "offset_x": 5,      # X 軸水平右移像素
+    "offset_y": -10,     # Y 軸垂直上移像素 (負數為向上)
+    "box_width": 360,   # 裁切框寬度 (像素)
+    "box_height": 57,   # 裁切框高度 (像素)
+}
+
+
+
+
+
+# ==================== 2. 城鎮子流程獨立配置 (SUBFLOW CONFIGS - 專供 Dev 測試與 08:05 佇列) ====================
+# ------------------ 以下為 08:05 每日任務城鎮子流程 (Daily Subflows) ------------------
+SUBFLOW_CONFIGS = {
+    # ------------------ 背包整理模式 ------------------
+    "bag_clean": {
+        "enabled": True,
+        "name": "背包整理",
+        "type": "bag_clean",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
     },
 
     # ------------------ 血之祭壇獻祭模式 ------------------
     "blood_altar": {
+        "enabled": True,
         "name": "血之祭壇獻祭",
         "type": "blood_altar",
         "building_btn": "town_building/Blood_Altar/Blood_Altar.png",
+        "receive_entry_btn": "town_building/Blood_Altar/receive_entry.png",
+        "receive_daily_btn": "town_building/Blood_Altar/receive_daily.png",
         "sacrifice_btn": "town_building/Blood_Altar/Sacrifice.png",
         "alter_btn": "town_building/Blood_Altar/alter.png",
         "exit_building_btn": "town_building/exitfromhouse_and_to_town.png",
@@ -176,6 +244,7 @@ GAME_CONFIGS = {
 
     # ------------------ 珠寶加工廠出售模式 ------------------
     "jewelry_workshop": {
+        "enabled": True,
         "name": "珠寶加工廠出售",
         "type": "jewelry_workshop",
         "building_btn": "town_building/Jewelry_workshop/Jewelry_workshop.png",
@@ -202,8 +271,71 @@ GAME_CONFIGS = {
         "goods_dir": "town_building/Jewelry_workshop/goods",
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
-    }
+    },
+
+    # ------------------ 首領領主討伐模式 ------------------
+    "lord_boss": {
+        "enabled": True,
+        "name": "首領領主討伐",
+        "type": "lord_boss",
+        "entry_btn": "load/Lord_entry.png",
+        "entry_after_btn": "load/Lord_entry_after.png",
+        "bosses": {
+            "lord_spider": {
+                "name": "育母蜘蛛麗拉西亞",
+                "template": "load/lord_spider.png",
+                "cooldown_seconds": 3600.0,
+            },
+            "lord_spectre": {
+                "name": "古代惡靈伊瑟倫",
+                "template": "load/lord_spectre.png",
+                "cooldown_seconds": 7200.0,
+            }
+        },
+        "start_btn": "stages/start.png",
+        "result_buttons": ["common/continue.png", "common/continue1.png", "common/continue2.png", "common/continue_gray.png"],
+        "navigation_path": [],
+    },
+
+    # ------------------ 神秘寶箱模式 (開寶箱) ------------------
+    "chest": {
+        "enabled": True,
+        "name": "神秘寶箱",
+        "type": "chest",
+        "building_btn": "town_building/mysterious_treasure/mysterious_treasure.png",
+        "free_btn": "free.png",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
+
+    # ------------------ 抽英雄模式 (酒館招募) ------------------
+    "hero_draw": {
+        "enabled": True,  # 抽英雄子流程開關
+        "name": "抽英雄",
+        "type": "hero_draw",
+        "building_btn": "town_building/Tavern/Tavern.png",
+        "recruitment_btn": "town_building/Tavern/free_recruitment.png",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
+
+    # ------------------ 懸賞告示牌模式 (領任務) ------------------
+    "bulletin_board": {
+        "enabled": True,
+        "name": "懸賞告示牌",
+        "type": "bulletin_board",
+        "building_btn": "town_building/bulletin_board/bulletin_board.png",
+        "reset_btn": "town_building/bulletin_board/reset.png",
+        "accept_btn": "town_building/bulletin_board/accept_task.png",
+        "task_after_btn": "town_building/bulletin_board/task_after.png",
+        "task_already_full_btn": "town_building/bulletin_board/task_already_full.png",
+        "navigation_path": [],
+        "lobby_start_btn": "stages/start.png",
+    },
 }
+
+# ==================== 3. 統一匯出 (GAME_CONFIGS 向後完全相容) ====================
+GAME_CONFIGS = {**PRIMARY_MODES, **SUBFLOW_CONFIGS}
 
 BASE_STAGE_LEVELS = {
     "1": {"name": "蒼穹平原", "entry": "stages/level1_sky_plains.png"},
@@ -211,7 +343,8 @@ BASE_STAGE_LEVELS = {
     "3": {"name": "古樹森林", "entry": "stages/level3_ancient_forest.png"},
     "4": {"name": "沙漠廢墟", "entry": "stages/level4_desert_ruins.png"},
     "5": {"name": "幽暗沼澤", "entry": "stages/level5_gloomy_swamp.png"},
-    "6": {"name": "冰雪洞窟", "entry": "stages/level6_ice_cave.png"},
+    "6": {"name": "冰凍峽谷", "entry": "stages/level6_ice_cave.png"},
+
 }
 
 from utils.config_helper import get_stage_configs

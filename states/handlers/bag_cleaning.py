@@ -120,16 +120,23 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_clean_step = 0
                         time.sleep(0.1)
                         
-                        # 如果是單獨的背包整理模式，在此完成後直接結束腳本
-                        if self.machine.config and self.machine.config.get("type") == "bag_clean":
-                            logging.info("🎒 [背包整理] 整理分解流程已全部完成！退出程式。")
-                            import sys
-                            sys.exit(0)
-                            
-                        # 背包清理完畢後，觸發城鎮子流程流水線佇列 (血之祭壇 ➔ 珠寶加工廠...)
-                        logging.info("🏛️ 背包清理完成，觸發城鎮任務流水線佇列...")
-                        self.machine.trigger_town_subflow_chain()
+                        # 背包清理完畢後，嚴格區分【地下城探索】與【普通關卡/城鎮】之流水線觸發時機
+                        is_dungeon_context = (
+                            getattr(self.machine, "is_in_dungeon", False) or
+                            self.machine.config.get("type") == "dungeon" or
+                            getattr(self.machine, "previous_state", None) == self.machine.STATE_DUNGEON_EXPLORING
+                        )
+
+                        if is_dungeon_context:
+                            logging.info("🏰 [地下城背包清理] 已清理完畢，暫緩城鎮流水線，標記 pending_town_subflows，恢復地下城探索打完本趟副本...")
+                            self.machine.pending_town_subflows = True
+                            target_state = self.machine.previous_state if getattr(self.machine, "previous_state", None) else self.machine.STATE_DUNGEON_EXPLORING
+                            self.machine.transition_to(target_state)
+                        else:
+                            logging.info("🏛️ [城鎮/關卡背包清理] 背包清理完成，立即觸發城鎮任務流水線佇列...")
+                            self.machine.trigger_town_subflow_chain()
                         return
+
 
         # 3. 如果已經分解完畢，則進行「整理」
         if getattr(self.machine, "bag_disassembled", False):
@@ -156,6 +163,7 @@ class BagCleaningHandler(BaseStateHandler):
                         self.machine.bag_select_all_clicked = True
                         self.machine.bag_deselected = False  # 初始化反選標記
                         self.machine.bag_deselect_retry_count = 0
+                        self.machine.bag_deselected_slots = set()  # 初始化已反選格子記錄集
                         time.sleep(0.1)
                         return
 
@@ -242,8 +250,9 @@ class BagCleaningHandler(BaseStateHandler):
                             
                             grid_info.append((r, c, cx, cy, x1, y1, x2, y2, color, is_valuable, has_check_mark))
                             
-                            # 只有當它是貴重裝備，且目前是勾選狀態時，我們才進行反選點擊
-                            if is_valuable and has_check_mark:
+                            # 只有當它是貴重裝備，且目前是勾選狀態，且該 (r, c) 格子尚未被單步反選點擊過時
+                            deselected_slots = getattr(self.machine, "bag_deselected_slots", set())
+                            if is_valuable and has_check_mark and ((r, c) not in deselected_slots):
                                 if target_to_deselect is None:
                                     target_to_deselect = (rect["left"] + cx, rect["top"] + cy, color, r, c)
 
@@ -255,9 +264,13 @@ class BagCleaningHandler(BaseStateHandler):
                         click_x, click_y, color, r, c = target_to_deselect
                         logging.info(f"🛡️ 背包清理：於 Row {r}, Col {c} 發現貴重物品 ({color})，單步點擊以取消選取！座標: ({click_x}, {click_y})")
                         self._save_step_screenshot(screen_img, f"5_deselect_r{r}_c{c}")
+                        if not hasattr(self.machine, "bag_deselected_slots"):
+                            self.machine.bag_deselected_slots = set()
+                        self.machine.bag_deselected_slots.add((r, c))
                         self.mouse.click(click_x, click_y)
-                        time.sleep(0.25)
+                        time.sleep(0.5)
                         return
+
 
                     # 如果循環完畢沒有任何貴重物品被選中
                     # 檢查是否所有物品都被反選了（即全選後全反選，代表無可分解物品），此時直接點擊關閉退出

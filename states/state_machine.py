@@ -15,7 +15,11 @@ from states.handlers import (
     CollectOnlyHandler,
     LoadingHandler,
     BloodAltarHandler,
-    JewelryWorkshopHandler
+    JewelryWorkshopHandler,
+    LordBossHandler,
+    ChestHandler,
+    HeroDrawHandler,
+    BulletinBoardHandler
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -36,6 +40,12 @@ class GameStateMachine:
     STATE_LOADING = "LOADING"                            # 畫面過渡載入流程
     STATE_BLOOD_ALTAR = "BLOOD_ALTAR"                    # 血之祭壇獻祭流程
     STATE_JEWELRY_WORKSHOP = "JEWELRY_WORKSHOP"          # 珠寶加工廠出售流程
+    STATE_LORD_BOSS = "LORD_BOSS"                        # 首領領主討伐流程
+    STATE_CHEST = "CHEST"                                # 神秘寶箱 (開寶箱) 流程
+    STATE_HERO_DRAW = "HERO_DRAW"                        # 抽英雄 (酒館招募) 流程
+    STATE_BULLETIN_BOARD = "BULLETIN_BOARD"              # 懸賞告示牌 (領任務) 流程
+
+
     
     def __init__(self, capturer, matcher, mouse):
         self.capturer = capturer
@@ -80,6 +90,13 @@ class GameStateMachine:
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
         self.town_subflow_queue = []
+        self.quest_scheduler = None
+        self.daily_manager = None
+        self.config = {}
+        self.primary_config = {}
+
+
+
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
         self.chest_opened_this_floor = False
@@ -127,6 +144,10 @@ class GameStateMachine:
             self.STATE_LOADING: LoadingHandler(self),
             self.STATE_BLOOD_ALTAR: BloodAltarHandler(self),
             self.STATE_JEWELRY_WORKSHOP: JewelryWorkshopHandler(self),
+            self.STATE_LORD_BOSS: LordBossHandler(self),
+            self.STATE_CHEST: ChestHandler(self),
+            self.STATE_HERO_DRAW: HeroDrawHandler(self),
+            self.STATE_BULLETIN_BOARD: BulletinBoardHandler(self),
         }
 
     @property
@@ -137,23 +158,26 @@ class GameStateMachine:
     def dungeon_defeat_count(self, value):
         self.defeat_count = value
 
-    def get_ocr_reader(self):
+    def get_ocr_reader(self, lang_list=None):
         """
-        延遲載入並取得 EasyOCR 讀取器實例，避免啟動延遲。
+        延遲載入並取得 EasyOCR 讀取器實例，預設載入繁體中文與英文 ['ch_tra', 'en']。
         """
-        if self._ocr_reader is None:
+        if lang_list is None:
+            lang_list = ['ch_tra', 'en']
+            
+        key = "_".join(lang_list)
+        if not hasattr(self, "_ocr_readers"):
+            self._ocr_readers = {}
+            
+        if key not in self._ocr_readers:
             import easyocr
-            logging.info("⚙️ 正在首次載入 EasyOCR 辨識模型 (使用 CPU)...")
-            self._ocr_reader = easyocr.Reader(['en'], gpu=False)
-        return self._ocr_reader
+            logging.info(f"⚙️ 正在首次載入 EasyOCR 辨識模型 ({lang_list}) (使用 CPU)...")
+            self._ocr_readers[key] = easyocr.Reader(lang_list, gpu=False)
+        return self._ocr_readers[key]
 
 
 
     def transition_to(self, new_state):
-        if self.config is not None and self.config.get("type") == "collect_only":
-            if new_state in [self.STATE_NAVIGATING, self.STATE_LOBBY]:
-                new_state = self.STATE_COLLECT_ONLY
-
         if self.current_state != new_state:
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
             self.last_state = self.current_state
@@ -161,26 +185,67 @@ class GameStateMachine:
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
             self.just_resumed_from_user = False
+            
+            # 🛡️ 關鍵防護：當轉移至新狀態時，自動重置目標 Handler 內部步驟 phase
+            handler = self.handlers.get(new_state)
+            if handler and hasattr(handler, "reset_state"):
+                handler.reset_state()
 
-            # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
-            if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
-                try:
-                    self.handlers[new_state].reset_state()
-                except Exception as e:
-                    logging.debug(f"重置 Handler [{new_state}] 狀態時發生異常: {e}")
+            self._on_state_transition_sync_context(new_state)
 
-            if new_state == self.STATE_BATTLE:
-                self.last_auto_click_time = 0
-            elif new_state == self.STATE_LOADING:
-                self.loading_start_time = time.time()
-            elif new_state == self.STATE_BACKPACK_FULL_SORTING:
-                self.need_bag_cleaning = True
-                self.handlers[new_state].screenshot_counter = 1
+
+    # 🏛️ 城鎮子流程與 Config Key 聲明式對照表 (新增城鎮子流程只需在此註冊對應 Key)
+    TOWN_SUBFLOW_CONFIG_MAP = {
+        STATE_BLOOD_ALTAR: "blood_altar",
+        STATE_JEWELRY_WORKSHOP: "jewelry_workshop",
+        STATE_LORD_BOSS: "lord_boss",
+        STATE_CHEST: "chest",
+        STATE_HERO_DRAW: "hero_draw",
+        STATE_BULLETIN_BOARD: "bulletin_board",
+    }
+
+
+
+    def _on_state_transition_sync_context(self, new_state):
+        from config import GAME_CONFIGS
+        key = self.TOWN_SUBFLOW_CONFIG_MAP.get(new_state)
+        if key and key in GAME_CONFIGS:
+            if self.config is None:
+                self.config = {}
+            self.config.update(GAME_CONFIGS[key])
+
+        # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
+        if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
+            try:
+                self.handlers[new_state].reset_state()
+            except Exception as e:
+                logging.debug(f"重置 Handler [{new_state}] 狀態時發生異常: {e}")
+
+        if new_state == self.STATE_BATTLE:
+            self.last_auto_click_time = 0
+        elif new_state == self.STATE_LOADING:
+            self.loading_start_time = time.time()
+        elif new_state == self.STATE_BACKPACK_FULL_SORTING:
+            self.need_bag_cleaning = True
+            self.handlers[new_state].screenshot_counter = 1
+        elif new_state in [self.STATE_NAVIGATING, self.STATE_COLLECT_ONLY]:
+            if getattr(self, "pending_town_subflows", False):
+                self.pending_town_subflows = False
+                logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
+                self.trigger_town_subflow_chain()
+            elif self.is_daily_pipeline_active():
+                self.evaluate_and_schedule_daily_pipeline()
+
+
 
     def step(self):
         """
         執行單步狀態檢索與決策（主調度器）。
         """
+        # 動態檢查 08:30 日常任務/Boss 清零重置線 (全模式適用)
+        if getattr(self, "daily_manager", None):
+            self.daily_manager.check_and_reset_daily()
+
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
             time.sleep(1)
@@ -264,16 +329,10 @@ class GameStateMachine:
             if os.path.exists(os.path.join("templates", "task_complete.png")):
                 pos, conf = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
                 if pos:
-                    # 計算「領取獎勵」按鈕的相對位置（依據當前畫面高度動態縮放偏移量，以 1080p 為基準）
-                    height_to_use = rect.get("height") or screen_img.shape[0] or 1080
-                    scale_y = height_to_use / 1080.0
-                    btn_x = rect["left"] + pos[0]
-                    btn_y = rect["top"] + pos[1] + int(281 * scale_y)
-                    logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程，點擊座標 ({btn_x}, {btn_y})。")
-                    self.mouse.click(btn_x, btn_y)
-                    time.sleep(0.5)  # 等待動畫
+                    logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程進行 OCR 辨識與核銷。")
                     self._run_task_complete_subflow(rect)
                     return
+
 
             # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
             if os.path.exists(os.path.join("templates", "backpack_full.png")):
@@ -343,7 +402,7 @@ class GameStateMachine:
                         return
 
         # 0.06 如果需要血之祭壇獻祭 (need_blood_altar == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
-        if getattr(self, "need_blood_altar", False) or (self.config is not None and self.config["type"] == "blood_altar"):
+        if getattr(self, "need_blood_altar", False):
             for town_btn in ["common/door.png", "goback_town.png", "town_building/Blood_Altar/Blood_Altar.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.8)
@@ -351,8 +410,8 @@ class GameStateMachine:
                         self.transition_to(self.STATE_BLOOD_ALTAR)
                         return
 
-        # 0.07 如果模式為 jewelry_workshop 或需要珠寶加工廠出售，且已回到了大廳/城鎮/建築畫面
-        if getattr(self, "need_jewelry_workshop", False) or (self.config is not None and self.config["type"] == "jewelry_workshop"):
+        # 0.07 如果需要珠寶加工廠出售 (need_jewelry_workshop == True)，且已回到了大廳/城鎮/建築畫面
+        if getattr(self, "need_jewelry_workshop", False):
             for town_btn in ["common/door.png", "goback_town.png", "town_building/Jewelry_workshop/Jewelry_workshop.png", "town_building/sell_out.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):
                     pos_t, _ = self.matcher.match(screen_img, town_btn, threshold=0.75)
@@ -372,7 +431,8 @@ class GameStateMachine:
                 if os.path.exists(os.path.join("templates", bf)):
                     pos, _ = self.matcher.match(screen_img, bf, threshold=0.8)
                     if pos:
-                        self.transition_to(self.STATE_NAVIGATING)
+                        next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                        self.transition_to(next_state)
                         return
 
         # 1. 檢查是否在戰鬥中 (看到 common/auto.png 必定在戰鬥)
@@ -400,7 +460,8 @@ class GameStateMachine:
             pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
             logging.info(f"🔍 [除錯] 比對尋路按鈕 '{btn}'，最高相似度: {conf:.4f}，座標: {pos}")
             if pos and conf >= 0.8:
-                self.transition_to(self.STATE_NAVIGATING)
+                next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                self.transition_to(next_state)
                 return
                 
         # 4. 檢查是否在地下城探險中
@@ -581,23 +642,116 @@ class GameStateMachine:
                 self.bread_collected_this_run = False
                 self.bread_click_attempted = False
 
+    def attach_quest_scheduler(self, scheduler):
+        """
+        將實例化的 QuestScheduler 動態掛載至 GameStateMachine。
+        """
+        self.quest_scheduler = scheduler
+        logging.info("🔗 [GameStateMachine] 已成功連結懸賞任務排程器 (QuestScheduler)。")
+
+    def apply_mix_fallback_config(self):
+        """
+        當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
+        """
+        if getattr(self, "primary_config", None):
+            self.config = self.primary_config.copy()
+            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
+        else:
+            from config import PRIMARY_MODES
+            mix_config = PRIMARY_MODES["mix"].copy()
+            mix_config["greedy_dungeon"] = False
+            mix_config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
+            if hasattr(self, "backend_mode"):
+                mix_config["backend_mode"] = self.backend_mode
+
+            self.config = mix_config
+            self.primary_config = mix_config.copy()
+            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至預設退守混合模式: {mix_config['name']} (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+
+
+
+    def check_and_advance_quest_target(self):
+        """
+        當當前任務目標完成時，動態查詢下一個懸賞任務目標並切換模式配置。
+        若所有懸賞任務已全數完成，自動解除懸賞排程器並切換為預設 mix 模式。
+        """
+        if self.quest_scheduler is None:
+            return False
+
+        if self.quest_scheduler.is_all_completed():
+            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為退守混合模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+            self.quest_scheduler = None
+            self.apply_mix_fallback_config()
+            return True
+
+        target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
+        if target_task:
+            if target_task.completed_count >= target_task.max_run_limit:
+                logging.warning(f"⚠️ [10次上限統一刪除] 懸賞任務 [{target_task.quest_title}] 已達到最多 {target_task.max_run_limit} 次戰鬥上限，強制將該任務從排程佇列與 JSON 中刪除！")
+                self.quest_scheduler.tasks = [t for t in self.quest_scheduler.tasks if t != target_task]
+                if getattr(self, "daily_manager", None):
+                    self.daily_manager.remove_accepted_quest(target_task.quest_title)
+                return self.check_and_advance_quest_target()
+
+            quest_cfg = target_task.to_config_dict()
+            if hasattr(self, "backend_mode"):
+                quest_cfg["backend_mode"] = self.backend_mode
+            self.config = quest_cfg
+            logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
+            return False
+
+
+
+        return False
+
+
+
+
     def _run_task_complete_subflow(self, rect):
         logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")
         start_time = time.time()
-        timeout = 5.0  # 最多執行 5 秒
-        
+        timeout = 10.0  # 最多執行 10 秒，相容多個任務連續完成彈窗
+
         subflow_templates = [
             ("common/confirm.png", 0.80),
             ("common/ok.png", 0.80)
         ]
-        
+
         while time.time() - start_time < timeout:
             screen_img = self.capturer.capture(rect)
             if screen_img is None:
                 time.sleep(0.2)
                 continue
+
+            # 1. 檢查任務完成主彈窗是否存在，若已無彈窗則直接成功結束
+            pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
+            if not pos_task:
+                logging.info("🟢 [子流程] 任務完成彈窗已全數確認關閉，成功領取獎勵！")
+                return
+
+            # 2. 🛡️ 嚴格順序：先判斷任務標題，確認判斷出來後才允許點擊！
+            task_recognized = False
+            ocr_attempts = 0
+            while ocr_attempts < 3 and not task_recognized:
+                ocr_attempts += 1
+                if self.quest_scheduler:
+                    try:
+                        recognized_title = self.quest_scheduler.process_task_complete_banner(screen_img, pos_task, ocr_reader=self._ocr_reader)
+                        if recognized_title:
+                            logging.info(f"✅ [子流程] 已成功辨識核銷任務: [{recognized_title}]，準備點擊確認離場。")
+                            task_recognized = True
+                            break
+                    except Exception as e:
+                        logging.debug(f"OCR 辨識完成彈窗時發生異常: {e}")
                 
-            matched_any = False
+                if not task_recognized and ocr_attempts < 3:
+                    time.sleep(0.3)
+                    screen_img = self.capturer.capture(rect)
+                    if screen_img is None:
+                        break
+
+            # 3. 確認判斷出任務後，才進行點擊確認按鈕關閉
+            matched_confirm = False
             for template_name, thresh in subflow_templates:
                 if not os.path.exists(os.path.join("templates", template_name)):
                     continue
@@ -605,25 +759,68 @@ class GameStateMachine:
                 if pos:
                     logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}，進行點擊...")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    matched_any = True
-                    time.sleep(0.5) # 等待彈窗關閉動畫
-                    break # 重新擷取畫面以確認是否消失
-                    
-            if not matched_any:
-                # 2. 如果無任何確認按鈕，檢查任務完成主彈窗是否消失
-                pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
-                if not pos_task:
-                    logging.info("🟢 [子流程] 任務完成彈窗已確認關閉，成功領取獎勵！")
-                    return
+                    matched_confirm = True
+                    time.sleep(0.6) # 等待當前彈窗關閉/下一個彈窗出現
+                    break
+
+            # 4. 若無確認按鈕，點擊彈窗內領獎位置
+            if not matched_confirm:
+                height_to_use = rect.get("height") or screen_img.shape[0] or 1080
+                scale_y = height_to_use / 1080.0
+                btn_x = rect["left"] + pos_task[0]
+                btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
+                logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，點擊領取獎勵座標 ({btn_x}, {btn_y})。")
+                self.mouse.click(btn_x, btn_y)
+                time.sleep(0.6)
+
+            # 5. 🛡️ 確定消失防護：點擊發射後，連續兩幀驗證 task_complete.png 徹底消失並補點確認
+            disappeared_streak = 0
+            for retry in range(5):
+                chk_img = self.capturer.capture(rect)
+                if chk_img is None:
+                    break
+                pos_still, conf_still = self.matcher.match(chk_img, "task_complete.png", threshold=0.70)
+                if not pos_still:
+                    disappeared_streak += 1
+                    if disappeared_streak >= 2:
+                        logging.info("🟢 [子流程] 已連續兩幀確認【任務完成】彈窗徹底關閉消失，畫面動畫恢復完畢！")
+                        time.sleep(1)
+                        return
                 else:
-                    # 3. 若任務彈窗仍存在且無確認按鈕，說明第一步點選「領取獎勵」失效，進行重新點擊！
-                    height_to_use = rect.get("height") or screen_img.shape[0] or 1080
-                    scale_y = height_to_use / 1080.0
-                    btn_x = rect["left"] + pos_task[0]
-                    btn_y = rect["top"] + pos_task[1] + int(281 * scale_y)
-                    logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，重新點擊領取獎勵座標 ({btn_x}, {btn_y})。")
-                    self.mouse.click(btn_x, btn_y)
-                    time.sleep(0.5)
+                    disappeared_streak = 0
+                    logging.info(f"⏳ [子流程] 彈窗尚未完全關閉 (殘留信心度: {conf_still:.4f})，進行補點確認關閉 (嘗試 {retry+1}/5)...")
+                    pos_c, _ = self.matcher.match(chk_img, "common/confirm.png", threshold=0.80)
+                    if pos_c:
+                        self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                    else:
+                        target_x = btn_x if 'btn_x' in locals() else rect["left"] + pos_task[0]
+                        target_y = btn_y if 'btn_y' in locals() else rect["top"] + pos_task[1] + int(281 * (rect.get("height", 1080) / 1080.0))
+                        self.mouse.click(target_x, target_y)
+                    time.sleep(1)
+
+
+
+
+
+    def start_subflow_queue(self, queue):
+        """
+        初始化並啟動城鎮子流程佇列，並單次列印任務總覽儀表板。
+        """
+        from config import SUBFLOW_CONFIGS
+        self.town_subflow_queue = list(queue)
+
+        logging.info("=" * 60)
+        logging.info("🏛️ 【城鎮任務流水線 - 任務總覽儀表板】 🏛️")
+        logging.info("=" * 60)
+        for idx, flow_key in enumerate(queue, 1):
+            cfg = SUBFLOW_CONFIGS.get(flow_key, {})
+            name = cfg.get("name", flow_key)
+            is_enabled = cfg.get("enabled", True)
+            status_str = "🟢 待執行 (Enabled)" if is_enabled else "🔴 停用 (enabled=False)"
+            logging.info(f"  {idx}. [{flow_key}] {name:<12} : {status_str}")
+        logging.info("=" * 60)
+
+        self.pop_and_next_town_subflow()
 
     def trigger_town_subflow_chain(self):
         """
@@ -632,9 +829,8 @@ class GameStateMachine:
         from config import GLOBAL_SETTINGS
         cfg = self.config or {}
         order = cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_town_subflow_order", ["blood_altar", "jewelry_workshop"]))
-        self.town_subflow_queue = list(order)
-        logging.info(f"🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列: {self.town_subflow_queue}")
-        self.pop_and_next_town_subflow()
+        logging.info("🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列...")
+        self.start_subflow_queue(order)
 
     def pop_and_next_town_subflow(self):
         """
@@ -644,18 +840,121 @@ class GameStateMachine:
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
 
-        if self.town_subflow_queue:
+        while self.town_subflow_queue:
             next_flow = self.town_subflow_queue.pop(0)
-            logging.info(f"🏛️ [城鎮流水線] 彈出下一個城鎮任務 [{next_flow}]，剩餘佇列: {self.town_subflow_queue}")
-            if next_flow == "blood_altar":
-                self.need_blood_altar = True
-                self.transition_to(self.STATE_BLOOD_ALTAR)
+
+            from config import SUBFLOW_CONFIGS, GAME_CONFIGS
+            flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
+            if not flow_cfg.get("enabled", True):
+                logging.info(f"⏭️ [城鎮流水線] 子流程 [{next_flow}] 設定為停用 (enabled=False) ➔ 自動跳過！剩餘佇列 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
+                continue
+
+            flow_name = flow_cfg.get("name", next_flow)
+            logging.info("=" * 60)
+            logging.info(f"🎯 [城鎮流水線進度] 彈出並切換至任務: [{next_flow}] ({flow_name})")
+            logging.info(f"📌 剩餘待執行子流程 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
+            logging.info("=" * 60)
+
+            if next_flow in GAME_CONFIGS:
+                self.config = GAME_CONFIGS[next_flow].copy()
+
+            if next_flow == "bag_clean":
+                self.need_bag_cleaning = True
+                self.transition_to(self.STATE_BAG_CLEANING)
                 return
+            elif next_flow == "blood_altar":
+                self.need_blood_altar = True
             elif next_flow == "jewelry_workshop":
                 self.need_jewelry_workshop = True
-                self.transition_to(self.STATE_JEWELRY_WORKSHOP)
+
+
+
+            # 🏛️ 資料驅動動態派發：依據 TOWN_SUBFLOW_CONFIG_MAP 反向比對目標狀態
+            config_to_state = {v: k for k, v in self.TOWN_SUBFLOW_CONFIG_MAP.items()}
+            target_state = config_to_state.get(next_flow)
+            if target_state:
+                self.transition_to(target_state)
                 return
 
-        logging.info("🏛️ [城鎮流水線] 所有城鎮任務均已完成！重置旗標並回復 STATE_NAVIGATING 續行導航...")
-        self.transition_to(self.STATE_NAVIGATING)
+        # 若佇列已空！
+        logging.info("=" * 60)
+        logging.info("🎉 【城鎮流水線 - 全部完成】 🎉")
+        if getattr(self, "is_dev_subflow_run", False):
+            logging.info("Dev 測試模式：所有指定的城鎮子流程已全數執行完畢！結束程式。")
+            logging.info("=" * 60)
+            import sys
+            sys.exit(0)
+
+        if getattr(self, "primary_config", None):
+            self.config = self.primary_config.copy()
+            logging.info(f"恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
+        else:
+            logging.info("重置旗標並回復原模式續行...")
+        logging.info("=" * 60)
+
+        # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
+        if self.is_daily_pipeline_active():
+            scheduled = self.evaluate_and_schedule_daily_pipeline()
+            if scheduled:
+                return
+
+        next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+        self.transition_to(next_st)
+
+    def is_daily_pipeline_active(self):
+        """
+        檢查目前是否處於每日全域流水線 (--mode daily) 運作模式中。
+        """
+        if not getattr(self, "daily_manager", None):
+            return False
+        mode_type = self.config.get("type") if getattr(self, "config", None) else None
+        return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
+
+
+    def evaluate_and_schedule_daily_pipeline(self):
+        """
+        全域每日大流水線動態調度器 (Daily Master Pipeline Scheduler)。
+        依據四階梯全域優先級自動判斷與發起：
+        - Tier 1: 一極優先 (每日一次性城鎮速領: chest ➔ hero_draw ➔ blood_altar + jewelry_workshop)
+        - Tier 2: 二極優先 (領主 Boss 討伐 lord_boss 計時器調度，優先級 > bulletin_board)
+        - Tier 3: 三極優先 (懸賞告示牌與動態任務 bulletin_board)
+        - Tier 4: 四極退守 (預設 mix 模式: 冰雪洞窟 + 關卡 6-1)
+        """
+        if getattr(self, "_in_scheduling_pipeline", False):
+            return False
+        self._in_scheduling_pipeline = True
+
+        try:
+            if not self.daily_manager:
+                return False
+
+            # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar)
+            pending_town = self.daily_manager.get_pending_town_subflows()
+            if pending_town and not self.town_subflow_queue:
+                logging.info(f"🏛️ [Daily Master Pipeline] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
+                self.start_subflow_queue(pending_town)
+                return True
+        finally:
+            self._in_scheduling_pipeline = False
+
+
+        # 2. 檢查 Tier 2 領主 Boss 討伐 (lord_boss)
+        if self.daily_manager.has_available_lord_boss():
+            avail_bosses = self.daily_manager.get_available_lord_bosses()
+            logging.info(f"⚔️ [Daily Master Pipeline] 觸發 Tier 2 領主 Boss 討伐 (可用 Boss: {avail_bosses}) ➔ 優先插隊討伐！")
+            self.start_subflow_queue(["lord_boss"])
+            return True
+
+        # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
+        if self.quest_scheduler:
+            self.check_and_advance_quest_target()
+            if self.quest_scheduler:
+                return True
+
+        # 4. 退守 Tier 4 Mix 模式 (冰雪洞窟 + 關卡 6-1)
+        self.apply_mix_fallback_config()
+        return False
+
+
+
 

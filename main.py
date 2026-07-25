@@ -17,8 +17,9 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS
+from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
 from utils import get_stage_configs
+from utils.daily_manager import DailyManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -85,7 +86,7 @@ def setup_stage_config(config, prompt_prefix=""):
     print(" 3) 古樹森林 (Level 3)")
     print(" 4) 沙漠廢墟 (Level 4)")
     print(" 5) 幽暗沼澤 (Level 5)")
-    print(" 6) 冰雪洞窟 (Level 6) - 預設")
+    print(" 6) 冰凍峽谷 (Level 6) - 預設")
     try:
         choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
         if not choice:
@@ -97,7 +98,8 @@ def setup_stage_config(config, prompt_prefix=""):
         choice = "6"
 
     if choice not in stage_configs:
-        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰凍峽谷]...")
+
         choice = "6"
 
     cfg = stage_configs[choice]
@@ -302,15 +304,26 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
-    parser.add_argument("--mode", type=str, default="mix", choices=list(GAME_CONFIGS.keys()), 
-                        help="掛機模式：mix (混合模式，預設)、dungeon (地下城) 或 stage (普通關卡)")
+    parser.add_argument("--mode", type=str, default="mix", choices=list(PRIMARY_MODES.keys()), 
+                        help="主掛機模式：mix (混合模式，預設)、dungeon (地下城)、stage (普通關卡)、collect_only (純領取)")
+    parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
+                        help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
     return parser.parse_args()
 
 def setup_mode_config(args):
-    config = GAME_CONFIGS[args.mode].copy()
+    # 若指定了 --subflow，為純城鎮子流程測試，完全不跳出地下城與關卡選單提示！
+    if args.subflow:
+        target_key = args.subflow[0]
+        config = GAME_CONFIGS[target_key].copy()
+        config["backend_mode"] = args.backend
+        print(f"🛠️ [Dev 測試模式] 直接發起城鎮子流程: {args.subflow} (免選關卡，直通城鎮)")
+        return config
+
+    target_key = args.mode
+    config = GAME_CONFIGS[target_key].copy()
     config["backend_mode"] = args.backend
 
     if args.mode == "stage":
@@ -321,6 +334,28 @@ def setup_mode_config(args):
         setup_dungeon_config(config, args)
         setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
         print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
+    elif args.mode == "daily":
+        # 懸賞任務全數完成時，預設退守 mix 標的：地下城 5) 冰雪洞窟，關卡 第六關第一小關 (冰凍峽谷)
+        config["name"] = "每日懸賞任務 (退守: 冰雪洞窟 + 冰凍峽谷 6-1)"
+        config["greedy_dungeon"] = False
+        config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
+        config["stage_name"] = "冰凍峽谷 (first)"
+        config["stage_entry"] = "stages/level6_ice_cave.png"
+        config["stage_target"] = "stages/first_stage.png"
+        config["stage_navigation_path"] = [
+            "common/door.png",
+            "common/select_stage.png",
+            "stages/level6_ice_cave.png",
+            "stages/stage_label.png",
+            "stages/first_stage.png"
+        ]
+        config["lobby_start_btn"] = "stages/start.png"
+        config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+        print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行 [冰雪洞窟] 與 [冰凍峽谷 6-1]。")
+
+
+
+
     elif args.mode == "blood_altar":
         print("\n請選擇要獻祭/消耗的血水品質（設定為『否/保留』者將不進行點選獻祭）：")
         print(" 1) 灰、綠、藍獻祭 (紫色保留不賣/不獻祭) - 預設")
@@ -347,7 +382,7 @@ def setup_mode_config(args):
     return config
 
 def setup_equipment_config(config):
-    if config["type"] in ["collect_only", "blood_altar", "jewelry_workshop"]:
+    if config["type"] in ["collect_only", "blood_altar", "jewelry_workshop", "chest", "lord_boss", "hero_draw"]:
         config["keep_colors"] = []
         config["disassemble_colors"] = []
         return
@@ -470,6 +505,23 @@ def init_state_machine_system(args, config):
     # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
     mouse.state_machine = state_machine
     state_machine.config = config
+    state_machine.primary_config = config.copy()
+    daily_manager = DailyManager()
+    state_machine.daily_manager = daily_manager
+
+    # 若使用 --subflow 發起 Dev 階段獨立測試
+    if hasattr(args, "subflow") and args.subflow:
+        state_machine.is_dev_subflow_run = True
+        state_machine.start_subflow_queue(args.subflow)
+
+    # 每日任務主模式：載入 accepted_quests、掛載 QuestScheduler 並啟動 Daily Master Pipeline 全域流水線
+    if getattr(args, "mode", None) == "daily":
+        quest_scheduler = daily_manager.load_quest_scheduler()
+        state_machine.attach_quest_scheduler(quest_scheduler)
+        state_machine.evaluate_and_schedule_daily_pipeline()
+
+
+
 
     if config["type"] in ["bag_clean", "blood_altar"]:
         state_machine.enable_bread = False

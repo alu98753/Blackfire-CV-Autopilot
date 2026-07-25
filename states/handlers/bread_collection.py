@@ -81,7 +81,8 @@ class BreadCollectionHandler(BaseStateHandler):
                     self.machine.bread_click_attempted = False
                     self.machine.bread_window_missing_count = 0
                     self.machine.last_bread_collection_time = time.time()
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                    self.machine.transition_to(next_state)
                     return
 
             # 情況二：尚未領取且未冷卻，嘗試領取

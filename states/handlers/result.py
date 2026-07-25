@@ -78,13 +78,26 @@ class ResultHandler(BaseStateHandler):
                 return True
 
 
-        # A2. 檢查離開戰鬥/結算退出按鈕 (在背包滿需要清理，或領取時間到了需要去領體力/鑽石時，退出戰鬥回大廳)
+        is_daily = self.machine.is_daily_pipeline_active()
+        boss_available = False
+        if is_daily and getattr(self.machine, "daily_manager", None):
+            boss_available = self.machine.daily_manager.has_available_lord_boss()
+
+        quest_batch_completed = False
+        if is_daily and getattr(self.machine, "quest_scheduler", None):
+            quest_batch_completed = self.machine.quest_scheduler.is_current_task_batch_completed(dungeon_cooldowns=self.machine.dungeon_cooldowns)
+
         should_exit_battle = (
+            self.machine.stamina_retreat_start_time is not None or
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
             (self.machine.enable_bread and self.machine.need_bread_collection) or
-            (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon())
+            (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
+            (is_daily and boss_available) or
+            (is_daily and quest_batch_completed)
         )
+
+
         if should_exit_battle:
             if os.path.exists(os.path.join("templates", "exit_battle.png")):
                 pos_exit, conf_exit = self.matcher.match(screen_img, "exit_battle.png", threshold=0.9)
@@ -96,7 +109,15 @@ class ResultHandler(BaseStateHandler):
                     logging.info(f"👉 偵測到離開戰鬥按鈕 [{conf_exit:.4f}]，點擊退出結算以返回大廳執行清理/領取/地下城任務。")
                     self.mouse.click(rect["left"] + pos_exit[0], rect["top"] + pos_exit[1])
                     self.machine.is_in_dungeon = False
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    
+                    if getattr(self.machine, "current_lord_boss_key", None):
+                        b_key = self.machine.current_lord_boss_key
+                        self.machine.current_lord_boss_key = None
+                        if getattr(self.machine, "daily_manager", None):
+                            self.machine.daily_manager.record_lord_boss_fight(b_key)
+                            
+                    next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                    self.machine.transition_to(next_state)
                     time.sleep(0.2)
                     return True
 
@@ -120,10 +141,12 @@ class ResultHandler(BaseStateHandler):
             time.sleep(0.1)
             return True
 
-        # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如金黃色與灰色繼續按鈕）
+        # B. 檢查「繼續」按鈕（支援多個繼續按鈕模板，例如 common/continue.png, continue1.png, continue2.png, continue_gray.png）
         # 繼續按鈕亮度門檻調鬆為 0.0，避免勝場動畫漸變影響匹配
         continue_configs = [
             (self.machine.continue_template, 0.80, 0.0),
+            ("common/continue1.png", 0.80, 0.0),
+            ("common/continue2.png", 0.80, 0.0),
             ("common/continue_gray.png", 0.88, 0.70)
         ]
         for c_temp, thresh, b_thresh in continue_configs:
@@ -132,17 +155,43 @@ class ResultHandler(BaseStateHandler):
                 if pos_c:
                     logging.info(f"👉 偵測到「繼續」按鈕 ({c_temp}) (信心度: {conf_c:.4f})，進行點擊。")
                     self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+
+                    if getattr(self.machine, "current_lord_boss_key", None):
+                        b_key = self.machine.current_lord_boss_key
+                        self.machine.current_lord_boss_key = None
+                        dm = getattr(self.machine, "daily_manager", None)
+                        if dm:
+                            dm.record_lord_boss_fight(b_key)
+
                     time.sleep(0.1)
                     return True
 
-        # C. 檢查是否已經默默回到準備大廳
-        lobby_btn = self.machine.config.get("lobby_start_btn")
-        if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
-            pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-            if pos_start:
-                logging.info(f"👉 偵測到已回到大廳 ({lobby_btn})，將狀態轉回 LOBBY。")
-                self.machine.transition_to(self.machine.STATE_LOBBY)
-                return True
+        # C. 檢查是否已經默默回到準備大廳/頁籤選單 (包含 Lord_entry_after, dungeon_after, goback_town)
+        lobby_templates = []
+        if self.machine.config.get("lobby_start_btn"):
+            lobby_templates.append(self.machine.config.get("lobby_start_btn"))
+        lobby_templates.extend(["load/Lord_entry_after.png", "dungeons/dungeon_after.png", "goback_town.png"])
+
+        for l_temp in lobby_templates:
+            if l_temp and os.path.exists(os.path.join("templates", l_temp)):
+                pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80)
+                if pos_l:
+                    logging.info(f"👉 結算辨識：偵測到畫面已切回大廳/頁籤 [{l_temp}] (相似度: {conf_l:.4f})，即時結束結算狀態。")
+                    if getattr(self.machine, "current_lord_boss_key", None):
+                        b_key = self.machine.current_lord_boss_key
+                        self.machine.current_lord_boss_key = None
+                        dm = getattr(self.machine, "daily_manager", None)
+                        if dm:
+                            dm.record_lord_boss_fight(b_key)
+
+                    dev_subs = getattr(self.machine, "dev_subflows", None) or []
+                    if "lord_boss" in dev_subs or l_temp == "load/Lord_entry_after.png":
+                        self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+                    elif self.machine.stamina_retreat_start_time is not None:
+                        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                    else:
+                        self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    return True
             
         # D. 檢查是否已經進入戰鬥狀態 (避免人手點擊或自動戰鬥提早開始時卡在結算超時)
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
@@ -196,6 +245,7 @@ class ResultHandler(BaseStateHandler):
 
         self.machine.defeat_count = 0
         self.machine.is_in_dungeon = False
-        self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+        self.machine.transition_to(next_state)
         time.sleep(0.2)
         return True
