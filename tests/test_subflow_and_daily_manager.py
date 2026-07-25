@@ -319,8 +319,8 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
     def test_bulletin_board_prepends_today_new_quests(self):
         """
-        測試：每日抓取新任務時以【前插策略 Prepending Strategy】更新佇列，
-        確保【今日新任務排在前、舊未完成任務留在後】且不重複。
+        測試：每日抓取新任務時以多階梯優先級 (sort_quests) 更新佇列，
+        確保確定性任務排在前、不確定性任務排在後。
         """
         # 1. 昨日殘留未完成舊任務: ["清除野豬", "擊殺首領"]
         self.manager.status["subflows"]["bulletin_board"]["accepted_quests"] = ["清除野豬", "擊殺首領"]
@@ -330,17 +330,18 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         today_new_quests = ["擊敗冰元素", "史萊姆王的毀滅"]
         updated = self.manager.update_bulletin_board_quests(today_new_quests)
 
-        # 3. 驗證更新後：今日新任務在前，舊任務在後！
-        expected = ["擊敗冰元素", "史萊姆王的毀滅", "清除野豬", "擊殺首領"]
+        # 3. 驗證更新後按 sort_quests 排序：擊敗冰元素 (Stage 6) ➔ 清除野豬 (Stage 1) ➔ 擊殺首領 ➔ 史萊姆王的毀滅 (BANNER_VERIFY)
+        expected = ["擊敗冰元素", "清除野豬", "擊殺首領", "史萊姆王的毀滅"]
         self.assertEqual(updated, expected)
         self.assertEqual(self.manager.status["subflows"]["bulletin_board"]["accepted_quests"], expected)
 
         # 4. 測試重複項目不重複插入
         today_new_quests_2 = ["擊敗冰元素", "清除野豬"]
         updated_2 = self.manager.update_bulletin_board_quests(today_new_quests_2)
-        expected_2 = ["擊敗冰元素", "清除野豬", "史萊姆王的毀滅", "擊殺首領"]
+        expected_2 = ["擊敗冰元素", "清除野豬", "擊殺首領", "史萊姆王的毀滅"]
         self.assertEqual(updated_2, expected_2)
 
 if __name__ == "__main__":
     unittest.main()
+
 
