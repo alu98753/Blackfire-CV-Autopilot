@@ -29,14 +29,16 @@ class QuestOCRExtractor:
             logging.warning("⚠️ [QuestOCRExtractor] 未在畫面中辨識到任何懸賞任務標籤 (task.png) 錨點！")
             return [], ""
 
+        h_img, w_img = screen_img.shape[:2]
+
+        # 專精優化：過濾只保留螢幕左半邊 (cx < w_img // 2) 的 task.png 錨點 (避開右半邊任務描述區的圖示)
+        anchors = [a for a in anchors if a[0] < w_img // 2]
+        if not anchors:
+            logging.warning("⚠️ [QuestOCRExtractor] 左半邊未找到任何 task.png 錨點！")
+            return [], ""
+
         # 按 Y 座標排序 (自上而下)
         anchors = sorted(anchors, key=lambda a: a[1])
-
-        # 取得模板寬高
-        temp_img = self.matcher._load_template(template_name)
-        temp_h, temp_w = temp_img.shape[:2] if temp_img is not None else (40, 40)
-
-        h_img, w_img = screen_img.shape[:2]
         extracted_names = []
 
         for idx, (cx, cy, conf) in enumerate(anchors):
