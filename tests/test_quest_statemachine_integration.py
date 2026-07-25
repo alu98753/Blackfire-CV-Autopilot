@@ -124,6 +124,19 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertNotIn("清除蛙人", remaining_quests)
         self.assertIn("清除沙蟲", remaining_quests)
 
+    def test_dungeon_quest_always_prioritized_over_stage_quest(self):
+        """[排序優先級測試] 驗證地下城懸賞任務 (即使為 banner_verify_only) 100% 優先於普通關卡任務 (即使為 deterministic)"""
+        from utils.quest_mapper import QuestMapper
+        mapper = QuestMapper()
+        
+        # 傳入：關卡任務 (清除沙蟲, deterministic) 與 地下城任務 (破除森林的枷鎖, banner_verify)
+        quests = ["清除沙蟲", "破除森林的枷鎖"]
+        sorted_quests = mapper.sort_quests(quests)
+        
+        # 斷言：地下城任務 '破除森林的枷鎖' 必須排在第 1 位！
+        self.assertEqual(sorted_quests[0], "破除森林的枷鎖")
+        self.assertEqual(sorted_quests[1], "清除沙蟲")
+
     def test_state_machine_attach_and_advance(self):
         """驗證 GameStateMachine 掛載 QuestScheduler 與目標推進"""
         capturer = MagicMock()

@@ -236,8 +236,8 @@ class QuestMapper:
     def get_quest_sort_key(self, title):
         """
         計算單個懸賞任務標題的多階梯排序 Key (4 元組)。
-        1. policy_score: DETERMINISTIC = 0 (最優先), BANNER_VERIFY = 1, IGNORED = 9
-        2. mode_score: dungeon = 0 (地下城優先), stage = 1, generic_boss = 2, ignored = 9
+        1. mode_score: dungeon = 0 (地下城最高優先), stage = 1, generic_boss = 2, ignored = 9
+        2. policy_score: DETERMINISTIC = 0, BANNER_VERIFY = 1, IGNORED = 9
         3. idx_score: -dungeon_index 或 -stage_level (數字大者排在最前面)
         4. sub_score: final = 0, middle = 1, first = 2
         """
@@ -245,10 +245,7 @@ class QuestMapper:
         if node is None or node.mode_type == "ignored":
             return (9, 9, 0, 0)
 
-        # 1. 梯隊一：確定性優先
-        policy_score = 0 if node.counting_policy == TaskNode.POLICY_DETERMINISTIC else 1
-
-        # 2. 梯隊二：模式優先 (地下城 0 > 普通關卡 1 > 通用首領 2)
+        # 1. 梯隊一：模式優先 (地下城 0 > 普通關卡 1 > 通用首領 2)
         if node.mode_type == "dungeon":
             mode_score = 0
             idx_score = -node.dungeon_index if node.dungeon_index is not None else 0
@@ -263,7 +260,10 @@ class QuestMapper:
             idx_score = 0
             sub_score = 0
 
-        return (policy_score, mode_score, idx_score, sub_score)
+        # 2. 梯隊二：確定性優先
+        policy_score = 0 if node.counting_policy == TaskNode.POLICY_DETERMINISTIC else 1
+
+        return (mode_score, policy_score, idx_score, sub_score)
 
     def sort_quests(self, quest_titles):
         """
