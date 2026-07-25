@@ -10,7 +10,7 @@ DEFAULT_DAILY_STATUS = {
         "chest": {"completed_today": False, "last_executed_at": ""},
         "hero_draw": {"completed_today": False, "last_executed_at": ""},
         "blood_altar": {"completed_today": False, "last_executed_at": ""},
-        "bulletin_board": {"completed_today": False, "last_executed_at": ""},
+        "bulletin_board": {"completed_today": False, "last_executed_at": "", "accepted_quests": []},
         "lord_boss": {
             "completed_today": False,
             "bosses": {
@@ -249,7 +249,7 @@ class DailyManager:
         sf = self.status.get("subflows", {}).get(subflow_key, {})
         return sf.get("completed_today", False)
 
-    def record_subflow_completed(self, subflow_key, now_ts=None):
+    def record_subflow_completed(self, subflow_key, now_ts=None, extra_data=None):
         """
         記錄通用子流程 (如 chest, hero_draw 等) 今日已完成。
         """
@@ -259,6 +259,8 @@ class DailyManager:
         sf = subflows.setdefault(subflow_key, {"completed_today": False, "last_executed_at": ""})
         sf["completed_today"] = True
         sf["last_executed_at"] = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(extra_data, dict):
+            sf.update(extra_data)
         self.save_status()
         logging.info(f"✅ [DailyManager] 記錄通用子流程 [{subflow_key}] 今日已完成。")
 

@@ -3,10 +3,11 @@ import os
 import logging
 import numpy as np
 from states.handlers.base import BaseStateHandler
+from utils.quest_ocr_extractor import QuestOCRExtractor
 
 class BulletinBoardHandler(BaseStateHandler):
     """
-    每日懸賞告示牌 (Bulletin Board) 處理器 - 第一階段：
+    每日懸賞告示牌 (Bulletin Board) 處理器：
     1. 確認與進入城鎮 (INIT)：
        - 以 _ensure_in_town 確保在城鎮介面。
        - 專精限制於螢幕左上 1/4 區域 (screen_img[0:h//2, 0:w//2]) 匹配並點擊告示牌 (bulletin_board.png)。
@@ -14,19 +15,37 @@ class BulletinBoardHandler(BaseStateHandler):
        - 必須先等待並確認 common/quit.png 出現，作為 100% 成功進入告示牌的憑據。
     3. 條件式重置檢查 (CHECK_RESET)：
        - 若看得到 reset.png 則點擊重置；若未看到則記錄日誌並跳過該步驟。
-    4. 最終退出步驟 (EXIT_BOARD)：
+    4. 逐一接取懸賞任務與 OCR 標題記錄 (PROCESS_ACCEPT_QUESTS)：
+       - 0. 鎖定最上方未接取任務 (task.png)，經 EasyOCR 抓取標題文字。
+       - 1. 點擊該任務列，於全螢幕(右半邊)點擊接受任務按鈕 (accept_task.png)。
+       - 2. 點擊確認彈窗 (common/confirm.png / common/ok.png)。
+       - 迴圈重複上述步驟，直到畫面中無 task.png (全部任務均接取為 task_after.png)。
+    5. JSON 持久化寫入：
+       - 將接取的任務標題列表寫入 daily_status.json (accepted_quests 欄位)。
+    6. 最終退出步驟 (EXIT_BOARD)：
        - 點擊 common/quit.png 退出告示牌視窗。
-    5. 階段完成與佇列連動 (ALL_DONE_EXITING)：
+    7. 階段完成與佇列連動 (ALL_DONE_EXITING)：
        - 於 DailyManager 記錄 bulletin_board 完成，重置狀態並呼叫 pop_and_next_town_subflow()。
     """
     def __init__(self, machine):
         super().__init__(machine)
-        self.step_phase = "INIT"  # INIT, WAIT_BOARD_OPEN, CHECK_RESET, EXIT_BOARD, ALL_DONE_EXITING
+        self.step_phase = "INIT"  # INIT, WAIT_BOARD_OPEN, CHECK_RESET, PROCESS_ACCEPT_QUESTS, EXIT_BOARD, ALL_DONE_EXITING
+        self.accept_sub_phase = "FIND_TOP_TASK"  # FIND_TOP_TASK, CLICK_ACCEPT_BTN, CLICK_CONFIRM_POPUP
         self.last_action_time = 0.0
+        self.accepted_quest_titles = []
+        self.ocr_extractor = None
 
     def reset_state(self):
         self.step_phase = "INIT"
+        self.accept_sub_phase = "FIND_TOP_TASK"
         self.last_action_time = 0.0
+        self.accepted_quest_titles = []
+
+    def _get_ocr_extractor(self):
+        if self.ocr_extractor is None:
+            ocr_reader = getattr(self.machine, "get_ocr_reader", lambda: None)()
+            self.ocr_extractor = QuestOCRExtractor(matcher=self.matcher, ocr_reader=ocr_reader)
+        return self.ocr_extractor
 
     def _ensure_in_town(self, screen_img, rect=None):
         """
@@ -45,13 +64,14 @@ class BulletinBoardHandler(BaseStateHandler):
 
     def _record_completion(self):
         """記錄 DailyManager 完成狀態並自動切換至下一個城鎮任務"""
+        titles = list(self.accepted_quest_titles)
         self.reset_state()
         if hasattr(self.machine, "need_bulletin_board"):
             self.machine.need_bulletin_board = False
         dm = getattr(self.machine, "daily_manager", None)
         if dm and hasattr(dm, "record_subflow_completed"):
-            dm.record_subflow_completed("bulletin_board")
-        logging.info("📋 [懸賞告示牌] 第一階段重置與退出流程完成，消費城鎮佇列中的下一個任務...")
+            dm.record_subflow_completed("bulletin_board", extra_data={"accepted_quests": titles})
+        logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
         self.machine.pop_and_next_town_subflow()
 
     def handle(self, screen_img=None, rect=None):
@@ -72,11 +92,15 @@ class BulletinBoardHandler(BaseStateHandler):
 
         left = rect["left"] if rect else 0
         top = rect["top"] if rect else 0
+        h_img = rect["height"] if rect else (screen_img.shape[0] if isinstance(screen_img, np.ndarray) else 600)
+        w_img = rect["width"] if rect else (screen_img.shape[1] if isinstance(screen_img, np.ndarray) else 800)
 
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", "town_building/bulletin_board/bulletin_board.png")
         reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
         quit_btn = cfg.get("quit_btn", "common/quit.png")
+        accept_btn = cfg.get("accept_btn", "town_building/bulletin_board/accept_task.png")
+        task_tpl = cfg.get("task_btn", "town_building/bulletin_board/task.png")
 
         # =========================================================================
         # 1. 紀錄與階段完成 (ALL_DONE_EXITING)
@@ -105,24 +129,109 @@ class BulletinBoardHandler(BaseStateHandler):
             return
 
         # =========================================================================
-        # 3. 條件式重置檢查：若無 reset.png 則自動跳過 (CHECK_RESET)
+        # 3. 逐一接取懸賞任務與 OCR 標題記錄 (PROCESS_ACCEPT_QUESTS)
+        # =========================================================================
+        if self.step_phase == "PROCESS_ACCEPT_QUESTS":
+            # 優先處理彈窗確認 (若有 confirm.png / ok.png / confirm1.png)
+            pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.75)
+            pos_ok, _ = self.matcher.match(screen_img, "common/ok.png", threshold=0.75)
+            pos_pop = pos_confirm or pos_ok
+            if pos_pop:
+                btn_name = "common/confirm.png" if pos_confirm else "common/ok.png"
+                logging.info(f"📋 [懸賞告示牌] 發現接取成功確認彈窗 [{btn_name}]，點擊確認...")
+                self.mouse.click(left + pos_pop[0], top + pos_pop[1])
+                self.accept_sub_phase = "FIND_TOP_TASK"
+                self.last_action_time = now
+                return
+
+            if self.accept_sub_phase == "FIND_TOP_TASK":
+                # 掃描左半邊 (cx < w_img // 2) 所有未接受任務錨點 (task.png)
+                anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, quiet=True)
+                anchors = [a for a in anchors if a[0] < w_img // 2]
+
+                if not anchors:
+                    logging.info(f"📋 [懸賞告示牌] 已無視窗內未接取任務 (task.png)，共成功接取 {len(self.accepted_quest_titles)} 項任務: {self.accepted_quest_titles}")
+                    self.step_phase = "EXIT_BOARD"
+                    self.last_action_time = now
+                    return
+
+                # 永遠鎖定最上方 (Y 座標最小) 的第 1 個未接受任務 top_anchor
+                top_anchor = sorted(anchors, key=lambda a: a[1])[0]
+                cx, cy = top_anchor[0], top_anchor[1]
+
+                # 調用 QuestOCRExtractor 抓取標題文字
+                extractor = self._get_ocr_extractor()
+                temp_img = self.matcher._load_template(task_tpl)
+                temp_h, temp_w = (temp_img.shape[0], temp_img.shape[1]) if isinstance(temp_img, np.ndarray) else (40, 40)
+                scale = 0.863 if w_img > 800 else 1.0
+                icon_w, icon_h = int(temp_w * scale), int(temp_h * scale)
+
+                x0 = cx - icon_w // 2
+                y0 = cy - icon_h // 2
+                crop_x = x0 + icon_w + 5
+                crop_y = max(0, y0 - 5)
+                crop_w = min(360, w_img - crop_x)
+                crop_h = min(icon_h + 10, h_img - crop_y)
+
+                if crop_w > 0 and crop_h > 0:
+                    text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+                    title_name = extractor._ocr_crop(text_roi)
+                    if title_name and title_name not in self.accepted_quest_titles:
+                        self.accepted_quest_titles.append(title_name)
+                        logging.info(f"📋 [懸賞告示牌] 成功對最上方未接任務 (Y={cy}) 抓取標題: '{title_name}'")
+
+                # 點擊該列任務以選取（使右半邊呈現 accept_task.png）
+                logging.info(f"📋 [懸賞告示牌] 點擊最上方未接任務列 (座標: {cx}, {cy})...")
+                self.mouse.click(left + cx, top + cy)
+                self.accept_sub_phase = "CLICK_ACCEPT_BTN"
+                self.last_action_time = now
+                return
+
+            if self.accept_sub_phase == "CLICK_ACCEPT_BTN":
+                pos_accept, _ = self.matcher.match(screen_img, accept_btn, threshold=0.75)
+                if pos_accept:
+                    logging.info(f"📋 [懸賞告示牌] 於右半邊發現接受任務按鈕 [{accept_btn}]，點擊接受！")
+                    self.mouse.click(left + pos_accept[0], top + pos_accept[1])
+                    self.accept_sub_phase = "CLICK_CONFIRM_POPUP"
+                    self.last_action_time = now
+                    return
+                
+                # 若未在右半邊找到 accept_task.png，可能已點擊或需要彈窗確認，嘗試繼續進入 CLICK_CONFIRM_POPUP
+                self.accept_sub_phase = "CLICK_CONFIRM_POPUP"
+                self.last_action_time = now
+                return
+
+            if self.accept_sub_phase == "CLICK_CONFIRM_POPUP":
+                # 重新檢查是否有 confirm.png
+                pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.75)
+                if pos_confirm:
+                    logging.info(f"📋 [懸賞告示牌] 點擊確認彈窗 [common/confirm.png]...")
+                    self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
+                self.accept_sub_phase = "FIND_TOP_TASK"
+                self.last_action_time = now
+                return
+
+        # =========================================================================
+        # 4. 條件式重置檢查：若無 reset.png 則自動跳過 (CHECK_RESET)
         # =========================================================================
         if self.step_phase == "CHECK_RESET":
             pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
             if pos_reset:
                 logging.info(f"📋 [懸賞告示牌] 發現重置按鈕 [{reset_btn}]，點擊執行重置！")
                 self.mouse.click(left + pos_reset[0], top + pos_reset[1])
-                self.step_phase = "EXIT_BOARD"
+                self.step_phase = "PROCESS_ACCEPT_QUESTS"
+                self.accept_sub_phase = "FIND_TOP_TASK"
                 self.last_action_time = now
                 return
             else:
-                logging.info(f"📋 [懸賞告示牌] 未發現重置按鈕 [{reset_btn}] (無需重新整理或已重置)，跳過該步驟！")
-                self.step_phase = "EXIT_BOARD"
+                logging.info(f"📋 [懸賞告示牌] 未發現重置按鈕 [{reset_btn}] (無需重新整理或已重置)，直接進入任務接取階段！")
+                self.step_phase = "PROCESS_ACCEPT_QUESTS"
+                self.accept_sub_phase = "FIND_TOP_TASK"
                 self.last_action_time = now
                 return
 
         # =========================================================================
-        # 4. 等待開窗：先確認 quit.png 出現才算真正進入告示牌 (WAIT_BOARD_OPEN)
+        # 5. 等待開窗：先確認 quit.png 出現才算真正進入告示牌 (WAIT_BOARD_OPEN)
         # =========================================================================
         pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.75)
         if self.step_phase == "WAIT_BOARD_OPEN":
@@ -134,7 +243,7 @@ class BulletinBoardHandler(BaseStateHandler):
             return
 
         # =========================================================================
-        # 5. 城鎮點擊告示牌建築 (INIT / 左上 1/4 區域 Scoped Crop 精確比對)
+        # 6. 城鎮點擊告示牌建築 (INIT / 左上 1/4 區域 Scoped Crop 精確比對)
         # =========================================================================
         if pos_quit:
             logging.info(f"📋 [懸賞告示牌] 辨識到目前已在告示牌介面 (發現 {quit_btn})，準備進行重置判斷...")
@@ -144,9 +253,7 @@ class BulletinBoardHandler(BaseStateHandler):
 
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
         if pos_door:
-            h = rect["height"] if rect else (screen_img.shape[0] if isinstance(screen_img, np.ndarray) else 600)
-            w = rect["width"] if rect else (screen_img.shape[1] if isinstance(screen_img, np.ndarray) else 800)
-            top_left_crop = screen_img[0:h // 2, 0:w // 2] if isinstance(screen_img, np.ndarray) else screen_img
+            top_left_crop = screen_img[0:h_img // 2, 0:w_img // 2] if isinstance(screen_img, np.ndarray) else screen_img
             pos_bb, conf_bb = self.matcher.match(top_left_crop, building_btn, threshold=0.75)
             
             if pos_bb:
