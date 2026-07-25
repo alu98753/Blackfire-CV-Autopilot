@@ -78,12 +78,12 @@ class TestMainConfig(unittest.TestCase):
         cfg_collect = GAME_CONFIGS["collect_only"].copy()
         setup_equipment_config(cfg_collect)
         cfg_collect = normalize_config(cfg_collect)
-        self.assertEqual(cfg_collect["keep_colors"], ["blue", "purple", "orange_yellow", "red"])
+        self.assertEqual(cfg_collect["keep_colors"], ["purple", "orange_yellow", "red"])
         self.assertEqual(cfg_collect["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
         cfg_daily = GAME_CONFIGS["daily"].copy()
         cfg_daily = normalize_config(cfg_daily)
-        self.assertEqual(cfg_daily["keep_colors"], ["blue", "purple", "orange_yellow", "red"])
+        self.assertEqual(cfg_daily["keep_colors"], ["purple", "orange_yellow", "red"])
         self.assertEqual(cfg_daily["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
 if __name__ == "__main__":

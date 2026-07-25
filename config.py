@@ -336,7 +336,7 @@ SUBFLOW_CONFIGS = {
 
 # ==================== 中央配置規範化 (Centralized Config Normalization) ====================
 DEFAULT_DISASSEMBLE_COLORS = ["gray_or_empty", "green", "blue"]
-DEFAULT_KEEP_COLORS = ["blue", "purple", "orange_yellow", "red"]
+DEFAULT_KEEP_COLORS = ["purple", "orange_yellow", "red"]
 
 def normalize_config(config):
     """
