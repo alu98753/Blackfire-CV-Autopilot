@@ -20,25 +20,38 @@ class LordBossHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.current_target_boss = None
 
-    def _check_card_cooldown_ocr(self, screen_img, pos_b, max_allowed_seconds=7200.0):
+    def _check_card_cooldown_ocr(self, screen_img, pos_b, temp_path, max_allowed_seconds=7200.0):
         """
-        [ Clean Code 重用 utils.cooldown_detector ]
-        在點擊卡片前，僅截取卡片「上半部繪圖區域」(排除底部名稱框與5圓點區)，呼叫 detect_cooldown_sign_and_time。
-        若優先比對到冷卻木牌且解出合法倒數時間，回傳 (parsed_seconds, raw_text)；否則回傳 (None, None)。
+        [ Clean Code 專比單張卡片 ]
+        依據匹配出的 Boss 單張卡片範本 (如 lord_spectre.png / lord_spider.png) 尺寸，
+        在螢幕截圖中精確切出該「單張卡片區域」，並僅留取上半部 65% 繪圖區送交 detect_cooldown_sign_and_time。
         """
         try:
+            full_path = os.path.join("templates", temp_path) if temp_path else None
+            if not full_path or not os.path.exists(full_path):
+                return None, None
+
+            t_img = cv2.imread(full_path)
+            if t_img is None:
+                return None, None
+            t_h, t_w = t_img.shape[:2]
+
             h, w = screen_img.shape[:2]
             cx, cy = pos_b
-            # 嚴格限制：僅截取卡片「上半部繪圖區域」(寬 300, 高 220)，完全排除下方名稱框 (cy + 60 以下)
-            x1 = max(0, cx - 150)
-            x2 = min(w, cx + 150)
-            y1 = max(0, cy - 160)
-            y2 = min(h, cy + 60)
 
-            crop_img = screen_img[y1:y2, x1:x2]
+            # 依單張卡片範本尺寸精確切割該卡片於螢幕上的畫面
+            x1 = max(0, cx - t_w // 2)
+            x2 = min(w, cx + t_w // 2)
+            y1 = max(0, cy - t_h // 2)
+            y2 = min(h, cy + t_h // 2)
+
+            single_card_img = screen_img[y1:y2, x1:x2]
+
+            # 僅取該單張卡片上半部 65% (圖畫區，100% 避開下方名稱框與外部背景)
+            artwork_crop = single_card_img[0 : int(single_card_img.shape[0] * 0.65), :]
             
             has_cd, rem_secs, raw_text = detect_cooldown_sign_and_time(
-                crop_img, 
+                artwork_crop, 
                 self.machine.get_ocr_reader, 
                 max_allowed_seconds=max_allowed_seconds, 
                 threshold=0.58
@@ -46,7 +59,7 @@ class LordBossHandler(BaseStateHandler):
             if has_cd:
                 return rem_secs, raw_text
         except Exception as e:
-            logging.warning(f"⚠️ [首領討伐] 點擊前卡片 OCR 辨識過程異常: {e}")
+            logging.warning(f"⚠️ [首領討伐] 點擊前單張卡片 OCR 辨識過程異常: {e}")
         return None, None
 
     def handle(self, screen_img, rect):
@@ -100,8 +113,8 @@ class LordBossHandler(BaseStateHandler):
                     max_cd = b_cfg.get("cooldown_seconds", 7200.0)
                     logging.info(f"🔍 [首領討伐] 於畫面發現 Boss 卡片 [{b_name}] [{conf_b:.4f}]，檢查是否有冷卻木牌...")
                     
-                    # 點擊前防護：先不進行點擊，進行卡片木牌 / OCR 冷卻時間辨識
-                    rem_secs, raw_text = self._check_card_cooldown_ocr(screen_img, pos_b, max_allowed_seconds=max_cd)
+                    # 點擊前防護：專比單張卡片範本圖畫區，進行卡片木牌 / OCR 冷卻時間辨識
+                    rem_secs, raw_text = self._check_card_cooldown_ocr(screen_img, pos_b, temp_path, max_allowed_seconds=max_cd)
                     if rem_secs is not None and rem_secs > 0:
                         logging.info(
                             f"⏳ [首領討伐] 偵測到 Boss [{b_name}] 設有冷卻木牌！倒數時間: \"{raw_text}\" "
