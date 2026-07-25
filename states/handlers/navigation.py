@@ -97,75 +97,19 @@ class NavigationHandler(BaseStateHandler):
         crop_x2 = min(w_limit, max_loc[0] + t_w)
         dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
         
-        for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
-            if os.path.exists(os.path.join("templates", cd_temp)):
-                cd_img = cv2.imread(os.path.join("templates", cd_temp))
-                if cd_img is not None:
-                    cd_w = int(cd_img.shape[1] * scale)
-                    cd_h = int(cd_img.shape[0] * scale)
-                    cd_w = max(5, cd_w)
-                    cd_h = max(5, cd_h)
-                    resized_cd = cv2.resize(cd_img, (cd_w, cd_h))
-                    res_cd = cv2.matchTemplate(dungeon_crop, resized_cd, cv2.TM_CCOEFF_NORMED)
-                    _, max_val_cd, _, max_loc_cd = cv2.minMaxLoc(res_cd)
-                    if max_val_cd >= 0.58:
-                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌 [{cd_temp}] (相似度: {max_val_cd:.4f}，閥值: 0.58)，判定為冷卻中。")
-                        in_cooldown = True
-                        
-                        # 試圖利用 EasyOCR 進行精確時間識別
-                        try:
-                            cd_cx = max_loc_cd[0] + cd_w // 2
-                            cd_cy = max_loc_cd[1] + cd_h // 2
-                            
-                            # 根據匹配到的是左木牌還是右木牌，動態調整 X 軸偏移方向
-                            if "left" in cd_temp:
-                                # 左木牌：木柱在左，文字偏右，因此裁剪框向右偏移 25 像素 (相較於中心點)
-                                tx1 = max(0, cd_cx - 60)
-                                tx2 = min(dungeon_crop.shape[1], cd_cx + 110)
-                            else:
-                                # 右木牌：木柱在右，文字偏左，因此裁剪框向左偏移 25 像素 (相較於中心點)
-                                tx1 = max(0, cd_cx - 110)
-                                tx2 = min(dungeon_crop.shape[1], cd_cx + 60)
-                                
-                            ty1 = max(0, cd_cy - 18)
-                            ty2 = min(dungeon_crop.shape[0], cd_cy + 12)
-                            
-                            # 【新增除錯標記】在卡片上繪製紅點(中心)與綠框(裁剪區)並存檔
-                            try:
-                                debug_match_img = dungeon_crop.copy()
-                                cv2.circle(debug_match_img, (cd_cx, cd_cy), 4, (0, 0, 255), -1) # 畫紅色的中心點
-                                cv2.rectangle(debug_match_img, (tx1, ty1), (tx2, ty2), (0, 255, 0), 2) # 畫綠色裁剪框
-                                cv2.imwrite("debug_cooldown_match.png", debug_match_img)
-                                logging.info("📸 [DEBUG] 已將木牌中心與裁剪框標記寫入 debug_cooldown_match.png")
-                            except Exception as draw_err:
-                                logging.warning(f"⚠️ [DEBUG] 標記圖片寫入失敗: {draw_err}")
-                            
-                            time_crop = dungeon_crop[ty1:ty2, tx1:tx2]
-                            if time_crop.size > 0:
-                                time_gray = cv2.cvtColor(time_crop, cv2.COLOR_BGR2GRAY)
-                                padded = cv2.copyMakeBorder(time_gray, 15, 15, 30, 30, cv2.BORDER_CONSTANT, value=159)
-                                resized_text = cv2.resize(padded, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-                                
-                                reader = self.machine.get_ocr_reader()
-                                ocr_results = reader.readtext(resized_text, allowlist="0123456789:")
-                                
-                                # 將送去辨識的圖片寫入專案目錄
-                                cv2.imwrite("debug_cooldown_ocr.png", resized_text)
-                                logging.info(f"📸 [DEBUG] 已將 OCR 辨識區域寫入 debug_cooldown_ocr.png，裁剪範圍 Y 軸: [{ty1}:{ty2}]，X 軸: [{tx1}:{tx2}]")
-                                
-                                if ocr_results:
-                                    raw_text = ocr_results[0][1]
-                                    conf = ocr_results[0][2]
-                                    parsed_secs = self._parse_time_to_seconds(raw_text)
-                                    if parsed_secs is not None and parsed_secs > 0:
-                                        logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)}，信心度: {conf:.4f})")
-                                        self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
-                                        ocr_success = True
-                                        break
-                        except Exception as ocr_err:
-                            logging.warning(f"⚠️ 貪婪地下城：[{dungeon_names[i]}] OCR 辨識過程發生異常: {ocr_err}")
-                        break
-                        
+        has_cd, parsed_secs, raw_text = detect_cooldown_sign_and_time(
+            dungeon_crop,
+            self.machine.get_ocr_reader(),
+            max_allowed_seconds=cd_seconds,
+            threshold=0.58,
+            scale=scale
+        )
+        if has_cd:
+            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌，判定為冷卻中。")
+            in_cooldown = True
+            if parsed_secs is not None and 0 < parsed_secs < cd_seconds:
+                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)})")
+                self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
         if in_cooldown:
             if not ocr_success:
                 logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 剩餘時間辨識未成功，使用 30 秒臨時冷卻退避...")

@@ -2,7 +2,8 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
-from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
+from utils.time_parser import format_seconds_to_readable
+from utils.cooldown_detector import detect_cooldown_sign_and_time
 
 class LordBossHandler(BaseStateHandler):
     """
@@ -19,16 +20,15 @@ class LordBossHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.current_target_boss = None
 
-    def _check_card_cooldown_ocr(self, screen_img, pos_b):
+    def _check_card_cooldown_ocr(self, screen_img, pos_b, max_allowed_seconds=7200.0):
         """
-        [Clean Code 重用 utils.time_parser]
-        在點擊卡片前，截取卡片及其周邊區域圖像並呼叫 EasyOCR。
-        若偵測到倒數時間字串 (例如 "01:23:45" 或 "59:30")，回傳 (parsed_seconds, raw_text)；否則回傳 (None, None)。
+        [ Clean Code 重用 utils.cooldown_detector ]
+        在點擊卡片前，截取卡片及其周邊區域圖像並呼叫 detect_cooldown_sign_and_time。
+        若優先比對到冷卻木牌且解出合法倒數時間，回傳 (parsed_seconds, raw_text)；否則回傳 (None, None)。
         """
         try:
             h, w = screen_img.shape[:2]
             cx, cy = pos_b
-            # 以卡片中心 cx, cy 為基準截取卡片與下方文字區域 (寬 320, 高 400)
             x1 = max(0, cx - 160)
             x2 = min(w, cx + 160)
             y1 = max(0, cy - 100)
@@ -36,13 +36,15 @@ class LordBossHandler(BaseStateHandler):
 
             crop_img = screen_img[y1:y2, x1:x2]
             ocr_reader = self.machine.get_ocr_reader()
-            results = ocr_reader.readtext(crop_img)
-
-            for item in results:
-                raw_text = item[1]
-                parsed_secs = parse_time_to_seconds(raw_text)
-                if parsed_secs is not None and parsed_secs > 0:
-                    return parsed_secs, raw_text
+            
+            has_cd, rem_secs, raw_text = detect_cooldown_sign_and_time(
+                crop_img, 
+                ocr_reader, 
+                max_allowed_seconds=max_allowed_seconds, 
+                threshold=0.58
+            )
+            if has_cd:
+                return rem_secs, raw_text
         except Exception as e:
             logging.warning(f"⚠️ [首領討伐] 點擊前卡片 OCR 辨識過程異常: {e}")
         return None, None
@@ -95,8 +97,9 @@ class LordBossHandler(BaseStateHandler):
                 pos_b, conf_b = self.matcher.match(screen_img, temp_path, threshold=0.75)
                 if pos_b:
                     b_name = b_cfg.get("name", boss_key)
-                    # 點擊前防護：先不進行點擊，重用 parse_time_to_seconds 進行卡片木牌 / OCR 冷卻時間辨識
-                    rem_secs, raw_text = self._check_card_cooldown_ocr(screen_img, pos_b)
+                    max_cd = b_cfg.get("cooldown_seconds", 7200.0)
+                    # 點擊前防護：先不進行點擊，重用 detect_cooldown_sign_and_time 進行卡片木牌 / OCR 冷卻時間辨識
+                    rem_secs, raw_text = self._check_card_cooldown_ocr(screen_img, pos_b, max_allowed_seconds=max_cd)
                     if rem_secs is not None and rem_secs > 0:
                         logging.info(
                             f"⏳ [首領討伐] 點擊前經 OCR 偵測到 Boss [{b_name}] 尚在冷卻中: \"{raw_text}\" "
