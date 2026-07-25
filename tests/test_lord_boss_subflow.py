@@ -133,6 +133,7 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         self.state_machine.matcher.match.side_effect = lambda img, temp, **kw: ((100, 100), 0.9)
         
         handler = LordBossHandler(self.state_machine)
+        handler.has_reset_to_left = True
         
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
@@ -171,6 +172,7 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
 
         self.state_machine.matcher.match.side_effect = fake_match
         handler = LordBossHandler(self.state_machine)
+        handler.has_reset_to_left = True
         
         # 執行 handle，預期 lord_spectre 被 pre-click OCR 攔截跳過，選擇 lord_spider 進入戰鬥
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
