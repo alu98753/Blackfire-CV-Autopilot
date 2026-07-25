@@ -42,10 +42,15 @@ class TaskNode:
 
 class QuestMapper:
     """
-    懸賞任務與指令映射器 (Quest-to-CLI Mapper)。
-    支援地端關鍵字/正則規則映射，並保留 LLM Agent Fallback 擴充介面。
+    懸賞任務與指令映射器 (Quest-to-CLI Mapper) [全域對照字典唯一定義檔]。
+
+    📌 任務對照表維護與擴充說明 (新增新懸賞任務時在此編輯)：
+    1. 地下城任務：新增至 self.dungeon_rules 陣列 (r"正則關鍵字", 地下城索引 0~4)
+    2. 普通關卡任務：新增至 self.stage_rules 陣列 (r"正則關鍵字", 關卡等級 1~6, 子關卡類型 "first"/"final" 等)
+    3. 未定義任務參考檔：user_data/daily_status.json 內的 unknown_quests 陣列。
     """
     def __init__(self):
+
         # 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4)
         self.dungeon_rules = [
             (r"(史萊姆王|黏糊糊的石窟)", 0),
