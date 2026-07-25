@@ -33,10 +33,12 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         """
         測試解析用戶圖片中的 5 個每日懸賞任務條件與指令產生。
         """
-        # 1. 圖片 1: 清除骷髏
+        # 1. 圖片 1: 清除骷髏 (現在一對一對應至地下城 #4 神秘遺跡)
         node1 = self.mapper.parse_quest("清除骷髏", "骷髏在戰場上肆虐...", "擊殺: 骷髏 x 10")
-        self.assertEqual(node1.mode_type, "stage")
+        self.assertEqual(node1.mode_type, "dungeon")
+        self.assertEqual(node1.dungeon_index, 3)
         self.assertEqual(node1.target_count, 10)
+        self.assertIn("--mode dungeon --dungeon 4", node1.to_cli_args())
 
         # 2. 圖片 2: 擊敗冰元素
         node2 = self.mapper.parse_quest("擊敗冰元素", "冰元素棲息在寒冷地區...", "擊殺: 冰元素 x 10")
@@ -74,13 +76,13 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         - 完成地下城史萊姆王時，自動併行更新「擊殺首領」進度 (Piggybacking)！
         - 依序完成所有任務直至 is_all_completed == True。
         """
-        # 1. 載入 5 個任務
+        # 1. 載入 5 個任務 (史萊姆王放在第一個)
         quests = [
+            ("史萊姆王的毀滅", "黏糊糊的石窟...", "擊殺: [史萊姆王] x 1"),
             ("清除骷髏", "骷髏在戰場上...", "擊殺: 骷髏 x 10"),
             ("擊敗冰元素", "冰元素棲息在...", "擊殺: 冰元素 x 10"),
             ("擊殺首領", "各種強大的首領...", "擊殺: 首領 x 5"),
             ("清除野豬", "野豬在肆意...", "擊殺: 野豬 x 10"),
-            ("史萊姆王的毀滅", "黏糊糊的石窟...", "擊殺: [史萊姆王] x 1"),
         ]
         for title, desc, req in quests:
             node = self.mapper.parse_quest(title, desc, req)
@@ -91,6 +93,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         # 2. 第一次取得啟動指令 ➔ 應優先傳回地下城 1 (史萊姆王)
         cmd1, msg1 = self.scheduler.get_next_action_config()
         self.assertIn("--mode dungeon --dungeon 1", cmd1)
+
         print(f"\n[動態排程 step 1] 指令: {cmd1} | 說明: {msg1}")
 
         # 3. 模擬通關地下城 1 (黏糊糊的石窟, 擊殺史萊姆王 x 1)
