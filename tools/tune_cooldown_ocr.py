@@ -49,7 +49,7 @@ def main():
         best_val = 0.0
         template_w, template_h = 0, 0
 
-        for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
+        for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png", "load/cooldown_sign.png"]:
             temp_path = os.path.join("templates", cd_temp)
             if os.path.exists(temp_path):
                 t_img = cv2.imread(temp_path)
@@ -64,13 +64,15 @@ def main():
                         template_w = t_img.shape[1]
                         template_h = t_img.shape[0]
 
-        if not has_match:
-            print(f"⚠️ 在門檻 {threshold_val:.2f} 下未搜尋到任何木牌模板 (最高匹配度: {best_val:.4f})")
-            cv2.imwrite("debug_tune_preview.png", img_copy)
-            return
-
-        cx = best_loc[0] + template_w // 2 + offset_x
-        cy = best_loc[1] + template_h // 2 + offset_y
+        # 若未匹配到，預設以圖片中心點為錨點，讓使用者依然能自由移動滑桿
+        if has_match:
+            cx = best_loc[0] + template_w // 2 + offset_x
+            cy = best_loc[1] + template_h // 2 + offset_y
+            status_text = f"Matched: {matched_temp} ({best_val:.2f})"
+        else:
+            cx = img_copy.shape[1] // 2 + offset_x
+            cy = img_copy.shape[0] // 2 + offset_y
+            status_text = f"Manual Anchor (No Match < {threshold_val:.2f}, max={best_val:.2f})"
 
         half_w = crop_w // 2
         half_h = crop_h // 2
@@ -81,15 +83,13 @@ def main():
         ty2 = min(img_copy.shape[0], cy + half_h)
 
         # 繪製除錯圖形：紅點 (中心點), 綠框 (裁切框)
-        cv2.circle(img_copy, (cx, cy), 4, (0, 0, 255), -1)
+        cv2.circle(img_copy, (cx, cy), 5, (0, 0, 255), -1)
         cv2.rectangle(img_copy, (tx1, ty1), (tx2, ty2), (0, 255, 0), 2)
 
-        # 標註匹配資訊
-        label = f"Match: {matched_temp} ({best_val:.2f})"
-        cv2.putText(img_copy, label, (max(10, tx1), max(20, ty1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+        cv2.putText(img_copy, status_text, (max(10, tx1), max(20, ty1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
         cv2.imwrite("debug_tune_preview.png", img_copy)
-        print(f"📸 預覽圖已寫入 debug_tune_preview.png | 木牌: {matched_temp} ({best_val:.4f}) | 中心: ({cx},{cy}) | 綠框: X[{tx1}:{tx2}], Y[{ty1}:{ty2}]")
+        print(f"📸 預覽圖已寫入 debug_tune_preview.png | {status_text} | 中心: ({cx},{cy}) | 綠框: X[{tx1}:{tx2}], Y[{ty1}:{ty2}]")
 
         time_crop = screen_img[ty1:ty2, tx1:tx2]
         if time_crop.size > 0:

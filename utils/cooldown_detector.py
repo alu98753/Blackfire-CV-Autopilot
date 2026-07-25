@@ -21,7 +21,7 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
     cd_w = 0
     cd_h = 0
 
-    for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png"]:
+    for cd_temp in ["dungeons/cooldown_left.png", "dungeons/cooldown_right.png", "load/cooldown_sign.png"]:
         template_path = os.path.join("templates", cd_temp)
         if os.path.exists(template_path):
             cd_img = cv2.imread(template_path)
@@ -52,15 +52,21 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
         cd_cx = max_loc_cd[0] + cd_w // 2
         cd_cy = max_loc_cd[1] + cd_h // 2
 
-        if "left" in matched_sign:
+        if "sign" in matched_sign:
+            tx1 = max(0, cd_cx - 20)
+            tx2 = min(crop_img.shape[1], cd_cx + 140)
+            ty1 = max(0, cd_cy - 20)
+            ty2 = min(crop_img.shape[0], cd_cy + 25)
+        elif "left" in matched_sign:
             tx1 = max(0, cd_cx - 60)
             tx2 = min(crop_img.shape[1], cd_cx + 110)
+            ty1 = max(0, cd_cy - 18)
+            ty2 = min(crop_img.shape[0], cd_cy + 12)
         else:
             tx1 = max(0, cd_cx - 110)
             tx2 = min(crop_img.shape[1], cd_cx + 60)
-
-        ty1 = max(0, cd_cy - 18)
-        ty2 = min(crop_img.shape[0], cd_cy + 12)
+            ty1 = max(0, cd_cy - 18)
+            ty2 = min(crop_img.shape[0], cd_cy + 12)
 
         # 【DEBUG 可視化標記】在畫面/卡片上記錄木牌中心點(紅)與 OCR 裁剪框(綠)
         try:
