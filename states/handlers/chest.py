@@ -107,23 +107,45 @@ class ChestHandler(BaseStateHandler):
                 self.machine.pop_and_next_town_subflow()
                 return True
 
-        # Step 3: WAITING_CONFIRM 階段（檢查彈出的獎勵確認 / 關閉按鈕）
+        # Step 3: WAITING_CONFIRM 階段（檢查彈出的獎勵確認按鈕 confirm.png / ok.png）
         elif self.step_phase == "WAITING_CONFIRM":
-            confirm_list = [
-                "common/confirm.png", 
-                "common/ok.png", 
-                "common/quit.png", 
-            ]
+            confirm_list = ["common/confirm.png", "common/ok.png"]
             for confirm_template in confirm_list:
                 if os.path.exists(os.path.join("templates", confirm_template)):
                     pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
                     if pos_c:
-                        logging.info(f"🎁 [神秘寶箱 Step 3] 發現領取確認按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊！")
+                        logging.info(f"🎁 [神秘寶箱 Step 3] 發現領取確認按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊！轉入 Step 4 等待退出...")
                         self.mouse.click(left + pos_c[0], top + pos_c[1])
-                        time.sleep(0.2)
+                        self.last_action_time = now
+                        self.step_phase = "WAITING_QUIT"
+                        self.not_found_count = 0
+                        time.sleep(0.5)
+                        return True
+
+            self.not_found_count += 1
+            if self.not_found_count >= 3:
+                logging.info("🎁 [神秘寶箱 Step 3] 未跳出額外確認按鈕，轉入 Step 4 檢查退出建築...")
+                self.step_phase = "WAITING_QUIT"
+                self.not_found_count = 0
+                return True
+
+        # Step 4: WAITING_QUIT 階段（點擊 quit.png / exitfromhouse 退出建築返回城鎮）
+        elif self.step_phase == "WAITING_QUIT":
+            quit_list = [
+                "common/quit.png", 
+                "town_building/exitfromhouse_and_to_town.png",
+                "goback_town.png"
+            ]
+            for quit_template in quit_list:
+                if os.path.exists(os.path.join("templates", quit_template)):
+                    pos_q, conf_q = self.matcher.match(screen_img, quit_template, threshold=0.75)
+                    if pos_q:
+                        logging.info(f"🎁 [神秘寶箱 Step 4] 發現退出建築按鈕 [{quit_template}] [{conf_q:.4f}]，點擊退出返回城鎮！")
+                        self.mouse.click(left + pos_q[0], top + pos_q[1])
+                        time.sleep(0.3)
                         break
 
-            logging.info("🎉 [神秘寶箱 Step 3] 寶箱領取流程完成！記錄 DailyManager 並彈出下一個城鎮任務...")
+            logging.info("🎉 [神秘寶箱 Step 4] 寶箱領取與退出流程完成！記錄 DailyManager 並彈出下一個城鎮任務...")
             dm = getattr(self.machine, "daily_manager", None)
             if dm and hasattr(dm, "record_subflow_completed"):
                 dm.record_subflow_completed("chest")

@@ -34,7 +34,7 @@ class TestChestSubflow(unittest.TestCase):
         self.mock_machine.mouse.click.assert_called_once_with(150, 150)
 
     def test_handler_claims_chest_when_found(self):
-        """測試：Step 1 點擊寶箱建築 ➔ Step 2 點擊免費寶箱 ➔ Step 3 確認彈窗並記錄完成"""
+        """測試：Step 1 點擊寶箱建築 ➔ Step 2 點擊免費寶箱 ➔ Step 3 確認彈窗 ➔ Step 4 退出並記錄完成"""
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
@@ -43,10 +43,12 @@ class TestChestSubflow(unittest.TestCase):
                 return (None, 0.0)
             if template == "town_building/mysterious_treasure/mysterious_treasure.png":
                 return ((200, 300), 0.88)
-            if template == "town_building/mysterious_treasure/free_treasure.png":
+            if template == "free.png":
                 return ((400, 500), 0.90)
             if template == "common/confirm.png":
                 return ((400, 550), 0.85)
+            if template == "common/quit.png":
+                return ((100, 100), 0.80)
             return (None, 0.0)
 
         self.mock_machine.matcher.match.side_effect = fake_match
@@ -63,10 +65,16 @@ class TestChestSubflow(unittest.TestCase):
             self.assertTrue(res2)
             self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
 
-            # Step 3: WAITING_CONFIRM ➔ Complete
+            # Step 3: WAITING_CONFIRM ➔ WAITING_QUIT
             self.handler.last_action_time = 0.0
             res3 = self.handler.handle(mock_img, rect)
             self.assertTrue(res3)
+            self.assertEqual(self.handler.step_phase, "WAITING_QUIT")
+
+            # Step 4: WAITING_QUIT ➔ Complete
+            self.handler.last_action_time = 0.0
+            res4 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res4)
             self.mock_daily_manager.record_subflow_completed.assert_called_with("chest")
             self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
