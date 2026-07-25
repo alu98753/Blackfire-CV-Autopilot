@@ -41,13 +41,16 @@
 
 
 4. 領任務 (每日懸賞告示牌 `bulletin_board`)
-   - **城鎮自動導航與左上 1/4 ROI 鎖定**：若處於大廳畫面，優先點擊 `goback_town.png` 退回城鎮；於城鎮對螢幕左上 $1/4$ 區域 (`screen_img[0:h//2, 0:w//2]`) 進行 `town_building/bulletin_board/bulletin_board.png` 精確比對與點擊進入。
-   - **開窗確認 (`quit.png`)**：在判斷有無重置前，必須先等待並確認 `common/quit.png` 出現，作為 100% 成功進入告示牌介面的憑據。
-   - **條件式重置與跳過 (`reset.png`)**：於告示牌介面掃描 `reset.png`；若存在則點擊重置，若無（無重置按鈕或已重置過）則自動跳過該步驟。
-   - **最終離場步驟 (`quit.png`)**：領取/重置完畢後的最後一個步驟為點擊 `common/quit.png` 關閉告示牌視窗離場。
-   - **狀態持久化與 08:30 重置**：透過 `DailyManager` 記錄 `bulletin_board` 的 `completed_today = True`（於 `user_data/daily_status.json` 中保存），每日 08:30 自動重置。
-   - **詳細架構報告與研究**：參見 [daily_task_architecture_report.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily_task_architecture_report.md)
-   - **懸賞任務模板圖片**：[templates/town_building/bulletin_board/Daily_task/](file:///e:/Side_Project/BlackfireCrusade_tool/templates/town_building/bulletin_board/Daily_task/)
+   - **大廳退回與左上 1/4 ROI 鎖定**：若處於大廳 (`goback_town.png`) 點擊返回城鎮；於城鎮對螢幕左上 $1/4$ 區域 (`screen_img[0:h//2, 0:w//2]`) 進行 `town_building/bulletin_board/bulletin_board.png` 匹配與點擊。
+   - **開窗憑據與條件式重置**：等待並確認 `common/quit.png` 出現證明成功開窗；掃描 `town_building/bulletin_board/reset.png`，若存在則點擊重置，若無則自動跳過。
+   - **相對優勢過濾 (`task_after.png`)**：比對左半邊 ($X < W/2$) 任務卡片錨點 `task.png`。對每個錨點 ROI 同時比對 `task_after.png`；若 `conf(task_after) >= conf(task) - 0.02` 判定為已接取並自動過濾。若全數過濾（無未接任務），直接轉移至退出離場。
+   - **Scale 自適應與 OCR 預處理**：
+     - 依 `template_scale`（或視窗寬度比）動態計算 `icon_w` 與標題 ROI 起始點 `crop_x`。
+     - 對標題 ROI 裁切上半部 $55\%$（避開下方副標與橫線），放大 2 倍 (`cv2.resize fx=2, fy=2`)。
+     - 使用 EasyOCR 繁中與英文雙語模型 (`['ch_tra', 'en']`) 提取標題。
+   - **逐列接取與 1 秒點擊延遲**：鎖定最上方 ($Y$ 最小) 未接任務點擊，並點擊右半邊 `accept_task.png`；點擊後強制等待 1 秒 (`time.sleep(1.0)`) 供系統響應與彈窗判斷。
+   - **任務已滿防護 (`task_already_full.png`)**：若點擊後彈出 `task_already_full.png`，點擊 `confirm.png` 確認，寫入已抓取之標題至 JSON 並轉移至退出。
+   - **離場與 JSON 持久化**：點擊 `common/quit.png` 關閉視窗；將標題陣列 `accepted_quests` 寫入 `user_data/daily_status.json` 並記錄 `completed_today = True`（每日 08:05 自動重置）。
 
 
 ===

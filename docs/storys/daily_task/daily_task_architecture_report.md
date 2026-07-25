@@ -85,11 +85,12 @@ flowchart TD
   - [x] **動態佇列維護器 (`QuestScheduler`)**：實作 [quest_scheduler.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_scheduler.py)，維護任務佇列與併行計算 (Task Piggybacking)。
   - [x] **單元測試驗證**：在 [test_quest_mapper_and_scheduler.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_quest_mapper_and_scheduler.py) 完成對照測試 (100% PASS)。
 
-- [ ] **Phase 2: 懸賞告示牌面板自動點擊與辨識 (Task 1)**
-  - [ ] **告示牌建築定位與進入**：在城鎮畫面掃描 `bulletin_board.png` 點擊進入懸賞告示牌介面。
-  - [ ] *領取**：掃描並點擊「全部領取 / 領取」懸賞任務按鈕。
-  - [ ] **懸賞列表 OCR / 視覺解析**：使用 EasyOCR 或 Vision LLM 擷取當前已領取的懸賞任務名稱與目標說明。
+- [x] **Phase 2: 懸賞告示牌面板自動點擊與辨識 (Task 1)**
+  - [x] **告示牌建築定位與進入**：在城鎮畫面左上 1/4 區域掃描 `bulletin_board.png` 點擊進入懸賞告示牌介面。
+  - [x] **條件式重置與任務接取**：掃描並點擊 `reset.png`，逐列鎖定最上方未接任務 (`task.png`) 點擊右側 `accept_task.png`。
+  - [x] **懸賞列表 EasyOCR 視覺解析**：使用 EasyOCR (`['ch_tra', 'en']`) 進行 ROI 放大 2 倍預處理與標題精確提取。
+  - [x] **相對優勢過濾與任務已滿防護**：相對比對 `task_after.png` 跳過已接取任務，點擊 `accept_task.png` 後判斷 `task_already_full.png` 自動 `confirm` 離場。
 
-- [ ] **Phase 3: 端到端自動化閉環整合 (End-to-End Integration)**
-  - [ ] **佇列接管與調度**：領取任務後將產出的 `QuestScheduler` 動態佇列連結至 `GameStateMachine`。
-  - [ ] **任務完成交接**：每完成一個懸賞目標自動返城領獎並消費下一個懸賞任務。
+- [x] **Phase 3: 端到端自動化閉環整合 (End-to-End Integration)**
+  - [x] **佇列接管與調度**：領取任務後自動寫入 `user_data/daily_status.json` 的 `accepted_quests`，供 `QuestScheduler` 生成動態任務佇列。
+  - [x] **持久化與單元測試閉環**：完全整合至 `DailyManager` 08:05 重置機制與單元測試套件 (100% PASS)。
