@@ -632,20 +632,37 @@ class GameStateMachine:
         self.quest_scheduler = scheduler
         logging.info("🔗 [GameStateMachine] 已成功連結懸賞任務排程器 (QuestScheduler)。")
 
+    def apply_mix_fallback_config(self):
+        """
+        當懸賞任務全數完成時，自動載入並切換至預設 mix 模式配置 (冰雪洞窟 + 關卡 6-1)。
+        """
+        from config import PRIMARY_MODES
+        mix_config = PRIMARY_MODES["mix"].copy()
+        if hasattr(self, "backend_mode"):
+            mix_config["backend_mode"] = self.backend_mode
+
+        self.config = mix_config
+        self.primary_config = mix_config.copy()
+        logging.info(f"🔄 [GameStateMachine] 已自動將狀態機配置切換至退守混合模式: {mix_config['name']} (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+
     def check_and_advance_quest_target(self):
         """
         當當前任務目標完成時，動態查詢下一個懸賞任務目標並切換模式配置。
+        若所有懸賞任務已全數完成，自動解除懸賞排程器並切換為預設 mix 模式。
         """
         if self.quest_scheduler is None:
             return False
 
         if self.quest_scheduler.is_all_completed():
-            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！")
+            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為退守混合模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+            self.quest_scheduler = None
+            self.apply_mix_fallback_config()
             return True
 
         cli_cmd, msg = self.quest_scheduler.get_next_action_config(dungeon_cooldowns=self.dungeon_cooldowns)
         logging.info(f"🔄 [GameStateMachine 動態調度] {msg}")
         return False
+
 
 
     def _run_task_complete_subflow(self, rect):

@@ -193,10 +193,27 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertNotIn("敵人剿滅", bb.get("unknown_quests", []))
         self.assertNotIn("獵金之蟲", bb.get("unknown_quests", []))
 
+    def test_all_quests_completed_transitions_to_mix(self):
+        """驗證當所有每日懸賞任務完成時，狀態機自動解鎖 QuestScheduler 並切換至預設 mix 模式配置 (冰雪洞窟 + 關卡 6-1)"""
+        sm = GameStateMachine()
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        sm.attach_quest_scheduler(scheduler)
+
+        # 手動將所有任務設為 completed
+        for t in scheduler.tasks:
+            t.completed_count = t.target_count
+
+        res = sm.check_and_advance_quest_target()
+        self.assertTrue(res)
+        self.assertIsNone(sm.quest_scheduler)
+        self.assertEqual(sm.config["type"], "mix")
+        self.assertEqual(sm.config["stage_name"], "冰雪洞窟 (first)")
+        self.assertIn("Ice_entry.png", sm.config["navigation_path"][-1])
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

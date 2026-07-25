@@ -101,7 +101,8 @@ PRIMARY_MODES = {
         "greedy_dungeon": True,
         "greedy_allowed_indices": [0, 1, 2, 3, 4],  # 預設允許全部地下城 [0, 1, 2, 3, 4]
         "auto_resume_dungeon_on_cd": False,  # 體力退避期間若地下城冷卻結束，是否自動切回刷地下城
-        "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
+        "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"],
+
         "dungeon_fight_btn": "dungeons/dungeon_fight.png",
         "dungeon_battle_results": ["common/continue.png", "common/continue_gray.png"],
         "explore_priorities": [
