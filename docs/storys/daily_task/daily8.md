@@ -66,7 +66,7 @@ python main.py --backend --subflow hero_draw
 python main.py --backend --subflow blood_altar
 
 # 獨立測試：領懸賞任務
-python main.py --backend --subflow bounty
+python main.py --backend --subflow bulletin_board
 
 # 獨立測試：打 Boss (預設輪巡所有獨立 Boss)
 python main.py --backend --subflow lord_boss
@@ -93,7 +93,7 @@ python main.py --backend --subflow chest blood_altar lord_boss
     "chest": { "completed_today": true, "last_executed_at": "2026-07-25 08:31:00" },
     "hero_draw": { "completed_today": true, "last_executed_at": "2026-07-25 08:32:00" },
     "blood_altar": { "completed_today": true, "last_executed_at": "2026-07-25 08:33:00" },
-    "bounty": { "completed_today": true, "last_executed_at": "2026-07-25 08:34:00" },
+    "bulletin_board": { "completed_today": true, "last_executed_at": "2026-07-25 08:34:00" },
     "lord_boss": {
       "completed_today": false,
       "bosses": {
@@ -141,7 +141,7 @@ SUBFLOW_CONFIGS = {
     "jewelry_workshop": { ... },
     "chest": { ... },
     "hero_draw": { ... },
-    "bounty": { ... },
+    "bulletin_board": { ... },
     "lord_boss": { ... }
 }
 
