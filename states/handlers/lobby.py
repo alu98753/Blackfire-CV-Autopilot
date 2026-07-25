@@ -12,7 +12,7 @@ class LobbyHandler(BaseStateHandler):
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
             if os.path.exists(os.path.join("templates", feat)):
                 thresh = 0.65 if feat == "common/auto.png" else 0.70
-                pos, conf = self.matcher.match(screen_img, feat, threshold=thresh)
+                pos, conf = self.matcher.match(screen_img, feat, threshold=thresh, quiet=True)
                 if pos:
                     logging.info(f"⚔️ 偵測到戰鬥已真正開始（出現特徵 [{feat}]，相似度: {conf:.4f}），進入戰鬥狀態！")
                     self.machine.battle_start_time = time.time()
