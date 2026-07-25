@@ -169,7 +169,9 @@ class QuestScheduler:
             mode_desc = f"地下城 #{t.dungeon_index + 1}" if t.mode_type == "dungeon" else (
                 f"關卡 Lvl {t.stage_level} ({t.sub_stage})" if t.mode_type == "stage" else "通用首領"
             )
+            cli_cmd = t.to_cli_args()
             logging.info(f"  {idx:2d}. {status_icon} [{t.quest_title}] ➔ 模式: {mode_desc} | 進度: {t.completed_count}/{t.target_count}")
+            logging.info(f"      👉 啟動指令: `{cli_cmd}`")
         logging.info("=" * 60)
 
     def record_task_complete(self, ocr_text):
