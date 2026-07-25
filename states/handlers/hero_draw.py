@@ -98,10 +98,9 @@ class HeroDrawHandler(BaseStateHandler):
                 self.last_action_time = now
                 return True
 
-        # 4. RECRUITED 階段：點擊領取/招募確認按鈕
+        # 4. RECRUITED 階段：點擊領取/招募確認按鈕 ("招募" 彈窗按鈕)
         elif self.step_phase == "RECRUITED":
-            
-            for confirm_template in ["common/confirm.png", "common/ok.png"]:
+            for confirm_template in ["town_building/Tavern/RECRUITED.png", "common/confirm.png", "common/ok.png"]:
                 if os.path.exists(os.path.join("templates", confirm_template)):
                     pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
                     if pos_c:
