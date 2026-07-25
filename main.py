@@ -333,6 +333,12 @@ def setup_mode_config(args):
         setup_dungeon_config(config, args)
         setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
         print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
+    elif args.mode == "quest":
+        print("\n[配置懸賞完成後的退守模式] 請設定當所有懸賞任務全數完成時要自動切換的地下城與關卡：")
+        setup_dungeon_config(config, args)
+        setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
+        print(f"[*] 懸賞任務全數完成後退守目標：{config['name']} | 關卡：{config['stage_name']}")
+
     elif args.mode == "blood_altar":
         print("\n請選擇要獻祭/消耗的血水品質（設定為『否/保留』者將不進行點選獻祭）：")
         print(" 1) 灰、綠、藍獻祭 (紫色保留不賣/不獻祭) - 預設")
@@ -491,11 +497,10 @@ def init_state_machine_system(args, config):
         state_machine.is_dev_subflow_run = True
         state_machine.start_subflow_queue(args.subflow)
 
-    # 懸賞任務模式 / 混合模式：載入 accepted_quests 並掛載 QuestScheduler
-    if getattr(args, "mode", None) in ["mix", "quest"]:
+    # 懸賞任務模式：載入 accepted_quests 並掛載 QuestScheduler
+    if getattr(args, "mode", None) == "quest":
         quest_scheduler = daily_manager.load_quest_scheduler()
         state_machine.attach_quest_scheduler(quest_scheduler)
-
 
 
     if config["type"] in ["bag_clean", "blood_altar"]:

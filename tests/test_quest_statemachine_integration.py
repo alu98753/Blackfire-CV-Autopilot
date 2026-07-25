@@ -195,8 +195,9 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
 
     def test_all_quests_completed_transitions_to_mix(self):
         """驗證當所有每日懸賞任務完成時，狀態機自動解鎖 QuestScheduler 並切換至預設 mix 模式配置 (冰雪洞窟 + 關卡 6-1)"""
-        sm = GameStateMachine()
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         scheduler = self.daily_mgr.load_quest_scheduler()
+
         sm.attach_quest_scheduler(scheduler)
 
         # 手動將所有任務設為 completed

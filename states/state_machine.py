@@ -634,16 +634,21 @@ class GameStateMachine:
 
     def apply_mix_fallback_config(self):
         """
-        當懸賞任務全數完成時，自動載入並切換至預設 mix 模式配置 (冰雪洞窟 + 關卡 6-1)。
+        當懸賞任務全數完成時，自動載入並切換至使用者啟動時配置的退守 mix 模式 (地下城 + 關卡)。
         """
-        from config import PRIMARY_MODES
-        mix_config = PRIMARY_MODES["mix"].copy()
-        if hasattr(self, "backend_mode"):
-            mix_config["backend_mode"] = self.backend_mode
+        if self.primary_config:
+            self.config = self.primary_config.copy()
+            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至使用者設定的退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
+        else:
+            from config import PRIMARY_MODES
+            mix_config = PRIMARY_MODES["mix"].copy()
+            if hasattr(self, "backend_mode"):
+                mix_config["backend_mode"] = self.backend_mode
 
-        self.config = mix_config
-        self.primary_config = mix_config.copy()
-        logging.info(f"🔄 [GameStateMachine] 已自動將狀態機配置切換至退守混合模式: {mix_config['name']} (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+            self.config = mix_config
+            self.primary_config = mix_config.copy()
+            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至預設退守混合模式: {mix_config['name']}")
+
 
     def check_and_advance_quest_target(self):
         """
