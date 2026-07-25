@@ -114,7 +114,41 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertIn("未知任務_A", loaded_unknowns)
         self.assertIn("未知任務_B", loaded_unknowns)
 
+    def test_typo_normalization_in_creation_and_completion(self):
+        """驗證 OCR 錯別字 (如 野瀦 ➔ 野豬, 毀減 ➔ 毀滅, 肇敗 ➔ 擊敗) 在建立任務與完成標記/剔除中均 100% 有效"""
+        # 1. 測試建立任務階段 (parse_quest 包含錯別字)
+        mapper = QuestMapper()
+        node_boar = mapper.parse_quest("清除野瀦")  # OCR 誤判 '野瀦'
+        self.assertIsNotNone(node_boar)
+        self.assertEqual(node_boar.stage_level, 1)
+        self.assertEqual(node_boar.sub_stage, "final")
+
+        node_slime = mapper.parse_quest("史萊姆王的毀減")  # OCR 誤判 '毀減'
+        self.assertIsNotNone(node_slime)
+        self.assertEqual(node_slime.mode_type, "dungeon")
+        self.assertEqual(node_slime.dungeon_index, 0)
+
+        # 2. 測試完成任務階段 (record_task_complete 包含錯別字)
+        scheduler = QuestScheduler()
+        scheduler.add_task(TaskNode("擊敗冰元素", "stage", target_count=10, stage_level=6, sub_stage="first"))
+        scheduler.add_task(TaskNode("清除野豬", "stage", target_count=10, stage_level=1, sub_stage="final"))
+
+        # 傳入包含錯別字的 OCR 文字 '肇敗冰元奏'
+        matched1 = scheduler.record_task_complete("肇敗冰元奏")
+        self.assertTrue(matched1)
+        self.assertTrue(scheduler.tasks[0].is_completed)
+
+        # 3. 測試 JSON 剔除階段 (remove_accepted_quest 包含錯別字)
+        self.daily_mgr.status["subflows"]["bulletin_board"]["accepted_quests"] = ["史萊姆王的毀滅", "清除野豬"]
+        self.daily_mgr.save_status()
+
+        # 使用包含錯別字的 '史萊姆王的毀減' 進行剔除
+        removed = self.daily_mgr.remove_accepted_quest("史萊姆王的毀減")
+        self.assertTrue(removed)
+        self.assertNotIn("史萊姆王的毀滅", self.daily_mgr.status["subflows"]["bulletin_board"]["accepted_quests"])
+
 if __name__ == "__main__":
     unittest.main()
+
 
 

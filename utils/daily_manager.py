@@ -318,19 +318,37 @@ class DailyManager:
         self.save_status()
 
     def remove_accepted_quest(self, quest_title):
+        """
+        將已完成的懸賞任務從 accepted_quests 列表中剔除並儲存 JSON (支援錯別字清洗與模糊匹配)。
+        """
+        if not quest_title:
+            return False
 
-        """
-        將已完成的懸賞任務從 accepted_quests 列表中剔除並儲存 JSON。
-        """
+        from utils.quest_mapper import normalize_quest_title
+        import difflib
+
+        norm_title = normalize_quest_title(quest_title)
+
         subflows = self.status.setdefault("subflows", {})
         bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": []})
         old_quests = bb.get("accepted_quests", [])
-        new_quests = [q for q in old_quests if not (quest_title in q or q in quest_title)]
-        if len(new_quests) != len(old_quests):
+        new_quests = []
+
+        removed = False
+        for q in old_quests:
+            norm_q = normalize_quest_title(q)
+            ratio = difflib.SequenceMatcher(None, norm_title, norm_q).ratio()
+            if quest_title in q or q in quest_title or norm_title in norm_q or norm_q in norm_title or ratio >= 0.70:
+                removed = True
+                continue
+            new_quests.append(q)
+
+        if removed:
             bb["accepted_quests"] = new_quests
             self.save_status()
-            logging.info(f"🗑️ [DailyManager] 已將懸賞任務 [{quest_title}] 從持久化 json 的 accepted_quests 中移除。")
+            logging.info(f"🗑️ [DailyManager] 已將懸賞任務 [{quest_title}] (相符) 從持久化 json 的 accepted_quests 中移除。")
             return True
         return False
+
 
 
