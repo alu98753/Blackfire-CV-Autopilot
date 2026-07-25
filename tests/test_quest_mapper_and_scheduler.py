@@ -179,11 +179,11 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
             "清除骷髏",       # DETERMINISTIC, dungeon 3
             "清除樹人",       # DETERMINISTIC, dungeon 2
             "清除史萊姆",     # DETERMINISTIC, dungeon 0
-            "清除蛙人",       # DETERMINISTIC, stage 5
-            "清除沙蟲",       # DETERMINISTIC, stage 4
             "冰雪洞窟的暴君",  # BANNER_VERIFY, dungeon 4
             "破除森林的枷鎖",  # BANNER_VERIFY, dungeon 2
             "史萊姆王的毀滅",  # BANNER_VERIFY, dungeon 0
+            "清除蛙人",       # DETERMINISTIC, stage 5
+            "清除沙蟲",       # DETERMINISTIC, stage 4
         ]
         self.assertEqual(sorted_quests, expected_order)
 
@@ -264,12 +264,12 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         """
         [防呆門禁測試] 驗證由亂序的 accepted_quests (包含沙蟲 L4, 森林枷鎖, 蛙人 L5)
         經由 from_daily_status 建立的 QuestScheduler 會自動進行四階梯排序：
-        1. 清除蛙人 (Level 5 確定性) ➔ 2. 清除沙蟲 (Level 4 確定性) ➔ 3. 破除森林的枷鎖 (Banner Verify)
+        1. 破除森林的枷鎖 (Dungeon 3) ➔ 2. 清除蛙人 (Stage 5) ➔ 3. 清除沙蟲 (Stage 4)
         """
         unordered_input = ["清除沙蟲", "破除森林的枷鎖", "清除蛙人"]
         scheduler = QuestScheduler.from_daily_status(unordered_input)
         titles_in_queue = [t.quest_title for t in scheduler.tasks]
-        self.assertEqual(titles_in_queue, ["清除蛙人", "清除沙蟲", "破除森林的枷鎖"])
+        self.assertEqual(titles_in_queue, ["破除森林的枷鎖", "清除蛙人", "清除沙蟲"])
 
 
 if __name__ == "__main__":

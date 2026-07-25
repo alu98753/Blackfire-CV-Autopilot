@@ -371,8 +371,8 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         today_new_quests = ["擊敗冰元素", "史萊姆王的毀滅"]
         updated = self.manager.update_bulletin_board_quests(today_new_quests)
 
-        # 3. 驗證更新後按 sort_quests 排序：擊敗冰元素 (Stage 6) ➔ 清除野豬 (Stage 1) ➔ 擊殺首領 ➔ 史萊姆王的毀滅 (BANNER_VERIFY)
-        expected = ["擊敗冰元素", "清除野豬", "擊殺首領", "史萊姆王的毀滅"]
+        # 3. 驗證更新後按 sort_quests 排序：史萊姆王的毀滅 (dungeon) ➔ 擊敗冰元素 (Stage 6) ➔ 清除野豬 (Stage 1) ➔ 擊殺首領
+        expected = ["史萊姆王的毀滅", "擊敗冰元素", "清除野豬", "擊殺首領"]
         self.assertEqual(updated, expected)
         self.assertEqual(self.manager.status["subflows"]["bulletin_board"]["accepted_quests"], expected)
 
