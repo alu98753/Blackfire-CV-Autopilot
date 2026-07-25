@@ -1,3 +1,4 @@
+import cv2
 import os
 import time
 import logging
@@ -22,16 +23,18 @@ class LordBossHandler(BaseStateHandler):
 
     def _check_card_cooldown_ocr(self, screen_img, pos_b, temp_path, max_allowed_seconds=7200.0):
         """
-        [ Clean Code 專比單張卡片 ]
+        [ Clean Code 專比單張卡片 + Scale 自適應 ]
         依據匹配出的 Boss 單張卡片範本 (如 lord_spectre.png / lord_spider.png) 尺寸，
-        在螢幕截圖中精確切出該「單張卡片區域」，並僅留取上半部 65% 繪圖區送交 detect_cooldown_sign_and_time。
+        在螢幕截圖中精確切出該「單張卡片區域」(整張 single_card_img，不進行人為比例硬裁)，
+        並傳遞當前 scale 供 detect_cooldown_sign_and_time 進行等比例木牌比對。
         """
         try:
             full_path = os.path.join("templates", temp_path) if temp_path else None
             if not full_path or not os.path.exists(full_path):
                 return None, None
 
-            t_img = cv2.imread(full_path)
+            # 優先透過 matcher 的 _load_template 取得已套用 template_scale 之單張卡片範本尺寸
+            t_img = self.matcher._load_template(temp_path) if hasattr(self, "matcher") and self.matcher else cv2.imread(full_path)
             if t_img is None:
                 return None, None
             t_h, t_w = t_img.shape[:2]
@@ -39,22 +42,21 @@ class LordBossHandler(BaseStateHandler):
             h, w = screen_img.shape[:2]
             cx, cy = pos_b
 
-            # 依單張卡片範本尺寸精確切割該卡片於螢幕上的畫面
+            # 依單張卡片縮放後尺寸，精確切割該卡片於螢幕上的完整畫面
             x1 = max(0, cx - t_w // 2)
             x2 = min(w, cx + t_w // 2)
             y1 = max(0, cy - t_h // 2)
             y2 = min(h, cy + t_h // 2)
 
             single_card_img = screen_img[y1:y2, x1:x2]
-
-            # 僅取該單張卡片上半部 65% (圖畫區，100% 避開下方名稱框與外部背景)
-            artwork_crop = single_card_img[0 : int(single_card_img.shape[0] * 0.65), :]
+            scale = getattr(self.matcher, "template_scale", 1.0) if hasattr(self, "matcher") else 1.0
             
             has_cd, rem_secs, raw_text = detect_cooldown_sign_and_time(
-                artwork_crop, 
+                single_card_img, 
                 self.machine.get_ocr_reader, 
                 max_allowed_seconds=max_allowed_seconds, 
-                threshold=0.58
+                threshold=0.58,
+                scale=scale
             )
             if has_cd:
                 return rem_secs, raw_text
