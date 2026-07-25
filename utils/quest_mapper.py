@@ -329,14 +329,14 @@ class QuestMapper:
             return TaskNode(
                 quest_title=norm_title,
                 mode_type="generic_boss",
-                target_count=5,
+                target_count=10,
                 batch_size=1,
-                max_run_limit=5,
+                max_run_limit=10,
                 raw_desc=combined_text,
                 counting_policy=default_policy
             )
 
-        # 3. 檢查地下城專屬任務 (地下城探索 1 趟即進入冷卻，故次數為 1 趟離場)
+        # 3. 檢查地下城專屬任務 (地下城不受固定次數限制，由 30 分鐘冷卻倒數與告示牌領獎動態控管)
         for rule in self.dungeon_rules:
             pattern = rule[0]
             dungeon_idx = rule[1]
@@ -346,9 +346,9 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="dungeon",
-                    target_count=1,
+                    target_count=10,
                     batch_size=1,
-                    max_run_limit=1,
+                    max_run_limit=10,
                     dungeon_index=dungeon_idx,
                     raw_desc=combined_text,
                     counting_policy=policy
@@ -365,7 +365,7 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="stage",
-                    target_count=4,
+                    target_count=10,
                     batch_size=4,
                     max_run_limit=10,
                     stage_level=stage_lvl,
@@ -373,6 +373,7 @@ class QuestMapper:
                     raw_desc=combined_text,
                     counting_policy=policy
                 )
+
 
 
         # 5. 無法精確映射：未定義任務預設為 BANNER_VERIFY_QUESTS 防呆保護
