@@ -30,12 +30,13 @@ class BattleHandler(BaseStateHandler):
         # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 0.5):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
-            logging.info(f"🔍 檢查自動戰鬥按鈕... 最大相似度: {conf_auto:.4f} (閥值: 0.7)")
+            logging.debug(f"🔍 檢查自動戰鬥按鈕... 最大相似度: {conf_auto:.4f} (閥值: 0.7)")
             if pos_auto:
                 logging.info(f"👉 偵測到「自動戰鬥」按鈕（目前為未啟用狀態），進行點擊啟用！")
                 self.mouse.click(rect["left"] + pos_auto[0], rect["top"] + pos_auto[1])
                 self.machine.last_auto_click_time = time.time()
                 time.sleep(0.1)
+
 
         # B. 監控戰鬥結算
         # 為了防範剛進入戰鬥時，由於畫面轉換延遲與殘留按鈕導致誤判上一次戰鬥的結算按鈕，
@@ -184,8 +185,13 @@ class BattleHandler(BaseStateHandler):
             time.sleep(0.15)
 
     def log_battle_duration(self):
-        if self.machine.battle_start_time:
-            duration = time.time() - self.machine.battle_start_time
-            logging.info(f"⚔️ 戰鬥進行中... 已持續 {int(duration)} 秒")
-        else:
-            logging.info(f"⚔️ 戰鬥進行中...")
+        now = time.time()
+        last_logged = getattr(self, "_last_battle_duration_logged_time", 0)
+        if now - last_logged >= 60.0:
+            self._last_battle_duration_logged_time = now
+            if self.machine.battle_start_time:
+                duration = now - self.machine.battle_start_time
+                logging.info(f"⚔️ 戰鬥進行中... 已持續 {int(duration)} 秒")
+            else:
+                logging.info(f"⚔️ 戰鬥進行中...")
+
