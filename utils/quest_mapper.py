@@ -39,7 +39,81 @@ class TaskNode:
             return f".venv\\Scripts\\python main.py --backend --mode dungeon --dungeon 1"
         return f".venv\\Scripts\\python main.py --backend --mode mix"
 
+    def to_config_dict(self):
+        """
+        將 TaskNode 轉換為 GameStateMachine 專用的 config 字典。
+        """
+        from config import PRIMARY_MODES
+        dungeon_entries = [
+            "dungeons/Slime_entry.png",
+            "dungeons/Ghost_entry.png",
+            "dungeons/Forest_entry.png",
+            "dungeons/Ruins_entry.png",
+            "dungeons/Ice_entry.png"
+        ]
+        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+
+        stage_entries = {
+            1: "stages/level1_plain.png",
+            2: "stages/level2_barren_rocks.png",
+            3: "stages/level3_ancient_forest.png",
+            4: "stages/level4_desert.png",
+            5: "stages/level5_swamp.png",
+            6: "stages/level6_ice_cave.png"
+        }
+        stage_names = {
+            1: "蒼穹平原", 2: "荒蕪岩地", 3: "古樹森林", 4: "沙漠廢墟", 5: "幽暗沼澤", 6: "冰凍峽谷"
+        }
+        stage_targets = {
+            "first": "stages/first_stage.png",
+            "middle": "stages/middle_stage.png",
+            "six": "stages/six_stage.png",
+            "final": "stages/final_boss_stage.png"
+        }
+
+        if self.mode_type == "dungeon" and self.dungeon_index is not None:
+            idx = self.dungeon_index
+            entry_img = dungeon_entries[idx] if 0 <= idx < len(dungeon_entries) else "dungeons/Ice_entry.png"
+            dname = dungeon_names[idx] if 0 <= idx < len(dungeon_names) else "地下城"
+            
+            cfg = PRIMARY_MODES["dungeon"].copy()
+            cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
+            cfg["greedy_dungeon"] = False
+            cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
+            return cfg
+
+        elif self.mode_type == "stage" and self.stage_level is not None:
+            lvl = self.stage_level
+            sub = self.sub_stage or "first"
+            entry_img = stage_entries.get(lvl, "stages/level6_ice_cave.png")
+            sname = stage_names.get(lvl, f"關卡 Lvl {lvl}")
+            target_img = stage_targets.get(sub, "stages/first_stage.png")
+
+            cfg = PRIMARY_MODES["stage"].copy()
+            cfg["name"] = f"懸賞任務 - {sname} ({sub}) (任務: {self.quest_title})"
+            cfg["stage_name"] = f"{sname} ({sub})"
+            cfg["stage_entry"] = entry_img
+            cfg["stage_target"] = target_img
+            cfg["stage_navigation_path"] = [
+                "common/door.png",
+                "common/select_stage.png",
+                entry_img,
+                "stages/stage_label.png",
+                target_img
+            ]
+            return cfg
+
+        elif self.mode_type == "generic_boss":
+            cfg = PRIMARY_MODES["dungeon"].copy()
+            cfg["name"] = f"懸賞任務 - 史萊姆石窟 (任務: {self.quest_title})"
+            cfg["greedy_dungeon"] = False
+            cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+            return cfg
+
+        return PRIMARY_MODES["mix"].copy()
+
     def __repr__(self):
+
         return (f"<TaskNode title='{self.quest_title}' mode='{self.mode_type}' policy='{self.counting_policy}' "
                 f"progress={self.completed_count}/{self.target_count} "
                 f"dungeon_idx={self.dungeon_index} stage_lvl={self.stage_level} sub='{self.sub_stage}'>")

@@ -81,6 +81,50 @@ class QuestScheduler:
 
         return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
 
+    def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None):
+        """
+        傳回目前最優的單個未完成 TaskNode 實例。
+        """
+        import time
+        from utils.time_parser import format_seconds_to_readable
+
+        if now_ts is None:
+            now_ts = time.time()
+
+        pending = self.get_pending_tasks()
+        if not pending:
+            return None, "🎉 所有每日懸賞任務均已 100% 完成！"
+
+        dungeon_tasks = [t for t in pending if t.mode_type == "dungeon"]
+        if dungeon_tasks:
+            for target_task in dungeon_tasks:
+                idx = target_task.dungeon_index
+                if dungeon_cooldowns and idx is not None:
+                    cd_until = dungeon_cooldowns.get(idx, 0.0)
+                    if now_ts < cd_until:
+                        rem_sec = int(cd_until - now_ts)
+                        rem_str = format_seconds_to_readable(rem_sec) if rem_sec != float('inf') else "∞"
+                        logging.info(f"⏳ [懸賞排程器] 任務 [{target_task.quest_title}] (地下城 #{idx + 1}) 正在冷卻中 (剩餘 {rem_str})，順延尋找下一個可執行任務...")
+                        continue
+
+                msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+                return target_task, msg
+
+        stage_tasks = [t for t in pending if t.mode_type == "stage"]
+        if stage_tasks:
+            target_task = stage_tasks[0]
+            msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+            return target_task, msg
+
+        boss_tasks = [t for t in pending if t.mode_type == "generic_boss"]
+        if boss_tasks:
+            target_task = boss_tasks[0]
+            msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
+            return target_task, msg
+
+        return None, "🔄 執行預設混合模式"
+
+
 
     @classmethod
     def from_daily_status(cls, accepted_quests, daily_manager=None):

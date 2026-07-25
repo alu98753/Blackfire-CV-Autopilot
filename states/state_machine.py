@@ -672,9 +672,17 @@ class GameStateMachine:
             self.apply_mix_fallback_config()
             return True
 
-        cli_cmd, msg = self.quest_scheduler.get_next_action_config(dungeon_cooldowns=self.dungeon_cooldowns)
-        logging.info(f"🔄 [GameStateMachine 動態調度] {msg}")
+        target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
+        if target_task:
+            quest_cfg = target_task.to_config_dict()
+            if hasattr(self, "backend_mode"):
+                quest_cfg["backend_mode"] = self.backend_mode
+            self.config = quest_cfg
+            logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
+            return False
+
         return False
+
 
 
 
