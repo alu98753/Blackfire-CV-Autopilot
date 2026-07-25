@@ -162,6 +162,8 @@ SUBFLOW_CONFIGS = {
         "name": "血之祭壇獻祭",
         "type": "blood_altar",
         "building_btn": "town_building/Blood_Altar/Blood_Altar.png",
+        "receive_entry_btn": "town_building/Blood_Altar/receive_entry.png",
+        "receive_daily_btn": "town_building/Blood_Altar/receive_daily.png",
         "sacrifice_btn": "town_building/Blood_Altar/Sacrifice.png",
         "alter_btn": "town_building/Blood_Altar/alter.png",
         "exit_building_btn": "town_building/exitfromhouse_and_to_town.png",

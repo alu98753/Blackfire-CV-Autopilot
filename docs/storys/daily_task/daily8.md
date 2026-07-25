@@ -18,10 +18,12 @@
    - **狀態持久化與 08:05 重置**：透過 `DailyManager` 記錄 `hero_draw` 的 `completed_today = True`，每日 08:05 自動重置。
    - **連動佇列**：招募完成後自動呼叫 `pop_and_next_town_subflow()` 續行下一個城鎮任務。
 
-3. 領血
-[Blood_Altar.png](file;file:///e%3A/Side_Project/BlackfireCrusade_tool/templates/town_building/Blood_Altar/Blood_Altar.png) 
-
-[receive.png](file;file:///e%3A/Side_Project/BlackfireCrusade_tool/templates/town_building/Blood_Altar/receive.png) 
+3. 領血 (血之祭壇 `blood_altar`)
+   - **城鎮自動導航與進入**：若處於大廳畫面，優先點擊 `goback_town.png` 退回城鎮；於城鎮中掃描並點擊 `town_building/Blood_Altar/Blood_Altar.png` 進入祭壇。
+   - **領水與領取按鈕**：進入建築後點擊領水頁籤 `town_building/Blood_Altar/receive_entry.png` ➔ 點擊每日免費領血按鈕 `town_building/Blood_Altar/receive_daily.png`。
+   - **彈窗處理與離場**：連續處理領取與確認彈窗 (`common/confirm.png` / `common/ok.png` / `common/quit.png`)；彈窗關閉後點擊 `town_building/exitfromhouse_and_to_town.png` 返回城鎮。
+   - **狀態持久化與 08:30 重置**：透過 `DailyManager` 記錄 `blood_altar` 的 `completed_today = True`（於 `user_data/daily_status.json` 中保存），每日 08:30 自動重置。
+   - **連動佇列與 (選用) 獻祭續行**：領取完成後呼叫 `pop_and_next_town_subflow()` 消費下一個城鎮任務。
 
 
 4. 領任務 (每日懸賞告示牌自動化與動態排程)

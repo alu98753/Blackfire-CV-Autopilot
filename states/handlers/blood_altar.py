@@ -6,28 +6,31 @@ from states.handlers.base import BaseStateHandler
 
 class BloodAltarHandler(BaseStateHandler):
     """
-    血之祭壇獻祭 (Blood Altar) 處理器：
-    1. 於城鎮點擊祭壇建築 (Blood_Altar.png) 進入建築 (進入 ENTERED_BUILDING)。
-    2. 點擊獻祭功能選單 (Sacrifice.png) 進入 SACRIFICE_MENU_OPEN。
-    3. 嚴格獻祭隔離模式 (SACRIFICE_MENU_OPEN)：
-       - 封鎖 Blood_Altar.png / quit.png / exitfromhouse_and_to_town.png 比對。
-       - 僅允許比對: confirm.png、啟用的血水 (gray/green/blue/purple)、alter.png。
-       - 依據配置點擊各品質血水 ➔ 點擊 alter.png ➔ 點擊 confirm.png。
-       - 當連續 3 幀無任何可獻祭血水 (empty_blood_scan_count >= 3) 時，判定全數獻祭完成 ➔ 進入 ALL_DONE_EXITING 階段。
+    血之祭壇 (Blood Altar) 處理器：
+    1. 於城鎮點擊祭壇建築 (Blood_Altar.png) 進入建築 (INIT -> ENTERED_BUILDING)。
+    2. 領取每日免費血水/體力 (RECEIVE_TAB_OPEN -> HANDLING_RECEIVE_POPUPS)：
+       - 點擊領水頁籤 (receive_entry.png)。
+       - 點擊每日領取按鈕 (receive_daily.png)。
+       - 處理領取確認/關閉彈窗 (confirm.png / ok.png / quit.png)。
+    3. (選用) 獻祭功能 (SACRIFICE_MENU_OPEN)：
+       - 若畫面有 Sacrifice.png，進行血水點擊 ➔ alter.png 獻祭。
+       - 當連續 3 幀無任何可獻祭血水時，轉移至 ALL_DONE_EXITING。
     4. 退出階段 (ALL_DONE_EXITING)：
-       - 點擊關閉視窗 (quit.png)。
        - 點擊離開建築按鈕 (exitfromhouse_and_to_town.png) 返回城鎮。
+       - 於 DailyManager 記錄 blood_altar 完成，消費佇列中的下一個任務。
     """
     def __init__(self, machine):
         super().__init__(machine)
-        self.step_phase = "INIT"  # INIT, ENTERED_BUILDING, SACRIFICE_MENU_OPEN, ALL_DONE_EXITING
+        self.step_phase = "INIT"  # INIT, ENTERED_BUILDING, RECEIVE_TAB_OPEN, HANDLING_RECEIVE_POPUPS, SACRIFICE_MENU_OPEN, ALL_DONE_EXITING
         self.last_action_time = 0.0
         self.empty_blood_scan_count = 0
+        self.has_claimed_daily = False
 
     def reset_state(self):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
         self.empty_blood_scan_count = 0
+        self.has_claimed_daily = False
 
     def _ensure_in_town(self, screen_img, rect=None):
         """
@@ -43,6 +46,16 @@ class BloodAltarHandler(BaseStateHandler):
             self.last_action_time = time.time()
             return False
         return True
+
+    def _record_completion(self):
+        """記錄 DailyManager 完成狀態並自動切換至下一個城鎮任務"""
+        self.reset_state()
+        self.machine.need_blood_altar = False
+        dm = getattr(self.machine, "daily_manager", None)
+        if dm and hasattr(dm, "record_subflow_completed"):
+            dm.record_subflow_completed("blood_altar")
+        logging.info("🩸 [血之祭壇] 領血與獻祭流程完成，消費城鎮佇列中的下一個任務...")
+        self.machine.pop_and_next_town_subflow()
 
     def handle(self, screen_img=None, rect=None):
         if screen_img is None and self.capturer:
@@ -65,6 +78,8 @@ class BloodAltarHandler(BaseStateHandler):
 
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", "town_building/Blood_Altar/Blood_Altar.png")
+        receive_entry_btn = cfg.get("receive_entry_btn", "town_building/Blood_Altar/receive_entry.png")
+        receive_daily_btn = cfg.get("receive_daily_btn", "town_building/Blood_Altar/receive_daily.png")
         sacrifice_btn = cfg.get("sacrifice_btn", "town_building/Blood_Altar/Sacrifice.png")
         alter_btn = cfg.get("alter_btn", "town_building/Blood_Altar/alter.png")
         exit_building_btn = cfg.get("exit_building_btn", "town_building/exitfromhouse_and_to_town.png")
@@ -79,18 +94,65 @@ class BloodAltarHandler(BaseStateHandler):
             "purple": "town_building/Blood_Altar/purple_blood.png",
         })
 
-        # 0. 通用防呆：若出現 common/confirm.png 彈窗，優先點擊確認
-        pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
-        if pos_confirm:
-            logging.info("🩸 [血之祭壇] 點擊通用確認按鈕 [common/confirm.png]...")
-            self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
-            self.last_action_time = now
-            return
+        # =========================================================================
+        # 1. 領取每日免費血水階段 (RECEIVE_TAB_OPEN / HANDLING_RECEIVE_POPUPS)
+        # =========================================================================
+        if self.step_phase == "RECEIVE_TAB_OPEN":
+            pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
+            if pos_rec_daily:
+                logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}]，點擊領取免費血水！")
+                self.mouse.click(left + pos_rec_daily[0], top + pos_rec_daily[1])
+                self.has_claimed_daily = True
+                self.step_phase = "HANDLING_RECEIVE_POPUPS"
+                self.last_action_time = now
+                return
+
+            # 若未看到領取按鈕（可能已領取或仍在彈窗中），轉至彈窗處理或結束/獻祭
+            self.step_phase = "HANDLING_RECEIVE_POPUPS"
+
+        if self.step_phase == "HANDLING_RECEIVE_POPUPS":
+            pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
+            pos_ok, _ = self.matcher.match(screen_img, "common/ok.png", threshold=0.8)
+            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
+            
+            if pos_confirm:
+                logging.info("🩸 [血之祭壇] 點擊領取確認按鈕 [common/confirm.png]...")
+                self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
+                self.last_action_time = now
+                return
+            elif pos_ok:
+                logging.info("🩸 [血之祭壇] 點擊領取 OK 按鈕 [common/ok.png]...")
+                self.mouse.click(left + pos_ok[0], top + pos_ok[1])
+                self.last_action_time = now
+                return
+            elif pos_quit:
+                logging.info("🩸 [血之祭壇] 點擊領取關閉按鈕 [common/quit.png]...")
+                self.mouse.click(left + pos_quit[0], top + pos_quit[1])
+                self.last_action_time = now
+                return
+
+            # 彈窗關閉後，若看到離場按鈕或獻祭按鈕，代表領取完畢
+            pos_exit_check, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+            pos_sac_check, _ = self.matcher.match(screen_img, sacrifice_btn, threshold=0.75)
+            if pos_exit_check or pos_sac_check:
+                logging.info("🩸 [血之祭壇] 每日領血彈窗已關閉，完成領血步驟！")
+                # 若無獻祭需求或已有獻祭按鈕可選，檢查是否轉入 ALL_DONE_EXITING
+                self.step_phase = "ALL_DONE_EXITING"
+                self.last_action_time = now
+                return
 
         # =========================================================================
-        # 1. 嚴格獻祭選單開啟狀態 (SACRIFICE_MENU_OPEN) - 嚴格隔離模式
+        # 2. 獻祭選單開啟狀態 (SACRIFICE_MENU_OPEN) - 嚴格隔離模式
         # =========================================================================
         if self.step_phase == "SACRIFICE_MENU_OPEN":
+            # 通用防呆：若出現 common/confirm.png 彈窗，優先點擊確認
+            pos_confirm, _ = self.matcher.match(screen_img, "common/confirm.png", threshold=0.8)
+            if pos_confirm:
+                logging.info("🩸 [血之祭壇] 點擊獻祭確認按鈕 [common/confirm.png]...")
+                self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
+                self.last_action_time = now
+                return
+
             max_btn = cfg.get("max_btn", "town_building/sell_max.png")
             pos_alter, _ = self.matcher.match(screen_img, alter_btn, threshold=0.75)
             pos_max, _ = self.matcher.match(screen_img, max_btn, threshold=0.75)
@@ -150,23 +212,20 @@ class BloodAltarHandler(BaseStateHandler):
             return
 
         # =========================================================================
-        # 2. 退出階段 (ALL_DONE_EXITING)
+        # 3. 退出階段 (ALL_DONE_EXITING)
         # =========================================================================
         if self.step_phase == "ALL_DONE_EXITING":
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
             pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
             if pos_door or pos_building:
-                logging.info("✅ [血之祭壇] 偵測到目前已處於城鎮大門畫面，視為已退回城鎮，完成獻祭流程！")
-                self.reset_state()
-                self.machine.need_blood_altar = False
+                logging.info("✅ [血之祭壇] 偵測到目前已處於城鎮大門畫面，視為已退回城鎮，完成領血與獻祭流程！")
+                self._record_completion()
                 self.last_action_time = now
-                logging.info("🩸 [血之祭壇] 獻祭流程完成，消費城鎮佇列中的下一個任務...")
-                self.machine.pop_and_next_town_subflow()
                 return
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
             if pos_quit:
-                logging.info("🩸 [血之祭壇] 獻祭全數完成，點擊關閉視窗 [common/quit.png]...")
+                logging.info("🩸 [血之祭壇] 點擊關閉視窗 [common/quit.png]...")
                 self.mouse.click(left + pos_quit[0], top + pos_quit[1])
                 self.last_action_time = now
                 return
@@ -175,47 +234,43 @@ class BloodAltarHandler(BaseStateHandler):
             if pos_exit:
                 logging.info(f"🩸 [血之祭壇] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
-                self.reset_state()
-                self.machine.need_blood_altar = False
+                self._record_completion()
                 self.last_action_time = now
-                logging.info("🩸 [血之祭壇] 獻祭流程完成，消費城鎮佇列中的下一個任務...")
-                self.machine.pop_and_next_town_subflow()
                 return
             return
 
         # =========================================================================
-        # 3. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
+        # 4. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
         # =========================================================================
-        # 3.1 優先檢查是否在獻祭選單開啟中 (如 alter.png 或任何血水模板已在畫面上)
-        pos_alter_init, _ = self.matcher.match(screen_img, alter_btn, threshold=0.75)
-        has_any_blood = False
-        for q, enabled in sacrifice_settings.items():
-            if enabled:
-                tp = blood_templates.get(q)
-                if tp and os.path.exists(os.path.join("templates", tp)):
-                    p_b, _ = self.matcher.match(screen_img, tp, threshold=0.75)
-                    if p_b:
-                        has_any_blood = True
-                        break
-        if pos_alter_init or has_any_blood:
-            logging.info("🩸 [血之祭壇] 辨識到目前已處於獻祭選單畫面 (alter.png / 血水可見)，直接進入獻祭階段...")
-            self.step_phase = "SACRIFICE_MENU_OPEN"
-            self.empty_blood_scan_count = 0
-            self.last_action_time = now
-            return
+        # 4.1 檢查是否在建築物內部 (可看到 receive_entry.png / receive_daily.png 或 Sacrifice.png)
+        pos_rec_entry, _ = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
+        pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
+        if pos_rec_entry or pos_rec_daily:
+            if not self.has_claimed_daily and pos_rec_entry and not pos_rec_daily:
+                logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}]，點擊切換至領血介面...")
+                self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
+                self.step_phase = "RECEIVE_TAB_OPEN"
+                self.last_action_time = now
+                return
+            elif not self.has_claimed_daily and pos_rec_daily:
+                logging.info(f"🩸 [血之祭壇] 已在領血介面，點擊每日領取按鈕 [{receive_daily_btn}]...")
+                self.mouse.click(left + pos_rec_daily[0], top + pos_rec_daily[1])
+                self.has_claimed_daily = True
+                self.step_phase = "HANDLING_RECEIVE_POPUPS"
+                self.last_action_time = now
+                return
 
-        # 3.2 檢查是否已在建築物內部 (Sacrifice.png 與 exitfromhouse_and_to_town.png 同時存在，conf >= 0.85)
         pos_sac, conf_sac = self.matcher.match(screen_img, sacrifice_btn, threshold=0.85)
         pos_exit_init, conf_exit_init = self.matcher.match(screen_img, exit_building_btn, threshold=0.85)
         if pos_sac and pos_exit_init:
-            logging.info(f"🩸 [血之祭壇] 辨識到目前已在建築物內部 (Sacrifice.png 與 {exit_building_btn} 同時可見)，點擊開啟獻祭選單...")
-            self.mouse.click(left + pos_sac[0], top + pos_sac[1])
-            self.step_phase = "SACRIFICE_MENU_OPEN"
-            self.empty_blood_scan_count = 0
-            self.last_action_time = now
-            return
+            if not self.has_claimed_daily and pos_rec_entry:
+                logging.info(f"🩸 [血之祭壇] 已在建築物內部，優先點擊領水頁籤 [{receive_entry_btn}]...")
+                self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
+                self.step_phase = "RECEIVE_TAB_OPEN"
+                self.last_action_time = now
+                return
 
-        # 3.3 城鎮點擊祭壇建築 (Blood_Altar.png)
+        # 4.2 城鎮點擊祭壇建築 (Blood_Altar.png)
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
         pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
         if pos_building and pos_door:
@@ -226,9 +281,15 @@ class BloodAltarHandler(BaseStateHandler):
             return
 
         if pos_sac:
-            logging.info(f"🩸 [血之祭壇] 發現獻祭功能選單 [{sacrifice_btn}]，點擊開啟選單...")
-            self.mouse.click(left + pos_sac[0], top + pos_sac[1])
-            self.step_phase = "SACRIFICE_MENU_OPEN"
-            self.empty_blood_scan_count = 0  # 剛開啟選單，重置掃描計數
+            if not self.has_claimed_daily and pos_rec_entry:
+                logging.info(f"🩸 [血之祭壇] 點擊領水頁籤 [{receive_entry_btn}]...")
+                self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
+                self.step_phase = "RECEIVE_TAB_OPEN"
+            else:
+                logging.info(f"🩸 [血之祭壇] 點擊獻祭功能選單 [{sacrifice_btn}]...")
+                self.mouse.click(left + pos_sac[0], top + pos_sac[1])
+                self.step_phase = "SACRIFICE_MENU_OPEN"
+                self.empty_blood_scan_count = 0
             self.last_action_time = now
             return
+
