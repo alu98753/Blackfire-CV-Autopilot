@@ -846,16 +846,43 @@ class GameStateMachine:
             else:
                 return
 
-        # ===== Phase 4: 配對點擊直到目標與彈窗徹底消失 (CLICK_DISMISS_LOOP) =====
+        # ===== Phase 4: 配對點擊直到目標與 confirm 彈窗徹底消失 (CLICK_DISMISS_LOOP) =====
         if self.task_complete_phase == "CLICK_DISMISS_LOOP":
             click_target = getattr(self, "_subflow_click_target", None)
             if click_target and click_target[0] is not None and click_target[1] is not None:
                 click_x, click_y, target_tpl = click_target
-                logging.info(f"👉 [Phase 4: CLICK_DISMISS_LOOP] 發起配對點擊 ({click_x}, {click_y}) 直到 [{target_tpl}] 徹底消失...")
+                logging.info(f"👉 [Phase 4: CLICK_DISMISS_LOOP] 發起配對點擊 ({click_x}, {click_y}) 直到 [{target_tpl}] 與所有 confirm 彈窗徹底消失 (每 2.0 秒匹配檢查一次)...")
+                
+                # 1. 第一階段：配對點擊並等待目標標的與 confirm 消失 (每次輪詢 2.0 秒)
                 self.click_and_wait_until_gone(
                     target_tpl, click_x, click_y, rect,
-                    timeout=6.0, threshold=0.70, check_interval=0.8, retry_interval=1.2, post_delay=0.5
+                    timeout=10.0, threshold=0.70, check_interval=2.0, retry_interval=2.0, post_delay=0.5
                 )
+
+                # 2. 第二階段：連鎖檢查是否還有殘留的 confirm/ok 按鈕，匹配直到完全沒有 confirm (每次 2.0s 輪詢)
+                for extra_round in range(1, 3):
+                    fresh_img = self.capturer.capture(rect)
+                    if fresh_img is None:
+                        break
+                    
+                    found_any_confirm = False
+                    for btn_name in ["common/confirm.png", "common/ok.png"]:
+                        if os.path.exists(os.path.join("templates", btn_name)):
+                            match_res = self.matcher.match(fresh_img, btn_name, threshold=0.75, quiet=True) if hasattr(self.matcher, 'match') else None
+                            pos_c = match_res[0] if match_res and isinstance(match_res, tuple) and len(match_res) >= 1 else None
+                            conf_c = match_res[1] if match_res and isinstance(match_res, tuple) and len(match_res) >= 2 else 0.0
+                            if pos_c:
+                                found_any_confirm = True
+                                cx = rect["left"] + pos_c[0]
+                                cy = rect["top"] + pos_c[1]
+                                logging.info(f"🔄 [Phase 4: 二次補點擊] 畫面上仍存在彈窗 [{btn_name}] (相似度: {conf_c:.4f})，點擊 ({cx}, {cy}) 並等待 2.0 秒...")
+                                self.mouse.click(cx, cy)
+                                time.sleep(2.0)
+                                break
+                    
+                    if not found_any_confirm:
+                        logging.info("🟢 [Phase 4: 配對完成] 畫面上已完全無任何 confirm/ok 彈窗，安全結束子流程。")
+                        break
             
             # 關閉成功，重置 Phase 與暫存屬性
             self.task_complete_phase = "INIT_BANNER_CHECK"

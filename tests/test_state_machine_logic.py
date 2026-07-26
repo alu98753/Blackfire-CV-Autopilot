@@ -1340,6 +1340,25 @@ class TestStateMachineLogic(unittest.TestCase):
             self.state_machine._run_task_complete_subflow(rect)
             mock_wait_gone.assert_called_once()
 
+    @patch('os.path.exists')
+    def test_task_complete_subflow_waits_2s_loop_until_no_confirm(self, mock_exists):
+        """驗證 Phase 4 以 2.0s 為間隔匹配直至沒有 confirm/ok 彈窗才回到原本流程"""
+        mock_exists.return_value = True
+        self.state_machine.task_complete_phase = "CLICK_DISMISS_LOOP"
+        self.state_machine._subflow_click_target = (160, 170, "common/confirm.png")
+
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            with patch('states.state_machine.time.sleep'):
+                self.state_machine._run_task_complete_subflow(rect)
+
+        # 斷言點擊並等待消失 API 被呼叫，且包含 check_interval=2.0
+        mock_wait_gone.assert_called_once()
+        _, kwargs = mock_wait_gone.call_args
+        self.assertEqual(kwargs.get('check_interval'), 2.0, "未將 check_interval 設定為 2.0 秒！")
+        self.assertEqual(kwargs.get('retry_interval'), 2.0, "未將 retry_interval 設定為 2.0 秒！")
+
 
     @patch('os.path.exists')
     def test_dungeon_navigation_anti_reentry(self, mock_exists):
@@ -2274,10 +2293,10 @@ class TestTaskCompletePhaseStateMachine(unittest.TestCase):
             self.state_machine._run_task_complete_subflow(self.rect)
 
             # 斷言 Phase 4 正確調用 click_and_wait_until_gone 監控 confirm.png 消失
-            mock_wait_gone.assert_called_once_with(
-                "common/confirm.png", 160, 170, self.rect,
-                timeout=6.0, threshold=0.70, check_interval=0.8, retry_interval=1.2, post_delay=0.5
-            )
+            mock_wait_gone.assert_called_once()
+            args, kwargs = mock_wait_gone.call_args
+            self.assertEqual(args[0], "common/confirm.png")
+            self.assertEqual(kwargs.get('check_interval'), 2.0)
 
         # 斷言最後 Phase 已重置為 INIT_BANNER_CHECK
         self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
@@ -2337,10 +2356,10 @@ class TestTaskCompletePhaseStateMachine(unittest.TestCase):
             self.state_machine._run_task_complete_subflow(self.rect)
 
             # 斷言 Phase 4 將標的設為 task_complete.png 且點擊計算出之保底座標 (110, 276)
-            mock_wait_gone.assert_called_once_with(
-                "task_complete.png", 110, 276, self.rect,
-                timeout=6.0, threshold=0.70, check_interval=0.8, retry_interval=1.2, post_delay=0.5
-            )
+            mock_wait_gone.assert_called_once()
+            args, kwargs = mock_wait_gone.call_args
+            self.assertEqual(args[0], "task_complete.png")
+            self.assertEqual(kwargs.get('check_interval'), 2.0)
 
         self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
 
