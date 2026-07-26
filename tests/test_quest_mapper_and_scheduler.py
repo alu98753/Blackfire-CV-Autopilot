@@ -60,6 +60,31 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         node_ghost = self.mapper.parse_quest("瘋狂鬼魂")
         self.assertIsNone(node_ghost)
 
+    def test_ocr_noisy_title_completion_does_not_misspill_other_quests(self):
+        """
+        [Regression Test] 驗證當佇列中同時存在 '清除史萊姆' 與 '史萊姆王的毀滅' 時，
+        從彈窗 OCR 讀取到帶噪訊字串 '史萊姆王的毀滅玉3t' 能精確對齊核銷 '史萊姆王的毀滅'，
+        且絕對不會誤扣或標記完成 '清除史萊姆'。
+        """
+        node1 = self.mapper.parse_quest("清除史萊姆")
+        node2 = self.mapper.parse_quest("史萊姆王的毀滅")
+
+        self.scheduler.add_task(node1)
+        self.scheduler.add_task(node2)
+
+        # 模擬彈窗 OCR 辨識出帶有尾巴噪訊的字串 '史萊姆王的毀滅玉3t'
+        matched_title = self.scheduler.record_task_complete("史萊姆王的毀滅玉3t")
+
+        # 1. 斷言匹配到的標題必須是 '史萊姆王的毀滅'
+        self.assertEqual(matched_title, "史萊姆王的毀滅")
+
+        # 2. 斷言 '史萊姆王的毀滅' 已標記為完成 (10/10)
+        self.assertTrue(node2.is_completed)
+
+        # 3. 斷言 '清除史萊姆' 絕不能被誤扣/誤標記完成 (0/10)
+        self.assertFalse(node1.is_completed)
+        self.assertEqual(node1.completed_count, 0)
+
     def test_parse_five_user_quests(self):
         """
         測試解析用戶圖片中的 5 個每日懸賞任務條件、指令與計數策略 (counting_policy)。
