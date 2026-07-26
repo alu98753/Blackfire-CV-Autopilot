@@ -219,9 +219,8 @@ class QuestScheduler:
                 from vision.matcher import TemplateMatcher
                 matcher = TemplateMatcher(templates_dir="templates")
 
-            pos_icon, _ = matcher.match(screen_img, "town_building/bulletin_board/task.png", threshold=0.60, quiet=True)
-            if not pos_icon:
-                pos_icon, _ = matcher.match(screen_img, "task.png", threshold=0.60, quiet=True)
+            task_tpl = "town_building/bulletin_board/task.png"
+            pos_icon, _ = matcher.match(screen_img, task_tpl, threshold=0.60, quiet=True)
 
             if pos_icon:
                 icon_x, icon_y = pos_icon
