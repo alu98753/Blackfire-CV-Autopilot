@@ -799,6 +799,7 @@ class GameStateMachine:
                         if recognized_title:
                             logging.info(f"✅ [Phase 2: OCR_RECOGNIZE] 第 {attempt} 次 Match/辨識成功核銷任務: [{recognized_title}]。")
                             task_recognized = True
+                            self._subflow_completed_task = True
                             break
                     except Exception as e:
                         logging.debug(f"OCR 辨識發生例外: {e}")
@@ -888,6 +889,10 @@ class GameStateMachine:
             self.task_complete_phase = "INIT_BANNER_CHECK"
             self._subflow_cached_pos_task = None
             self._subflow_click_target = None
+            if getattr(self, "_subflow_completed_task", False):
+                self._subflow_completed_task = False
+                logging.info("🔄 [任務核銷完成] 「領取任務獎勵」子流程完成，觸發動態推進下一個懸賞任務目標...")
+                self.check_and_advance_quest_target()
             logging.info("🎉 [子流程] 「領取任務獎勵」 Phase 狀態機圓滿結束！")
 
     def start_subflow_queue(self, queue):

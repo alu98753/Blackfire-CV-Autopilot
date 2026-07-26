@@ -2394,6 +2394,31 @@ class TestTaskCompletePhaseStateMachine(unittest.TestCase):
             # 斷言 click_and_wait_until_gone 被成功呼叫 2 次
             self.assertEqual(mock_wait_gone.call_count, 2)
 
+    @patch('os.path.exists')
+    def test_task_complete_subflow_advances_quest_target(self, mock_exists):
+        """
+        驗證領取任務完成彈窗子流程結束時，會主動呼叫 check_and_advance_quest_target() 推進目標配置。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name in ["task_complete.png", "common/confirm.png"]:
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+        mock_qs = MagicMock()
+        mock_qs.process_task_complete_banner.return_value = "清除史萊姆"
+        self.state_machine.quest_scheduler = mock_qs
+
+        with patch.object(self.state_machine, 'check_and_advance_quest_target') as mock_advance, \
+             patch.object(self.state_machine, 'click_and_wait_until_gone'):
+            self.state_machine._run_task_complete_subflow(self.rect)
+            # 斷言 Phase 4 結束時 check_and_advance_quest_target 被成功呼叫 1 次
+            mock_advance.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
