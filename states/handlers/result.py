@@ -144,6 +144,7 @@ class ResultHandler(BaseStateHandler):
         is_in_tier4 = is_daily and (getattr(self.machine, "quest_scheduler", None) is None or self.machine.quest_scheduler.is_all_completed())
 
         should_exit_battle = (
+            getattr(self.machine, "pending_daily_reset_exit", False) or
             self.machine.stamina_retreat_start_time is not None or
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
@@ -242,6 +243,7 @@ class ResultHandler(BaseStateHandler):
                                 if getattr(self.machine, "daily_manager", None):
                                     self.machine.daily_manager.record_lord_boss_fight(b_key)
 
+                            self.machine.pending_daily_reset_exit = False
                             next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
                             self.machine.transition_to(next_state)
                             return True

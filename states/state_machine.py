@@ -95,6 +95,7 @@ class GameStateMachine:
         self.daily_manager = None
         self.config = {}
         self.primary_config = {}
+        self.pending_daily_reset_exit = False
 
 
 
@@ -251,6 +252,8 @@ class GameStateMachine:
                 self.quest_scheduler = None
                 self.defeat_count = 0
                 self.original_config = None
+                self.pending_daily_reset_exit = True
+                logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
 
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")

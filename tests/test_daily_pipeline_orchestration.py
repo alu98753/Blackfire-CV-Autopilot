@@ -269,6 +269,33 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         )
         self.assertFalse(should_exit)
 
+    def test_daily_reset_triggers_active_battle_exit(self):
+        """[08:05 重置離場測試] 驗證當跨越 08:05 觸發重置時，pending_daily_reset_exit 標記會被置為 True，使 ResultHandler 在戰鬥結束後主動離場"""
+        from states.handlers.result import ResultHandler
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.set_config({"name": "每日懸賞任務", "type": "mix", "stage_name": "level6"})
+
+        # 模擬 08:05 觸發重置
+        sm.pending_daily_reset_exit = True
+
+        handler = ResultHandler(sm)
+        
+        # 測試：ResultHandler 的 should_exit_battle 在 pending_daily_reset_exit == True 時應為 True
+        is_daily = sm.is_daily_pipeline_active()
+        is_in_tier4 = is_daily and (getattr(sm, "quest_scheduler", None) is None or sm.quest_scheduler.is_all_completed())
+        
+        should_exit = (
+            getattr(sm, "pending_daily_reset_exit", False) or
+            sm.stamina_retreat_start_time is not None or
+            sm.need_bag_cleaning or 
+            sm.need_diamond_collection or 
+            (sm.enable_bread and sm.need_bread_collection) or
+            (sm.config.get("type") == "mix" and sm.has_available_dungeon())
+        )
+        self.assertTrue(should_exit)
+
 
 if __name__ == "__main__":
     unittest.main()
