@@ -54,6 +54,7 @@ class TestHeroDrawSubflow(unittest.TestCase):
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
+        ok_clicked = [False]
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
             if self.handler.step_phase == "INIT" and template == "town_building/Tavern/Tavern.png":
                 return ((200, 200), 0.85)
@@ -61,7 +62,7 @@ class TestHeroDrawSubflow(unittest.TestCase):
                 return ((300, 300), 0.85)
             if self.handler.step_phase == "CLICKED_FREE_RECRUITMENT" and template == "town_building/Tavern/RECRUITED.png":
                 return ((350, 350), 0.85)
-            if self.handler.step_phase == "WAITING_CONFIRM" and template == "common/ok.png":
+            if self.handler.step_phase == "WAITING_CONFIRM" and template == "common/ok.png" and not ok_clicked[0]:
                 return ((400, 400), 0.85)
             if self.handler.step_phase == "ALL_DONE_EXITING" and template == "town_building/exitfromhouse_and_to_town.png":
                 return ((500, 500), 0.85)
@@ -87,10 +88,16 @@ class TestHeroDrawSubflow(unittest.TestCase):
             self.assertTrue(res3)
             self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
 
-            # 4. Step 4: WAITING_CONFIRM 點擊 confirm.png
+            # 4. Step 4: WAITING_CONFIRM 點擊 ok.png ➔ 保持在 WAITING_CONFIRM 繼續檢查彈窗，連續 3 幀無彈窗轉入 ALL_DONE_EXITING
             self.handler.last_action_time = 0.0
             res4 = self.handler.handle(mock_img, rect)
             self.assertTrue(res4)
+            self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+            ok_clicked[0] = True
+
+            for _ in range(3):
+                self.handler.last_action_time = 0.0
+                self.handler.handle(mock_img, rect)
             self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
 
             # 5. Step 5: ALL_DONE_EXITING 點擊 quit.png 退出並彈出下一任務
@@ -107,11 +114,12 @@ class TestHeroDrawSubflow(unittest.TestCase):
         self.handler.step_phase = "WAITING_CONFIRM"
 
         has_deassembled = [False]
+        has_ok_clicked = [False]
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
             if template in ["town_building/Tavern/deassemble_hero.png", "deassemble_hero.png"]:
                 return ((400, 300), 0.90) if not has_deassembled[0] else (None, 0.0)
-            if template == "common/ok.png" and has_deassembled[0]:
+            if template == "common/ok.png" and has_deassembled[0] and not has_ok_clicked[0]:
                 return ((500, 400), 0.85)
             return (None, 0.0)
 
@@ -124,10 +132,51 @@ class TestHeroDrawSubflow(unittest.TestCase):
             self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
             has_deassembled[0] = True
 
-            # 2. 第二次在 WAITING_CONFIRM 發現 ok.png ➔ 觸發點擊並轉入 ALL_DONE_EXITING
+            # 2. 第二次在 WAITING_CONFIRM 發現 ok.png ➔ 觸發點擊並保持在 WAITING_CONFIRM (重置計數)
             self.handler.last_action_time = 0.0
             res2 = self.handler.handle(mock_img, rect)
             self.assertTrue(res2)
+            self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+            has_ok_clicked[0] = True
+
+            # 3. 連續 3 幀未發現彈窗 ➔ 轉入 ALL_DONE_EXITING
+            for _ in range(3):
+                self.handler.last_action_time = 0.0
+                self.handler.handle(mock_img, rect)
+            self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
+
+    def test_handler_multiple_confirm_popups_flow(self):
+        """測試：驗證多個 OK / Confirm 連續彈窗會被持續點擊清理，直至連續 3 幀畫面上完全無彈窗後才轉入 ALL_DONE_EXITING"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.handler.step_phase = "WAITING_CONFIRM"
+
+        popup_queue = ["common/ok.png", "common/confirm.png"]
+
+        def fake_match_popups(img, template, threshold=0.75, *args, **kwargs):
+            if popup_queue and template == popup_queue[0]:
+                return ((450, 450), 0.90)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match_popups
+
+        with patch("os.path.exists", return_value=True):
+            # 點擊第 1 個彈窗 ok.png
+            self.handler.handle(mock_img, rect)
+            self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+            popup_queue.pop(0)
+
+            # 點擊第 2 個彈窗 confirm.png
+            self.handler.last_action_time = 0.0
+            self.handler.handle(mock_img, rect)
+            self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+            popup_queue.pop(0)
+
+            # 彈窗隊列已空，連續 3 幀嘗試後轉入 ALL_DONE_EXITING
+            for _ in range(3):
+                self.handler.last_action_time = 0.0
+                self.handler.handle(mock_img, rect)
+
             self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
 
     def test_recruitment_buttons_brightness_thresholds(self):
