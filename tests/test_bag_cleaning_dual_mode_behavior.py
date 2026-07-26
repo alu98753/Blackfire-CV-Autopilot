@@ -71,5 +71,58 @@ class TestBagCleaningDualModeBehavior(unittest.TestCase):
         # 驗證立刻呼叫了 trigger_town_subflow_chain()
         self.mock_machine.trigger_town_subflow_chain.assert_called_once()
 
+class TestBackpackFullDestroyableColorsDecoupling(unittest.TestCase):
+    def setUp(self):
+        self.mock_machine = MagicMock()
+        self.mock_machine.STATE_UNKNOWN = "UNKNOWN"
+        self.mock_machine.config = {
+            # 大廳大量分解設定為包含紫/藍/綠/灰
+            "disassemble_colors": ["gray_or_empty", "green", "blue", "purple"],
+            "keep_colors": ["purple", "orange_yellow", "red"],
+            # 獨立的背包已滿銷毀設定：預設僅允許 gray_or_empty
+            "backpack_full_destroyable_colors": ["gray_or_empty"]
+        }
+
+    @patch('states.handlers.backpack_full_sorting.np.std')
+    def test_backpack_full_restricts_destroy_target_to_gray_only(self, mock_std):
+        """驗證當大廳大量分解包含了綠/藍/紫時，背包已滿分選處理器依然嚴格僅挑選 gray_or_empty 進行銷毀"""
+        from states.handlers.backpack_full_sorting import BackpackFullSortingHandler
+        handler = BackpackFullSortingHandler(self.mock_machine)
+        handler.matcher = MagicMock()
+        handler.mouse = MagicMock()
+        handler.save_diagnostic_image = MagicMock()
+        handler.click_close_button = MagicMock()
+
+        # 模擬彈窗匹配 backpack_full.png 成功
+        handler.matcher.match.side_effect = lambda img, tpl, **kw: ((500, 300), 0.90) if tpl == "backpack_full.png" else (None, 0.0)
+
+        # 模擬 classify_slot_color 依呼叫順序回傳：
+        # 左側 (4x4): 第 0 格為 purple，其餘 15 格為 gray_or_empty
+        # 右側 (4x4): 第 0 格為 green，第 1 格為 gray_or_empty，其餘為 gray_or_empty
+        classify_returns = ["purple"] + ["gray_or_empty"] * 15 + ["green", "gray_or_empty"] + ["gray_or_empty"] * 14
+        handler.classify_slot_color = MagicMock(side_effect=classify_returns)
+        mock_std.return_value = 25.0  # 標準差皆達標
+
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        with patch('states.handlers.backpack_full_sorting.time.sleep'):
+            handler.handle(fake_img, rect)
+
+        # 驗證核心：當 destroyable_colors 為 ["gray_or_empty"] 時，右側被選中的標的 (target_right_slot) 必須是 (0, 1, 'gray_or_empty')，絕對不能是 (0, 0, 'green')！
+        # 檢視 save_diagnostic_image 被呼叫時傳進去的 click_target
+        self.assertTrue(handler.save_diagnostic_image.called)
+        args, kwargs = handler.save_diagnostic_image.call_args
+        # kwargs 中的 right_slots_data 或 debug 印出
+        # 亦可檢驗 mouse.click 座標為第 1 格 (gray_or_empty) 而非第 0 格 (green)
+        # 由於 right_start_dx = 34, step_x = 134，pos_full[0] = 500
+        # 格子 (0, 0) x = 500 + (34 + 0*134 + 67) = 601
+        # 格子 (0, 1) x = 500 + (34 + 1*134 + 67) = 735
+        clicked_x = handler.mouse.click.call_args_list[0][0][0]
+        # 當前舊程式碼實作中，因為借用了 disassemble_colors (含 green)，clicked_x 會命中 (0, 0) 即 green 格子！
+        # 在新實作修復後，clicked_x 必須命中 (0, 1) 即 gray_or_empty 格子！
+        self.assertGreater(clicked_x, 650, "未選擇 gray_or_empty 格子，誤選了 green 格子！")
+
 if __name__ == "__main__":
     unittest.main()
