@@ -371,10 +371,14 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(900, 900)
         self.assertTrue(self.state_machine.bag_tidied)
         
-        # - 退出
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((1000, 1000), 0.9) if name == "common/quit.png" else (None, 0.0)
-        )
+        quit_matched = [False]
+        def mock_match_quit(img, name, **kw):
+            if name == "common/quit.png" and not quit_matched[0]:
+                quit_matched[0] = True
+                return ((1000, 1000), 0.9)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = mock_match_quit
+
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1000, 1000)
         
@@ -2189,16 +2193,25 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
         self.state_machine.bag_tidied = True
         self.state_machine.need_bag_cleaning = True
+        self.state_machine.bag_opened_clicked = True
 
         handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(handler, 'reset_state'):
+            handler.reset_state()
+        self.state_machine.bag_opened_clicked = True
 
+
+
+        quit_matched = [False]
         def mock_match_quit(img, name, **kw):
-            if name == "common/quit.png":
+            if name == "common/quit.png" and not quit_matched[0]:
+                quit_matched[0] = True
                 return ((800, 200), 0.90)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_quit
         self.mock_mouse.click.reset_mock()
+
 
         import numpy as np
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -2679,15 +2692,18 @@ class TestBehavioralScenarios(unittest.TestCase):
         dis_pos = (500, 500)
         quit_pos = (800, 200)
 
+        quit_matched = [False]
         def mock_match(img, name, **kw):
             if name == "common/Disassembly.png":
                 return (dis_pos, 0.90)
-            elif name == "common/quit.png":
+            elif name == "common/quit.png" and not quit_matched[0]:
+                quit_matched[0] = True
                 return (quit_pos, 0.90)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match
         self.mock_mouse.click.reset_mock()
+
         import numpy as np
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = self.mock_capturer.get_window_rect()
