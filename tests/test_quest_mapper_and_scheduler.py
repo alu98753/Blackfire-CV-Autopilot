@@ -47,6 +47,19 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertIn("--mode stage --stage 6 --sub six", node_demon.to_cli_args())
         self.assertEqual(normalize_quest_title("清除樹入"), "清除樹人")
 
+    def test_exact_full_name_match_prevent_unknown_false_positive(self):
+        """
+        驗證全新未知任務 (如 '龍騎士的毀滅'、'瘋狂鬼魂') 不會因為部分關鍵字重疊而被誤判，
+        必須 100% 傳回 None 並精確觸發 unknown_quests 上報。
+        """
+        # 1. '龍騎士的毀滅' 雖然帶有 '的毀滅'，但不完全等於已知任務，應回傳 None
+        node_dragon = self.mapper.parse_quest("龍騎士的毀滅")
+        self.assertIsNone(node_dragon)
+
+        # 2. '瘋狂鬼魂' 雖然帶有 '鬼魂'，但不完全等於已知任務，應回傳 None
+        node_ghost = self.mapper.parse_quest("瘋狂鬼魂")
+        self.assertIsNone(node_ghost)
+
     def test_parse_five_user_quests(self):
         """
         測試解析用戶圖片中的 5 個每日懸賞任務條件、指令與計數策略 (counting_policy)。

@@ -258,28 +258,30 @@ class QuestMapper:
             self.ignored_rules = []
 
         # 2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4, counting_policy)
+        # 📌 註記：dungeon_rules 要記錄的是「完整的官方任務全名」或「特有地圖名」
         # 0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 冰雪洞窟
         self.dungeon_rules = [
             (r"(史萊姆王的毀滅|史萊姆王)", 0, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除史萊姆|史萊姆|黏糊糊的石窟)", 0, TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除史萊姆|黏糊糊的石窟)", 0, TaskNode.POLICY_DETERMINISTIC),
             (r"(消滅蛛王與蛛後|蛛王與蛛後)", 1, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除蜘蛛|蜘蛛|幽影地穴|鬼魂)", 1, TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除蜘蛛|幽影地穴)", 1, TaskNode.POLICY_DETERMINISTIC),
             (r"(破除森林的枷鎖)", 2, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除樹人|森林迷宮|樹人)", 2, TaskNode.POLICY_DETERMINISTIC),
-            (r"(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒|枯樓|骷髏)", 3, TaskNode.POLICY_DETERMINISTIC),
-            (r"(冰雪洞窟的暴君|終結寒冰獸王|暴君)", 4, TaskNode.POLICY_BANNER_VERIFY),
+            (r"(清除樹人|森林迷宮)", 2, TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒)", 3, TaskNode.POLICY_DETERMINISTIC),
+            (r"(冰雪洞窟的暴君|終結寒冰獸王)", 4, TaskNode.POLICY_BANNER_VERIFY),
             (r"(冰雪洞窟)", 4, TaskNode.POLICY_DETERMINISTIC),
         ]
 
         # 3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型, counting_policy)
+        # 📌 註記：stage_rules 要記錄的是「完整的官方任務全名」
         # Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷
         self.stage_rules = [
-            (r"(野豬)", 1, "final", TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除野豬|野豬)", 1, "final", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除熊|熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除沙蟲|沙蟲)", 4, "middle", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除蛙人|蛙人)", 5, "first", TaskNode.POLICY_DETERMINISTIC),
             (r"(討伐惡魔|惡魔)", 6, "six", TaskNode.POLICY_DETERMINISTIC),
-            (r"(冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
+            (r"(擊敗冰元素|冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
         ]
 
     def get_quest_sort_key(self, title):
@@ -376,12 +378,16 @@ class QuestMapper:
         default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in BANNER_VERIFY_QUESTS else TaskNode.POLICY_DETERMINISTIC
 
         # 2. 檢查地下城專屬任務 (地下城不受固定次數限制，由 30 分鐘冷卻倒數與告示牌領獎動態控管)
+        # 必須與候選完整標題/關鍵字完全相等 ==，避免 '龍騎士的毀滅' 誤判)
+
         for rule in self.dungeon_rules:
             pattern = rule[0]
             dungeon_idx = rule[1]
             policy = rule[2] if len(rule) > 2 else default_policy
 
-            if re.search(pattern, combined_text):
+            # 拆解正則 tuple 內的候選字串清單 (例如 ["史萊姆王的毀滅", "史萊姆王"])
+            candidates = [c.strip() for c in pattern.strip("()").split("|") if c.strip()]
+            if norm_title in candidates or any(c in norm_title or norm_title == c for c in candidates):
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="dungeon",
@@ -393,14 +399,15 @@ class QuestMapper:
                     counting_policy=policy
                 )
 
-        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 10 次)
+        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 10 次) (必須包含完整候選標題/專有名詞)
         for rule in self.stage_rules:
             pattern = rule[0]
             stage_lvl = rule[1]
             sub_stage = rule[2]
             policy = rule[3] if len(rule) > 3 else default_policy
 
-            if re.search(pattern, combined_text):
+            candidates = [c.strip() for c in pattern.strip("()").split("|") if c.strip()]
+            if norm_title in candidates or any(c in norm_title or norm_title == c for c in candidates):
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="stage",
