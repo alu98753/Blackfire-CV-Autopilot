@@ -347,8 +347,8 @@ class DailyManager:
     def get_pending_town_subflows(self):
         """
         取得 Tier 1 尚未完成的城鎮一次性速領子流程佇列。
-        優先順序：chest ➔ hero_draw ➔ blood_altar (連帶 jewelry_workshop)
-        :return: list of str (例如 ["chest", "hero_draw", "blood_altar", "jewelry_workshop"])
+        優先順序：chest ➔ hero_draw ➔ blood_altar (連帶 jewelry_workshop) ➔ bulletin_board
+        :return: list of str (例如 ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"])
         """
         pending = []
         if not self.is_subflow_completed("chest"):
@@ -359,6 +359,8 @@ class DailyManager:
             pending.append("blood_altar")
             if "jewelry_workshop" not in pending:
                 pending.append("jewelry_workshop")
+        if not self.is_subflow_completed("bulletin_board"):
+            pending.append("bulletin_board")
         return pending
 
     def is_subflow_completed(self, subflow_key):

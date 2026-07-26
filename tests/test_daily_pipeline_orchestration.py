@@ -30,23 +30,24 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
             shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_tier1_town_subflows_priority_order(self):
-        """驗證 Tier 1 一極優先 (每日一次性城鎮速領) 順序: chest -> hero_draw -> blood_altar (+ jewelry_workshop)"""
+        """驗證 Tier 1 一極優先 (每日一次性城鎮速領) 順序: chest -> hero_draw -> blood_altar (+ jewelry_workshop) -> bulletin_board"""
         pending = self.daily_mgr.get_pending_town_subflows()
-        self.assertEqual(pending, ["chest", "hero_draw", "blood_altar", "jewelry_workshop"])
+        self.assertEqual(pending, ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"])
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
 
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
-        self.assertEqual(sm.town_subflow_queue, ["hero_draw", "blood_altar", "jewelry_workshop"])
+        self.assertEqual(sm.town_subflow_queue, ["hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"])
 
     def test_tier2_lord_boss_priority_over_bulletin_board(self):
-        """驗證 Tier 2 領主 Boss 討伐優先級大於 bulletin_board 懸賞告示牌"""
+        """驗證 Tier 1 城鎮速領 (包含 bulletin_board) 完成後，Tier 2 領主 Boss 討伐被優先觸發"""
         # 手動標示 Tier 1 子流程已完成
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
 
         # 斷言 Tier 1 已空
         self.assertEqual(self.daily_mgr.get_pending_town_subflows(), [])
@@ -71,6 +72,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
@@ -91,6 +93,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
 
         # 手動將 Boss 次數填滿
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
@@ -121,6 +124,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
 
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
@@ -172,16 +176,16 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertNotIn("森林迷宮", sm.config.get("name", ""))
 
     def test_tier1_resume_after_partial_completion(self):
-        """[Tier 1 檢驗] 驗證城鎮速領中途斷開重新啟動時，會自動接續剩餘未完成項目 (如只留 blood_altar)"""
+        """[Tier 1 檢驗] 驗證城鎮速領中途斷開重新啟動時，會自動接續剩餘未完成項目 (如只留 blood_altar, jewelry_workshop, bulletin_board)"""
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         pending = self.daily_mgr.get_pending_town_subflows()
-        self.assertEqual(pending, ["blood_altar", "jewelry_workshop"])
+        self.assertEqual(pending, ["blood_altar", "jewelry_workshop", "bulletin_board"])
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
         sm.evaluate_and_schedule_daily_pipeline()
-        self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop"])
+        self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop", "bulletin_board"])
         self.assertEqual(sm.current_state, sm.STATE_BLOOD_ALTAR)
 
     def test_tier2_boss_preemption_over_tier3_and_tier4(self):
@@ -189,6 +193,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
@@ -211,6 +216,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
 
         # 設蜘蛛今日 5 次全滿
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
