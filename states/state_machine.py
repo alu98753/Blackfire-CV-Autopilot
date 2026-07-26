@@ -957,14 +957,13 @@ class GameStateMachine:
             logging.info("重置旗標並回復原模式續行...")
         logging.info("=" * 60)
 
-        # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
-        if self.is_daily_pipeline_active():
-            scheduled = self.evaluate_and_schedule_daily_pipeline()
-            if scheduled:
-                return
-
+        # 城鎮流水線結束，先將狀態轉移至 NAVIGATING / COLLECT_ONLY，確保退出子流程狀態
         next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
         self.transition_to(next_st)
+
+        # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
+        if self.is_daily_pipeline_active():
+            self.evaluate_and_schedule_daily_pipeline()
 
     def is_daily_pipeline_active(self):
         """

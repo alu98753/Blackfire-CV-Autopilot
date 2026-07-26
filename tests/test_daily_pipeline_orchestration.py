@@ -302,6 +302,20 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         )
         self.assertTrue(should_exit)
 
+    def test_pop_and_next_town_subflow_state_transition_not_leaked(self):
+        """[Subflow State Transition] 驗證城鎮佇列結束時，current_state 會切換至 NAVIGATING，不會殘留 JEWELRY_WORKSHOP"""
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.town_subflow_queue = []
+        sm.current_state = sm.STATE_JEWELRY_WORKSHOP
+
+        # 執行城鎮流水線結束彈出
+        sm.pop_and_next_town_subflow()
+
+        # 斷言 current_state 絕不能殘留在 JEWELRY_WORKSHOP
+        self.assertNotEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+
 
 if __name__ == "__main__":
     unittest.main()
