@@ -215,13 +215,17 @@ class TestBehavioralScenarios(unittest.TestCase):
         test_img[394+35:394+75, 994+35:994+75] = [50, 50, 50]
         self.mock_capturer.capture.return_value = test_img
         
+        confirm_matched = [0]
         def match_side_effect_destroy_collect(img, name, threshold):
             if name == "backpack_full.png":
                 return ((960, 289), 0.9)
             elif name == "common/destroy.png":
                 return ((500, 500), 0.9)
             elif name == "common/confirm.png":
-                return ((600, 600), 0.9)
+                if confirm_matched[0] == 0:
+                    confirm_matched[0] += 1
+                    return ((600, 600), 0.9)
+                return (None, 0.0)
             elif name == "common/collect.png":
                 return ((700, 700), 0.9)
             return (None, 0.0)
@@ -231,8 +235,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         # Act
         self.state_machine.step()
         
-        # Assert: 整個銷毀收集鏈完成，最後一步應為 collect 領取
-        self.mock_mouse.click.assert_called_with(700, 700)
+        # Assert: 整個銷毀收集鏈完成，點擊關閉確認彈窗 (600, 600)
+        self.mock_mouse.click.assert_called_with(600, 600)
 
     @patch('os.path.exists')
     def test_backpack_sorting_scroll_and_exit_recovery(self, mock_exists):
