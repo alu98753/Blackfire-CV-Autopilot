@@ -178,9 +178,9 @@ class TemplateMatcher:
             logging.info(f"成功匹配模板 '{template_name}'！相似度: {final_conf:.4f}，相對亮度比: {final_ratio:.2f}，座標: ({center_x}, {center_y})")
         return (center_x, center_y), final_conf
 
-    def match_all(self, screen_img, template_name, threshold=0.7, scales=None, quiet=False):
+    def match_all(self, screen_img, template_name, threshold=0.7, scales=None, brightness_threshold=0.0, quiet=False):
         """
-        在 screen_img 中尋找所有與 template_name 匹配度高於 threshold 的位置 (支援自適應多尺度測試)。
+        在 screen_img 中尋找所有與 template_name 匹配度高於 threshold 的位置 (支援自適應多尺度測試與相對亮度比過濾)。
         :return: [(center_x, center_y, confidence), ...]
         """
         base_template = self._load_template(template_name)
@@ -222,6 +222,23 @@ class TemplateMatcher:
                         break
                 if not too_close:
                     candidates.append((x, y, conf))
+
+            # 相對亮度比例過濾 (Relative Brightness Ratio Filter)
+            if brightness_threshold > 0.0 and candidates:
+                temp_gray = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
+                mean_temp = np.mean(temp_gray)
+                screen_gray = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+
+                filtered_candidates = []
+                for x, y, conf in candidates:
+                    crop = screen_gray[y:y+temp_h, x:x+temp_w]
+                    mean_crop = np.mean(crop)
+                    ratio = mean_crop / max(1.0, mean_temp)
+                    if ratio >= brightness_threshold:
+                        filtered_candidates.append((x, y, conf))
+                    elif not quiet:
+                        logging.warning(f"⚠️ [match_all] 模板 '{template_name}' 在 ({x}, {y}) 相似度 {conf:.4f} 達標，但亮度比 {ratio:.2f} < 門檻 {brightness_threshold:.2f}，予以過濾。")
+                candidates = filtered_candidates
 
             results = []
             for x, y, conf in candidates:
