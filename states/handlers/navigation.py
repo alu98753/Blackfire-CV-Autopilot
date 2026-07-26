@@ -604,8 +604,16 @@ class NavigationHandler(BaseStateHandler):
                     stage_target
                 ]
                 nav_path = self.machine.config.get("stage_navigation_path", default_stage_nav)
-        else:
-            nav_path = self.machine.config.get("navigation_path", [])
+        if config_type == "collect_only":
+            pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8, quiet=True)
+            if pos_goback:
+                logging.info("🧭 [純領取模式] 領取完成後在大廳畫面，點擊 [goback_town.png] 返回城鎮待機...")
+                self.mouse.click(rect["left"] + pos_goback[0], rect["top"] + pos_goback[1])
+                time.sleep(0.5)
+                self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                return
+            self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+            return
 
         if not nav_path:
             self.machine.transition_to(self.machine.STATE_LOBBY)

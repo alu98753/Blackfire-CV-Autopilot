@@ -2133,6 +2133,29 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config = {"type": "stage"}
         self.assertFalse(self.state_machine.has_available_dungeon())
 
+    @patch('os.path.exists')
+    def test_collect_only_navigation_returns_to_town_instead_of_lobby(self, mock_exists):
+        """
+        測試當在 collect_only 模式下處於 NAVIGATING 狀態時：
+        看見 goback_town.png 應自動點擊返回城鎮並切換至 STATE_COLLECT_ONLY，絕不誤切至 STATE_LOBBY。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        def mock_match(img, tpl, threshold=0.8, quiet=False):
+            if tpl == "goback_town.png":
+                return (72, 757), 0.92
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = mock_match
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        self.state_machine.step()
+
+        self.mock_mouse.click.assert_called_with(72, 757)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+
     def test_get_dungeon_cooldown_status(self):
         """
         測試 get_dungeon_cooldown_status 能正確格式化顯示各地下城冷卻狀態與可挑戰清單。
