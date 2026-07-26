@@ -140,8 +140,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 if self.goods_scroll_state == "SCROLLED_DOWN":
                     center_x = left + (rect["width"] // 2 if rect and "width" in rect else 960)
                     height = rect["height"] if rect and "height" in rect else 1080
-                    drag_start_y = top + int(height * 0.6)
-                    drag_end_y = top + int(height * 0.4)
+                    drag_start_y = top + int(height * 0.75)
+                    drag_end_y = top + int(height * 0.25)
                     self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
                     self.goods_scroll_state = "TOP"
                     time.sleep(0.3)
@@ -155,8 +155,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
             # 滾動與拖曳座標計算 (由畫面 60% 高度拖曳至 40% 高度)
             center_x = left + (rect["width"] // 2 if rect and "width" in rect else 960)
             height = rect["height"] if rect and "height" in rect else 1080
-            drag_start_y = top + int(height * 0.6)
-            drag_end_y = top + int(height * 0.4)
+            drag_start_y = top + int(height * 0.75)
+            drag_end_y = top + int(height * 0.25)
 
             # 步驟 A: 嘗試在當前畫面匹配目標商品
             pos_goods = None
