@@ -130,6 +130,52 @@ class TestHeroDrawSubflow(unittest.TestCase):
             self.assertTrue(res2)
             self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
 
+    def test_recruitment_buttons_brightness_thresholds(self):
+        """測試：驗證免費招募、專用招募與分解英雄按鈕均精確帶入 brightness_threshold 防障參數"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        match_kwargs_history = []
+
+        def tracking_match(img, template, threshold=0.75, **kwargs):
+            match_kwargs_history.append((template, kwargs))
+            if template == "town_building/Tavern/free_recruitment.png":
+                return ((100, 100), 0.9)
+            elif template == "town_building/Tavern/RECRUITED.png":
+                return ((200, 200), 0.9)
+            elif template in ["town_building/Tavern/deassemble_hero.png", "deassemble_hero.png"]:
+                return ((300, 300), 0.9)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = tracking_match
+
+        with patch("os.path.exists", return_value=True):
+            # 1. 測試免費招募按鈕 brightness_threshold
+            self.handler.step_phase = "ENTERED_TAVERN"
+            self.handler.handle(mock_img, rect)
+            self.mock_machine.click_and_wait_until_gone.assert_called_with(
+                "town_building/Tavern/free_recruitment.png", 100, 100, rect,
+                timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+            )
+
+            # 2. 測試專用招募按鈕 brightness_threshold
+            self.handler.last_action_time = 0.0
+            self.handler.step_phase = "CLICKED_FREE_RECRUITMENT"
+            self.handler.handle(mock_img, rect)
+            self.mock_machine.click_and_wait_until_gone.assert_called_with(
+                "town_building/Tavern/RECRUITED.png", 200, 200, rect,
+                timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+            )
+
+            # 3. 測試分解英雄按鈕 brightness_threshold (0.85 避障門檻)
+            self.handler.last_action_time = 0.0
+            self.handler.step_phase = "WAITING_CONFIRM"
+            self.handler.handle(mock_img, rect)
+            self.mock_machine.click_and_wait_until_gone.assert_called_with(
+                "town_building/Tavern/deassemble_hero.png", 300, 300, rect,
+                timeout=5.0, threshold=0.75, brightness_threshold=0.85, check_interval=0.25, post_delay=0.5
+            )
+
     def test_daily_manager_hero_draw_completion_and_reset(self):
         """測試：DailyManager 正確記錄 hero_draw 完成狀態並於 08:05 重置"""
         test_dir = "scratch/test_user_data"
