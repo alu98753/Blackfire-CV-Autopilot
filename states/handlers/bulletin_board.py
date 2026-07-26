@@ -33,6 +33,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.step_phase = "INIT"  # INIT, WAIT_BOARD_OPEN, CHECK_RESET, PROCESS_ACCEPT_QUESTS, EXIT_BOARD, ALL_DONE_EXITING
         self.accept_sub_phase = "FIND_TOP_TASK"  # FIND_TOP_TASK, CLICK_ACCEPT_BTN, CLICK_CONFIRM_POPUP
         self.last_action_time = 0.0
+        self.last_reset_click_time = 0.0
         self.accepted_quest_titles = []
         self.ocr_extractor = None
 
@@ -40,6 +41,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.accept_sub_phase = "FIND_TOP_TASK"
         self.last_action_time = 0.0
+        self.last_reset_click_time = 0.0
         self.accepted_quest_titles = []
 
     def _get_ocr_extractor(self):
@@ -213,38 +215,22 @@ class BulletinBoardHandler(BaseStateHandler):
                 crop_x = x0 + icon_w + 5
                 crop_y = max(0, y0 - 5)
                 crop_w = min(max(200, int(360 * scale)), w_img - crop_x)
-                crop_h = min(icon_h + 10, h_img - crop_y)
+                quest_title = extractor.extract_quest_title_at(screen_img, rect, (cx, cy))
+                if not quest_title:
+                    logging.warning(f"⚠️ [懸賞告示牌] 於座標 ({cx}, {cy}) 提取標題失敗，跳過該任務項。")
+                    self.accept_sub_phase = "FIND_TOP_TASK"
+                    self.last_action_time = now
+                    return
 
-                if crop_w > 0 and crop_h > 0:
-                    text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
-                    
-                    # 💾 保存視覺化偵錯圖 (debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png)
-                    if isinstance(screen_img, np.ndarray):
-                        try:
-                            cv2.imwrite("debug_bulletin_board_roi.png", text_roi)
-                            debug_full = screen_img.copy()
-                            # 紅框: task.png 錨點圖示
-                            cv2.rectangle(debug_full, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
-                            # 綠框: 送交 EasyOCR 辨識之標題 ROI 區域
-                            cv2.rectangle(debug_full, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), (0, 255, 0), 2)
-                            cv2.imwrite("debug_bulletin_board_ocr.png", debug_full)
-                            logging.info(f"📸 [懸賞告示牌 Debug] 已將 OCR 文字裁切區域寫入 debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png (ROI: X=[{crop_x}:{crop_x+crop_w}], Y=[{crop_y}:{crop_y+crop_h}])")
-                        except Exception as ex:
-                            logging.warning(f"⚠️ [懸賞告示牌 Debug] 保存圖片時發生異常: {ex}")
-
-                    title_name = extractor._ocr_crop(text_roi)
-                    if title_name and title_name not in self.accepted_quest_titles:
-                        self.accepted_quest_titles.append(title_name)
-                        logging.info(f"📋 [懸賞告示牌] 成功對最上方未接任務 (Y={cy}) 抓取標題: '{title_name}'")
-
-                # 點擊該列任務以選取（使右半邊呈現 accept_task.png）
-                logging.info(f"📋 [懸賞告示牌] 點擊最上方未接任務列 (座標: {cx}, {cy})...")
+                logging.info(f"📋 [懸賞告示牌] 成功對齊標題: '{quest_title}'，點擊任務項目鎖定右半邊內容...")
                 self.mouse.click(left + cx, top + cy)
-                self.accept_sub_phase = "CLICK_ACCEPT_BTN"
-                self.last_action_time = now
-                return
+                
+                if quest_title not in self.accepted_quest_titles:
+                    self.accepted_quest_titles.append(quest_title)
+                
+                time.sleep(0.5)
 
-            if self.accept_sub_phase == "CLICK_ACCEPT_BTN":
+                # 在右半邊 (cx > w_img // 2) 搜尋「接受任務 (accept_task.png)」按鈕
                 pos_accept, _ = self.matcher.match(screen_img, accept_btn, threshold=0.75)
                 if pos_accept:
                     logging.info(f"📋 [懸賞告示牌] 於右半邊發現接受任務按鈕 [{accept_btn}]，點擊接受！")
@@ -265,22 +251,27 @@ class BulletinBoardHandler(BaseStateHandler):
                 return
 
         # =========================================================================
-        # 4. 條件式重置檢查：若無 reset.png 則自動跳過 (CHECK_RESET)
+        # 4. 條件式重置檢查：點擊 reset 直到沒有 + 滿 3 秒靜置 (CHECK_RESET)
         # =========================================================================
         if self.step_phase == "CHECK_RESET":
             pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
             if pos_reset:
                 logging.info(f"📋 [懸賞告示牌] 發現重置按鈕 [{reset_btn}]，點擊執行重置！")
                 self.mouse.click(left + pos_reset[0], top + pos_reset[1])
+                self.last_reset_click_time = now
+                self.last_action_time = now
+                return
+            
+            # 判斷可接取條件：1. 確定無 reset 按鈕  2. 離上次 reset 點擊已過至少 3 秒
+            if self.last_reset_click_time == 0.0 or (now - self.last_reset_click_time >= 3.0):
+                logging.info("📋 [懸賞告示牌] 確定無重置按鈕且重置後已滿 3 秒，切換至 PROCESS_ACCEPT_QUESTS 開始領取任務...")
                 self.step_phase = "PROCESS_ACCEPT_QUESTS"
                 self.accept_sub_phase = "FIND_TOP_TASK"
                 self.last_action_time = now
                 return
             else:
-                logging.info(f"📋 [懸賞告示牌] 未發現重置按鈕 [{reset_btn}] (無需重新整理或已重置)，直接進入任務接取階段！")
-                self.step_phase = "PROCESS_ACCEPT_QUESTS"
-                self.accept_sub_phase = "FIND_TOP_TASK"
-                self.last_action_time = now
+                rem = 3.0 - (now - self.last_reset_click_time)
+                logging.info(f"⌛ [懸賞告示牌] 重置完成，等待畫面渲染中 (靜置 3 秒，剩餘 {rem:.1f} 秒)...")
                 return
 
         # =========================================================================

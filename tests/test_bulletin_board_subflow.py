@@ -80,36 +80,36 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.mock_matcher.match.side_effect = fake_match_step3
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(300, 300)
+        self.assertEqual(handler.step_phase, "CHECK_RESET")
+        
+        # 模擬 3.5 秒過後，當前已無 reset.png 推進至 PROCESS_ACCEPT_QUESTS
+        handler.last_action_time = 0.0
+        handler.last_reset_click_time = time.time() - 3.5
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (None, 0.0)
+        handler.handle()
         self.assertEqual(handler.step_phase, "PROCESS_ACCEPT_QUESTS")
         self.assertEqual(handler.accept_sub_phase, "FIND_TOP_TASK")
 
-        # Step 4: 發現 task.png -> 點擊首列任務
+        # Step 4: 發現 task.png -> 點擊首列任務與右半邊 accept_task.png
         handler.last_action_time = 0.0
         self.mock_matcher.match_all.return_value = [(100, 100, 0.90)]
+        def fake_match_step4(img, name, **kw):
+            if name == "town_building/bulletin_board/accept_task.png":
+                return ((600, 500), 0.90)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = fake_match_step4
         self.mock_mouse.click.reset_mock()
 
         # Mock OCR reader
         mock_ocr = MagicMock()
-        mock_ocr._ocr_crop.return_value = "清除野豬"
+        mock_ocr.extract_quest_title_at.return_value = "清除野豬"
         handler.ocr_extractor = mock_ocr
 
         handler.handle()
-        self.mock_mouse.click.assert_called_once_with(100, 100)
-        self.assertEqual(handler.accept_sub_phase, "CLICK_ACCEPT_BTN")
-        self.assertIn("清除野豬", handler.accepted_quest_titles)
-
-        # Step 5: 點擊 accept_task.png
-        handler.last_action_time = 0.0
-        def fake_match_step5(img, name, **kw):
-            if name == "town_building/bulletin_board/accept_task.png":
-                return ((600, 500), 0.90)
-            return (None, 0.0)
-
-        self.mock_matcher.match.side_effect = fake_match_step5
-        self.mock_mouse.click.reset_mock()
-        handler.handle()
-        self.mock_mouse.click.assert_called_once_with(600, 500)
+        self.mock_mouse.click.assert_any_call(100, 100)
+        self.mock_mouse.click.assert_any_call(600, 500)
         self.assertEqual(handler.accept_sub_phase, "CLICK_CONFIRM_POPUP")
+        self.assertIn("清除野豬", handler.accepted_quest_titles)
 
         # Step 6: 點擊 confirm.png
         handler.last_action_time = 0.0
