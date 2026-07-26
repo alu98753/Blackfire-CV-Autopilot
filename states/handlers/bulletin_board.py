@@ -176,7 +176,10 @@ class BulletinBoardHandler(BaseStateHandler):
                 
                 logging.info(f"📋 [懸賞告示牌 診斷分析] 在畫面左半邊共掃描到 {len(raw_anchors)} 個未接取任務候選點 (task.png, threshold=0.70, brightness=0.88)")
 
-                # 相對優勢比對：精確過濾已接取任務 (task_after.png)
+                # 相對優勢與灰度比比對：精確過濾已接取任務 (task_after.png)
+                temp_after_img = self.matcher._load_template(task_after_tpl)
+                mean_after_temp = np.mean(cv2.cvtColor(temp_after_img, cv2.COLOR_BGR2GRAY)) if isinstance(temp_after_img, np.ndarray) else 89.3
+
                 anchors = []
                 for (cx, cy, conf_before) in raw_anchors:
                     x1 = max(0, cx - 60)
@@ -185,11 +188,18 @@ class BulletinBoardHandler(BaseStateHandler):
                     y2 = min(h_img, cy + 60)
                     roi = screen_img[y1:y2, x1:x2]
                     
-                    pos_after, conf_after = self.matcher.match(roi, task_after_tpl, threshold=0.65, quiet=True)
-                    if pos_after and conf_after >= conf_before - 0.02:
-                        logging.info(f"❌ [過濾理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}]，但在週邊比對到已接取圖案 [{task_after_tpl}] (分數: [{conf_after:.4f}] >= [{conf_before - 0.02:.4f}]) ➔ 判定為已接取，予以過濾！")
-                        continue
-                    logging.info(f"🟢 [通過理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}] (無 task_after 強干擾) ➔ 判定為待接取任務！")
+                    pos_after, conf_after = self.matcher.match(roi, task_after_tpl, threshold=0.75, quiet=True)
+                    if pos_after:
+                        roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if isinstance(roi, np.ndarray) else None
+                        ratio_after = (np.mean(roi_gray) / max(1.0, mean_after_temp)) if roi_gray is not None else 1.0
+                        if conf_after >= 0.75 and ratio_after <= 0.88:
+                            logging.info(f"❌ [過濾理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}]，但在週邊比對到已接取灰色圖案 [{task_after_tpl}] (相似度: [{conf_after:.4f}], 灰度比: [{ratio_after:.2f}] <= 0.88) ➔ 判定為已接取，予以過濾！")
+                            continue
+                        else:
+                            logging.info(f"🟢 [通過理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}]，週邊雖然相似度大，但屬鮮黃色區塊 (灰度比: [{ratio_after:.2f}] > 0.88) ➔ 判定為待接取任務！")
+                    else:
+                        logging.info(f"🟢 [通過理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}] (無 task_after 強干擾) ➔ 判定為待接取任務！")
+                    
                     anchors.append((cx, cy, conf_before))
 
                 if not anchors:
