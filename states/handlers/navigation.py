@@ -352,6 +352,7 @@ class NavigationHandler(BaseStateHandler):
         # B. 原本的尋路導航邏輯
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
         config_type = self.machine.config.get("type") if self.machine.config else "stage"
+        nav_path = self.machine.config.get("navigation_path", [])
         
         if config_type == "blood_altar":
             self.machine.transition_to(self.machine.STATE_BLOOD_ALTAR)
