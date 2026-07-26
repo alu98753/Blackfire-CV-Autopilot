@@ -77,11 +77,6 @@ class QuestScheduler:
                 msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
                 return cli_cmd, msg
 
-            elif target_task.mode_type == "generic_boss":
-                cli_cmd = target_task.to_cli_args()
-                msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-                return cli_cmd, msg
-
         return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
 
     def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None):
@@ -176,8 +171,8 @@ class QuestScheduler:
 
     def record_task_complete(self, ocr_text):
         """
-        根據任務標題或 OCR 解析結果將指定任務標記為已完成。
-        支援錯別字清洗 (normalize)、標題包含、描述包含、核心關鍵字與字串相似度 (>70%) 模糊匹配。
+        當在彈窗或介面中辨識到任務完成文字時，嘗試在目前懸賞任務清單中精確匹配並標記完成。
+        支援錯別字清洗 (normalize)、標題精確相等/對齊與高相似度 (>70%) 模糊匹配。
         回傳成功匹配並標記完成的乾淨 TaskNode 標題字串；未匹配到則回傳 None。
         """
         if not ocr_text:
@@ -191,29 +186,14 @@ class QuestScheduler:
         for t in self.tasks:
             title = t.quest_title
             norm_title = normalize_quest_title(title)
-            desc = getattr(t, "raw_desc", "")
 
-            # 1. 標題與辨識文字 (含清洗後) 互相包含
-            if title in ocr_text or ocr_text in title or norm_title in norm_ocr or norm_ocr in norm_title:
+            # 1. 精確全名相等 (==) 或正名後完全一致
+            if norm_ocr == norm_title or title == ocr_text or title in ocr_text or ocr_text in title:
                 t.completed_count = t.target_count
-                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題精確匹配) 已標記為完全完成！")
+                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題精確相符) 已標記為完全完成！")
                 return t.quest_title
 
-            # 2. 原始描述文字包含
-            if desc and (desc in ocr_text or ocr_text in desc or desc in norm_ocr or norm_ocr in desc):
-                t.completed_count = t.target_count
-                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (描述匹配) 已標記為完全完成！")
-                return t.quest_title
-
-            # 3. 核心關鍵字比對
-            keywords = ["史萊姆", "骷髏", "野豬", "冰元素", "敵人", "首領", "鬼魂", "熊", "蛙人", "樹人", "石窟", "洞窟", "遺跡", "枷鎖", "詛咒", "暴君", "獸王"]
-            for kw in keywords:
-                if kw in norm_title and kw in norm_ocr:
-                    t.completed_count = t.target_count
-                    logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (關鍵字 '{kw}' 匹配) 已標記為完全完成！")
-                    return t.quest_title
-
-            # 4. 模糊字串相似度比對 (>70% 相似度，相容 1~2 個錯別字)
+            # 2. 模糊字串高相似度比對 (>= 70% 相似度，相容 1~2 個噪訊字符)
             ratio = difflib.SequenceMatcher(None, norm_ocr, norm_title).ratio()
             if ratio >= 0.70:
                 t.completed_count = t.target_count
@@ -221,8 +201,6 @@ class QuestScheduler:
                 return t.quest_title
 
         return None
-
-
 
     def process_task_complete_banner(self, screen_img, pos_task, ocr_reader=None, matcher=None):
         """
@@ -241,9 +219,8 @@ class QuestScheduler:
                 from vision.matcher import TemplateMatcher
                 matcher = TemplateMatcher(templates_dir="templates")
 
-            pos_icon, _ = matcher.match(screen_img, "town_building/bulletin_board/task.png", threshold=0.60, quiet=True)
-            if not pos_icon:
-                pos_icon, _ = matcher.match(screen_img, "task.png", threshold=0.60, quiet=True)
+            task_tpl = "town_building/bulletin_board/task.png"
+            pos_icon, _ = matcher.match(screen_img, task_tpl, threshold=0.60, quiet=True)
 
             if pos_icon:
                 icon_x, icon_y = pos_icon
@@ -271,14 +248,16 @@ class QuestScheduler:
             crop_roi = screen_img[y1:y2, x1:x2]
 
             from utils.quest_ocr_extractor import QuestOCRExtractor
+            from utils.quest_mapper import normalize_quest_title
+
             extractor = QuestOCRExtractor(ocr_reader=ocr_reader)
             title = extractor._ocr_crop(crop_roi)
             if title:
-                logging.info(f"🔍 [OCR 懸賞完成辨識] 成功從完成彈窗標題區讀取任務標題: '{title}'")
+                clean_ocr_title = normalize_quest_title(title)
+                logging.info(f"🔍 [OCR 懸賞完成辨識] 成功從彈窗讀取原始標題: '{title}' ➔ 自動清洗正名: '{clean_ocr_title}'")
                 matched_title = self.record_task_complete(title)
 
-                from utils.quest_mapper import normalize_quest_title
-                clean_title = matched_title if matched_title else normalize_quest_title(title)
+                clean_title = matched_title if matched_title else clean_ocr_title
 
                 dm = getattr(self, "daily_manager", None)
                 if dm is None:

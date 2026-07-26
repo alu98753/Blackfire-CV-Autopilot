@@ -13,7 +13,7 @@ class TaskNode:
 
     def __init__(self, quest_title, mode_type, target_count=10, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC, batch_size=4, max_run_limit=10):
         self.quest_title = quest_title
-        self.mode_type = mode_type          # "dungeon", "stage", "generic_boss", "ignored"
+        self.mode_type = mode_type          # "dungeon", "stage", "ignored"
         self.target_count = target_count
         self.completed_count = 0
         self.dungeon_index = dungeon_index  # 0~4
@@ -49,9 +49,6 @@ class TaskNode:
             lvl_str = str(self.stage_level)
             sub_str = self.sub_stage or "first"
             return f".venv\\Scripts\\python main.py --backend --mode stage --stage {lvl_str} --sub {sub_str}"
-        elif self.mode_type == "generic_boss":
-            # 預設打地下城 1 (史萊姆) 或普通關卡魔王關
-            return f".venv\\Scripts\\python main.py --backend --mode dungeon --dungeon 1"
         return f".venv\\Scripts\\python main.py --backend --mode mix"
 
     def to_config_dict(self, base_config=None):
@@ -103,6 +100,7 @@ class TaskNode:
             dname = dungeon_names[idx] if 0 <= idx < len(dungeon_names) else "地下城"
             
             cfg = PRIMARY_MODES["dungeon"].copy()
+            cfg["dungeon_index"] = idx
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
@@ -128,6 +126,8 @@ class TaskNode:
                 target_img = "stages/first_stage.png"
 
             cfg = PRIMARY_MODES["stage"].copy()
+            cfg["stage_level"] = lvl
+            cfg["sub_stage"] = sub
             cfg["name"] = f"懸賞任務 - {sname} ({sub}) (任務: {self.quest_title})"
             cfg["stage_name"] = f"{sname} ({sub})"
             cfg["stage_entry"] = entry_img
@@ -141,13 +141,6 @@ class TaskNode:
             ]
             cfg["navigation_path"] = stage_path
             cfg["stage_navigation_path"] = stage_path
-            return _apply_base_preferences(cfg)
-
-        elif self.mode_type == "generic_boss":
-            cfg = PRIMARY_MODES["dungeon"].copy()
-            cfg["name"] = f"懸賞任務 - 史萊姆石窟 (任務: {self.quest_title})"
-            cfg["greedy_dungeon"] = False
-            cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
             return _apply_base_preferences(cfg)
 
         return _apply_base_preferences(PRIMARY_MODES["mix"].copy())
@@ -165,54 +158,86 @@ DETERMINISTIC_QUESTS = [
     "清除骷髏",
     "清除史萊姆",
     "清除樹人",
+    "清除熊",
+    "清除蜘蛛",
+    "討伐惡魔",
 ]
 
 BANNER_VERIFY_QUESTS = [
     "冰雪洞窟的暴君",
     "史萊姆王的毀滅",
     "破除森林的枷鎖",
+    "消滅蛛王與蛛後",
 ]
 
 IGNORED_QUESTS = [
     "獵金之蟲",
     "完成任何地下城",
     "敵人剿滅",
+    "擊殺首領",
 ]
 
+import difflib
+
 # ------------------ 常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 ------------------
-OCR_TYPO_MAP = {
-    "毀減": "毀滅",
-    "野瀦": "野豬", "野玫": "野豬", "野猞": "野豬", "野猾": "野豬",
-    "擎敗": "擊敗", "肇敗": "擊敗", "望敗": "擊敗", "堅敗": "擊敗",
-    "堅殺": "擊殺",
-    "骷饌": "骷髏", "枯樓": "骷髏", "骷饞": "骷髏",
-    "苜領": "首領", "苜貊": "首領", "苜項": "首領",
-    "逍跡": "遺跡", "祺跡": "遺跡",
-    "景君": "暴君", "默王": "獸王", "絲結": "終結",
-    "冰元奏": "冰元素", "冰元奉": "冰元素",
-    "敵人巢": "敵人剿滅",
-    "加鎖": "枷鎖", "架鎖": "枷鎖",
-    "姐咒": "詛咒", "詛祝": "詛咒",
-    "獵全": "獵金",
+# 結構：以「正確官方字」為 Key ➔ 「EasyOCR 易看錯的錯字清單 List」為 Value，極致提升維護性
+TYPO_GROUPS = {
+    "毀滅": ["致滅", "毀減"],
+    "蛛後": ["蛛后", "蛛俊"],
+    "野豬": ["野瀦", "野玫", "野猞", "野猾"],
+    "擊敗": ["擎敗", "肇敗", "望敗", "堅敗"],
+    "擊殺": ["堅殺", "擎殺"],
+    "首領": ["苜領", "苜貊", "苜項", "直領"],
+    "惡魔": ["忠魔"],
+    "樹人": ["樹入"],
+    "骷髏": ["骷饌", "枯樓", "骷饞"],
+    "遺跡": ["逍跡", "祺跡"],
+    "暴君": ["景君"],
+    "獸王": ["默王"],
+    "終結": ["絲結"],
+    "冰元素": ["冰元奏", "冰元奉"],
+    "敵人剿滅": ["敵人巢"],
+    "枷鎖": ["加鎖", "架鎖"],
+    "詛咒": ["姐咒", "詛祝"],
+    "獵金": ["獵全"],
 }
+
+# 自動將 TYPO_GROUPS 展平為一對一匹配字典 OCR_TYPO_MAP
+OCR_TYPO_MAP = {typo: correct for correct, typos in TYPO_GROUPS.items() for typo in typos}
 
 
 def normalize_quest_title(title):
     """
-    自動校正 EasyOCR 易誤判的中文字（如 '毀減'➔'毀滅'、'野瀦'➔'野豬'、'擎敗'➔'擊敗'）。
-    並會嘗試匹配到全名資料庫 (DETERMINISTIC_QUESTS / BANNER_VERIFY_QUESTS / IGNORED_QUESTS)。
+    三合一複合自動正名校正管道：
+    1.0 確定性字典 (OCR_TYPO_MAP) ➔ 2.0 difflib 編輯距離對齊 ➔ 2.5 中文筆畫與子字串自動正名。
     """
     if not title:
         return ""
+
+    # 1️⃣ 第一重：1.0 確定性字典替換
     cleaned = title
     for typo, correct in OCR_TYPO_MAP.items():
         cleaned = cleaned.replace(typo, correct)
 
-    # 嘗試精確與全名清單比對 (若完全符合直接返回全名)
     all_known_full_names = DETERMINISTIC_QUESTS + BANNER_VERIFY_QUESTS + IGNORED_QUESTS
+
+    # 若已經完全相符，直接回傳
+    if cleaned in all_known_full_names:
+        return cleaned
+
+    # 2️⃣ 第二重：2.0 difflib 編輯距離 (Levenshtein Distance) 自動對齊 (門檻提高至 0.65，防止新任務如'龍騎士的毀滅'誤判)
+    matches = difflib.get_close_matches(cleaned, all_known_full_names, n=1, cutoff=0.65)
+    if matches:
+        return matches[0]
+
+    # 3️⃣ 第三重：包含/被包含關係與關鍵字匹配兜底
     for name in all_known_full_names:
         if name in cleaned or cleaned in name:
             return name
+
+    # 核心關鍵字特例對齊（如 '討伐忠魔' ➔ '討伐惡魔'）
+    if "忠魔" in cleaned:
+        return "討伐惡魔"
 
     return cleaned
 
@@ -228,38 +253,44 @@ class QuestMapper:
     """
     def __init__(self):
 
-        # 1. 顯式忽略/跳過執行的任務關鍵字
-        self.ignored_rules = [
-            r"(獵金之蟲|完成任何地下城|敵人剿滅)",
-        ]
+        # 1. 顯式忽略/跳過執行的任務關鍵字 (動態由 IGNORED_QUESTS 構建正則，避免 Hardcode 重覆維護)
+        if IGNORED_QUESTS:
+            escaped_items = [re.escape(q) for q in IGNORED_QUESTS]
+            self.ignored_rules = [f"({'|'.join(escaped_items)})"]
+        else:
+            self.ignored_rules = []
 
         # 2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4, counting_policy)
+        # 📌 註記：dungeon_rules 要記錄的是「完整的官方任務全名」或「特有地圖名」
         # 0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 冰雪洞窟
         self.dungeon_rules = [
             (r"(史萊姆王的毀滅|史萊姆王)", 0, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除史萊姆|史萊姆|黏糊糊的石窟)", 0, TaskNode.POLICY_DETERMINISTIC),
-            (r"(幽影地穴|鬼魂)", 1, TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除史萊姆|黏糊糊的石窟)", 0, TaskNode.POLICY_DETERMINISTIC),
+            (r"(消滅蛛王與蛛後|蛛王與蛛後)", 1, TaskNode.POLICY_BANNER_VERIFY),
+            (r"(清除蜘蛛|幽影地穴)", 1, TaskNode.POLICY_DETERMINISTIC),
             (r"(破除森林的枷鎖)", 2, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除樹人|森林迷宮|樹人)", 2, TaskNode.POLICY_DETERMINISTIC),
-            (r"(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒|枯樓|骷髏)", 3, TaskNode.POLICY_DETERMINISTIC),
-            (r"(冰雪洞窟的暴君|終結寒冰獸王|暴君)", 4, TaskNode.POLICY_BANNER_VERIFY),
+            (r"(清除樹人|森林迷宮)", 2, TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒)", 3, TaskNode.POLICY_DETERMINISTIC),
+            (r"(冰雪洞窟的暴君|終結寒冰獸王)", 4, TaskNode.POLICY_BANNER_VERIFY),
             (r"(冰雪洞窟)", 4, TaskNode.POLICY_DETERMINISTIC),
         ]
 
         # 3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型, counting_policy)
+        # 📌 註記：stage_rules 要記錄的是「完整的官方任務全名」
         # Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷
         self.stage_rules = [
-            (r"(野豬)", 1, "final", TaskNode.POLICY_DETERMINISTIC),
-            (r"(熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除野豬|野豬)", 1, "final", TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除熊|熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除沙蟲|沙蟲)", 4, "middle", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除蛙人|蛙人)", 5, "first", TaskNode.POLICY_DETERMINISTIC),
-            (r"(冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
+            (r"(討伐惡魔|惡魔)", 6, "six", TaskNode.POLICY_DETERMINISTIC),
+            (r"(擊敗冰元素|冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
         ]
 
     def get_quest_sort_key(self, title):
         """
         計算單個懸賞任務標題的多階梯排序 Key (4 元組)。
-        1. mode_score: dungeon = 0 (地下城最高優先), stage = 1, generic_boss = 2, ignored = 9
+        1. mode_score: dungeon = 0 (地下城最高優先), stage = 1, ignored = 9
         2. policy_score: DETERMINISTIC = 0, BANNER_VERIFY = 1, IGNORED = 9
         3. idx_score: -dungeon_index 或 -stage_level (數字大者排在最前面)
         4. sub_score: final = 0, middle = 1, first = 2
@@ -268,7 +299,7 @@ class QuestMapper:
         if node is None or node.mode_type == "ignored":
             return (9, 9, 0, 0)
 
-        # 1. 梯隊一：模式優先 (地下城 0 > 普通關卡 1 > 通用首領 2)
+        # 1. 梯隊一：模式優先 (地下城 0 > 普通關卡 1)
         if node.mode_type == "dungeon":
             mode_score = 0
             idx_score = -node.dungeon_index if node.dungeon_index is not None else 0
@@ -279,7 +310,7 @@ class QuestMapper:
             sub_map = {"final": 0, "middle": 1, "first": 2}
             sub_score = sub_map.get(node.sub_stage, 3)
         else:
-            mode_score = 2
+            mode_score = 9
             idx_score = 0
             sub_score = 0
 
@@ -349,25 +380,17 @@ class QuestMapper:
         # 判定預設政策 (若在 BANNER_VERIFY_QUESTS 全名清單中)
         default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in BANNER_VERIFY_QUESTS else TaskNode.POLICY_DETERMINISTIC
 
-        # 2. 檢查通用「首領 / Boss」任務 (此類任務可由任何副本 Boss 推進)
-        if re.search(r"(擊殺首領|首領)", title) or re.search(r"首領\s*x\s*\d+", requirement_text):
-            return TaskNode(
-                quest_title=norm_title,
-                mode_type="generic_boss",
-                target_count=10,
-                batch_size=1,
-                max_run_limit=10,
-                raw_desc=combined_text,
-                counting_policy=default_policy
-            )
+        # 2. 檢查地下城專屬任務 (地下城不受固定次數限制，由 30 分鐘冷卻倒數與告示牌領獎動態控管)
+        # 必須與候選完整標題/關鍵字完全相等 ==，避免 '龍騎士的毀滅' 誤判)
 
-        # 3. 檢查地下城專屬任務 (地下城不受固定次數限制，由 30 分鐘冷卻倒數與告示牌領獎動態控管)
         for rule in self.dungeon_rules:
             pattern = rule[0]
             dungeon_idx = rule[1]
             policy = rule[2] if len(rule) > 2 else default_policy
 
-            if re.search(pattern, combined_text):
+            # 拆解正則 tuple 內的候選字串清單 (例如 ["史萊姆王的毀滅", "史萊姆王"])
+            candidates = [c.strip() for c in pattern.strip("()").split("|") if c.strip()]
+            if norm_title in candidates or any(c in norm_title or norm_title == c for c in candidates):
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="dungeon",
@@ -379,14 +402,15 @@ class QuestMapper:
                     counting_policy=policy
                 )
 
-        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 10 次)
+        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 10 次) (必須包含完整候選標題/專有名詞)
         for rule in self.stage_rules:
             pattern = rule[0]
             stage_lvl = rule[1]
             sub_stage = rule[2]
             policy = rule[3] if len(rule) > 3 else default_policy
 
-            if re.search(pattern, combined_text):
+            candidates = [c.strip() for c in pattern.strip("()").split("|") if c.strip()]
+            if norm_title in candidates or any(c in norm_title or norm_title == c for c in candidates):
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="stage",

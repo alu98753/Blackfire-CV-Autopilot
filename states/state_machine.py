@@ -125,8 +125,11 @@ class GameStateMachine:
         self.stamina_retreat_start_time = None
         self.last_lobby_start_click_time = 0.0
         self.last_result_retry_click_time = 0.0
-        self.loading_start_time = 0.0
-        
+        # 領取任務獎勵子流程 (Phase 狀態機屬性)
+        self.task_complete_phase = "INIT_BANNER_CHECK"
+        self._subflow_cached_pos_task = None
+        self._subflow_click_target = None
+
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"
         self._ocr_reader = None
@@ -519,9 +522,21 @@ class GameStateMachine:
                 logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")
                 self.transition_to(self.STATE_NAVIGATING)
 
-    def has_available_dungeon(self):
+    def has_available_dungeon(self, target_config=None):
         """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
-        if not self.config:
+        if target_config is not None:
+            cfg = target_config
+        elif getattr(self, "stamina_retreat_start_time", None) is not None and getattr(self, "original_config", None) is not None:
+            cfg = self.original_config
+        else:
+            cfg = self.config
+
+        if not cfg:
+            return False
+
+        # 如果模式類型不是地下城/mix/daily，直接傳回 False（防呆非地下城模式）
+        cfg_type = cfg.get("type")
+        if cfg_type not in ["dungeon", "mix", "daily"]:
             return False
 
         # 如果先前已確認所有地下城皆在冷卻中，且尚未超過暫存冷卻時間，直接傳回 False
@@ -529,12 +544,12 @@ class GameStateMachine:
         if time.time() < all_cd_until:
             return False
 
-        allowed_indices = self.config.get("greedy_allowed_indices")
+        allowed_indices = cfg.get("greedy_allowed_indices")
         if allowed_indices is None:
             raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
 
         now = time.time()
-        is_greedy = self.config.get("greedy_dungeon", False)
+        is_greedy = cfg.get("greedy_dungeon", False)
         
         if is_greedy:
             for idx in allowed_indices:
@@ -543,10 +558,10 @@ class GameStateMachine:
             return False
         else:
             # 非貪婪模式 (指定特定副本)：只檢查 navigation_path 中指定的副本索引
-            entry_templates = self.config.get("dungeon_entries")
+            entry_templates = cfg.get("dungeon_entries")
             if entry_templates is None:
                 raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
-            nav_path = self.config.get("navigation_path")
+            nav_path = cfg.get("navigation_path")
             if nav_path is None:
                 raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
 
@@ -761,73 +776,136 @@ class GameStateMachine:
         time.sleep(post_delay)
 
     def _run_task_complete_subflow(self, rect):
-        logging.info("🎉 [子流程] 開始執行「領取任務獎勵」確認子流程...")
-        start_time = time.time()
-        timeout = 10.0  # 最多執行 10 秒，相容多個任務連續完成彈窗
+        """
+        以 Match 驅動之 Phase 狀態機執行「領取任務獎勵」子流程。
+        唯有當當前 Phase 成功 Match 到目標元素時才更新狀態推進；無 Match 則保持 Phase 等待下一幀。
+        """
+        if not hasattr(self, "task_complete_phase") or not self.task_complete_phase:
+            self.task_complete_phase = "INIT_BANNER_CHECK"
 
-        subflow_templates = [
-            ("common/confirm.png", 0.80),
-            ("common/ok.png", 0.80)
-        ]
+        screen_img = self.capturer.capture(rect)
+        if screen_img is None:
+            return
 
-        while time.time() - start_time < timeout:
-            screen_img = self.capturer.capture(rect)
-            if screen_img is None:
-                time.sleep(0.2)
-                continue
-
-            # 1. 檢查任務完成主彈窗是否存在，若已無彈窗則直接成功結束
+        # ===== Phase 1: 彈窗存續檢測 (INIT_BANNER_CHECK) =====
+        if self.task_complete_phase == "INIT_BANNER_CHECK":
             pos_task, conf_task = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
-            if not pos_task:
-                logging.info("🟢 [子流程] 任務完成彈窗已全數確認關閉，成功領取獎勵！")
+            if pos_task:
+                logging.info(f"🟢 [Phase 1: INIT_BANNER_CHECK] Match 成功！發現 task_complete 彈窗 (座標: {pos_task}, 信心度: {conf_task:.4f})，切換 Phase ➔ OCR_RECOGNIZE")
+                self.task_complete_phase = "OCR_RECOGNIZE"
+                self._subflow_cached_pos_task = pos_task
+            else:
+                # 📌 有 match 才能更新狀態；若無 match 則保持 Phase 不變，等待下一幀繼續 match
                 return
 
-            # 2. 🛡️ 嚴格順序：先判斷任務標題，確認判斷出來後才允許點擊！
+        # ===== Phase 2: OCR 標題辨識與持久化核銷 (OCR_RECOGNIZE) =====
+        if self.task_complete_phase == "OCR_RECOGNIZE":
+            cached_pos = getattr(self, "_subflow_cached_pos_task", None)
             task_recognized = False
-            ocr_attempts = 0
-            while ocr_attempts < 3 and not task_recognized:
-                ocr_attempts += 1
+            for attempt in range(1, 4):
                 if self.quest_scheduler:
                     try:
-                        recognized_title = self.quest_scheduler.process_task_complete_banner(screen_img, pos_task, ocr_reader=self._ocr_reader)
+                        recognized_title = self.quest_scheduler.process_task_complete_banner(
+                            screen_img, cached_pos, ocr_reader=self._ocr_reader
+                        )
                         if recognized_title:
-                            logging.info(f"✅ [子流程] 已成功辨識核銷任務: [{recognized_title}]，準備點擊確認離場。")
+                            logging.info(f"✅ [Phase 2: OCR_RECOGNIZE] 第 {attempt} 次 Match/辨識成功核銷任務: [{recognized_title}]。")
                             task_recognized = True
+                            self._subflow_completed_task = True
                             break
                     except Exception as e:
-                        logging.debug(f"OCR 辨識完成彈窗時發生異常: {e}")
+                        logging.debug(f"OCR 辨識發生例外: {e}")
                 
-                if not task_recognized and ocr_attempts < 3:
-                    time.sleep(0.3)
-                    screen_img = self.capturer.capture(rect)
-                    if screen_img is None:
-                        break
-
-            # 3. 找出確認按鈕或領獎目標座標
-            click_x, click_y = None, None
-            for template_name, thresh in subflow_templates:
-                if not os.path.exists(os.path.join("templates", template_name)):
-                    continue
-                pos, conf = self.matcher.match(screen_img, template_name, threshold=thresh)
-                if pos:
-                    click_x = rect["left"] + pos[0]
-                    click_y = rect["top"] + pos[1]
-                    logging.info(f"🎉 [子流程] 偵測到確認按鈕 '{template_name}'，相似度: {conf:.4f}。")
+                time.sleep(0.2)
+                screen_img = self.capturer.capture(rect)
+                if screen_img is None:
                     break
 
-            if click_x is None:
+            if not task_recognized:
+                logging.warning("⚠️ [Phase 2: OCR_RECOGNIZE] OCR 嘗試結束，切換 Phase ➔ FIND_DISMISS_TARGET。")
+
+            # 辨識步驟結束，更新 Phase 推進至下一階段 (允許同幀瀑布直通)
+            self.task_complete_phase = "FIND_DISMISS_TARGET"
+
+        # ===== Phase 3: 尋找關閉按鈕與目標座標 (FIND_DISMISS_TARGET) =====
+        if self.task_complete_phase == "FIND_DISMISS_TARGET":
+            cached_pos = getattr(self, "_subflow_cached_pos_task", None)
+            click_x, click_y, target_tpl = None, None, "task_complete.png"
+
+            # 1. 優先比對獨立確認按鈕 (common/confirm.png 或 common/ok.png)
+            for btn_name in ["common/confirm.png", "common/ok.png"]:
+                if os.path.exists(os.path.join("templates", btn_name)):
+                    pos_btn, conf_btn = self.matcher.match(screen_img, btn_name, threshold=0.80)
+                    if pos_btn:
+                        click_x = rect["left"] + pos_btn[0]
+                        click_y = rect["top"] + pos_btn[1]
+                        target_tpl = btn_name  # 鎖定監控消失標的為 confirm.png / ok.png
+                        logging.info(f"🎉 [Phase 3: FIND_DISMISS_TARGET] Match 成功！鎖定確認按鈕 [{btn_name}] 座標: ({click_x}, {click_y})。")
+                        break
+
+            # 2. 備用方案：若無獨立按鈕，使用彈窗中心算出的保底領獎座標，並鎖定 task_complete.png
+            if click_x is None and cached_pos is not None:
                 height_to_use = rect.get("height") or screen_img.shape[0] or 1080
                 scale_y = height_to_use / 1080.0
-                click_x = rect["left"] + pos_task[0]
-                click_y = rect["top"] + pos_task[1] + int(281 * scale_y)
-                logging.info(f"🔄 [子流程] 偵測到任務完成彈窗仍存在，但無確認按鈕，使用彈窗內領獎座標 ({click_x}, {click_y})。")
+                click_x = rect["left"] + cached_pos[0]
+                click_y = rect["top"] + cached_pos[1] + int(281 * scale_y)
+                target_tpl = "task_complete.png"  # 鎖定監控消失標的為 task_complete.png
+                logging.info(f"🔄 [Phase 3: FIND_DISMISS_TARGET] 使用保底領獎座標: ({click_x}, {click_y})，監控標的: [{target_tpl}]。")
 
-            # 4. 呼叫專案統一 API: 配對確認直到 task_complete.png 徹底消失 (每次檢查間隔 1.0 秒)
-            self.click_and_wait_until_gone(
-                "task_complete.png", click_x, click_y, rect,
-                timeout=6.0, threshold=0.70, check_interval=1.0, post_delay=1.0
-            )
-            return
+            if click_x is not None and click_y is not None:
+                self._subflow_click_target = (click_x, click_y, target_tpl)
+                logging.info(f"🟢 [Phase 3: FIND_DISMISS_TARGET] 按鈕/座標定位成功 (標的: {target_tpl})，切換 Phase ➔ CLICK_DISMISS_LOOP")
+                self.task_complete_phase = "CLICK_DISMISS_LOOP"
+            else:
+                return
+
+        # ===== Phase 4: 配對點擊直到目標與 confirm 彈窗徹底消失 (CLICK_DISMISS_LOOP) =====
+        if self.task_complete_phase == "CLICK_DISMISS_LOOP":
+            click_target = getattr(self, "_subflow_click_target", None)
+            if click_target and click_target[0] is not None and click_target[1] is not None:
+                click_x, click_y, target_tpl = click_target
+                logging.info(f"👉 [Phase 4: CLICK_DISMISS_LOOP] 發起配對點擊 ({click_x}, {click_y}) 直到 [{target_tpl}] 與所有 confirm 彈窗徹底消失 (每 2.0 秒匹配檢查一次)...")
+                
+                # 1. 第一階段：配對點擊並等待目標標的與 confirm 消失 (每次輪詢 2.0 秒)
+                self.click_and_wait_until_gone(
+                    target_tpl, click_x, click_y, rect,
+                    timeout=10.0, threshold=0.70, check_interval=2.0, retry_interval=2.0, post_delay=0.5
+                )
+
+                # 2. 第二階段：連鎖檢查是否還有殘留的 confirm/ok 按鈕，匹配直到完全沒有 confirm (每次 2.0s 輪詢)
+                for extra_round in range(1, 3):
+                    fresh_img = self.capturer.capture(rect)
+                    if fresh_img is None:
+                        break
+                    
+                    found_any_confirm = False
+                    for btn_name in ["common/confirm.png", "common/ok.png"]:
+                        if os.path.exists(os.path.join("templates", btn_name)):
+                            match_res = self.matcher.match(fresh_img, btn_name, threshold=0.75, quiet=True) if hasattr(self.matcher, 'match') else None
+                            pos_c = match_res[0] if match_res and isinstance(match_res, tuple) and len(match_res) >= 1 else None
+                            conf_c = match_res[1] if match_res and isinstance(match_res, tuple) and len(match_res) >= 2 else 0.0
+                            if pos_c:
+                                found_any_confirm = True
+                                cx = rect["left"] + pos_c[0]
+                                cy = rect["top"] + pos_c[1]
+                                logging.info(f"🔄 [Phase 4: 二次補點擊] 畫面上仍存在彈窗 [{btn_name}] (相似度: {conf_c:.4f})，點擊 ({cx}, {cy}) 並等待 2.0 秒...")
+                                self.mouse.click(cx, cy)
+                                time.sleep(2.0)
+                                break
+                    
+                    if not found_any_confirm:
+                        logging.info("🟢 [Phase 4: 配對完成] 畫面上已完全無任何 confirm/ok 彈窗，安全結束子流程。")
+                        break
+            
+            # 關閉成功，重置 Phase 與暫存屬性
+            self.task_complete_phase = "INIT_BANNER_CHECK"
+            self._subflow_cached_pos_task = None
+            self._subflow_click_target = None
+            if getattr(self, "_subflow_completed_task", False):
+                self._subflow_completed_task = False
+                logging.info("🔄 [任務核銷完成] 「領取任務獎勵」子流程完成，觸發動態推進下一個懸賞任務目標...")
+                self.check_and_advance_quest_target()
+            logging.info("🎉 [子流程] 「領取任務獎勵」 Phase 狀態機圓滿結束！")
 
     def start_subflow_queue(self, queue):
         """
@@ -923,14 +1001,13 @@ class GameStateMachine:
             logging.info("重置旗標並回復原模式續行...")
         logging.info("=" * 60)
 
-        # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
-        if self.is_daily_pipeline_active():
-            scheduled = self.evaluate_and_schedule_daily_pipeline()
-            if scheduled:
-                return
-
+        # 城鎮流水線結束，先將狀態轉移至 NAVIGATING / COLLECT_ONLY，確保退出子流程狀態
         next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
         self.transition_to(next_st)
+
+        # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
+        if self.is_daily_pipeline_active():
+            self.evaluate_and_schedule_daily_pipeline()
 
     def is_daily_pipeline_active(self):
         """

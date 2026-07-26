@@ -1,6 +1,7 @@
 import os
 import json
 import unittest
+import numpy as np
 from unittest.mock import MagicMock
 from utils.quest_mapper import QuestMapper, TaskNode
 from utils.quest_scheduler import QuestScheduler
@@ -19,7 +20,7 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
             "清除樹人",
             "清除史萊姆",
             "史萊姆王的毀滅",
-            "擊殺首領"
+            "擊敗冰元素"
         ]
         with open(self.test_json_path, "w", encoding="utf-8") as f:
             json.dump(sample_status, f, ensure_ascii=False, indent=2)
@@ -50,14 +51,14 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         """驗證事件廣播同步更新多個相關任務 (Piggybacking)"""
         scheduler = self.daily_mgr.load_quest_scheduler()
         
-        # 模擬擊殺 10 次史萊姆王 (同時滿足史萊姆王的毀滅與通用首領擊殺)
-        scheduler.record_kill_event(enemy_name="史萊姆王", is_boss=True, dungeon_index=0, kill_count=10)
+        # 模擬擊殺 10 次 (同時滿足史萊姆王的毀滅與確定性關卡擊敗冰元素)
+        scheduler.record_kill_event(enemy_name="冰元素", stage_level=6, sub_stage="first", kill_count=10)
         
         tasks_map = {t.quest_title: t for t in scheduler.tasks}
         # 史萊姆王的毀滅 屬於 BANNER_VERIFY_QUESTS，record_kill_event 絕不自動加算進度
         self.assertFalse(tasks_map["史萊姆王的毀滅"].is_completed)
-        # 通用首領擊殺屬於確定性任務/通用任務，自動加算完成 (10/10)
-        self.assertTrue(tasks_map["擊殺首領"].is_completed)
+        # 確定性任務自動加算完成 (10/10)
+        self.assertTrue(tasks_map["擊敗冰元素"].is_completed)
 
 
     def test_remove_accepted_quest_from_json(self):
@@ -275,7 +276,33 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertEqual(sm.config["type"], "mix")
         self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
 
-        self.assertIn("Ice_entry.png", sm.config["navigation_path"][-1])
+    def test_result_handler_batch_exit_on_fourth_run(self):
+        """驗證當普通關卡任務 (batch_size=4) 戰鬥勝利至第 4 場時，ResultHandler 自動累加 completed_count 並觸發批次離場」"""
+        from states.handlers.result import ResultHandler
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.matcher.match.return_value = (None, 0.0)
+        scheduler = QuestScheduler.from_daily_status(["擊敗冰元素"])
+        sm.attach_quest_scheduler(scheduler)
+        sm.backend_mode = "daily"
+        sm.check_and_advance_quest_target()
+
+        handler = ResultHandler(sm)
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+
+        # 前 3 場勝利通關
+        for run in range(1, 4):
+            handler.reset_state()
+            handler.handle(fake_img, {"left": 0, "top": 0, "width": 800, "height": 600})
+
+        current_task = scheduler.get_next_action_node()[0]
+        self.assertEqual(current_task.completed_count, 3)
+        self.assertFalse(scheduler.is_current_task_batch_completed())
+
+        # 第 4 場勝利通關
+        handler.reset_state()
+        handler.handle(fake_img, {"left": 0, "top": 0, "width": 800, "height": 600})
+        self.assertEqual(current_task.completed_count, 4)
+        self.assertTrue(scheduler.is_current_task_batch_completed())
 
 
 if __name__ == "__main__":

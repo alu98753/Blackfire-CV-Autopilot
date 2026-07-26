@@ -56,11 +56,18 @@
 ---
 
 ## 6. 測試執行精準度與效能規範 (Test Execution Efficiency) 🧪
-1. **修改核心業務邏輯 (Core Logic Edit)**：
-   - 當修改 `states/`, `utils/`, `config.py` 或 `main.py` 等核心業務邏輯程式碼時，**必須執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保無 Regression。
-2. **僅新增或微調單一測試檔 (Test-Only Edit)**：
-   - 當未修改核心業務邏輯，**僅新增、補充或微調單一測試檔案/測試方法**時，**只須精準執行該單一測試檔或測試方法**，絕不盲目跑全套測試。
-   - 範例指令：
+
+1. **假設有修改程式碼 (Code Modification)**：
+   - 當修改 `states/`, `utils/`, `config.py` 或 `main.py` 等程式碼時，**必須先執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
+
+2. **假設跑完「所有測試」發現有錯誤 (Failed Tests Handling)**：
+   - **針對性修復與疊代**：修改程式碼 ➔ **僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) ➔ **直到所有有錯的測試修正通過** ➔ **再次執行「所有測試」** 確保無其他側邊效應。若再次發現有錯，回到本步驟持續疊代。
+
+3. **假設只有修改測試檔案 (Test-Only Modification)**：
+   - 當未修改業務程式碼，僅新增、補充或微調測試檔案/測試方法時，**僅須精確執行該修改的測試檔或測試方法**。
+   - 若執行過程中發現問題出在程式碼本體，請直接**回到第 2 點流程**處理。
+
+   - **範例指令**：
      - 精確執行單一測試檔案：`.venv\Scripts\python -m unittest tests.test_state_machine_logic`
      - 精確執行單一測試方法：`.venv\Scripts\python -m unittest tests.test_state_machine_logic.TestStateMachineLogic.test_multiple_task_complete_popups_sequential_handling`
 

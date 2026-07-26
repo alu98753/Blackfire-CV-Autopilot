@@ -122,7 +122,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         step_y = 139.5
 
         keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
-        disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
+        # 背包已滿溢出銷毀獨立配置項，預設僅允許 ["gray_or_empty"] (與大廳大量分解 disassemble_colors 完全解耦)
+        destroyable_colors = self.machine.config.get("backpack_full_destroyable_colors", ["gray_or_empty"])
 
         def is_high_rarity(color):
             return color in keep_colors or color == "unknown_colored"
@@ -173,9 +174,9 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 
                 right_slots_data.append((r, c, color, whole_std, center_std))
                 
-                # 只有含有物品的格子才能銷毀，且必須是低稀有度（可分解且非保留品質），必須排除標準差過低的空格子
+                # 只有含有物品的格子才能銷毀，且必須屬於 destroyable_colors 並非保留品質，必須排除標準差過低的空格子
                 if target_right_slot is None:
-                    if color in disassemble_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
+                    if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
                         target_right_slot = (r, c, color)
 
         # 滾動定位參考中心點 (右側網格中心位置)
@@ -244,7 +245,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                         right_slots_data.append((r, c, color, whole_std, center_std))
                         
                         if target_right_slot is None:
-                            if color in disassemble_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
+                            if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
                                 target_right_slot = (r, c, color)
                                 screen_img = new_screen
                                 
@@ -254,7 +255,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # E. 步驟 3: 如果完全找不到低稀有度物品，只好安全關閉
         if not target_right_slot:
-            logging.warning("🎒 [背包分選] ⚠️ 右側背包內無可銷毀的綠色或灰色低稀有度物品！滾動後仍未尋獲。")
+            logging.warning(f"🎒 [背包分選] ⚠️ 右側背包內無可銷毀的允許物品 ({destroyable_colors})！滾動後仍未尋獲。")
             if scroll_count > 0:
                 self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
                 time.sleep(0.08)

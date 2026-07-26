@@ -91,6 +91,19 @@ class DailyManager:
             self.status["last_daily_reset_date"] = self.get_today_reset_tag()
             self.save_status()
 
+        # 💡 [自癒機制] 載入時自動校正並正名清洗 accepted_quests 存檔
+        subflows = self.status.get("subflows", {})
+        bb = subflows.get("bulletin_board", {})
+        raw_quests = bb.get("accepted_quests", [])
+        if raw_quests:
+            from utils.quest_mapper import QuestMapper
+            mapper = QuestMapper()
+            cleaned_quests = mapper.sort_quests(raw_quests)
+            if cleaned_quests != raw_quests:
+                bb["accepted_quests"] = cleaned_quests
+                self.save_status()
+                logging.info(f"✨ [DailyManager] 自動自癒清洗存檔中未正名的任務佇列: {cleaned_quests}")
+
     def save_status(self):
         """
         將當前狀態寫回 JSON 檔案。
@@ -347,8 +360,8 @@ class DailyManager:
     def get_pending_town_subflows(self):
         """
         取得 Tier 1 尚未完成的城鎮一次性速領子流程佇列。
-        優先順序：chest ➔ hero_draw ➔ blood_altar (連帶 jewelry_workshop)
-        :return: list of str (例如 ["chest", "hero_draw", "blood_altar", "jewelry_workshop"])
+        優先順序：chest ➔ hero_draw ➔ blood_altar (連帶 jewelry_workshop) ➔ bulletin_board
+        :return: list of str (例如 ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"])
         """
         pending = []
         if not self.is_subflow_completed("chest"):
@@ -359,6 +372,8 @@ class DailyManager:
             pending.append("blood_altar")
             if "jewelry_workshop" not in pending:
                 pending.append("jewelry_workshop")
+        if not self.is_subflow_completed("bulletin_board"):
+            pending.append("bulletin_board")
         return pending
 
     def is_subflow_completed(self, subflow_key):

@@ -33,6 +33,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.step_phase = "INIT"  # INIT, WAIT_BOARD_OPEN, CHECK_RESET, PROCESS_ACCEPT_QUESTS, EXIT_BOARD, ALL_DONE_EXITING
         self.accept_sub_phase = "FIND_TOP_TASK"  # FIND_TOP_TASK, CLICK_ACCEPT_BTN, CLICK_CONFIRM_POPUP
         self.last_action_time = 0.0
+        self.last_reset_click_time = 0.0
         self.accepted_quest_titles = []
         self.ocr_extractor = None
 
@@ -40,6 +41,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.accept_sub_phase = "FIND_TOP_TASK"
         self.last_action_time = 0.0
+        self.last_reset_click_time = 0.0
         self.accepted_quest_titles = []
 
     def _get_ocr_extractor(self):
@@ -167,11 +169,17 @@ class BulletinBoardHandler(BaseStateHandler):
 
             if self.accept_sub_phase == "FIND_TOP_TASK":
                 task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
+                
                 # 掃描左半邊 (cx < w_img // 2) 所有潛在任務錨點 (task.png)
-                raw_anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, quiet=True)
+                raw_anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, brightness_threshold=0.88, quiet=True)
                 raw_anchors = [a for a in raw_anchors if a[0] < w_img // 2]
+                
+                logging.info(f"📋 [懸賞告示牌 診斷分析] 在畫面左半邊共掃描到 {len(raw_anchors)} 個未接取任務候選點 (task.png, threshold=0.70, brightness=0.88)")
 
-                # 相對優勢比對：精確過濾已接取任務 (task_after.png)
+                # 相對優勢與灰度比比對：精確過濾已接取任務 (task_after.png)
+                temp_after_img = self.matcher._load_template(task_after_tpl)
+                mean_after_temp = np.mean(cv2.cvtColor(temp_after_img, cv2.COLOR_BGR2GRAY)) if isinstance(temp_after_img, np.ndarray) else 89.3
+
                 anchors = []
                 for (cx, cy, conf_before) in raw_anchors:
                     x1 = max(0, cx - 60)
@@ -180,13 +188,34 @@ class BulletinBoardHandler(BaseStateHandler):
                     y2 = min(h_img, cy + 60)
                     roi = screen_img[y1:y2, x1:x2]
                     
-                    pos_after, conf_after = self.matcher.match(roi, task_after_tpl, threshold=0.65, quiet=True)
-                    if pos_after and conf_after >= conf_before - 0.02:
-                        # 該處已呈現 task_after.png 樣式（已接取），自動過濾
-                        continue
+                    pos_after, conf_after = self.matcher.match(roi, task_after_tpl, threshold=0.75, quiet=True)
+                    if pos_after:
+                        roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if isinstance(roi, np.ndarray) else None
+                        ratio_after = (np.mean(roi_gray) / max(1.0, mean_after_temp)) if roi_gray is not None else 1.0
+                        if conf_after >= 0.75 and ratio_after <= 0.88:
+                            logging.info(f"❌ [過濾理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}]，但在週邊比對到已接取灰色圖案 [{task_after_tpl}] (相似度: [{conf_after:.4f}], 灰度比: [{ratio_after:.2f}] <= 0.88) ➔ 判定為已接取，予以過濾！")
+                            continue
+                        else:
+                            logging.info(f"🟢 [通過理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}]，週邊雖然相似度大，但屬鮮黃色區塊 (灰度比: [{ratio_after:.2f}] > 0.88) ➔ 判定為待接取任務！")
+                    else:
+                        logging.info(f"🟢 [通過理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}] (無 task_after 強干擾) ➔ 判定為待接取任務！")
+                    
                     anchors.append((cx, cy, conf_before))
 
                 if not anchors:
+                    # 💾 自動保存當前無任務視窗的除錯截圖
+                    if isinstance(screen_img, np.ndarray):
+                        try:
+                            cv2.imwrite("debug_bulletin_board_fail.png", screen_img)
+                            logging.warning("📸 [懸賞告示牌 診斷] 未搜尋到可用任務，已將當前畫面截圖儲存至 debug_bulletin_board_fail.png")
+                        except Exception as ex:
+                            logging.warning(f"⚠️ [懸賞告示牌 診斷] 儲存 debug_bulletin_board_fail.png 失敗: {ex}")
+
+                    if len(raw_anchors) == 0:
+                        logging.warning("⚠️ [無任務理由] match_all 未匹配到任何 task.png！(可能是 brightness_threshold=0.88 過高、threshold=0.70 過高、或是畫面尚未定格)")
+                    else:
+                        logging.info(f"📋 [無任務理由] 匹配到的 {len(raw_anchors)} 個候選點全數被 task_after.png 比對過濾！")
+
                     logging.info(f"📋 [懸賞告示牌] 畫面上所有任務均已接取 (task_after.png)！共成功接取 {len(self.accepted_quest_titles)} 項任務: {self.accepted_quest_titles}")
                     self.step_phase = "EXIT_BOARD"
                     self.last_action_time = now
@@ -213,38 +242,22 @@ class BulletinBoardHandler(BaseStateHandler):
                 crop_x = x0 + icon_w + 5
                 crop_y = max(0, y0 - 5)
                 crop_w = min(max(200, int(360 * scale)), w_img - crop_x)
-                crop_h = min(icon_h + 10, h_img - crop_y)
+                quest_title = extractor.extract_quest_title_at(screen_img, rect, (cx, cy))
+                if not quest_title:
+                    logging.warning(f"⚠️ [懸賞告示牌] 於座標 ({cx}, {cy}) 提取標題失敗，跳過該任務項。")
+                    self.accept_sub_phase = "FIND_TOP_TASK"
+                    self.last_action_time = now
+                    return
 
-                if crop_w > 0 and crop_h > 0:
-                    text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
-                    
-                    # 💾 保存視覺化偵錯圖 (debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png)
-                    if isinstance(screen_img, np.ndarray):
-                        try:
-                            cv2.imwrite("debug_bulletin_board_roi.png", text_roi)
-                            debug_full = screen_img.copy()
-                            # 紅框: task.png 錨點圖示
-                            cv2.rectangle(debug_full, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
-                            # 綠框: 送交 EasyOCR 辨識之標題 ROI 區域
-                            cv2.rectangle(debug_full, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), (0, 255, 0), 2)
-                            cv2.imwrite("debug_bulletin_board_ocr.png", debug_full)
-                            logging.info(f"📸 [懸賞告示牌 Debug] 已將 OCR 文字裁切區域寫入 debug_bulletin_board_roi.png 與 debug_bulletin_board_ocr.png (ROI: X=[{crop_x}:{crop_x+crop_w}], Y=[{crop_y}:{crop_y+crop_h}])")
-                        except Exception as ex:
-                            logging.warning(f"⚠️ [懸賞告示牌 Debug] 保存圖片時發生異常: {ex}")
-
-                    title_name = extractor._ocr_crop(text_roi)
-                    if title_name and title_name not in self.accepted_quest_titles:
-                        self.accepted_quest_titles.append(title_name)
-                        logging.info(f"📋 [懸賞告示牌] 成功對最上方未接任務 (Y={cy}) 抓取標題: '{title_name}'")
-
-                # 點擊該列任務以選取（使右半邊呈現 accept_task.png）
-                logging.info(f"📋 [懸賞告示牌] 點擊最上方未接任務列 (座標: {cx}, {cy})...")
+                logging.info(f"📋 [懸賞告示牌] 成功對齊標題: '{quest_title}'，點擊任務項目鎖定右半邊內容...")
                 self.mouse.click(left + cx, top + cy)
-                self.accept_sub_phase = "CLICK_ACCEPT_BTN"
-                self.last_action_time = now
-                return
+                
+                if quest_title not in self.accepted_quest_titles:
+                    self.accepted_quest_titles.append(quest_title)
+                
+                time.sleep(0.5)
 
-            if self.accept_sub_phase == "CLICK_ACCEPT_BTN":
+                # 在右半邊 (cx > w_img // 2) 搜尋「接受任務 (accept_task.png)」按鈕
                 pos_accept, _ = self.matcher.match(screen_img, accept_btn, threshold=0.75)
                 if pos_accept:
                     logging.info(f"📋 [懸賞告示牌] 於右半邊發現接受任務按鈕 [{accept_btn}]，點擊接受！")
@@ -265,19 +278,33 @@ class BulletinBoardHandler(BaseStateHandler):
                 return
 
         # =========================================================================
-        # 4. 條件式重置檢查：若無 reset.png 則自動跳過 (CHECK_RESET)
+        # 4. 條件式重置檢查：點擊 reset 直到沒有 + 滿 3 秒靜置 (CHECK_RESET)
         # =========================================================================
         if self.step_phase == "CHECK_RESET":
             pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
             if pos_reset:
                 logging.info(f"📋 [懸賞告示牌] 發現重置按鈕 [{reset_btn}]，點擊執行重置！")
                 self.mouse.click(left + pos_reset[0], top + pos_reset[1])
-                self.step_phase = "PROCESS_ACCEPT_QUESTS"
-                self.accept_sub_phase = "FIND_TOP_TASK"
+                self.last_reset_click_time = now
                 self.last_action_time = now
                 return
+            
+            # 判斷可接取條件：
+            # 情況 A：若曾點擊過 reset，需等待距離上次點擊滿 3.0 秒
+            if self.last_reset_click_time > 0.0:
+                if now - self.last_reset_click_time >= 3.0:
+                    logging.info("📋 [懸賞告示牌] 確定重置按鈕已消失且已滿 3 秒，切換至 PROCESS_ACCEPT_QUESTS 開始領取任務...")
+                    self.step_phase = "PROCESS_ACCEPT_QUESTS"
+                    self.accept_sub_phase = "FIND_TOP_TASK"
+                    self.last_action_time = now
+                    return
+                else:
+                    rem = 3.0 - (now - self.last_reset_click_time)
+                    logging.info(f"⌛ [懸賞告示牌] 重置完成，等待畫面渲染中 (靜置 3 秒，剩餘 {rem:.1f} 秒)...")
+                    return
             else:
-                logging.info(f"📋 [懸賞告示牌] 未發現重置按鈕 [{reset_btn}] (無需重新整理或已重置)，直接進入任務接取階段！")
+                # 情況 B：無 reset 按鈕且未曾點擊（已無 reset 可點），直接進入任務接取
+                logging.info("📋 [懸賞告示牌] 畫面無重置按鈕 (無重置需求/已重置過)，直接切換至 PROCESS_ACCEPT_QUESTS 開始領取任務...")
                 self.step_phase = "PROCESS_ACCEPT_QUESTS"
                 self.accept_sub_phase = "FIND_TOP_TASK"
                 self.last_action_time = now

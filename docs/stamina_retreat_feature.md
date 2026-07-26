@@ -54,7 +54,7 @@
 
 ---
 
-## 5. 多模式相容性行為
+## 5. 多模式相容性與防呆機制
 
 ### 5.1 普通關卡模式 (`stage`)
 * 退避恢復後，自動於大廳重新定位並繼續進行 Stage 尋路與刷關。
@@ -62,20 +62,29 @@
 ### 5.2 地下城模式 (`dungeon`)
 * 退避恢復後，自動進入地下城選單，繼續進行地下城探索。
 
-### 5.3 混合模式 (`mix`)
-* 退避啟動時，完整備份 `mix` 全量配置（含 `dungeon_names`, `greedy_dungeon`, `stage_target`）。
-* 退避恢復後，`mix` 導航邏輯會重新檢測全地下城 CD：
+### 5.3 混合模式 (`mix`) / 每日任務 (`daily`)
+* 退避啟動時，完整備份全量配置（含 `dungeon_names`, `greedy_dungeon`, `stage_target`）。
+* 退避恢復後，`mix` / `daily` 導航邏輯會重新檢測全地下城 CD：
   * 若有可刷地下城（`has_available_dungeon()` 為 True），優先前往地下城。
   * 若地下城全在冷卻中，自動進入 Stage 普通關卡。
 
----
+### 5.4 安全防呆過濾 (`has_available_dungeon`)
+* 支援 `has_available_dungeon(target_config=...)` 帶入評估配置。
+* **智慧自動備援**：當處於體力退避狀態 (`stamina_retreat_start_time` 存在) 且未傳參數時，自動讀取 `original_config` 進行評估。
+* **非地下城模式隔離**：若評估配置之 `type` 為非地下城模式（如純 `collect_only` 或 `stage`），安全回傳 `False`，避免誤拋 `ValueError` 中斷程式。
+
+### 5.5 純領取模式 (`collect_only`) 大廳退回城鎮修復
+* 於 `--mode collect_only` 領完體力視窗關閉後（狀態轉為 `NAVIGATING`）：
+* 因為 `collect_only` 配置之 `navigation_path` 為空 `[]`，系統會自動在畫面上搜尋 `goback_town.png`（返回城鎮按鈕），點擊退回城鎮並轉移至 `STATE_COLLECT_ONLY` 待機，避免在 `NAVIGATING ↔ LOBBY` 之間發生死迴圈跳轉。
+
 
 ## 6. 模組關聯與組件索引
 
 | 組件名稱 | 檔案路徑 | 職責 |
 | :--- | :--- | :--- |
-| **全域攔截處** | `states/state_machine.py` | 於 `step()` 開頭呼叫體力不足檢測 |
+| **全域攔截處** | `states/state_machine.py` | 於 `step()` 開頭呼叫體力不足檢測與 `has_available_dungeon` 備援過濾 |
 | **退避邏輯** | `states/stamina_flow.py` | 關閉彈窗、退回城鎮、備份與切換模式 |
-| **恢復邏輯** | `states/handlers/collect_only.py` | 監測退避時間與自動還原配置 |
-| **全域配置** | `config.py` | 定義 `stamina_retreat_duration` 等參數 |
-| **單元測試** | `tests/test_state_machine_logic.py` | 驗證觸發、備份、定時恢復與模式切換 |
+| **恢復與待機** | `states/handlers/collect_only.py` | 監測退避時間、冷卻結束自動切回 (`auto_resume_dungeon_on_cd`) 與還原配置 |
+| **導航與再退避** | `states/handlers/navigation.py` | 全冷卻再退避轉移、大廳退回城鎮離場 |
+| **全域配置** | `config.py` | 定義 `stamina_retreat_duration` 與 `auto_resume_dungeon_on_cd` 參數 |
+| **單元測試** | `tests/test_state_machine_logic.py` | 驗證觸發、備份、定時恢復、冷卻開關與模式切換 |

@@ -215,13 +215,17 @@ class TestBehavioralScenarios(unittest.TestCase):
         test_img[394+35:394+75, 994+35:994+75] = [50, 50, 50]
         self.mock_capturer.capture.return_value = test_img
         
+        confirm_matched = [0]
         def match_side_effect_destroy_collect(img, name, threshold):
             if name == "backpack_full.png":
                 return ((960, 289), 0.9)
             elif name == "common/destroy.png":
                 return ((500, 500), 0.9)
             elif name == "common/confirm.png":
-                return ((600, 600), 0.9)
+                if confirm_matched[0] == 0:
+                    confirm_matched[0] += 1
+                    return ((600, 600), 0.9)
+                return (None, 0.0)
             elif name == "common/collect.png":
                 return ((700, 700), 0.9)
             return (None, 0.0)
@@ -231,8 +235,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         # Act
         self.state_machine.step()
         
-        # Assert: 整個銷毀收集鏈完成，最後一步應為 collect 領取
-        self.mock_mouse.click.assert_called_with(700, 700)
+        # Assert: 整個銷毀收集鏈完成，點擊關閉確認彈窗 (600, 600)
+        self.mock_mouse.click.assert_called_with(600, 600)
 
     @patch('os.path.exists')
     def test_backpack_sorting_scroll_and_exit_recovery(self, mock_exists):
@@ -2001,9 +2005,13 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         # Step 2: 點擊 Sacrifice.png 開啟選單
         handler.last_action_time = 0.0
+        sac_matched = [0]
         def mock_match_step2(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
-                return ((830, 863), 0.9)
+                if sac_matched[0] == 0:
+                    sac_matched[0] += 1
+                    return ((830, 863), 0.9)
+                return (None, 0.0)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_step2
@@ -2152,9 +2160,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.reset_state()
 
 
+        sac_inside_matched = [0]
         def mock_match_inside(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
-                return ((718, 745), 0.90)
+                if sac_inside_matched[0] == 0:
+                    sac_inside_matched[0] += 1
+                    return ((718, 745), 0.90)
+                return (None, 0.0)
             elif name == "town_building/exitfromhouse_and_to_town.png":
                 return ((74, 744), 0.90)
             return (None, 0.0)
@@ -2467,7 +2479,7 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         # 1. 第一幀：頂層未找到，執行平滑拖曳滑動
         handler.handle(fake_img, rect)
-        self.mock_mouse.drag.assert_called_with(960, 648, 960, 432, duration=0.5, inertia=False)
+        self.mock_mouse.drag.assert_called_with(960, 810, 960, 270, duration=0.5, inertia=False)
         self.assertEqual(handler.goods_scroll_state, "SCROLLED_DOWN")
 
         # 2. 第二幀：滑動後找到商品，執行點選與賣出

@@ -75,8 +75,31 @@
 
 ---
 
-## 🛡️ OCR 錯別字自動加強防護
-不論是告示牌讀取還是完成彈窗，輸入的標題均會自動經過 `normalize_quest_title()` 清洗（如 `野瀦`➔`野豬`、`毀減`➔`毀滅`、`肇敗`➔`擊敗`、`枯樓`➔`骷髏`），確保精確命中上述字典。
+## 🛡️ OCR 錯別字對照與 3-in-1 自動正名校正管道
+
+為了解決 EasyOCR 將遊戲簡體/繁體字寫讀錯的問題（如 `野猾` ➔ `野豬`），系統在 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L41) 採用了 **`TYPO_GROUPS` 結構** 與 **三合一自動正名校正管道**：
+
+### 1. 錯字對照表 (`TYPO_GROUPS`)
+以正確標準繁體字為 Key，常見 OCR 誤讀錯字清單為 Value：
+- `"野豬"` ➔ `["野瀦", "野猾", "野豬"]`
+- `"毀滅"` ➔ `["毀減", "毀滅"]`
+- `"擊敗"` ➔ `["肇敗", "擎殺", "擊敗"]`
+- `"骷髏"` ➔ `["枯樓", "骷樓", "骷髏"]`
+- `"首領"` ➔ `["直領", "首領"]`
+- `"惡魔"` ➔ `["忠魔", "惡魔"]`
+- `"樹人"` ➔ `["樹入", "樹人"]`
+- `"蛛後"` ➔ `["蛛俊", "蛛後"]`
+
+### 2. 三合一自動正名校正管道 (`auto_correct_quest_title`)
+當 EasyOCR 讀取標題文字後，會依序通過以下三道過濾防線：
+1. **字典反向映射 (1.0 權重)**：查詢 `TYPO_GROUPS`，精確命中錯字直接正名。
+2. **`difflib` 編輯距離 (2.0 權重)**：計算字串相似度（Cutoff ≥ 0.65）。
+3. **筆畫與子字串比對 (2.5 權重)**：比對特有專有名詞與子字串，防止未知新任務誤判。
+
+### 3. 告示牌灰色已接取任務 (`task_after.png`) 灰度比防誤殺
+在 [bulletin_board.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/bulletin_board.py#L195) 中，除了模板比對外，額外計算 ROI 灰度比 `ratio_after <= 0.88`：
+- **灰度比 ≤ 0.88** ➔ 判定為灰色已接取任務 (`task_after.png`)，予以過濾。
+- **鮮黃色區域 (灰度比 > 0.88)** ➔ 判定為待接取任務 (`task.png`)，方可進行點擊接取。
 
 
 ## 🔍 未來發現 unknown_quests 時的檢查與處理 SOP
@@ -90,6 +113,6 @@
 2. **情況 B：不要打的任務**（如`敵人剿滅`、`獵金之蟲`、`完成任何地下城`）
    開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L86)：
    - 加入 `IGNORED_QUESTS` 全名清單與 `self.ignored_rules` 正則匹配，系統會識別為 `ignored` 模式，直接跳過不接取，且**不上報 `unknown_quests`**。
-3. **情況 C：EasyOCR 錯別字誤判**（如 `野猾` ➔ `野豬`）
-   開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L44)：
-   - 加入 `OCR_TYPO_MAP` 對照字典，自動清洗為標準繁體字。
+3. **情況 C：EasyOCR 錯別字誤判**（如 `直領` ➔ `首領`）
+   開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L41)：
+   - 於 `TYPO_GROUPS` 的 Key 下補充對應的 OCR 錯別字，系統自動進行清洗與正名。

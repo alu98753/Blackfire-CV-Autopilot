@@ -560,6 +560,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.enable_bread = False
         self.state_machine.need_bread_collection = False
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
+        self.state_machine.config["backpack_full_destroyable_colors"] = ["gray_or_empty", "green"]
         
         mock_exists.return_value = True
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -1214,6 +1215,7 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["stage"].copy()
         # 自訂只分解/銷毀 灰色、綠色、藍色 裝備
         self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue"]
+        self.state_machine.config["backpack_full_destroyable_colors"] = ["gray_or_empty", "green", "blue"]
         # 設定保留紫色及以上（藍色不在保留名單中，因此可以被銷毀）
         self.state_machine.config["keep_colors"] = ["purple", "orange_yellow", "red"]
         self.state_machine.current_state = self.state_machine.STATE_BACKPACK_FULL_SORTING
@@ -1337,6 +1339,25 @@ class TestStateMachineLogic(unittest.TestCase):
         with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
             self.state_machine._run_task_complete_subflow(rect)
             mock_wait_gone.assert_called_once()
+
+    @patch('os.path.exists')
+    def test_task_complete_subflow_waits_2s_loop_until_no_confirm(self, mock_exists):
+        """驗證 Phase 4 以 2.0s 為間隔匹配直至沒有 confirm/ok 彈窗才回到原本流程"""
+        mock_exists.return_value = True
+        self.state_machine.task_complete_phase = "CLICK_DISMISS_LOOP"
+        self.state_machine._subflow_click_target = (160, 170, "common/confirm.png")
+
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            with patch('states.state_machine.time.sleep'):
+                self.state_machine._run_task_complete_subflow(rect)
+
+        # 斷言點擊並等待消失 API 被呼叫，且包含 check_interval=2.0
+        mock_wait_gone.assert_called_once()
+        _, kwargs = mock_wait_gone.call_args
+        self.assertEqual(kwargs.get('check_interval'), 2.0, "未將 check_interval 設定為 2.0 秒！")
+        self.assertEqual(kwargs.get('retry_interval'), 2.0, "未將 retry_interval 設定為 2.0 秒！")
 
 
     @patch('os.path.exists')
@@ -1824,6 +1845,46 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertIsNone(self.state_machine.stamina_retreat_start_time)
 
     @patch('os.path.exists')
+    def test_auto_resume_dungeon_disabled_stays_in_collect_only(self, mock_exists):
+        """
+        測試當 auto_resume_dungeon_on_cd 設定為 False 時：
+        即使體力退避期間地下城冷卻結束，也絕不提前切回地下城，維持純定時領取直到滿 4 小時。
+        """
+        mock_exists.return_value = True
+        orig_config = GAME_CONFIGS["dungeon"].copy()
+        orig_config["auto_resume_dungeon_on_cd"] = False  # 關閉冷卻結束自動復歸
+        
+        t0 = time.time() - 1800.0  # 已退避 0.5 小時
+        self.state_machine.original_config = orig_config
+        self.state_machine.stamina_retreat_start_time = t0
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.config["stamina_retreat_duration"] = 4.0
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = False
+        
+        # 模擬地下城 0 冷卻已結束 (0.0)
+        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        self.state_machine.step()
+        
+        # 斷言 1：因 auto_resume_dungeon_on_cd == False，即便冷卻結束也維持在 STATE_COLLECT_ONLY 待機！
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        
+        # 模擬退避滿 4.0 小時
+        self.state_machine.stamina_retreat_start_time = time.time() - (4.1 * 3600.0)
+        self.state_machine.step()
+        
+        # 斷言 2：滿 4 小時後，順利恢復原配置 orig_config 並離場
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertIsNone(self.state_machine.original_config)
+        self.assertIsNone(self.state_machine.stamina_retreat_start_time)
+
+    @patch('os.path.exists')
     def test_normal_dungeon_mode_ignores_retreat_check(self, mock_exists):
         """
         測試單純的地下城/混合模式 (非體力退避狀態下，stamina_retreat_start_time 為 None)：
@@ -2062,6 +2123,39 @@ class TestStateMachineLogic(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.state_machine.has_available_dungeon()
 
+    def test_has_available_dungeon_non_dungeon_mode_returns_false(self):
+        """
+        測試當 config 為 collect_only 或 stage 模式時，has_available_dungeon 應安全傳回 False 而非拋出 ValueError
+        """
+        self.state_machine.config = {"type": "collect_only"}
+        self.assertFalse(self.state_machine.has_available_dungeon())
+
+        self.state_machine.config = {"type": "stage"}
+        self.assertFalse(self.state_machine.has_available_dungeon())
+
+    @patch('os.path.exists')
+    def test_collect_only_navigation_returns_to_town_instead_of_lobby(self, mock_exists):
+        """
+        測試當在 collect_only 模式下處於 NAVIGATING 狀態時：
+        看見 goback_town.png 應自動點擊返回城鎮並切換至 STATE_COLLECT_ONLY，絕不誤切至 STATE_LOBBY。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        
+        def mock_match(img, tpl, threshold=0.8, quiet=False):
+            if tpl == "goback_town.png":
+                return (72, 757), 0.92
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = mock_match
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        self.state_machine.step()
+
+        self.mock_mouse.click.assert_called_with(72, 757)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+
     def test_get_dungeon_cooldown_status(self):
         """
         測試 get_dungeon_cooldown_status 能正確格式化顯示各地下城冷卻狀態與可挑戰清單。
@@ -2234,6 +2328,170 @@ class TestStateMachineLogic(unittest.TestCase):
         # 斷言標記被重置為 False 且狀態維持在 BATTLE
         self.assertFalse(self.state_machine.just_resumed_from_user)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+
+
+class TestTaskCompletePhaseStateMachine(unittest.TestCase):
+    """
+    專屬驗證重構後『領取任務獎勵』 Match 驅動 4 Phase 狀態機子流程的 4 大維度測試。
+    """
+    def setUp(self):
+        self.mock_capturer = MagicMock()
+        self.mock_matcher = MagicMock()
+        self.mock_mouse = MagicMock()
+        from states.state_machine import GameStateMachine
+        self.state_machine = GameStateMachine(self.mock_capturer, self.mock_matcher, self.mock_mouse)
+        self.rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+    @patch('os.path.exists')
+    def test_phase_happy_path_flow(self, mock_exists):
+        """
+        維度 1：全順暢主幹流程測試。
+        驗證 Phase 1 (INIT) ➔ Phase 2 (OCR) ➔ Phase 3 (FIND) ➔ Phase 4 (DISMISS) 連貫完成並重置 Phase。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            if name == "common/confirm.png":
+                return ((150, 150), 0.92)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            # 執行子流程
+            self.state_machine._run_task_complete_subflow(self.rect)
+
+            # 斷言 Phase 4 正確調用 click_and_wait_until_gone 監控 confirm.png 消失
+            mock_wait_gone.assert_called_once()
+            args, kwargs = mock_wait_gone.call_args
+            self.assertEqual(args[0], "common/confirm.png")
+            self.assertEqual(kwargs.get('check_interval'), 2.0)
+
+        # 斷言最後 Phase 已重置為 INIT_BANNER_CHECK
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+    @patch('os.path.exists')
+    def test_phase_no_match_retention_and_resumption(self, mock_exists):
+        """
+        維度 2：Match 失敗狀態留存與跨幀恢復測試。
+        模擬第 1 幀無 Match ➔ 狀態留存；第 2 幀淡入 Match 成功 ➔ 切換 Phase 推進。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        # 第 1 幀：未匹配到大彈窗
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine._run_task_complete_subflow(self.rect)
+
+        # 斷言 Phase 保持在 INIT_BANNER_CHECK
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+        # 第 2 幀：Match 成功
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            if name == "common/confirm.png":
+                return ((150, 150), 0.92)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone'):
+            self.state_machine._run_task_complete_subflow(self.rect)
+
+        # 斷言成功經歷 Phase 1~4 關閉後重置為 INIT_BANNER_CHECK
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+    @patch('os.path.exists')
+    def test_phase_no_confirm_button_fallback(self, mock_exists):
+        """
+        維度 3：無獨立確認按鈕，保底座標領獎測試。
+        驗證 Phase 3 能算出自適應座標 (766, 1710) 並將標的鎖定為 task_complete.png。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        # 僅 match 到 task_complete.png，無法 match 到 common/confirm.png 或 ok.png
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            self.state_machine._run_task_complete_subflow(self.rect)
+
+            # 斷言 Phase 4 將標的設為 task_complete.png 且點擊計算出之保底座標 (110, 276)
+            mock_wait_gone.assert_called_once()
+            args, kwargs = mock_wait_gone.call_args
+            self.assertEqual(args[0], "task_complete.png")
+            self.assertEqual(kwargs.get('check_interval'), 2.0)
+
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+    @patch('os.path.exists')
+    def test_phase_sequential_multi_popups(self, mock_exists):
+        """
+        維度 4：連續多彈窗鏈式處理測試。
+        驗證連續 2 個彈窗皆能順暢完成 Phase 1~4 並完成核銷。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            if name == "common/confirm.png":
+                return ((150, 150), 0.92)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            # 跑第 1 彈窗
+            self.state_machine._run_task_complete_subflow(self.rect)
+            self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+            # 跑第 2 彈窗
+            self.state_machine._run_task_complete_subflow(self.rect)
+            self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+            # 斷言 click_and_wait_until_gone 被成功呼叫 2 次
+            self.assertEqual(mock_wait_gone.call_count, 2)
+
+    @patch('os.path.exists')
+    def test_task_complete_subflow_advances_quest_target(self, mock_exists):
+        """
+        驗證領取任務完成彈窗子流程結束時，會主動呼叫 check_and_advance_quest_target() 推進目標配置。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name in ["task_complete.png", "common/confirm.png"]:
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+        mock_qs = MagicMock()
+        mock_qs.process_task_complete_banner.return_value = "清除史萊姆"
+        self.state_machine.quest_scheduler = mock_qs
+
+        with patch.object(self.state_machine, 'check_and_advance_quest_target') as mock_advance, \
+             patch.object(self.state_machine, 'click_and_wait_until_gone'):
+            self.state_machine._run_task_complete_subflow(self.rect)
+            # 斷言 Phase 4 結束時 check_and_advance_quest_target 被成功呼叫 1 次
+            mock_advance.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

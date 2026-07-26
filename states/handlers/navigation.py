@@ -332,14 +332,22 @@ class NavigationHandler(BaseStateHandler):
                 return
 
 
-        # 檢查體力退避期間是否所有地下城皆已進入冷卻
+        # 檢查體力退避期間是否所有地下城皆已進入冷卻 (僅當前配置非 collect_only 時評估)
         if getattr(self.machine, "stamina_retreat_start_time", None) is not None and getattr(self.machine, "original_config", None) is not None:
-            if not self.machine.has_available_dungeon():
-                logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
-                from config import GAME_CONFIGS
-                self.machine.config = GAME_CONFIGS["collect_only"].copy()
-                self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
-                return
+            if self.machine.config.get("type") != "collect_only":
+                orig_cfg = self.machine.original_config
+                if orig_cfg.get("type") in ["dungeon", "mix", "daily"]:
+                    try:
+                        dungeon_avail = self.machine.has_available_dungeon(target_config=orig_cfg)
+                    except Exception:
+                        dungeon_avail = False
+
+                    if not dungeon_avail:
+                        logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
+                        from config import GAME_CONFIGS
+                        self.machine.config = GAME_CONFIGS["collect_only"].copy()
+                        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                        return
 
         # B. 原本的尋路導航邏輯
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
@@ -596,8 +604,16 @@ class NavigationHandler(BaseStateHandler):
                     stage_target
                 ]
                 nav_path = self.machine.config.get("stage_navigation_path", default_stage_nav)
-        else:
-            nav_path = self.machine.config.get("navigation_path", [])
+        if config_type == "collect_only":
+            pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.8, quiet=True)
+            if pos_goback:
+                logging.info("🧭 [純領取模式] 領取完成後在大廳畫面，點擊 [goback_town.png] 返回城鎮待機...")
+                self.mouse.click(rect["left"] + pos_goback[0], rect["top"] + pos_goback[1])
+                time.sleep(0.5)
+                self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                return
+            self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+            return
 
         if not nav_path:
             self.machine.transition_to(self.machine.STATE_LOBBY)
