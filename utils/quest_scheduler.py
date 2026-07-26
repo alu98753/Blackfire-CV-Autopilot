@@ -77,11 +77,6 @@ class QuestScheduler:
                 msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
                 return cli_cmd, msg
 
-            elif target_task.mode_type == "generic_boss":
-                cli_cmd = target_task.to_cli_args()
-                msg = f"⚔️ 執行首領懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
-                return cli_cmd, msg
-
         return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
 
     def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None):

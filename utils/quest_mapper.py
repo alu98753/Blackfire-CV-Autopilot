@@ -13,7 +13,7 @@ class TaskNode:
 
     def __init__(self, quest_title, mode_type, target_count=10, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC, batch_size=4, max_run_limit=10):
         self.quest_title = quest_title
-        self.mode_type = mode_type          # "dungeon", "stage", "generic_boss", "ignored"
+        self.mode_type = mode_type          # "dungeon", "stage", "ignored"
         self.target_count = target_count
         self.completed_count = 0
         self.dungeon_index = dungeon_index  # 0~4
@@ -49,9 +49,6 @@ class TaskNode:
             lvl_str = str(self.stage_level)
             sub_str = self.sub_stage or "first"
             return f".venv\\Scripts\\python main.py --backend --mode stage --stage {lvl_str} --sub {sub_str}"
-        elif self.mode_type == "generic_boss":
-            # 預設打地下城 1 (史萊姆) 或普通關卡魔王關
-            return f".venv\\Scripts\\python main.py --backend --mode dungeon --dungeon 1"
         return f".venv\\Scripts\\python main.py --backend --mode mix"
 
     def to_config_dict(self, base_config=None):
@@ -143,13 +140,6 @@ class TaskNode:
             cfg["stage_navigation_path"] = stage_path
             return _apply_base_preferences(cfg)
 
-        elif self.mode_type == "generic_boss":
-            cfg = PRIMARY_MODES["dungeon"].copy()
-            cfg["name"] = f"懸賞任務 - 史萊姆石窟 (任務: {self.quest_title})"
-            cfg["greedy_dungeon"] = False
-            cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
-            return _apply_base_preferences(cfg)
-
         return _apply_base_preferences(PRIMARY_MODES["mix"].copy())
 
     def __repr__(self):
@@ -181,6 +171,7 @@ IGNORED_QUESTS = [
     "獵金之蟲",
     "完成任何地下城",
     "敵人剿滅",
+    "擊殺首領",
 ]
 
 import difflib
@@ -261,10 +252,12 @@ class QuestMapper:
     """
     def __init__(self):
 
-        # 1. 顯式忽略/跳過執行的任務關鍵字
-        self.ignored_rules = [
-            r"(獵金之蟲|完成任何地下城|敵人剿滅)",
-        ]
+        # 1. 顯式忽略/跳過執行的任務關鍵字 (動態由 IGNORED_QUESTS 構建正則，避免 Hardcode 重覆維護)
+        if IGNORED_QUESTS:
+            escaped_items = [re.escape(q) for q in IGNORED_QUESTS]
+            self.ignored_rules = [f"({'|'.join(escaped_items)})"]
+        else:
+            self.ignored_rules = []
 
         # 2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4, counting_policy)
         # 0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 冰雪洞窟
@@ -294,7 +287,7 @@ class QuestMapper:
     def get_quest_sort_key(self, title):
         """
         計算單個懸賞任務標題的多階梯排序 Key (4 元組)。
-        1. mode_score: dungeon = 0 (地下城最高優先), stage = 1, generic_boss = 2, ignored = 9
+        1. mode_score: dungeon = 0 (地下城最高優先), stage = 1, ignored = 9
         2. policy_score: DETERMINISTIC = 0, BANNER_VERIFY = 1, IGNORED = 9
         3. idx_score: -dungeon_index 或 -stage_level (數字大者排在最前面)
         4. sub_score: final = 0, middle = 1, first = 2
@@ -303,7 +296,7 @@ class QuestMapper:
         if node is None or node.mode_type == "ignored":
             return (9, 9, 0, 0)
 
-        # 1. 梯隊一：模式優先 (地下城 0 > 普通關卡 1 > 通用首領 2)
+        # 1. 梯隊一：模式優先 (地下城 0 > 普通關卡 1)
         if node.mode_type == "dungeon":
             mode_score = 0
             idx_score = -node.dungeon_index if node.dungeon_index is not None else 0
@@ -314,7 +307,7 @@ class QuestMapper:
             sub_map = {"final": 0, "middle": 1, "first": 2}
             sub_score = sub_map.get(node.sub_stage, 3)
         else:
-            mode_score = 2
+            mode_score = 9
             idx_score = 0
             sub_score = 0
 

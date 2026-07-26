@@ -37,6 +37,8 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(normalize_quest_title("史萊姆王的致滅"), "史萊姆王的毀滅")
         self.assertEqual(normalize_quest_title("消滅蛛王與蛛俊"), "消滅蛛王與蛛後")
         self.assertEqual(normalize_quest_title("擎殺直領"), "擊殺首領")
+        node_boss = self.mapper.parse_quest("擎殺直領")
+        self.assertEqual(node_boss.mode_type, "ignored")
         self.assertEqual(normalize_quest_title("討伐忠魔"), "討伐惡魔")
         node_demon = self.mapper.parse_quest("討伐忠魔")
         self.assertEqual(node_demon.mode_type, "stage")
@@ -66,10 +68,9 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node2.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode stage --stage 6 --sub first", node2.to_cli_args())
 
-        # 3. 圖片 3: 擊殺首領 (預設固定 10 次)
+        # 3. 圖片 3: 擊殺首領 (已視為 IGNORED 顯式跳過任務)
         node3 = self.mapper.parse_quest("擊殺首領", "各種強大的首領在附近地區活動...", "擊殺: 首領 x 5")
-        self.assertEqual(node3.mode_type, "generic_boss")
-        self.assertEqual(node3.target_count, 10)
+        self.assertEqual(node3.mode_type, "ignored")
 
         # 4. 圖片 4: 清除野豬 (可精確計數)
         node4 = self.mapper.parse_quest("清除野豬", "野豬在肆意橫行...", "擊殺: 野豬 x 10")
@@ -101,19 +102,18 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         - 優先產出地下城專屬指令。
         - 通過 counting_policy 保障：POLICY_BANNER_VERIFY 任務不會被 record_kill_event 誤計數。
         """
-        # 1. 載入 5 個任務
+        # 1. 載入 4 個任務
         quests = [
             ("史萊姆王的毀滅", "黏糊糊的石窟...", "擊殺: [史萊姆王] x 1"),
             ("清除骷髏", "骷髏在戰場上...", "擊殺: 骷髏 x 10"),
             ("擊敗冰元素", "冰元素棲息在...", "擊殺: 冰元素 x 10"),
-            ("擊殺首領", "各種強大的首領...", "擊殺: 首領 x 5"),
             ("清除野豬", "野豬在肆意...", "擊殺: 野豬 x 10"),
         ]
         for title, desc, req in quests:
             node = self.mapper.parse_quest(title, desc, req)
             self.scheduler.add_task(node)
 
-        self.assertEqual(len(self.scheduler.get_pending_tasks()), 5)
+        self.assertEqual(len(self.scheduler.get_pending_tasks()), 4)
 
         # 2. 第一次取得啟動指令 ➔ 應優先傳回地下城 1 (史萊姆王)
         cmd1, msg1 = self.scheduler.get_next_action_config()
@@ -125,9 +125,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
         # 斷言：史萊姆王的毀滅屬於 POLICY_BANNER_VERIFY，record_kill_event 絕不自動加算進度！
         slime_task = [t for t in self.scheduler.tasks if t.quest_title == "史萊姆王的毀滅"][0]
-        boss_task = [t for t in self.scheduler.tasks if t.quest_title == "擊殺首領"][0]
         self.assertFalse(slime_task.is_completed)
-        self.assertEqual(boss_task.completed_count, 1)
 
         # 模擬彈窗領獎成功核銷史萊姆王任務
         self.scheduler.remove_completed_quest("史萊姆王的毀滅")
@@ -153,16 +151,11 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertIn("--mode stage --stage 1 --sub final", cmd4)
         print(f"[動態排程 step 4] 指令: {cmd4} | 說明: {msg4}")
 
-        # 模擬打野豬魔王關 9 次 (每次算 1 隻野豬與 1 個 Boss，加算前次史萊姆 1 次共 10 次 Boss)
-        for _ in range(9):
-            self.scheduler.record_kill_event(enemy_name="野豬", is_boss=True, stage_level=1, sub_stage="final", kill_count=1)
+        self.scheduler.record_kill_event(enemy_name="野豬", stage_level=1, sub_stage="final", kill_count=10)
 
-        # 首領已累積 1(史萊姆) + 9(野豬) = 10 隻！首領任務自動完成！
-        self.assertTrue(boss_task.is_completed)
-
-        # 模擬打完剩下的 1 隻野豬 (累計 10 隻野豬)
-        self.scheduler.record_kill_event(enemy_name="野豬", stage_level=1, sub_stage="final", kill_count=1)
-
+        # 所有任務皆完成
+        pending_after = self.scheduler.get_pending_tasks()
+        self.assertEqual(len(pending_after), 0)
 
         # 7. 最終斷言：所有懸賞任務 100% 完成！
         self.assertTrue(self.scheduler.is_all_completed())
