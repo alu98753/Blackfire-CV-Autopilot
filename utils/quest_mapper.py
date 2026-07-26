@@ -165,12 +165,16 @@ DETERMINISTIC_QUESTS = [
     "清除骷髏",
     "清除史萊姆",
     "清除樹人",
+    "清除熊",
+    "清除蜘蛛",
+    "討伐惡魔",
 ]
 
 BANNER_VERIFY_QUESTS = [
     "冰雪洞窟的暴君",
     "史萊姆王的毀滅",
     "破除森林的枷鎖",
+    "消滅蛛王與蛛後",
 ]
 
 IGNORED_QUESTS = [
@@ -181,7 +185,8 @@ IGNORED_QUESTS = [
 
 # ------------------ 常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 ------------------
 OCR_TYPO_MAP = {
-    "毀減": "毀滅",
+    "致滅": "毀滅", "毀減": "毀滅",
+    "蛛后": "蛛後",
     "野瀦": "野豬", "野玫": "野豬", "野猞": "野豬", "野猾": "野豬",
     "擎敗": "擊敗", "肇敗": "擊敗", "望敗": "擊敗", "堅敗": "擊敗",
     "堅殺": "擊殺",
@@ -238,7 +243,8 @@ class QuestMapper:
         self.dungeon_rules = [
             (r"(史萊姆王的毀滅|史萊姆王)", 0, TaskNode.POLICY_BANNER_VERIFY),
             (r"(清除史萊姆|史萊姆|黏糊糊的石窟)", 0, TaskNode.POLICY_DETERMINISTIC),
-            (r"(幽影地穴|鬼魂)", 1, TaskNode.POLICY_DETERMINISTIC),
+            (r"(消滅蛛王與蛛後|蛛王與蛛後)", 1, TaskNode.POLICY_BANNER_VERIFY),
+            (r"(清除蜘蛛|蜘蛛|幽影地穴|鬼魂)", 1, TaskNode.POLICY_DETERMINISTIC),
             (r"(破除森林的枷鎖)", 2, TaskNode.POLICY_BANNER_VERIFY),
             (r"(清除樹人|森林迷宮|樹人)", 2, TaskNode.POLICY_DETERMINISTIC),
             (r"(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒|枯樓|骷髏)", 3, TaskNode.POLICY_DETERMINISTIC),
@@ -250,7 +256,8 @@ class QuestMapper:
         # Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷
         self.stage_rules = [
             (r"(野豬)", 1, "final", TaskNode.POLICY_DETERMINISTIC),
-            (r"(熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
+            (r"(討伐惡魔|惡魔)", 2, "final", TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除熊|熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除沙蟲|沙蟲)", 4, "middle", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除蛙人|蛙人)", 5, "first", TaskNode.POLICY_DETERMINISTIC),
             (r"(冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
