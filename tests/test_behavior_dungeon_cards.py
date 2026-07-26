@@ -212,5 +212,49 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         # 斷言地下城 0 被判定為未解鎖，冷卻時間設為 float('inf')
         self.assertEqual(self.mock_machine.dungeon_cooldowns.get(0), float('inf'))
 
+    # =========================================================================
+    # 2.4 全冷卻混合模式防死鎖切換測試
+    # =========================================================================
+
+    @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
+    @patch("os.path.exists")
+    @patch("cv2.imread")
+    @patch("cv2.resize")
+    @patch("cv2.matchTemplate")
+    def test_2_4_all_dungeons_cooldown_in_mix_mode_switches_to_stage_tab(
+        self, mock_matchTemplate, mock_resize, mock_imread, mock_exists, mock_detect_cd
+    ):
+        """
+        [2.4 Behavior Test]
+        Given: 混合模式 (type="mix") 下，地下城卡片在畫面上但檢測到冷卻木牌 (全冷卻)
+        When: 執行 NavigationHandler.handle()
+        Then: 自動呼叫 _switch_to_stage_or_back 點擊 select_stage.png 切換至關卡頁籤防死鎖
+        """
+        mock_exists.return_value = True
+        self.mock_machine.stamina_retreat_start_time = None
+        self.mock_machine.original_config = None
+        self.mock_machine.config["type"] = "mix"
+        self.mock_machine.config["greedy_allowed_indices"] = [0]
+        self.mock_machine.dungeon_cooldowns = {0: time.time() + 600.0}
+        mock_detect_cd.return_value = (True, 600.0, "10:00")
+
+        def fake_match(img, template, threshold=0.6, *args, **kwargs):
+            if template == "common/select_stage.png":
+                return ((150, 250), 0.85)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.side_effect = lambda img, dsize: img
+        mock_matchTemplate.return_value = np.array([[0.85]], dtype=np.float32)
+
+        screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
+
+        self.handler.handle(screen_img, self.rect)
+
+        # 斷言發射點擊 (250, 300) (加上 rect offset left=100, top=50) 點擊 select_stage.png 切換頁籤
+        self.mock_mouse.click.assert_called_once_with(250, 300)
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,7 +22,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.mock_machine.need_diamond_collection = False
         self.mock_machine.enable_bread = False
         self.mock_machine.need_bread_collection = False
-        self.mock_machine.is_daily_pipeline_active.return_return_value = False
+        self.mock_machine.is_daily_pipeline_active.return_value = False
         self.mock_machine.has_available_dungeon.return_value = False
         self.mock_machine.dungeon_cooldowns = {}
         
@@ -269,6 +269,69 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.mock_machine._run_task_complete_subflow.assert_called_once_with(self.rect)
         # 驗證未發射常規尋路點擊
         self.mock_machine.mouse.click.assert_not_called()
+
+    # =========================================================================
+    # 1.5 鑽石與體力全域圖示自動跳轉行為測試
+    # =========================================================================
+
+    def test_1_5_diamond_btn_detected_triggers_diamond_collection_transition(self):
+        """
+        [1.5 Behavior Test]
+        Given: need_diamond_collection = True，且畫面直接比對出 diamond.png 入口
+        When: 執行 NavigationHandler.handle()
+        Then: 觸發狀態轉移至 STATE_DIAMOND_COLLECTION
+        """
+        mock_img = MagicMock()
+        self.mock_machine.need_diamond_collection = True
+        self.mock_machine.diamond_window_opened = False
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "diamond.png":
+                return ((100, 200), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        # 驗證轉移至 DIAMOND_COLLECTION 狀態
+        self.mock_machine.transition_to.assert_called_once_with("DIAMOND_COLLECTION")
+
+    # =========================================================================
+    # 1.6 關卡模式預設子關卡退守路徑行為測試
+    # =========================================================================
+
+    @patch("os.path.exists")
+    def test_1_6_stage_mode_unspecified_sub_stage_defaults_to_first_stage(self, mock_exists):
+        """
+        [1.6 Behavior Test]
+        Given: type="stage" 且 sub_stage 未特別指定 (None)，在關卡大廳
+        When: 執行 NavigationHandler.handle()
+        Then: 預設搜尋並點擊 stages/first_stage.png 作為第一個導航標的
+        """
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        self.mock_machine.config = {
+            "name": "普通關卡模式",
+            "type": "stage",
+            "stage_level": 1,
+            "sub_stage": None,
+            "navigation_path": ["common/door.png", "stages/first_stage.png"]
+        }
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/first_stage.png":
+                return ((400, 300), 0.95)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        # 驗證預設搜尋並點擊 first_stage.png
+        self.mock_machine.mouse.click.assert_called_once_with(400, 300)
 
 if __name__ == "__main__":
     unittest.main()
