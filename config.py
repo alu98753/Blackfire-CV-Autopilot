@@ -211,6 +211,7 @@ SUBFLOW_CONFIGS = {
         "enabled": True,
         "name": "背包整理",
         "type": "bag_clean",
+        "disassemble_colors": ["gray_or_empty", "green", "blue", "purple"],
         "navigation_path": [],
         "lobby_start_btn": "stages/start.png",
     },
