@@ -264,10 +264,10 @@ class QuestMapper:
         # Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷
         self.stage_rules = [
             (r"(野豬)", 1, "final", TaskNode.POLICY_DETERMINISTIC),
-            (r"(討伐惡魔|惡魔)", 2, "final", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除熊|熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除沙蟲|沙蟲)", 4, "middle", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除蛙人|蛙人)", 5, "first", TaskNode.POLICY_DETERMINISTIC),
+            (r"(討伐惡魔|惡魔)", 6, "six", TaskNode.POLICY_DETERMINISTIC),
             (r"(冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
         ]
 

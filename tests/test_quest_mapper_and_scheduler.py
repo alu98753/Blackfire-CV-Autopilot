@@ -38,6 +38,11 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(normalize_quest_title("消滅蛛王與蛛俊"), "消滅蛛王與蛛後")
         self.assertEqual(normalize_quest_title("擎殺直領"), "擊殺首領")
         self.assertEqual(normalize_quest_title("討伐忠魔"), "討伐惡魔")
+        node_demon = self.mapper.parse_quest("討伐忠魔")
+        self.assertEqual(node_demon.mode_type, "stage")
+        self.assertEqual(node_demon.stage_level, 6)
+        self.assertEqual(node_demon.sub_stage, "six")
+        self.assertIn("--mode stage --stage 6 --sub six", node_demon.to_cli_args())
         self.assertEqual(normalize_quest_title("清除樹入"), "清除樹人")
 
     def test_parse_five_user_quests(self):
