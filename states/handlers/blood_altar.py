@@ -123,8 +123,8 @@ class BloodAltarHandler(BaseStateHandler):
 
             pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
             if pos_exit:
-                logging.info(f"🩸 [血之祭壇] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
-                self.mouse.click(left + pos_exit[0], top + pos_exit[1])
+                logging.info(f"🩸 [血之祭壇] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮 (配對確認直到消失)...")
+                self.click_and_wait_until_gone(exit_building_btn, left + pos_exit[0], top + pos_exit[1], rect)
                 self._record_completion()
                 self.last_action_time = now
                 return
@@ -201,8 +201,8 @@ class BloodAltarHandler(BaseStateHandler):
         if self.step_phase == "RECEIVE_TAB_OPEN":
             pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
             if pos_rec_daily:
-                logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}]，點擊領取免費血水！")
-                self.mouse.click(left + pos_rec_daily[0], top + pos_rec_daily[1])
+                logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}]，點擊領取免費血水 (配對確認直到消失)...")
+                self.click_and_wait_until_gone(receive_daily_btn, left + pos_rec_daily[0], top + pos_rec_daily[1], rect)
                 self.has_claimed_daily = True
                 self.step_phase = "HANDLING_RECEIVE_POPUPS"
                 self.last_action_time = now

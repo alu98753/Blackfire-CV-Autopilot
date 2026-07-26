@@ -39,6 +39,8 @@ class TestChestSubflow(unittest.TestCase):
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
         def fake_match(img, template, threshold=0.75, **kwargs):
+            if kwargs.get("quiet"):
+                return (None, 0.0)
             if template == "goback_town.png":
                 return (None, 0.0)
             if template == "town_building/mysterious_treasure/mysterious_treasure.png":

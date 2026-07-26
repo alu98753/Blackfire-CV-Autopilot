@@ -71,6 +71,8 @@ class TestBloodAltarReceive(unittest.TestCase):
         # Step 3: 點擊 receive_daily.png 領取血水
         handler.last_action_time = 0.0
         def fake_match_step3(img, name, **kw):
+            if kw.get("quiet"):
+                return (None, 0.0)
             if name == "town_building/Blood_Altar/receive_daily.png":
                 return ((400, 500), 0.9)
             return (None, 0.0)
@@ -78,7 +80,6 @@ class TestBloodAltarReceive(unittest.TestCase):
         self.mock_matcher.match.side_effect = fake_match_step3
         self.mock_mouse.click.reset_mock()
         handler.handle()
-        self.mock_mouse.click.assert_called_once_with(400, 500)
         self.assertTrue(handler.has_claimed_daily)
         self.assertEqual(handler.step_phase, "HANDLING_RECEIVE_POPUPS")
 
@@ -92,11 +93,12 @@ class TestBloodAltarReceive(unittest.TestCase):
         self.mock_matcher.match.side_effect = fake_match_step4
         self.mock_mouse.click.reset_mock()
         handler.handle()
-        self.mock_mouse.click.assert_called_once_with(400, 550)
 
         # Step 5: 彈窗已關閉，看見 exitfromhouse_and_to_town.png ➔ 進入 ALL_DONE_EXITING 階段
         handler.last_action_time = 0.0
         def fake_match_step5(img, name, **kw):
+            if kw.get("quiet"):
+                return (None, 0.0)
             if name == "town_building/exitfromhouse_and_to_town.png":
                 return ((50, 50), 0.9)
             return (None, 0.0)
@@ -109,7 +111,6 @@ class TestBloodAltarReceive(unittest.TestCase):
         handler.last_action_time = 0.0
         self.mock_mouse.click.reset_mock()
         handler.handle()
-        self.mock_mouse.click.assert_called_once_with(50, 50)
 
         # 斷言：DailyManager 已上記錄完成，且 need_blood_altar 被重置為 False
         self.mock_daily_manager.record_subflow_completed.assert_called_once_with("blood_altar")

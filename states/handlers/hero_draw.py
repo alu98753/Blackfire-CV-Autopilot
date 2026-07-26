@@ -56,8 +56,8 @@ class HeroDrawHandler(BaseStateHandler):
         if self.step_phase == "INIT":
             # 2.1 防呆：若目前已在酒館內部 (看得到免費招募/招募按鈕/房屋退出按鈕)，直接切換至 ENTERED_TAVERN 階段
             pos_free_check, _ = self.matcher.match(screen_img, recruitment_btn, threshold=0.75, brightness_threshold=0.70)
-            pos_rec_check, _ = self.matcher.match(screen_img, "town_building/Tavern/RECRUITED.png", threshold=0.75)
-            pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.75)
+            pos_rec_check, _ = self.matcher.match(screen_img, "town_building/Tavern/RECRUITED.png", threshold=0.85)
+            pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.80)
 
             if pos_free_check or pos_rec_check or pos_exit_check:
                 logging.info("🍺 [抽英雄] 辨識到目前已在酒館內部，直接切換至酒館招募階段...")
@@ -69,12 +69,14 @@ class HeroDrawHandler(BaseStateHandler):
             if os.path.exists(os.path.join("templates", building_btn)):
                 pos_tavern, conf_tavern = self.matcher.match(screen_img, building_btn, threshold=0.75)
                 if pos_tavern:
-                    logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築 [{building_btn}] [{conf_tavern:.4f}]，點擊進入...")
-                    self.mouse.click(left + pos_tavern[0], top + pos_tavern[1])
+                    logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築 [{building_btn}] [{conf_tavern:.4f}]，發起點擊並進店...")
+                    self.machine.click_and_wait_until_gone(
+                        building_btn, left + pos_tavern[0], top + pos_tavern[1], rect,
+                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                    )
                     self.last_action_time = now
                     self.step_phase = "ENTERED_TAVERN"
                     self.not_found_count = 0
-                    time.sleep(0.3)
                     return True
 
             self.not_found_count += 1
@@ -89,7 +91,6 @@ class HeroDrawHandler(BaseStateHandler):
         # 3. ENTERED_TAVERN 階段：精確比對免費招募按鈕 (free_recruitment.png)
         elif self.step_phase == "ENTERED_TAVERN":
             if os.path.exists(os.path.join("templates", recruitment_btn)):
-                # 配合包含「❶免費招募」紅色驚嘆號的獨特模板，門檻設定為 0.75 即可 100% 辨識
                 pos_free, conf_free = self.matcher.match(
                     screen_img, 
                     recruitment_btn, 
@@ -97,12 +98,14 @@ class HeroDrawHandler(BaseStateHandler):
                     brightness_threshold=0.70
                 )
                 if pos_free:
-                    logging.info(f"🍺 [抽英雄] 於酒館精確匹配到免費招募按鈕 [{recruitment_btn}] [{conf_free:.4f}]，進行點擊！")
-                    self.mouse.click(left + pos_free[0], top + pos_free[1])
+                    logging.info(f"🍺 [抽英雄] 於酒館精確匹配到免費招募按鈕 [{recruitment_btn}] [{conf_free:.4f}]，點擊並 WHILE 輪詢直到消失...")
+                    self.machine.click_and_wait_until_gone(
+                        recruitment_btn, left + pos_free[0], top + pos_free[1], rect,
+                        timeout=5.0, threshold=0.75, brightness_threshold=0.70, check_interval=0.25, post_delay=0.5
+                    )
                     self.last_action_time = now
                     self.step_phase = "CLICKED_FREE_RECRUITMENT"
                     self.not_found_count = 0
-                    time.sleep(0.3)
                     return True
 
             self.not_found_count += 1
@@ -118,12 +121,14 @@ class HeroDrawHandler(BaseStateHandler):
             if os.path.exists(os.path.join("templates", recruited_template)):
                 pos_r, conf_r = self.matcher.match(screen_img, recruited_template, threshold=0.75)
                 if pos_r:
-                    logging.info(f"🍺 [抽英雄] 於彈窗中發現專用「招募」按鈕 [{recruited_template}] [{conf_r:.4f}]，進行點擊！")
-                    self.mouse.click(left + pos_r[0], top + pos_r[1])
+                    logging.info(f"🍺 [抽英雄] 於彈窗中發現專用「招募」按鈕 [{recruited_template}] [{conf_r:.4f}]，點擊並 WHILE 輪詢直到消失...")
+                    self.machine.click_and_wait_until_gone(
+                        recruited_template, left + pos_r[0], top + pos_r[1], rect,
+                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                    )
                     self.last_action_time = now
                     self.step_phase = "WAITING_CONFIRM"
                     self.not_found_count = 0
-                    time.sleep(0.3)
                     return True
 
             self.not_found_count += 1
@@ -133,18 +138,20 @@ class HeroDrawHandler(BaseStateHandler):
                 self.last_action_time = now
                 return True
 
-        # 5. WAITING_CONFIRM 階段：點擊獲得英雄 OK 按鈕 (僅匹配 common/ok.png，支援多幀動畫等待)
+        # 5. WAITING_CONFIRM 階段：點擊獲得英雄 OK 按鈕 (僅匹配 common/ok.png)
         elif self.step_phase == "WAITING_CONFIRM":
             confirm_template = "common/ok.png"
             if os.path.exists(os.path.join("templates", confirm_template)):
                 pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
                 if pos_c:
-                    logging.info(f"🍺 [抽英雄] 發現獲得英雄 OK 按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊！")
-                    self.mouse.click(left + pos_c[0], top + pos_c[1])
+                    logging.info(f"🍺 [抽英雄] 發現獲得英雄 OK 按鈕 [{confirm_template}] [{conf_c:.4f}]，發起確信點擊與消失輪詢...")
+                    self.machine.click_and_wait_until_gone(
+                        confirm_template, left + pos_c[0], top + pos_c[1], rect,
+                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                    )
                     self.last_action_time = now
                     self.step_phase = "ALL_DONE_EXITING"
                     self.not_found_count = 0
-                    time.sleep(0.3)
                     return True
 
             self.not_found_count += 1
@@ -162,13 +169,16 @@ class HeroDrawHandler(BaseStateHandler):
         # 6. ALL_DONE_EXITING 階段：點擊房屋退出按鈕 (僅配對 town_building/exitfromhouse_and_to_town.png)
         elif self.step_phase == "ALL_DONE_EXITING":
             exit_template = "town_building/exitfromhouse_and_to_town.png"
+            exit_clicked = False
             if os.path.exists(os.path.join("templates", exit_template)):
                 pos_exit, conf_exit = self.matcher.match(screen_img, exit_template, threshold=0.75)
                 if pos_exit:
-                    logging.info(f"🍺 [抽英雄] 點擊退出酒館按鈕 [{exit_template}] [{conf_exit:.4f}] 返回城鎮...")
-                    self.mouse.click(left + pos_exit[0], top + pos_exit[1])
-                    self.last_action_time = now
-                    time.sleep(0.3)
+                    logging.info(f"🍺 [抽英雄] 點擊退出酒館按鈕 [{exit_template}] [{conf_exit:.4f}]，點擊並 WHILE 輪詢直到消失...")
+                    self.machine.click_and_wait_until_gone(
+                        exit_template, left + pos_exit[0], top + pos_exit[1], rect,
+                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.8
+                    )
+                    exit_clicked = True
 
             dm = getattr(self.machine, "daily_manager", None)
             if dm and hasattr(dm, "record_subflow_completed"):

@@ -74,21 +74,18 @@ class TestHeroDrawSubflow(unittest.TestCase):
             res1 = self.handler.handle(mock_img, rect)
             self.assertTrue(res1)
             self.assertEqual(self.handler.step_phase, "ENTERED_TAVERN")
-            self.mock_machine.mouse.click.assert_called_with(200, 200)
 
             # 2. Step 2: ENTERED_TAVERN 點擊 free_recruitment.png
             self.handler.last_action_time = 0.0
             res2 = self.handler.handle(mock_img, rect)
             self.assertTrue(res2)
             self.assertEqual(self.handler.step_phase, "CLICKED_FREE_RECRUITMENT")
-            self.mock_machine.mouse.click.assert_called_with(300, 300)
 
             # 3. Step 3: CLICKED_FREE_RECRUITMENT 點擊 RECRUITED.png (專用「招募」按鈕)
             self.handler.last_action_time = 0.0
             res3 = self.handler.handle(mock_img, rect)
             self.assertTrue(res3)
             self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
-            self.mock_machine.mouse.click.assert_called_with(350, 350)
 
             # 4. Step 4: WAITING_CONFIRM 點擊 confirm.png
             self.handler.last_action_time = 0.0

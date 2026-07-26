@@ -99,12 +99,15 @@ class ChestHandler(BaseStateHandler):
                             click_y = top + y1 + pos_sub_free[1]
                             logging.info(f"🎁 [神秘寶箱 Step 2] 於免費寶匣彈窗內精確比對到 [free.png] [{conf_sub_free:.4f}]，點擊座標 ({click_x}, {click_y})！")
 
-                    logging.info(f"🎁 [神秘寶箱 Step 2] 成功鎖定免費寶匣彈窗 [{conf_ft:.4f}]，進行點擊免費按鈕位置 ({click_x}, {click_y})！")
-                    self.mouse.click(click_x, click_y)
+                    target_template = "free.png" if os.path.exists(os.path.join("templates", "free.png")) and self.matcher.match(dialog_crop, "free.png", threshold=0.70)[0] else dialog_template
+                    logging.info(f"🎁 [神秘寶箱 Step 2] 成功鎖定免費寶匣彈窗 [{conf_ft:.4f}]，點擊免費按鈕位置 ({click_x}, {click_y}) 兼 WHILE 輪詢直到消失...")
+                    self.machine.click_and_wait_until_gone(
+                        target_template, click_x, click_y, rect,
+                        timeout=5.0, threshold=0.70, check_interval=0.25, post_delay=0.5
+                    )
                     self.last_action_time = now
                     self.step_phase = "WAITING_CONFIRM"
                     self.not_found_count = 0
-                    time.sleep(0.3)
                     return True
 
             self.not_found_count += 1
@@ -123,12 +126,14 @@ class ChestHandler(BaseStateHandler):
                 if os.path.exists(os.path.join("templates", confirm_template)):
                     pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
                     if pos_c:
-                        logging.info(f"🎁 [神秘寶箱 Step 3] 發現領取確認按鈕 [{confirm_template}] [{conf_c:.4f}]，進行點擊！轉入 Step 4 等待退出...")
-                        self.mouse.click(left + pos_c[0], top + pos_c[1])
+                        logging.info(f"🎁 [神秘寶箱 Step 3] 發現領取確認按鈕 [{confirm_template}] [{conf_c:.4f}]，發起確信點擊與消失輪詢！")
+                        self.machine.click_and_wait_until_gone(
+                            confirm_template, left + pos_c[0], top + pos_c[1], rect,
+                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                        )
                         self.last_action_time = now
                         self.step_phase = "WAITING_QUIT"
                         self.not_found_count = 0
-                        time.sleep(0.5)
                         return True
 
             self.not_found_count += 1
@@ -145,20 +150,27 @@ class ChestHandler(BaseStateHandler):
                 "town_building/exitfromhouse_and_to_town.png",
                 "goback_town.png"
             ]
+            quit_clicked = False
             for quit_template in quit_list:
                 if os.path.exists(os.path.join("templates", quit_template)):
                     pos_q, conf_q = self.matcher.match(screen_img, quit_template, threshold=0.75)
                     if pos_q:
-                        logging.info(f"🎁 [神秘寶箱 Step 4] 發現退出建築按鈕 [{quit_template}] [{conf_q:.4f}]，點擊退出返回城鎮！")
-                        self.mouse.click(left + pos_q[0], top + pos_q[1])
-                        time.sleep(0.3)
+                        logging.info(f"🎁 [神秘寶箱 Step 4] 發現退出建築按鈕 [{quit_template}] [{conf_q:.4f}]，發起點擊並 WHILE 輪詢直到消失...")
+                        self.machine.click_and_wait_until_gone(
+                            quit_template, left + pos_q[0], top + pos_q[1], rect,
+                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.8
+                        )
+                        quit_clicked = True
                         break
 
-            logging.info("🎉 [神秘寶箱 Step 4] 寶箱領取與退出流程完成！記錄 DailyManager 並彈出下一個城鎮任務...")
-            dm = getattr(self.machine, "daily_manager", None)
-            if dm and hasattr(dm, "record_subflow_completed"):
-                dm.record_subflow_completed("chest")
-            self.machine.pop_and_next_town_subflow()
-            return True
+            if quit_clicked or self.not_found_count >= 3:
+                logging.info("🎉 [神秘寶箱 Step 4] 寶箱領取與退出流程完成！記錄 DailyManager 並彈出下一個城鎮任務...")
+                dm = getattr(self.machine, "daily_manager", None)
+                if dm and hasattr(dm, "record_subflow_completed"):
+                    dm.record_subflow_completed("chest")
+                self.machine.pop_and_next_town_subflow()
+                return True
+            else:
+                self.not_found_count += 1
 
         return False
