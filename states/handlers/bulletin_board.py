@@ -169,8 +169,8 @@ class BulletinBoardHandler(BaseStateHandler):
 
             if self.accept_sub_phase == "FIND_TOP_TASK":
                 task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
-                # 掃描左半邊 (cx < w_img // 2) 所有潛在任務錨點 (task.png)
-                raw_anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, quiet=True)
+                # 掃描左半邊 (cx < w_img // 2) 所有潛在任務錨點 (task.png)，帶入 brightness_threshold=0.88 門檻過濾暗區/灰色區塊
+                raw_anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, brightness_threshold=0.88, quiet=True)
                 raw_anchors = [a for a in raw_anchors if a[0] < w_img // 2]
 
                 # 相對優勢比對：精確過濾已接取任務 (task_after.png)
