@@ -91,6 +91,19 @@ class DailyManager:
             self.status["last_daily_reset_date"] = self.get_today_reset_tag()
             self.save_status()
 
+        # 💡 [自癒機制] 載入時自動校正並正名清洗 accepted_quests 存檔
+        subflows = self.status.get("subflows", {})
+        bb = subflows.get("bulletin_board", {})
+        raw_quests = bb.get("accepted_quests", [])
+        if raw_quests:
+            from utils.quest_mapper import QuestMapper
+            mapper = QuestMapper()
+            cleaned_quests = mapper.sort_quests(raw_quests)
+            if cleaned_quests != raw_quests:
+                bb["accepted_quests"] = cleaned_quests
+                self.save_status()
+                logging.info(f"✨ [DailyManager] 自動自癒清洗存檔中未正名的任務佇列: {cleaned_quests}")
+
     def save_status(self):
         """
         將當前狀態寫回 JSON 檔案。
