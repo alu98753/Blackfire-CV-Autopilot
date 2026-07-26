@@ -256,5 +256,103 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         # 斷言發射點擊 (250, 300) (加上 rect offset left=100, top=50) 點擊 select_stage.png 切換頁籤
         self.mock_mouse.click.assert_called_once_with(250, 300)
 
+    # =========================================================================
+    # 2.5 全冷卻且無關卡頁籤時退回城鎮測試
+    # =========================================================================
+
+    @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
+    @patch("os.path.exists")
+    @patch("cv2.imread")
+    @patch("cv2.resize")
+    @patch("cv2.matchTemplate")
+    def test_2_5_switch_to_stage_clicks_goback_town_when_select_stage_missing(
+        self, mock_matchTemplate, mock_resize, mock_imread, mock_exists, mock_detect_cd
+    ):
+        """
+        [2.5 Behavior Test]
+        Given: 全冷卻狀態切換頁籤時，畫面上無 common/select_stage.png，但看得到 goback_town.png
+        When: 執行 NavigationHandler.handle()
+        Then: 點擊 goback_town.png 退回城鎮
+        """
+        mock_exists.return_value = True
+        self.mock_machine.stamina_retreat_start_time = None
+        self.mock_machine.original_config = None
+        self.mock_machine.config["type"] = "mix"
+        self.mock_machine.config["greedy_allowed_indices"] = [0]
+        self.mock_machine.dungeon_cooldowns = {0: time.time() + 600.0}
+        mock_detect_cd.return_value = (True, 600.0, "10:00")
+
+        def fake_match(img, template, threshold=0.6, *args, **kwargs):
+            if template == "goback_town.png":
+                return ((60, 450), 0.85)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.side_effect = lambda img, dsize: img
+        mock_matchTemplate.return_value = np.array([[0.85]], dtype=np.float32)
+
+        screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
+
+        self.handler.handle(screen_img, self.rect)
+
+        # 斷言發射點擊 (160, 500) (加上 rect offset left=100, top=50) 點擊 goback_town.png 退回城鎮
+        self.mock_mouse.click.assert_called_once_with(160, 500)
+
+    # =========================================================================
+    # 2.6 地下城多次滑動無卡片極限退回城鎮測試
+    # =========================================================================
+
+    @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
+    @patch("os.path.exists")
+    @patch("cv2.imread")
+    @patch("cv2.resize")
+    @patch("cv2.matchTemplate")
+    def test_2_6_dungeon_mode_max_fallback_swipes_clicks_goback_town(
+        self, mock_matchTemplate, mock_resize, mock_imread, mock_exists, mock_detect_cd
+    ):
+        """
+        [2.6 Behavior Test]
+        Given: dungeon 模式下連滑 fallback_swipe_count >= 3 仍無可打卡片，看得到 goback_town.png
+        When: 執行 NavigationHandler.handle()
+        Then: 點擊 goback_town.png 退回城鎮，且重置 fallback_swipe_count 為 0
+        """
+        mock_exists.return_value = True
+        self.mock_machine.stamina_retreat_start_time = None
+        self.mock_machine.original_config = None
+        self.mock_machine.config["type"] = "dungeon"
+        self.mock_machine.fallback_swipe_count = 3
+        mock_detect_cd.return_value = (False, None, "")
+
+        def imread_side_effect(path):
+            if "locked_entry.png" in path:
+                return np.ones((41, 238, 3), dtype=np.uint8) * 99
+            return np.ones((50, 100, 3), dtype=np.uint8) * 5
+
+        def match_side_effect(screen, templ, method):
+            if np.array_equal(templ[0,0], [99, 99, 99]):
+                return np.array([[0.95]], dtype=np.float32)
+            return np.array([[0.0]], dtype=np.float32)
+
+        def fake_match(img, template, threshold=0.6, *args, **kwargs):
+            if template == "goback_town.png":
+                return ((60, 450), 0.85)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        mock_imread.side_effect = imread_side_effect
+        mock_resize.side_effect = lambda img, dsize: img
+        mock_matchTemplate.side_effect = match_side_effect
+
+        screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
+
+        self.handler.handle(screen_img, self.rect)
+
+        # 驗證點擊 goback_town.png
+        self.mock_mouse.click.assert_called_once_with(160, 500)
+        # 驗證重置 fallback_swipe_count 為 0
+        self.assertEqual(self.mock_machine.fallback_swipe_count, 0)
+
 if __name__ == "__main__":
     unittest.main()

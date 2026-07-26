@@ -16,12 +16,16 @@
 - [x] **1.4 全域任務完成彈窗攔截行為**：當尋路過程中出現 `task_complete.png`，中斷尋路並調用領獎子流程。
 - [x] **1.5 鑽石與體力全域圖示自動跳轉**：尋路過程中若直接出現 `diamond.png` (且 `need_diamond_collection=True`) 或 `bread.png`，自動切換至對應領取狀態。
 - [x] **1.6 關卡模式預設子關卡退守路徑**：當 `config_type == "stage"` 且 `sub_stage` 未指定時，預設載入 `stages/first_stage.png` 為尋路標的。
+- [x] **1.7 關卡選擇多次滑動未果點擊返回重置**：在關卡選擇介面，當 `horizontal_scroll_count >= 8` 仍未見目標小島時，點擊 `goback_town.png` 退回城鎮並重置計數。
+- [x] **1.8 關卡細節背景向下拖曳滾動尋找魔王關**：當偵測到關卡背景 `stages/stage_label.png` 但魔王關按鈕尚未出現時，經過 1.5 秒緩衝後觸發 `mouse.drag` 向下滾動。
 
 ### 2. `tests/test_behavior_dungeon_cards.py` (地下城卡片掃描與冷卻退避行為)
 - [x] **2.1 地下城卡片定位與對齊行為**：正確定位多解析度下卡片位置，若無解鎖卡片觸發 `CardListNavigator.reset_to_left` 防呆滑動。
 - [x] **2.2 冷卻木牌 OCR 解析與退避行為**：比對出 `cooldown_left.png` 時，解析剩餘秒數並更新冷卻緩衝字典。
 - [x] **2.3 亮骨頭未解鎖過濾行為**：比對出 `light_skull.png` 相似度 < 0.75 時，設定無限冷卻防呆並切換頁籤/回城。
 - [x] **2.4 全冷卻混合模式防死鎖切換**：地下城貪婪模式下若所有允許地下城均在冷卻中且模式為 `mix`，觸發 `_switch_to_stage_or_back` 切換關卡頁籤。
+- [x] **2.5 全冷卻且無關卡頁籤時退回城鎮**：切換頁籤時若畫面上無 `select_stage.png` 但看得到 `goback_town.png`，點擊 `goback_town.png` 退回城鎮。
+- [x] **2.6 地下城多次滑動無卡片極限退回城鎮**：單一模式下當 `fallback_swipe_count >= 3` 且無可打卡片時，點擊 `goback_town.png` 重置計數並退回城鎮。
 
 ### 3. `tests/test_behavior_stamina_retreat.py` (體力退避與狀態切換行為)
 - [x] **3.1 地下城全冷卻切換 Collect Only**：混合/地下城模式下全冷卻時，自動退回 `STATE_COLLECT_ONLY`。
