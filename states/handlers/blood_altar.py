@@ -259,14 +259,15 @@ class BloodAltarHandler(BaseStateHandler):
 
         # 4.1 已在建築物內部：判斷領血或獻祭頁籤
         pos_sac, _ = self.matcher.match(screen_img, sacrifice_btn, threshold=0.75)
-        pos_rec_entry, conf_rec_entry = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75, brightness_threshold=0.70)
+        # receive_entry_btn 模板原始灰度較高 (79.64)，實機正常狀態相對亮度比在 0.17~0.50 之間，故亮度門檻降至 0.15 防止誤攔
+        pos_rec_entry, conf_rec_entry = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75, brightness_threshold=0.15)
 
         if pos_sac or pos_rec_entry:
             if not is_claimed_today and pos_rec_entry:
                 logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}] [{conf_rec_entry:.4f}]，點擊切換至領血介面 (配對確認直到消失)...")
                 self.click_and_wait_until_gone(
                     receive_entry_btn, left + pos_rec_entry[0], top + pos_rec_entry[1], rect,
-                    timeout=5.0, threshold=0.75, brightness_threshold=0.70, check_interval=0.25, post_delay=0.5
+                    timeout=5.0, threshold=0.75, brightness_threshold=0.15, check_interval=0.25, post_delay=0.5
                 )
                 self.step_phase = "RECEIVE_TAB_OPEN"
             elif pos_sac:
