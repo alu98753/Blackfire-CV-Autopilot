@@ -100,6 +100,36 @@ class TestHeroDrawSubflow(unittest.TestCase):
             self.mock_daily_manager.record_subflow_completed.assert_called_with("hero_draw")
             self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
+    def test_handler_deassemble_hero_flow(self):
+        """測試：在 WAITING_CONFIRM 階段當抽到重複英雄時，優先點擊「分解英雄」 (deassemble_hero.png) 確信消失，隨後點擊 ok.png"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.handler.step_phase = "WAITING_CONFIRM"
+
+        has_deassembled = [False]
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template in ["town_building/Tavern/deassemble_hero.png", "deassemble_hero.png"]:
+                return ((400, 300), 0.90) if not has_deassembled[0] else (None, 0.0)
+            if template == "common/ok.png" and has_deassembled[0]:
+                return ((500, 400), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            # 1. 第一次在 WAITING_CONFIRM 發現分解按鈕 ➔ 觸發點擊並保持在 WAITING_CONFIRM
+            res1 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res1)
+            self.assertEqual(self.handler.step_phase, "WAITING_CONFIRM")
+            has_deassembled[0] = True
+
+            # 2. 第二次在 WAITING_CONFIRM 發現 ok.png ➔ 觸發點擊並轉入 ALL_DONE_EXITING
+            self.handler.last_action_time = 0.0
+            res2 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res2)
+            self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
+
     def test_daily_manager_hero_draw_completion_and_reset(self):
         """測試：DailyManager 正確記錄 hero_draw 完成狀態並於 08:05 重置"""
         test_dir = "scratch/test_user_data"

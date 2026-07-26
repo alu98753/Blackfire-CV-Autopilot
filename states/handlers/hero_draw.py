@@ -138,8 +138,27 @@ class HeroDrawHandler(BaseStateHandler):
                 self.last_action_time = now
                 return True
 
-        # 5. WAITING_CONFIRM 階段：點擊獲得英雄 OK 按鈕 (僅匹配 common/ok.png)
+        # 5. WAITING_CONFIRM 階段：點擊獲得英雄 OK 按鈕或「分解英雄」按鈕 (deassemble_hero.png)
         elif self.step_phase == "WAITING_CONFIRM":
+            deassemble_list = [
+                "town_building/Tavern/deassemble_hero.png",
+                "deassemble_hero.png"
+            ]
+            # 5.1 優先檢查與點擊「分解英雄」按鈕 (抽到重複英雄時分解領取資源)
+            for deassemble_template in deassemble_list:
+                if os.path.exists(os.path.join("templates", deassemble_template)):
+                    pos_d, conf_d = self.matcher.match(screen_img, deassemble_template, threshold=0.75)
+                    if pos_d:
+                        logging.info(f"🍺 [抽英雄] 發現「分解英雄」按鈕 [{deassemble_template}] [{conf_d:.4f}]，點擊分解獲得資源 (配對確認直到消失)...")
+                        self.machine.click_and_wait_until_gone(
+                            deassemble_template, left + pos_d[0], top + pos_d[1], rect,
+                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                        )
+                        self.last_action_time = now
+                        self.not_found_count = 0
+                        return True
+
+            # 5.2 檢查與點擊 OK 按鈕
             confirm_template = "common/ok.png"
             if os.path.exists(os.path.join("templates", confirm_template)):
                 pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
@@ -156,11 +175,11 @@ class HeroDrawHandler(BaseStateHandler):
 
             self.not_found_count += 1
             if self.not_found_count < 5:
-                logging.info(f"🍺 [抽英雄] 等待 OK 按鈕 [{confirm_template}] 彈出中... (第 {self.not_found_count}/5 幀嘗試)")
+                logging.info(f"🍺 [抽英雄] 等待 OK / 分解按鈕彈出中... (第 {self.not_found_count}/5 幀嘗試)")
                 self.last_action_time = now
                 return True
 
-            logging.info("🍺 [抽英雄] 未偵測到 OK 按鈕 (可能無動畫彈窗)，準備退出酒館...")
+            logging.info("🍺 [抽英雄] 未偵測到 OK 或分解按鈕 (可能無動畫彈窗)，準備退出酒館...")
             self.step_phase = "ALL_DONE_EXITING"
             self.not_found_count = 0
             self.last_action_time = now
