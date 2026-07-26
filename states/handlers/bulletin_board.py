@@ -169,9 +169,12 @@ class BulletinBoardHandler(BaseStateHandler):
 
             if self.accept_sub_phase == "FIND_TOP_TASK":
                 task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
-                # 掃描左半邊 (cx < w_img // 2) 所有潛在任務錨點 (task.png)，帶入 brightness_threshold=0.88 門檻過濾暗區/灰色區塊
+                
+                # 掃描左半邊 (cx < w_img // 2) 所有潛在任務錨點 (task.png)
                 raw_anchors = self.matcher.match_all(screen_img, task_tpl, threshold=0.70, brightness_threshold=0.88, quiet=True)
                 raw_anchors = [a for a in raw_anchors if a[0] < w_img // 2]
+                
+                logging.info(f"📋 [懸賞告示牌 診斷分析] 在畫面左半邊共掃描到 {len(raw_anchors)} 個未接取任務候選點 (task.png, threshold=0.70, brightness=0.88)")
 
                 # 相對優勢比對：精確過濾已接取任務 (task_after.png)
                 anchors = []
@@ -184,11 +187,25 @@ class BulletinBoardHandler(BaseStateHandler):
                     
                     pos_after, conf_after = self.matcher.match(roi, task_after_tpl, threshold=0.65, quiet=True)
                     if pos_after and conf_after >= conf_before - 0.02:
-                        # 該處已呈現 task_after.png 樣式（已接取），自動過濾
+                        logging.info(f"❌ [過濾理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}]，但在週邊比對到已接取圖案 [{task_after_tpl}] (分數: [{conf_after:.4f}] >= [{conf_before - 0.02:.4f}]) ➔ 判定為已接取，予以過濾！")
                         continue
+                    logging.info(f"🟢 [通過理由] 座標 ({cx}, {cy}) 原始 task.png 分數 [{conf_before:.4f}] (無 task_after 強干擾) ➔ 判定為待接取任務！")
                     anchors.append((cx, cy, conf_before))
 
                 if not anchors:
+                    # 💾 自動保存當前無任務視窗的除錯截圖
+                    if isinstance(screen_img, np.ndarray):
+                        try:
+                            cv2.imwrite("debug_bulletin_board_fail.png", screen_img)
+                            logging.warning("📸 [懸賞告示牌 診斷] 未搜尋到可用任務，已將當前畫面截圖儲存至 debug_bulletin_board_fail.png")
+                        except Exception as ex:
+                            logging.warning(f"⚠️ [懸賞告示牌 診斷] 儲存 debug_bulletin_board_fail.png 失敗: {ex}")
+
+                    if len(raw_anchors) == 0:
+                        logging.warning("⚠️ [無任務理由] match_all 未匹配到任何 task.png！(可能是 brightness_threshold=0.88 過高、threshold=0.70 過高、或是畫面尚未定格)")
+                    else:
+                        logging.info(f"📋 [無任務理由] 匹配到的 {len(raw_anchors)} 個候選點全數被 task_after.png 比對過濾！")
+
                     logging.info(f"📋 [懸賞告示牌] 畫面上所有任務均已接取 (task_after.png)！共成功接取 {len(self.accepted_quest_titles)} 項任務: {self.accepted_quest_titles}")
                     self.step_phase = "EXIT_BOARD"
                     self.last_action_time = now
@@ -262,16 +279,25 @@ class BulletinBoardHandler(BaseStateHandler):
                 self.last_action_time = now
                 return
             
-            # 判斷可接取條件：1. 確定無 reset 按鈕  2. 離上次 reset 點擊已過至少 3 秒
-            if self.last_reset_click_time == 0.0 or (now - self.last_reset_click_time >= 3.0):
-                logging.info("📋 [懸賞告示牌] 確定無重置按鈕且重置後已滿 3 秒，切換至 PROCESS_ACCEPT_QUESTS 開始領取任務...")
+            # 判斷可接取條件：
+            # 情況 A：若曾點擊過 reset，需等待距離上次點擊滿 3.0 秒
+            if self.last_reset_click_time > 0.0:
+                if now - self.last_reset_click_time >= 3.0:
+                    logging.info("📋 [懸賞告示牌] 確定重置按鈕已消失且已滿 3 秒，切換至 PROCESS_ACCEPT_QUESTS 開始領取任務...")
+                    self.step_phase = "PROCESS_ACCEPT_QUESTS"
+                    self.accept_sub_phase = "FIND_TOP_TASK"
+                    self.last_action_time = now
+                    return
+                else:
+                    rem = 3.0 - (now - self.last_reset_click_time)
+                    logging.info(f"⌛ [懸賞告示牌] 重置完成，等待畫面渲染中 (靜置 3 秒，剩餘 {rem:.1f} 秒)...")
+                    return
+            else:
+                # 情況 B：無 reset 按鈕且未曾點擊（已無 reset 可點），直接進入任務接取
+                logging.info("📋 [懸賞告示牌] 畫面無重置按鈕 (無重置需求/已重置過)，直接切換至 PROCESS_ACCEPT_QUESTS 開始領取任務...")
                 self.step_phase = "PROCESS_ACCEPT_QUESTS"
                 self.accept_sub_phase = "FIND_TOP_TASK"
                 self.last_action_time = now
-                return
-            else:
-                rem = 3.0 - (now - self.last_reset_click_time)
-                logging.info(f"⌛ [懸賞告示牌] 重置完成，等待畫面渲染中 (靜置 3 秒，剩餘 {rem:.1f} 秒)...")
                 return
 
         # =========================================================================
