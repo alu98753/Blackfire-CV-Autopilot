@@ -58,6 +58,8 @@ class TestBloodAltarReceive(unittest.TestCase):
         # Step 2: 點擊 receive_entry.png 切換至領血頁籤
         handler.last_action_time = 0.0
         def fake_match_step2(img, name, **kw):
+            if kw.get("quiet"):
+                return (None, 0.0)
             if name == "town_building/Blood_Altar/receive_entry.png":
                 return ((300, 400), 0.9)
             return (None, 0.0)
@@ -86,6 +88,8 @@ class TestBloodAltarReceive(unittest.TestCase):
         # Step 4: 點擊 common/confirm.png 關閉領取獎勵彈窗
         handler.last_action_time = 0.0
         def fake_match_step4(img, name, **kw):
+            if kw.get("quiet"):
+                return (None, 0.0)
             if name == "common/confirm.png":
                 return ((400, 550), 0.85)
             return (None, 0.0)
@@ -115,6 +119,34 @@ class TestBloodAltarReceive(unittest.TestCase):
         # 斷言：DailyManager 已上記錄完成，且 need_blood_altar 被重置為 False
         self.mock_daily_manager.record_subflow_completed.assert_called_once_with("blood_altar")
         self.assertFalse(self.state_machine.need_blood_altar)
+
+    @patch('os.path.exists')
+    def test_blood_altar_receive_daily_brightness_threshold(self, mock_exists):
+        """測試：驗證血之祭壇 receive_daily.png 比對與 click_and_wait_until_gone 均帶入 brightness_threshold=0.80 防護"""
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        self.state_machine.need_blood_altar = True
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.step_phase = "RECEIVE_TAB_OPEN"
+
+        def fake_match(img, name, **kw):
+            if name == "town_building/Blood_Altar/receive_daily.png":
+                self.assertEqual(kw.get("brightness_threshold"), 0.80)
+                return ((400, 500), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        handler.click_and_wait_until_gone = MagicMock()
+
+        handler.handle()
+
+        handler.click_and_wait_until_gone.assert_called_once_with(
+            "town_building/Blood_Altar/receive_daily.png", 400, 500,
+            {"left": 0, "top": 0, "width": 800, "height": 600},
+            timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+        )
 
 if __name__ == "__main__":
     unittest.main()

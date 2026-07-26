@@ -199,10 +199,18 @@ class BloodAltarHandler(BaseStateHandler):
         # 3. 每日免費領血處理階段 (RECEIVE_TAB_OPEN / HANDLING_RECEIVE_POPUPS)
         # =========================================================================
         if self.step_phase == "RECEIVE_TAB_OPEN":
-            pos_rec_daily, _ = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
+            pos_rec_daily, conf_rec_daily = self.matcher.match(
+                screen_img, 
+                receive_daily_btn, 
+                threshold=0.75,
+                brightness_threshold=0.80
+            )
             if pos_rec_daily:
-                logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}]，點擊領取免費血水！")
-                self.click_and_wait_until_gone(receive_daily_btn, left + pos_rec_daily[0], top + pos_rec_daily[1], rect)
+                logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}] [{conf_rec_daily:.4f}]，點擊領取免費血水 (配對確認直到消失)...")
+                self.click_and_wait_until_gone(
+                    receive_daily_btn, left + pos_rec_daily[0], top + pos_rec_daily[1], rect,
+                    timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+                )
                 self.has_claimed_daily = True
                 self.step_phase = "HANDLING_RECEIVE_POPUPS"
                 self.last_action_time = now
@@ -215,18 +223,18 @@ class BloodAltarHandler(BaseStateHandler):
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
             
             if pos_confirm:
-                logging.info("🩸 [血之祭壇] 點擊領取確認按鈕 [common/confirm.png]...")
-                self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
+                logging.info("🩸 [血之祭壇] 點擊領取確認按鈕 [common/confirm.png] (配對確認直到消失)...")
+                self.click_and_wait_until_gone("common/confirm.png", left + pos_confirm[0], top + pos_confirm[1], rect)
                 self.last_action_time = now
                 return
             elif pos_ok:
-                logging.info("🩸 [血之祭壇] 點擊領取 OK 按鈕 [common/ok.png]...")
-                self.mouse.click(left + pos_ok[0], top + pos_ok[1])
+                logging.info("🩸 [血之祭壇] 點擊領取 OK 按鈕 [common/ok.png] (配對確認直到消失)...")
+                self.click_and_wait_until_gone("common/ok.png", left + pos_ok[0], top + pos_ok[1], rect)
                 self.last_action_time = now
                 return
             elif pos_quit:
-                logging.info("🩸 [血之祭壇] 點擊領取關閉按鈕 [common/quit.png]...")
-                self.mouse.click(left + pos_quit[0], top + pos_quit[1])
+                logging.info("🩸 [血之祭壇] 點擊領取關閉按鈕 [common/quit.png] (配對確認直到消失)...")
+                self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect)
                 self.last_action_time = now
                 return
 
@@ -236,7 +244,7 @@ class BloodAltarHandler(BaseStateHandler):
                 logging.info("🩸 [血之祭壇] 每日領血彈窗已關閉，完成領血步驟！切換至獻祭選單...")
                 if pos_sac_check:
                     logging.info(f"🩸 [血之祭壇] 點擊獻祭功能選單 [{sacrifice_btn}]...")
-                    self.mouse.click(left + pos_sac_check[0], top + pos_sac_check[1])
+                    self.click_and_wait_until_gone(sacrifice_btn, left + pos_sac_check[0], top + pos_sac_check[1], rect)
                     self.step_phase = "SACRIFICE_MENU_OPEN"
                     self.empty_blood_scan_count = 0
                 else:
@@ -251,12 +259,15 @@ class BloodAltarHandler(BaseStateHandler):
 
         # 4.1 已在建築物內部：判斷領血或獻祭頁籤
         pos_sac, _ = self.matcher.match(screen_img, sacrifice_btn, threshold=0.75)
-        pos_rec_entry, _ = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
+        pos_rec_entry, conf_rec_entry = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75, brightness_threshold=0.70)
 
         if pos_sac or pos_rec_entry:
             if not is_claimed_today and pos_rec_entry:
-                logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}]，點擊切換至領血介面...")
-                self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
+                logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}] [{conf_rec_entry:.4f}]，點擊切換至領血介面 (配對確認直到消失)...")
+                self.click_and_wait_until_gone(
+                    receive_entry_btn, left + pos_rec_entry[0], top + pos_rec_entry[1], rect,
+                    timeout=5.0, threshold=0.75, brightness_threshold=0.70, check_interval=0.25, post_delay=0.5
+                )
                 self.step_phase = "RECEIVE_TAB_OPEN"
             elif pos_sac:
                 logging.info(f"🩸 [血之祭壇] 點擊獻祭功能選單 [{sacrifice_btn}]...")
