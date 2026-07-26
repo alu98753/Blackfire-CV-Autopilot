@@ -9,6 +9,12 @@
 2. **分支合併限制 (Strict Rule)**：
    - ⚠️ **AI 協同開發人員絕對禁止自行執行分支合併**（例如將 feature 分支 merge 到 `main` 分支）。
    - 只有在使用者明確指示「可以進行 merge」時，AI 方可執行合併操作。
+3. **分支合併強制使用 `--no-ff` (Non-Fast-Forward Rule)**：
+   - 合併分支至 `main` 時，**必須強制使用 `--no-ff` 參數**（例如 `git merge --no-ff <branch_name>`），確保 Git 歷史留下明確的分支合併節點。
+   - 合併時必須撰寫 **結構化與詳細的 Merge Commit 日誌**，明確記載：
+     - 修改統計（如 `36 commits, +1372/-490 lines`）
+     - 各子模組/領域的技術改動細節
+     - 單元測試與驗證結果（如 `All 249+ unit tests passed OK`）
 
 ---
 
