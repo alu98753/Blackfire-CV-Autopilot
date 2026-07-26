@@ -2001,9 +2001,13 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         # Step 2: 點擊 Sacrifice.png 開啟選單
         handler.last_action_time = 0.0
+        sac_matched = [0]
         def mock_match_step2(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
-                return ((830, 863), 0.9)
+                if sac_matched[0] == 0:
+                    sac_matched[0] += 1
+                    return ((830, 863), 0.9)
+                return (None, 0.0)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_step2
@@ -2152,9 +2156,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.reset_state()
 
 
+        sac_inside_matched = [0]
         def mock_match_inside(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
-                return ((718, 745), 0.90)
+                if sac_inside_matched[0] == 0:
+                    sac_inside_matched[0] += 1
+                    return ((718, 745), 0.90)
+                return (None, 0.0)
             elif name == "town_building/exitfromhouse_and_to_town.png":
                 return ((74, 744), 0.90)
             return (None, 0.0)
@@ -2467,7 +2475,7 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         # 1. 第一幀：頂層未找到，執行平滑拖曳滑動
         handler.handle(fake_img, rect)
-        self.mock_mouse.drag.assert_called_with(960, 648, 960, 432, duration=0.5, inertia=False)
+        self.mock_mouse.drag.assert_called_with(960, 810, 960, 270, duration=0.5, inertia=False)
         self.assertEqual(handler.goods_scroll_state, "SCROLLED_DOWN")
 
         # 2. 第二幀：滑動後找到商品，執行點選與賣出

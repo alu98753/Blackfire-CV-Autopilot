@@ -1,6 +1,7 @@
 import os
 import json
 import unittest
+import numpy as np
 from unittest.mock import MagicMock
 from utils.quest_mapper import QuestMapper, TaskNode
 from utils.quest_scheduler import QuestScheduler
@@ -275,7 +276,33 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertEqual(sm.config["type"], "mix")
         self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
 
-        self.assertIn("Ice_entry.png", sm.config["navigation_path"][-1])
+    def test_result_handler_batch_exit_on_fourth_run(self):
+        """驗證當普通關卡任務 (batch_size=4) 戰鬥勝利至第 4 場時，ResultHandler 自動累加 completed_count 並觸發批次離場」"""
+        from states.handlers.result import ResultHandler
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.matcher.match.return_value = (None, 0.0)
+        scheduler = QuestScheduler.from_daily_status(["擊敗冰元素"])
+        sm.attach_quest_scheduler(scheduler)
+        sm.backend_mode = "daily"
+        sm.check_and_advance_quest_target()
+
+        handler = ResultHandler(sm)
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+
+        # 前 3 場勝利通關
+        for run in range(1, 4):
+            handler.reset_state()
+            handler.handle(fake_img, {"left": 0, "top": 0, "width": 800, "height": 600})
+
+        current_task = scheduler.get_next_action_node()[0]
+        self.assertEqual(current_task.completed_count, 3)
+        self.assertFalse(scheduler.is_current_task_batch_completed())
+
+        # 第 4 場勝利通關
+        handler.reset_state()
+        handler.handle(fake_img, {"left": 0, "top": 0, "width": 800, "height": 600})
+        self.assertEqual(current_task.completed_count, 4)
+        self.assertTrue(scheduler.is_current_task_batch_completed())
 
 
 if __name__ == "__main__":

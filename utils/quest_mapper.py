@@ -100,6 +100,7 @@ class TaskNode:
             dname = dungeon_names[idx] if 0 <= idx < len(dungeon_names) else "地下城"
             
             cfg = PRIMARY_MODES["dungeon"].copy()
+            cfg["dungeon_index"] = idx
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
@@ -125,6 +126,8 @@ class TaskNode:
                 target_img = "stages/first_stage.png"
 
             cfg = PRIMARY_MODES["stage"].copy()
+            cfg["stage_level"] = lvl
+            cfg["sub_stage"] = sub
             cfg["name"] = f"懸賞任務 - {sname} ({sub}) (任務: {self.quest_title})"
             cfg["stage_name"] = f"{sname} ({sub})"
             cfg["stage_entry"] = entry_img

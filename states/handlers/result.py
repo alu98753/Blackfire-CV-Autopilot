@@ -14,6 +14,7 @@ class ResultHandler(BaseStateHandler):
         self.subflow_step = "INIT_DELAY"
         self.continue_click_count = 0
         self.no_match_count = 0
+        self._recorded_kill_for_current_battle = False
 
     def _check_final_buttons_exist(self, screen_img, should_exit_battle):
         """檢查終局離場或再戰按鈕是否已經出現在畫面上"""
@@ -61,8 +62,9 @@ class ResultHandler(BaseStateHandler):
         ]
         for l_temp in lobby_features:
             if os.path.exists(os.path.join("templates", l_temp)):
-                pos_l, conf_l = self.matcher.match(screen_img, l_temp, threshold=0.80, brightness_threshold=0.70, quiet=True)
-                if pos_l:
+                match_res = self.matcher.match(screen_img, l_temp, threshold=0.80, brightness_threshold=0.70, quiet=True)
+                if isinstance(match_res, (tuple, list)) and len(match_res) >= 2 and match_res[0]:
+                    pos_l, conf_l = match_res[0], match_res[1]
                     logging.info(f"👉 結算辨識：偵測到關卡大廳獨有特徵 [{l_temp}] (相似度: {conf_l:.4f})，代表戰鬥結算已結束並已回到大廳，轉移至 NAVIGATING。")
                     self.reset_state()
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
@@ -128,6 +130,17 @@ class ResultHandler(BaseStateHandler):
                 logging.info(f"🚀 點擊重新開始按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
                 self.machine.transition_to(self.machine.STATE_LOADING)
                 return True
+
+        # 勝利過關事件廣播 (每個戰鬥場次僅累加紀錄一次)
+        if not getattr(self, "_recorded_kill_for_current_battle", False):
+            self._recorded_kill_for_current_battle = True
+            if getattr(self.machine, "quest_scheduler", None):
+                cfg = getattr(self.machine, "config", {}) or {}
+                self.machine.quest_scheduler.record_kill_event(
+                    dungeon_index=cfg.get("dungeon_index"),
+                    stage_level=cfg.get("stage_level"),
+                    sub_stage=cfg.get("sub_stage")
+                )
 
         # 計算是否滿足離場條件 (第 4、8、10 場 / 滿背包 / 體力退避等)
         is_daily = self.machine.is_daily_pipeline_active()
