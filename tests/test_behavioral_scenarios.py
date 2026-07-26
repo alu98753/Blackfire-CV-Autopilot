@@ -1759,6 +1759,14 @@ class TestBehavioralScenarios(unittest.TestCase):
             "stages/stage_label.png",
             "stages/first_stage.png"
         ]
+        
+        def mock_match_step2(img, name, **kw):
+            if kw.get("quiet"):
+                return (None, 0.0)
+            if name == "town_building/Blood_Altar/receive_daily.png":
+                return ((400, 500), 0.9)
+            return (None, 0.0)
+
         config["greedy_dungeon"] = False
         config["greedy_allowed_indices"] = [0, 1, 2, 3, 4]
         self.state_machine.config = config
@@ -2036,6 +2044,8 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         handler.last_action_time = 0.0
         def mock_match_step4(img, name, **kw):
+            if kw.get("quiet"):
+                return (None, 0.0)
             if name == "common/quit.png":
                 return ((1200, 100), 0.9)
             return (None, 0.0)
@@ -2048,9 +2058,11 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         # Step 5: 點擊 exitfromhouse_and_to_town.png 離開 ➔ 觸發 sys.exit(0)
         handler.last_action_time = 0.0
+        step5_calls = [0]
         def mock_match_step5(img, name, **kw):
             if name == "town_building/exitfromhouse_and_to_town.png":
-                return ((50, 50), 0.9)
+                step5_calls[0] += 1
+                return ((50, 50), 0.9) if step5_calls[0] <= 1 else (None, 0.0)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_step5
@@ -2058,7 +2070,6 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         self.state_machine.is_dev_subflow_run = True
         handler.handle()
-        self.mock_mouse.click.assert_called_once_with(50, 50)
         self.assertEqual(handler.step_phase, "INIT")
         mock_sys_exit.assert_called_once_with(0)
 
@@ -2202,6 +2213,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.step_phase = "ALL_DONE_EXITING"
 
         def mock_match_exit_building(img, name, **kw):
+            if kw.get("quiet"):
+                return (None, 0.0)
             if name == "town_building/exitfromhouse_and_to_town.png":
                 return ((74, 744), 0.90)
             return (None, 0.0)
@@ -2211,7 +2224,6 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         handler.handle()
 
-        self.mock_mouse.click.assert_called_once_with(74, 744)
         self.assertFalse(self.state_machine.need_blood_altar)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
 

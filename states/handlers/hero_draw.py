@@ -69,7 +69,7 @@ class HeroDrawHandler(BaseStateHandler):
             if os.path.exists(os.path.join("templates", building_btn)):
                 pos_tavern, conf_tavern = self.matcher.match(screen_img, building_btn, threshold=0.75)
                 if pos_tavern:
-                    logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築 [{building_btn}] [{conf_tavern:.4f}]，發起點擊並進店...")
+                    logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築 [{building_btn}] [{conf_tavern:.4f}]，點擊進入...")
                     self.machine.click_and_wait_until_gone(
                         building_btn, left + pos_tavern[0], top + pos_tavern[1], rect,
                         timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
