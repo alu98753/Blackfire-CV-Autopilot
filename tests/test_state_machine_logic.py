@@ -2235,6 +2235,145 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertFalse(self.state_machine.just_resumed_from_user)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
 
+
+class TestTaskCompletePhaseStateMachine(unittest.TestCase):
+    """
+    專屬驗證重構後『領取任務獎勵』 Match 驅動 4 Phase 狀態機子流程的 4 大維度測試。
+    """
+    def setUp(self):
+        self.mock_capturer = MagicMock()
+        self.mock_matcher = MagicMock()
+        self.mock_mouse = MagicMock()
+        from states.state_machine import GameStateMachine
+        self.state_machine = GameStateMachine(self.mock_capturer, self.mock_matcher, self.mock_mouse)
+        self.rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+    @patch('os.path.exists')
+    def test_phase_happy_path_flow(self, mock_exists):
+        """
+        維度 1：全順暢主幹流程測試。
+        驗證 Phase 1 (INIT) ➔ Phase 2 (OCR) ➔ Phase 3 (FIND) ➔ Phase 4 (DISMISS) 連貫完成並重置 Phase。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            if name == "common/confirm.png":
+                return ((150, 150), 0.92)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            # 執行子流程
+            self.state_machine._run_task_complete_subflow(self.rect)
+
+            # 斷言 Phase 4 正確調用 click_and_wait_until_gone 監控 confirm.png 消失
+            mock_wait_gone.assert_called_once_with(
+                "common/confirm.png", 160, 170, self.rect,
+                timeout=6.0, threshold=0.70, check_interval=0.8, retry_interval=1.2, post_delay=0.5
+            )
+
+        # 斷言最後 Phase 已重置為 INIT_BANNER_CHECK
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+    @patch('os.path.exists')
+    def test_phase_no_match_retention_and_resumption(self, mock_exists):
+        """
+        維度 2：Match 失敗狀態留存與跨幀恢復測試。
+        模擬第 1 幀無 Match ➔ 狀態留存；第 2 幀淡入 Match 成功 ➔ 切換 Phase 推進。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        # 第 1 幀：未匹配到大彈窗
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine._run_task_complete_subflow(self.rect)
+
+        # 斷言 Phase 保持在 INIT_BANNER_CHECK
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+        # 第 2 幀：Match 成功
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            if name == "common/confirm.png":
+                return ((150, 150), 0.92)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone'):
+            self.state_machine._run_task_complete_subflow(self.rect)
+
+        # 斷言成功經歷 Phase 1~4 關閉後重置為 INIT_BANNER_CHECK
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+    @patch('os.path.exists')
+    def test_phase_no_confirm_button_fallback(self, mock_exists):
+        """
+        維度 3：無獨立確認按鈕，保底座標領獎測試。
+        驗證 Phase 3 能算出自適應座標 (766, 1710) 並將標的鎖定為 task_complete.png。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        # 僅 match 到 task_complete.png，無法 match 到 common/confirm.png 或 ok.png
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            self.state_machine._run_task_complete_subflow(self.rect)
+
+            # 斷言 Phase 4 將標的設為 task_complete.png 且點擊計算出之保底座標 (110, 276)
+            mock_wait_gone.assert_called_once_with(
+                "task_complete.png", 110, 276, self.rect,
+                timeout=6.0, threshold=0.70, check_interval=0.8, retry_interval=1.2, post_delay=0.5
+            )
+
+        self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+    @patch('os.path.exists')
+    def test_phase_sequential_multi_popups(self, mock_exists):
+        """
+        維度 4：連續多彈窗鏈式處理測試。
+        驗證連續 2 個彈窗皆能順暢完成 Phase 1~4 並完成核銷。
+        """
+        mock_exists.return_value = True
+        fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = fake_img
+
+        def match_side_effect(img, name, threshold=None, **kwargs):
+            if name == "task_complete.png":
+                return ((100, 100), 0.90)
+            if name == "common/confirm.png":
+                return ((150, 150), 0.92)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        with patch.object(self.state_machine, 'click_and_wait_until_gone') as mock_wait_gone:
+            # 跑第 1 彈窗
+            self.state_machine._run_task_complete_subflow(self.rect)
+            self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+            # 跑第 2 彈窗
+            self.state_machine._run_task_complete_subflow(self.rect)
+            self.assertEqual(self.state_machine.task_complete_phase, "INIT_BANNER_CHECK")
+
+            # 斷言 click_and_wait_until_gone 被成功呼叫 2 次
+            self.assertEqual(mock_wait_gone.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
 
