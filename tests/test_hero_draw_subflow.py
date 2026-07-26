@@ -150,24 +150,24 @@ class TestHeroDrawSubflow(unittest.TestCase):
         self.mock_machine.matcher.match.side_effect = tracking_match
 
         with patch("os.path.exists", return_value=True):
-            # 1. 測試免費招募按鈕 brightness_threshold
+            # 1. 測試免費招募按鈕 (標準簡化參數)
             self.handler.step_phase = "ENTERED_TAVERN"
             self.handler.handle(mock_img, rect)
             self.mock_machine.click_and_wait_until_gone.assert_called_with(
                 "town_building/Tavern/free_recruitment.png", 100, 100, rect,
-                timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+                timeout=5.0, threshold=0.75, brightness_threshold=0.70, check_interval=0.25, post_delay=0.5
             )
 
-            # 2. 測試專用招募按鈕 brightness_threshold
+            # 2. 測試專用招募按鈕 (標準參數)
             self.handler.last_action_time = 0.0
             self.handler.step_phase = "CLICKED_FREE_RECRUITMENT"
             self.handler.handle(mock_img, rect)
             self.mock_machine.click_and_wait_until_gone.assert_called_with(
                 "town_building/Tavern/RECRUITED.png", 200, 200, rect,
-                timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+                timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
             )
 
-            # 3. 測試分解英雄按鈕 brightness_threshold (0.85 避障門檻)
+            # 3. 測試分解英雄按鈕 (專用 0.85 避障門檻，防止同狀態內背景壓暗殘影誤判)
             self.handler.last_action_time = 0.0
             self.handler.step_phase = "WAITING_CONFIRM"
             self.handler.handle(mock_img, rect)

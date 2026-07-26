@@ -95,13 +95,13 @@ class HeroDrawHandler(BaseStateHandler):
                     screen_img, 
                     recruitment_btn, 
                     threshold=0.75, 
-                    brightness_threshold=0.80
+                    brightness_threshold=0.70
                 )
                 if pos_free:
                     logging.info(f"🍺 [抽英雄] 於酒館精確匹配到免費招募按鈕 [{recruitment_btn}] [{conf_free:.4f}]，點擊並 WHILE 輪詢直到消失...")
                     self.machine.click_and_wait_until_gone(
                         recruitment_btn, left + pos_free[0], top + pos_free[1], rect,
-                        timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+                        timeout=5.0, threshold=0.75, brightness_threshold=0.70, check_interval=0.25, post_delay=0.5
                     )
                     self.last_action_time = now
                     self.step_phase = "CLICKED_FREE_RECRUITMENT"
@@ -119,17 +119,12 @@ class HeroDrawHandler(BaseStateHandler):
         elif self.step_phase == "CLICKED_FREE_RECRUITMENT":
             recruited_template = "town_building/Tavern/RECRUITED.png"
             if os.path.exists(os.path.join("templates", recruited_template)):
-                pos_r, conf_r = self.matcher.match(
-                    screen_img, 
-                    recruited_template, 
-                    threshold=0.75,
-                    brightness_threshold=0.80
-                )
+                pos_r, conf_r = self.matcher.match(screen_img, recruited_template, threshold=0.75)
                 if pos_r:
                     logging.info(f"🍺 [抽英雄] 於彈窗中發現專用「招募」按鈕 [{recruited_template}] [{conf_r:.4f}]，點擊並 WHILE 輪詢直到消失...")
                     self.machine.click_and_wait_until_gone(
                         recruited_template, left + pos_r[0], top + pos_r[1], rect,
-                        timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
+                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
                     )
                     self.last_action_time = now
                     self.step_phase = "WAITING_CONFIRM"
