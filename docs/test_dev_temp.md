@@ -39,8 +39,21 @@
 ---
 
 ## 📈 執行與驗證流程
-建立每一包測試後，精確執行該測試包：
-```bash
-.venv\Scripts\python -m unittest tests.test_behavior_navigation
-```
-當所有 `test_behavior_*.py` 全部 PASS 後，方可進行 `SceneDetector` 重構，確保重構過程無任何行為破壞。
+
+### 增量覆蓋率流程
+當針對性開發或補充單一測試檔時，**使用 `-a` 增量模式與既有數據庫求聯集 (Union)**：
+
+1. **增量執行**：
+   ```bash
+   .venv\Scripts\python -m coverage run -a -m unittest tests.test_behavior_navigation
+   ```
+2. **報表**：
+   ```bash
+   .venv\Scripts\python -m coverage report --include="states/handlers/navigation.py,utils/scene_detector.py" -m
+   ```
+
+3. **全域驗證** (Commit 前)：
+   ```bash
+   .venv\Scripts\python -m unittest discover tests
+   ```
+當所有 `test_behavior_*.py` 全部 PASS 且覆蓋率達標後，方可進行 `SceneDetector` 重構，確保重構過程無任何行為破壞。

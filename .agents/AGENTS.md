@@ -55,3 +55,16 @@
    - **有修改程式碼 (Code Modification)**：修改 `states/`, `utils/`, `config.py` 或 `main.py` 時，**必須先執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
    - **測試失敗修復 (Failed Tests Handling)**：針對性修改 ➔ **僅精確執行有錯的測試檔案或方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) ➔ 修正通過後 **再次執行全套測試** 確保無側邊效應。
    - **僅修改測試檔案 (Test-Only Modification)**：僅精確執行該修改的測試檔或測試方法。
+
+4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
+   - 當僅更新,編寫或補強單一行為測試檔,而沒有動實作時，**禁止盲目每次重新執行 4 分鐘全套測試**。
+   - **精要兩步流程**：
+     1. **增量累加**：使用 `-a` (`--append`) 僅執行新編寫之測試檔，將覆蓋數據與原數據庫求**聯集 (Union)**：
+        ```bash
+        .venv\Scripts\python -m coverage run -a -m unittest tests.test_behavior_xxx
+        ```
+     2. **報表**：
+        ```bash
+        .venv\Scripts\python -m coverage report --include="states/handlers/navigation.py,utils/scene_detector.py" -m
+        ```
+   - **最終全域驗證**：完成所有增量開發準備 Commit 前，才執行全套測試 (`.venv\Scripts\python -m unittest discover tests`) 作為收尾。
