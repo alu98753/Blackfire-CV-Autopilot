@@ -144,34 +144,40 @@ class HeroDrawHandler(BaseStateHandler):
                 "town_building/Tavern/deassemble_hero.png",
                 "deassemble_hero.png"
             ]
-            # 5.1 優先檢查與點擊「分解英雄」按鈕 (抽到重複英雄時分解領取資源)
+            # 5.1 優先檢查與點擊「分解英雄」按鈕 (抽到重複英雄時分解領取資源，帶入 brightness_threshold=0.85 防止前景彈窗遮罩壓暗背景殘影誤判)
             for deassemble_template in deassemble_list:
                 if os.path.exists(os.path.join("templates", deassemble_template)):
-                    pos_d, conf_d = self.matcher.match(screen_img, deassemble_template, threshold=0.75)
+                    pos_d, conf_d = self.matcher.match(
+                        screen_img, 
+                        deassemble_template, 
+                        threshold=0.75, 
+                        brightness_threshold=0.85
+                    )
                     if pos_d:
                         logging.info(f"🍺 [抽英雄] 發現「分解英雄」按鈕 [{deassemble_template}] [{conf_d:.4f}]，點擊分解獲得資源 (配對確認直到消失)...")
                         self.machine.click_and_wait_until_gone(
                             deassemble_template, left + pos_d[0], top + pos_d[1], rect,
-                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                            timeout=5.0, threshold=0.75, brightness_threshold=0.85, check_interval=0.25, post_delay=0.5
                         )
                         self.last_action_time = now
                         self.not_found_count = 0
                         return True
 
-            # 5.2 檢查與點擊 OK 按鈕
-            confirm_template = "common/ok.png"
-            if os.path.exists(os.path.join("templates", confirm_template)):
-                pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
-                if pos_c:
-                    logging.info(f"🍺 [抽英雄] 發現獲得英雄 OK 按鈕 [{confirm_template}] [{conf_c:.4f}]，發起確信點擊與消失輪詢...")
-                    self.machine.click_and_wait_until_gone(
-                        confirm_template, left + pos_c[0], top + pos_c[1], rect,
-                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
-                    )
-                    self.last_action_time = now
-                    self.step_phase = "ALL_DONE_EXITING"
-                    self.not_found_count = 0
-                    return True
+            # 5.2 檢查與點擊 OK / 確認按鈕 (支援 common/ok.png 與 common/confirm.png)
+            confirm_list = ["common/ok.png", "common/confirm.png"]
+            for confirm_template in confirm_list:
+                if os.path.exists(os.path.join("templates", confirm_template)):
+                    pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
+                    if pos_c:
+                        logging.info(f"🍺 [抽英雄] 發現獲得英雄 OK 按鈕 [{confirm_template}] [{conf_c:.4f}]，發起確信點擊與消失輪詢...")
+                        self.machine.click_and_wait_until_gone(
+                            confirm_template, left + pos_c[0], top + pos_c[1], rect,
+                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                        )
+                        self.last_action_time = now
+                        self.step_phase = "ALL_DONE_EXITING"
+                        self.not_found_count = 0
+                        return True
 
             self.not_found_count += 1
             if self.not_found_count < 5:
