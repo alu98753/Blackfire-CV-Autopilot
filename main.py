@@ -181,17 +181,17 @@ def setup_dungeon_config(config, args):
     print(" 2) 幽影地穴 (Ghost_entry)")
     print(" 3) 森林迷宮 (Forest_entry)")
     print(" 4) 神秘遺跡 (Ruins_entry)")
-    print(" 5) 冰雪洞窟 (Ice_entry)")
-    print(" 6) 自動貪婪挑選 (Greedy Select) - 預設")
+    print(" 5) 冰雪洞窟 (Ice_entry) - 預設")
+    print(" 6) 自動貪婪挑選 (Greedy Select)")
     try:
-        choice = input("請輸入地下城數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
+        choice = input("請輸入地下城數字 [1-6] (直接 Enter 鍵預設為 5): ").strip()
         if not choice:
-            choice = "6"
+            choice = "5"
     except KeyboardInterrupt:
         print("\n[!] 取消啟動。")
         sys.exit(0)
     except Exception:
-        choice = "6"
+        choice = "5"
 
     dungeon_map = {
         "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
@@ -202,8 +202,8 @@ def setup_dungeon_config(config, args):
         "6": (None, "自動貪婪挑選", True)
     }
     if choice not in dungeon_map:
-        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [自動貪婪挑選]...")
-        choice = "6"
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [冰雪洞窟]...")
+        choice = "5"
 
     entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
     config["name"] = f"地下城 - {dungeon_name}"

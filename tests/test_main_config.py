@@ -89,7 +89,7 @@ class TestMainConfig(unittest.TestCase):
     @patch('os.path.exists')
     @patch('builtins.input', return_value="")
     def test_setup_mode_config_daily_default(self, mock_input, mock_exists):
-        """測試 setup_mode_config 在 daily 模式下預設 Enter 選擇 (自動貪婪地下城 + 冰凍峽谷 6-1 關卡)"""
+        """測試 setup_mode_config 在 daily 模式下預設 Enter 選擇 (第 5 關冰雪洞窟地下城 + 冰凍峽谷 6-1 關卡)"""
         mock_exists.return_value = True
         mock_args = MagicMock()
         mock_args.subflow = None
@@ -98,7 +98,8 @@ class TestMainConfig(unittest.TestCase):
         mock_args.blessmode = None
 
         config = setup_mode_config(mock_args)
-        self.assertTrue(config["greedy_dungeon"])
+        self.assertFalse(config["greedy_dungeon"])
+        self.assertIn("dungeons/Ice_entry.png", config["navigation_path"])
         self.assertEqual(config["stage_entry"], "stages/level6_ice_cave.png")
         self.assertEqual(config["stage_target"], "stages/first_stage.png")
         self.assertEqual(config["bless_mode"], "combat")
