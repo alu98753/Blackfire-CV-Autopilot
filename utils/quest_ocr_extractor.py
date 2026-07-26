@@ -16,6 +16,67 @@ class QuestOCRExtractor:
         self.matcher = matcher
         self.ocr_reader = ocr_reader
 
+    def extract_quest_title_at(self, screen_img, rect, anchor_pos):
+        """
+        對指定單一任務圖示錨點 (cx, cy) 進行右側 ROI 裁切與 EasyOCR 文字提取。
+        :param screen_img: 全螢幕影像 numpy array
+        :param rect: 視窗 rect 字典
+        :param anchor_pos: (cx, cy) 圖示中心座標
+        :return: 辨識出的乾淨任務標題字串
+        """
+        if screen_img is None or not anchor_pos:
+            return ""
+
+        cx, cy = anchor_pos[0], anchor_pos[1]
+        h_img, w_img = screen_img.shape[:2]
+
+        scale = getattr(self.matcher, "template_scale", 1.0) if self.matcher else 1.0
+        if scale == 1.0 and w_img < 1500:
+            scale = w_img / 1940.0
+
+        # 模擬圖示尺寸
+        icon_w = max(20, int(40 * scale))
+        icon_h = max(20, int(40 * scale))
+        x0 = cx - icon_w // 2
+        y0 = cy - icon_h // 2
+
+        from config import BULLETIN_BOARD_OCR_OFFSET
+        off_x = BULLETIN_BOARD_OCR_OFFSET.get("offset_x", 5)
+        off_y = BULLETIN_BOARD_OCR_OFFSET.get("offset_y", -5)
+        box_w = BULLETIN_BOARD_OCR_OFFSET.get("box_width", 360)
+        box_h = BULLETIN_BOARD_OCR_OFFSET.get("box_height", 40)
+
+        crop_x = max(0, x0 + icon_w + int(off_x * scale))
+        crop_y = max(0, y0 + int(off_y * scale))
+        crop_w = min(max(20, int(box_w * scale)), w_img - crop_x)
+        crop_h = min(max(10, int(box_h * scale)), h_img - crop_y)
+
+        if crop_w <= 0 or crop_h <= 0:
+            return ""
+
+        text_roi = screen_img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
+        title_name = self._ocr_crop(text_roi, crop_top_half=True)
+
+        # 📸 保存視覺化偵錯圖片 debug_bulletin_board_ocr.png 與 debug_bulletin_board_roi.png
+        import numpy as np
+        if isinstance(screen_img, np.ndarray):
+            try:
+                cv2.imwrite("debug_bulletin_board_roi.png", text_roi)
+                debug_full = screen_img.copy()
+                # 🟥 紅框: task.png 錨點圖示
+                cv2.rectangle(debug_full, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
+                # 🟩 綠框: 送交 EasyOCR 辨識之標題 ROI 區域
+                cv2.rectangle(debug_full, (crop_x, crop_y), (crop_x + crop_w, crop_y + crop_h), (0, 255, 0), 2)
+                if title_name:
+                    cv2.putText(debug_full, f"Quest: {title_name}", (crop_x, max(20, crop_y - 10)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.imwrite("debug_bulletin_board_ocr.png", debug_full)
+                logging.info(f"📸 [懸賞告示牌] 已將可視化偵錯圖寫入 debug_bulletin_board_ocr.png (紅框:錨點, 綠框:OCR區, 辨識標題: '{title_name}')")
+            except Exception as ex:
+                logging.warning(f"⚠️ [懸賞告示牌] 寫入 debug_bulletin_board_ocr.png 發生異常: {ex}")
+
+        return title_name
+
     def extract_quest_names(self, screen_img, template_name="town_building/bulletin_board/task.png", threshold=0.70):
         """
         對截圖進行圖示錨點定位與右側文字辨識，回傳 (task_names_list, comma_separated_string)。
