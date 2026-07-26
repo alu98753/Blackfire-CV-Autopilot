@@ -233,12 +233,17 @@ class BloodAltarHandler(BaseStateHandler):
         # 4. 每日免費領血按鈕階段 (RECEIVE_TAB_OPEN)
         # =========================================================================
         if self.step_phase == "RECEIVE_TAB_OPEN":
-            pos_rec_daily, conf_rec_daily = self.matcher.match(screen_img, receive_daily_btn, threshold=0.75)
+            pos_rec_daily, conf_rec_daily = self.matcher.match(
+                screen_img, 
+                receive_daily_btn, 
+                threshold=0.75,
+                brightness_threshold=0.80
+            )
             if pos_rec_daily:
                 logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}] [{conf_rec_daily:.4f}]，點擊領取免費血水 (配對確認直到消失)...")
                 self.click_and_wait_until_gone(
                     receive_daily_btn, left + pos_rec_daily[0], top + pos_rec_daily[1], rect,
-                    timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                    timeout=5.0, threshold=0.75, brightness_threshold=0.80, check_interval=0.25, post_delay=0.5
                 )
                 self.has_claimed_daily = True
                 self.step_phase = "HANDLING_RECEIVE_POPUPS"
@@ -258,11 +263,8 @@ class BloodAltarHandler(BaseStateHandler):
 
             if pos_sac or pos_rec_entry:
                 if not is_claimed_today and pos_rec_entry:
-                    logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}] [{conf_rec_entry:.4f}]，點擊切換至領血介面 (配對確認直到消失)...")
-                    self.click_and_wait_until_gone(
-                        receive_entry_btn, left + pos_rec_entry[0], top + pos_rec_entry[1], rect,
-                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
-                    )
+                    logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}] [{conf_rec_entry:.4f}]，點擊切換至領血介面...")
+                    self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
                     self.step_phase = "RECEIVE_TAB_OPEN"
                 elif pos_sac:
                     logging.info(f"🩸 [血之祭壇] 點擊獻祭功能選單 [{sacrifice_btn}]...")
