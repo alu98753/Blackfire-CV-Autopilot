@@ -1845,6 +1845,46 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertIsNone(self.state_machine.stamina_retreat_start_time)
 
     @patch('os.path.exists')
+    def test_auto_resume_dungeon_disabled_stays_in_collect_only(self, mock_exists):
+        """
+        測試當 auto_resume_dungeon_on_cd 設定為 False 時：
+        即使體力退避期間地下城冷卻結束，也絕不提前切回地下城，維持純定時領取直到滿 4 小時。
+        """
+        mock_exists.return_value = True
+        orig_config = GAME_CONFIGS["dungeon"].copy()
+        orig_config["auto_resume_dungeon_on_cd"] = False  # 關閉冷卻結束自動復歸
+        
+        t0 = time.time() - 1800.0  # 已退避 0.5 小時
+        self.state_machine.original_config = orig_config
+        self.state_machine.stamina_retreat_start_time = t0
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.config["stamina_retreat_duration"] = 4.0
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = False
+        
+        # 模擬地下城 0 冷卻已結束 (0.0)
+        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        self.mock_matcher.match.return_value = (None, 0.0)
+        
+        self.state_machine.step()
+        
+        # 斷言 1：因 auto_resume_dungeon_on_cd == False，即便冷卻結束也維持在 STATE_COLLECT_ONLY 待機！
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertEqual(self.state_machine.original_config, orig_config)
+        
+        # 模擬退避滿 4.0 小時
+        self.state_machine.stamina_retreat_start_time = time.time() - (4.1 * 3600.0)
+        self.state_machine.step()
+        
+        # 斷言 2：滿 4 小時後，順利恢復原配置 orig_config 並離場
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertIsNone(self.state_machine.original_config)
+        self.assertIsNone(self.state_machine.stamina_retreat_start_time)
+
+    @patch('os.path.exists')
     def test_normal_dungeon_mode_ignores_retreat_check(self, mock_exists):
         """
         測試單純的地下城/混合模式 (非體力退避狀態下，stamina_retreat_start_time 為 None)：
@@ -2082,6 +2122,16 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config = {"type": "mix", "greedy_allowed_indices": None}
         with self.assertRaises(ValueError):
             self.state_machine.has_available_dungeon()
+
+    def test_has_available_dungeon_non_dungeon_mode_returns_false(self):
+        """
+        測試當 config 為 collect_only 或 stage 模式時，has_available_dungeon 應安全傳回 False 而非拋出 ValueError
+        """
+        self.state_machine.config = {"type": "collect_only"}
+        self.assertFalse(self.state_machine.has_available_dungeon())
+
+        self.state_machine.config = {"type": "stage"}
+        self.assertFalse(self.state_machine.has_available_dungeon())
 
     def test_get_dungeon_cooldown_status(self):
         """

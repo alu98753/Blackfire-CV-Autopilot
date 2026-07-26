@@ -522,9 +522,21 @@ class GameStateMachine:
                 logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")
                 self.transition_to(self.STATE_NAVIGATING)
 
-    def has_available_dungeon(self):
+    def has_available_dungeon(self, target_config=None):
         """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
-        if not self.config:
+        if target_config is not None:
+            cfg = target_config
+        elif getattr(self, "stamina_retreat_start_time", None) is not None and getattr(self, "original_config", None) is not None:
+            cfg = self.original_config
+        else:
+            cfg = self.config
+
+        if not cfg:
+            return False
+
+        # 如果模式類型不是地下城/mix/daily，直接傳回 False（防呆非地下城模式）
+        cfg_type = cfg.get("type")
+        if cfg_type not in ["dungeon", "mix", "daily"]:
             return False
 
         # 如果先前已確認所有地下城皆在冷卻中，且尚未超過暫存冷卻時間，直接傳回 False
@@ -532,12 +544,12 @@ class GameStateMachine:
         if time.time() < all_cd_until:
             return False
 
-        allowed_indices = self.config.get("greedy_allowed_indices")
+        allowed_indices = cfg.get("greedy_allowed_indices")
         if allowed_indices is None:
             raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
 
         now = time.time()
-        is_greedy = self.config.get("greedy_dungeon", False)
+        is_greedy = cfg.get("greedy_dungeon", False)
         
         if is_greedy:
             for idx in allowed_indices:
@@ -546,10 +558,10 @@ class GameStateMachine:
             return False
         else:
             # 非貪婪模式 (指定特定副本)：只檢查 navigation_path 中指定的副本索引
-            entry_templates = self.config.get("dungeon_entries")
+            entry_templates = cfg.get("dungeon_entries")
             if entry_templates is None:
                 raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
-            nav_path = self.config.get("navigation_path")
+            nav_path = cfg.get("navigation_path")
             if nav_path is None:
                 raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
 
