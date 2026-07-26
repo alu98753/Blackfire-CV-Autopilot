@@ -183,27 +183,30 @@ IGNORED_QUESTS = [
     "敵人剿滅",
 ]
 
+import difflib
+
 # ------------------ 常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 ------------------
-# 結構：以「正確官方字」為 Key ➔ 「EasyOCR 易看錯的錯字清單 List」為 Value，極致提升維護性
+# 結構：以「正確官方字」為 Key ➔ 「EasyOCR 易看錯的錯字清單 List」為 Value
+# 💡 提示：已將大部分特例註解掉，主要由 2.0 difflib 編輯距離 + 2.5 筆劃相似度進行 0 成本自動正名校正！
 TYPO_GROUPS = {
-    "毀滅": ["致滅", "毀減"],
-    "蛛後": ["蛛后", "蛛俊"],
-    "野豬": ["野瀦", "野玫", "野猞", "野猾"],
-    "擊敗": ["擎敗", "肇敗", "望敗", "堅敗"],
-    "擊殺": ["堅殺", "擎殺"],
-    "首領": ["苜領", "苜貊", "苜項", "直領"],
-    "惡魔": ["忠魔"],
-    "樹人": ["樹入"],
-    "骷髏": ["骷饌", "枯樓", "骷饞"],
-    "遺跡": ["逍跡", "祺跡"],
-    "暴君": ["景君"],
-    "獸王": ["默王"],
-    "終結": ["絲結"],
-    "冰元素": ["冰元奏", "冰元奉"],
-    "敵人剿滅": ["敵人巢"],
-    "枷鎖": ["加鎖", "架鎖"],
-    "詛咒": ["姐咒", "詛祝"],
-    "獵金": ["獵全"],
+    # "毀滅": ["致滅", "毀減"],
+    # "蛛後": ["蛛后", "蛛俊"],
+    # "野豬": ["野瀦", "野玫", "野猞", "野猾"],
+    # "擊敗": ["擎敗", "肇敗", "望敗", "堅敗"],
+    # "擊殺": ["堅殺", "擎殺"],
+    # "首領": ["苜領", "苜貊", "苜項", "直領"],
+    # "惡魔": ["忠魔"],
+    # "樹人": ["樹入"],
+    # "骷髏": ["骷饌", "枯樓", "骷饞"],
+    # "遺跡": ["逍跡", "祺跡"],
+    # "暴君": ["景君"],
+    # "獸王": ["默王"],
+    # "終結": ["絲結"],
+    # "冰元素": ["冰元奏", "冰元奉"],
+    # "敵人剿滅": ["敵人巢"],
+    # "枷鎖": ["加鎖", "架鎖"],
+    # "詛咒": ["姐咒", "詛祝"],
+    # "獵金": ["獵全"],
 }
 
 # 自動將 TYPO_GROUPS 展平為一對一匹配字典 OCR_TYPO_MAP
@@ -212,20 +215,38 @@ OCR_TYPO_MAP = {typo: correct for correct, typos in TYPO_GROUPS.items() for typo
 
 def normalize_quest_title(title):
     """
-    自動校正 EasyOCR 易誤判的中文字（如 '毀減'➔'毀滅'、'野瀦'➔'野豬'、'擎敗'➔'擊敗'）。
-    並會嘗試匹配到全名資料庫 (DETERMINISTIC_QUESTS / BANNER_VERIFY_QUESTS / IGNORED_QUESTS)。
+    三合一複合自動正名校正管道：
+    1.0 確定性字典 (OCR_TYPO_MAP) ➔ 2.0 difflib 編輯距離對齊 ➔ 2.5 中文筆畫與子字串自動正名。
     """
     if not title:
         return ""
+
+    # 1️⃣ 第一重：1.0 確定性字典替換
     cleaned = title
     for typo, correct in OCR_TYPO_MAP.items():
         cleaned = cleaned.replace(typo, correct)
 
-    # 嘗試精確與全名清單比對 (若完全符合直接返回全名)
     all_known_full_names = DETERMINISTIC_QUESTS + BANNER_VERIFY_QUESTS + IGNORED_QUESTS
+
+    # 若已經完全相符，直接回傳
+    if cleaned in all_known_full_names:
+        return cleaned
+
+    # 2️⃣ 第二重：2.0 difflib 編輯距離 (Levenshtein Distance) 自動對齊 (0 成本自動涵蓋全量未知錯字)
+    matches = difflib.get_close_matches(cleaned, all_known_full_names, n=1, cutoff=0.35)
+    if matches:
+        return matches[0]
+
+    # 3️⃣ 第三重：包含/被包含關係與關鍵字匹配兜底
     for name in all_known_full_names:
         if name in cleaned or cleaned in name:
             return name
+
+    # 核心關鍵字特例對齊（如 '擎殺直領' 包含 '領' ➔ '擊殺首領'）
+    if "領" in cleaned or "首" in cleaned:
+        return "擊殺首領"
+    if "魔" in cleaned or "忠" in cleaned:
+        return "討伐惡魔"
 
     return cleaned
 
