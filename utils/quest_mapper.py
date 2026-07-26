@@ -222,8 +222,8 @@ def normalize_quest_title(title):
     if cleaned in all_known_full_names:
         return cleaned
 
-    # 2️⃣ 第二重：2.0 difflib 編輯距離 (Levenshtein Distance) 自動對齊 (0 成本自動涵蓋全量未知錯字)
-    matches = difflib.get_close_matches(cleaned, all_known_full_names, n=1, cutoff=0.35)
+    # 2️⃣ 第二重：2.0 difflib 編輯距離 (Levenshtein Distance) 自動對齊 (門檻提高至 0.65，防止新任務如'龍騎士的毀滅'誤判)
+    matches = difflib.get_close_matches(cleaned, all_known_full_names, n=1, cutoff=0.65)
     if matches:
         return matches[0]
 
@@ -232,10 +232,8 @@ def normalize_quest_title(title):
         if name in cleaned or cleaned in name:
             return name
 
-    # 核心關鍵字特例對齊（如 '擎殺直領' 包含 '領' ➔ '擊殺首領'）
-    if "領" in cleaned or "首" in cleaned:
-        return "擊殺首領"
-    if "魔" in cleaned or "忠" in cleaned:
+    # 核心關鍵字特例對齊（如 '討伐忠魔' ➔ '討伐惡魔'）
+    if "忠魔" in cleaned:
         return "討伐惡魔"
 
     return cleaned
@@ -377,19 +375,7 @@ class QuestMapper:
         # 判定預設政策 (若在 BANNER_VERIFY_QUESTS 全名清單中)
         default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in BANNER_VERIFY_QUESTS else TaskNode.POLICY_DETERMINISTIC
 
-        # 2. 檢查通用「首領 / Boss」任務 (此類任務可由任何副本 Boss 推進)
-        if re.search(r"(擊殺首領|首領)", title) or re.search(r"首領\s*x\s*\d+", requirement_text):
-            return TaskNode(
-                quest_title=norm_title,
-                mode_type="generic_boss",
-                target_count=10,
-                batch_size=1,
-                max_run_limit=10,
-                raw_desc=combined_text,
-                counting_policy=default_policy
-            )
-
-        # 3. 檢查地下城專屬任務 (地下城不受固定次數限制，由 30 分鐘冷卻倒數與告示牌領獎動態控管)
+        # 2. 檢查地下城專屬任務 (地下城不受固定次數限制，由 30 分鐘冷卻倒數與告示牌領獎動態控管)
         for rule in self.dungeon_rules:
             pattern = rule[0]
             dungeon_idx = rule[1]
