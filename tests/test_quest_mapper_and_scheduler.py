@@ -29,6 +29,17 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.mapper = QuestMapper()
         self.scheduler = QuestScheduler()
 
+    def test_user_reported_typos_normalization(self):
+        """
+        驗證用戶回報的真實 EasyOCR 錯別字自動清洗與正名對齊。
+        """
+        from utils.quest_mapper import normalize_quest_title
+        self.assertEqual(normalize_quest_title("史萊姆王的致滅"), "史萊姆王的毀滅")
+        self.assertEqual(normalize_quest_title("消滅蛛王與蛛俊"), "消滅蛛王與蛛後")
+        self.assertEqual(normalize_quest_title("擎殺直領"), "擊殺首領")
+        self.assertEqual(normalize_quest_title("討伐忠魔"), "討伐惡魔")
+        self.assertEqual(normalize_quest_title("清除樹入"), "清除樹人")
+
     def test_parse_five_user_quests(self):
         """
         測試解析用戶圖片中的 5 個每日懸賞任務條件、指令與計數策略 (counting_policy)。
