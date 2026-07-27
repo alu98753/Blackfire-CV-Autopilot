@@ -724,7 +724,7 @@ class GameStateMachine:
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為混合模式")
             self.quest_scheduler = None
             self.apply_mix_fallback_config()
-            return True
+            return False
 
         target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
         if target_task:

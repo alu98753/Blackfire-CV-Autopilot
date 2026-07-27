@@ -271,7 +271,7 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
             t.completed_count = t.target_count
 
         res = sm.check_and_advance_quest_target()
-        self.assertTrue(res)
+        self.assertFalse(res)
         self.assertIsNone(sm.quest_scheduler)
         self.assertEqual(sm.config["type"], "mix")
         self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
