@@ -395,7 +395,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
     def test_update_bulletin_board_quests_filters_unknown_and_ignored(self):
         """
-        [未知/忽略任務隔離測試] 驗證當告示牌掃描到未知任務 (虛f行者昀番判, 清除蛤蟆) 與忽略任務 (獵金之蟲) 時，
+        [未知/忽略任務隔離測試] 驗證當告示牌掃描到未知任務 (完全未知任務_XYZ) 與忽略任務 (獵金之蟲) 時，
         update_bulletin_board_quests 能精確將未知任務上報至 unknown_quests，剔除忽略任務，並只留有效懸賞至 accepted_quests！
         """
         import tempfile, shutil
@@ -403,20 +403,39 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         tmp_dir = tempfile.mkdtemp()
         try:
             daily_mgr = DailyManager(data_dir=tmp_dir, status_file="test_status.json")
-            raw_scanned = ["清除骷髏", "虛f行者昀番判", "清除蛤蟆", "獵金之蟲"]
+            raw_scanned = ["清除骷髏", "完全未知任務_XYZ", "獵金之蟲"]
             res = daily_mgr.update_bulletin_board_quests(raw_scanned)
             
             # 斷言 accepted_quests 僅含有效任務 "清除骷髏"
             self.assertEqual(res, ["清除骷髏"])
             
-            # 斷言 unknown_quests 精確包含 "虛f行者昀番判" 與 "清除蛤蟆"，且不含 "獵金之蟲"
+            # 斷言 unknown_quests 精確包含 "完全未知任務_XYZ"，且不含 "獵金之蟲"
             bb = daily_mgr.status["subflows"]["bulletin_board"]
             unknowns = bb.get("unknown_quests", [])
-            self.assertIn("虛f行者昀番判", unknowns)
-            self.assertIn("清除蛤蟆", unknowns)
+            self.assertIn("完全未知任務_XYZ", unknowns)
             self.assertNotIn("獵金之蟲", unknowns)
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def test_toad_and_void_walker_quest_mapping(self):
+        """
+        [清除蛤蟆與虛空行者的審判測試]
+        1. 驗證 '清除蛤蟆' 能精確映射至 幽暗沼澤 (Level 5) 第六小關 (six)。
+        2. 驗證 EasyOCR 錯字 '虛f行者昀番判' 能自動正名為 '虛空行者的審判' 並解析為 mode_type == 'ignored'。
+        """
+        node_toad = self.mapper.parse_quest("清除蛤蟆")
+        self.assertIsNotNone(node_toad)
+        self.assertEqual(node_toad.mode_type, "stage")
+        self.assertEqual(node_toad.stage_level, 5)
+        self.assertEqual(node_toad.sub_stage, "six")
+
+        from utils.quest_mapper import normalize_quest_title
+        norm_void = normalize_quest_title("虛f行者昀番判")
+        self.assertEqual(norm_void, "虛空行者的審判")
+        
+        node_void = self.mapper.parse_quest(norm_void)
+        self.assertIsNotNone(node_void)
+        self.assertEqual(node_void.mode_type, "ignored")
 
 
 if __name__ == "__main__":
