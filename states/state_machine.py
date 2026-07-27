@@ -722,7 +722,7 @@ class GameStateMachine:
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為混合模式")
             self.quest_scheduler = None
             self.apply_mix_fallback_config()
-            return True
+            return False
 
         target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
         if target_task:
@@ -738,9 +738,7 @@ class GameStateMachine:
                 quest_cfg["backend_mode"] = self.backend_mode
             self.set_config(quest_cfg)
             logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
-            return False
-
-
+            return True
 
         return False
 
@@ -1070,9 +1068,13 @@ class GameStateMachine:
 
         # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
         if self.quest_scheduler:
-            self.check_and_advance_quest_target()
-            if self.quest_scheduler:
-                return True
+            if self.quest_scheduler.is_all_completed():
+                logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器")
+                self.quest_scheduler = None
+            else:
+                scheduled = self.check_and_advance_quest_target()
+                if scheduled:
+                    return True
 
         # 4. 退守 Tier 4 Mix 模式 (冰雪洞窟 + 關卡 6-1)
         self.apply_mix_fallback_config()

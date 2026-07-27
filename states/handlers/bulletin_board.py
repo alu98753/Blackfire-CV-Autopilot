@@ -74,6 +74,9 @@ class BulletinBoardHandler(BaseStateHandler):
         dm = getattr(self.machine, "daily_manager", None)
         if dm and hasattr(dm, "record_subflow_completed"):
             dm.record_subflow_completed("bulletin_board", extra_data={"accepted_quests": titles})
+            if hasattr(dm, "load_quest_scheduler"):
+                self.machine.quest_scheduler = dm.load_quest_scheduler()
+                logging.info(f"📋 [懸賞告示牌] 已即時同步載入動態懸賞排程器 (共 {len(getattr(self.machine.quest_scheduler, 'tasks', []))} 個任務)。")
         logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
         self.machine.pop_and_next_town_subflow()
 
