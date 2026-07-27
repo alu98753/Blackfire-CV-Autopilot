@@ -348,6 +348,92 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertEqual(sm.config["stage_name"], "蒼穹平原 (final)")
 
 
+class TestTierConfigMatrix(unittest.TestCase):
+    """專門驗證 Tier 1~4 全階梯調度時 Config 設定正確性之測試矩陣」"""
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.test_json_path = os.path.join(self.test_dir, "test_daily_status.json")
+        sample_status = json.loads(json.dumps(DEFAULT_DAILY_STATUS))
+        sample_status["subflows"]["bulletin_board"]["accepted_quests"] = [
+            "史萊姆王的毀滅"
+        ]
+        with open(self.test_json_path, "w", encoding="utf-8") as f:
+            json.dump(sample_status, f, ensure_ascii=False, indent=2)
+        self.daily_mgr = DailyManager(data_dir=self.test_dir, status_file="test_daily_status.json")
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_tier1_config_and_state_verification(self):
+        """[Tier 1 Config 驗證] 驗證 Tier 1 觸發時 Config 精確設定為 chest 且狀態轉移至 STATE_CHEST"""
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = self.daily_mgr
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled)
+        self.assertEqual(sm.current_state, sm.STATE_CHEST)
+        self.assertEqual(sm.config["type"], "chest")
+
+    def test_tier2_config_and_state_verification(self):
+        """[Tier 2 Config 驗證] 驗證 Tier 2 觸發時 Config 精確切換為 lord_boss 且狀態轉移至 STATE_LORD_BOSS"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = self.daily_mgr
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled)
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+        self.assertEqual(sm.config["type"], "lord_boss")
+
+    def test_tier3_config_and_state_verification(self):
+        """[Tier 3 Config 驗證] 驗證 Tier 3 觸發時 Config 精確切換為懸賞任務指定之地下城配置 (dungeon index 0)"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = self.daily_mgr
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        sm.attach_quest_scheduler(scheduler)
+
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled)
+        self.assertEqual(sm.config["type"], "dungeon")
+        self.assertEqual(sm.config["dungeon_index"], 0)
+        self.assertIn("史萊姆", sm.config["name"])
+
+    def test_tier4_config_and_state_verification(self):
+        """[Tier 4 Config 驗證] 驗證 Tier 4 退守時 Config 精確載入使用者動態設定之 primary_config"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.quest_scheduler = None  # 無懸賞任務
+        custom_cfg = {"name": "荒蕪岩地 (middle)", "type": "stage", "stage_level": 2, "stage_sub": "middle", "stage_name": "荒蕪岩地 (middle)"}
+        sm.primary_config = custom_cfg.copy()
+
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertFalse(scheduled)
+        self.assertEqual(sm.config["type"], "stage")
+        self.assertEqual(sm.config["stage_name"], "荒蕪岩地 (middle)")
+
+
 if __name__ == "__main__":
     unittest.main()
 
