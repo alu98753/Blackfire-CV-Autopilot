@@ -694,13 +694,16 @@ class GameStateMachine:
         當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
         """
         if getattr(self, "primary_config", None):
-            self.set_config(self.primary_config.copy())
+            fallback_cfg = self.primary_config.copy()
+            fallback_cfg["is_tier4_fallback"] = True
+            self.set_config(fallback_cfg)
             logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
         else:
             from config import PRIMARY_MODES
             mix_config = PRIMARY_MODES["mix"].copy()
             mix_config["greedy_dungeon"] = False
             mix_config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
+            mix_config["is_tier4_fallback"] = True
             if hasattr(self, "backend_mode"):
                 mix_config["backend_mode"] = self.backend_mode
 

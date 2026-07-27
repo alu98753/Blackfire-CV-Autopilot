@@ -34,7 +34,7 @@ class QuestScheduler:
         """
         根據 GameStateMachine 的 config 字典匹配對應的 TaskNode 實例。
         """
-        if not config or not isinstance(config, dict):
+        if not config or not isinstance(config, dict) or config.get("is_tier4_fallback"):
             return None
         cfg_type = config.get("type")
         for task in self.tasks:
@@ -69,12 +69,16 @@ class QuestScheduler:
         if not current_config:
             return False
 
-        current_task = self.find_task_node_by_config(current_config)
-        if not current_task:
+        next_best_task, _ = self.get_next_action_node(dungeon_cooldowns=dungeon_cooldowns, now_ts=now_ts)
+        if not next_best_task:
             return False
 
-        next_best_task, _ = self.get_next_action_node(dungeon_cooldowns=dungeon_cooldowns, now_ts=now_ts)
-        if not next_best_task or next_best_task == current_task:
+        current_task = self.find_task_node_by_config(current_config)
+        # 若當前執行的非 Tier 3 懸賞任務 (例如 Tier 4 退守模式)，只要有任何懸賞任務就緒即為更高優先度
+        if current_task is None:
+            return True
+
+        if next_best_task == current_task:
             return False
 
         try:

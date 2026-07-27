@@ -347,6 +347,100 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertEqual(sm.config["name"], "蒼穹平原 (final)")
         self.assertEqual(sm.config["stage_name"], "蒼穹平原 (final)")
 
+    def test_tier3_all_cooldown_fallbacks_to_tier4(self):
+        """[Tier 3 冷卻退守 Tier 4 測試] 驗證當 Tier 3 懸賞任務全數處於冷卻中時，排程器會自動切換至 Tier 4 退守模式"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        
+        # 建立僅含有破除森林的枷鎖 (Dungeon 3, index 2) 的排程器
+        from utils.quest_scheduler import QuestScheduler
+        scheduler = QuestScheduler.from_daily_status(["破除森林的枷鎖"])
+        sm.attach_quest_scheduler(scheduler)
+
+        # 設 Dungeon 3 冷卻 10 分鐘
+        now_ts = time.time()
+        sm.dungeon_cooldowns[2] = now_ts + 600.0
+
+        # 評估 daily pipeline，因任務冷卻，應回傳 False 並自動載入 Tier 4 退守模式 (Mix/Stage)
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertFalse(scheduled)
+        self.assertIn("模式", sm.config.get("name", ""))
+
+    def test_tier4_running_repreempted_when_tier3_cooldown_expires(self):
+        """[Tier 4 執行中 Tier 3 解凍搶佔測試] 驗證當處於 Tier 4 退守模式時，只要 Tier 3 懸賞地下城冷卻到期，能夠搶佔離場並切回 Tier 3"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        
+        from utils.quest_scheduler import QuestScheduler
+        scheduler = QuestScheduler.from_daily_status(["破除森林的枷鎖"])
+        sm.attach_quest_scheduler(scheduler)
+
+        # 1. 設冷卻 600 秒，初次排程退守至 Tier 4
+        now_ts = time.time()
+        sm.dungeon_cooldowns[2] = now_ts + 600.0
+        sm.evaluate_and_schedule_daily_pipeline()
+        tier4_cfg = sm.config.copy()
+        self.assertTrue(tier4_cfg.get("is_tier4_fallback"))
+
+        # 2. 模擬 601 秒後 (冷卻到期)，驗證 has_higher_priority_task_ready 傳回 True
+        has_ready = sm.quest_scheduler.has_higher_priority_task_ready(
+            current_config=tier4_cfg,
+            dungeon_cooldowns=sm.dungeon_cooldowns,
+            now_ts=now_ts + 601.0
+        )
+        self.assertTrue(has_ready, "冷卻解凍後應傳回 True 以觸發結算離場搶佔！")
+
+        # 3. 離場後重新排程，驗證已成功切換回 Tier 3 (破除森林的枷鎖)
+        sm.dungeon_cooldowns[2] = 0.0  # 解凍
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled)
+        self.assertEqual(sm.config["type"], "dungeon")
+        self.assertEqual(sm.config["dungeon_index"], 2)
+
+    def test_tier3_all_completed_clears_scheduler_and_permanently_enters_tier4(self):
+        """[Tier 3 全完結解構測試] 驗證當所有 Tier 3 任務進度達成 (10/10) 時，會解除排程器並永久轉入 Tier 4"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        
+        from utils.quest_scheduler import QuestScheduler
+        scheduler = QuestScheduler.from_daily_status(["清除野豬"])
+        node = scheduler.tasks[0]
+        node.completed_count = 10  # 10/10 滿
+        sm.attach_quest_scheduler(scheduler)
+
+        # 執行排程
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertFalse(scheduled)
+        self.assertIsNone(sm.quest_scheduler, "全完結後應解除 quest_scheduler")
+
+
 
 class TestTierConfigMatrix(unittest.TestCase):
     """專門驗證 Tier 1~4 全階梯調度時 Config 設定正確性之測試矩陣」"""
