@@ -316,6 +316,37 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertNotEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
         self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
 
+    def test_tier4_dynamic_user_configured_primary_config_fallback(self):
+        """[Tier 4 檢驗] 驗證懸賞全清時，狀態機自動載入並切換至使用者在 main 階段所設定的動態 primary_config (例如 蒼穹平原 final)"""
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        
+        # 模擬使用者在 main.py 初始化時動態選擇的 Tier 4 退守目標
+        custom_tier4_cfg = {
+            "name": "蒼穹平原 (final)",
+            "type": "stage",
+            "stage_level": 1,
+            "stage_sub": "final",
+            "stage_name": "蒼穹平原 (final)"
+        }
+        sm.primary_config = custom_tier4_cfg.copy()
+        sm.quest_scheduler = None  # 代表懸賞任務全數完成
+        
+        # 將速領與 Boss 設為完成
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertFalse(scheduled)
+        self.assertEqual(sm.config["name"], "蒼穹平原 (final)")
+        self.assertEqual(sm.config["stage_name"], "蒼穹平原 (final)")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -271,8 +271,11 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
             t.completed_count = t.target_count
 
         res = sm.check_and_advance_quest_target()
-        self.assertFalse(res)
+        self.assertIsNone(res)
         self.assertIsNone(sm.quest_scheduler)
+        
+        # 測試由 evaluate_and_schedule_daily_pipeline 統一將配置切換至動態/預設 Tier 4 Mix 模式
+        sm.evaluate_and_schedule_daily_pipeline()
         self.assertEqual(sm.config["type"], "mix")
         self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
 
