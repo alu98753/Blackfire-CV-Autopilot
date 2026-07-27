@@ -2007,7 +2007,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(550, 688)
         self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
 
-        # Step 2: 點擊 Sacrifice.png 開啟選單
+        # Step 2: 進入建築後轉移至 SACRIFICE_MENU_OPEN，並點擊 Sacrifice.png 開啟選單
         handler.last_action_time = 0.0
         sac_matched = [0]
         def mock_match_step2(img, name, **kw):
@@ -2021,9 +2021,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match_step2
         self.mock_mouse.click.reset_mock()
 
-        handler.handle()
-        self.mock_mouse.click.assert_called_once_with(830, 863)
+        handler.handle() # ENTERED_BUILDING ➔ SACRIFICE_MENU_OPEN
         self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
+        handler.last_action_time = 0.0
+        handler.handle() # 在 SACRIFICE_MENU_OPEN 點擊 Sacrifice.png
+        self.mock_mouse.click.assert_called_once_with(830, 863)
 
         # Step 3: 點選 green_blood 獻祭 ➔ 點擊 sell_max.png ➔ 點擊 alter.png
         handler.last_action_time = 0.0
@@ -2163,14 +2165,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
 
-
-        sac_inside_matched = [0]
         def mock_match_inside(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
-                if sac_inside_matched[0] == 0:
-                    sac_inside_matched[0] += 1
-                    return ((718, 745), 0.90)
-                return (None, 0.0)
+                return ((718, 745), 0.90)
             elif name == "town_building/exitfromhouse_and_to_town.png":
                 return ((74, 744), 0.90)
             return (None, 0.0)
@@ -2178,7 +2175,11 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match_inside
         self.mock_mouse.click.reset_mock()
 
-        handler.handle()
+        handler.handle() # INIT ➔ ENTERED_BUILDING
+        handler.last_action_time = 0.0
+        handler.handle() # ENTERED_BUILDING ➔ SACRIFICE_MENU_OPEN
+        handler.last_action_time = 0.0
+        handler.handle() # 在 SACRIFICE_MENU_OPEN 點擊 Sacrifice.png (718, 745)
         self.mock_mouse.click.assert_called_once_with(718, 745)
         self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
 
