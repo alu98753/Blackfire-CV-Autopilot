@@ -6,6 +6,8 @@ from states.handlers.base import BaseStateHandler
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardListNavigator
+from utils.scene_detector import SceneDetector, SceneType
+
 
 def filter_navigation_path(nav_path, active_tabs=None):
     """
@@ -167,49 +169,44 @@ class NavigationHandler(BaseStateHandler):
         rect["height"] = height
 
 
-        # 0. 全域最高優先防護：檢查畫面上是否有任務完成彈窗 (task_complete.png) 阻擋
-        if os.path.exists(os.path.join("templates", "task_complete.png")):
-            pos_task_chk, conf_task_chk = self.matcher.match(screen_img, "task_complete.png", threshold=0.75)
-            if pos_task_chk:
-                logging.info(f"🎉 尋路中偵測到【任務完成】彈窗 (信心度: {conf_task_chk:.4f})，啟動「領取任務獎勵」子流程清理彈窗。")
-                self.machine._run_task_complete_subflow(rect)
-                return
+        # 呼叫 SceneDetector 進行全場景與 UI 頁籤診斷
+        if not hasattr(self, "scene_detector") or self.scene_detector is None or self.scene_detector.matcher != self.matcher:
+            self.scene_detector = SceneDetector(self.matcher)
 
+        scene = self.scene_detector.detect(screen_img, machine=self.machine)
+
+        # 0. 全域最高優先防護：檢查畫面上是否有任務完成彈窗 (task_complete.png) 阻擋
+        if scene.scene_type == SceneType.POPUP_TASK_COMPLETE:
+            matched = scene.matched_elements.get("task_complete.png")
+            conf_task_chk = matched[1] if matched else 0.75
+            logging.info(f"🎉 尋路中偵測到【任務完成】彈窗 (信心度: {conf_task_chk:.4f})，啟動「領取任務獎勵」子流程清理彈窗。")
+            self.machine._run_task_complete_subflow(rect)
+            return
 
         # 優先判定：如果我們已經看到地下城內部的離開按鈕或其他探索按鈕，說明點擊已經成功並進入內部，轉移狀態！
-        if self.machine.config.get("type") in ["dungeon", "mix"]:
+        if scene.scene_type == SceneType.IN_DUNGEON:
+            check_btn = next((k for k in scene.matched_elements.keys() if k.startswith("dungeons/")), "dungeons/leave.png")
+            conf = scene.matched_elements.get(check_btn, ((0, 0), 0.8))[1]
+            logging.info(f"🧭 尋路中偵測到地下城內部按鈕 [{check_btn}] (信心度: {conf:.4f})，判定已進入地下城，轉移至 DUNGEON_EXPLORING。")
+            self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
+            return
 
-            # 移出 dungeons/dungeon_fight.png，改由 dungeons/leave.png 判定已正式進入
-            for check_btn in ["dungeons/leave.png", "dungeons/dungeon_bless.png", "dungeons/Treasure.png", "dungeons/gungeon_godown.png"]:
-                if os.path.exists(os.path.join("templates", check_btn)):
-                    pos, conf = self.matcher.match(screen_img, check_btn, threshold=0.8)
-                    if pos:
-                        logging.info(f"🧭 尋路中偵測到地下城內部按鈕 [{check_btn}] (信心度: {conf:.4f})，判定已進入地下城，轉移至 DUNGEON_EXPLORING。")
-                        self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
-                        return
-
-            # 如果已經在準備進入地下城的介面（看見戰鬥入口 dungeons/dungeon_fight.png，但尚未看到 leave.png）
-            # 此時我們在 NAVIGATING 狀態下執行點擊戰鬥，以便體力不足偵測（no_bread）在此狀態下正常工作
-            if os.path.exists(os.path.join("templates", "dungeons/dungeon_fight.png")):
-                pos_fight, conf_fight = self.matcher.match(screen_img, "dungeons/dungeon_fight.png", threshold=0.8)
-                if pos_fight:
-                    logging.info(f"🧭 尋路中：在畫面上找到地下城戰鬥開始按鈕 [dungeons/dungeon_fight.png] (信心度: {conf_fight:.4f})，點擊進入地下城。")
-                    self.mouse.click(rect["left"] + pos_fight[0], rect["top"] + pos_fight[1])
-                    time.sleep(0.5)
-                    return
+        if scene.scene_type == SceneType.DUNGEON_PREPARE:
+            matched = scene.matched_elements.get("dungeons/dungeon_fight.png", ((0, 0), 0.8))
+            pos_fight, conf_fight = matched[0], matched[1]
+            logging.info(f"🧭 尋路中：在畫面上找到地下城戰鬥開始按鈕 [dungeons/dungeon_fight.png] (信心度: {conf_fight:.4f})，點擊進入地下城。")
+            self.mouse.click(rect["left"] + pos_fight[0], rect["top"] + pos_fight[1])
+            time.sleep(0.5)
+            return
 
         # 0. 背包清理優先防護：如果需要整理背包，尋路只能引導我們退回大廳，不得前進
         if self.machine.need_bag_cleaning:
-            # 1. 檢查是否已經離開關卡回到了大廳/城鎮 (看到了 common/door.png 或 goback_town.png)
-            for town_btn in ["common/door.png", "goback_town.png"]:
-                if os.path.exists(os.path.join("templates", town_btn)):
-                    pos_t, conf_t = self.matcher.match(screen_img, town_btn, threshold=0.8)
-                    if pos_t:
-                        logging.info(f"🎒 尋路中：偵測到大廳/城鎮標誌 [{town_btn}] 且需要清理背包，切換至 BAG_CLEANING 狀態。")
-                        self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
-                        return
-            
-            # 2. 如果還在大地圖或結算退出介面，只允許點擊回城/退出按鈕 (如 exit_battle.png 或 goback_town.png)
+            if scene.is_town or scene.is_lobby:
+                town_btn = "common/door.png" if "common/door.png" in scene.matched_elements else "goback_town.png"
+                logging.info(f"🎒 尋路中：偵測到大廳/城鎮標誌 [{town_btn}] 且需要清理背包，切換至 BAG_CLEANING 狀態。")
+                self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
+                return
+
             for back_btn in ["exit_battle.png", "goback_town.png"]:
                 if os.path.exists(os.path.join("templates", back_btn)):
                     pos_b, conf_b = self.matcher.match(screen_img, back_btn, threshold=0.8)
@@ -218,80 +215,34 @@ class NavigationHandler(BaseStateHandler):
                         self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                         time.sleep(0.1)
                         return
-            
-            # 其他情況原地等待回城
+
             logging.info("⌛ 尋路中：背包已滿，正在等待退出戰鬥或返回城鎮畫面...")
             return
 
-        # 1. 偵測當前畫面狀態 (城鎮 vs 大廳)
-        is_town = False
-        is_lobby = False
-        
-        # 檢查已開啟彈窗防禦
-        if self.machine.diamond_window_opened:
+        # 1. 檢查已開啟對話視窗
+        if scene.scene_type == SceneType.WINDOW_DIAMOND:
             logging.info("💎 尋路中：偵測到鑽石視窗已開啟，跳轉至 DIAMOND_COLLECTION。")
             self.machine.transition_to(self.machine.STATE_DIAMOND_COLLECTION)
             self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
             return
-            
-        if self.machine.bread_window_opened:
+
+        if scene.scene_type == SceneType.WINDOW_BREAD:
             logging.info("🍞 尋路中：偵測到體力視窗已開啟，跳轉至 BREAD_COLLECTION。")
             self.machine.transition_to(self.machine.STATE_BREAD_COLLECTION)
             self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
             return
-            
-        # 檢查城鎮指標 (door.png 或 diamond.png)
-        pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.8)
-        pos_diamond, conf_diamond = self.matcher.match(screen_img, "diamond.png", threshold=0.8)
-        if pos_door or pos_diamond:
-            is_town = True
-            
-        # 檢查大廳指標 (goback_town.png 或 bread.png)
-        pos_goback, conf_goback = self.matcher.match(screen_img, "goback_town.png", threshold=0.8)
-        pos_bread_btn, conf_bread_btn = self.matcher.match(screen_img, "common/bread.png", threshold=0.8)
-        if pos_goback or pos_bread_btn:
-            is_lobby = True
 
-        # 頁籤開啟狀態統一對比檢測 (比較 select_stage_after.png 與 dungeon_after.png)
-        res_tabs = self.matcher.match_mutually_exclusive_tabs(
-            screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
-        )
-        if isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4 and type(res_tabs).__name__ != "MagicMock":
-            stage_select_open, dungeon_select_open, _, _ = res_tabs
-        else:
-            conf_stage_after, conf_dungeon_after = 0.0, 0.0
-            if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-                res_sa = self.matcher.match(screen_img, "common/select_stage_after.png", threshold=0.70)
-                conf_stage_after = res_sa[1] if (isinstance(res_sa, (tuple, list)) and len(res_sa) >= 2 and res_sa[1] is not None) else 0.0
+        # 提取場景診斷結果與特徵座標
+        is_town = scene.is_town
+        is_lobby = scene.is_lobby
+        stage_select_open = "stage" in scene.active_tabs
+        dungeon_select_open = "dungeon" in scene.active_tabs
 
-            if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-                res_da = self.matcher.match(screen_img, "dungeons/dungeon_after.png", threshold=0.70)
-                conf_dungeon_after = res_da[1] if (isinstance(res_da, (tuple, list)) and len(res_da) >= 2 and res_da[1] is not None) else 0.0
+        pos_door = scene.matched_elements.get("common/door.png", (None, 0.0))[0]
+        pos_diamond = scene.matched_elements.get("diamond.png", (None, 0.0))[0]
+        pos_goback = scene.matched_elements.get("goback_town.png", (None, 0.0))[0]
+        pos_bread_btn = scene.matched_elements.get("common/bread.png", (None, 0.0))[0]
 
-            stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
-            dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
-
-        if is_town:
-            stage_select_open = False
-            dungeon_select_open = False
-        else:
-            if not stage_select_open and not dungeon_select_open:
-                stage_templates = self.machine.config.get("stage_templates", [])
-                for st_temp in stage_templates:
-                    if os.path.exists(os.path.join("templates", st_temp)):
-                        pos, conf = self.matcher.match(screen_img, st_temp, threshold=0.75)
-                        if pos:
-                            stage_select_open = True
-                            break
-
-            if not stage_select_open and not dungeon_select_open:
-                dungeon_templates = self.machine.config.get("dungeon_entries", [])
-                for dg_temp in dungeon_templates:
-                    if os.path.exists(os.path.join("templates", dg_temp)):
-                        pos, conf = self.matcher.match(screen_img, dg_temp, threshold=0.75)
-                        if pos:
-                            dungeon_select_open = True
-                            break
 
         # 2. 領鑽石優先流程
         if self.machine.need_diamond_collection:
@@ -352,6 +303,7 @@ class NavigationHandler(BaseStateHandler):
         # B. 原本的尋路導航邏輯
         # 如果是地下城模式，且畫面上看見任何一個地下城入口，執行地下城選關邏輯（支援自動貪婪挑選與指定地下城左右滑動尋找）
         config_type = self.machine.config.get("type") if self.machine.config else "stage"
+        nav_path = self.machine.config.get("navigation_path", [])
         
         if config_type == "blood_altar":
             self.machine.transition_to(self.machine.STATE_BLOOD_ALTAR)

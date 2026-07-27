@@ -4,79 +4,71 @@
 
 ---
 
-## 1. Git 分支與 Commit 規範 🔀
-1. **Commit 訊息格式**：採用 Angular Standard Commit 規範（`feat:`, `fix:`, `refactor:`, `docs:`, `test:`）。
-2. **分支合併限制 (Strict Rule)**：
-   - ⚠️ **AI 協同開發人員絕對禁止自行執行分支合併**（例如將 feature 分支 merge 到 `main` 分支）。
-   - 只有在使用者明確指示「可以進行 merge」時，AI 方可執行合併操作。
-3. **分支合併強制使用 `--no-ff` (Non-Fast-Forward Rule)**：
-   - 合併分支至 `main` 時，**必須強制使用 `--no-ff` 參數**（例如 `git merge --no-ff <branch_name>`），確保 Git 歷史留下明確的分支合併節點。
-   - 合併時必須撰寫 **結構化與詳細的 Merge Commit 日誌**，明確記載：
-     - 修改統計（如 `36 commits, +1372/-490 lines`）
-     - 各子模組/領域的技術改動細節
-     - 單元測試與驗證結果（如 `All 249+ unit tests passed OK`）
+## 核心原則：AI Agent 4 大極簡原則 💡
+
+1. **「感知」與「決策」分離**：`Detector` 只負責觀察畫面並輸出狀態 (`SceneInfo`)，絕不觸發點擊；`Handler` 只根據狀態做決策，絕不現場比對畫面。
+2. **單一職責與 300 行警戒線**：一檔一職。任何檔案超過 300 行或出現非本檔職責之 `if` 分支時，必須主動提請重構抽離。
+3. **狀態驅動，拒絕補釘**：面對新需求/彈窗，優先建立獨立 State 或子狀態機，絕不在主流程中增修 `if is_special_case` 補釘。
+4. **全局審視優先於局部編寫**：寫代碼前必須先審視既有架構，嚴禁無視模組邊界隨手插入跨層邏輯。
 
 ---
 
-## 2. 極速掛機效能與物理延遲規範 ⚡
-1. **PyAutoGUI 全域延遲**：必須維持 `pyautogui.PAUSE = 0.002` (2ms) 的極低全域預設阻塞。
-2. **滑鼠點擊物理時長**：`mouseDown` 與 `mouseUp` 之間必須保留 `40ms` 間隔 (`time.sleep(0.04)`)，且點擊釋放後至少等待 `40ms`，確保遊戲客戶端能穩定輪詢捕捉事件。
-3. **主迴圈偵測間隔**：`--interval` 預設為 `0.05` 秒 (50ms)。
-4. **狀態處理器點擊後等待**：常規按鈕點擊後睡眠統一壓縮至 `30ms`；跨場景/下樓睡眠壓縮至 `40ms`。
+## 研發與維護實務規範 🛠️
 
----
+### 1. Git 分支與 Commit 規範 🔀
+> [!CRITICAL]
+> **禁止自行合併**：AI 絕對禁止自行執行分支合併 (`git merge`)，必須等待使用者明確指示。
 
-## 3. 開發故事與成果記錄規範 (PARS Framework) 📝
-當需要描寫與記錄專案中的開發故事與成果時，必須遵循 **PARS 架構** 在 `docs/storys/` 目錄下建立文件：
-1. **Purpose (目的)**: 描述需求或痛點。
-2. **Action (行動)**: 具體改進措施與細節。
-3. **Result (結果)**: 成效與測試驗證結果。
-4. **So What (核心價值)**: 提煉出最核心的工程價值。
-5. **Influence (影響)**: 對後續架構與其他模組的借鑑。
+- **Commit 格式**：Angular Standard (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
+- **強制 `--no-ff`**：合併至 `main` 必須使用 `git merge --no-ff` 並附帶包含異動統計、模組細節與測試結果的結構化 Merge Log。
 
----
+### 2. 極速掛機與延遲規範 ⚡
+- `pyautogui.PAUSE = 0.002` (2ms)。
+- `mouseDown`/`mouseUp` 間隔 `40ms` (`time.sleep(0.04)`)，釋放後至少等 `40ms`。
+- 主迴圈 `--interval` 預設 `0.05` 秒 (50ms)；常規按鈕點擊後等待 `30ms`，跨場景/下樓等待 `40ms`。
 
-## 4. 通用卡片/彈窗局部比對與 Scale 視務規範 (Scoped Crop & Scale Guidelines) 🎯
-1. **禁止全螢幕盲目比對 (Scoped Crop Only)**：
-   - 涉及卡片狀態（如冷卻木牌 `cooldown_left.png` / `cooldown_right.png`）或大彈窗內部按鈕（如 `free_treasure.png` 內的 `free.png`）比對時，**絕對禁止直接對全螢幕 `screen_img` 進行全局掃描**。
-   - 必須先透過範本匹配取得主體（卡片或彈窗）中心座標與邊界，切割局部區域 `crop = screen_img[y1:y2, x1:x2]` 後，僅在 `crop` 內部進行木牌比對、按鈕定位或 OCR 解析。
-2. **解析度 Scale 自適應 (Template Scale Adaptation)**：
-   - 在計算卡片/彈窗裁切邊界時，必須考量不同遊戲視窗尺寸與解析度縮放。
-   - 透過 `scale_x = w / base_w` 縮放範本寬高 `t_w, t_h`，避免因螢幕縮放導致裁切座標偏離或木牌/按鈕漏檢。
-3. **無木牌預先防呆機制 (Pre-Click Sign Verification)**：
-   - 比對出 `cooldown_left.png` 或 `cooldown_right.png` ➔ 代表冷卻中，啟動 OCR 解析剩餘時間。
-   - **無木牌** ➔ 代表可挑戰，方可發射點擊。
+### 3. 開發故事規範 (PARS Framework) 📝
+- 功能/修復收尾時於 `docs/storys/` 建立 PARS 文檔 (`Purpose`, `Action`, `Result`, `So What`, `Influence`)。
 
----
+### 4. 局部比對與 Scale 視務規範 🎯
+- **Scoped Crop Only**：卡片/彈窗內部比對禁止全螢幕掃描，必須先切割 `crop` 區域再比對。
+- **Scale 自適應**：以 `scale_x = w / base_w` 縮放範本；卡片發射前需先核驗無冷卻木牌。
 
-## 5. 懸賞任務對應規則維護與擴充規範 (Quest Rules Maintenance) 📋
-1. **任務規則唯一定義檔與參考報告**：
-   - 所有的懸賞任務對應規則（將任務標題/關鍵字映射至關卡或地下城）與三大任務全名清單（`DETERMINISTIC_QUESTS`, `BANNER_VERIFY_QUESTS`, `IGNORED_QUESTS`）皆集中定義在 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84) 的 `QuestMapper` 類別中。
-   - 完整對照與多階梯排序報告請參閱 [quest_mapping_rules_report.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/quest_mapping_rules_report.md)。
-   - **多階梯優先級排序 (`sort_quests`)**：`確定性` (0) > `僅彈窗核銷` (1)；`地下城` (0) > `關卡` (1)；`dungeon_index/stage_level` 大者優先！
-   - **顯式忽略任務**：定義於 `IGNORED_QUESTS`（`獵金之蟲`, `完成任何地下城`, `敵人剿滅` ➔ 不執行、不上報 unknown_quests）。
-2. **未定義任務新增加載流程 (Adding New Quests)**：
-   - 當懸賞告示牌出現未對應的全新任務時，系統會自動記錄於 [user_data/daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json) 的 `subflows.bulletin_board.unknown_quests` 列表中 (每日不清空)。
-   - 當使用者指示「加入新任務」時，AI 與開發者必須直接開啟 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84) 補充對應正則關鍵字規則與分類全名清單。
+### 5. 懸賞任務對應規範 📋
+- 集中於 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84) 的 `QuestMapper`；報告維護於 [quest_mapping_rules_report.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/quest_mapping_rules_report.md)。
+- 優先級：`確定性` > `僅彈窗`；`地下城` > `關卡`；`關卡層數`大者優先。未知任務自動下記 `user_data/daily_status.json`。
 
----
+### 6. 測試架構設計與執行規範 (Google Software Engineering Standard) 🧪
 
-## 6. 測試執行精準度與效能規範 (Test Execution Efficiency) 🧪
+1. **測試行為而非實作 (Test Public Behaviors, Not Private Implementation)**：
+   - **Google 軟體工程最佳實務**：測試案例必須專注於驗證系統的**外部可觀察行為**與狀態轉移契約（Given 特性畫面/狀態 ➔ When 觸發處理 ➔ Then 斷言發射點擊或轉移狀態）。
+   - **拒絕與實作細節耦合**：嚴禁測試內部私有 Helper 或依賴中間變數。當進行內部架構重構（如抽離 `SceneDetector`）時，行為測試應在不改動測試程式碼的前提下維持 100% 綠燈，真正作為防護網。
 
-1. **假設有修改程式碼 (Code Modification)**：
-   - 當修改 `states/`, `utils/`, `config.py` 或 `main.py` 等程式碼時，**必須先執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
+2. **按業務領域輕量化拆分測試檔 (Behavioral Domain Slicing)**：
+   - **拒絕單一巨型測試包**：測試檔應按獨立業務行為領域（Behavior Domains）拆分，單一測試檔維持輕量且職責單一：
+     - `tests/test_behavior_navigation.py` (導航與頁籤切換行為)
+     - `tests/test_behavior_stamina_retreat.py` (體力退避與狀態切換行為)
+     - `tests/test_behavior_daily_pipeline.py` (懸賞任務動態調度行為)
+     - `tests/test_behavior_town_subflows.py` (城鎮子流程行為)
+     - `tests/test_behavior_bag_cleaning.py` (背包滿與整理銷毀行為)
+   - 每一包專注特定行為閉環，組合後可 100% 涵蓋系統所有現有功能。
 
-2. **假設跑完「所有測試」發現有錯誤 (Failed Tests Handling)**：
-   - **針對性修復與疊代**：修改程式碼 ➔ **僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) ➔ **直到所有有錯的測試修正通過** ➔ **再次執行「所有測試」** 確保無其他側邊效應。若再次發現有錯，回到本步驟持續疊代。
+3. **測試執行與修復疊代流程 (Test Execution Efficiency)**：
+   > [!IMPORTANT]
+   > **測試執行三大精確規則**：
+   > 1. **僅修改測試檔案 (Test-Only Modification)**：**嚴禁執行全套測試！只精確執行該修改的測試檔案或方法** (例如: `.venv\Scripts\python -m unittest tests.test_xxx`)。
+   > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後才執行全套驗證。
+   > 3. **有修改核心程式碼 (Code Modification)**：修改 `states/`, `utils/`, `config.py` 或 `main.py` 時，**必須執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
 
-3. **假設只有修改測試檔案 (Test-Only Modification)**：
-   - 當未修改業務程式碼，僅新增、補充或微調測試檔案/測試方法時，**僅須精確執行該修改的測試檔或測試方法**。
-   - 若執行過程中發現問題出在程式碼本體，請直接**回到第 2 點流程**處理。
-
-   - **範例指令**：
-     - 精確執行單一測試檔案：`.venv\Scripts\python -m unittest tests.test_state_machine_logic`
-     - 精確執行單一測試方法：`.venv\Scripts\python -m unittest tests.test_state_machine_logic.TestStateMachineLogic.test_multiple_task_complete_popups_sequential_handling`
-
-
-
-
+4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
+   - 當僅更新、編寫或補強單一行為測試檔，而沒有修改邏輯實作時，**禁止盲目每次重新執行 4 分鐘全套測試**。
+   - **精要兩步流程**：
+     1. **增量累加**：使用 `-a` (`--append`) 僅執行新編寫之測試檔，將覆蓋數據與原數據庫求**聯集 (Union)**：
+        ```bash
+        .venv\Scripts\python -m coverage run -a -m unittest tests.test_behavior_xxx
+        ```
+     2. **報表**：
+        ```bash
+        .venv\Scripts\python -m coverage report --include="states/handlers/navigation.py,utils/scene_detector.py" -m
+        ```
+   - **最終全域驗證**：完成所有增量開發準備 Commit 前，才執行全套測試 (`.venv\Scripts\python -m unittest discover tests`) 作為收尾。

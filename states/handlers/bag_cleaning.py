@@ -108,11 +108,15 @@ class BagCleaningHandler(BaseStateHandler):
                 if os.path.exists(os.path.join("templates", quit_btn)):
                     pos_quit, conf_quit = self.matcher.match(screen_img, quit_btn, threshold=0.7)
                     if pos_quit:
-                        logging.info(f"🎒 背包清理：已整理完畢，點擊退出按鈕 [{quit_btn}] (信心度: {conf_quit:.4f}) 關閉背包。")
+                        logging.info(f"🎒 背包清理：已整理完畢，點擊退出按鈕 [{quit_btn}] (信心度: {conf_quit:.4f}) 關閉背包 (配對確認直到消失)...")
                         self._save_step_screenshot(screen_img, "9_quit")
-                        self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                        self.click_and_wait_until_gone(quit_btn, rect["left"] + pos_quit[0], rect["top"] + pos_quit[1], rect, threshold=0.7)
+
                         self.machine.need_bag_cleaning = False
+
+
                         self.machine.bag_tidied = False
+
                         self.machine.bag_disassembled = False  # 重設分解狀態
                         self.machine.bag_select_all_clicked = False  # 重設全選狀態
                         self.machine.bag_deselected = False # 重設反選狀態
@@ -283,9 +287,13 @@ class BagCleaningHandler(BaseStateHandler):
                         click_x = rect["left"] + (pos_quit[0] if pos_quit else btn_cx - 738 + 859)
                         click_y = rect["top"] + (pos_quit[1] if pos_quit else btn_cy - 590 + 38)
                         
-                        logging.info(f"🎒 背包清理：點擊關閉按鈕 ({click_x}, {click_y}) 退出大量分解。")
+                        logging.info(f"🎒 背包清理：點擊關閉按鈕 ({click_x}, {click_y}) 退出大量分解 (配對確認直到消失)...")
                         self._save_step_screenshot(screen_img, "quit_all_valuable")
-                        self.mouse.click(click_x, click_y)
+                        if pos_quit:
+                            self.click_and_wait_until_gone("common/quit.png", click_x, click_y, rect, threshold=0.7)
+                        else:
+                            self.mouse.click(click_x, click_y)
+
                         self.machine.bag_deselected = True
                         self.machine.bag_disassembled = True
                         time.sleep(0.1)
@@ -316,7 +324,8 @@ class BagCleaningHandler(BaseStateHandler):
                             self._save_step_screenshot(screen_img, "6_disassemble_dry_run")
                             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.6)
                             if pos_quit:
-                                self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                                self.click_and_wait_until_gone("common/quit.png", rect["left"] + pos_quit[0], rect["top"] + pos_quit[1], rect, threshold=0.6)
+
                             self.machine.bag_disassembled = True
                             time.sleep(0.1)
                             return

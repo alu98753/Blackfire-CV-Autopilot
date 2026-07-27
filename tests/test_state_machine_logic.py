@@ -387,10 +387,14 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(900, 900)
         self.assertTrue(self.state_machine.bag_tidied)
         
-        # - 當 bag_tidied 為 True 時，偵測 quit 按鈕 (dungeons/quit.png) ➔ 點擊退出，結束清理並恢復 LOBBY 狀態
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((1000, 1000), 0.9) if name == "common/quit.png" else (None, 0.0)
-        )
+        quit_matched = [False]
+        def mock_match_quit(img, name, **kw):
+            if name == "common/quit.png" and not quit_matched[0]:
+                quit_matched[0] = True
+                return ((1000, 1000), 0.9)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = mock_match_quit
+
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1000, 1000)
         

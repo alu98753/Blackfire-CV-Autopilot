@@ -153,14 +153,16 @@ class TaskNode:
 
 # ------------------ 懸賞任務全名與計數分類資料庫 ------------------
 DETERMINISTIC_QUESTS = [
+    "清除骷髏",
+    "清除蜘蛛",
+    "清除樹人",
+    "清除野豬",
+    "清除熊",
     "清除沙蟲",
     "清除蛙人",
-    "清除骷髏",
-    "清除史萊姆",
-    "清除樹人",
-    "清除熊",
-    "清除蜘蛛",
+    "清除蛤蟆",
     "討伐惡魔",
+    "擊敗冰元素",
 ]
 
 BANNER_VERIFY_QUESTS = [
@@ -175,6 +177,7 @@ IGNORED_QUESTS = [
     "完成任何地下城",
     "敵人剿滅",
     "擊殺首領",
+    "虛空行者的審判",
 ]
 
 import difflib
@@ -200,6 +203,7 @@ TYPO_GROUPS = {
     "枷鎖": ["加鎖", "架鎖"],
     "詛咒": ["姐咒", "詛祝"],
     "獵金": ["獵全"],
+    "虛空行者的審判": ["虛f行者昀番判", "虛空行者審判"],
 }
 
 # 自動將 TYPO_GROUPS 展平為一對一匹配字典 OCR_TYPO_MAP
@@ -283,6 +287,7 @@ class QuestMapper:
             (r"(清除熊|熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除沙蟲|沙蟲)", 4, "middle", TaskNode.POLICY_DETERMINISTIC),
             (r"(清除蛙人|蛙人)", 5, "first", TaskNode.POLICY_DETERMINISTIC),
+            (r"(清除蛤蟆|蛤蟆)", 5, "six", TaskNode.POLICY_DETERMINISTIC),
             (r"(討伐惡魔|惡魔)", 6, "six", TaskNode.POLICY_DETERMINISTIC),
             (r"(擊敗冰元素|冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
         ]
@@ -309,20 +314,18 @@ class QuestMapper:
             idx_score = -node.stage_level if node.stage_level is not None else 0
             sub_map = {"final": 0, "middle": 1, "first": 2}
             sub_score = sub_map.get(node.sub_stage, 3)
-        else:
-            mode_score = 9
-            idx_score = 0
-            sub_score = 0
+        if node is None:
+            return (99, 99, 0, 0)
 
         # 2. 梯隊二：確定性優先
-        policy_score = 0 if node.counting_policy == TaskNode.POLICY_DETERMINISTIC else 1
+        policy_score = 0 if getattr(node, "counting_policy", None) == TaskNode.POLICY_DETERMINISTIC else 1
 
         return (mode_score, policy_score, idx_score, sub_score)
 
     def sort_quests(self, quest_titles):
         """
         對懸賞任務標題陣列進行多階梯優先級排序。
-        過濾掉 ignored 任務，並按 [確定性 ➔ 地下城/關卡 ➔ idx/level大者優先] 排序。
+        過濾掉 ignored 與 unknown (node is None) 任務，並按 [確定性 ➔ 地下城/關卡 ➔ idx/level大者優先] 排序。
         """
         if not quest_titles:
             return []
@@ -332,7 +335,7 @@ class QuestMapper:
                 continue
             norm = normalize_quest_title(t)
             node = self.parse_quest(norm)
-            if node is not None and node.mode_type == "ignored":
+            if node is None or node.mode_type == "ignored":
                 continue
             if norm not in valid_titles:
                 valid_titles.append(norm)

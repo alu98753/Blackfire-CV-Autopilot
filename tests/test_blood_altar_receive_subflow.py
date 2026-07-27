@@ -74,9 +74,7 @@ class TestBloodAltarReceiveSubflow(unittest.TestCase):
         self.mock_matcher.match.side_effect = fake_match_step3
         handler.handle()
 
-        # Step 4: 彈窗關閉後看見 Sacrifice.png 獻祭選單按鈕 ➔ 轉入 SACRIFICE_MENU_OPEN
-        handler.last_action_time = 0.0
-
+        # Step 4: 彈窗關閉後無彈窗殘留 (連續 3 幀無彈窗) ➔ 轉入 SACRIFICE_MENU_OPEN
         def fake_match_step4(img, name, **kw):
             if kw.get("quiet"):
                 return (None, 0.0)
@@ -85,7 +83,9 @@ class TestBloodAltarReceiveSubflow(unittest.TestCase):
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = fake_match_step4
-        handler.handle()
+        for _ in range(3):
+            handler.last_action_time = 0.0
+            handler.handle()
         self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
 
 

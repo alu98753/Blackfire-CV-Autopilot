@@ -46,7 +46,7 @@ class BaseStateHandler:
         """
         [配對確認直到消失]
         發起點擊後，持續輪詢比對畫面，直到指定模板 template_name 從畫面上 100% 消失 (pos is None) 才解鎖返回。
-        若超過 retry_interval 秒模板仍未消失，則自動補點擊 (Re-click)，避免單點沒響應時空等。
+        若超過 retry_interval 秒模板仍未消失，則對當前匹配座標發起自動補點擊 (Re-click)。
         """
         import time, logging, os
         logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環...")
@@ -66,9 +66,17 @@ class BaseStateHandler:
                     else:
                         logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
                         if time.time() - last_click_t >= retry_interval:
-                            logging.info(f"🔄 [自動補點] 模板 [{template_name}] 在 {retry_interval} 秒內未消失，重新發起點擊 ({click_x}, {click_y})...")
-                            self.mouse.click(click_x, click_y)
+                            cur_x = rect["left"] + pos[0]
+                            cur_y = rect["top"] + pos[1]
+                            logging.info(f"🔄 [自動補點] 模板 [{template_name}] 在 {retry_interval} 秒內未消失，對當前目標位置 ({cur_x}, {cur_y}) 重新發起點擊...")
+                            self.mouse.click(cur_x, cur_y)
                             last_click_t = time.time()
+            else:
+                break
 
         time.sleep(post_delay)
+
+
+
+
 

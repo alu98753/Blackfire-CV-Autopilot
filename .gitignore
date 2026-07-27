@@ -41,3 +41,4 @@ scratch/
 
 # User runtime data & state persistence
 user_data/
+user_data_test_temp/

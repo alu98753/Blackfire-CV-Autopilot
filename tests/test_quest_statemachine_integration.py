@@ -261,7 +261,18 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
 
     def test_all_quests_completed_transitions_to_mix(self):
         """驗證當所有每日懸賞任務完成時，狀態機自動解鎖 QuestScheduler 並切換至預設 mix 模式配置 (冰雪洞窟 + 關卡 6-1)"""
+        # 手動標示 Tier 1 速領與 Tier 2 Boss 已完成
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
         scheduler = self.daily_mgr.load_quest_scheduler()
 
         sm.attach_quest_scheduler(scheduler)
@@ -271,8 +282,11 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
             t.completed_count = t.target_count
 
         res = sm.check_and_advance_quest_target()
-        self.assertTrue(res)
+        self.assertIsNone(res)
         self.assertIsNone(sm.quest_scheduler)
+        
+        # 測試由 evaluate_and_schedule_daily_pipeline 統一將配置切換至動態/預設 Tier 4 Mix 模式
+        sm.evaluate_and_schedule_daily_pipeline()
         self.assertEqual(sm.config["type"], "mix")
         self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
 

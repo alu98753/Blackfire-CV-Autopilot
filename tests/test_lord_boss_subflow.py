@@ -112,6 +112,7 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         
         stage_cfg = GAME_CONFIGS["stage"].copy()
         self.state_machine.primary_config = stage_cfg
+        self.state_machine.original_config = stage_cfg
         self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
         self.state_machine.stamina_retreat_start_time = time.time()
         self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS

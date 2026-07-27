@@ -393,9 +393,106 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(sm.config["keep_colors"], ["purple", "orange_yellow", "red"])
         self.assertEqual(sm.config["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
+    def test_update_bulletin_board_quests_filters_unknown_and_ignored(self):
+        """
+        [未知/忽略任務隔離測試] 驗證當告示牌掃描到未知任務 (完全未知任務_XYZ) 與忽略任務 (獵金之蟲) 時，
+        update_bulletin_board_quests 能精確將未知任務上報至 unknown_quests，剔除忽略任務，並只留有效懸賞至 accepted_quests！
+        """
+        import tempfile, shutil
+        from utils.daily_manager import DailyManager
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            daily_mgr = DailyManager(data_dir=tmp_dir, status_file="test_status.json")
+            raw_scanned = ["清除骷髏", "完全未知任務_XYZ", "獵金之蟲"]
+            res = daily_mgr.update_bulletin_board_quests(raw_scanned)
+            
+            # 斷言 accepted_quests 僅含有效任務 "清除骷髏"
+            self.assertEqual(res, ["清除骷髏"])
+            
+            # 斷言 unknown_quests 精確包含 "完全未知任務_XYZ"，且不含 "獵金之蟲"
+            bb = daily_mgr.status["subflows"]["bulletin_board"]
+            unknowns = bb.get("unknown_quests", [])
+            self.assertIn("完全未知任務_XYZ", unknowns)
+            self.assertNotIn("獵金之蟲", unknowns)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def test_toad_and_void_walker_quest_mapping(self):
+        """
+        [清除蛤蟆與虛空行者的審判測試]
+        1. 驗證 '清除蛤蟆' 能精確映射至 幽暗沼澤 (Level 5) 第六小關 (six)。
+        2. 驗證 EasyOCR 錯字 '虛f行者昀番判' 能自動正名為 '虛空行者的審判' 並解析為 mode_type == 'ignored'。
+        """
+        node_toad = self.mapper.parse_quest("清除蛤蟆")
+        self.assertIsNotNone(node_toad)
+        self.assertEqual(node_toad.mode_type, "stage")
+        self.assertEqual(node_toad.stage_level, 5)
+        self.assertEqual(node_toad.sub_stage, "six")
+
+        from utils.quest_mapper import normalize_quest_title
+        norm_void = normalize_quest_title("虛f行者昀番判")
+        self.assertEqual(norm_void, "虛空行者的審判")
+        
+        node_void = self.mapper.parse_quest(norm_void)
+        self.assertIsNotNone(node_void)
+        self.assertEqual(node_void.mode_type, "ignored")
+
+    def test_is_current_task_batch_completed_when_higher_priority_cooldown_expires(self):
+        """
+        [懸賞離場 bug 防護測試]
+        當低優先度任務 (清除蛤蟆 Stage 5) 進度到達 8/10 (batch滿4) 時，
+        即使高優先度任務 (破除森林的枷鎖 Dungeon 3) 冷卻剛好到期，
+        is_current_task_batch_completed 依然必須正確針對【當前執行的任務】回傳 True！
+        """
+        now = 1000.0
+        scheduler = QuestScheduler.from_daily_status(["破除森林的枷鎖", "清除蛤蟆"])
+        toad_node = [t for t in scheduler.tasks if t.quest_title == "清除蛤蟆"][0]
+        toad_node.completed_count = 8  # 8 % 4 == 0 滿批次
+        
+        # 1. 當 Dungeon 3 也在冷卻中時
+        cd_map_active = {2: now + 100.0} # Dungeon 3 index 2
+        stage5_cfg = toad_node.to_config_dict()
+        
+        # 2. 當 Dungeon 3 冷卻剛好結束 (now = 1101.0)
+        now_after_cd = 1101.0
+        
+        # 當傳入 current_config 時，必須精確判斷當前任務 (toad_node) 已滿 8 次 (True)
+        res_current = scheduler.is_current_task_batch_completed(
+            dungeon_cooldowns=cd_map_active, 
+            now_ts=now_after_cd,
+            current_config=stage5_cfg
+        )
+        self.assertTrue(res_current, "當前任務已滿 8 次，應正確判定批次完成！")
+
+    def test_has_higher_priority_task_ready(self):
+        """
+        [高優先度搶佔測試]
+        當前正執行關卡任務 (清除蛤蟆 Stage 5，進度 5/10 未滿批次)，
+        若高優先度地下城任務 (破除森林的枷鎖 Dungeon 3) 冷卻結束，
+        has_higher_priority_task_ready 應回傳 True，提示戰鬥結算應立即離場切換任務！
+        """
+        now = 1000.0
+        scheduler = QuestScheduler.from_daily_status(["破除森林的枷鎖", "清除蛤蟆"])
+        toad_node = [t for t in scheduler.tasks if t.quest_title == "清除蛤蟆"][0]
+        toad_node.completed_count = 5  # 5/10 未滿批次
+        
+        stage5_cfg = toad_node.to_config_dict()
+        cd_map = {2: now + 100.0} # Dungeon 3 (index 2) 在冷卻中
+        
+        # 當冷卻未結束 (now = 1050.0) ➔ 無更高優先度任務就緒 ➔ False
+        self.assertFalse(
+            scheduler.has_higher_priority_task_ready(current_config=stage5_cfg, dungeon_cooldowns=cd_map, now_ts=1050.0)
+        )
+        
+        # 當冷卻結束 (now = 1101.0) ➔ Dungeon 3 已經就緒 ➔ True
+        self.assertTrue(
+            scheduler.has_higher_priority_task_ready(current_config=stage5_cfg, dungeon_cooldowns=cd_map, now_ts=1101.0)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

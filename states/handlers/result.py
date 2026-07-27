@@ -151,8 +151,16 @@ class ResultHandler(BaseStateHandler):
                 boss_available = dm.has_available_lord_boss()
 
         quest_batch_completed = False
+        has_higher_priority_task = False
         if is_daily and getattr(self.machine, "quest_scheduler", None):
-            quest_batch_completed = self.machine.quest_scheduler.is_current_task_batch_completed(dungeon_cooldowns=self.machine.dungeon_cooldowns)
+            quest_batch_completed = self.machine.quest_scheduler.is_current_task_batch_completed(
+                dungeon_cooldowns=self.machine.dungeon_cooldowns,
+                current_config=self.machine.config
+            )
+            has_higher_priority_task = self.machine.quest_scheduler.has_higher_priority_task_ready(
+                current_config=self.machine.config,
+                dungeon_cooldowns=self.machine.dungeon_cooldowns
+            )
 
         is_in_tier4 = is_daily and (getattr(self.machine, "quest_scheduler", None) is None or self.machine.quest_scheduler.is_all_completed())
 
@@ -164,7 +172,8 @@ class ResultHandler(BaseStateHandler):
             (self.machine.enable_bread and self.machine.need_bread_collection) or
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
             (is_daily and boss_available) or
-            (is_daily and quest_batch_completed and not is_in_tier4)
+            (is_daily and quest_batch_completed and not is_in_tier4) or
+            (is_daily and has_higher_priority_task and not is_in_tier4)
         )
 
         # =========================================================================
@@ -257,7 +266,7 @@ class ResultHandler(BaseStateHandler):
                                     self.machine.daily_manager.record_lord_boss_fight(b_key)
 
                             self.machine.pending_daily_reset_exit = False
-                            next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                            next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
                             self.machine.transition_to(next_state)
                             return True
             else:
@@ -338,7 +347,7 @@ class ResultHandler(BaseStateHandler):
 
         self.machine.defeat_count = 0
         self.machine.is_in_dungeon = False
-        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
         self.machine.transition_to(next_state)
         time.sleep(0.2)
         return True

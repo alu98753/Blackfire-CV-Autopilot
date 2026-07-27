@@ -18,8 +18,9 @@ class BackpackFullSortingHandler(BaseStateHandler):
         if pos_quit:
             qx = rect["left"] + pos_quit[0]
             qy = rect["top"] + pos_quit[1]
-            logging.info(f"🎒 [背包分選] 成功匹配關閉按鈕 'common/quit.png' [{conf_quit:.4f}]，點擊座標: ({qx}, {qy})")
-            return self.mouse.click(qx, qy)
+            logging.info(f"🎒 [背包分選] 成功匹配關閉按鈕 'common/quit.png' [{conf_quit:.4f}]，點擊座標: ({qx}, {qy}) (配對確認直到消失)")
+            return self.click_and_wait_until_gone("common/quit.png", qx, qy, rect, threshold=0.7)
+
         else:
             # 備用防禦性點擊 (使用原有的寫死偏置計算並乘以縮放因子)
             # 設計相對位移：dx = 1228 - 630 = 598, dy = 50 - 91 = -41

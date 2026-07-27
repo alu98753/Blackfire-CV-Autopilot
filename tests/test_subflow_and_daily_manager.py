@@ -418,6 +418,31 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 斷言 StateMachine 上的殘留狀態已全數清空/重置 (quest_scheduler 設為 None, defeat_count 設為 0)
         self.assertIsNone(sm.quest_scheduler)
         self.assertEqual(sm.defeat_count, 0)
+        self.assertIsNone(sm.stamina_retreat_start_time)
+
+    def test_reevaluate_unknown_quests_on_load(self):
+        """
+        [Unknown 歸位自癒測試] 驗證當 unknown_quests 中包含：
+        1. 舊錯字 '討伐忠魔' (Mapper 正名 '討伐惡魔' ➔ 晉升正名 '討伐惡魔' 入 accepted_quests)
+        2. '獵全之蟲' (Mapper 正名 '獵金之蟲' 視為 ignored ➔ 移除)
+        3. '完全未知任務_XYZ' (仍無規則 ➔ 保留於 unknown_quests)
+        在載入 DailyManager 時自動完滿自癒歸位！
+        """
+        bb = self.manager.status["subflows"]["bulletin_board"]
+        bb["unknown_quests"] = ["討伐忠魔", "獵全之蟲", "完全未知任務_XYZ"]
+        bb["accepted_quests"] = ["清除骷髏"]
+        self.manager.save_status()
+
+        # 重新載入存檔觸發自癒
+        new_mgr = DailyManager(data_dir=TEST_DATA_DIR, status_file="test_daily.json")
+        new_bb = new_mgr.status["subflows"]["bulletin_board"]
+
+        # 斷言 unknown_quests 僅剩真正的未知任務
+        self.assertEqual(new_bb["unknown_quests"], ["完全未知任務_XYZ"])
+
+        # 斷言 accepted_quests 成功包含正名後的 '討伐惡魔' 與原本的 '清除骷髏'
+        self.assertIn("討伐惡魔", new_bb["accepted_quests"])
+        self.assertIn("清除骷髏", new_bb["accepted_quests"])
 
     def test_lord_boss_cooldown_buffer_prevents_infinite_triggering(self):
         """

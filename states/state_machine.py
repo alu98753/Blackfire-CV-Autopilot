@@ -255,6 +255,7 @@ class GameStateMachine:
                 self.quest_scheduler = None
                 self.defeat_count = 0
                 self.original_config = None
+                self.stamina_retreat_start_time = None
                 self.pending_daily_reset_exit = True
                 logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
 
@@ -443,7 +444,7 @@ class GameStateMachine:
                 if os.path.exists(os.path.join("templates", bf)):
                     pos, _ = self.matcher.match(screen_img, bf, threshold=0.8)
                     if pos:
-                        next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                        next_state = self.STATE_COLLECT_ONLY if self.is_in_collect_only_mode() else self.STATE_NAVIGATING
                         self.transition_to(next_state)
                         return
 
@@ -472,7 +473,7 @@ class GameStateMachine:
             pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
             logging.info(f"🔍 [除錯] 比對尋路按鈕 '{btn}'，最高相似度: {conf:.4f}，座標: {pos}")
             if pos and conf >= 0.8:
-                next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                next_state = self.STATE_COLLECT_ONLY if self.is_in_collect_only_mode() else self.STATE_NAVIGATING
                 self.transition_to(next_state)
                 return
                 
@@ -693,13 +694,16 @@ class GameStateMachine:
         當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
         """
         if getattr(self, "primary_config", None):
-            self.set_config(self.primary_config.copy())
+            fallback_cfg = self.primary_config.copy()
+            fallback_cfg["is_tier4_fallback"] = True
+            self.set_config(fallback_cfg)
             logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
         else:
             from config import PRIMARY_MODES
             mix_config = PRIMARY_MODES["mix"].copy()
             mix_config["greedy_dungeon"] = False
             mix_config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
+            mix_config["is_tier4_fallback"] = True
             if hasattr(self, "backend_mode"):
                 mix_config["backend_mode"] = self.backend_mode
 
@@ -712,16 +716,17 @@ class GameStateMachine:
     def check_and_advance_quest_target(self):
         """
         當當前任務目標完成時，動態查詢下一個懸賞任務目標並切換模式配置。
-        若所有懸賞任務已全數完成，自動解除懸賞排程器並切換為 mix 模式。
+        傳回值:
+          TaskNode: 成功排定並切換至該 Tier 3 懸賞任務目標 (Truthy)
+          None: 無法排定任何懸賞任務（無任務、已 100% 全部完成、或全部冷卻中） (Falsy)
         """
         if self.quest_scheduler is None:
-            return False
+            return None
 
         if self.quest_scheduler.is_all_completed():
-            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為混合模式")
+            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器。")
             self.quest_scheduler = None
-            self.apply_mix_fallback_config()
-            return True
+            return None
 
         target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
         if target_task:
@@ -737,11 +742,9 @@ class GameStateMachine:
                 quest_cfg["backend_mode"] = self.backend_mode
             self.set_config(quest_cfg)
             logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
-            return False
+            return target_task
 
-
-
-        return False
+        return None
 
 
 
@@ -994,7 +997,11 @@ class GameStateMachine:
             import sys
             sys.exit(0)
 
-        if getattr(self, "primary_config", None):
+        if getattr(self, "original_config", None) is not None:
+            from config import GAME_CONFIGS
+            self.set_config(GAME_CONFIGS["collect_only"].copy())
+            logging.info("體力退避期間城鎮流水線結束，回復定時領取待機配置 [collect_only]...")
+        elif getattr(self, "primary_config", None):
             self.set_config(self.primary_config.copy())
             logging.info(f"恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
         else:
@@ -1002,12 +1009,22 @@ class GameStateMachine:
         logging.info("=" * 60)
 
         # 城鎮流水線結束，先將狀態轉移至 NAVIGATING / COLLECT_ONLY，確保退出子流程狀態
-        next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+        next_st = self.STATE_COLLECT_ONLY if self.is_in_collect_only_mode() else self.STATE_NAVIGATING
         self.transition_to(next_st)
 
         # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
         if self.is_daily_pipeline_active():
             self.evaluate_and_schedule_daily_pipeline()
+
+    def is_in_collect_only_mode(self):
+        """
+        檢查目前活躍配置是否為定時領取待機 (collect_only)。
+        注意：不應僅以 stamina_retreat_start_time is not None 判定，
+        因為在 auto_resume_dungeon_on_cd 暫時切回打地下城時，stamina_retreat_start_time 仍保留作為背景倒數。
+        """
+        if not getattr(self, "config", None):
+            return False
+        return self.config.get("type") == "collect_only"
 
     def is_daily_pipeline_active(self):
         """
@@ -1055,11 +1072,15 @@ class GameStateMachine:
 
         # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
         if self.quest_scheduler:
-            self.check_and_advance_quest_target()
-            if self.quest_scheduler:
-                return True
+            if self.quest_scheduler.is_all_completed():
+                logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器")
+                self.quest_scheduler = None
+            else:
+                scheduled_node = self.check_and_advance_quest_target()
+                if scheduled_node:
+                    return True
 
-        # 4. 退守 Tier 4 Mix 模式 (冰雪洞窟 + 關卡 6-1)
+        # 4. 退守 Tier 4 Mix 模式 (當 Tier 1~3 皆無任務可做時，切換至退守配置)
         self.apply_mix_fallback_config()
         return False
 
