@@ -714,6 +714,8 @@ class GameStateMachine:
         """
         當當前任務目標完成時，動態查詢下一個懸賞任務目標並切換模式配置。
         若所有懸賞任務已全數完成，自動解除懸賞排程器並切換為 mix 模式。
+        True: 成功排定並派發了可執行的 Tier 3 懸賞任務目標
+        False: 無法派發任何懸賞任務（無任務、已 100% 全部完成、或全部冷卻中）。
         """
         if self.quest_scheduler is None:
             return False
@@ -722,7 +724,7 @@ class GameStateMachine:
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動切換為混合模式")
             self.quest_scheduler = None
             self.apply_mix_fallback_config()
-            return False
+            return True
 
         target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
         if target_task:
@@ -1072,9 +1074,7 @@ class GameStateMachine:
                 logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器")
                 self.quest_scheduler = None
             else:
-                scheduled = self.check_and_advance_quest_target()
-                if scheduled:
-                    return True
+                return self.check_and_advance_quest_target()
 
         # 4. 退守 Tier 4 Mix 模式 (冰雪洞窟 + 關卡 6-1)
         self.apply_mix_fallback_config()
