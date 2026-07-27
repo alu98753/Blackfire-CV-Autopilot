@@ -393,6 +393,24 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(sm.config["keep_colors"], ["purple", "orange_yellow", "red"])
         self.assertEqual(sm.config["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
+    def test_update_bulletin_board_quests_filters_unknown_and_ignored(self):
+        """
+        [未知/忽略任務隔離測試] 驗證當告示牌掃描到未知任務 (虛f行者昀番判, 清除蛤蟆) 與忽略任務 (獵金之蟲) 時，
+        update_bulletin_board_quests 能精確將未知任務上報至 unknown_quests，剔除忽略任務，並只留有效懸賞至 accepted_quests！
+        """
+        raw_scanned = ["清除骷髏", "虛f行者昀番判", "清除蛤蟆", "獵金之蟲"]
+        res = self.daily_manager.update_bulletin_board_quests(raw_scanned)
+        
+        # 斷言 accepted_quests 僅含有效任務 "清除骷髏"
+        self.assertEqual(res, ["清除骷髏"])
+        
+        # 斷言 unknown_quests 精確包含 "虛f行者昀番判" 與 "清除蛤蟆"，且不含 "獵金之蟲"
+        bb = self.daily_manager.status["subflows"]["bulletin_board"]
+        unknowns = bb.get("unknown_quests", [])
+        self.assertIn("虛f行者昀番判", unknowns)
+        self.assertIn("清除蛤蟆", unknowns)
+        self.assertNotIn("獵金之蟲", unknowns)
+
 
 if __name__ == "__main__":
     unittest.main()

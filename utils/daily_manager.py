@@ -98,11 +98,17 @@ class DailyManager:
         if raw_quests:
             from utils.quest_mapper import QuestMapper
             mapper = QuestMapper()
+            unknowns_found = [q for q in raw_quests if q and mapper.parse_quest(q) is None]
+            if unknowns_found:
+                for uq in unknowns_found:
+                    self.record_unknown_quest(uq)
+                raw_quests = [q for q in raw_quests if q not in unknowns_found]
+                bb["accepted_quests"] = raw_quests
             cleaned_quests = mapper.sort_quests(raw_quests)
-            if cleaned_quests != raw_quests:
+            if cleaned_quests != raw_quests or unknowns_found:
                 bb["accepted_quests"] = cleaned_quests
                 self.save_status()
-                logging.info(f"✨ [DailyManager] 自動自癒清洗存檔中未正名的任務佇列: {cleaned_quests}")
+                logging.info(f"✨ [DailyManager] 自動自癒清洗存檔中未正名/未知的任務佇列: {cleaned_quests}")
 
     def save_status(self):
         """
@@ -335,6 +341,10 @@ class DailyManager:
             if node is not None and node.mode_type == "ignored":
                 logging.info(f"🚫 [DailyManager] 新抓取任務 [{q}] 為顯式忽略任務，不寫入 accepted_quests。")
                 continue
+            if node is None:
+                logging.warning(f"⚠️ [DailyManager] 新抓取任務 [{q}] 為未知/無法解析任務，自動移至 unknown_quests，不寫入 accepted_quests。")
+                self.record_unknown_quest(q)
+                continue
             if q not in updated:
                 updated.append(q)
 
@@ -343,6 +353,9 @@ class DailyManager:
                 continue
             node = mapper.parse_quest(q)
             if node is not None and node.mode_type == "ignored":
+                continue
+            if node is None:
+                self.record_unknown_quest(q)
                 continue
             if q not in updated:
                 updated.append(q)
