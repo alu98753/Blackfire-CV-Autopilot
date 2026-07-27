@@ -38,7 +38,7 @@ class BloodAltarHandler(BaseStateHandler):
             logging.info("🩸 [血之祭壇] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
             left = rect["left"] if rect else 0
             top = rect["top"] if rect else 0
-            self.mouse.click(left + pos_goback[0], top + pos_goback[1])
+            self.click_and_wait_until_gone("goback_town.png", left + pos_goback[0], top + pos_goback[1], rect)
             self.last_action_time = time.time()
             return False
         return True
