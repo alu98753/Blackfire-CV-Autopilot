@@ -28,7 +28,8 @@ templates/town_building/Jewelry_workshop/goods/
 │   └── Slime_Mucus.png                       # 史萊姆黏液
 ├── green/                                    # 綠色素材 (優秀)
 │   ├── The_cloth_wrapped_around_the_dead.png # 包裹死者的布
-│   └── Giant_Beast_Gold_Tooth.png           # 巨獸金牙
+│   ├── Giant_Beast_Gold_Tooth.png           # 巨獸金牙
+│   └── Toad_Venom.png                        # 蟾蜍毒液
 ├── blue/                                     # 藍色素材 (預留)
 └── purple/                                   # 紫色素材 (預留)
 ```
@@ -55,6 +56,7 @@ templates/town_building/Jewelry_workshop/goods/
     "green": {
         "The_cloth_wrapped_around_the_dead": True, # 出售包裹死者的布
         "Giant_Beast_Gold_Tooth": True,            # 出售巨獸金牙
+        "Toad_Venom": True,                        # 出售蟾蜍毒液
     },
     "blue": {},
     "purple": {},
