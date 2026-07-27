@@ -110,6 +110,58 @@ class DailyManager:
                 self.save_status()
                 logging.info(f"✨ [DailyManager] 自動自癒清洗存檔中未正名/未知的任務佇列: {cleaned_quests}")
 
+        self.reevaluate_unknown_quests()
+
+    def reevaluate_unknown_quests(self):
+        """
+        當 QuestMapper 新增規則或正名對齊後，自動重新掃描存檔中的 unknown_quests：
+        - 依然 unknown ➔ 保留於 unknown_quests
+        - 變為 ignored ➔ 從 unknown_quests 移除 (刪除)
+        - 變為有效任務 ➔ 從 unknown_quests 移除，正名後晉升至 accepted_quests (進行多階梯排序)
+        """
+        subflows = self.status.setdefault("subflows", {})
+        bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []})
+        unknowns = bb.get("unknown_quests", [])
+        if not unknowns:
+            return False
+
+        from utils.quest_mapper import QuestMapper, normalize_quest_title
+        mapper = QuestMapper()
+
+        remaining_unknowns = []
+        promoted_quests = []
+        changed = False
+
+        for uq in list(unknowns):
+            if not uq:
+                continue
+            norm = normalize_quest_title(uq)
+            node = mapper.parse_quest(norm)
+            if node is None:
+                if uq not in remaining_unknowns:
+                    remaining_unknowns.append(uq)
+            elif node.mode_type == "ignored":
+                logging.info(f"✨ [DailyManager 自癒] 未知任務 [{uq}] 經 Mapper 重新辨識為顯式跳過任務，自動從 unknown_quests 移除。")
+                changed = True
+            else:
+                logging.info(f"🎉 [DailyManager 自癒] 未知任務 [{uq}] 經 Mapper 重新解析為有效任務 [{node.quest_title}]，自動晉升至 accepted_quests！")
+                promoted_quests.append(node.quest_title)
+                changed = True
+
+        if changed or len(remaining_unknowns) != len(unknowns):
+            bb["unknown_quests"] = remaining_unknowns
+            if promoted_quests:
+                existing = bb.get("accepted_quests", [])
+                for pq in promoted_quests:
+                    if pq not in existing:
+                        existing.append(pq)
+                bb["accepted_quests"] = mapper.sort_quests(existing)
+            self.save_status()
+            logging.info(f"✨ [DailyManager 自癒] unknown_quests 重新評估完成！剩餘未知任務: {remaining_unknowns}")
+            return True
+
+        return False
+
     def save_status(self):
         """
         將當前狀態寫回 JSON 檔案。
