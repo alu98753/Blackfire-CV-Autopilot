@@ -271,6 +271,7 @@ SUBFLOW_CONFIGS = {
             "green": {
                 "The_cloth_wrapped_around_the_dead": True,
                 "Giant_Beast_Gold_Tooth": True,
+                "Toad_Venom": True,
             },
             "blue": {},
             "purple": {},
