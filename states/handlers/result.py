@@ -257,7 +257,7 @@ class ResultHandler(BaseStateHandler):
                                     self.machine.daily_manager.record_lord_boss_fight(b_key)
 
                             self.machine.pending_daily_reset_exit = False
-                            next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+                            next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
                             self.machine.transition_to(next_state)
                             return True
             else:
@@ -338,7 +338,7 @@ class ResultHandler(BaseStateHandler):
 
         self.machine.defeat_count = 0
         self.machine.is_in_dungeon = False
-        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.stamina_retreat_start_time is not None else self.machine.STATE_NAVIGATING
+        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
         self.machine.transition_to(next_state)
         time.sleep(0.2)
         return True

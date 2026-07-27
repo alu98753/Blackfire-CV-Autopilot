@@ -12,6 +12,17 @@ class CollectOnlyHandler(BaseStateHandler):
         - 如果需要領取體力，在大廳則進入領取；在城鎮則點擊門進入大廳。
         - 如果目前無領取任務，在大廳則自動返回城鎮，在城鎮則維持原地待機。
         """
+        # 0.0 檢查 08:05 跨日重置離場標示 (若在定時領取待機中，直接結束退避並觸發全新一日城鎮任務流水線)
+        if getattr(self.machine, "pending_daily_reset_exit", False):
+            logging.info("🌅 [定時領取待機] 偵測到 08:05 跨日重置標誌！結束體力退避，啟動新一日城鎮任務流水線...")
+            self.machine.pending_daily_reset_exit = False
+            self.machine.stamina_retreat_start_time = None
+            if getattr(self.machine, "original_config", None):
+                self.machine.config = self.machine.original_config
+                self.machine.original_config = None
+            self.machine.trigger_town_subflow_chain()
+            return
+
         # 0. 檢查體力不足退避恢復機制
         if self.machine.original_config is not None and self.machine.stamina_retreat_start_time is not None:
             retreat_hours = self.machine.config.get("stamina_retreat_duration", 4.0)

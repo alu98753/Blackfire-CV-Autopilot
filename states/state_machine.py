@@ -255,6 +255,7 @@ class GameStateMachine:
                 self.quest_scheduler = None
                 self.defeat_count = 0
                 self.original_config = None
+                self.stamina_retreat_start_time = None
                 self.pending_daily_reset_exit = True
                 logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
 
@@ -443,7 +444,7 @@ class GameStateMachine:
                 if os.path.exists(os.path.join("templates", bf)):
                     pos, _ = self.matcher.match(screen_img, bf, threshold=0.8)
                     if pos:
-                        next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                        next_state = self.STATE_COLLECT_ONLY if self.is_in_collect_only_mode() else self.STATE_NAVIGATING
                         self.transition_to(next_state)
                         return
 
@@ -472,7 +473,7 @@ class GameStateMachine:
             pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
             logging.info(f"🔍 [除錯] 比對尋路按鈕 '{btn}'，最高相似度: {conf:.4f}，座標: {pos}")
             if pos and conf >= 0.8:
-                next_state = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+                next_state = self.STATE_COLLECT_ONLY if self.is_in_collect_only_mode() else self.STATE_NAVIGATING
                 self.transition_to(next_state)
                 return
                 
@@ -994,7 +995,11 @@ class GameStateMachine:
             import sys
             sys.exit(0)
 
-        if getattr(self, "primary_config", None):
+        if getattr(self, "original_config", None) is not None:
+            from config import GAME_CONFIGS
+            self.set_config(GAME_CONFIGS["collect_only"].copy())
+            logging.info("體力退避期間城鎮流水線結束，回復定時領取待機配置 [collect_only]...")
+        elif getattr(self, "primary_config", None):
             self.set_config(self.primary_config.copy())
             logging.info(f"恢復主掛機模式配置: [{self.config.get('name', '原模式')}]")
         else:
@@ -1002,12 +1007,22 @@ class GameStateMachine:
         logging.info("=" * 60)
 
         # 城鎮流水線結束，先將狀態轉移至 NAVIGATING / COLLECT_ONLY，確保退出子流程狀態
-        next_st = self.STATE_COLLECT_ONLY if self.stamina_retreat_start_time is not None else self.STATE_NAVIGATING
+        next_st = self.STATE_COLLECT_ONLY if self.is_in_collect_only_mode() else self.STATE_NAVIGATING
         self.transition_to(next_st)
 
         # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
         if self.is_daily_pipeline_active():
             self.evaluate_and_schedule_daily_pipeline()
+
+    def is_in_collect_only_mode(self):
+        """
+        檢查目前活躍配置是否為定時領取待機 (collect_only)。
+        注意：不應僅以 stamina_retreat_start_time is not None 判定，
+        因為在 auto_resume_dungeon_on_cd 暫時切回打地下城時，stamina_retreat_start_time 仍保留作為背景倒數。
+        """
+        if not getattr(self, "config", None):
+            return False
+        return self.config.get("type") == "collect_only"
 
     def is_daily_pipeline_active(self):
         """
