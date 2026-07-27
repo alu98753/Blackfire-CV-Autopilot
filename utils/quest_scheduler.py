@@ -30,14 +30,60 @@ class QuestScheduler:
         """
         return len(self.get_pending_tasks()) == 0
 
-    def is_current_task_batch_completed(self, dungeon_cooldowns=None, now_ts=None):
+    def find_task_node_by_config(self, config):
         """
-        傳回當前正在執行的最優懸賞任務是否已打滿批次 (每 4 次) 或達到 10 次上限。
+        根據 GameStateMachine 的 config 字典匹配對應的 TaskNode 實例。
         """
+        if not config or not isinstance(config, dict):
+            return None
+        cfg_type = config.get("type")
+        for task in self.tasks:
+            if cfg_type == "dungeon" and task.mode_type == "dungeon":
+                if task.dungeon_index == config.get("dungeon_index"):
+                    return task
+            elif cfg_type == "stage" and task.mode_type in ["stage", "generic_boss"]:
+                if task.stage_level == config.get("stage_level") and task.sub_stage == config.get("sub_stage"):
+                    return task
+        return None
+
+    def is_current_task_batch_completed(self, dungeon_cooldowns=None, now_ts=None, current_config=None):
+        """
+        傳回當前正在執行的懸賞任務是否已打滿批次 (每 4 次) 或達到 10 次上限。
+        若傳入 current_config，優先針對當前運行的 TaskNode 做點擊判定；若未傳入則以 get_next_action_node 判定。
+        """
+        if current_config:
+            task = self.find_task_node_by_config(current_config)
+            if task:
+                return task.is_batch_completed()
+
         task, _ = self.get_next_action_node(dungeon_cooldowns=dungeon_cooldowns, now_ts=now_ts)
         if task:
             return task.is_batch_completed()
         return False
+
+    def has_higher_priority_task_ready(self, current_config, dungeon_cooldowns=None, now_ts=None):
+        """
+        檢查目前是否有比當前執行的任務 (current_config) 優先度更高的任務已解除冷卻就緒。
+        :return: bool
+        """
+        if not current_config:
+            return False
+
+        current_task = self.find_task_node_by_config(current_config)
+        if not current_task:
+            return False
+
+        next_best_task, _ = self.get_next_action_node(dungeon_cooldowns=dungeon_cooldowns, now_ts=now_ts)
+        if not next_best_task or next_best_task == current_task:
+            return False
+
+        try:
+            curr_idx = self.tasks.index(current_task)
+            next_idx = self.tasks.index(next_best_task)
+            return next_idx < curr_idx
+        except ValueError:
+            return False
+
 
 
     def get_next_action_config(self, dungeon_cooldowns=None, now_ts=None):
