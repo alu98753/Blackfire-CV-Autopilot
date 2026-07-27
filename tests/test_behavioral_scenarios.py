@@ -2327,6 +2327,104 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertEqual(handler.step_phase, "INIT")
         self.assertEqual(handler.empty_blood_scan_count, 0)
 
+    @patch('os.path.exists', return_value=True)
+    def test_blood_altar_full_pipeline_receive_and_sacrifice(self, mock_exists):
+        """
+        [血之祭壇全流程測試] 驗證重構後單向 Pipeline 的 5 階狀態流轉：
+        1. INIT ➔ ENTERED_BUILDING
+        2. ENTERED_BUILDING ➔ RECEIVE_TAB_OPEN
+        3. RECEIVE_TAB_OPEN ➔ HANDLING_RECEIVE_POPUPS (成功領水)
+        4. HANDLING_RECEIVE_POPUPS ➔ SACRIFICE_MENU_OPEN (僅驗證彈窗全清 3 幀)
+        5. SACRIFICE_MENU_OPEN ➔ ALL_DONE_EXITING (點擊 Sacrifice.png 頁籤與獻祭閉環)
+        """
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+        if self.state_machine.daily_manager:
+            self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=False)
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+
+        # Step 1: INIT 點擊建築進屋
+        def match_step1(img, name, **kw):
+            if name == "common/door.png":
+                return ((100, 100), 0.90)
+            elif name == "town_building/Blood_Altar/Blood_Altar.png":
+                return ((500, 500), 0.90)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_step1
+        handler.handle()
+        self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
+
+        # Step 2: ENTERED_BUILDING 點擊領水頁籤切換
+        handler.last_action_time = 0.0
+        def match_step2(img, name, **kw):
+            if name == "town_building/Blood_Altar/receive_entry.png":
+                return ((400, 700), 0.90)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_step2
+        handler.handle()
+        self.assertEqual(handler.step_phase, "RECEIVE_TAB_OPEN")
+
+        # Step 3: RECEIVE_TAB_OPEN 點擊每日領取按鈕 (帶入 brightness_threshold=0.50)
+        handler.last_action_time = 0.0
+        def match_step3(img, name, **kw):
+            if name == "town_building/Blood_Altar/receive_daily.png":
+                return ((500, 500), 0.85)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_step3
+        handler.handle()
+        self.assertEqual(handler.step_phase, "HANDLING_RECEIVE_POPUPS")
+
+        # Step 4: HANDLING_RECEIVE_POPUPS 僅驗證彈窗全清 (無彈窗 3 幀後轉移)
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (None, 0.0)
+        handler.last_action_time = 0.0
+        handler.handle()
+        handler.last_action_time = 0.0
+        handler.handle()
+        handler.last_action_time = 0.0
+        handler.handle()
+        self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
+
+        # Step 5: SACRIFICE_MENU_OPEN 點擊 Sacrifice.png 頁籤進入獻祭介面
+        def match_step5(img, name, **kw):
+            if name == "town_building/Blood_Altar/Sacrifice.png":
+                return ((700, 700), 0.90)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_step5
+        handler.last_action_time = 0.0
+        handler.handle()
+        self.mock_mouse.click.assert_called_with(700, 700)
+
+    @patch('os.path.exists', return_value=True)
+    def test_blood_altar_receive_daily_retry_3_frames_and_fallback(self, mock_exists):
+        """
+        [領血重試與降級測試] 驗證當 RECEIVE_TAB_OPEN 階段未掃描到 receive_daily.png 時：
+        連續重試 3 幀後，平滑降級轉移至 SACRIFICE_MENU_OPEN！
+        """
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.reset_state()
+        handler.step_phase = "RECEIVE_TAB_OPEN"
+
+        # 畫面無 receive_daily.png
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (None, 0.0)
+
+        # 1 幀重試
+        handler.handle()
+        self.assertEqual(handler.step_phase, "RECEIVE_TAB_OPEN")
+        self.assertEqual(handler.receive_scan_count, 1)
+
+        # 2 幀重試
+        handler.last_action_time = 0.0
+        handler.handle()
+        self.assertEqual(handler.step_phase, "RECEIVE_TAB_OPEN")
+        self.assertEqual(handler.receive_scan_count, 2)
+
+        # 3 幀重試觸發平滑轉移
+        handler.last_action_time = 0.0
+        handler.handle()
+        self.assertEqual(handler.step_phase, "SACRIFICE_MENU_OPEN")
+
     @patch('os.path.exists')
     def test_blood_altar_to_navigating_in_mix_mode_with_available_dungeon(self, mock_exists):
         """
