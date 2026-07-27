@@ -21,6 +21,10 @@
 
 - **Commit 格式**：Angular Standard (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
 - **強制 `--no-ff`**：合併至 `main` 必須使用 `git merge --no-ff` 並附帶包含異動統計、模組細節與測試結果的結構化 Merge Log。
+- **跨平台 Shell 貼上語法規範**：
+  - 為防止 Terminal 貼上多行指令時因換行符號（`\n`）導致指令截斷或報錯，提供 Merge 指令時必須**感應用戶 OS/Shell**。
+  - **Windows (PowerShell / CMD)**：必須使用**多個 `-m` 參數**串聯多段訊息 (例如 `git merge --no-ff <branch> -m "標題" -m "變更摘要..." -m "測試結果..."`)，避免任何跨列換行。
+  - **Linux / macOS (Bash / Zsh)**：可使用多個 `-m` 參數或標準多行引號。
 
 ### 2. 極速掛機與延遲規範 ⚡
 - `pyautogui.PAUSE = 0.002` (2ms)。
