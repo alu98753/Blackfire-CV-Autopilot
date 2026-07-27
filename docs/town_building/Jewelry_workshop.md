@@ -12,57 +12,13 @@
 
 ## 📂 顏色品質階層目錄結構 (Color-Based Directory Structure)
 
-素材模板依顏色品質等級分門別類收錄於 `templates/town_building/Jewelry_workshop/goods/` 子目錄中：
-
-```
-templates/town_building/Jewelry_workshop/goods/
-├── gray/                                     # 灰色素材 (普通)
-│   ├── Sandworm_scales.png                   # 沙蟲鱗片
-│   ├── Spider_silk.png                       # 蜘蛛絲
-│   ├── Spider_venom_glands.png               # 蜘蛛毒腺
-│   ├── Warcraft_Fang.png                     # 魔獸之牙 (預設不賣)
-│   ├── lizard_skin.png                       # 蜥蜴皮
-│   ├── scrap.png                             # 廢料
-│   ├── Frog_Skin.png                         # 青蛙皮
-│   ├── Purple_Spore.png                      # 紫色孢子
-│   └── Slime_Mucus.png                       # 史萊姆黏液
-├── green/                                    # 綠色素材 (優秀)
-│   ├── The_cloth_wrapped_around_the_dead.png # 包裹死者的布
-│   ├── Giant_Beast_Gold_Tooth.png           # 巨獸金牙
-│   └── Toad_Venom.png                        # 蟾蜍毒液
-├── blue/                                     # 藍色素材 (預留)
-└── purple/                                   # 紫色素材 (預留)
-```
+素材模板依顏色品質等級分門別類收錄於 `templates/town_building/Jewelry_workshop/goods/` 子目錄中
 
 ---
 
 ## ⚙️ 可配置出售規則 (Configurable Goods Settings)
 
 使用者可在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py#L255) 中的 `goods_settings` 字典內，按顏色品質區分並**個別管理每一個商品是否出售 (`True` / `False`)**：
-
-```python
-"goods_settings": {
-    "gray": {
-        "Sandworm_scales": True,     # 出售沙蟲鱗片
-        "Spider_silk": True,         # 出售蜘蛛絲
-        "Spider_venom_glands": True, # 出售蜘蛛毒腺
-        "Warcraft_Fang": False,      # 保留魔獸之牙 (不賣)
-        "lizard_skin": True,         # 出售蜥蜴皮
-        "scrap": True,               # 出售廢料
-        "Frog_Skin": True,           # 出售青蛙皮
-        "Purple_Spore": True,        # 出售紫色孢子
-        "Slime_Mucus": True,         # 出售史萊姆黏液
-    },
-    "green": {
-        "The_cloth_wrapped_around_the_dead": True, # 出售包裹死者的布
-        "Giant_Beast_Gold_Tooth": True,            # 出售巨獸金牙
-        "Toad_Venom": True,                        # 出售蟾蜍毒液
-    },
-    "blue": {},
-    "purple": {},
-}
-```
-
 > ⚠️ **注意事項**：新增任何商品截圖至 `goods/` 資料夾時，必須同步在 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py#L255) 的 `goods_settings` 白名單設定為 `True`，系統才會發起比對與出售！
 
 ---
