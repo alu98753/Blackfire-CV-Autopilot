@@ -16,8 +16,10 @@
 ## 研發與維護實務規範 🛠️
 
 ### 1. Git 分支與 Commit 規範 🔀
+> [!CRITICAL]
+> **禁止自行合併**：AI 絕對禁止自行執行分支合併 (`git merge`)，必須等待使用者明確指示。
+
 - **Commit 格式**：Angular Standard (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
-- **禁止自行合併**：⚠️ AI 絕對禁止自行執行分支合併，必須等待使用者明確指示。
 - **強制 `--no-ff`**：合併至 `main` 必須使用 `git merge --no-ff` 並附帶包含異動統計、模組細節與測試結果的結構化 Merge Log。
 
 ### 2. 極速掛機與延遲規範 ⚡
@@ -52,12 +54,14 @@
    - 每一包專注特定行為閉環，組合後可 100% 涵蓋系統所有現有功能。
 
 3. **測試執行與修復疊代流程 (Test Execution Efficiency)**：
-   - **有修改程式碼 (Code Modification)**：修改 `states/`, `utils/`, `config.py` 或 `main.py` 時，**必須先執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
-   - **測試失敗修復 (Failed Tests Handling)**：針對性修改 ➔ **僅精確執行有錯的測試檔案或方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) ➔ 修正通過後 **再次執行全套測試** 確保無側邊效應。
-   - **僅修改測試檔案 (Test-Only Modification)**：僅精確執行該修改的測試檔或測試方法。
+   > [!IMPORTANT]
+   > **測試執行三大精確規則**：
+   > 1. **僅修改測試檔案 (Test-Only Modification)**：**嚴禁執行全套測試！只精確執行該修改的測試檔案或方法** (例如: `.venv\Scripts\python -m unittest tests.test_xxx`)。
+   > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後才執行全套驗證。
+   > 3. **有修改核心程式碼 (Code Modification)**：修改 `states/`, `utils/`, `config.py` 或 `main.py` 時，**必須執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
 
 4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
-   - 當僅更新,編寫或補強單一行為測試檔,而沒有動實作時，**禁止盲目每次重新執行 4 分鐘全套測試**。
+   - 當僅更新、編寫或補強單一行為測試檔，而沒有修改邏輯實作時，**禁止盲目每次重新執行 4 分鐘全套測試**。
    - **精要兩步流程**：
      1. **增量累加**：使用 `-a` (`--append`) 僅執行新編寫之測試檔，將覆蓋數據與原數據庫求**聯集 (Union)**：
         ```bash
