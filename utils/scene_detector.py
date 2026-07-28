@@ -16,7 +16,9 @@ class SceneType(Enum):
     POPUP_TASK_COMPLETE = auto() # 任務完成彈窗
     WINDOW_DIAMOND = auto()       # 鑽石領取視窗已開啟
     WINDOW_BREAD = auto()         # 體力領取視窗已開啟
+    POPUP_UNEXPECTED = auto()     # 意外視窗/彈窗已開啟
     UNKNOWN = auto()              # 未知/切換中
+
 
 
 @dataclass

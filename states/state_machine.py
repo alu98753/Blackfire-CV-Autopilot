@@ -20,8 +20,10 @@ from states.handlers import (
     LordBossHandler,
     ChestHandler,
     HeroDrawHandler,
-    BulletinBoardHandler
+    BulletinBoardHandler,
+    UnexpectedPopupRecoveryHandler
 )
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -45,6 +47,8 @@ class GameStateMachine:
     STATE_CHEST = "CHEST"                                # 神秘寶箱 (開寶箱) 流程
     STATE_HERO_DRAW = "HERO_DRAW"                        # 抽英雄 (酒館招募) 流程
     STATE_BULLETIN_BOARD = "BULLETIN_BOARD"              # 懸賞告示牌 (領任務) 流程
+    STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
+
 
 
     
@@ -134,6 +138,10 @@ class GameStateMachine:
         self.continue_template = "common/continue.png"
         self._ocr_reader = None
         
+        # 意外彈窗處置與狀態暫存屬性
+        self.stashed_state = None
+        self.stashed_context = {}
+
         # 初始化註冊所有狀態處理器
         self.handlers = {
             self.STATE_NAVIGATING: NavigationHandler(self),
@@ -153,7 +161,40 @@ class GameStateMachine:
             self.STATE_CHEST: ChestHandler(self),
             self.STATE_HERO_DRAW: HeroDrawHandler(self),
             self.STATE_BULLETIN_BOARD: BulletinBoardHandler(self),
+            self.STATE_POPUP_RECOVERY: UnexpectedPopupRecoveryHandler(self),
         }
+
+    def stash_current_state(self, reason="unexpected_popup"):
+        """
+        暫存當前狀態與 context，並切換至意外彈窗復原流程 STATE_POPUP_RECOVERY。
+        """
+        if self.current_state != self.STATE_POPUP_RECOVERY:
+            self.stashed_state = self.current_state
+            self.stashed_context = {
+                "task_complete_phase": getattr(self, "task_complete_phase", None),
+                "last_state_change": self.last_state_change,
+                "timestamp": time.time(),
+                "reason": reason
+            }
+            logging.info(f"💾 [StateStash] 已暫存原狀態: {self.stashed_state} (原因: {reason})")
+            self.transition_to(self.STATE_POPUP_RECOVERY)
+
+    def restore_stashed_state(self):
+        """
+        復原先前暫存之狀態與 context。若無暫存狀態則安全降級至 STATE_NAVIGATING。
+        """
+        if self.stashed_state:
+            target = self.stashed_state
+            logging.info(f"🔄 [StateRestore] 恢復原暫存狀態: {target}")
+            self.stashed_state = None
+            self.stashed_context = {}
+            self.transition_to(target)
+            return True
+        else:
+            logging.warning("⚠️ [StateRestore] 無可恢復之暫存狀態，安全退避至 NAVIGATING")
+            self.transition_to(self.STATE_NAVIGATING)
+            return False
+
 
     @property
     def dungeon_defeat_count(self):
