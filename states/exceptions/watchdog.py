@@ -19,6 +19,8 @@ class ExceptionWatchdog:
 
     def __init__(self, machine):
         self.machine = machine
+        self.consecutive_stuck_count = 0
+        self.last_stuck_state = None
 
     def check(self, screen_img) -> bool:
         """
@@ -27,8 +29,8 @@ class ExceptionWatchdog:
         :param screen_img: 擷取到的遊戲畫面影像
         :return: True 代表已觸發例外並完成 stash_current_state()；False 代表畫面正常
         """
-        # 護欄：當前處於意外彈窗修復中，或處於定時領取/體力退避長途待機中 (COLLECT_ONLY) 時，豁免 Watchdog 30s 時間逾時檢查
-        if self.machine.current_state in [self.machine.STATE_POPUP_RECOVERY, self.machine.STATE_COLLECT_ONLY]:
+        # 1. 意外彈窗處置中豁免 (由 UnexpectedPopupRecoveryHandler 5 次重試控制)
+        if self.machine.current_state == self.machine.STATE_POPUP_RECOVERY:
             return False
 
         now_t = time.time()
@@ -41,10 +43,47 @@ class ExceptionWatchdog:
 
         state_duration = now_t - last_change
 
-        # 門檻判斷：戰鬥與探索 90 秒；其餘狀態 30 秒
+        # 2. 定時領取待機 (COLLECT_ONLY) 專屬智慧動態逾時與視窗崩潰消失護欄
+        if self.machine.current_state == self.machine.STATE_COLLECT_ONLY:
+            # (A) 視窗崩潰消失檢查 (HWND 不存在)
+            if hasattr(self.machine, "capturer") and self.machine.capturer:
+                rect = self.machine.capturer.get_window_rect()
+                if rect is None:
+                    logging.error("❌ [Watchdog] 定時領取待機中 (COLLECT_ONLY) 偵測到遊戲視窗消失崩潰 (HWND 不存在)！發起 GameRelaunchSubflow 重啟...")
+                    from states.exceptions.subflows import GameRelaunchSubflow
+                    GameRelaunchSubflow().execute(self.machine, reason="collect_only_window_lost")
+                    return True
+
+            # (B) 動態 CD 最大逾時時間檢查 (max(diamond_cd, bread_cd) + 60 秒緩衝)
+            cfg_dict = getattr(self.machine, "config", {}) or {}
+            diamond_cd = float(cfg_dict.get("diamond_cd", 300.0))
+            bread_cd = float(cfg_dict.get("bread_cd", 300.0))
+            collect_timeout = max(diamond_cd, bread_cd) + 60.0
+
+            if state_duration > collect_timeout:
+                logging.error(f"❌ [Watchdog] 定時領取待機狀態 [COLLECT_ONLY] 已卡住逾時 {state_duration:.1f}s (門檻 {collect_timeout}s)！發起 GameRelaunchSubflow 重啟...")
+                from states.exceptions.subflows import GameRelaunchSubflow
+                GameRelaunchSubflow().execute(self.machine, reason="collect_only_cooldown_timeout_exceeded")
+                return True
+
+            return False
+
+        # 門檻判斷：戰鬥、探索、背包整理與長城鎮任務 (抽卡/領懸賞/Boss/獻祭/寶箱/珠寶加工) 給予 90 秒寬鬆門檻；其餘短狀態 30 秒
+        long_subflow_states = [
+            self.machine.STATE_BATTLE,
+            self.machine.STATE_DUNGEON_EXPLORING,
+            self.machine.STATE_LORD_BOSS,
+            self.machine.STATE_HERO_DRAW,
+            self.machine.STATE_BULLETIN_BOARD,
+            self.machine.STATE_BLOOD_ALTAR,
+            self.machine.STATE_JEWELRY_WORKSHOP,
+            self.machine.STATE_CHEST,
+            self.machine.STATE_BAG_CLEANING,
+            self.machine.STATE_BACKPACK_FULL_SORTING
+        ]
         stuck_timeout = (
-            cfg.get("battle_stuck_timeout_sec", 90.0)
-            if self.machine.current_state in [self.machine.STATE_BATTLE, self.machine.STATE_DUNGEON_EXPLORING]
+            cfg.get("long_subflow_timeout_sec", 90.0)
+            if self.machine.current_state in long_subflow_states
             else cfg.get("non_battle_stuck_timeout_sec", 30.0)
         )
 
@@ -52,9 +91,26 @@ class ExceptionWatchdog:
         if state_duration < stuck_timeout:
             return False
 
-        # 2. 確定滿 30s/90s 逾時：啟動圖像特徵掃描與例外處理
+        # 2. 確定滿 30s/90s 逾時：計算連續卡死次數
+        if self.last_stuck_state == self.machine.current_state:
+            self.consecutive_stuck_count += 1
+        else:
+            self.last_stuck_state = self.machine.current_state
+            self.consecutive_stuck_count = 1
+
+        # 🚨 硬條件 B：若同一個狀態連續 2 次逾時 (代表第 1 次輕量救援無效) -> 觸發 GameRelaunchSubflow
+        if self.consecutive_stuck_count >= 2:
+            logging.error(
+                f"❌ [Watchdog] 狀態 [{self.machine.current_state}] 連續 {self.consecutive_stuck_count} 次逾時卡死！輕量救援無效，發起 GameRelaunchSubflow 重啟..."
+            )
+            self.consecutive_stuck_count = 0
+            self.last_stuck_state = None
+            from states.exceptions.subflows import GameRelaunchSubflow
+            GameRelaunchSubflow().execute(self.machine, reason=f"watchdog_consecutive_timeout_{self.machine.current_state}")
+            return True
+
         logging.warning(
-            f"⚠️ [Watchdog] 狀態 [{self.machine.current_state}] 已卡住逾時 {state_duration:.1f}s (門檻 {stuck_timeout}s)，啟動特徵掃描與復原！"
+            f"⚠️ [Watchdog] (第 1 次逾時) 狀態 [{self.machine.current_state}] 已卡住逾時 {state_duration:.1f}s (門檻 {stuck_timeout}s)，啟動特徵掃描與輕量復原！"
         )
 
         popup_handler = self.machine.handlers.get(self.machine.STATE_POPUP_RECOVERY)

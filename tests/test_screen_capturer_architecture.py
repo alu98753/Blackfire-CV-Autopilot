@@ -63,7 +63,7 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
         mock_enum_monitors.return_value = [("hmon1", None, None)]
         mock_get_mon_info.return_value = {"Monitor": (1, 1080, 1921, 2160), "Device": r"\\.\DISPLAY1"}
         # 模擬移動前在 (0, 0)，移動後抵達目標螢幕 (1, 1080)
-        mock_get_win_rect.side_effect = [(0, 0, 1280, 720), (1, 1080, 1921, 2160)]
+        mock_get_win_rect.side_effect = [(0, 0, 1280, 720), (0, 0, 1280, 720), (1, 1080, 1921, 2160)]
 
         with patch("ctypes.windll.user32.IsZoomed", return_value=False), \
              patch("ctypes.windll.user32.IsIconic", return_value=False):

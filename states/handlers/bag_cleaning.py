@@ -55,6 +55,7 @@ class BagCleaningHandler(BaseStateHandler):
                 if r_minus_b > 18.0:
                     logging.info(f"🎒 背包清理：優先使用備用模板偵測到背包入口按鈕 [{conf_bag:.4f}] (色彩驗證 R-B: {r_minus_b:.2f})，點擊打開背包。")
                     self._save_step_screenshot(screen_img, "1_open")
+                    self.notify_ui_progress()
                     self.mouse.click(rect["left"] + pos_bag[0], rect["top"] + pos_bag[1])
                     self.machine.bag_opened_clicked = True
                     time.sleep(0.1)
@@ -79,6 +80,7 @@ class BagCleaningHandler(BaseStateHandler):
         if pos_conf:
             logging.info(f"🎒 背包清理：偵測到確認彈窗 [{conf_conf:.4f}]，點擊確認。")
             self._save_step_screenshot(screen_img, "7_confirm")
+            self.notify_ui_progress()
             self.mouse.click(rect["left"] + pos_conf[0], rect["top"] + pos_conf[1])
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
@@ -92,6 +94,7 @@ class BagCleaningHandler(BaseStateHandler):
         if pos_ok:
             logging.info(f"🎒 背包清理：偵測到 OK 彈窗 [{conf_ok:.4f}]，點擊確認。")
             self._save_step_screenshot(screen_img, "7_ok")
+            self.notify_ui_progress()
             self.mouse.click(rect["left"] + pos_ok[0], rect["top"] + pos_ok[1])
             if not getattr(self.machine, "bag_disassembled", False):
                 self.machine.bag_disassembled = True
@@ -110,6 +113,7 @@ class BagCleaningHandler(BaseStateHandler):
                     if pos_quit:
                         logging.info(f"🎒 背包清理：已整理完畢，點擊退出按鈕 [{quit_btn}] (信心度: {conf_quit:.4f}) 關閉背包 (配對確認直到消失)...")
                         self._save_step_screenshot(screen_img, "9_quit")
+                        self.notify_ui_progress()
                         self.click_and_wait_until_gone(quit_btn, rect["left"] + pos_quit[0], rect["top"] + pos_quit[1], rect, threshold=0.7)
 
                         self.machine.need_bag_cleaning = False
@@ -149,6 +153,7 @@ class BagCleaningHandler(BaseStateHandler):
                 if pos_tidy:
                     logging.info(f"🎒 背包清理：偵測到整理按鈕 [{conf_tidy:.4f}]，點擊整理。")
                     self._save_step_screenshot(screen_img, "8_tidy")
+                    self.notify_ui_progress()
                     self.mouse.click(rect["left"] + pos_tidy[0], rect["top"] + pos_tidy[1])
                     self.machine.bag_tidied = True
                     time.sleep(0.1)
@@ -163,6 +168,7 @@ class BagCleaningHandler(BaseStateHandler):
                     if pos_all:
                         logging.info(f"🎒 背包清理：偵測到全選按鈕 [{conf_all:.4f}]，點擊全選。")
                         self._save_step_screenshot(screen_img, "3_select_all")
+                        self.notify_ui_progress()
                         self.mouse.click(rect["left"] + pos_all[0], rect["top"] + pos_all[1])
                         self.machine.bag_select_all_clicked = True
                         self.machine.bag_deselected = False  # 初始化反選標記

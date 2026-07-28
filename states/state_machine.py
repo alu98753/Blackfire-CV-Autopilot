@@ -245,7 +245,12 @@ class GameStateMachine:
             self.consecutive_stuck_count = 0
             self.just_resumed_from_user = False
             
-            # 🛡️ 關鍵防護：當轉移至新狀態時，自動重置目標 Handler 內部步驟 phase
+            # 狀態發生真實轉移且非 POPUP_RECOVERY 時，歸零 Watchdog 連續卡死計數
+            if new_state != self.STATE_POPUP_RECOVERY and hasattr(self, "exception_watchdog"):
+                self.exception_watchdog.consecutive_stuck_count = 0
+                self.exception_watchdog.last_stuck_state = None
+            
+            # 當轉移至新狀態時，自動重置目標 Handler 內部步驟 phase
             handler = self.handlers.get(new_state)
             if handler and hasattr(handler, "reset_state"):
                 handler.reset_state()
@@ -345,9 +350,23 @@ class GameStateMachine:
         self.last_rect = rect # 快取當前幀最穩定的物理邊界
         
         if rect is None:
-            logging.warning("⚠️ 找不到遊戲視窗，請確認遊戲未縮小且視窗名稱符合設定。")
+            self.window_lost_count = getattr(self, "window_lost_count", 0) + 1
+            logging.warning(f"⚠️ 找不到遊戲視窗 (連續第 {self.window_lost_count} 次)，請確認遊戲未縮小且視窗名稱符合設定。")
+            
+            # 若連續 5 次 (~2.5s) 找不到遊戲視窗，判定遊戲已被使用者手動關閉或崩潰，觸發 GameRelaunchSubflow 自動重開
+            if self.window_lost_count >= 5:
+                logging.warning("🚨 連續 5 次偵測不到遊戲視窗 (遊戲已被手動關閉或崩潰)，發起 GameRelaunchSubflow 自動重開流程！")
+                self.window_lost_count = 0
+                from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
+                relaunch_subflow = GameRelaunchSubflow()
+                relaunch_subflow.execute(self, reason="game_window_closed_by_user")
+                return
+
             time.sleep(0.5)
             return
+
+        # 視窗存在，重置視窗遺失計數器
+        self.window_lost_count = 0
             
         screen_img = self.capturer.capture(rect)
         if screen_img is None:
@@ -451,7 +470,7 @@ class GameStateMachine:
         # 0.0 全域防護：若畫面上存在歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防遮擋導航與領取
         for popup_btn in ["common/confirm.png", "common/ok.png"]:
             if os.path.exists(os.path.join("templates", popup_btn)):
-                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.75)
+                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.90)
                 if pos_popup:
                     logging.info(f"👉 [全域防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
                     self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])

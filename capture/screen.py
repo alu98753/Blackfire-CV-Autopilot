@@ -47,8 +47,12 @@ class ScreenCapturer:
             
             if win32gui.IsIconic(hwnd):
                 if not quiet:
-                    logging.warning(f"偵測到視窗 '{self.window_title}' 已最小化，請還原視窗以進行截圖。")
-                return None
+                    logging.info(f"🔄 偵測到視窗 '{self.window_title}' 被最小化，自動發起 ensure_window_on_monitor 還原並置頂最大化...")
+                self.ensure_window_on_monitor()
+                if win32gui.IsIconic(hwnd):
+                    if not quiet:
+                        logging.warning(f"⚠️ 嘗試自動還原最小化視窗 '{self.window_title}' 失敗。")
+                    return None
 
             if bool(ctypes.windll.user32.IsZoomed(hwnd)):
                 client_pt = win32gui.ClientToScreen(hwnd, (0, 0))
@@ -116,26 +120,44 @@ class ScreenCapturer:
                 if not is_on_target_mon or not is_zoomed:
                     logging.info(f"🚚 [ScreenCapturer] 執行跨螢幕傳送至 Monitor {target_idx} ({mon_l}, {mon_t})...")
 
-                    # 1. 關鍵步驟：若目前處於最大化或最小化狀態，必須先 SW_RESTORE，否則 Win32 禁止 SetWindowPos 跨螢幕移動
+                    # 1. 關鍵步驟：若目前處於最大化或最小化狀態，先 SW_RESTORE 解除
                     if is_zoomed or is_iconic:
                         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                        time.sleep(0.15)
+                        time.sleep(0.1)
 
-                    # 2. 將未最大化的視窗移入目標顯示器內部
-                    win32gui.SetWindowPos(
-                        hwnd,
-                        win32con.HWND_TOP,
-                        mon_l + 50,
-                        mon_t + 50,
-                        1280,
-                        720,
-                        win32con.SWP_SHOWWINDOW
-                    )
+                    # 重新取得解小化後的實體視窗中心點
+                    w_left, w_top, w_right, w_bottom = win32gui.GetWindowRect(hwnd)
+                    w_center_x = (w_left + w_right) // 2
+                    w_center_y = (w_top + w_bottom) // 2
+                    is_on_target_mon = (mon_l <= w_center_x < mon_r) and (mon_t <= w_center_y < mon_b)
+
+                    # 2. 唯有當視窗「不在目標顯示器上」時，才發起 SetWindowPos 跨螢幕移動 (避免同一顯示器解小化時產生 10px 偏移抖動)
+                    if not is_on_target_mon:
+                        logging.info(f"🚚 [ScreenCapturer] 視窗不在 Monitor {target_idx}，執行 SetWindowPos 跨螢幕移動...")
+                        win32gui.SetWindowPos(
+                            hwnd,
+                            win32con.HWND_TOP,
+                            mon_l + 10,
+                            mon_t + 10,
+                            0,
+                            0,
+                            win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW
+                        )
+                        time.sleep(0.1)
+
+                    # 3. 搶佔前景焦點並直接在目標顯示器上最大化全螢幕 (0 位移平滑還原)
+                    try:
+                        ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    except Exception:
+                        pass
+                    win32gui.ShowWindow(hwnd, win32con.SW_SHOWMAXIMIZED)
                     time.sleep(0.15)
 
-                    # 3. 在目標顯示器上呼叫 SW_MAXIMIZE 填滿全螢幕
-                    win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
-                    time.sleep(0.3)
+                    # 雙重護欄：若仍未處於 IsZoomed 狀態，對 HWND 發送標題列最大化按鈕訊息 (WM_SYSCOMMAND, SC_MAXIMIZE)
+                    if not bool(ctypes.windll.user32.IsZoomed(hwnd)):
+                        logging.info("🔄 [ScreenCapturer] SW_SHOWMAXIMIZED 未即時生效，對視窗發送 SC_MAXIMIZE 標題列訊息強制最大化...")
+                        win32gui.SendMessage(hwnd, win32con.WM_SYSCOMMAND, win32con.SC_MAXIMIZE, 0)
+                        time.sleep(0.2)
 
                     # 4. 驗證移動結果
                     new_rect = win32gui.GetWindowRect(hwnd)

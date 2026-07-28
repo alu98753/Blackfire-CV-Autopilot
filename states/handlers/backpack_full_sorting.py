@@ -296,6 +296,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                                    click_target=(int(pos_full[0] + tx_rel), int(pos_full[1] + ty_rel), f"Right Slot [{r_row},{r_col}] ({r_color})"))
 
         logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
+        self.notify_ui_progress()
         self.mouse.click(rx_click, ry_click)
         time.sleep(0.1) # 等待詳情面板彈出
 
@@ -308,6 +309,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
             dest_x = rect["left"] + pos_dest[0]
             dest_y = rect["top"] + pos_dest[1]
             logging.info(f"🎒 [背包分選] 偵測到銷毀按鈕 [{conf_dest:.4f}]，進行點擊座標: ({dest_x}, {dest_y})。")
+            self.notify_ui_progress()
             self.mouse.click(dest_x, dest_y)
             time.sleep(0.1)
 
@@ -318,6 +320,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                     conf_x = rect["left"] + pos_conf[0]
                     conf_y = rect["top"] + pos_conf[1]
                     logging.info(f"🎒 [背包分選] 偵測到銷毀確認按鈕 [{conf_conf:.4f}]，點擊確認。")
+                    self.notify_ui_progress()
                     self.mouse.click(conf_x, conf_y)
                     time.sleep(0.1)
         else:

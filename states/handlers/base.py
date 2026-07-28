@@ -42,6 +42,13 @@ class BaseStateHandler:
             screen_img, template_a, template_b, margin=margin, threshold=threshold
         )
 
+    def notify_ui_progress(self):
+        """
+        通知狀態機發生有效 UI 進展，重置 Watchdog 卡死計時器。
+        """
+        if hasattr(self.machine, "notify_ui_progress"):
+            self.machine.notify_ui_progress()
+
     def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=4.0, threshold=0.75, brightness_threshold=0.0, check_interval=0.25, post_delay=1.0, retry_interval=1.0):
         """
         [配對確認直到消失]
@@ -50,6 +57,7 @@ class BaseStateHandler:
         """
         import time, logging, os
         logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環...")
+        self.notify_ui_progress()
         self.mouse.click(click_x, click_y)
 
         start_t = time.time()
