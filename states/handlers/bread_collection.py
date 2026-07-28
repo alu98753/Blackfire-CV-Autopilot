@@ -2,12 +2,38 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
+from utils.scene_detector import SceneDetector, SceneType
+
 
 class BreadCollectionHandler(BaseStateHandler):
+    def __init__(self, state_machine):
+        super().__init__(state_machine)
+        self.scene_detector = SceneDetector(self.matcher)
+
     def handle(self, screen_img, rect):
         """
         自動領體力狀態處理器。
         """
+        if self.scene_detector is None:
+            self.scene_detector = SceneDetector(self.matcher)
+
+        scene_info = self.scene_detector.detect(screen_img, machine=self.machine)
+
+        # 🛡️ 場景感知防護 (Scene Guard)：若畫面上看得到 common/door.png (確定在城鎮 Town)，絕不上當誤點 collect.png
+        if scene_info.scene_type == SceneType.TOWN or scene_info.is_town:
+            if self.machine.bread_window_opened:
+                logging.warning("🍞 領體力：防護攔截 - 當前實際處於城鎮畫面 (common/door.png 可見)，重置視窗開啟狀態...")
+                self.machine.bread_window_opened = False
+                self.machine.bread_window_missing_count = 0
+                self.machine.bread_click_attempted = False
+
+            if "common/door.png" in scene_info.matched_elements:
+                pos_door, conf_door = scene_info.matched_elements["common/door.png"]
+                logging.info(f"🍞 領體力：在城鎮畫面，點擊入口按鈕 [common/door.png] ({conf_door:.4f}) 進入大廳以領取體力。")
+                self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
+                time.sleep(1.0)
+                return
+
         # A. 如果體力視窗已開啟 (看到 quit.png 或 bread_window_opened)
         if self.machine.bread_window_opened:
             # 1. 彈窗內的確認按鈕 (獲得體力確認或體力已滿提示確認)
@@ -44,11 +70,11 @@ class BreadCollectionHandler(BaseStateHandler):
 
             # 判斷是否需要退出 (已領取確認，或者判定為冷卻/已領完)
             if not self.machine.bread_collected_this_run and not getattr(self.machine, "bread_cooldown_detected", False):
-                # 檢查是否有收集按鈕
+                # 檢查是否有收集按鈕 (門檻提升至 0.80 防止城鎮假陽性)
                 pos_coll = None
                 for template_name in ["common/collect.png", "common/bread_collection.png"]:
                     if os.path.exists(os.path.join("templates", template_name)):
-                        pos, conf = self.matcher.match(screen_img, template_name, threshold=0.70)
+                        pos, conf = self.matcher.match(screen_img, template_name, threshold=0.80)
                         if pos:
                             pos_coll = pos
                             self.machine.bread_window_missing_count = 0  # 成功看到元素，重置缺失計數
@@ -85,19 +111,20 @@ class BreadCollectionHandler(BaseStateHandler):
                     self.machine.transition_to(next_state)
                     return
 
-            # 情況二：尚未領取且未冷卻，嘗試領取
+            # 情況二：尚未領取且未冷卻，嘗試領取 (門檻提升至 0.80)
             # 3. 領體力按鈕 (不依賴 pos_quit 即可執行比對)
             pos_coll = None
             conf_coll = 0.0
             matched_template = None
             for template_name in ["common/collect.png", "common/bread_collection.png"]:
                 if os.path.exists(os.path.join("templates", template_name)):
-                    pos, conf = self.matcher.match(screen_img, template_name, threshold=0.70)
+                    pos, conf = self.matcher.match(screen_img, template_name, threshold=0.80)
                     if pos:
                         pos_coll = pos
                         conf_coll = conf
                         matched_template = template_name
                         self.machine.bread_window_missing_count = 0  # 成功看到元素，重置缺失計數
+
                         break
                         
             if pos_coll:
