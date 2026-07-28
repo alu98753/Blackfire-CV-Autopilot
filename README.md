@@ -47,8 +47,13 @@
 14. **城鎮任務流水線佇列 (`Town Subflow Pipeline`)**：
     * 提供無解耦、可高度擴充的城鎮子流程鏈式動態佇列。當背包清理分解完成後，腳本將自動依序在城鎮中執行「血之祭壇獻祭 ➔ 珠寶加工廠出售 ➔ 未來新建築」，任務清空後自動恢復 `mix` / `stage` / `dungeon` 掛機。
     * 詳細架構請參閱專屬文件：[pipeline.md (城鎮任務流水線說明文件)](docs/town_building/pipeline.md)。
+15. **例外處理與防卡死子系統 (`states/exceptions/`)**：
+    * **集中化例外處置**：所有意外彈窗（如 `Raid_Box.png` 掃蕩、`Wheel_of_Fortune.png` 幸運輪盤、卡死逾時等）均集中於 `states/exceptions/` 獨立模組處置，嚴禁在業務主迴圈寫硬編碼補釘。
+    * **雙層優先級機制**：優先級 1 專屬 Subflows (`RaidBoxSubflow`, `WheelOfFortuneSubflow`) 進行 ROI 點對點關閉；優先級 2 通用防卡死 (`GenericAntiStuckSubflow`) 在無專屬圖案時進行全域按鈕備援兜底。
+    * **詳細架構與 Subflow 開發指引**：請參閱專屬文件：[exception_subsystem_architecture.md (例外處理子系統說明文件)](docs/exception_subsystem_architecture.md)。
 
 ---
+
 
 ## 🛠️ 環境配置與安裝指引 (How to Build & Setup)
 
