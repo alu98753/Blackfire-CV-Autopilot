@@ -100,14 +100,16 @@ class ExceptionWatchdog:
                                     popup_handler.active_subflow = target_subflow
                             return True
 
-            # B. 檢測暗色遮罩 is_dimmed
-            if popup_handler and hasattr(popup_handler, "analyze_dimming_overlay"):
-                dim_info = popup_handler.analyze_dimming_overlay(screen_img)
-                if dim_info.get("is_dimmed", False):
-                    logging.warning(
-                        f"⚠️ [MismatchGuard] 於狀態 [{self.machine.current_state}] 檢測到顯著暗色遮罩 (is_dimmed=True)，發起暫存與復原！"
-                    )
-                    self.machine.stash_current_state(reason="mismatch_dimming_overlay")
-                    return True
+            # B. 檢測暗色遮罩 is_dimmed (僅在非戰鬥、非探索過渡狀態下生效，避免戰鬥畫面固有暗色背景與特效誤判)
+            if self.machine.current_state not in [self.machine.STATE_BATTLE, self.machine.STATE_EXPLORING]:
+                if popup_handler and hasattr(popup_handler, "analyze_dimming_overlay"):
+                    dim_info = popup_handler.analyze_dimming_overlay(screen_img)
+                    if dim_info.get("is_dimmed", False):
+                        logging.warning(
+                            f"⚠️ [MismatchGuard] 於狀態 [{self.machine.current_state}] 檢測到顯著暗色遮罩 (is_dimmed=True)，發起暫存與復原！"
+                        )
+                        self.machine.stash_current_state(reason="mismatch_dimming_overlay")
+                        return True
+
 
         return False
