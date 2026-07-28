@@ -1992,7 +1992,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler.reset_state()
 
 
-        # Step 1: 城鎮點擊祭壇建築
+        # Step 1: 城鎮點擊祭壇建築 (保持在 INIT 等待 UI 渲染)
         def mock_match_step1(img, name, **kw):
             if name == "common/door.png":
                 return ((100, 200), 0.9)
@@ -2005,6 +2005,17 @@ class TestBehavioralScenarios(unittest.TestCase):
 
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(550, 688)
+        self.assertEqual(handler.step_phase, "INIT")
+
+        # Step 1.5: 畫面完成渲染 (辨識到 exitfromhouse_and_to_town.png 或 Sacrifice.png) ➔ 切換至 ENTERED_BUILDING
+        handler.last_action_time = 0.0
+        def mock_match_step1_5(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((50, 50), 0.9)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_step1_5
+        handler.handle()
         self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
 
         # Step 2: 進入建築後轉移至 SACRIFICE_MENU_OPEN，並點擊 Sacrifice.png 開啟選單
