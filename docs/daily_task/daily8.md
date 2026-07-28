@@ -26,8 +26,8 @@
                              ▼
 🥈 Tier 2: 二極優先 (領主 Boss 討伐 lord_boss 包含計時器調度)
    👉 優先級 > bulletin_board (懸賞任務)！
-   👉 檢查 DailyManager.get_available_lord_bosses() (蜘蛛 1hr / 惡靈 2hr CD 與 5 次上限)
-   👉 只要有 Boss CD 結束且今日場次 < 5 次 ➔ 戰鬥結束回到大廳時立刻搶先插隊討伐！
+   👉 檢查 DailyManager.get_available_lord_bosses() (蜘蛛 1hr / 惡靈 2hr CD, 5 次上限，每次戰鬥需 5 點體力/麵包)
+   👉 只要有 Boss CD 結束且今日場次 < 5 次 ➔ 戰鬥結束回到大廳時發起討伐（體力不足 5 點時將轉入 collect_only 待機領體力）！
                              │
                              ▼
 🥉 Tier 3: 三極優先 (懸賞告示牌與動態任務 bulletin_board)

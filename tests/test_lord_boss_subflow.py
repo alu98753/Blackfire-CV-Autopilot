@@ -169,6 +169,8 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
                 return ((200, 200), 0.90)
             if temp == "stages/start.png":
                 return ((300, 300), 0.90)
+            if temp in ["battle/battle_features_1.png", "battle/battle_features_2.png", "common/auto.png"]:
+                return ((400, 400), 0.90)
             return (None, 0.0)
 
         self.state_machine.matcher.match.side_effect = fake_match
@@ -179,6 +181,151 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spider")
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+
+    # ------------------------------------------------------------------
+    # 3. 防死鎖與假進戰場驗證退場測試 (Deadlock Prevention & Fallback)
+    # ------------------------------------------------------------------
+    def test_mark_boss_completed_in_daily_manager(self):
+        """測試：DailyManager.mark_boss_completed 可將特定 Boss 標記為今日已打滿 (completed_today = True)"""
+        self.daily_manager.mark_boss_completed("lord_spider")
+        spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
+        self.assertTrue(spider_info["completed_today"])
+        self.assertEqual(spider_info["today_count"], 5)
+        avail = self.daily_manager.get_available_lord_bosses()
+        self.assertNotIn("lord_spider", avail)
+
+    @patch('states.handlers.lord_boss.LordBossHandler._check_card_cooldown_ocr')
+    @patch('os.path.exists')
+    def test_lord_boss_handler_battle_verification_failed_and_quit(self, mock_exists, mock_ocr):
+        """測試：點擊開始戰鬥後 2.5 秒未比對到戰鬥特徵，且 start.png 依然存在時，自動點擊 quit 離場並標記 DailyManager 完成"""
+        mock_exists.return_value = True
+        mock_ocr.return_value = (None, None)
+
+        stage_cfg = GAME_CONFIGS["stage"].copy()
+        self.state_machine.primary_config = stage_cfg
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.50)
+
+        def fake_match(img, temp, **kw):
+            if temp == "load/lord_spider.png":
+                return ((100, 100), 0.90)
+            if temp == "stages/start.png":
+                return ((300, 300), 0.90)
+            if temp == "common/quit.png":
+                return ((500, 500), 0.90)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        handler = LordBossHandler(self.state_machine)
+        handler.has_reset_to_left = True
+
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 斷言：點擊 quit 後狀態轉移至 NAVIGATING，且 lord_spider 已標記為今日完成
+        spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
+        self.assertTrue(spider_info["completed_today"])
+
+    def test_battle_handler_5s_timeout_fallback_marks_boss_completed(self):
+        """測試：當 BATTLE 狀態觸發 5 秒防卡死退場且存有 current_lord_boss_key 時，自動補償將該 Boss 標記為完成」"""
+        from states.handlers.battle import BattleHandler
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.current_lord_boss_key = "lord_spider"
+
+        self.state_machine.matcher.match.return_value = (None, 0.0)
+        battle_handler = BattleHandler(self.state_machine)
+        battle_handler.non_battle_feature_start_time = time.time() - 6.0  # 模擬超時 6 秒
+
+        battle_handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 斷言：5 秒防卡死觸發，current_lord_boss_key 被清空且 DailyManager 的 lord_spider 已標記完成
+        self.assertIsNone(self.state_machine.current_lord_boss_key)
+        spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
+        self.assertTrue(spider_info["completed_today"])
+
+    @patch('os.path.exists')
+    def test_step3_start_button_verification_failure_and_quit(self, mock_exists):
+        """測試 (步驟3死角專用)：當上一幀已選取 target_boss，第2幀在步驟 3 觸發 start.png 且 2.5 秒未進場時，自動點擊 quit 離場並更新 DailyManager"""
+        mock_exists.return_value = True
+
+        stage_cfg = GAME_CONFIGS["stage"].copy()
+        self.state_machine.primary_config = stage_cfg
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.50)
+
+        def fake_match(img, temp, **kw):
+            if temp == "stages/start.png":
+                return ((300, 300), 0.90)
+            if temp == "common/quit.png":
+                return ((500, 500), 0.90)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        handler = LordBossHandler(self.state_machine)
+        handler.current_target_boss = "lord_spider"  # 模擬上一幀已點擊過卡片
+
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 斷言：步驟 3 的 2.5 秒驗證失敗後點擊 quit 退場，且 lord_spider 被標記為今日完成
+        spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
+        self.assertTrue(spider_info["completed_today"])
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
+    @patch('os.path.exists')
+    def test_step3_start_button_verification_success(self, mock_exists):
+        """測試 (步驟3死角專用)：當在步驟 3 點擊 start.png 後 2.5 秒內比對到信心度 >= 0.85 的戰鬥特徵，順利進入 STATE_BATTLE"""
+        mock_exists.return_value = True
+
+        stage_cfg = GAME_CONFIGS["stage"].copy()
+        self.state_machine.primary_config = stage_cfg
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.50)
+
+        def fake_match(img, temp, **kw):
+            if temp == "stages/start.png":
+                return ((300, 300), 0.90)
+            if temp in ["common/auto.png", "battle/battle_features_1.png"]:
+                return ((400, 400), 0.88)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        handler = LordBossHandler(self.state_machine)
+        handler.current_target_boss = "lord_spider"
+
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 斷言：成功進戰場，狀態切換至 STATE_BATTLE
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spider")
+
+    @patch('os.path.exists')
+    def test_threshold_filtering_for_low_confidence_battle_features(self, mock_exists):
+        """測試：當戰鬥特徵信心度為 0.80 (< 0.85 門檻) 時，判定為未進入戰鬥，啟動 quit 退場流程"""
+        mock_exists.return_value = True
+
+        stage_cfg = GAME_CONFIGS["stage"].copy()
+        self.state_machine.primary_config = stage_cfg
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.50)
+
+        def fake_match(img, temp, threshold=0.75, **kw):
+            if temp == "stages/start.png":
+                return ((300, 300), 0.90)
+            if temp in ["common/auto.png", "battle/battle_features_1.png"]:
+                if threshold <= 0.80:
+                    return ((400, 400), 0.80)
+                return (None, 0.0)  # 高於 0.80 (如 0.85 門檻) 則過濾不匹配
+            if temp == "common/quit.png":
+                return ((500, 500), 0.90)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        handler = LordBossHandler(self.state_machine)
+        handler.current_target_boss = "lord_spider"
+
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 斷言：因為信心度 < 0.85 被過濾，觸發 quit 退場流程並標記完成
+        spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
+        self.assertTrue(spider_info["completed_today"])
 
 if __name__ == '__main__':
     unittest.main()

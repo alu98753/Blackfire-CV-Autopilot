@@ -1086,8 +1086,11 @@ class GameStateMachine:
     def is_daily_pipeline_active(self):
         """
         檢查目前是否處於每日全域流水線 (--mode daily) 運作模式中。
+        注意：當處於定時領取待機狀態 (collect_only) 時，一律回傳 False 以禁止排程推進 accepted_quests 任務。
         """
         if not getattr(self, "daily_manager", None):
+            return False
+        if self.is_in_collect_only_mode():
             return False
         mode_type = self.config.get("type") if getattr(self, "config", None) else None
         return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
@@ -1104,11 +1107,19 @@ class GameStateMachine:
         """
         if getattr(self, "_in_scheduling_pipeline", False):
             return False
+        if self.is_in_collect_only_mode():
+            return False
         self._in_scheduling_pipeline = True
 
         try:
             if not self.daily_manager:
                 return False
+
+            # 0. 若目前處於體力退避冷卻復歸期間 (stamina_retreat_start_time 存在)，優先執行使用者指定之 Tier 4 退守地下城
+            if getattr(self, "stamina_retreat_start_time", None) is not None:
+                logging.info("🔄 [Daily Master Pipeline] 偵測到處於體力退避冷卻復歸期間 ➔ 自動切回執行使用者指定之 Tier 4 退守地下城！")
+                self.apply_mix_fallback_config()
+                return True
 
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar)
             pending_town = self.daily_manager.get_pending_town_subflows()

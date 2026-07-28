@@ -279,6 +279,7 @@ SUBFLOW_CONFIGS = {
                 "Giant_Beast_Gold_Tooth": True,
                 "Toad_Venom": True,
                 "Dead_Soul_Core": True,
+                "Wild_boar_tusk": True,
             },
             "blue": {},
             "purple": {},

@@ -27,7 +27,8 @@ class ExceptionWatchdog:
         :param screen_img: 擷取到的遊戲畫面影像
         :return: True 代表已觸發例外並完成 stash_current_state()；False 代表畫面正常
         """
-        if self.machine.current_state == self.machine.STATE_POPUP_RECOVERY:
+        # 護欄：當前處於意外彈窗修復中，或處於定時領取/體力退避長途待機中 (COLLECT_ONLY) 時，豁免 Watchdog 30s 時間逾時檢查
+        if self.machine.current_state in [self.machine.STATE_POPUP_RECOVERY, self.machine.STATE_COLLECT_ONLY]:
             return False
 
         now_t = time.time()
