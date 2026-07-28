@@ -89,8 +89,9 @@ class ScreenCapturer:
                 w_w = w_right - w_left
                 w_h = w_bottom - w_top
 
-                if abs(w_left - mon_l) > 50 or abs(w_top - mon_t) > 50:
-                    logging.info(f"🚚 [ScreenCapturer] 將遊戲視窗自動移動至 Monitor {target_idx} 筆電螢幕 ({mon_l}, {mon_t})...")
+                is_zoomed = win32gui.IsZoomed(hwnd)
+                if abs(w_left - mon_l) > 50 or abs(w_top - mon_t) > 50 or not is_zoomed:
+                    logging.info(f"🚚 [ScreenCapturer] 將遊戲視窗自動移動至 Monitor {target_idx} 筆電螢幕 ({mon_l}, {mon_t}) 並執行最大化全螢幕...")
                     if win32gui.IsIconic(hwnd):
                         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
 
@@ -103,6 +104,8 @@ class ScreenCapturer:
                         w_h,
                         win32con.SWP_SHOWWINDOW
                     )
+                    time.sleep(0.1)
+                    win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
                     time.sleep(0.3)
                     return True
         except Exception as e:
