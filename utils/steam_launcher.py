@@ -344,140 +344,36 @@ class SteamGameLauncher:
         logging.info(f"🔄 [SteamGameLauncher] 狀態轉移: {self.phase.name} ➔ {next_phase.name} ({reason})")
         self.phase = next_phase
 
-    def run_launch_subflow(self, timeout: float = 60.0, poll_interval: float = 0.5) -> bool:
+    def run_launch_subflow(self, timeout: float = 30.0, poll_interval: float = 1.0) -> bool:
         logging.info("==================================================")
-        logging.info(" 🚀 [SteamGameLauncher] 開始執行 Steam 啟動遊戲 狀態機 Subflow")
+        logging.info(" 🚀 [SteamGameLauncher] 開始執行原生協定直連啟動與輪詢重試流程")
         logging.info("==================================================")
 
-        self.phase = LauncherPhase.SEARCH_WINDOWS
         start_time = time.time()
-        last_action_time = 0.0
-        start_click_count = 0
+        retry_count = 0
 
         while time.time() - start_time < timeout:
-            now = time.time()
+            retry_count += 1
+            logging.info(f"🚀 [SteamGameLauncher] (第 {retry_count} 次) 呼叫 Windows 原生 steam://rungameid/1765770 發起啟動...")
+            try:
+                import subprocess
+                subprocess.Popen(["cmd", "/c", "start", "steam://rungameid/1765770"], shell=True)
+            except Exception as e:
+                logging.warning(f"發起 steam:// 協定失敗: {e}")
 
-            # ----------------------------------------------------
-            # 階段 4: WAIT_GAME_WINDOW (等待遊戲視窗開啟 + 自動重試 Click Until)
-            # ----------------------------------------------------
-            if self.phase == LauncherPhase.WAIT_GAME_WINDOW:
-                rect = self.capturer.get_window_rect(quiet=True)
-                if rect is not None:
+            # 每輪輪詢 5 秒檢測遊戲視窗 HWND 是否建立
+            check_start = time.time()
+            while time.time() - check_start < 5.0:
+                if self.is_game_open():
+                    rect = self.capturer.get_window_rect(quiet=True)
                     logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟與定位: {rect}")
                     self.transition_to(LauncherPhase.COMPLETED, "已偵測到遊戲視窗")
                     logging.info("✅ [SteamGameLauncher] 第一階段 Steam 啟動遊戲 Subflow 成功執行完畢！")
                     return True
-
-                # 若超過 2.5 秒遊戲視窗仍未開啟，抓取畫面檢查 start_game.png 是否仍然存在 (點擊未成功觸發)
-                if now - last_action_time >= 2.5:
-                    img_chk = self.capturer.capture(full_screen=True)
-                    if img_chk is not None:
-                        start_pos, _, _ = self._match_anywhere(img_chk, self.TPL_START_GAME, threshold=0.65)
-                        if start_pos:
-                            logging.info("🔄 [SteamGameLauncher] 偵測到 start_game.png 仍存在 (先前點擊未觸發)，返回 START_OR_UNSTUCK_GAME 再次點擊...")
-                            self.transition_to(LauncherPhase.START_OR_UNSTUCK_GAME, "自動重試點擊開始遊戲")
-                            continue
                 time.sleep(poll_interval)
-                continue
 
-            # 擷取全螢幕畫面供 Phase 1~3 使用
-            img = self.capturer.capture(full_screen=True)
-            if img is None:
-                time.sleep(poll_interval)
-                continue
+            logging.warning("⚠️ [SteamGameLauncher] 等待 5 秒遊戲視窗尚未開啟，準備進行 Retry...")
 
-            try:
-                cv2.imwrite("debug_launcher_screen.png", img)
-            except Exception:
-                pass
-
-            sh, sw = img.shape[:2]
-            taskbar_roi = (int(sw * 1/6), int(sh * 0.9), int(sw * 2/3), int(sh * 0.1))
-
-            # ----------------------------------------------------
-            # 階段 1: SEARCH_WINDOWS (steam:// Direct Protocol 直連)
-            # ----------------------------------------------------
-            if self.phase == LauncherPhase.SEARCH_WINDOWS:
-                # 0. 全局 Pattern 優先判定：若畫面上已呈現 Steam UI 按鈕 (start_game.png / stop_game.png)，直接跳轉
-                start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
-                stop_pos, _, _ = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
-                if start_pos or stop_pos:
-                    self.transition_to(LauncherPhase.START_OR_UNSTUCK_GAME, "Pattern 匹配: 偵測到 Steam 遊戲介面已開啟")
-                    continue
-
-                steam_pos, _, _ = self._match_anywhere(img, self.TPL_STEAM, threshold=0.65)
-                if steam_pos:
-                    self.transition_to(LauncherPhase.LAUNCH_STEAM, "Pattern 匹配: 偵測到 Steam 圖示已呈現")
-                    continue
-
-                # 1. 透過 Windows 原生 steam:// 協定喚醒 Steam，徹底消除中文輸入法(am/ㄇㄩ)打字干擾
-                if now - last_action_time >= self.action_cooldown:
-                    pos, conf, abs_pos = self._match_anywhere(img, self.TPL_SEARCH, threshold=0.65, roi_box=taskbar_roi)
-                    if pos:
-                        logging.info(f"🔍 [SteamGameLauncher] 在工作列區域 (中央 2/3, 下方 1/10) 找到搜尋圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
-                        self._visualize_and_click(img, self.TPL_SEARCH, pos, conf, abs_click_pos=abs_pos, roi_box=taskbar_roi)
-
-                    logging.info("🚀 [SteamGameLauncher] 呼叫 Windows 原生 steam://rungameid/1765770 協定直連啟動黑炎遠征 (零打字)...")
-                    try:
-                        import subprocess
-                        subprocess.Popen(["cmd", "/c", "start", "steam://rungameid/1765770"], shell=True)
-                    except Exception as e_launch:
-                        logging.debug(f"steam:// 協定喚醒異常: {e_launch}")
-
-                    last_action_time = now
-                    self.transition_to(LauncherPhase.LAUNCH_STEAM, "已透過 steam:// 原生協定喚醒 Steam")
-                    continue
-
-            # ----------------------------------------------------
-            # 階段 2: LAUNCH_STEAM (Click Until Steam 介面呈現)
-            # ----------------------------------------------------
-            elif self.phase == LauncherPhase.LAUNCH_STEAM:
-                start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
-                stop_pos, _, _ = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
-                if start_pos or stop_pos:
-                    self.transition_to(LauncherPhase.START_OR_UNSTUCK_GAME, "Pattern 匹配: Steam 遊戲介面按鈕已呈現")
-                    continue
-
-                # Click Until 機制：若超時 3 秒 Steam 介面依然未呈現，退回 SEARCH_WINDOWS 重試
-                if now - last_action_time >= 3.0:
-                    logging.info("🔄 [SteamGameLauncher] [Click Until] 等待 3 秒未偵測到 Steam 遊戲介面，返回 SEARCH_WINDOWS 再次發起...")
-                    self.transition_to(LauncherPhase.SEARCH_WINDOWS, "Click Until 超時重試")
-                    continue
-
-                steam_pos, conf, abs_pos = self._match_anywhere(img, self.TPL_STEAM, threshold=0.65)
-                if steam_pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"🚀 [SteamGameLauncher] 找到 Steam 圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
-                    self._visualize_and_click(img, self.TPL_STEAM, steam_pos, conf, abs_click_pos=abs_pos)
-                    try:
-                        import pyautogui
-                        pyautogui.press("enter")
-                    except Exception:
-                        pass
-                    last_action_time = now
-
-            # ----------------------------------------------------
-            # 階段 3: START_OR_UNSTUCK_GAME (Click Until 解卡與啟動)
-            # ----------------------------------------------------
-            elif self.phase == LauncherPhase.START_OR_UNSTUCK_GAME:
-                stop_pos, stop_conf, stop_abs = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
-                start_pos, start_conf, start_abs = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
-
-                if stop_pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"🛑 [SteamGameLauncher] 偵測到遊戲卡死 (stop_game.png, 座標: {stop_abs})，寫入 debug_click.png 並點擊解卡...")
-                    self._visualize_and_click(img, self.TPL_STOP_GAME, stop_pos, stop_conf, abs_click_pos=stop_abs)
-                    last_action_time = now
-                    continue
-
-                if start_pos and not stop_pos and (now - last_action_time >= self.action_cooldown):
-                    start_click_count += 1
-                    logging.info(f"▶️ [SteamGameLauncher] [Click Until 第 {start_click_count} 次] 點擊「開始遊戲」 (start_game.png, 座標: {start_abs})，寫入 debug_click.png 並點擊...")
-                    self._visualize_and_click(img, self.TPL_START_GAME, start_pos, start_conf, abs_click_pos=start_abs)
-                    last_action_time = now
-                    self.transition_to(LauncherPhase.WAIT_GAME_WINDOW, f"已觸發第 {start_click_count} 次點擊開始遊戲")
-                    continue
-
-            time.sleep(poll_interval)
-
-        logging.warning(f"⚠️ [SteamGameLauncher] 超時未在 {timeout}s 內完成 Steam 啟動 Subflow。")
-        self.transition_to(LauncherPhase.FAILED, "逾時")
+        logging.error(f"❌ [SteamGameLauncher] 超時 {timeout} 秒未成功開啟遊戲。")
+        self.transition_to(LauncherPhase.FAILED, "超時")
         return False
