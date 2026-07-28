@@ -32,35 +32,32 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         """
         logging.warning(f"🚨 [GameRelaunchSubflow] 啟動嚴重卡死強行終止與重啟自癒閉環 (原因: {reason})...")
 
-        # 1. 多重強行終止卡死之遊戲進程 (PID 優先 ➔ 視窗標題 ➔ EXE 映像名稱)
+        # 1. 精確強行終止卡死之遊戲進程 (PID 優先 ➔ EXE 映像名稱，嚴禁使用萬用字元 WINDOWTITLE 避免誤殺腳本 Terminal)
         try:
             game_title = getattr(machine, "window_title", "Blackfire Crusade")
-            logging.info(f"💥 [GameRelaunchSubflow] 開始發起強行終止遊戲進程 (目標標題: '{game_title}')...")
+            current_script_pid = os.getpid()
+            logging.info(f"💥 [GameRelaunchSubflow] 開始發起強行終止遊戲進程 (目標標題: '{game_title}', 腳本 PID: {current_script_pid})...")
 
             import win32gui
             import win32process
 
-            # (A) 優先根據 HWND 取得實體 PID 發起精確 taskkill /f /pid <pid>
+            # (A) 優先根據 HWND 取得實體 PID 發起精確 taskkill /f /pid <pid> (包含 PID 護欄)
             hwnd = win32gui.FindWindow(None, game_title)
             if hwnd:
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                if pid:
-                    logging.info(f"💥 [GameRelaunchSubflow] (1/3) 偵測到遊戲進程 PID: {pid}，執行 taskkill /f /pid {pid}...")
+                if pid and pid != current_script_pid:
+                    logging.info(f"💥 [GameRelaunchSubflow] 偵測到遊戲進程 PID: {pid} (非腳本 PID {current_script_pid})，執行 taskkill /f /pid {pid}...")
                     subprocess.run(f"taskkill /f /pid {pid}", shell=True, capture_output=True)
 
-            # (B) 備份 2：根據視窗標題關閉
-            subprocess.run(f'taskkill /f /fi "WINDOWTITLE eq {game_title}*"', shell=True, capture_output=True)
-
-            # (C) 備份 3：根據可能之 EXE 映像名稱關閉
-            subprocess.run('taskkill /f /im "Blackfire Crusade.exe"', shell=True, capture_output=True)
+            # (B) 精確關閉遊戲 EXE 映像 (絕對不使用 WINDOWTITLE 萬用字元，避免匹配到含有 BlackfireCrusade_tool 路徑之 PowerShell 視窗)
             subprocess.run('taskkill /f /im BlackfireCrusade.exe', shell=True, capture_output=True)
 
-            # (D) 輪詢驗證：等待直到 win32gui.FindWindow 確定傳回 0 (視窗與進程徹底消失)
+            # (C) 輪詢驗證：等待直到 win32gui.FindWindow 確定傳回 0 (視窗與進程徹底銷毀)
             start_k_time = time.time()
             while time.time() - start_k_time < 5.0:
                 h_check = win32gui.FindWindow(None, game_title)
                 if not h_check:
-                    logging.info("✅ [GameRelaunchSubflow] 遊戲進程已確定完全終止與銷毀！")
+                    logging.info("✅ [GameRelaunchSubflow] 遊戲視窗與進程已確定完全終止與銷毀！")
                     break
                 time.sleep(0.3)
         except Exception as e:

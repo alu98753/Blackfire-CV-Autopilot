@@ -110,6 +110,25 @@ class TestGameRelaunchRecovery(unittest.TestCase):
         self.assertEqual(watchdog.consecutive_stuck_count, 0)
         self.assertIsNone(watchdog.last_stuck_state)
 
+    @patch("subprocess.run")
+    @patch("utils.steam_launcher.SteamGameLauncher.ensure_game_ready", return_value=True)
+    def test_5_script_pid_exemption_guard(self, mock_ensure_ready, mock_subprocess_run):
+        """
+        測試 5：驗證當 HWND 恰好返回與當前腳本相同的 PID 時，護欄觸發不進行 PID kill，且絕對不使用 WINDOWTITLE 萬用字元指令
+        """
+        script_pid = os.getpid()
+        subflow = GameRelaunchSubflow()
+
+        with patch("win32gui.FindWindow", return_value=99999), \
+             patch("win32process.GetWindowThreadProcessId", return_value=(0, script_pid)):
+            subflow.execute(self.machine, reason="pid_guard_test")
+
+            # 斷言：沒有發起 taskkill /f /pid <script_pid>
+            for call_item in mock_subprocess_run.call_args_list:
+                cmd_str = call_item[0][0]
+                self.assertNotIn(f"taskkill /f /pid {script_pid}", cmd_str)
+                self.assertNotIn("WINDOWTITLE", cmd_str)
+
 
 if __name__ == "__main__":
     unittest.main()
