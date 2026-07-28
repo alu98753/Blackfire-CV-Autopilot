@@ -355,14 +355,6 @@ class SteamGameLauncher:
         start_click_count = 0
 
         while time.time() - start_time < timeout:
-            if self.phase == LauncherPhase.COMPLETED:
-                logging.info("✅ [SteamGameLauncher] 第一階段 Steam 啟動遊戲 Subflow 成功執行完成！")
-                return True
-
-            if self.phase == LauncherPhase.FAILED:
-                logging.error("❌ [SteamGameLauncher] 狀態機轉移至 FAILED 狀態，終止 Subflow。")
-                return False
-
             now = time.time()
 
             # ----------------------------------------------------
@@ -373,7 +365,8 @@ class SteamGameLauncher:
                 if rect is not None:
                     logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟與定位: {rect}")
                     self.transition_to(LauncherPhase.COMPLETED, "已偵測到遊戲視窗")
-                    continue
+                    logging.info("✅ [SteamGameLauncher] 第一階段 Steam 啟動遊戲 Subflow 成功執行完畢！")
+                    return True
 
                 # 若超過 2.5 秒遊戲視窗仍未開啟，抓取畫面檢查 start_game.png 是否仍然存在 (點擊未成功觸發)
                 if now - last_action_time >= 2.5:
@@ -399,11 +392,10 @@ class SteamGameLauncher:
                 pass
 
             sh, sw = img.shape[:2]
-            # 使用使用者指定之精密 ROI: 中央 2/3 (X: 1/6~5/6) 與下方 1/10 (Y: 0.9~1.0)
             taskbar_roi = (int(sw * 1/6), int(sh * 0.9), int(sw * 2/3), int(sh * 0.1))
 
             # ----------------------------------------------------
-            # 階段 1: SEARCH_WINDOWS (steam:// 原生協定雙保險 + Pattern 驅動)
+            # 階段 1: SEARCH_WINDOWS (steam:// Direct Protocol 直連)
             # ----------------------------------------------------
             if self.phase == LauncherPhase.SEARCH_WINDOWS:
                 # 0. 全局 Pattern 優先判定：若畫面上已呈現 Steam UI 按鈕 (start_game.png / stop_game.png)，直接跳轉
@@ -425,10 +417,10 @@ class SteamGameLauncher:
                         logging.info(f"🔍 [SteamGameLauncher] 在工作列區域 (中央 2/3, 下方 1/10) 找到搜尋圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
                         self._visualize_and_click(img, self.TPL_SEARCH, pos, conf, abs_click_pos=abs_pos, roi_box=taskbar_roi)
 
-                    logging.info("🚀 [SteamGameLauncher] 呼叫 Windows 原生 steam://open/main 協定喚醒 Steam (零打字)...")
+                    logging.info("🚀 [SteamGameLauncher] 呼叫 Windows 原生 steam://rungameid/1765770 協定直連啟動黑炎遠征 (零打字)...")
                     try:
                         import subprocess
-                        subprocess.Popen(["cmd", "/c", "start", "steam://open/main"], shell=True)
+                        subprocess.Popen(["cmd", "/c", "start", "steam://rungameid/1765770"], shell=True)
                     except Exception as e_launch:
                         logging.debug(f"steam:// 協定喚醒異常: {e_launch}")
 
