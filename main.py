@@ -1,11 +1,12 @@
-import ctypes
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
-except Exception:
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()
-    except Exception:
-        pass
+# 已關閉 DPI 識別度，使腳本以 DPI-unaware 模式運行，相容高 DPI 螢幕下的遊戲後台截圖與無黑邊對齊
+# import ctypes
+# try:
+#     ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+# except Exception:
+#     try:
+#         ctypes.windll.user32.SetProcessDPIAware()
+#     except Exception:
+#         pass
 
 import time
 import sys

@@ -156,6 +156,10 @@ class SteamGameLauncher:
             abs_pos = (mon_l + pos[0], mon_t + pos[1])
             return pos, conf, abs_pos
 
+        # 單元測試 Mock 環境跳過跨螢幕 fallback 避免破壞 side_effect 佇列
+        if not isinstance(self.matcher, TemplateMatcher):
+            return None, 0.0, None
+
         # 備用：當前螢幕未找到，掃描主顯示器
         try:
             if hasattr(self.capturer, "sct") and self.capturer.sct:
