@@ -1086,8 +1086,11 @@ class GameStateMachine:
     def is_daily_pipeline_active(self):
         """
         檢查目前是否處於每日全域流水線 (--mode daily) 運作模式中。
+        注意：當處於定時領取待機狀態 (collect_only) 時，一律回傳 False 以禁止排程推進 accepted_quests 任務。
         """
         if not getattr(self, "daily_manager", None):
+            return False
+        if self.is_in_collect_only_mode():
             return False
         mode_type = self.config.get("type") if getattr(self, "config", None) else None
         return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
@@ -1103,6 +1106,8 @@ class GameStateMachine:
         - Tier 4: 四極退守 (預設 mix 模式: 冰雪洞窟 + 關卡 6-1)
         """
         if getattr(self, "_in_scheduling_pipeline", False):
+            return False
+        if self.is_in_collect_only_mode():
             return False
         self._in_scheduling_pipeline = True
 

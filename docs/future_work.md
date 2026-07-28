@@ -21,7 +21,7 @@
 #### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
 - [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Blood_Altar.md)]
 - [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md)]
-- [已完成] **每日討伐首領領主** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]
+- [已完成] **每日討伐首領領主 (每次討伐需 5 點體力/麵包)** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]
 - [已完成] **每日任務與免費抽獎** [REF: [daily8.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily8.md)]
 - [已完成] **CPU 低功耗睡眠控管** [REF: [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)]
 - [已驗證] **長時間運轉資源與記憶體無洩漏** (1,000 次循環僅增 1.09MB)
