@@ -117,7 +117,16 @@ class BattleHandler(BaseStateHandler):
                                     time.sleep(0.3)
                                     break
                     
-                    # 3.3 重置狀態與計時器，轉移至 UNKNOWN
+                    # 3.3 若先前有 current_lord_boss_key，代表這是 Boss 假進戰場防卡死，自動通知 DailyManager 標記完成！
+                    if getattr(self.machine, "current_lord_boss_key", None):
+                        b_key = self.machine.current_lord_boss_key
+                        logging.warning(f"⚠️ [防卡死補償] 偵測到 Boss [{b_key}] 假進戰場防護，自動更新 DailyManager 並重置狀態！")
+                        dm = getattr(self.machine, "daily_manager", None)
+                        if dm and hasattr(dm, "mark_boss_completed"):
+                            dm.mark_boss_completed(b_key)
+                        self.machine.current_lord_boss_key = None
+
+                    # 3.4 重置狀態與計時器，轉移至 UNKNOWN
                     self.non_battle_feature_start_time = None
                     self.machine.battle_start_time = None
                     self.machine.transition_to(self.machine.STATE_UNKNOWN)

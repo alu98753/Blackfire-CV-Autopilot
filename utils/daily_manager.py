@@ -276,6 +276,27 @@ class DailyManager:
             self.save_status()
             logging.info(f"⚔️ [DailyManager] 記錄 Boss [{b_info['name']}] 戰鬥完成 (今日進度: {b_info['today_count']}/{b_info['max_daily_count']})")
 
+    def mark_boss_completed(self, boss_key, now_ts=None):
+        """
+        [防卡死狀態同步] 強制將特定的 Boss 標記為今日已打滿 (completed_today: True, today_count: max_daily_count)。
+        用於處理實機次數已滿但 JSON 紀錄落後，或點擊開始戰鬥失敗之自癒復原。
+        """
+        if now_ts is None:
+            now_ts = time.time()
+
+        bosses = self.status.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
+        if boss_key in bosses:
+            b_info = bosses[boss_key]
+            b_info["today_count"] = b_info.get("max_daily_count", 5)
+            b_info["completed_today"] = True
+            b_info["last_fight_timestamp"] = now_ts
+
+            all_bosses_done = all(b.get("completed_today", False) for b in bosses.values())
+            self.status.get("subflows", {}).get("lord_boss", {})["completed_today"] = all_bosses_done
+
+            self.save_status()
+            logging.info(f"🛡️ [DailyManager] 已手動將 Boss [{b_info.get('name', boss_key)}] 強制標記為今日已打滿 (completed_today: True)。")
+
     def update_boss_cooldown(self, boss_key, remaining_seconds, now_ts=None):
         """
         當在 UI/OCR 上讀取到 Boss 冷卻時間時，自動修復/更新 DailyManager 狀態。

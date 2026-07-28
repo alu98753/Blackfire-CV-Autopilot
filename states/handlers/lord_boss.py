@@ -200,14 +200,63 @@ class LordBossHandler(BaseStateHandler):
                     self.current_target_boss = boss_key
                     self.last_card_click_time = now
 
-                    # 若畫面上已存在「開始戰鬥」按鈕 (stages/start.png)，直接發起戰鬥
+                    # 若畫面上已存在「開始戰鬥」按鈕 (stages/start.png)，點擊並啟動 2.5 秒戰鬥進場驗證閉環
                     if os.path.exists(os.path.join("templates", start_btn)):
                         pos_start, conf_start = self.matcher.match(screen_img, start_btn, threshold=0.80)
                         if pos_start:
-                            logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，轉移至 STATE_BATTLE 發起討伐！")
+                            logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，啟動 2.5 秒戰鬥進場驗證...")
                             self.mouse.click(rect["left"] + pos_start[0], rect["top"] + pos_start[1])
-                            self.machine.current_lord_boss_key = boss_key
-                            self.machine.transition_to(self.machine.STATE_BATTLE)
+
+                            battle_entered = False
+                            start_verify_t = time.time()
+                            battle_features = [
+                                "battle/battle_features_1.png",
+                                "battle/battle_features_2.png",
+                                "common/auto.png"
+                            ]
+
+                            while time.time() - start_verify_t < 2.5:
+                                time.sleep(0.3)
+                                if self.capturer and rect:
+                                    fresh_img = self.capturer.capture(rect)
+                                    if fresh_img is not None:
+                                        for feat in battle_features:
+                                            if os.path.exists(os.path.join("templates", feat)):
+                                                p_f, _ = self.matcher.match(fresh_img, feat, threshold=0.75, quiet=True)
+                                                if p_f:
+                                                    battle_entered = True
+                                                    break
+                                if battle_entered:
+                                    break
+
+                            if battle_entered:
+                                logging.info(f"⚔️ [首領討伐] 成功比對到戰鬥特徵，確認進入戰鬥！轉移至 STATE_BATTLE 發起討伐 [{boss_key}]...")
+                                self.machine.current_lord_boss_key = boss_key
+                                self.machine.transition_to(self.machine.STATE_BATTLE)
+                                return True
+                            else:
+                                latest_img = self.capturer.capture(rect) if (self.capturer and rect) else None
+                                still_start = False
+                                if latest_img is not None and os.path.exists(os.path.join("templates", start_btn)):
+                                    p_still, _ = self.matcher.match(latest_img, start_btn, threshold=0.75, quiet=True)
+                                    if p_still:
+                                        still_start = True
+
+                                if still_start or latest_img is None:
+                                    logging.warning(f"⚠️ [首領討伐] 點擊開始戰鬥 2.5 秒後未偵測到戰鬥特徵，且按鈕 [{start_btn}] 依然存在！判定 Boss [{b_name}] 次數已滿或無法挑戰。")
+                                    quit_template = "common/quit.png"
+                                    if latest_img is not None and os.path.exists(os.path.join("templates", quit_template)):
+                                        p_quit, _ = self.matcher.match(latest_img, quit_template, threshold=0.75)
+                                        if p_quit:
+                                            logging.info(f"🚪 [首領討伐] 點擊卡片關閉按鈕 [{quit_template}] 退回大廳...")
+                                            self.click_and_wait_until_gone(quit_template, rect["left"] + p_quit[0], rect["top"] + p_quit[1], rect, threshold=0.75)
+
+                                    if dm and hasattr(dm, "mark_boss_completed"):
+                                        dm.mark_boss_completed(boss_key)
+
+                                    self.reset_state()
+                                    self.machine.pop_and_next_town_subflow()
+                                    return True
                     break
 
         # 7. 若在畫面上未能匹配到當前欲尋找的 Boss 卡片，發動向左滑動翻頁
