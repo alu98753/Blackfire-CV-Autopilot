@@ -20,9 +20,10 @@ from states.handlers import (
     LordBossHandler,
     ChestHandler,
     HeroDrawHandler,
-    BulletinBoardHandler,
-    UnexpectedPopupRecoveryHandler
+    BulletinBoardHandler
 )
+from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
+
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -138,9 +139,12 @@ class GameStateMachine:
         self.continue_template = "common/continue.png"
         self._ocr_reader = None
         
-        # 意外彈窗處置與狀態暫存屬性
+        # 意外彈窗處置與 Watchdog 監控器元件 (來自 states.exceptions)
         self.stashed_state = None
         self.stashed_context = {}
+        self.exception_watchdog = ExceptionWatchdog(self)
+
+
 
         # 初始化註冊所有狀態處理器
         self.handlers = {
@@ -167,12 +171,15 @@ class GameStateMachine:
     def stash_current_state(self, reason="unexpected_popup"):
         """
         暫存當前狀態與 context，並切換至意外彈窗復原流程 STATE_POPUP_RECOVERY。
+        具備 Stash Lock 防護：若已有暫存狀態未復原，不重覆覆蓋原始業務狀態。
         """
-        if self.current_state != self.STATE_POPUP_RECOVERY:
+        import copy
+        if self.current_state != self.STATE_POPUP_RECOVERY and self.stashed_state is None:
             self.stashed_state = self.current_state
             self.stashed_context = {
                 "task_complete_phase": getattr(self, "task_complete_phase", None),
                 "last_state_change": self.last_state_change,
+                "context": copy.deepcopy(getattr(self, "context", {})),
                 "timestamp": time.time(),
                 "reason": reason
             }
@@ -186,6 +193,8 @@ class GameStateMachine:
         if self.stashed_state:
             target = self.stashed_state
             logging.info(f"🔄 [StateRestore] 恢復原暫存狀態: {target}")
+            if isinstance(self.stashed_context, dict) and "context" in self.stashed_context:
+                self.context = self.stashed_context["context"]
             self.stashed_state = None
             self.stashed_context = {}
             self.transition_to(target)
@@ -194,6 +203,10 @@ class GameStateMachine:
             logging.warning("⚠️ [StateRestore] 無可恢復之暫存狀態，安全退避至 NAVIGATING")
             self.transition_to(self.STATE_NAVIGATING)
             return False
+
+
+
+
 
 
     @property
@@ -322,9 +335,13 @@ class GameStateMachine:
             time.sleep(0.2)
             return
 
+        # 0. 全域 Watchdog 雙重觸發器 (30s 非戰鬥 / 90s 戰鬥 / 30s 衝突掃描)
+        if self.exception_watchdog.check(screen_img):
+            return
 
 
         # B. 全域自動重登處理 (低頻率檢測)
+
         import sys
         is_testing = "unittest" in sys.modules
         now_time = time.time()
