@@ -1,0 +1,12 @@
+{
+  "description": "Subflow 特徵對照表與全域 Watchdog 逾時設定檔",
+  "mismatch_scan_interval_sec": 30.0,
+  "non_battle_stuck_timeout_sec": 30.0,
+  "battle_stuck_timeout_sec": 90.0,
+  "subflow_feature_mapping": {
+    "raid_box_subflow": {
+      "trigger_template": "exceptions/Raid_Box.png",
+      "description": "懸賞/掃蕩對話框"
+    }
+  }
+}
