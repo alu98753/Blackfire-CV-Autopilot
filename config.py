@@ -271,6 +271,8 @@ SUBFLOW_CONFIGS = {
                 "Frog_Skin": True,
                 "Purple_Spore": True,
                 "Slime_Mucus": True,
+                "Bat_wings": True,
+                "Wolf_skin": True,
             },
             "green": {
                 "The_cloth_wrapped_around_the_dead": True,
