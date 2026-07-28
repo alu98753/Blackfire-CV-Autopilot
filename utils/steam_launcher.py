@@ -8,30 +8,21 @@ from typing import Optional, Tuple
 from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
-from states.debug import DebugVisualizer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
 class LauncherPhase(Enum):
-    SEARCH_WINDOWS = auto()           # 階段 1: 尋找並點擊 Windows 搜尋
-    LAUNCH_STEAM = auto()             # 階段 2: 點擊 Steam 圖示並等待 Steam 視窗開啟
-    START_OR_UNSTUCK_GAME = auto()    # 階段 3: 檢查 Steam 介面並進行解卡或觸發開始遊戲 (Click Until 重試機制)
-    WAIT_GAME_WINDOW = auto()         # 階段 4: 等待遊戲視窗開啟並定位
-    COMPLETED = auto()                # 階段 5: 第一階段流程完成
+    LAUNCHING = auto()               # 階段 1: 發起直連啟動並輪詢視窗
+    COMPLETED = auto()                # 階段 2: 遊戲視窗建立與傳送最大化完成
     FAILED = auto()                   # 流程失敗/超時
 
 
 class SteamGameLauncher:
     """
-    從 Windows 桌面/工作列自動開啟 Steam 並啟動/解卡遊戲的 Phase 狀態機類別 (Steam Game Launcher Subflow)。
-    採用 Click Until 持續點擊與雙重自動重試機制，完全以 DPI-unaware 模式與 Multi-Scale 多重縮放比對運作。
+    從 Windows 原生協定 (steam://rungameid/1765770) 自動發起直連啟動並管理遊戲視窗的 Phase 狀態機類別。
+    畫面載入 login/login.png 後，自動將視窗傳送至指定 Monitor (預設 1 號筆電螢幕) 並最大化全螢幕。
     """
-
-    TPL_SEARCH = "reload_game/search.png"
-    TPL_STEAM = "reload_game/steam.png"
-    TPL_START_GAME = "reload_game/start_game.png"
-    TPL_STOP_GAME = "reload_game/stop_game.png"
 
     def __init__(
         self,
@@ -50,207 +41,34 @@ class SteamGameLauncher:
         self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode)
         self.matcher = matcher or TemplateMatcher()
         self.action_cooldown = action_cooldown
-        self.phase = LauncherPhase.SEARCH_WINDOWS
+        self.phase = LauncherPhase.LAUNCHING
 
     def _safe_match(
         self,
         screen_img: np.ndarray,
         template_name: str,
-        threshold: float = 0.65,
-        roi_box: Optional[Tuple[int, int, int, int]] = None
+        threshold: float = 0.65
     ) -> Tuple[Optional[Tuple[int, int]], float]:
         """
-        安全呼叫 TemplateMatcher.match()，支援 Mock 單元測試與 Multi-Scale 多重縮放 (1.0x, 1.25x, 0.8x 等)。
+        安全呼叫 TemplateMatcher.match()，支援 Mock 單元測試與標準模板比對。
         """
         if screen_img is None or not hasattr(screen_img, "shape"):
             return None, 0.0
 
-        target_img = screen_img
-        offset_x, offset_y = 0, 0
-
-        if roi_box:
-            rx, ry, rw, rh = roi_box
-            sh, sw = screen_img.shape[:2]
-            rx = max(0, min(rx, sw))
-            ry = max(0, min(ry, sh))
-            rw = min(rw, sw - rx)
-            rh = min(rh, sh - ry)
-            if rw > 0 and rh > 0:
-                target_img = screen_img[ry:ry+rh, rx:rx+rw]
-                offset_x, offset_y = rx, ry
-
-        # 1. 優先透過 TemplateMatcher 進行標準比對 (相容 Mock 單元測試)
         if matcher_func := getattr(self.matcher, "match", None):
             try:
-                res = matcher_func(target_img, template_name, threshold=threshold)
+                res = matcher_func(screen_img, template_name, threshold=threshold)
                 if isinstance(res, (tuple, list)) and len(res) >= 2:
                     pos = res[0]
                     conf = float(res[1]) if res[1] is not None else 0.0
                     if pos is not None and conf >= threshold:
-                        actual_pos = (pos[0] + offset_x, pos[1] + offset_y)
-                        logging.info(f"🎯 [Match Success] 模板 '{template_name}' 匹配成功！座標: {actual_pos}, 相似度: {conf:.4f} (門檻: {threshold})")
-                        return actual_pos, conf
-                    if not isinstance(self.matcher, TemplateMatcher):
-                        return None, conf
+                        logging.info(f"🎯 [Match Success] 模板 '{template_name}' 匹配成功！座標: {pos}, 相似度: {conf:.4f} (門檻: {threshold})")
+                        return pos, conf
+                    return None, conf
             except Exception as e:
-                logging.debug(f"matcher_func 比對異常: {e}")
+                logging.debug(f"_safe_match 比對異常: {e}")
 
-        # 2. 多重縮放掃描 (相容高 DPI 螢幕 125%/150% 縮放比率)
-        tpl_path = os.path.join("templates", template_name)
-        if not os.path.exists(tpl_path):
-            return None, 0.0
-
-        tpl_img = cv2.imread(tpl_path)
-        if tpl_img is None or not hasattr(tpl_img, "shape"):
-            return None, 0.0
-
-        best_pos = None
-        best_conf = 0.0
-        best_scale = 1.0
-
-        scales = [1.0, 1.25, 0.8, 1.2, 0.75, 1.1]
-        sh, sw = target_img.shape[:2]
-
-        for s in scales:
-            tw_s = int(tpl_img.shape[1] * s)
-            th_s = int(tpl_img.shape[0] * s)
-            if tw_s > sw or th_s > sh or tw_s < 5 or th_s < 5:
-                continue
-
-            try:
-                scaled_tpl = cv2.resize(tpl_img, (tw_s, th_s), interpolation=cv2.INTER_AREA if s < 1.0 else cv2.INTER_LINEAR)
-                res = cv2.matchTemplate(target_img, scaled_tpl, cv2.TM_CCOEFF_NORMED)
-                _, max_val, _, max_loc = cv2.minMaxLoc(res)
-
-                if max_val > best_conf:
-                    best_conf = max_val
-                    best_pos = (max_loc[0] + tw_s // 2, max_loc[1] + th_s // 2)
-                    best_scale = s
-
-                # 早期退出 (Early Exit)：若當前 scale 1.0 匹配率已達標，立即 break 返回，省去其餘 5 個 scale 浪費
-                if best_conf >= threshold:
-                    break
-            except Exception:
-                pass
-
-        if best_pos and best_conf >= threshold:
-            actual_pos = (best_pos[0] + offset_x, best_pos[1] + offset_y)
-            logging.info(f"🎯 [Match Success] 模板 '{template_name}' 多縮放匹配成功！(縮放: {best_scale}x) 座標: {actual_pos}, 相似度: {best_conf:.4f} (門檻: {threshold})")
-            return actual_pos, best_conf
-        else:
-            actual_pos = (best_pos[0] + offset_x, best_pos[1] + offset_y) if best_pos else None
-            logging.info(f"🔍 [Match Debug] 模板 '{template_name}' 最高相似度: {best_conf:.4f} < 門檻 {threshold} (點位: {actual_pos})")
-            return None, best_conf
-
-    def _match_anywhere(
-        self,
-        current_img: np.ndarray,
-        template_name: str,
-        threshold: float = 0.65,
-        roi_box: Optional[Tuple[int, int, int, int]] = None
-    ) -> Tuple[Optional[Tuple[int, int]], float, Optional[Tuple[int, int]]]:
-        """
-        雙螢幕全域匹配：優先在當前指定螢幕搜尋，若找不到則自動備用掃描主顯示器。
-        """
-        pos, conf = self._safe_match(current_img, template_name, threshold=threshold, roi_box=roi_box)
-        if pos:
-            mon = getattr(self.capturer, "last_monitor", None)
-            mon_l = mon.get("left", 0) if isinstance(mon, dict) else 0
-            mon_t = mon.get("top", 0) if isinstance(mon, dict) else 0
-            dpi_scale = getattr(self.capturer, "last_dpi_scale", (1.0, 1.0))
-            if isinstance(dpi_scale, (tuple, list)) and len(dpi_scale) >= 2:
-                scale_x, scale_y = float(dpi_scale[0]), float(dpi_scale[1])
-            else:
-                scale_x, scale_y = 1.0, 1.0
-            log_pos_x = int(pos[0] / scale_x)
-            log_pos_y = int(pos[1] / scale_y)
-            abs_pos = (mon_l + log_pos_x, mon_t + log_pos_y)
-            return pos, conf, abs_pos
-
-        # 單元測試 Mock 環境跳過跨螢幕 fallback 避免破壞 side_effect 佇列
-        if not isinstance(self.matcher, TemplateMatcher):
-            return None, 0.0, None
-
-        # 備用：當前螢幕未找到，掃描主顯示器
-        try:
-            if hasattr(self.capturer, "sct") and self.capturer.sct:
-                primary_mon = next((m for m in self.capturer.sct.monitors[1:] if m.get("is_primary")), None)
-                if primary_mon:
-                    pri_shot = self.capturer.sct.grab(primary_mon)
-                    pri_img = cv2.cvtColor(np.array(pri_shot), cv2.COLOR_BGRA2BGR)
-                    
-                    pri_roi = None
-                    if roi_box:
-                        psh, psw = pri_img.shape[:2]
-                        pri_roi = (0, int(psh * 0.8), psw, int(psh * 0.2))
-
-                    pri_pos, pri_conf = self._safe_match(pri_img, template_name, threshold=threshold, roi_box=pri_roi)
-                    if pri_pos:
-                        abs_x = primary_mon["left"] + pri_pos[0]
-                        abs_y = primary_mon["top"] + pri_pos[1]
-                        logging.info(f"🌐 [Match MainScreen] 在主顯示器成功匹配 '{template_name}'！座標: ({abs_x}, {abs_y}), 相似度: {pri_conf:.4f}")
-                        return pri_pos, pri_conf, (abs_x, abs_y)
-        except Exception as e:
-            logging.debug(f"_match_anywhere 備用掃描異常: {e}")
-
-        return None, 0.0, None
-
-    def _visualize_and_click(
-        self,
-        screen_img: np.ndarray,
-        template_name: str,
-        pos_in_img: Tuple[int, int],
-        confidence: float,
-        abs_click_pos: Optional[Tuple[int, int]] = None,
-        roi_box: Optional[Tuple[int, int, int, int]] = None,
-        filename: str = "debug_click.png"
-    ):
-        """
-        調用 DebugVisualizer 統一將點擊座標、匹配 Bounding Box 與 ROI 區域寫入 debug_click.png，並執行點擊。
-        """
-        bw, bh = 60, 60
-        tpl_path = os.path.join("templates", template_name)
-        if os.path.exists(tpl_path):
-            img_tpl = cv2.imread(tpl_path)
-            if img_tpl is not None and len(img_tpl.shape) >= 2:
-                bh, bw = img_tpl.shape[:2]
-
-        box_x, box_y = pos_in_img
-        matched_bbox = (max(0, box_x - bw // 2), max(0, box_y - bh // 2), bw, bh)
-
-        if abs_click_pos is not None:
-            target_x, target_y = abs_click_pos
-        else:
-            mon = getattr(self.capturer, "last_monitor", None)
-            mon_left = mon.get("left", 0) if isinstance(mon, dict) else 0
-            mon_top = mon.get("top", 0) if isinstance(mon, dict) else 0
-            dpi_scale = getattr(self.capturer, "last_dpi_scale", (1.0, 1.0))
-            if isinstance(dpi_scale, (tuple, list)) and len(dpi_scale) >= 2:
-                scale_x, scale_y = float(dpi_scale[0]), float(dpi_scale[1])
-            else:
-                scale_x, scale_y = 1.0, 1.0
-            log_pos_x = int(pos_in_img[0] / scale_x)
-            log_pos_y = int(pos_in_img[1] / scale_y)
-            target_x = mon_left + log_pos_x
-            target_y = mon_top + log_pos_y
-
-        try:
-            DebugVisualizer.draw_detection(
-                screen_img=screen_img,
-                click_pos=pos_in_img,
-                matched_bbox=matched_bbox,
-                roi_box=roi_box,
-                labels={
-                    "match": f"{template_name} ({confidence:.2f})",
-                    "click": f"Click {template_name}",
-                    "roi": "Taskbar Region"
-                },
-                filename=filename
-            )
-        except Exception as e:
-            logging.debug(f"DebugVisualizer 繪圖失敗: {e}")
-
-        self.mouse.click(target_x, target_y)
+        return None, 0.0
 
     def is_game_open(self) -> bool:
         """
@@ -267,8 +85,7 @@ class SteamGameLauncher:
     def wait_and_handle_login(self, timeout: float = 60.0, poll_interval: float = 0.5) -> bool:
         """
         在「遊戲視窗」中搜尋登入畫面 [login/login.png]。
-        一旦畫面載入完成並比對成功 login/login.png，執行視窗傳送至 1 號筆電螢幕並最大化全螢幕，
-        隨後返回 True，將後續登入點擊與 Click Until 流程交由主狀態機 LoginFlow 處理。
+        畫面渲染成功後觸發傳送至 1 號筆電螢幕並最大化全螢幕，隨後將登入點擊交由主狀態機 LoginFlow 處理。
         """
         logging.info("[SteamGameLauncher] 正在「遊戲視窗」中搜尋登入畫面 [login/login.png]...")
         start_time = time.time()
@@ -284,11 +101,6 @@ class SteamGameLauncher:
                 time.sleep(poll_interval)
                 continue
 
-            try:
-                cv2.imwrite("debug_game_window.png", screen_img)
-            except Exception:
-                pass
-
             # 專心比對登入主畫面 login/login.png
             login_pos, conf = self._safe_match(screen_img, "login/login.png", threshold=0.65)
             if login_pos:
@@ -303,7 +115,7 @@ class SteamGameLauncher:
 
             time.sleep(poll_interval)
 
-        logging.warning("⚠️ [SteamGameLauncher] 超時未在遊戲視窗內偵測到登入畫面或城鎮。")
+        logging.warning("⚠️ [SteamGameLauncher] 超時未在遊戲視窗內偵測到登入畫面。")
         return False
 
     def ensure_game_ready(self) -> bool:
@@ -311,7 +123,7 @@ class SteamGameLauncher:
         全流程開關與登入檢測入口：
         1. 判斷 is_game_open()
         2. 若未開啟，跑 run_launch_subflow() 啟動遊戲
-        3. 在「遊戲視窗」中等待畫面完全載入 (login.png) 後，自動移動至 1 號筆電螢幕並最大化全螢幕
+        3. 在遊戲視窗中等待畫面完全載入 (login.png) 後，自動移動至 1 號筆電螢幕並最大化全螢幕
         """
         logging.info("[SteamGameLauncher] 開始執行 ensure_game_ready 檢查與啟動流程...")
 
