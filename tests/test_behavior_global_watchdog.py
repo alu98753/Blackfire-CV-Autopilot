@@ -38,22 +38,28 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOBBY)
         self.matcher.match.assert_not_called()
 
-    def test_battle_and_exploring_under_90s_does_not_trigger_or_scan(self):
-        """[測試 2] 效能護欄：戰鬥 (BATTLE) 與探索 (EXPLORING) 未滿 90 秒，絕對不觸發，且 0 圖像匹配消耗"""
+    def test_long_subflow_states_under_90s_does_not_trigger_or_scan(self):
+        """[測試 2] 效能護欄：戰鬥、探索與長城鎮子流程 (HERO_DRAW, BULLETIN_BOARD, BLOOD_ALTAR 等 8 個狀態) 未滿 90 秒，絕對不觸發"""
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         self.matcher.match.return_value = ((100, 100), 0.99)
 
-        # 1. 戰鬥 80 秒 (未滿 90s)
-        self.machine.current_state = GameStateMachine.STATE_BATTLE
-        self.machine.last_state_change = time.time() - 80.0
-        self.assertFalse(self.watchdog.check(dummy_img))
-        self.assertEqual(self.machine.current_state, GameStateMachine.STATE_BATTLE)
+        long_states = [
+            GameStateMachine.STATE_BATTLE,
+            GameStateMachine.STATE_DUNGEON_EXPLORING,
+            GameStateMachine.STATE_LORD_BOSS,
+            GameStateMachine.STATE_HERO_DRAW,
+            GameStateMachine.STATE_BULLETIN_BOARD,
+            GameStateMachine.STATE_BLOOD_ALTAR,
+            GameStateMachine.STATE_JEWELRY_WORKSHOP,
+            GameStateMachine.STATE_CHEST
+        ]
 
-        # 2. 探索 85 秒 (未滿 90s)
-        self.machine.current_state = GameStateMachine.STATE_DUNGEON_EXPLORING
-        self.machine.last_state_change = time.time() - 85.0
-        self.assertFalse(self.watchdog.check(dummy_img))
-        self.assertEqual(self.machine.current_state, GameStateMachine.STATE_DUNGEON_EXPLORING)
+        # 逐一驗證 8 個長流程狀態在 85 秒 (未滿 90s) 時均回傳 False，且不觸發 Watchdog
+        for st in long_states:
+            self.machine.current_state = st
+            self.machine.last_state_change = time.time() - 85.0
+            self.assertFalse(self.watchdog.check(dummy_img))
+            self.assertEqual(self.machine.current_state, st)
 
         self.matcher.match.assert_not_called()
 
