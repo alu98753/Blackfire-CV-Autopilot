@@ -348,9 +348,9 @@ class SteamGameLauncher:
         logging.info(f"🔄 [SteamGameLauncher] 狀態轉移: {self.phase.name} ➔ {next_phase.name} ({reason})")
         self.phase = next_phase
 
-    def run_launch_subflow(self, timeout: float = 30.0, poll_interval: float = 1.0) -> bool:
+    def run_launch_subflow(self, timeout: float = 90.0, poll_interval: float = 1.0) -> bool:
         logging.info("==================================================")
-        logging.info(" 🚀 [SteamGameLauncher] 開始執行原生協定直連啟動與輪詢重試流程")
+        logging.info(" 🚀 [SteamGameLauncher] 開始執行原生協定直連啟動與輪詢重試流程 (Retry 間隔: 30 秒)")
         logging.info("==================================================")
 
         start_time = time.time()
@@ -365,8 +365,8 @@ class SteamGameLauncher:
             except Exception as e:
                 logging.warning(f"發起 steam:// 協定失敗: {e}")
 
-            # 每輪輪詢 5 秒檢測遊戲視窗 HWND 是否建立
-            max_ticks = max(1, int(5.0 / poll_interval)) if poll_interval > 0 else 5
+            # 每輪輪詢 30 秒檢測遊戲視窗 HWND 是否建立
+            max_ticks = max(1, int(30.0 / poll_interval)) if poll_interval > 0 else 30
             for _ in range(max_ticks):
                 rect = self.capturer.get_window_rect(quiet=True)
                 if rect is not None:
@@ -376,7 +376,7 @@ class SteamGameLauncher:
                     return True
                 time.sleep(poll_interval)
 
-            logging.warning("⚠️ [SteamGameLauncher] 等待 5 秒遊戲視窗尚未開啟，準備進行 Retry...")
+            logging.warning("⚠️ [SteamGameLauncher] 等待 30 秒遊戲視窗尚未開啟，準備進行 Retry...")
 
         logging.error(f"❌ [SteamGameLauncher] 超時 {timeout} 秒未成功開啟遊戲。")
         self.transition_to(LauncherPhase.FAILED, "超時")
