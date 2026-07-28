@@ -86,7 +86,8 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                 matched_center=pos_box,
                 confidence=conf_box,
                 click_pos=click_pt,
-                pause_sec=5.0
+                pause_sec=0.0
+
             )
 
             if mouse:
@@ -109,7 +110,8 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                             matched_center=pos_box,
                             confidence=conf_box,
                             click_pos=click_pt,
-                            pause_sec=5.0
+                            pause_sec=0.0
+
                         )
 
                         if mouse:
@@ -126,7 +128,8 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                     matched_center=pos_box,
                     confidence=conf_box,
                     click_pos=(box_x + 500, box_y + 40),
-                    pause_sec=5.0
+                    pause_sec=0.0
+
                 )
 
                 if mouse:
