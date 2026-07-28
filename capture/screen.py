@@ -180,8 +180,9 @@ class ScreenCapturer:
                     hdc = win32gui.CreateDC(device_name, None, None)
                     mfcDC = win32ui.CreateDCFromHandle(hdc)
                     saveDC = mfcDC.CreateCompatibleDC()
-                    w = mfcDC.GetDeviceCaps(win32con.HORZRES)
-                    h = mfcDC.GetDeviceCaps(win32con.VERTRES)
+                    # 118: DESKTOPHORZRES, 117: DESKTOPVERTRES 獲取真實 100% 物理解析度 (1920x1080)，防止高 DPI 下裁切右側與工作列
+                    w = mfcDC.GetDeviceCaps(118)
+                    h = mfcDC.GetDeviceCaps(117)
 
                     saveBitMap = win32ui.CreateBitmap()
                     saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
