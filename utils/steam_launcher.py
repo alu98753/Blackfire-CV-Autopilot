@@ -59,7 +59,7 @@ class SteamGameLauncher:
         roi_box: Optional[Tuple[int, int, int, int]] = None
     ) -> Tuple[Optional[Tuple[int, int]], float]:
         """
-        安全呼叫 TemplateMatcher.match()，支援指定 ROI 搜尋區域 (如螢幕下方 1/5 工作列)。
+        安全呼叫 TemplateMatcher.match()，支援指定 ROI 搜尋區域並印出詳細診斷日誌。
         """
         if screen_img is None or not hasattr(screen_img, "shape"):
             return None, 0.0
@@ -79,22 +79,33 @@ class SteamGameLauncher:
                 offset_x, offset_y = rx, ry
 
         tpl_path = os.path.join("templates", template_name)
-        if os.path.exists(tpl_path):
-            tpl_img = cv2.imread(tpl_path)
-            if tpl_img is not None and hasattr(tpl_img, "shape"):
-                sh, sw = target_img.shape[:2]
-                th, tw = tpl_img.shape[:2]
-                if th > sh or tw > sw:
-                    return None, 0.0
+        if not os.path.exists(tpl_path):
+            logging.warning(f"⚠️ [Match Debug] 模板圖片不存在: '{tpl_path}'")
+            return None, 0.0
+
+        tpl_img = cv2.imread(tpl_path)
+        if tpl_img is not None and hasattr(tpl_img, "shape"):
+            sh, sw = target_img.shape[:2]
+            th, tw = tpl_img.shape[:2]
+            if th > sh or tw > sw:
+                logging.warning(f"⚠️ [Match Debug] 模板 '{template_name}' 尺寸 ({tw}x{th}) 大於搜尋畫面尺寸 ({sw}x{sh})，跳過比對。")
+                return None, 0.0
 
         if matcher_func := getattr(self.matcher, "match", None):
             try:
-                res = matcher_func(target_img, template_name, threshold=threshold)
-                if isinstance(res, (tuple, list)) and len(res) >= 2 and res[0]:
+                # 採用門檻 0.1 取得最高匹配得分用於診斷日誌
+                res = matcher_func(target_img, template_name, threshold=0.1)
+                if isinstance(res, (tuple, list)) and len(res) >= 2:
                     pos = res[0]
                     conf = float(res[1]) if res[1] is not None else 0.0
-                    actual_pos = (pos[0] + offset_x, pos[1] + offset_y)
-                    return actual_pos, conf
+                    actual_pos = (pos[0] + offset_x, pos[1] + offset_y) if pos else None
+                    
+                    if pos and conf >= threshold:
+                        logging.info(f"🎯 [Match Success] 模板 '{template_name}' 匹配成功！座標: {actual_pos}, 相似度: {conf:.4f} (門檻: {threshold})")
+                        return actual_pos, conf
+                    else:
+                        logging.info(f"🔍 [Match Debug] 模板 '{template_name}' 最高相似度: {conf:.4f} < 門檻 {threshold} (點位: {actual_pos})")
+                        return None, conf
             except Exception as e:
                 logging.debug(f"_safe_match 比對異常: {e}")
         return None, 0.0
@@ -108,7 +119,6 @@ class SteamGameLauncher:
     ) -> Tuple[Optional[Tuple[int, int]], float, Optional[Tuple[int, int]]]:
         """
         雙螢幕全域匹配：優先在當前指定螢幕搜尋，若找不到則自動備用掃描主顯示器。
-        支援 roi_box 搜尋區域限制 (例如下方 1/5 工作列)。
         """
         pos, conf = self._safe_match(current_img, template_name, threshold=threshold, roi_box=roi_box)
         if pos:
@@ -135,6 +145,7 @@ class SteamGameLauncher:
                     if pri_pos:
                         abs_x = primary_mon["left"] + pri_pos[0]
                         abs_y = primary_mon["top"] + pri_pos[1]
+                        logging.info(f"🌐 [Match MainScreen] 在主顯示器成功匹配 '{template_name}'！座標: ({abs_x}, {abs_y}), 相似度: {pri_conf:.4f}")
                         return pri_pos, pri_conf, (abs_x, abs_y)
         except Exception as e:
             logging.debug(f"_match_anywhere 備用掃描異常: {e}")
@@ -182,7 +193,7 @@ class SteamGameLauncher:
                 labels={
                     "match": f"{template_name} ({confidence:.2f})",
                     "click": f"Click {template_name}",
-                    "roi": "Bottom 1/5 Taskbar"
+                    "roi": "Taskbar Region"
                 },
                 filename=filename
             )
@@ -221,6 +232,12 @@ class SteamGameLauncher:
             if screen_img is None:
                 time.sleep(poll_interval)
                 continue
+
+            # 存檔供除錯
+            try:
+                cv2.imwrite("debug_game_window.png", screen_img)
+            except Exception:
+                pass
 
             # 1. 檢查 common/door.png 是否已在城鎮 (若已經在城鎮中則免登入)
             door_pos, _ = self._safe_match(screen_img, "common/door.png", threshold=0.75)
@@ -313,6 +330,12 @@ class SteamGameLauncher:
             if img is None:
                 time.sleep(poll_interval)
                 continue
+
+            # 保存即時抓到的畫面存檔供視覺化除錯診斷
+            try:
+                cv2.imwrite("debug_launcher_screen.png", img)
+            except Exception:
+                pass
 
             sh, sw = img.shape[:2]
             bottom_fifth_roi = (0, int(sh * 0.8), sw, int(sh * 0.2))
