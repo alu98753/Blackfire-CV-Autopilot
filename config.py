@@ -146,8 +146,9 @@ PRIMARY_MODES = {
         "navigation_path": [],
         "diamond_cd": 300.0,
         "bread_cd": 300.0,
-        "stamina_retreat_duration": 7.0,
+        "stamina_retreat_duration": 8.08988764,
     },
+    # 7hr collect only+dungeon = 203 energy ,可以打 dungeon+stagesix_first  x 小時, 上面數字可以 打一休一共12小時
 
     # ------------------ 每日懸賞任務動態調度模式 ------------------
     "daily": {
