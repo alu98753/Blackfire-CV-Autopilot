@@ -164,13 +164,13 @@ class TestBehaviorPopupRecovery(unittest.TestCase):
         dummy_img = np.ones((100, 100, 3), dtype=np.uint8) * 150
         rect = {"left": 0, "top": 0, "width": 100, "height": 100}
 
-        # 模擬所有圖片匹配均失敗
-        self.matcher.match.return_value = (None, 0.0)
+        with patch("utils.steam_launcher.SteamGameLauncher.ensure_game_ready", return_value=True), \
+             patch("subprocess.run"):
+            for _ in range(3):
+                self.handler.handle(dummy_img, rect)
 
-        for _ in range(3):
-            self.handler.handle(dummy_img, rect)
-
-        self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOBBY)
+            # 驗證達到 max_retries 後觸發 GameRelaunchSubflow，重置暫存並轉移至 STATE_NAVIGATING
+            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_NAVIGATING)
 
     def test_context_preservation_and_stash_lock(self):
         """[階段 3-D] 驗證 Context 數據深拷貝備份/還原，以及 Stash Lock 防護二次暫存不覆蓋原狀態"""

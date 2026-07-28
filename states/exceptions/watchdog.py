@@ -19,6 +19,8 @@ class ExceptionWatchdog:
 
     def __init__(self, machine):
         self.machine = machine
+        self.consecutive_stuck_count = 0
+        self.last_stuck_state = None
 
     def check(self, screen_img) -> bool:
         """
@@ -52,9 +54,26 @@ class ExceptionWatchdog:
         if state_duration < stuck_timeout:
             return False
 
-        # 2. 確定滿 30s/90s 逾時：啟動圖像特徵掃描與例外處理
+        # 2. 確定滿 30s/90s 逾時：計算連續卡死次數
+        if self.last_stuck_state == self.machine.current_state:
+            self.consecutive_stuck_count += 1
+        else:
+            self.last_stuck_state = self.machine.current_state
+            self.consecutive_stuck_count = 1
+
+        # 🚨 硬條件 B：若同一個狀態連續 2 次逾時 (代表第 1 次輕量救援無效) -> 觸發 GameRelaunchSubflow
+        if self.consecutive_stuck_count >= 2:
+            logging.error(
+                f"❌ [Watchdog] 狀態 [{self.machine.current_state}] 連續 {self.consecutive_stuck_count} 次逾時卡死！輕量救援無效，發起 GameRelaunchSubflow 重啟..."
+            )
+            self.consecutive_stuck_count = 0
+            self.last_stuck_state = None
+            from states.exceptions.subflows import GameRelaunchSubflow
+            GameRelaunchSubflow().execute(self.machine, reason=f"watchdog_consecutive_timeout_{self.machine.current_state}")
+            return True
+
         logging.warning(
-            f"⚠️ [Watchdog] 狀態 [{self.machine.current_state}] 已卡住逾時 {state_duration:.1f}s (門檻 {stuck_timeout}s)，啟動特徵掃描與復原！"
+            f"⚠️ [Watchdog] (第 1 次逾時) 狀態 [{self.machine.current_state}] 已卡住逾時 {state_duration:.1f}s (門檻 {stuck_timeout}s)，啟動特徵掃描與輕量復原！"
         )
 
         popup_handler = self.machine.handlers.get(self.machine.STATE_POPUP_RECOVERY)

@@ -245,7 +245,12 @@ class GameStateMachine:
             self.consecutive_stuck_count = 0
             self.just_resumed_from_user = False
             
-            # 🛡️ 關鍵防護：當轉移至新狀態時，自動重置目標 Handler 內部步驟 phase
+            # 狀態發生真實轉移且非 POPUP_RECOVERY 時，歸零 Watchdog 連續卡死計數
+            if new_state != self.STATE_POPUP_RECOVERY and hasattr(self, "exception_watchdog"):
+                self.exception_watchdog.consecutive_stuck_count = 0
+                self.exception_watchdog.last_stuck_state = None
+            
+            # 當轉移至新狀態時，自動重置目標 Handler 內部步驟 phase
             handler = self.handlers.get(new_state)
             if handler and hasattr(handler, "reset_state"):
                 handler.reset_state()
