@@ -126,6 +126,10 @@ class SteamGameLauncher:
                     best_conf = max_val
                     best_pos = (max_loc[0] + tw_s // 2, max_loc[1] + th_s // 2)
                     best_scale = s
+
+                # 早期退出 (Early Exit)：若當前 scale 1.0 匹配率已達標，立即 break 返回，省去其餘 5 個 scale 浪費
+                if best_conf >= threshold:
+                    break
             except Exception:
                 pass
 
@@ -395,12 +399,28 @@ class SteamGameLauncher:
                 pass
 
             sh, sw = img.shape[:2]
-            bottom_fifth_roi = (0, int(sh * 0.8), sw, int(sh * 0.2))
+            # 使用使用者指定之精密 ROI: 中央 2/3 (X: 1/6~5/6) 與下方 1/10 (Y: 0.9~1.0)
+            taskbar_roi = (int(sw * 1/6), int(sh * 0.9), int(sw * 2/3), int(sh * 0.1))
 
             # ----------------------------------------------------
-            # 階段 1: SEARCH_WINDOWS (Click Until 機制)
+            # 階段 1: SEARCH_WINDOWS (極速 10ms 發起機制)
             # ----------------------------------------------------
             if self.phase == LauncherPhase.SEARCH_WINDOWS:
+                # 1. 優先極速 (10ms) 在工作列區域 (中央 2/3, 下方 1/10) 尋找搜尋圖示
+                pos, conf, abs_pos = self._match_anywhere(img, self.TPL_SEARCH, threshold=0.65, roi_box=taskbar_roi)
+                if pos and (now - last_action_time >= self.action_cooldown):
+                    logging.info(f"🔍 [SteamGameLauncher] 在工作列區域 (中央 2/3, 下方 1/10) 找到搜尋圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
+                    self._visualize_and_click(img, self.TPL_SEARCH, pos, conf, abs_click_pos=abs_pos, roi_box=taskbar_roi)
+                    try:
+                        import pyautogui
+                        pyautogui.write("steam", interval=0.05)
+                        pyautogui.press("enter")
+                    except Exception:
+                        pass
+                    last_action_time = now
+                    self.transition_to(LauncherPhase.LAUNCH_STEAM, "已點擊 Windows 搜尋並輸入 steam + Enter")
+                    continue
+
                 start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
                 stop_pos, _, _ = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
                 if start_pos or stop_pos:
@@ -411,18 +431,6 @@ class SteamGameLauncher:
                 if steam_pos:
                     self.transition_to(LauncherPhase.LAUNCH_STEAM, "偵測到 Steam 圖示已呈現")
                     continue
-
-                pos, conf, abs_pos = self._match_anywhere(img, self.TPL_SEARCH, threshold=0.65, roi_box=bottom_fifth_roi)
-                if pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"🔍 [SteamGameLauncher] 在工作列區域 (下方 1/5) 找到搜尋圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
-                    self._visualize_and_click(img, self.TPL_SEARCH, pos, conf, abs_click_pos=abs_pos, roi_box=bottom_fifth_roi)
-                    try:
-                        import pyautogui
-                        pyautogui.write("steam", interval=0.05)
-                    except Exception:
-                        pass
-                    last_action_time = now
-                    self.transition_to(LauncherPhase.LAUNCH_STEAM, "已點擊 Windows 搜尋並輸入 steam")
 
             # ----------------------------------------------------
             # 階段 2: LAUNCH_STEAM (Click Until Steam 開啟)
