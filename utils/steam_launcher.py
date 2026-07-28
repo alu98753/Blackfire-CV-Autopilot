@@ -25,6 +25,7 @@ class LauncherPhase(Enum):
 class SteamGameLauncher:
     """
     從 Windows 桌面/工作列自動開啟 Steam 並啟動/解卡遊戲的 Phase 狀態機類別 (Steam Game Launcher Subflow)。
+    完全以 DPI-unaware 模式與 Multi-Scale 多重縮放比對運作。
     """
 
     TPL_SEARCH = "reload_game/search.png"
@@ -55,11 +56,11 @@ class SteamGameLauncher:
         self,
         screen_img: np.ndarray,
         template_name: str,
-        threshold: float = 0.75,
+        threshold: float = 0.65,
         roi_box: Optional[Tuple[int, int, int, int]] = None
     ) -> Tuple[Optional[Tuple[int, int]], float]:
         """
-        安全呼叫 TemplateMatcher.match()，支援指定 ROI 搜尋區域並印出詳細診斷日誌。
+        安全呼叫 TemplateMatcher.match()，支援 Mock 單元測試與 Multi-Scale 多重縮放 (1.0x, 1.25x, 0.8x 等)。
         """
         if screen_img is None or not hasattr(screen_img, "shape"):
             return None, 0.0
@@ -78,43 +79,70 @@ class SteamGameLauncher:
                 target_img = screen_img[ry:ry+rh, rx:rx+rw]
                 offset_x, offset_y = rx, ry
 
-        tpl_path = os.path.join("templates", template_name)
-        if not os.path.exists(tpl_path):
-            logging.warning(f"⚠️ [Match Debug] 模板圖片不存在: '{tpl_path}'")
-            return None, 0.0
-
-        tpl_img = cv2.imread(tpl_path)
-        if tpl_img is not None and hasattr(tpl_img, "shape"):
-            sh, sw = target_img.shape[:2]
-            th, tw = tpl_img.shape[:2]
-            if th > sh or tw > sw:
-                logging.warning(f"⚠️ [Match Debug] 模板 '{template_name}' 尺寸 ({tw}x{th}) 大於搜尋畫面尺寸 ({sw}x{sh})，跳過比對。")
-                return None, 0.0
-
+        # 1. 優先透過 TemplateMatcher 進行標準比對 (相容 Mock 單元測試)
         if matcher_func := getattr(self.matcher, "match", None):
             try:
-                # 採用門檻 0.1 取得最高匹配得分用於診斷日誌
-                res = matcher_func(target_img, template_name, threshold=0.1)
+                res = matcher_func(target_img, template_name, threshold=threshold)
                 if isinstance(res, (tuple, list)) and len(res) >= 2:
                     pos = res[0]
                     conf = float(res[1]) if res[1] is not None else 0.0
-                    actual_pos = (pos[0] + offset_x, pos[1] + offset_y) if pos else None
-                    
-                    if pos and conf >= threshold:
+                    if pos is not None and conf >= threshold:
+                        actual_pos = (pos[0] + offset_x, pos[1] + offset_y)
                         logging.info(f"🎯 [Match Success] 模板 '{template_name}' 匹配成功！座標: {actual_pos}, 相似度: {conf:.4f} (門檻: {threshold})")
                         return actual_pos, conf
-                    else:
-                        logging.info(f"🔍 [Match Debug] 模板 '{template_name}' 最高相似度: {conf:.4f} < 門檻 {threshold} (點位: {actual_pos})")
+                    if not isinstance(self.matcher, TemplateMatcher):
                         return None, conf
             except Exception as e:
-                logging.debug(f"_safe_match 比對異常: {e}")
-        return None, 0.0
+                logging.debug(f"matcher_func 比對異常: {e}")
+
+        # 2. 多重縮放掃描 (相容高 DPI 螢幕 125%/150% 縮放比率)
+        tpl_path = os.path.join("templates", template_name)
+        if not os.path.exists(tpl_path):
+            return None, 0.0
+
+        tpl_img = cv2.imread(tpl_path)
+        if tpl_img is None or not hasattr(tpl_img, "shape"):
+            return None, 0.0
+
+        best_pos = None
+        best_conf = 0.0
+        best_scale = 1.0
+
+        scales = [1.0, 1.25, 0.8, 1.2, 0.75, 1.1]
+        sh, sw = target_img.shape[:2]
+
+        for s in scales:
+            tw_s = int(tpl_img.shape[1] * s)
+            th_s = int(tpl_img.shape[0] * s)
+            if tw_s > sw or th_s > sh or tw_s < 5 or th_s < 5:
+                continue
+
+            try:
+                scaled_tpl = cv2.resize(tpl_img, (tw_s, th_s), interpolation=cv2.INTER_AREA if s < 1.0 else cv2.INTER_LINEAR)
+                res = cv2.matchTemplate(target_img, scaled_tpl, cv2.TM_CCOEFF_NORMED)
+                _, max_val, _, max_loc = cv2.minMaxLoc(res)
+
+                if max_val > best_conf:
+                    best_conf = max_val
+                    best_pos = (max_loc[0] + tw_s // 2, max_loc[1] + th_s // 2)
+                    best_scale = s
+            except Exception:
+                pass
+
+        if best_pos and best_conf >= threshold:
+            actual_pos = (best_pos[0] + offset_x, best_pos[1] + offset_y)
+            logging.info(f"🎯 [Match Success] 模板 '{template_name}' 多縮放匹配成功！(縮放: {best_scale}x) 座標: {actual_pos}, 相似度: {best_conf:.4f} (門檻: {threshold})")
+            return actual_pos, best_conf
+        else:
+            actual_pos = (best_pos[0] + offset_x, best_pos[1] + offset_y) if best_pos else None
+            logging.info(f"🔍 [Match Debug] 模板 '{template_name}' 最高相似度: {best_conf:.4f} < 門檻 {threshold} (點位: {actual_pos})")
+            return None, best_conf
 
     def _match_anywhere(
         self,
         current_img: np.ndarray,
         template_name: str,
-        threshold: float = 0.75,
+        threshold: float = 0.65,
         roi_box: Optional[Tuple[int, int, int, int]] = None
     ) -> Tuple[Optional[Tuple[int, int]], float, Optional[Tuple[int, int]]]:
         """
@@ -233,24 +261,23 @@ class SteamGameLauncher:
                 time.sleep(poll_interval)
                 continue
 
-            # 存檔供除錯
             try:
                 cv2.imwrite("debug_game_window.png", screen_img)
             except Exception:
                 pass
 
             # 1. 檢查 common/door.png 是否已在城鎮 (若已經在城鎮中則免登入)
-            door_pos, _ = self._safe_match(screen_img, "common/door.png", threshold=0.75)
+            door_pos, _ = self._safe_match(screen_img, "common/door.png", threshold=0.65)
             if door_pos:
                 logging.info("🏰 [SteamGameLauncher] 遊戲已直接處於城鎮大門畫面 (door.png 可見)，無需登入。")
                 return True
 
             # 2. 檢查登入主畫面 login/login.png
-            login_pos, conf = self._safe_match(screen_img, "login/login.png", threshold=0.75)
+            login_pos, conf = self._safe_match(screen_img, "login/login.png", threshold=0.65)
             if login_pos:
                 logging.info(f"🔑 [SteamGameLauncher] 在遊戲視窗內偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！開始執行登入流程...")
 
-                confirm_pos, conf_confirm = self._safe_match(screen_img, "login/login_confirm.png", threshold=0.75)
+                confirm_pos, conf_confirm = self._safe_match(screen_img, "login/login_confirm.png", threshold=0.65)
                 if confirm_pos:
                     abs_x = rect["left"] + confirm_pos[0]
                     abs_y = rect["top"] + confirm_pos[1]
@@ -331,7 +358,6 @@ class SteamGameLauncher:
                 time.sleep(poll_interval)
                 continue
 
-            # 保存即時抓到的畫面存檔供視覺化除錯診斷
             try:
                 cv2.imwrite("debug_launcher_screen.png", img)
             except Exception:
@@ -341,21 +367,21 @@ class SteamGameLauncher:
             bottom_fifth_roi = (0, int(sh * 0.8), sw, int(sh * 0.2))
 
             # ----------------------------------------------------
-            # 階段 1: SEARCH_WINDOWS (在螢幕下方 1/5 工作列專屬 ROI 匹配 search.png)
+            # 階段 1: SEARCH_WINDOWS
             # ----------------------------------------------------
             if self.phase == LauncherPhase.SEARCH_WINDOWS:
-                start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME)
-                stop_pos, _, _ = self._match_anywhere(img, self.TPL_STOP_GAME)
+                start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
+                stop_pos, _, _ = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
                 if start_pos or stop_pos:
                     self.transition_to(LauncherPhase.START_OR_UNSTUCK_GAME, "偵測到 Steam 遊戲介面已開啟")
                     continue
 
-                steam_pos, _, _ = self._match_anywhere(img, self.TPL_STEAM)
+                steam_pos, _, _ = self._match_anywhere(img, self.TPL_STEAM, threshold=0.65)
                 if steam_pos:
                     self.transition_to(LauncherPhase.LAUNCH_STEAM, "偵測到 Steam 圖示已呈現")
                     continue
 
-                pos, conf, abs_pos = self._match_anywhere(img, self.TPL_SEARCH, roi_box=bottom_fifth_roi)
+                pos, conf, abs_pos = self._match_anywhere(img, self.TPL_SEARCH, threshold=0.65, roi_box=bottom_fifth_roi)
                 if pos and (now - last_action_time >= self.action_cooldown):
                     logging.info(f"🔍 [SteamGameLauncher] 在工作列區域 (下方 1/5) 找到搜尋圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
                     self._visualize_and_click(img, self.TPL_SEARCH, pos, conf, abs_click_pos=abs_pos, roi_box=bottom_fifth_roi)
@@ -371,13 +397,13 @@ class SteamGameLauncher:
             # 階段 2: LAUNCH_STEAM (Click until Steam opened)
             # ----------------------------------------------------
             elif self.phase == LauncherPhase.LAUNCH_STEAM:
-                start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME)
-                stop_pos, _, _ = self._match_anywhere(img, self.TPL_STOP_GAME)
+                start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
+                stop_pos, _, _ = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
                 if start_pos or stop_pos:
                     self.transition_to(LauncherPhase.START_OR_UNSTUCK_GAME, "Steam 遊戲介面按鈕已呈現")
                     continue
 
-                steam_pos, conf, abs_pos = self._match_anywhere(img, self.TPL_STEAM)
+                steam_pos, conf, abs_pos = self._match_anywhere(img, self.TPL_STEAM, threshold=0.65)
                 if steam_pos and (now - last_action_time >= self.action_cooldown):
                     logging.info(f"🚀 [SteamGameLauncher] 找到 Steam 圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
                     self._visualize_and_click(img, self.TPL_STEAM, steam_pos, conf, abs_click_pos=abs_pos)
@@ -387,8 +413,8 @@ class SteamGameLauncher:
             # 階段 3: START_OR_UNSTUCK_GAME (解卡與啟動)
             # ----------------------------------------------------
             elif self.phase == LauncherPhase.START_OR_UNSTUCK_GAME:
-                stop_pos, stop_conf, stop_abs = self._match_anywhere(img, self.TPL_STOP_GAME)
-                start_pos, start_conf, start_abs = self._match_anywhere(img, self.TPL_START_GAME)
+                stop_pos, stop_conf, stop_abs = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
+                start_pos, start_conf, start_abs = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
 
                 if stop_pos and (now - last_action_time >= self.action_cooldown):
                     logging.info(f"🛑 [SteamGameLauncher] 偵測到遊戲卡死 (stop_game.png, 座標: {stop_abs})，寫入 debug_click.png 並點擊解卡...")
