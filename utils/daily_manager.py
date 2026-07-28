@@ -225,6 +225,9 @@ class DailyManager:
             b_info["today_count"] = 0
             b_info["completed_today"] = False
 
+        # 跨日重置時，自動重新評估歷史 unknown_quests 自癒晉升項目 (保留歷史佇列並與晉升項目自動排序)
+        self.reevaluate_unknown_quests()
+
         self.save_status()
         self.next_reset_timestamp = self.calculate_next_reset_timestamp(now_dt)
         return True
@@ -380,6 +383,9 @@ class DailyManager:
         """
         from utils.quest_mapper import QuestMapper
         mapper = QuestMapper()
+
+        # 優先重新評估歷史 unknown_quests 嘗試自癒晉升
+        self.reevaluate_unknown_quests()
 
         subflows = self.status.setdefault("subflows", {})
         bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": []})
