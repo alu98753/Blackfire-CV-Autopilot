@@ -288,15 +288,7 @@ class SteamGameLauncher:
             except Exception:
                 pass
 
-            # 1. 檢查 common/door.png 是否已在城鎮 (若已經在城鎮中則畫面已完全載入完成)
-            door_pos, _ = self._safe_match(screen_img, "common/door.png", threshold=0.65)
-            if door_pos:
-                logging.info("🏰 [SteamGameLauncher] 遊戲畫面載入完成且直接處於城鎮大門 (door.png 可見)！進行視窗移動與最大化全螢幕...")
-                if hasattr(self.capturer, "ensure_window_on_monitor"):
-                    self.capturer.ensure_window_on_monitor()
-                return True
-
-            # 2. 檢查登入主畫面 login/login.png
+            # 專心比對登入主畫面 login/login.png
             login_pos, conf = self._safe_match(screen_img, "login/login.png", threshold=0.65)
             if login_pos:
                 logging.info(f"🔑 [SteamGameLauncher] 遊戲畫面載入完成，偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！開始視窗移動與最大化全螢幕...")
