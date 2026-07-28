@@ -362,10 +362,10 @@ class SteamGameLauncher:
                 logging.warning(f"發起 steam:// 協定失敗: {e}")
 
             # 每輪輪詢 5 秒檢測遊戲視窗 HWND 是否建立
-            check_start = time.time()
-            while time.time() - check_start < 5.0:
-                if self.is_game_open():
-                    rect = self.capturer.get_window_rect(quiet=True)
+            max_ticks = max(1, int(5.0 / poll_interval)) if poll_interval > 0 else 5
+            for _ in range(max_ticks):
+                rect = self.capturer.get_window_rect(quiet=True)
+                if rect is not None:
                     logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟與定位: {rect}")
                     self.transition_to(LauncherPhase.COMPLETED, "已偵測到遊戲視窗")
                     logging.info("✅ [SteamGameLauncher] 第一階段 Steam 啟動遊戲 Subflow 成功執行完畢！")
