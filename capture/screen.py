@@ -1,35 +1,35 @@
-import mss
+import logging
+import sys
+import os
+import subprocess
+import time
+import ctypes
 import numpy as np
 import cv2
-import logging
+import mss
 import win32gui
-import win32api
-import win32con
 import win32ui
-import ctypes
-import subprocess
-import sys
+import win32con
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class ScreenCapturer:
     def __init__(self, window_title="Blackfire Crusade", backend_mode=False, monitor_index=1):
-        try:
-            import ctypes
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        except Exception:
-            pass
+        # 已關閉 DPI Awareness 宣告以符合專案與使用者需求
         self.window_title = window_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
         self.sct = mss.MSS()
         self._hwnd = None
+        self.last_monitor = None
+        self._backend_printwindow_supported = True
+        self._cached_phys_rect = None
+        self._cached_log_rect = None
 
     def get_hwnd(self):
         """
-        取得或快取遊戲視窗控制代碼 (hwnd)。
+        取得遊戲視窗控制代碼 (HWnd)，包含防快取失效重查。
         """
-        if self._hwnd is None or not win32gui.IsWindow(self._hwnd):
+        if not self._hwnd or not win32gui.IsWindow(self._hwnd):
             self._hwnd = win32gui.FindWindow(None, self.window_title)
         return self._hwnd
 
@@ -45,7 +45,8 @@ class ScreenCapturer:
                 return None
             
             if win32gui.IsIconic(hwnd):
-                logging.warning(f"偵測到視窗 '{self.window_title}' 已最小化，請還原視窗以進行截圖。")
+                if not quiet:
+                    logging.warning(f"偵測到視窗 '{self.window_title}' 已最小化，請還原視窗以進行截圖。")
                 return None
 
             rect = win32gui.GetWindowRect(hwnd)
@@ -57,7 +58,8 @@ class ScreenCapturer:
                 "title": self.window_title
             }
         except Exception as e:
-            logging.error(f"取得視窗座標時發生錯誤: {e}")
+            if not quiet:
+                logging.error(f"取得視窗座標時發生錯誤: {e}")
             return None
 
     def get_logical_window_rect(self, phys_rect):
@@ -74,7 +76,6 @@ class ScreenCapturer:
                 class POINT(ctypes.Structure):
                     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
                 
-                # 物理左上角與右下角
                 pt_tl = POINT(phys_rect["left"], phys_rect["top"])
                 pt_br = POINT(phys_rect["left"] + phys_rect["width"], phys_rect["top"] + phys_rect["height"])
                 
@@ -89,15 +90,11 @@ class ScreenCapturer:
                         "height": pt_br.y - pt_tl.y
                     }
                     return log_rect
-            except Exception as e_api:
-                logging.debug(f"使用 PhysicalToLogicalPointForWindow API 轉換失敗: {e_api}")
+            except Exception as e:
+                logging.debug(f"PhysicalToLogicalPointForWindow API 失敗: {e}")
 
-        # Fallback 備份方案：使用子進程獲取
-        if hasattr(self, "_cached_phys_rect") and self._cached_phys_rect == phys_rect:
-            if hasattr(self, "_cached_log_rect") and self._cached_log_rect is not None:
-                return self._cached_log_rect
-                
-        log_rect = None
+        # 子進程降階備用方案
+        log_rect = phys_rect
         try:
             cmd = [
                 sys.executable,
@@ -122,8 +119,7 @@ class ScreenCapturer:
 
     def _capture_backend(self, hwnd):
         """
-        後台視窗複製：優先使用 PrintWindow (flag=2) 以相容 GPU 硬體加速與跨螢幕邊界渲染，
-        若判定不可用則自適應鎖定為 BitBlt 複製方案，防止每幀無謂嘗試與 Exception 開銷。
+        後台視窗複製：優先使用 PrintWindow (flag=2) 以相容 GPU 硬體加速與跨螢幕邊界渲染。
         """
         try:
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
@@ -133,7 +129,6 @@ class ScreenCapturer:
             if width <= 0 or height <= 0:
                 return None
 
-            # 取得視窗設備上下文
             hwndDC = win32gui.GetWindowDC(hwnd)
             mfcDC = win32ui.CreateDCFromHandle(hwndDC)
             saveDC = mfcDC.CreateCompatibleDC()
@@ -142,83 +137,110 @@ class ScreenCapturer:
             saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
             saveDC.SelectObject(saveBitMap)
             
-            img_bgr = None
-
-            # 1. 優先嘗試 PrintWindow (若以前失敗過則自適應跳過，鎖定 BitBlt)
-            use_pw = getattr(self, "_use_printwindow", True)
-            if use_pw:
+            result = False
+            if self._backend_printwindow_supported:
                 try:
-                    res = ctypes.windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 2)
-                    if res:
-                        bmpinfo = saveBitMap.GetInfo()
-                        bmpstr = saveBitMap.GetBitmapBits(True)
-                        img = np.frombuffer(bmpstr, dtype=np.uint8).reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
-                        img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-                        if np.all(img_bgr == 0):
-                            img_bgr = None
-                            self._use_printwindow = False
-                    else:
-                        self._use_printwindow = False
-                except Exception as e_pw:
-                    self._use_printwindow = False
-
-            # 2. 備份方案：若 PrintWindow 失敗、未使用或回傳空畫面，使用傳統 BitBlt 複製
-            if img_bgr is None:
-                saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
-                bmpinfo = saveBitMap.GetInfo()
-                bmpstr = saveBitMap.GetBitmapBits(True)
-                img = np.frombuffer(bmpstr, dtype=np.uint8).reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
-                img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-
-            # 釋放所有 GDI 資源
+                    result = ctypes.windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 3)
+                except Exception:
+                    self._backend_printwindow_supported = False
+                    
+            if not result:
+                result = saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
+                
+            bmpinfo = saveBitMap.GetInfo()
+            bmpstr = saveBitMap.GetBitmapBits(True)
+            
+            img = np.frombuffer(bmpstr, dtype=np.uint8)
+            img = img.reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
+            
             win32gui.DeleteObject(saveBitMap.GetHandle())
             saveDC.DeleteDC()
             mfcDC.DeleteDC()
             win32gui.ReleaseDC(hwnd, hwndDC)
             
-            if img_bgr is not None and np.all(img_bgr == 0):
-                return None
-                
+            img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             return img_bgr
         except Exception as e:
-            logging.debug(f"後台截圖發生錯誤: {e}")
+            logging.error(f"後台截圖失敗 ({e})，降階前台截圖。")
             return None
+
+    def capture_monitor_by_gdi(self, monitor_index=1):
+        """
+        使用 Windows GDI CreateDC 直接按 Display Device (如 \\.\DISPLAY1) 擷取指定 Monitor 的 100% 全螢幕畫面。
+        徹底解決跨螢幕絕對座標 offset (如 left=1, top=1080) 引發之 mss 失敗與邊界無效裁切問題。
+        """
+        try:
+            import win32api
+            monitors = win32api.EnumDisplayMonitors(None, None)
+            if 0 < monitor_index <= len(monitors):
+                hmon, _, _ = monitors[monitor_index - 1]
+                info = win32api.GetMonitorInfo(hmon)
+                device_name = info.get("Device")
+                if device_name:
+                    hdc = win32gui.CreateDC(device_name, None, None)
+                    mfcDC = win32ui.CreateDCFromHandle(hdc)
+                    saveDC = mfcDC.CreateCompatibleDC()
+                    w = mfcDC.GetDeviceCaps(win32con.HORZRES)
+                    h = mfcDC.GetDeviceCaps(win32con.VERTRES)
+
+                    saveBitMap = win32ui.CreateBitmap()
+                    saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
+                    saveDC.SelectObject(saveBitMap)
+                    saveDC.BitBlt((0, 0), (w, h), mfcDC, (0, 0), win32con.SRCCOPY)
+
+                    bmpinfo = saveBitMap.GetInfo()
+                    bmpstr = saveBitMap.GetBitmapBits(True)
+
+                    img = np.frombuffer(bmpstr, dtype=np.uint8)
+                    img = img.reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
+
+                    win32gui.DeleteObject(saveBitMap.GetHandle())
+                    saveDC.DeleteDC()
+                    mfcDC.DeleteDC()
+
+                    self.last_monitor = {
+                        "left": info["Monitor"][0],
+                        "top": info["Monitor"][1],
+                        "width": w,
+                        "height": h
+                    }
+                    return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        except Exception as e:
+            logging.debug(f"capture_monitor_by_gdi 失敗: {e}")
+        return None
 
     def capture(self, rect=None, full_screen=False):
         """
-        擷取螢幕或指定區域，回傳 OpenCV 格式 (BGR) 影像。
-        full_screen: 若為 True，代表強制擷取全螢幕 (不自動定位遊戲視窗)。
+        截取遊戲視窗或全螢幕畫面。
+        full_screen: 若為 True，代表強制擷取指定顯示器的 100% 全螢幕畫面。
         """
         hwnd = self.get_hwnd()
         
-        # 後台模式優先嘗試 BitBlt 後台截圖 (無遮擋限制)
+        # 後台模式優先嘗試 BitBlt 後台截圖
         if not full_screen and self.backend_mode and hwnd:
             img = self._capture_backend(hwnd)
             if img is not None:
-                # 診斷：將 BitBlt 擷取結果存檔 (已註解)
-                # try:
-                #     cv2.imwrite("debug_bitblt.png", img)
-                #     logging.info(f"📸 [後台 BitBlt 截圖成功] 尺寸: {img.shape}，已存檔為 debug_bitblt.png")
-                # except Exception:
-                #     pass
                 return img
                 
-        # 退回前台 / MSS 跨螢幕絕對座標裁剪 (第二防線)
+        # 全螢幕模式優先使用 GDI Direct Capture 確保 100% 擷取完整 Display Device 畫面
+        if full_screen and self.monitor_index is not None:
+            logging.info(f"將擷取指定顯示器 (Monitor {self.monitor_index})...")
+            gdi_img = self.capture_monitor_by_gdi(self.monitor_index)
+            if gdi_img is not None:
+                return gdi_img
+
         if not full_screen and rect is None:
             rect = self.get_window_rect()
             
         try:
             if full_screen or rect is None:
                 if self.monitor_index is not None and 0 < self.monitor_index < len(self.sct.monitors):
-                    logging.info(f"將擷取指定顯示器 (Monitor {self.monitor_index})...")
                     monitor = self.sct.monitors[self.monitor_index]
                 else:
-                    logging.info("將擷取主螢幕畫面...")
                     primary_mon = next((m for m in self.sct.monitors[1:] if m.get("is_primary")), None)
                     if primary_mon is None:
                         primary_mon = self.sct.monitors[1] if len(self.sct.monitors) > 1 else self.sct.monitors[0]
                     monitor = primary_mon
-                dpi_factor = 1.0
             else:
                 monitor = {
                     "left": rect["left"],
@@ -226,28 +248,13 @@ class ScreenCapturer:
                     "width": rect["width"],
                     "height": rect["height"]
                 }
-                dpi_factor = 1.0
             
             self.last_monitor = monitor
-            try:
-                screenshot = self.sct.grab(monitor)
-                img = np.array(screenshot)
-                img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-                return img_bgr
-            except Exception as e_grab:
-                logging.warning(f"mss 針對指定螢幕區域 {monitor} 擷取失敗 ({e_grab})，嘗試全區域 monitors[0] 相對裁切...")
-                full_shot = self.sct.grab(self.sct.monitors[0])
-                full_img = cv2.cvtColor(np.array(full_shot), cv2.COLOR_BGRA2BGR)
-                v_left = self.sct.monitors[0].get("left", 0)
-                v_top = self.sct.monitors[0].get("top", 0)
-                ml = max(0, monitor["left"] - v_left)
-                mt = max(0, monitor["top"] - v_top)
-                mw = monitor["width"]
-                mh = monitor["height"]
-                cropped = full_img[mt:mt+mh, ml:ml+mw]
-                return cropped
+            screenshot = self.sct.grab(monitor)
+            img = np.array(screenshot)
+            return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
         except Exception as e:
-            logging.warning(f"mss 跨螢幕擷取失敗 ({e})，嘗試使用 PIL ImageGrab 備用方案...")
+            logging.warning(f"mss 截圖失敗 ({e})，嘗試使用 PIL ImageGrab 備用方案...")
             try:
                 from PIL import ImageGrab
                 if rect is None:
@@ -259,27 +266,8 @@ class ScreenCapturer:
                         rect["left"] + rect["width"],
                         rect["top"] + rect["height"]
                     )
-                    img_pil = ImageGrab.grab(bbox)
-                img_bgr = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-                return img_bgr
-            except Exception as e_pil:
-                logging.error(f"備份方案 PIL ImageGrab 擷取亦失敗: {e_pil}")
+                    img_pil = ImageGrab.grab(bbox=bbox)
+                return cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+            except Exception as e2:
+                logging.error(f"截圖失敗: {e2}")
                 return None
-
-if __name__ == "__main__":
-    # 簡單的測試
-    capturer = ScreenCapturer()
-    rect = capturer.get_window_rect()
-    if rect:
-        print(f"找到視窗: {rect['title']} | 座標: ({rect['left']}, {rect['top']}), 大小: {rect['width']}x{rect['height']}")
-        img = capturer.capture(rect)
-        if img is not None:
-            print(f"擷取成功，畫面大小: {img.shape}")
-            cv2.imwrite("test_captured.png", img)
-            print("測試畫面已儲存至 test_captured.png")
-    else:
-        print("未找到指定視窗，擷取主螢幕...")
-        img = capturer.capture()
-        if img is not None:
-            cv2.imwrite("test_full_screen.png", img)
-            print("測試全螢幕畫面已儲存至 test_full_screen.png")
