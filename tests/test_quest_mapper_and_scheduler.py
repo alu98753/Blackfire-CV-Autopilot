@@ -46,6 +46,12 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node_demon.sub_stage, "six")
         self.assertIn("--mode stage --stage 6 --sub six", node_demon.to_cli_args())
         self.assertEqual(normalize_quest_title("清除樹入"), "清除樹人")
+        self.assertEqual(normalize_quest_title("害山詛咒"), "雪山詛咒")
+        node_snow = self.mapper.parse_quest("害山詛咒")
+        self.assertEqual(node_snow.mode_type, "dungeon")
+        self.assertEqual(node_snow.dungeon_index, 4)
+        self.assertEqual(node_snow.counting_policy, TaskNode.POLICY_BANNER_VERIFY)
+        self.assertIn("--mode dungeon --dungeon 5", node_snow.to_cli_args())
 
     def test_exact_full_name_match_prevent_unknown_false_positive(self):
         """

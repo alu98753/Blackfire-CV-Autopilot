@@ -170,6 +170,7 @@ BANNER_VERIFY_QUESTS = [
     "史萊姆王的毀滅",
     "破除森林的枷鎖",
     "消滅蛛王與蛛後",
+    "雪山詛咒",
 ]
 
 IGNORED_QUESTS = [
@@ -204,6 +205,7 @@ TYPO_GROUPS = {
     "詛咒": ["姐咒", "詛祝"],
     "獵金": ["獵全"],
     "虛空行者的審判": ["虛f行者昀番判", "虛空行者審判"],
+    "雪山詛咒": ["害山詛咒"],
 }
 
 # 自動將 TYPO_GROUPS 展平為一對一匹配字典 OCR_TYPO_MAP
@@ -275,7 +277,7 @@ class QuestMapper:
             (r"(破除森林的枷鎖)", 2, TaskNode.POLICY_BANNER_VERIFY),
             (r"(清除樹人|森林迷宮)", 2, TaskNode.POLICY_DETERMINISTIC),
             (r"(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒)", 3, TaskNode.POLICY_DETERMINISTIC),
-            (r"(冰雪洞窟的暴君|終結寒冰獸王)", 4, TaskNode.POLICY_BANNER_VERIFY),
+            (r"(冰雪洞窟的暴君|終結寒冰獸王|雪山詛咒)", 4, TaskNode.POLICY_BANNER_VERIFY),
             (r"(冰雪洞窟)", 4, TaskNode.POLICY_DETERMINISTIC),
         ]
 
