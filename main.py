@@ -590,14 +590,17 @@ def main():
     setup_utf8_encoding()
     args = parse_arguments()
 
-    # 在 setup config 前，先檢查遊戲是否已開啟並自動處置登入 (帶入 backend_mode 與 monitor_index 參數)
-    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=args.monitor)
-    if not launcher.ensure_game_ready():
-        print("[!] 遊戲啟動或登入準備失敗，終止腳本。")
-        sys.exit(1)
-
+    # 1. 優先處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)
     setup_equipment_config(config)
+
+    # 2. 檢查遊戲是否開啟，發起直連啟動並傳送至 1 號筆電螢幕與最大化全螢幕
+    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=args.monitor)
+    if not launcher.ensure_game_ready():
+        print("[!] 遊戲啟動準備失敗，終止腳本。")
+        sys.exit(1)
+
+    # 3. 初始化主狀態機並立即運行 (無縫接續執行 LoginFlow 登入與 Click Until 流程)
     state_machine = init_state_machine_system(args, config)
     run_main_loop(state_machine, args.interval)
 
