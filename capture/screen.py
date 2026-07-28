@@ -47,8 +47,12 @@ class ScreenCapturer:
             
             if win32gui.IsIconic(hwnd):
                 if not quiet:
-                    logging.warning(f"偵測到視窗 '{self.window_title}' 已最小化，請還原視窗以進行截圖。")
-                return None
+                    logging.info(f"🔄 偵測到視窗 '{self.window_title}' 被最小化，自動發起 ensure_window_on_monitor 還原並置頂最大化...")
+                self.ensure_window_on_monitor()
+                if win32gui.IsIconic(hwnd):
+                    if not quiet:
+                        logging.warning(f"⚠️ 嘗試自動還原最小化視窗 '{self.window_title}' 失敗。")
+                    return None
 
             if bool(ctypes.windll.user32.IsZoomed(hwnd)):
                 client_pt = win32gui.ClientToScreen(hwnd, (0, 0))
