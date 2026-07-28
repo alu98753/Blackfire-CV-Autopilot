@@ -169,6 +169,8 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
                 return ((200, 200), 0.90)
             if temp == "stages/start.png":
                 return ((300, 300), 0.90)
+            if temp in ["battle/battle_features_1.png", "battle/battle_features_2.png", "common/auto.png"]:
+                return ((400, 400), 0.90)
             return (None, 0.0)
 
         self.state_machine.matcher.match.side_effect = fake_match
