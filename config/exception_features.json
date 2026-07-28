@@ -4,9 +4,17 @@
   "non_battle_stuck_timeout_sec": 30.0,
   "battle_stuck_timeout_sec": 90.0,
   "subflow_feature_mapping": {
+    "wheel_of_fortune_subflow": {
+      "trigger_template": "exceptions/Wheel_of_Fortune.png",
+      "description": "幸運輪盤對話框"
+    },
     "raid_box_subflow": {
       "trigger_template": "exceptions/Raid_Box.png",
       "description": "懸賞/掃蕩對話框"
+    },
+    "generic_anti_stuck_subflow": {
+      "trigger_template": "exceptions/cancel.png",
+      "description": "通用取消與關閉按鈕"
     }
   }
 }

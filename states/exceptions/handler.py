@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from typing import List, Optional, Dict, Any
 from states.handlers.base import BaseStateHandler
-from states.exceptions.subflows import BaseExceptionSubflow, RaidBoxSubflow, GenericAntiStuckSubflow
+from states.exceptions.subflows import BaseExceptionSubflow, RaidBoxSubflow, WheelOfFortuneSubflow, GenericAntiStuckSubflow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -33,7 +33,9 @@ class UnexpectedPopupRecoveryHandler(BaseStateHandler):
         self.max_retries = 5
 
         # 註冊專屬 Subflows
+        self.register_subflow(WheelOfFortuneSubflow())
         self.register_subflow(RaidBoxSubflow())
+
 
     def register_subflow(self, subflow: BaseExceptionSubflow):
         """

@@ -50,9 +50,36 @@ class TestBehaviorPopupRecovery(unittest.TestCase):
             self.assertTrue(res)
             self.mouse.click.assert_called_with(550, 400)
 
+    def test_wheel_of_fortune_subflow_can_handle_execute_and_town_check(self):
+        """[階段 1-B] 驗證 WheelOfFortuneSubflow 獨立點擊退出與城鎮大門 (door.png) 檢測"""
+        from states.exceptions import WheelOfFortuneSubflow
+        subflow = WheelOfFortuneSubflow()
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        def mock_match(screen_img, template_name, threshold=0.75, quiet=True):
+            if "Wheel_of_Fortune" in template_name:
+                return (300, 200), 0.95
+            elif "quit" in template_name:
+                return (500, 40), 0.90
+            elif "door.png" in template_name:
+                return (900, 500), 0.85
+            return None, 0.0
+
+        self.matcher.match.side_effect = mock_match
+
+        with patch("os.path.exists", return_value=True):
+            self.assertTrue(subflow.can_handle(dummy_screen, self.matcher))
+
+            res = subflow.execute(dummy_screen, self.mouse, rect, self.matcher)
+            self.assertTrue(res)
+            # 斷言發起點擊 (300+500=800, 200+40=240)
+            self.mouse.click.assert_called_with(800, 240)
+
     # -------------------------------------------------------------------------
     # 階段 2：GenericAntiStuckSubflow 專屬獨立單元測試
     # -------------------------------------------------------------------------
+
     def test_generic_anti_stuck_subflow_can_handle_and_execute(self):
         """[階段 2] 驗證 GenericAntiStuckSubflow 獨立點擊全域按鈕"""
         subflow = GenericAntiStuckSubflow()
