@@ -252,6 +252,15 @@ class GameStateMachine:
 
             self._on_state_transition_sync_context(new_state)
 
+    def notify_ui_progress(self):
+        """
+        當 Handler 內部進行了有效 UI 操作 (如滑動、點擊商品、確定出售等) 時呼叫，
+        主動重置 last_state_change 與卡住計數，防止 ExceptionWatchdog 在長途流程中誤判卡死。
+        """
+        self.last_state_change = time.time()
+        self.consecutive_stuck_count = 0
+
+
 
     # 🏛️ 城鎮子流程與 Config Key 聲明式對照表 (新增城鎮子流程只需在此註冊對應 Key)
     TOWN_SUBFLOW_CONFIG_MAP = {

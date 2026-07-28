@@ -28,7 +28,8 @@ class GenericAntiStuckSubflow(BaseExceptionSubflow):
     def can_handle(self, screen_img, matcher, detector=None) -> bool:
         for tpl in self.fallback_templates:
             if os.path.exists(os.path.join("templates", tpl)):
-                pos, conf = safe_match(matcher, screen_img, tpl, threshold=0.75)
+                pos, conf = safe_match(matcher, screen_img, tpl, threshold=0.80
+)
                 if pos:
                     return True
         return False
@@ -36,7 +37,8 @@ class GenericAntiStuckSubflow(BaseExceptionSubflow):
     def execute(self, screen_img, mouse, rect, matcher=None) -> bool:
         for tpl in self.fallback_templates:
             if os.path.exists(os.path.join("templates", tpl)):
-                pos, conf = safe_match(matcher, screen_img, tpl, threshold=0.75)
+                pos, conf = safe_match(matcher, screen_img, tpl, threshold=0.80
+)
                 if pos:
                     cx = rect["left"] + pos[0]
                     cy = rect["top"] + pos[1]
