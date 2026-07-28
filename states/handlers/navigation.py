@@ -571,6 +571,16 @@ class NavigationHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_LOBBY)
             return
 
+        # 0. 優先防護：若畫面上出現關閉/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防止遮罩擋住導航點擊
+        for popup_btn in ["common/confirm.png", "common/ok.png"]:
+            if os.path.exists(os.path.join("templates", popup_btn)):
+                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.75)
+                if pos_popup:
+                    logging.info(f"👉 [尋路防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
+                    self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])
+                    time.sleep(0.5)
+                    return
+
         # 0. 優先判定：如果已經可以直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳，直接移轉狀態！
         lobby_btn = self.machine.config.get("lobby_start_btn")
         if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
