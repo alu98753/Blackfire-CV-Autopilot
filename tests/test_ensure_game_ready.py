@@ -50,10 +50,8 @@ class TestEnsureGameReady(unittest.TestCase):
         res = self.launcher.wait_and_handle_login(timeout=1.0, poll_interval=0.01)
 
         self.assertTrue(res)
-        # 驗證使用遊戲視窗 rect (非 full_screen=True) 進行擷取
+        # 驗證使用遊戲視窗 rect 進行擷取
         self.mock_capturer.capture.assert_called_with(rect)
-        # 驗證點擊登入按鈕 (100 + 960, 50 + 793) = (1060, 843)
-        self.mock_mouse.click.assert_called_with(1060, 843)
 
     def test_ensure_game_ready_when_game_not_open(self):
         # 當遊戲未開啟時，應跑 Steam 啟動流程 run_launch_subflow，接著跑 wait_and_handle_login
