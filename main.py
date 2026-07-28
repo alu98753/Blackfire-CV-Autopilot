@@ -310,7 +310,7 @@ def parse_arguments():
     parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
                         help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
-    parser.add_argument("--monitor", "--screen", type=int, default=None, help="指定全螢幕擷取/開遊戲的顯示器編號 (例如 1 為筆電螢幕，2 為外接螢幕)")
+    parser.add_argument("--monitor", "--screen", type=int, default=1, help="指定全螢幕擷取/開遊戲的顯示器編號 (預設: 1 為筆電螢幕，2 為外接螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
     return parser.parse_args()

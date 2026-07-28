@@ -39,7 +39,7 @@ class SteamGameLauncher:
         matcher: Optional[TemplateMatcher] = None,
         game_title: str = "Blackfire Crusade",
         backend_mode: bool = False,
-        monitor_index: Optional[int] = None,
+        monitor_index: Optional[int] = 1,
         action_cooldown: float = 1.0
     ):
         self.game_title = game_title
