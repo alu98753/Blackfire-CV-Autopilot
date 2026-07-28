@@ -37,33 +37,51 @@ class RaidBoxSubflow(BaseExceptionSubflow):
 
         box_x, box_y = pos_box
 
-        # 若帶有圖片物件，切割 Raid_Box 區域進行 Scoped Match
+        # 1. 嘗試於 Raid_Box ROI 內部進行關閉按鈕匹配 (使用較寬鬆門檻 0.65 以相容背景透明度)
+        crop_top = max(0, box_y)
+        crop_left = max(0, box_x)
         raid_crop = screen_img
         if screen_img is not None and hasattr(screen_img, "shape") and len(screen_img.shape) >= 2:
             h, w = screen_img.shape[:2]
-            raid_crop = screen_img[max(0, box_y):min(h, box_y + 600), max(0, box_x):min(w, box_x + 800)]
+            raid_crop = screen_img[crop_top:min(h, box_y + 650), crop_left:min(w, box_x + 850)]
+
+        cancel_candidates = [
+            "exceptions/cancel.png"
+        ]
 
         pos_cancel, conf_cancel = None, 0.0
-        for cancel_tpl in self.cancel_templates:
+        for cancel_tpl in cancel_candidates:
             if os.path.exists(os.path.join("templates", cancel_tpl)):
-                pos_cancel, conf_cancel = safe_match(matcher, raid_crop, cancel_tpl, threshold=0.75)
+                pos_cancel, conf_cancel = safe_match(matcher, raid_crop, cancel_tpl, threshold=0.65)
                 if pos_cancel:
-                    break
+                    abs_x = rect["left"] + crop_left + pos_cancel[0]
+                    abs_y = rect["top"] + crop_top + pos_cancel[1]
+                    logging.info(f"🛡️ [{self.name}] 成功在 Raid_Box ROI 內部匹配 [{cancel_tpl}] (相對: {pos_cancel}, 信心度: {conf_cancel:.4f})，點擊: ({abs_x}, {abs_y})")
+                    if mouse:
+                        mouse.click(abs_x, abs_y)
+                    time.sleep(0.5)
+                    return True
 
-        if pos_cancel:
-            abs_x = rect["left"] + box_x + pos_cancel[0]
-            abs_y = rect["top"] + box_y + pos_cancel[1]
-            logging.info(f"🛡️ [{self.name}] 成功在 Raid_Box ROI 內部匹配 cancel.png (相對: {pos_cancel})，發起絕對點擊: ({abs_x}, {abs_y})")
-            if mouse:
-                mouse.click(abs_x, abs_y)
-            time.sleep(0.5)
-            return True
-        else:
-            # 備援：若未精確比對到 cancel，點擊 box 中央或相對預設點
-            cx = rect["left"] + box_x + 100
-            cy = rect["top"] + box_y + 300
-            logging.info(f"🛡️ [{self.name}] 未在 Raid_Box ROI 內匹配到 cancel，點擊備援相對點: ({cx}, {cy})")
-            if mouse:
-                mouse.click(cx, cy)
-            time.sleep(0.5)
-            return True
+
+        # 2. 全圖備援匹配 (若 ROI 切割未能匹配到，於全圖嘗試搜尋關閉/取消按鈕)
+        for cancel_tpl in cancel_candidates:
+            if os.path.exists(os.path.join("templates", cancel_tpl)):
+                pos_cancel, conf_cancel = safe_match(matcher, screen_img, cancel_tpl, threshold=0.70)
+                if pos_cancel:
+                    abs_x = rect["left"] + pos_cancel[0]
+                    abs_y = rect["top"] + pos_cancel[1]
+                    logging.info(f"🛡️ [{self.name}] 全圖備援成功匹配關閉按鈕 [{cancel_tpl}] (信心度: {conf_cancel:.4f})，點擊: ({abs_x}, {abs_y})")
+                    if mouse:
+                        mouse.click(abs_x, abs_y)
+                    time.sleep(0.5)
+                    return True
+
+        # 3. 終極備援：若無任何關閉圖案比對成功，點擊 Raid_Box 右上角關閉位置 (box_x + 360, box_y + 35) 或取消區
+        cx = rect["left"] + box_x + 360
+        cy = rect["top"] + box_y + 35
+        logging.info(f"🛡️ [{self.name}] 未在畫面中精確匹配到 cancel 按鈕，點擊 Raid_Box 右上角預設關閉座標: ({cx}, {cy})")
+        if mouse:
+            mouse.click(cx, cy)
+        time.sleep(0.5)
+        return True
+
