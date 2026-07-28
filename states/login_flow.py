@@ -39,11 +39,20 @@ def _wait_for_town(state_machine, rect):
         if dismissed_popup:
             continue
             
-        # 2. 只有在無任何彈窗按鈕時，才判定大門是否可見
-        pos_door, _ = state_machine.matcher.match(screen_img, "common/door.png", threshold=0.8)
-        if pos_door:
-            logging.info("🟢 [登入流程] 成功偵測到城鎮大門 [common/door.png]，且無彈窗遮擋，已確認完全進入城鎮！")
-            door_found = True
+        # 2. 只有在無任何彈窗按鈕時，判定遊戲畫面是否已載入 (城鎮大門 door.png、自動戰鬥 auto.png、或選關大廳)
+        ready_found = False
+        for ready_feature in ["common/door.png", "common/auto.png", "common/select_stage.png", "dungeons/dungeon.png"]:
+            if os.path.exists(os.path.join("templates", ready_feature)):
+                pos_ready, conf_ready = state_machine.matcher.match(screen_img, ready_feature, threshold=0.75)
+                if pos_ready:
+                    logging.info(f"🟢 [登入流程] 登入後畫面載入完成！偵測到畫面特徵 [{ready_feature}] (相似度: {conf_ready:.4f})，準備進入全域狀態定位！")
+                    door_found = True
+                    ready_found = True
+                    break
+        if ready_found:
+            logging.info("🔄 [登入流程] 畫面載入完畢，立即發起全域狀態定位 (detect_current_state)...")
+            state_machine.transition_to(state_machine.STATE_UNKNOWN)
+            state_machine.detect_current_state(screen_img, rect_current)
             break
 
         # 3. [Click Until 自動重試] 若超過 3 秒仍滯留在登入畫面 login.png，自動重試點擊登入按鈕
