@@ -51,39 +51,66 @@ class SteamGameLauncher:
         self.action_cooldown = action_cooldown
         self.phase = LauncherPhase.SEARCH_WINDOWS
 
-    def _safe_match(self, screen_img, template_name: str, threshold: float = 0.75) -> Tuple[Optional[Tuple[int, int]], float]:
+    def _safe_match(
+        self,
+        screen_img: np.ndarray,
+        template_name: str,
+        threshold: float = 0.75,
+        roi_box: Optional[Tuple[int, int, int, int]] = None
+    ) -> Tuple[Optional[Tuple[int, int]], float]:
         """
-        安全呼叫 TemplateMatcher.match()，防範模板尺寸大於畫面尺寸之異常。
+        安全呼叫 TemplateMatcher.match()，支援指定 ROI 搜尋區域 (如螢幕下方 1/5 工作列)。
         """
         if screen_img is None or not hasattr(screen_img, "shape"):
             return None, 0.0
+
+        target_img = screen_img
+        offset_x, offset_y = 0, 0
+
+        if roi_box:
+            rx, ry, rw, rh = roi_box
+            sh, sw = screen_img.shape[:2]
+            rx = max(0, min(rx, sw))
+            ry = max(0, min(ry, sh))
+            rw = min(rw, sw - rx)
+            rh = min(rh, sh - ry)
+            if rw > 0 and rh > 0:
+                target_img = screen_img[ry:ry+rh, rx:rx+rw]
+                offset_x, offset_y = rx, ry
 
         tpl_path = os.path.join("templates", template_name)
         if os.path.exists(tpl_path):
             tpl_img = cv2.imread(tpl_path)
             if tpl_img is not None and hasattr(tpl_img, "shape"):
-                sh, sw = screen_img.shape[:2]
+                sh, sw = target_img.shape[:2]
                 th, tw = tpl_img.shape[:2]
                 if th > sh or tw > sw:
                     return None, 0.0
 
         if matcher_func := getattr(self.matcher, "match", None):
             try:
-                res = matcher_func(screen_img, template_name, threshold=threshold)
+                res = matcher_func(target_img, template_name, threshold=threshold)
                 if isinstance(res, (tuple, list)) and len(res) >= 2 and res[0]:
                     pos = res[0]
                     conf = float(res[1]) if res[1] is not None else 0.0
-                    return pos, conf
+                    actual_pos = (pos[0] + offset_x, pos[1] + offset_y)
+                    return actual_pos, conf
             except Exception as e:
                 logging.debug(f"_safe_match 比對異常: {e}")
         return None, 0.0
 
-    def _match_anywhere(self, current_img: np.ndarray, template_name: str, threshold: float = 0.75) -> Tuple[Optional[Tuple[int, int]], float, Optional[Tuple[int, int]]]:
+    def _match_anywhere(
+        self,
+        current_img: np.ndarray,
+        template_name: str,
+        threshold: float = 0.75,
+        roi_box: Optional[Tuple[int, int, int, int]] = None
+    ) -> Tuple[Optional[Tuple[int, int]], float, Optional[Tuple[int, int]]]:
         """
         雙螢幕全域匹配：優先在當前指定螢幕搜尋，若找不到則自動備用掃描主顯示器。
-        回傳: (pos_in_img, confidence, abs_click_pos)
+        支援 roi_box 搜尋區域限制 (例如下方 1/5 工作列)。
         """
-        pos, conf = self._safe_match(current_img, template_name, threshold=threshold)
+        pos, conf = self._safe_match(current_img, template_name, threshold=threshold, roi_box=roi_box)
         if pos:
             mon = getattr(self.capturer, "last_monitor", None)
             mon_l = mon.get("left", 0) if isinstance(mon, dict) else 0
@@ -98,7 +125,13 @@ class SteamGameLauncher:
                 if primary_mon:
                     pri_shot = self.capturer.sct.grab(primary_mon)
                     pri_img = cv2.cvtColor(np.array(pri_shot), cv2.COLOR_BGRA2BGR)
-                    pri_pos, pri_conf = self._safe_match(pri_img, template_name, threshold=threshold)
+                    
+                    pri_roi = None
+                    if roi_box:
+                        psh, psw = pri_img.shape[:2]
+                        pri_roi = (0, int(psh * 0.8), psw, int(psh * 0.2))
+
+                    pri_pos, pri_conf = self._safe_match(pri_img, template_name, threshold=threshold, roi_box=pri_roi)
                     if pri_pos:
                         abs_x = primary_mon["left"] + pri_pos[0]
                         abs_y = primary_mon["top"] + pri_pos[1]
@@ -115,10 +148,11 @@ class SteamGameLauncher:
         pos_in_img: Tuple[int, int],
         confidence: float,
         abs_click_pos: Optional[Tuple[int, int]] = None,
+        roi_box: Optional[Tuple[int, int, int, int]] = None,
         filename: str = "debug_click.png"
     ):
         """
-        調用 DebugVisualizer 統一將點擊座標與匹配 Bounding Box 寫入 debug_click.png，並執行點擊。
+        調用 DebugVisualizer 統一將點擊座標、匹配 Bounding Box 與 ROI 區域寫入 debug_click.png，並執行點擊。
         """
         bw, bh = 60, 60
         tpl_path = os.path.join("templates", template_name)
@@ -130,7 +164,6 @@ class SteamGameLauncher:
         box_x, box_y = pos_in_img
         matched_bbox = (max(0, box_x - bw // 2), max(0, box_y - bh // 2), bw, bh)
 
-        # 計算特定螢幕在 Windows 虛擬座標系中的絕對點擊位置 (加上 monitor left/top 偏移)
         if abs_click_pos is not None:
             target_x, target_y = abs_click_pos
         else:
@@ -145,7 +178,12 @@ class SteamGameLauncher:
                 screen_img=screen_img,
                 click_pos=pos_in_img,
                 matched_bbox=matched_bbox,
-                labels={"match": f"{template_name} ({confidence:.2f})", "click": f"Click {template_name}"},
+                roi_box=roi_box,
+                labels={
+                    "match": f"{template_name} ({confidence:.2f})",
+                    "click": f"Click {template_name}",
+                    "roi": "Bottom 1/5 Taskbar"
+                },
                 filename=filename
             )
         except Exception as e:
@@ -276,8 +314,11 @@ class SteamGameLauncher:
                 time.sleep(poll_interval)
                 continue
 
+            sh, sw = img.shape[:2]
+            bottom_fifth_roi = (0, int(sh * 0.8), sw, int(sh * 0.2))
+
             # ----------------------------------------------------
-            # 階段 1: SEARCH_WINDOWS
+            # 階段 1: SEARCH_WINDOWS (在螢幕下方 1/5 工作列專屬 ROI 匹配 search.png)
             # ----------------------------------------------------
             if self.phase == LauncherPhase.SEARCH_WINDOWS:
                 start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME)
@@ -291,10 +332,10 @@ class SteamGameLauncher:
                     self.transition_to(LauncherPhase.LAUNCH_STEAM, "偵測到 Steam 圖示已呈現")
                     continue
 
-                pos, conf, abs_pos = self._match_anywhere(img, self.TPL_SEARCH)
+                pos, conf, abs_pos = self._match_anywhere(img, self.TPL_SEARCH, roi_box=bottom_fifth_roi)
                 if pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"🔍 [SteamGameLauncher] 找到搜尋圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
-                    self._visualize_and_click(img, self.TPL_SEARCH, pos, conf, abs_click_pos=abs_pos)
+                    logging.info(f"🔍 [SteamGameLauncher] 在工作列區域 (下方 1/5) 找到搜尋圖示 (座標: {abs_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
+                    self._visualize_and_click(img, self.TPL_SEARCH, pos, conf, abs_click_pos=abs_pos, roi_box=bottom_fifth_roi)
                     try:
                         import pyautogui
                         pyautogui.write("steam", interval=0.05)
