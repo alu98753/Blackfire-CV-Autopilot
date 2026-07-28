@@ -448,13 +448,13 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         """
         [跨日重置與領任務全流程自癒測試] 驗證 24/7 不重開程序下：
         1. 舊有 accepted_quests (如 "清除野豬") 經跨日重置後清空。
-        2. 歷史 unknown_quests 中的 "害山詛咒" (正名 "雪山詛咒") 與 "清除樹入" (正名 "清除樹人") 成功自癒晉升入 accepted_quests。
+        2. 歷史 unknown_quests 中的 "消滅蛛王與蛛后" (正名 "消滅蛛王與蛛後") 與 "清除樹入" (正名 "清除樹人") 成功自癒晉升入 accepted_quests。
         3. 晉升任務與新抓取的 "清除骷髏" 必定經由 sort_quests 進行多階梯優先級排序 (確定性 > 彈窗核銷 ➔ 地下城 Index 大者優先)。
         4. 歷史 unknown_quests 中的 "完全未知任務_XYZ" 因無字典規則，依然安全留存在 unknown_quests 中。
         """
         bb = self.manager.status["subflows"]["bulletin_board"]
         bb["accepted_quests"] = ["清除野豬"]
-        bb["unknown_quests"] = ["害山詛咒", "清除樹入", "完全未知任務_XYZ"]
+        bb["unknown_quests"] = ["消滅蛛王與蛛后", "清除樹入", "完全未知任務_XYZ"]
         self.manager.save_status()
 
         # 1. 模擬 08:05 跨日重置
@@ -467,17 +467,17 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         accepted = updated_bb.get("accepted_quests", [])
         unknowns = updated_bb.get("unknown_quests", [])
 
-        # 斷言 1 (情況 A 晉升與排序驗證): "害山詛咒" ➔ "雪山詛咒"、"清除樹入" ➔ "清除樹人" 皆晉升，並與新任務 "清除骷髏" 及舊任務 "清除野豬" 自動排序！
+        # 斷言 1 (情況 A 晉升與排序驗證): "消滅蛛王與蛛后" ➔ "消滅蛛王與蛛後"、"清除樹入" ➔ "清除樹人" 皆晉升，並與新任務 "清除骷髏" 及舊任務 "清除野豬" 自動排序！
         # 期望排序 (mode_score: dungeon 0 > stage 1)：
         # 1. "清除骷髏" (dungeon index 3, DETERMINISTIC)
         # 2. "清除樹人" (dungeon index 2, DETERMINISTIC)
-        # 3. "雪山詛咒" (dungeon index 4, BANNER_VERIFY)
+        # 3. "消滅蛛王與蛛後" (dungeon index 0, BANNER_VERIFY)
         # 4. "清除野豬" (stage level 1, DETERMINISTIC)
-        expected_sorted_order = ["清除骷髏", "清除樹人", "雪山詛咒", "清除野豬"]
+        expected_sorted_order = ["清除骷髏", "清除樹人", "消滅蛛王與蛛後", "清除野豬"]
         self.assertEqual(accepted, expected_sorted_order)
 
-        self.assertNotIn("害山詛咒", unknowns)
-        self.assertNotIn("雪山詛咒", unknowns)
+        self.assertNotIn("消滅蛛王與蛛后", unknowns)
+        self.assertNotIn("消滅蛛王與蛛後", unknowns)
         self.assertNotIn("清除樹入", unknowns)
         self.assertNotIn("清除樹人", unknowns)
 
