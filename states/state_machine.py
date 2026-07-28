@@ -448,6 +448,16 @@ class GameStateMachine:
 
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
+        # 0.0 全域防護：若畫面上存在歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防遮擋導航與領取
+        for popup_btn in ["common/confirm.png", "common/ok.png"]:
+            if os.path.exists(os.path.join("templates", popup_btn)):
+                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.75)
+                if pos_popup:
+                    logging.info(f"👉 [全域防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
+                    self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])
+                    time.sleep(0.5)
+                    return
+
         # 0.0 如果看見「無法容納的物品 (背包滿)」彈窗，進入分選狀態
         if os.path.exists(os.path.join("templates", "backpack_full.png")):
             pos, _ = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
