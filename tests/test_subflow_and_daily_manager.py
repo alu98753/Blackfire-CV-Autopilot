@@ -485,6 +485,22 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertEqual(unknowns, ["完全未知任務_XYZ"])
         self.assertNotIn("完全未知任務_XYZ", accepted)
 
+    def test_remove_accepted_quest_no_cross_deletion(self):
+        """
+        [Regression Bug Fix 測試] 驗證 DailyManager.remove_accepted_quest("清除蛙人")
+        不會誤刪同在 accepted_quests 中的相似任務 "清除樹人" (相似度 0.75)。
+        """
+        self.manager.status["subflows"] = {
+            "bulletin_board": {
+                "accepted_quests": ["清除樹人", "清除蛙人"]
+            }
+        }
+        res = self.manager.remove_accepted_quest("清除蛙人")
+        self.assertTrue(res)
+        remaining = self.manager.status["subflows"]["bulletin_board"]["accepted_quests"]
+        self.assertIn("清除樹人", remaining)
+        self.assertNotIn("清除蛙人", remaining)
+
     def test_lord_boss_cooldown_buffer_prevents_infinite_triggering(self):
         """
         [防跳離與死循環測試] 驗證：

@@ -248,6 +248,25 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         pending_after = self.scheduler.get_pending_tasks()
         self.assertEqual(len(pending_after), 0)
 
+    def test_similar_quest_titles_no_mis_matching(self):
+        """
+        [Regression Bug Fix 測試] 驗證當佇列中同時存在相似名稱任務 (如 '清除樹人' 與 '清除蛙人' 相似度 0.75) 時，
+        辨識到 '清除蛙人' 必須 100% 精確匹配 '清除蛙人'，絕不能因早出現在列表而被 '清除樹人' 攔截。
+        """
+        from utils.quest_scheduler import QuestScheduler
+        scheduler = QuestScheduler()
+        node_tree = self.mapper.parse_quest("清除樹人")
+        node_frog = self.mapper.parse_quest("清除蛙人")
+
+        scheduler.add_task(node_tree)
+        scheduler.add_task(node_frog)
+
+        matched_title = scheduler.record_task_complete("清除蛙人田玉[2")
+
+        self.assertEqual(matched_title, "清除蛙人")
+        self.assertTrue(node_frog.is_completed)
+        self.assertFalse(node_tree.is_completed)
+
         # 7. 最終斷言：所有懸賞任務 100% 完成！
         self.assertTrue(self.scheduler.is_all_completed())
         cmd_end, msg_end = self.scheduler.get_next_action_config()

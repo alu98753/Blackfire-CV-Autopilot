@@ -222,7 +222,7 @@ class QuestScheduler:
     def record_task_complete(self, ocr_text):
         """
         當在彈窗或介面中辨識到任務完成文字時，嘗試在目前懸賞任務清單中精確匹配並標記完成。
-        支援錯別字清洗 (normalize)、標題精確相等/對齊與高相似度 (>70%) 模糊匹配。
+        三階段嚴謹比對：1. 完全精確相等 ➔ 2. 標題包含/被包含 ➔ 3. 最高相似度 (>= 0.85 門檻)。
         回傳成功匹配並標記完成的乾淨 TaskNode 標題字串；未匹配到則回傳 None。
         """
         if not ocr_text:
@@ -231,24 +231,40 @@ class QuestScheduler:
         from utils.quest_mapper import normalize_quest_title
         norm_ocr = normalize_quest_title(ocr_text)
 
-        import difflib
-
+        # 1️⃣ 第一階段：全域精確相等比對 (Exact Equal Match)
         for t in self.tasks:
             title = t.quest_title
             norm_title = normalize_quest_title(title)
-
-            # 1. 精確全名相等 (==) 或正名後完全一致
-            if norm_ocr == norm_title or title == ocr_text or title in ocr_text or ocr_text in title:
+            if norm_ocr == norm_title or title == ocr_text or norm_title == ocr_text or title == norm_ocr:
                 t.completed_count = t.target_count
                 logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題精確相符) 已標記為完全完成！")
                 return t.quest_title
 
-            # 2. 模糊字串高相似度比對 (>= 70% 相似度，相容 1~2 個噪訊字符)
-            ratio = difflib.SequenceMatcher(None, norm_ocr, norm_title).ratio()
-            if ratio >= 0.70:
+        # 2️⃣ 第二階段：子字串包含比對 (Substring Match)
+        for t in self.tasks:
+            title = t.quest_title
+            norm_title = normalize_quest_title(title)
+            if title in ocr_text or norm_title in norm_ocr or norm_ocr in norm_title:
                 t.completed_count = t.target_count
-                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (模糊相似度 {ratio:.2f} 匹配) 已標記為完全完成！")
+                logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題包含比對相符) 已標記為完全完成！")
                 return t.quest_title
+
+        # 3️⃣ 第三階段：尋找最高相似度且門檻 >= 0.85 (High Confidence Fuzzy Match)
+        import difflib
+        best_match = None
+        best_ratio = 0.0
+
+        for t in self.tasks:
+            norm_title = normalize_quest_title(t.quest_title)
+            ratio = difflib.SequenceMatcher(None, norm_ocr, norm_title).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_match = t
+
+        if best_match and best_ratio >= 0.85:
+            best_match.completed_count = best_match.target_count
+            logging.info(f"🎉 [懸賞排程器] 任務 [{best_match.quest_title}] (最高模糊相似度 {best_ratio:.2f} >= 0.85) 已標記為完全完成！")
+            return best_match.quest_title
 
         return None
 

@@ -519,7 +519,8 @@ class DailyManager:
 
     def remove_accepted_quest(self, quest_title):
         """
-        將已完成的懸賞任務從 accepted_quests 列表中剔除並儲存 JSON (支援錯別字清洗與模糊匹配)。
+        將已完成的懸賞任務從 accepted_quests 列表中剔除並儲存 JSON。
+        優先精確剔除單一最佳匹配項，防止如 '清除蛙人' (0.75 相似) 誤刪 '清除樹人'。
         """
         if not quest_title:
             return False
@@ -532,22 +533,45 @@ class DailyManager:
         subflows = self.status.setdefault("subflows", {})
         bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": []})
         old_quests = bb.get("accepted_quests", [])
-        new_quests = []
+        if not old_quests:
+            return False
 
-        removed = False
+        target_to_remove = None
+
+        # 1️⃣ 第一階段：全域精確全名相符
         for q in old_quests:
             norm_q = normalize_quest_title(q)
-            ratio = difflib.SequenceMatcher(None, norm_title, norm_q).ratio()
-            if quest_title in q or q in quest_title or norm_title in norm_q or norm_q in norm_title or ratio >= 0.70:
-                removed = True
-                continue
-            new_quests.append(q)
+            if quest_title == q or norm_title == norm_q:
+                target_to_remove = q
+                break
 
-        if removed:
-            bb["accepted_quests"] = new_quests
+        # 2️⃣ 第二階段：子字串包含關係
+        if target_to_remove is None:
+            for q in old_quests:
+                norm_q = normalize_quest_title(q)
+                if quest_title in q or q in quest_title or norm_title in norm_q or norm_q in norm_title:
+                    target_to_remove = q
+                    break
+
+        # 3️⃣ 第三階段：尋找最高相似度且 >= 0.85 門檻
+        if target_to_remove is None:
+            best_q = None
+            best_ratio = 0.0
+            for q in old_quests:
+                norm_q = normalize_quest_title(q)
+                ratio = difflib.SequenceMatcher(None, norm_title, norm_q).ratio()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_q = q
+            if best_q and best_ratio >= 0.85:
+                target_to_remove = best_q
+
+        if target_to_remove is not None:
+            bb["accepted_quests"] = [q for q in old_quests if q != target_to_remove]
             self.save_status()
-            logging.info(f"🗑️ [DailyManager] 已將懸賞任務 [{quest_title}] (相符) 從持久化 json 的 accepted_quests 中移除。")
+            logging.info(f"🗑️ [DailyManager] 已將懸賞任務 [{target_to_remove}] 從持久化 json 的 accepted_quests 中移除。")
             return True
+
         return False
 
 
