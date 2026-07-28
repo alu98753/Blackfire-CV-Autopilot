@@ -8,6 +8,7 @@ except Exception:
     except Exception:
         pass
 
+import argparse
 import cv2
 import os
 import sys
@@ -21,6 +22,11 @@ def main():
             sys.stderr.reconfigure(encoding='utf-8')
         except AttributeError:
             pass
+
+    parser = argparse.ArgumentParser(description="Blackfire Crusade 模板裁剪工具")
+    parser.add_argument("--full-screen", "--fullscreen", "-f", action="store_true", help="擷取整個螢幕畫面（包含 Windows 工作列，而非僅特定遊戲視窗）")
+    args = parser.parse_args()
+
     print("=" * 60)
     print(" 🎮 Blackfire Crusade 模板裁剪工具 🎮")
     print("=" * 60)
@@ -32,25 +38,29 @@ def main():
     target_title = "Blackfire Crusade"
     capturer = ScreenCapturer(window_title=target_title)
     
-    print(f"[*] 正在尋找視窗: '{target_title}'...")
-    rect = capturer.get_window_rect()
-    
-    if rect is None:
-        print(f"[!] 找不到 '{target_title}' 視窗！")
-        print("請確認遊戲已啟動，且視窗名稱無誤。您可以執行 list_windows.py 來列出所有視窗標題。")
-        sys.exit(1)
+    if args.full_screen:
+        print("[*] 模式: 🌐 全螢幕擷取 (Full Screen Capture)")
+        rect = None
+    else:
+        print(f"[*] 正在尋找視窗: '{target_title}'...")
+        rect = capturer.get_window_rect()
         
-    print(f"[+] 成功定位視窗: '{rect['title']}'")
-    print(f"    位置: ({rect['left']}, {rect['top']}) | 大小: {rect['width']}x{rect['height']}")
+        if rect is None:
+            print(f"[!] 找不到 '{target_title}' 視窗！")
+            print("請確認遊戲已啟動，且視窗名稱無誤。您可以執行 list_windows.py 來列出所有視窗標題。")
+            sys.exit(1)
+            
+        print(f"[+] 成功定位視窗: '{rect['title']}'")
+        print(f"    位置: ({rect['left']}, {rect['top']}) | 大小: {rect['width']}x{rect['height']}")
     
-    print("\n[*] 提示：請切換到遊戲視窗，並把畫面停留在包含您要裁剪按鈕的畫面。")
+    print("\n[*] 提示：請將畫面停留在包含您要裁剪按鈕的區域。")
     print("    系統將在 5 秒後自動截圖...")
     for i in range(5, 0, -1):
         print(f"⏳ {i} 秒...")
         time.sleep(1)
     
     print("[*] 正在擷取畫面...")
-    img = capturer.capture(rect)
+    img = capturer.capture(rect=rect, full_screen=args.full_screen)
     
     if img is None:
         print("[!] 擷取畫面失敗！")
@@ -66,9 +76,13 @@ def main():
     print(" 4. 按 [ESC] 鍵可取消並退出。")
     print("=" * 60)
     
-    # 建立視窗並設定為普通大小
+    # 建立視窗並依影像真實比例調整大小，防止 OpenCV 視窗拉伸變形
     window_name = "Crop Tool - Drag to Select ROI, Press Enter/Space to confirm, ESC to cancel"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    img_h, img_w = img.shape[:2]
+    display_w = min(img_w, 1600)
+    display_h = int(display_w * (img_h / img_w))
+    cv2.resizeWindow(window_name, display_w, display_h)
     
     # 使用 OpenCV 的 ROI 選擇器
     r = cv2.selectROI(window_name, img, fromCenter=False, showCrosshair=True)

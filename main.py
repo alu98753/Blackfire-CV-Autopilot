@@ -20,6 +20,7 @@ from states.state_machine import GameStateMachine
 from config import GAME_CONFIGS, PRIMARY_MODES, STAGE_CONFIGS, normalize_config, SUBFLOW_CONFIGS
 from utils import get_stage_configs
 from utils.daily_manager import DailyManager
+from utils.steam_launcher import SteamGameLauncher
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -309,6 +310,7 @@ def parse_arguments():
     parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
                         help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
+    parser.add_argument("--monitor", "--screen", type=int, default=1, help="指定全螢幕擷取/開遊戲的顯示器編號 (預設: 1 為筆電螢幕，2 為外接螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
     return parser.parse_args()
@@ -587,8 +589,18 @@ def run_main_loop(state_machine, interval):
 def main():
     setup_utf8_encoding()
     args = parse_arguments()
+
+    # 1. 優先處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)
     setup_equipment_config(config)
+
+    # 2. 檢查遊戲是否開啟，發起直連啟動並傳送至 1 號筆電螢幕與最大化全螢幕
+    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=args.monitor)
+    if not launcher.ensure_game_ready():
+        print("[!] 遊戲啟動準備失敗，終止腳本。")
+        sys.exit(1)
+
+    # 3. 初始化主狀態機並立即運行 (無縫接續執行 LoginFlow 登入與 Click Until 流程)
     state_machine = init_state_machine_system(args, config)
     run_main_loop(state_machine, args.interval)
 
