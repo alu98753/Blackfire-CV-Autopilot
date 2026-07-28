@@ -456,7 +456,7 @@ class GameStateMachine:
         # 0.0 全域防護：若畫面上存在歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防遮擋導航與領取
         for popup_btn in ["common/confirm.png", "common/ok.png"]:
             if os.path.exists(os.path.join("templates", popup_btn)):
-                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.75)
+                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.90)
                 if pos_popup:
                     logging.info(f"👉 [全域防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
                     self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])
