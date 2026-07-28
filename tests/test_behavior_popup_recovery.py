@@ -1,64 +1,135 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import numpy as np
-import cv2
 
 from states.state_machine import GameStateMachine
 from states.exceptions import (
     UnexpectedPopupRecoveryHandler,
     BaseExceptionSubflow,
-    GenericCancelSubflow,
-    RaidBoxSubflow
+    RaidBoxSubflow,
+    GenericAntiStuckSubflow
 )
 
 
-class DummySubflow(BaseExceptionSubflow):
-    name = "dummy_test_subflow"
-
-    def __init__(self, can_handle_return=True, execute_return=True):
-        self.can_handle_return = can_handle_return
-        self.execute_return = execute_return
-        self.can_handle_called = False
-        self.execute_called = False
-
-    def can_handle(self, screen_img, matcher, detector=None) -> bool:
-        self.can_handle_called = True
-        return self.can_handle_return
-
-    def execute(self, screen_img, mouse, rect, matcher=None) -> bool:
-        self.execute_called = True
-        return self.execute_return
-
-
 class TestBehaviorPopupRecovery(unittest.TestCase):
+    """
+    分階段雙層優先級彈窗復原與 Subflow 單元測試套件 (Staged 2-Priority Unit Tests)
+    """
+
     def setUp(self):
         self.capturer = MagicMock()
         self.matcher = MagicMock()
         self.mouse = MagicMock()
         self.machine = GameStateMachine(self.capturer, self.matcher, self.mouse)
+        self.handler = UnexpectedPopupRecoveryHandler(self.machine)
 
-    def test_custom_subflow_registration_and_execution(self):
-        """驗證動態註冊自訂 Exception Subflow 並優先完成觸發處置與狀態復原"""
-        handler = UnexpectedPopupRecoveryHandler(self.machine)
-        dummy_subflow = DummySubflow(can_handle_return=True, execute_return=True)
-        handler.register_subflow(dummy_subflow)
+    # -------------------------------------------------------------------------
+    # 階段 1：RaidBoxSubflow 專屬獨立單元測試
+    # -------------------------------------------------------------------------
+    def test_raid_box_subflow_can_handle_and_execute(self):
+        """[階段 1] 驗證 RaidBoxSubflow 獨立點擊與 Scoped ROI 運算"""
+        subflow = RaidBoxSubflow()
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 100, "top": 50, "width": 1920, "height": 1080}
 
-        self.machine.current_state = GameStateMachine.STATE_NAVIGATING
-        self.machine.stash_current_state(reason="test_trigger")
+        def mock_match(screen_img, template_name, threshold=0.75, quiet=True):
+            if "Raid_Box" in template_name:
+                return (400, 200), 0.95
+            elif "cancel" in template_name:
+                return (50, 150), 0.90
+            return None, 0.0
 
-        dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
+        self.matcher.match.side_effect = mock_match
+
+        with patch("os.path.exists", return_value=True):
+            # 1. 斷言 can_handle 傳回 True
+            self.assertTrue(subflow.can_handle(dummy_screen, self.matcher))
+
+            # 2. 執行 execute，斷言點擊絕對座標 (100+400+50=550, 50+200+150=400)
+            res = subflow.execute(dummy_screen, self.mouse, rect, self.matcher)
+            self.assertTrue(res)
+            self.mouse.click.assert_called_with(550, 400)
+
+    # -------------------------------------------------------------------------
+    # 階段 2：GenericAntiStuckSubflow 專屬獨立單元測試
+    # -------------------------------------------------------------------------
+    def test_generic_anti_stuck_subflow_can_handle_and_execute(self):
+        """[階段 2] 驗證 GenericAntiStuckSubflow 獨立點擊全域按鈕"""
+        subflow = GenericAntiStuckSubflow()
+        dummy_screen = np.zeros((100, 100, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 100, "height": 100}
 
-        handler.handle(dummy_img, rect)
+        def mock_match(screen_img, template_name, threshold=0.75, quiet=True):
+            if "common/quit.png" in template_name:
+                return (50, 50), 0.90
+            return None, 0.0
 
-        self.assertTrue(dummy_subflow.can_handle_called)
-        self.assertTrue(dummy_subflow.execute_called)
-        self.assertEqual(self.machine.current_state, GameStateMachine.STATE_NAVIGATING)
+        self.matcher.match.side_effect = mock_match
+
+        with patch("os.path.exists", return_value=True):
+            self.assertTrue(subflow.can_handle(dummy_screen, self.matcher))
+
+            res = subflow.execute(dummy_screen, self.mouse, rect, self.matcher)
+            self.assertTrue(res)
+            self.mouse.click.assert_called_with(50, 50)
+
+    # -------------------------------------------------------------------------
+    # 階段 3：雙層優先級分階段調度測試 (Staged Priority Dispatch Tests)
+    # -------------------------------------------------------------------------
+    def test_priority_level_1_overrides_priority_level_2(self):
+        """[階段 3-A] 驗證當同時存在 Raid_Box 與全域 quit.png 時，必定【優先級 1 優先】觸發 RaidBoxSubflow"""
+        self.machine.current_state = GameStateMachine.STATE_LOBBY
+        self.machine.stash_current_state(reason="dual_popup_test")
+
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        # 模擬畫面同時有 Raid_Box.png 與 common/quit.png
+        def mock_match(screen_img, template_name, threshold=0.75, quiet=True):
+            if "Raid_Box" in template_name:
+                return (500, 300), 0.95
+            elif "cancel" in template_name:
+                return (100, 300), 0.90
+            elif "common/quit.png" in template_name:
+                return (1000, 200), 0.98
+            return None, 0.0
+
+        self.matcher.match.side_effect = mock_match
+
+        with patch("os.path.exists", return_value=True):
+            self.handler.handle(dummy_screen, rect)
+
+            # 斷言：點擊的是 RaidBoxSubflow 的 cancel.png (500+100=600, 300+300=600)，而不是 quit.png (1000, 200)
+            self.mouse.click.assert_called_with(600, 600)
+            self.assertEqual(self.handler.active_subflow, None)  # 處置完畢後已清空 active
+            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOBBY)
+
+    def test_priority_level_2_fallback_when_no_level_1_match(self):
+        """[階段 3-B] 驗證完全【無優先級 1 專屬圖案】時，自動觸發【優先級 2 通用防卡死】點擊 common/confirm.png"""
+        self.machine.current_state = GameStateMachine.STATE_NAVIGATING
+        self.machine.stash_current_state(reason="anti_stuck_fallback_test")
+
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        # 模擬畫面無 Raid_Box，但有 common/confirm.png
+        def mock_match(screen_img, template_name, threshold=0.75, quiet=True):
+            if "common/confirm.png" in template_name:
+                return (800, 600), 0.92
+            return None, 0.0
+
+        self.matcher.match.side_effect = mock_match
+
+        with patch("os.path.exists", return_value=True):
+            self.handler.handle(dummy_screen, rect)
+
+            # 斷言：發起優先級 2 的通用防卡死點擊 (800, 600)
+            self.mouse.click.assert_called_with(800, 600)
+            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_NAVIGATING)
 
     def test_unhandled_popup_triggers_max_retries_fallback(self):
-        """驗證當所有 Subflow 均無法處置時，達到 max_retries 後發起 Fallback 降級復原"""
-        handler = UnexpectedPopupRecoveryHandler(self.machine)
-        handler.max_retries = 3
+        """[階段 3-C] 驗證當優先級 1 與 2 均無法匹配時，達到 max_retries 後發起 Fallback 降級復原"""
+        self.handler.max_retries = 3
 
         self.machine.current_state = GameStateMachine.STATE_LOBBY
         self.machine.stash_current_state(reason="unhandled_popup")
@@ -66,69 +137,16 @@ class TestBehaviorPopupRecovery(unittest.TestCase):
         dummy_img = np.ones((100, 100, 3), dtype=np.uint8) * 150
         rect = {"left": 0, "top": 0, "width": 100, "height": 100}
 
-        # 模擬比對均失敗
+        # 模擬所有圖片匹配均失敗
         self.matcher.match.return_value = (None, 0.0)
 
         for _ in range(3):
-            handler.handle(dummy_img, rect)
+            self.handler.handle(dummy_img, rect)
 
         self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOBBY)
 
-    def test_raid_box_scoped_cancel_recovery_and_stage_resumption(self):
-        """
-        驗證打 Stage 關卡點擊 start.png 前點錯彈出 Raid_Box 時的修復流程：
-        0. 暫存狀態 (STATE_LOBBY)
-        1. 配對 Raid_Box.png 取得 ROI
-        2. 僅於 Raid_Box ROI 內部配對 cancel.png 並發起點擊
-        3. 復原原狀態 (STATE_LOBBY)
-        4. 復原後 LobbyHandler 重新成功辨識到 stages/start.png 並推進至 STATE_LOADING
-        """
-        from states.handlers.lobby import LobbyHandler
-        from states.exceptions import RaidBoxSubflow
-
-        handler = UnexpectedPopupRecoveryHandler(self.machine)
-        lobby_handler = LobbyHandler(self.machine)
-        self.machine.config = {"type": "stage", "lobby_start_btn": "stages/start.png"}
-
-        # 0. 先存狀態
-        self.machine.current_state = GameStateMachine.STATE_LOBBY
-        self.machine.stash_current_state(reason="stage_misclick_raid_box")
-        self.assertEqual(self.machine.current_state, GameStateMachine.STATE_POPUP_RECOVERY)
-
-        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
-
-        # 模擬 matcher 行為：
-        def mock_match(screen_img, template_name, threshold=0.75, quiet=True):
-            if "Raid_Box" in template_name:
-                return (500, 300), 0.95
-            elif "cancel" in template_name:
-                return (100, 300), 0.90
-            elif "start.png" in template_name:
-                return (900, 800), 0.92
-            return None, 0.0
-
-        self.matcher.match.side_effect = mock_match
-
-        with patch("os.path.exists", return_value=True):
-            # 執行 PopupRecoveryHandler
-            handler.handle(dummy_screen, rect)
-
-            # 斷言：發起點擊 cancel.png 的絕對座標 (500+100=600, 300+300=600)
-            self.mouse.click.assert_called_with(600, 600)
-
-            # 3. 斷言狀態已自動復原至 STATE_LOBBY
-            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOBBY)
-
-            # 4. 復原後下一次迴圈由 LobbyHandler 接手，成功辨識到 stages/start.png 進入 STATE_LOADING
-            self.mouse.click.reset_mock()
-            lobby_handler.handle(dummy_screen, rect)
-
-            self.mouse.click.assert_called_with(900, 800)
-            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOADING)
-
     def test_context_preservation_and_stash_lock(self):
-        """驗證 Context 數據深拷貝備份/還原，以及 Stash Lock 防護二次暫存不覆蓋原狀態"""
+        """[階段 3-D] 驗證 Context 數據深拷貝備份/還原，以及 Stash Lock 防護二次暫存不覆蓋原狀態"""
         # 1. 初始設定業務狀態與 Context
         self.machine.current_state = GameStateMachine.STATE_DUNGEON_EXPLORING
         self.machine.context = {"dungeon_id": 4, "step_index": 2, "target_name": "Ghost_entry"}

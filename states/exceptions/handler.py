@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from typing import List, Optional, Dict, Any
 from states.handlers.base import BaseStateHandler
-from states.exceptions.subflows import BaseExceptionSubflow, GenericCancelSubflow, RaidBoxSubflow
+from states.exceptions.subflows import BaseExceptionSubflow, RaidBoxSubflow, GenericAntiStuckSubflow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -13,12 +13,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 class UnexpectedPopupRecoveryHandler(BaseStateHandler):
     """
     意外彈窗/視窗恢復處理器 (UnexpectedPopupRecoveryHandler)
-    
     職責：
     1. 統籌例外處置生命週期：調度對應 Subflow (Pure Execution) 進行點擊處理。
     2. 點擊處置完成後，統一呼叫 machine.restore_stashed_state() 恢復原本狀態。
     3. 提供明暗度 (Dimming Overlay) 圖像特徵分析。
     4. 當所有 Subflow 均無法處理或嘗試次數過多時，執行 Fallback 降級處置。
+        雙層優先級處置流轉：
+        1. 優先級 1 (專屬 Subflows)：
+        比對 subflows_map 中註冊的專屬例外彈窗 (如 RaidBoxSubflow)。
+        2. 優先級 2 (通用防卡死 Subflow)：
+        當且僅當「沒有任何專屬 Subflow 圖片被匹配到」時，執行 GenericAntiStuckSubflow 點擊全域按鈕。
     """
 
     def __init__(self, machine):
@@ -28,9 +32,8 @@ class UnexpectedPopupRecoveryHandler(BaseStateHandler):
         self.retry_count = 0
         self.max_retries = 5
 
-        # 註冊預設 Subflows
+        # 註冊專屬 Subflows
         self.register_subflow(RaidBoxSubflow())
-        self.register_subflow(GenericCancelSubflow())
 
     def register_subflow(self, subflow: BaseExceptionSubflow):
         """
@@ -71,7 +74,12 @@ class UnexpectedPopupRecoveryHandler(BaseStateHandler):
         }
 
     def handle(self, screen_img, rect):
-        """
+        """        
+        雙層優先級處置流程：
+        1. 優先級 1 (專屬 Subflows)：
+        比對 subflows_map 中註冊的專屬例外彈窗 (如 RaidBoxSubflow)。
+        2. 優先級 2 (通用防卡死 Subflow)：
+        當且僅當「沒有任何專屬 Subflow 圖片被匹配到」時，執行 GenericAntiStuckSubflow 點擊全域按鈕。
         主處置流程：
         1. 執行 active_subflow.execute(screen_img, mouse, rect, matcher)
         2. 處置完成後，統一呼叫 machine.restore_stashed_state() 發起復原閉環。
@@ -95,10 +103,10 @@ class UnexpectedPopupRecoveryHandler(BaseStateHandler):
             else:
                 self.retry_count += 1
 
-        # 2. 輪詢尋找符合 can_handle 之 Subflow
+        # 2. 優先級 1：輪詢尋找相符之專屬 Subflow
         for name, subflow in self.subflows_map.items():
             if subflow.can_handle(screen_img, self.matcher):
-                logging.info(f"🎯 [PopupRecovery] 命中 Exception Subflow: {subflow.name}")
+                logging.info(f"🎯 [PopupRecovery] [優先級 1] 命中專屬 Exception Subflow: {subflow.name}")
                 self.active_subflow = subflow
                 finished = self.active_subflow.execute(screen_img, self.mouse, rect, self.matcher)
                 if finished:
@@ -111,11 +119,11 @@ class UnexpectedPopupRecoveryHandler(BaseStateHandler):
                     self.retry_count += 1
                     return
 
-        # 3. 備援：若無特定 Subflow 命中但為遮罩或有取消鈕，嘗試通用關閉
-        generic_sub = GenericCancelSubflow()
-        if generic_sub.can_handle(screen_img, self.matcher):
-            logging.info("🛡️ [PopupRecovery] 執行通用取消按鈕掃描...")
-            generic_sub.execute(screen_img, self.mouse, rect, self.matcher)
+        # 3. 優先級 2：無專屬 Subflow 圖片匹配到，觸發通用防卡死兜底 Subflow
+        anti_stuck_sub = GenericAntiStuckSubflow()
+        if anti_stuck_sub.can_handle(screen_img, self.matcher):
+            logging.info("🛡️ [PopupRecovery] [優先級 2] 無專屬彈窗圖案匹配，觸發通用防卡死兜底點擊...")
+            anti_stuck_sub.execute(screen_img, self.mouse, rect, self.matcher)
             self.retry_count = 0
             self.machine.restore_stashed_state()
             return
@@ -123,7 +131,7 @@ class UnexpectedPopupRecoveryHandler(BaseStateHandler):
         # 4. 超過最大重試次數 Fallback
         self.retry_count += 1
         if self.retry_count >= self.max_retries:
-            logging.warning(f"⚠️ [PopupRecovery] 已達最大重試次數 ({self.max_retries})，無法成功排除視窗。發起 Fallback 降級處置！")
+            logging.warning(f"⚠️ [PopupRecovery] 已達最大重試次數 ({self.max_retries})，發起 Fallback 降級處置！")
             # TODO: 關掉遊戲重開 #TODO
             self.retry_count = 0
             self.active_subflow = None

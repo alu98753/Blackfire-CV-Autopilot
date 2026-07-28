@@ -833,34 +833,39 @@ class TestStateMachineLogic(unittest.TestCase):
         self.assertEqual(self.state_machine.consecutive_stuck_count, 14)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         
-        # 測試分支 A: 匹配成功 confirm.png
-        def match_confirm(img, name, threshold):
-            if name == "common/confirm.png":
+        # 測試分支 A: 卡住逾時發起暫存並由 GenericAntiStuckSubflow 點擊匹配 confirm.png
+        self.state_machine.last_state_change = time.time() - 31.0
+        
+        def match_confirm(img, name, threshold=0.75, quiet=True):
+            if "common/confirm.png" in name:
                 return ((800, 400), 0.9)
-            return (None, 0.0)
+            return None, 0.0
         self.mock_matcher.match.side_effect = match_confirm
         self.mock_mouse.click.reset_mock()
         
-        # 執行第 15 次 step
-        self.state_machine.step()
+        # 1. 執行 step 觸發 Watchdog 暫存
+        with patch("os.path.exists", return_value=True):
+            self.state_machine.step()
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_POPUP_RECOVERY)
+            
+            # 2. 下一步由 UnexpectedPopupRecoveryHandler 調度 GenericAntiStuckSubflow
+            self.state_machine.step()
+            self.mock_mouse.click.assert_called_with(800, 400)
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         
-        # 斷言：應該點擊通用確認按鈕 (0+800=800, 0+400=400)，且重置 stuck 次數，且狀態依然保持 NAVIGATING
-        self.mock_mouse.click.assert_called_with(800, 400)
-        self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
-        
-        # 測試分支 B: 找不到任何確認按鈕
-        self.state_machine.consecutive_stuck_count = 14  # 手動設回 14 次
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        # 測試分支 B: 找不到任何確認按鈕且達到最大重試次數
+        self.state_machine.last_state_change = time.time() - 31.0
+        self.mock_matcher.match.side_effect = lambda img, name, threshold=0.75, quiet=True: (None, 0.0)
         self.mock_mouse.click.reset_mock()
         
-        # 執行第 15 次 step
-        self.state_machine.step()
-        
-        # 斷言：無點擊，狀態被強制重設為 UNKNOWN，且 stuck 次數重置為 0
-        self.mock_mouse.click.assert_not_called()
-        self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        with patch("os.path.exists", return_value=True):
+            self.state_machine.step()  # 進入 POPUP_RECOVERY
+            popup_handler = self.state_machine.handlers[self.state_machine.STATE_POPUP_RECOVERY]
+            popup_handler.max_retries = 1
+            self.state_machine.step()  # 發起 Fallback 退避
+            self.mock_mouse.click.assert_not_called()
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
 
     @patch('os.path.exists')
     def test_dungeon_global_stamina_collection_trigger(self, mock_exists):

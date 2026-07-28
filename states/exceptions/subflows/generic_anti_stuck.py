@@ -4,24 +4,29 @@ import logging
 from states.exceptions.subflows.base import BaseExceptionSubflow, safe_match
 
 
-class GenericCancelSubflow(BaseExceptionSubflow):
+class GenericAntiStuckSubflow(BaseExceptionSubflow):
     """
-    通用取消/關閉按鈕 Subflow (Pure Execution)。
-    嘗試比對與點擊 cancel.png, common/close.png, common/x_button.png 等關閉圖示。
+    通用防卡死兜底 Subflow (Generic Anti-Stuck Fallback Subflow)。
+    
+    職責：
+    僅當「沒有任何專屬 Exception Subflow 圖案被匹配到」時，作為優先級 2 備援執行。
+    依序嘗試比對與點擊通用全域按鈕：
+    common/confirm.png, common/continue.png, common/quit.png, common/ok.png, exceptions/cancel.png
     """
-    name: str = "generic_cancel_subflow"
+    name: str = "generic_anti_stuck_subflow"
 
     def __init__(self):
-        self.cancel_templates = [
+        self.fallback_templates = [
+            "common/confirm.png",
+            "common/continue.png",
+            "common/quit.png",
+            "common/ok.png",
             "exceptions/cancel.png",
-            "cancel.png",
-            "common/close.png",
-            "common/x_button.png",
-            "common/cancel.png"
+            "cancel.png"
         ]
 
     def can_handle(self, screen_img, matcher, detector=None) -> bool:
-        for tpl in self.cancel_templates:
+        for tpl in self.fallback_templates:
             if os.path.exists(os.path.join("templates", tpl)):
                 pos, conf = safe_match(matcher, screen_img, tpl, threshold=0.75)
                 if pos:
@@ -29,13 +34,13 @@ class GenericCancelSubflow(BaseExceptionSubflow):
         return False
 
     def execute(self, screen_img, mouse, rect, matcher=None) -> bool:
-        for tpl in self.cancel_templates:
+        for tpl in self.fallback_templates:
             if os.path.exists(os.path.join("templates", tpl)):
                 pos, conf = safe_match(matcher, screen_img, tpl, threshold=0.75)
                 if pos:
                     cx = rect["left"] + pos[0]
                     cy = rect["top"] + pos[1]
-                    logging.info(f"🛡️ [{self.name}] 檢測到通用關閉/取消按鈕 [{tpl}] (相似度: {conf:.4f})，進行點擊: ({cx}, {cy})")
+                    logging.info(f"🛡️ [{self.name}] 偵測到通用防卡死全域按鈕 [{tpl}] (相似度: {conf:.4f})，進行點擊以清除阻礙: ({cx}, {cy})")
                     if mouse:
                         mouse.click(cx, cy)
                     time.sleep(0.5)
