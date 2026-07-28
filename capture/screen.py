@@ -66,7 +66,8 @@ class ScreenCapturer:
     def ensure_window_on_monitor(self, monitor_index: Optional[int] = None) -> bool:
         """
         將遊戲視窗自動移動並定位到指定的顯示器 (預設 self.monitor_index 筆電螢幕 1)。
-        若視窗當前不在指定螢幕上，調用 SetWindowPos 將視窗移至目標顯示器左上角。
+        修復邏輯：若視窗處於最大化狀態，必須先 SW_RESTORE 解除最大化，否則 Windows 禁止 SetWindowPos 跨顯示器移動！
+        移動後再調用 SW_MAXIMIZE 在目標顯示器上最大化全螢幕。
         """
         target_idx = monitor_index if monitor_index is not None else self.monitor_index
         if target_idx is None:
@@ -75,6 +76,7 @@ class ScreenCapturer:
         try:
             hwnd = self.get_hwnd()
             if not hwnd:
+                logging.warning(f"⚠️ [ScreenCapturer] ensure_window_on_monitor 找不到標題為 '{self.window_title}' 的視窗。")
                 return False
 
             import win32api
@@ -82,34 +84,59 @@ class ScreenCapturer:
             if 0 < target_idx <= len(monitors):
                 hmon, _, _ = monitors[target_idx - 1]
                 info = win32api.GetMonitorInfo(hmon)
-                mon_rect = info["Monitor"]
+                mon_rect = info["Monitor"]  # (left, top, right, bottom)
                 mon_l, mon_t = mon_rect[0], mon_rect[1]
+                mon_r, mon_b = mon_rect[2], mon_rect[3]
 
                 w_left, w_top, w_right, w_bottom = win32gui.GetWindowRect(hwnd)
-                w_w = w_right - w_left
-                w_h = w_bottom - w_top
+                w_center_x = (w_left + w_right) // 2
+                w_center_y = (w_top + w_bottom) // 2
 
+                is_on_target_mon = (mon_l <= w_center_x < mon_r) and (mon_t <= w_center_y < mon_b)
                 is_zoomed = win32gui.IsZoomed(hwnd)
-                if abs(w_left - mon_l) > 50 or abs(w_top - mon_t) > 50 or not is_zoomed:
-                    logging.info(f"🚚 [ScreenCapturer] 將遊戲視窗自動移動至 Monitor {target_idx} 筆電螢幕 ({mon_l}, {mon_t}) 並執行最大化全螢幕...")
-                    if win32gui.IsIconic(hwnd):
-                        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
 
+                logging.info(
+                    f"🔍 [ScreenCapturer Debug] 視窗 HWND: {hwnd}, 當前 Rect: ({w_left}, {w_top}, {w_right}, {w_bottom}), "
+                    f"中心點: ({w_center_x}, {w_center_y}), 已最大化: {is_zoomed} | "
+                    f"目標 Monitor {target_idx} 範圍: ({mon_l}, {mon_t})~({mon_r}, {mon_b}), 已在目標螢幕: {is_on_target_mon}"
+                )
+
+                if not is_on_target_mon or not is_zoomed:
+                    logging.info(f"🚚 [ScreenCapturer] 執行跨螢幕傳送至 Monitor {target_idx} ({mon_l}, {mon_t})...")
+
+                    # 1. 關鍵步驟：若目前處於最大化或最小化狀態，必須先 SW_RESTORE，否則 Win32 禁止 SetWindowPos 跨螢幕移動
+                    if is_zoomed or win32gui.IsIconic(hwnd):
+                        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                        time.sleep(0.15)
+
+                    # 2. 將未最大化的視窗移入目標顯示器內部
                     win32gui.SetWindowPos(
                         hwnd,
                         win32con.HWND_TOP,
-                        mon_l,
-                        mon_t,
-                        w_w,
-                        w_h,
+                        mon_l + 50,
+                        mon_t + 50,
+                        1280,
+                        720,
                         win32con.SWP_SHOWWINDOW
                     )
-                    time.sleep(0.1)
+                    time.sleep(0.15)
+
+                    # 3. 在目標顯示器上呼叫 SW_MAXIMIZE 填滿全螢幕
                     win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
                     time.sleep(0.3)
+
+                    # 4. 驗證移動結果
+                    new_rect = win32gui.GetWindowRect(hwnd)
+                    new_center_x = (new_rect[0] + new_rect[2]) // 2
+                    new_center_y = (new_rect[1] + new_rect[3]) // 2
+                    new_on_target = (mon_l <= new_center_x < mon_r) and (mon_t <= new_center_y < mon_b)
+                    logging.info(f"🎉 [ScreenCapturer] 視窗傳送結果: 新 Rect: {new_rect}, 新中心: ({new_center_x}, {new_center_y}), 是否成功到達 Monitor {target_idx}: {new_on_target}")
+                    return new_on_target
+                else:
+                    logging.info(f"✅ [ScreenCapturer] 遊戲視窗已在 Monitor {target_idx} 上且已處於最大化狀態。")
                     return True
         except Exception as e:
-            logging.debug(f"自動移動視窗至 Monitor {target_idx} 失敗: {e}")
+            logging.error(f"❌ 自動移動視窗至 Monitor {target_idx} 失敗: {e}", exc_info=True)
         return False
 
     def get_logical_window_rect(self, phys_rect):
