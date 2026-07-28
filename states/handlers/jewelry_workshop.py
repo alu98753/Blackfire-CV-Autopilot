@@ -97,9 +97,21 @@ class JewelryWorkshopHandler(BaseStateHandler):
         if now - self.last_action_time < 0.6:
             return
 
+        # 🛡️ 場景感知防護 (Scene Guard)：若非 INIT/EXITING 階段但畫面上已看見 common/door.png (確定在城鎮 Town)，代表已離場
+        if self.step_phase in ["SELL_MENU_OPEN", "ENTERED_BUILDING"]:
+            pos_door_chk, conf_door_chk = self.matcher.match(screen_img, "common/door.png", threshold=0.80)
+            if pos_door_chk:
+                logging.warning(f"💎 [珠寶加工廠] 防護攔截 - 處於 [{self.step_phase}] 階段但畫面上已看見城鎮大門 [common/door.png] ({conf_door_chk:.4f})，結束出售流程。")
+                self.reset_state()
+                self.machine.need_jewelry_workshop = False
+                self.last_action_time = now
+                self.machine.pop_and_next_town_subflow()
+                return
+
         # 優先檢查是否需要從小圖示大廳退回城鎮
         if not self._ensure_in_town(screen_img, rect):
             return
+
 
         left = rect["left"] if rect else 0
         top = rect["top"] if rect else 0
@@ -128,6 +140,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 logging.info(f"💎 [珠寶加工廠] 點擊確認按鈕 [{conf_name}]...")
                 self.mouse.click(left + pos_conf[0], top + pos_conf[1])
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 return
 
         # =========================================================================
@@ -147,6 +161,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                     time.sleep(0.3)
                 self.step_phase = "ALL_DONE_EXITING"
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 return
 
             goods_name = enabled_goods[self.current_goods_idx]
@@ -172,6 +188,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.goods_scroll_state = "SCROLLED_DOWN"
                 time.sleep(0.8)
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 return
 
             # 若向下滑動後仍未找到商品 ➔ 認定背包無此商品 ➔ 向上滑動還原高度 (向下拖曳 200 像素) ➔ 繼續下一個商品
@@ -183,6 +201,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.current_goods_idx += 1
                 time.sleep(0.8)
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 return
 
             # 若找到商品，執行出售流程
@@ -244,7 +264,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 if still_has_goods and self.repeat_sell_count < max_repeat:
                     logging.info(f"💎 [珠寶加工廠] 同一商品 [{goods_name}] 畫面中仍有可出售項目 (第 {self.repeat_sell_count} 次出售)，繼續對該商品執行出售...")
                     self.last_action_time = now
+                    self.machine.notify_ui_progress()
                     return
+
 
                 # 若畫面不再有該商品，或達到最大重複次數 (max_repeat)
                 if still_has_goods and self.repeat_sell_count >= max_repeat:
@@ -259,6 +281,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.repeat_sell_count = 0
                 self.current_goods_idx += 1
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 return
 
             return
@@ -274,6 +298,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
                 self.machine.pop_and_next_town_subflow()
                 return
@@ -283,6 +309,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 logging.info("💎 [珠寶加工廠] 點擊關閉視窗 [common/quit.png]...")
                 self.mouse.click(left + pos_quit[0], top + pos_quit[1])
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 return
 
             pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
@@ -292,6 +320,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
                 self.machine.pop_and_next_town_subflow()
                 return
@@ -333,6 +363,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.mouse.click(left + pos_building[0], top + pos_building[1])
                 self.step_phase = "ENTERED_BUILDING"
                 self.last_action_time = now
+                self.machine.notify_ui_progress()
+
                 return
 
         if pos_sell_out:
