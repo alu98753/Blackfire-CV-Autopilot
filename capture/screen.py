@@ -177,14 +177,15 @@ class ScreenCapturer:
             logging.debug(f"後台截圖發生錯誤: {e}")
             return None
 
-    def capture(self, rect=None):
+    def capture(self, rect=None, full_screen=False):
         """
         擷取螢幕或指定區域，回傳 OpenCV 格式 (BGR) 影像。
+        full_screen: 若為 True，代表強制擷取全螢幕 (不自動定位遊戲視窗)。
         """
         hwnd = self.get_hwnd()
         
         # 後台模式優先嘗試 BitBlt 後台截圖 (無遮擋限制)
-        if self.backend_mode and hwnd:
+        if not full_screen and self.backend_mode and hwnd:
             img = self._capture_backend(hwnd)
             if img is not None:
                 # 診斷：將 BitBlt 擷取結果存檔 (已註解)
@@ -196,13 +197,16 @@ class ScreenCapturer:
                 return img
                 
         # 退回前台 / MSS 跨螢幕絕對座標裁剪 (第二防線)
-        if rect is None:
+        if not full_screen and rect is None:
             rect = self.get_window_rect()
             
         try:
-            if rect is None:
-                logging.info("將擷取主螢幕畫面作為備用方案...")
-                monitor = self.sct.monitors[1]
+            if full_screen or rect is None:
+                logging.info("將擷取主螢幕畫面...")
+                primary_mon = next((m for m in self.sct.monitors[1:] if m.get("is_primary")), None)
+                if primary_mon is None:
+                    primary_mon = self.sct.monitors[1] if len(self.sct.monitors) > 1 else self.sct.monitors[0]
+                monitor = primary_mon
                 dpi_factor = 1.0
             else:
                 monitor = {
