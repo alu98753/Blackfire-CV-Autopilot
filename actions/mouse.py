@@ -70,31 +70,18 @@ class MouseController:
     def _draw_debug_click(self, hwnd, rx_physical, ry_physical):
         """
         擷取當前畫面並繪製點擊位置紅圈，存檔為 debug_click.png 供調試排查。
-        因為 rx_physical, ry_physical 就是相對於整個視窗左上角的物理座標，
-        直接在截圖的對應座標繪製即可，不需扣除任何邊框或標題列偏置。
         """
         if self.state_machine and self.state_machine.capturer:
-            # 取得最新截圖
             img = self.state_machine.capturer.capture()
             if img is not None:
-                try:
-                    img_x = rx_physical
-                    img_y = ry_physical
-                    
-                    # 畫一個紅色的空心圓
-                    cv2.circle(img, (img_x, img_y), 15, (0, 0, 255), 2)
-                    # 畫十字架
-                    cv2.line(img, (img_x - 25, img_y), (img_x + 25, img_y), (0, 0, 255), 2)
-                    cv2.line(img, (img_x, img_y - 25), (img_x, img_y + 25), (0, 0, 255), 2)
-                    # 標註座標
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    text = f"Click: ({rx_physical}, {ry_physical})"
-                    cv2.putText(img, text, (img_x + 20, img_y - 10), font, 0.6, (0, 0, 255), 2)
-                    
-                    cv2.imwrite("debug_click.png", img)
-                    logging.info(f"🎯 點擊繪製完成：物理相對座標 ({rx_physical}, {ry_physical})，已寫入 debug_click.png")
-                except Exception as e:
-                    logging.debug(f"無法寫入 debug_click.png: {e}")
+                from states.debug import DebugVisualizer
+                DebugVisualizer.draw_detection(
+                    img,
+                    click_pos=(rx_physical, ry_physical),
+                    labels={"click": f"Click ({rx_physical}, {ry_physical})"},
+                    filename="debug_click.png"
+                )
+
 
     def check_user_intervention(self):
         """
