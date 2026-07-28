@@ -149,7 +149,7 @@ class BloodAltarHandler(BaseStateHandler):
             return True
 
         # =========================================================================
-        # 3. RECEIVE_TAB_OPEN 階段：領血頁籤介面比對 receive_daily.png (帶 3 幀重試緩衝)
+        # 3. RECEIVE_TAB_OPEN 階段：領血頁籤介面比對 receive_daily.png (帶配對確認直到消失閉環)
         # =========================================================================
         elif self.step_phase == "RECEIVE_TAB_OPEN":
             pos_rec_daily, conf_rec_daily = self.matcher.match(
@@ -159,8 +159,18 @@ class BloodAltarHandler(BaseStateHandler):
                 brightness_threshold=0.50
             )
             if pos_rec_daily:
-                logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}] [{conf_rec_daily:.4f}]，點擊領取免費血水...")
-                self.mouse.click(left + pos_rec_daily[0], top + pos_rec_daily[1])
+                logging.info(f"🩸 [血之祭壇] 發現每日領血按鈕 [{receive_daily_btn}] [{conf_rec_daily:.4f}]，點擊並啟動配對確認直到消失閉環...")
+                self.click_and_wait_until_gone(
+                    receive_daily_btn,
+                    left + pos_rec_daily[0],
+                    top + pos_rec_daily[1],
+                    rect,
+                    timeout=5.0,
+                    threshold=0.70,
+                    brightness_threshold=0.50,
+                    retry_interval=1.0,
+                    post_delay=0.3
+                )
                 self.has_claimed_daily = True
                 self.step_phase = "HANDLING_RECEIVE_POPUPS"
                 self.popup_clear_count = 0
@@ -186,19 +196,19 @@ class BloodAltarHandler(BaseStateHandler):
 
             if pos_confirm:
                 logging.info("🩸 [血之祭壇] 點擊領取確認按鈕 [common/confirm.png]...")
-                self.mouse.click(left + pos_confirm[0], top + pos_confirm[1])
+                self.click_and_wait_until_gone("common/confirm.png", left + pos_confirm[0], top + pos_confirm[1], rect, threshold=0.8)
                 self.popup_clear_count = 0
                 self.last_action_time = now
                 return True
             elif pos_ok:
                 logging.info("🩸 [血之祭壇] 點擊領取 OK 按鈕 [common/ok.png]...")
-                self.mouse.click(left + pos_ok[0], top + pos_ok[1])
+                self.click_and_wait_until_gone("common/ok.png", left + pos_ok[0], top + pos_ok[1], rect, threshold=0.8)
                 self.popup_clear_count = 0
                 self.last_action_time = now
                 return True
             elif pos_quit:
                 logging.info("🩸 [血之祭壇] 點擊領取關閉按鈕 [common/quit.png]...")
-                self.mouse.click(left + pos_quit[0], top + pos_quit[1])
+                self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, threshold=0.8)
                 self.popup_clear_count = 0
                 self.last_action_time = now
                 return True
