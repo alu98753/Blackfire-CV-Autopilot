@@ -310,6 +310,7 @@ def parse_arguments():
     parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
                         help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
+    parser.add_argument("--monitor", "--screen", type=int, default=None, help="指定全螢幕擷取/開遊戲的顯示器編號 (例如 1 為筆電螢幕，2 為外接螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
     return parser.parse_args()
@@ -589,8 +590,8 @@ def main():
     setup_utf8_encoding()
     args = parse_arguments()
 
-    # 在 setup config 前，先檢查遊戲是否已開啟並自動處置登入 (帶入 backend_mode 參數)
-    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend)
+    # 在 setup config 前，先檢查遊戲是否已開啟並自動處置登入 (帶入 backend_mode 與 monitor_index 參數)
+    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=args.monitor)
     if not launcher.ensure_game_ready():
         print("[!] 遊戲啟動或登入準備失敗，終止腳本。")
         sys.exit(1)

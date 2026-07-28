@@ -13,9 +13,10 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class ScreenCapturer:
-    def __init__(self, window_title="Blackfire Crusade", backend_mode=False):
+    def __init__(self, window_title="Blackfire Crusade", backend_mode=False, monitor_index=None):
         self.window_title = window_title
         self.backend_mode = backend_mode
+        self.monitor_index = monitor_index
         self.sct = mss.MSS()
         self._hwnd = None
 
@@ -202,11 +203,15 @@ class ScreenCapturer:
             
         try:
             if full_screen or rect is None:
-                logging.info("將擷取主螢幕畫面...")
-                primary_mon = next((m for m in self.sct.monitors[1:] if m.get("is_primary")), None)
-                if primary_mon is None:
-                    primary_mon = self.sct.monitors[1] if len(self.sct.monitors) > 1 else self.sct.monitors[0]
-                monitor = primary_mon
+                if self.monitor_index is not None and 0 < self.monitor_index < len(self.sct.monitors):
+                    logging.info(f"將擷取指定顯示器 (Monitor {self.monitor_index})...")
+                    monitor = self.sct.monitors[self.monitor_index]
+                else:
+                    logging.info("將擷取主螢幕畫面...")
+                    primary_mon = next((m for m in self.sct.monitors[1:] if m.get("is_primary")), None)
+                    if primary_mon is None:
+                        primary_mon = self.sct.monitors[1] if len(self.sct.monitors) > 1 else self.sct.monitors[0]
+                    monitor = primary_mon
                 dpi_factor = 1.0
             else:
                 monitor = {
@@ -217,6 +222,7 @@ class ScreenCapturer:
                 }
                 dpi_factor = 1.0
             
+            self.last_monitor = monitor
             screenshot = self.sct.grab(monitor)
             img = np.array(screenshot)
             img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)

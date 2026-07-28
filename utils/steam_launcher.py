@@ -39,11 +39,13 @@ class SteamGameLauncher:
         matcher: Optional[TemplateMatcher] = None,
         game_title: str = "Blackfire Crusade",
         backend_mode: bool = False,
+        monitor_index: Optional[int] = None,
         action_cooldown: float = 1.0
     ):
         self.game_title = game_title
         self.backend_mode = backend_mode
-        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode)
+        self.monitor_index = monitor_index
+        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode, monitor_index=monitor_index)
         self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode)
         self.matcher = matcher or TemplateMatcher()
         self.action_cooldown = action_cooldown
@@ -97,7 +99,16 @@ class SteamGameLauncher:
 
         box_x, box_y = pos_in_img
         matched_bbox = (max(0, box_x - bw // 2), max(0, box_y - bh // 2), bw, bh)
-        click_target = abs_click_pos if abs_click_pos else pos_in_img
+
+        # 計算特定螢幕在 Windows 虛擬座標系中的絕對點擊位置 (加上 monitor left/top 偏移)
+        if abs_click_pos is not None:
+            target_x, target_y = abs_click_pos
+        else:
+            mon = getattr(self.capturer, "last_monitor", None)
+            mon_left = mon.get("left", 0) if isinstance(mon, dict) else 0
+            mon_top = mon.get("top", 0) if isinstance(mon, dict) else 0
+            target_x = mon_left + pos_in_img[0]
+            target_y = mon_top + pos_in_img[1]
 
         try:
             DebugVisualizer.draw_detection(
@@ -110,7 +121,7 @@ class SteamGameLauncher:
         except Exception as e:
             logging.debug(f"DebugVisualizer 繪圖失敗: {e}")
 
-        self.mouse.click(click_target[0], click_target[1])
+        self.mouse.click(target_x, target_y)
 
     def is_game_open(self) -> bool:
         """
