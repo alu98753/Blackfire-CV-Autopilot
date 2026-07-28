@@ -153,7 +153,14 @@ class SteamGameLauncher:
             mon = getattr(self.capturer, "last_monitor", None)
             mon_l = mon.get("left", 0) if isinstance(mon, dict) else 0
             mon_t = mon.get("top", 0) if isinstance(mon, dict) else 0
-            abs_pos = (mon_l + pos[0], mon_t + pos[1])
+            dpi_scale = getattr(self.capturer, "last_dpi_scale", (1.0, 1.0))
+            if isinstance(dpi_scale, (tuple, list)) and len(dpi_scale) >= 2:
+                scale_x, scale_y = float(dpi_scale[0]), float(dpi_scale[1])
+            else:
+                scale_x, scale_y = 1.0, 1.0
+            log_pos_x = int(pos[0] / scale_x)
+            log_pos_y = int(pos[1] / scale_y)
+            abs_pos = (mon_l + log_pos_x, mon_t + log_pos_y)
             return pos, conf, abs_pos
 
         # 單元測試 Mock 環境跳過跨螢幕 fallback 避免破壞 side_effect 佇列
@@ -213,8 +220,15 @@ class SteamGameLauncher:
             mon = getattr(self.capturer, "last_monitor", None)
             mon_left = mon.get("left", 0) if isinstance(mon, dict) else 0
             mon_top = mon.get("top", 0) if isinstance(mon, dict) else 0
-            target_x = mon_left + pos_in_img[0]
-            target_y = mon_top + pos_in_img[1]
+            dpi_scale = getattr(self.capturer, "last_dpi_scale", (1.0, 1.0))
+            if isinstance(dpi_scale, (tuple, list)) and len(dpi_scale) >= 2:
+                scale_x, scale_y = float(dpi_scale[0]), float(dpi_scale[1])
+            else:
+                scale_x, scale_y = 1.0, 1.0
+            log_pos_x = int(pos_in_img[0] / scale_x)
+            log_pos_y = int(pos_in_img[1] / scale_y)
+            target_x = mon_left + log_pos_x
+            target_y = mon_top + log_pos_y
 
         try:
             DebugVisualizer.draw_detection(

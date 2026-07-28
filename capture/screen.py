@@ -184,6 +184,9 @@ class ScreenCapturer:
                     w = mfcDC.GetDeviceCaps(118)
                     h = mfcDC.GetDeviceCaps(117)
 
+                    log_w = mfcDC.GetDeviceCaps(win32con.HORZRES)
+                    log_h = mfcDC.GetDeviceCaps(win32con.VERTRES)
+
                     saveBitMap = win32ui.CreateBitmap()
                     saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
                     saveDC.SelectObject(saveBitMap)
@@ -198,6 +201,10 @@ class ScreenCapturer:
                     win32gui.DeleteObject(saveBitMap.GetHandle())
                     saveDC.DeleteDC()
                     mfcDC.DeleteDC()
+
+                    scale_x = w / log_w if log_w > 0 else 1.0
+                    scale_y = h / log_h if log_h > 0 else 1.0
+                    self.last_dpi_scale = (scale_x, scale_y)
 
                     self.last_monitor = {
                         "left": info["Monitor"][0],
