@@ -4,16 +4,16 @@ import logging
 
 def _wait_for_town(state_machine, rect):
     """
-    登入點擊後，等待並確認進入城鎮 (door.png 可見)
+    登入點擊後，等待並確認進入城鎮 (door.png 可見)。
+    具備 Click Until 自動重試機制：若等待 3 秒以上發現畫面仍滯留在登入畫面 login.png，會再次重試點擊直到 door.png 出現。
     """
-    logging.info("⏳ [登入流程] 已點擊登入按鈕，等待 5 秒進行初步載入...")
-    time.sleep(5.0)
-    
-    logging.info("🔍 [登入流程] 開始確認城鎮大門 [common/door.png] 是否可見...")
+    logging.info("🔍 [登入流程] 開始確認城鎮大門 [common/door.png] 是否可見 (Click Until 機制啟動)...")
     start_wait = time.time()
+    last_click_time = time.time()
+    click_count = 1
     door_found = False
     
-    while time.time() - start_wait < 30.0:
+    while time.time() - start_wait < 35.0:
         rect_current = state_machine.capturer.get_window_rect()
         if not rect_current:
             time.sleep(0.5)
@@ -32,6 +32,7 @@ def _wait_for_town(state_machine, rect):
                     logging.info(f"👉 [登入流程] 偵測到可能遮擋的彈窗按鈕 [{btn}] (相似度: {conf_btn:.4f})，進行關閉...")
                     state_machine.mouse.click(rect_current["left"] + pos_btn[0], rect_current["top"] + pos_btn[1])
                     dismissed_popup = True
+                    last_click_time = time.time()
                     time.sleep(1.0) # 等待彈窗關閉動畫
                     break
                     
@@ -44,11 +45,29 @@ def _wait_for_town(state_machine, rect):
             logging.info("🟢 [登入流程] 成功偵測到城鎮大門 [common/door.png]，且無彈窗遮擋，已確認完全進入城鎮！")
             door_found = True
             break
+
+        # 3. [Click Until 自動重試] 若超過 3 秒仍滯留在登入畫面 login.png，自動重試點擊登入按鈕
+        if time.time() - last_click_time >= 3.0:
+            pos_login, conf_login = state_machine.matcher.match(screen_img, "login/login.png", threshold=0.75)
+            if pos_login:
+                click_count += 1
+                pos_confirm, conf_confirm = state_machine.matcher.match(screen_img, "login/login_confirm.png", threshold=0.75)
+                if pos_confirm:
+                    logging.info(f"▶️ [登入流程 Click Until 第 {click_count} 次] 偵測到仍停留在登入畫面，再次點擊 [login_confirm.png] (信心度: {conf_confirm:.4f})...")
+                    state_machine.mouse.click(rect_current["left"] + pos_confirm[0], rect_current["top"] + pos_confirm[1])
+                else:
+                    logging.info(f"▶️ [登入流程 Click Until 第 {click_count} 次] 偵測到仍停留在登入畫面，採用相對座標再次點擊...")
+                    height_to_use = rect_current.get("height", 1080)
+                    scale_y = height_to_use / 1080.0
+                    click_x = rect_current["left"] + pos_login[0] + int(-3 * scale_y)
+                    click_y = rect_current["top"] + pos_login[1] + int(253 * scale_y)
+                    state_machine.mouse.click(click_x, click_y)
+                last_click_time = time.time()
             
         time.sleep(0.5)
             
     if not door_found:
-        logging.warning("⚠️ [登入流程] 等待城鎮大門超時 (30 秒)，嘗試繼續後續流程。")
+        logging.warning("⚠️ [登入流程] 等待城鎮大門超時 (35 秒)，嘗試繼續後續流程。")
 
 def handle_global_login(state_machine, screen_img, rect):
     """

@@ -93,7 +93,8 @@ class ScreenCapturer:
                 w_center_y = (w_top + w_bottom) // 2
 
                 is_on_target_mon = (mon_l <= w_center_x < mon_r) and (mon_t <= w_center_y < mon_b)
-                is_zoomed = win32gui.IsZoomed(hwnd)
+                is_zoomed = bool(ctypes.windll.user32.IsZoomed(hwnd))
+                is_iconic = bool(ctypes.windll.user32.IsIconic(hwnd))
 
                 logging.info(
                     f"🔍 [ScreenCapturer Debug] 視窗 HWND: {hwnd}, 當前 Rect: ({w_left}, {w_top}, {w_right}, {w_bottom}), "
@@ -105,7 +106,7 @@ class ScreenCapturer:
                     logging.info(f"🚚 [ScreenCapturer] 執行跨螢幕傳送至 Monitor {target_idx} ({mon_l}, {mon_t})...")
 
                     # 1. 關鍵步驟：若目前處於最大化或最小化狀態，必須先 SW_RESTORE，否則 Win32 禁止 SetWindowPos 跨螢幕移動
-                    if is_zoomed or win32gui.IsIconic(hwnd):
+                    if is_zoomed or is_iconic:
                         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                         time.sleep(0.15)
 

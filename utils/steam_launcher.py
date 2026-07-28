@@ -264,12 +264,13 @@ class SteamGameLauncher:
             logging.debug(f"is_game_open 檢查失敗: {e}")
             return False
 
-    def wait_and_handle_login(self, timeout: float = 45.0, poll_interval: float = 1.0) -> bool:
+    def wait_and_handle_login(self, timeout: float = 60.0, poll_interval: float = 0.5) -> bool:
         """
-        在「遊戲視窗畫面」(非全螢幕) 中輪詢搜尋登入畫面 [login/login.png]，
-        一旦偵測到登入畫面，便寫入 debug_click.png 並執行登入點擊。
+        在「遊戲視窗」中搜尋登入畫面 [login/login.png]。
+        一旦畫面載入完成並比對成功 login/login.png，執行視窗傳送至 1 號筆電螢幕並最大化全螢幕，
+        隨後返回 True，將後續登入點擊與 Click Until 流程交由主狀態機 LoginFlow 處理。
         """
-        logging.info("[SteamGameLauncher] 正在「遊戲視窗」(非全螢幕) 中搜尋登入畫面 [login/login.png]...")
+        logging.info("[SteamGameLauncher] 正在「遊戲視窗」中搜尋登入畫面 [login/login.png]...")
         start_time = time.time()
 
         while time.time() - start_time < timeout:
@@ -293,31 +294,11 @@ class SteamGameLauncher:
             if login_pos:
                 logging.info(f"🔑 [SteamGameLauncher] 遊戲畫面載入完成，偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！開始視窗移動與最大化全螢幕...")
                 
-                # 確定畫面完全載入渲染後，再觸發傳送與最大化全螢幕，100% 成功不卡頓！
+                # 確定畫面完全載入渲染後，觸發傳送與最大化全螢幕
                 if hasattr(self.capturer, "ensure_window_on_monitor"):
                     self.capturer.ensure_window_on_monitor()
 
-                # 移動與最大化後，重新獲取最新的全螢幕視窗座標與畫面進行點擊
-                rect = self.capturer.get_window_rect() or rect
-                new_img = self.capturer.capture(rect)
-                if new_img is not None:
-                    screen_img = new_img
-
-                confirm_pos, conf_confirm = self._safe_match(screen_img, "login/login_confirm.png", threshold=0.65)
-                if confirm_pos:
-                    abs_x = rect["left"] + confirm_pos[0]
-                    abs_y = rect["top"] + confirm_pos[1]
-                    logging.info(f"👉 [SteamGameLauncher] 定位「開始冒險」 [login_confirm.png] (相似度: {conf_confirm:.2f})，寫入 debug_click.png 並點擊...")
-                    self._visualize_and_click(
-                        screen_img, "login/login_confirm.png", confirm_pos, conf_confirm, abs_click_pos=(abs_x, abs_y)
-                    )
-                else:
-                    abs_x = rect["left"] + login_pos[0] - 3
-                    abs_y = rect["top"] + login_pos[1] + 253
-                    logging.info(f"👉 [SteamGameLauncher] 採用相對 login.png 垂直偏移點擊 ({abs_x}, {abs_y})...")
-                    self._visualize_and_click(
-                        screen_img, "login/login.png", login_pos, conf, abs_click_pos=(abs_x, abs_y)
-                    )
+                logging.info("✅ [SteamGameLauncher] 遊戲視窗已定位至 1 號筆電螢幕並最大化，準備交由主狀態機 LoginFlow 執行登入！")
                 return True
 
             time.sleep(poll_interval)
