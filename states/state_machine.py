@@ -22,6 +22,9 @@ from states.handlers import (
     HeroDrawHandler,
     BulletinBoardHandler
 )
+from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
+
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -45,6 +48,8 @@ class GameStateMachine:
     STATE_CHEST = "CHEST"                                # 神秘寶箱 (開寶箱) 流程
     STATE_HERO_DRAW = "HERO_DRAW"                        # 抽英雄 (酒館招募) 流程
     STATE_BULLETIN_BOARD = "BULLETIN_BOARD"              # 懸賞告示牌 (領任務) 流程
+    STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
+
 
 
     
@@ -134,6 +139,13 @@ class GameStateMachine:
         self.continue_template = "common/continue.png"
         self._ocr_reader = None
         
+        # 意外彈窗處置與 Watchdog 監控器元件 (來自 states.exceptions)
+        self.stashed_state = None
+        self.stashed_context = {}
+        self.exception_watchdog = ExceptionWatchdog(self)
+
+
+
         # 初始化註冊所有狀態處理器
         self.handlers = {
             self.STATE_NAVIGATING: NavigationHandler(self),
@@ -153,7 +165,49 @@ class GameStateMachine:
             self.STATE_CHEST: ChestHandler(self),
             self.STATE_HERO_DRAW: HeroDrawHandler(self),
             self.STATE_BULLETIN_BOARD: BulletinBoardHandler(self),
+            self.STATE_POPUP_RECOVERY: UnexpectedPopupRecoveryHandler(self),
         }
+
+    def stash_current_state(self, reason="unexpected_popup"):
+        """
+        暫存當前狀態與 context，並切換至意外彈窗復原流程 STATE_POPUP_RECOVERY。
+        具備 Stash Lock 防護：若已有暫存狀態未復原，不重覆覆蓋原始業務狀態。
+        """
+        import copy
+        if self.current_state != self.STATE_POPUP_RECOVERY and self.stashed_state is None:
+            self.stashed_state = self.current_state
+            self.stashed_context = {
+                "task_complete_phase": getattr(self, "task_complete_phase", None),
+                "last_state_change": self.last_state_change,
+                "context": copy.deepcopy(getattr(self, "context", {})),
+                "timestamp": time.time(),
+                "reason": reason
+            }
+            logging.info(f"💾 [StateStash] 已暫存原狀態: {self.stashed_state} (原因: {reason})")
+            self.transition_to(self.STATE_POPUP_RECOVERY)
+
+    def restore_stashed_state(self):
+        """
+        復原先前暫存之狀態與 context。若無暫存狀態則安全降級至 STATE_NAVIGATING。
+        """
+        if self.stashed_state:
+            target = self.stashed_state
+            logging.info(f"🔄 [StateRestore] 恢復原暫存狀態: {target}")
+            if isinstance(self.stashed_context, dict) and "context" in self.stashed_context:
+                self.context = self.stashed_context["context"]
+            self.stashed_state = None
+            self.stashed_context = {}
+            self.transition_to(target)
+            return True
+        else:
+            logging.warning("⚠️ [StateRestore] 無可恢復之暫存狀態，安全退避至 NAVIGATING")
+            self.transition_to(self.STATE_NAVIGATING)
+            return False
+
+
+
+
+
 
     @property
     def dungeon_defeat_count(self):
@@ -281,9 +335,13 @@ class GameStateMachine:
             time.sleep(0.2)
             return
 
+        # 0. 全域 Watchdog 雙重觸發器 (30s 非戰鬥 / 90s 戰鬥 / 30s 衝突掃描)
+        if self.exception_watchdog.check(screen_img):
+            return
 
 
         # B. 全域自動重登處理 (低頻率檢測)
+
         import sys
         is_testing = "unittest" in sys.modules
         now_time = time.time()
@@ -308,33 +366,12 @@ class GameStateMachine:
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
 
-        # A. 卡死監控 (stuck monitoring)
-        # 只有在非戰鬥、非探索、非未知的過渡狀態下，如果同一個狀態持續了太多幀，說明流程可能卡住了
+        # A. 狀態持續計數 (consecutive_stuck_count 供 ExceptionWatchdog 與排程追蹤)
         if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN, self.STATE_COLLECT_ONLY, self.STATE_LOADING]:
             self.consecutive_stuck_count += 1
-            
-            if self.consecutive_stuck_count >= 15:
-                logging.warning(f"⚠️ [防卡死] 狀態 [{self.current_state}] 連續 {self.consecutive_stuck_count} 幀未轉移，判定為流程卡住。嘗試點擊全域 confirm/continue 按鈕...")
-                
-                # 嘗試尋找全域確認或繼續/退出按鈕
-                stuck_dismissed = False
-                for btn in ["common/confirm.png", "common/ok.png", "common/continue.png", "common/quit.png"]:
-                    if os.path.exists(os.path.join("templates", btn)):
-                        pos, conf = self.matcher.match(screen_img, btn, threshold=0.8)
-                        if pos:
-                            logging.info(f"👉 [防卡死] 偵測到通用確認/繼續/退出按鈕 [{btn}] (信心度: {conf:.4f})，進行點擊以清除阻礙。")
-                            self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                            self.consecutive_stuck_count = 0  # 重置計數
-                            stuck_dismissed = True
-                            time.sleep(0.15)
-                            break
-                            
-                if not stuck_dismissed:
-                    logging.warning(f"⚠️ [防卡死] 未能在畫面上找到任何全域確認/繼續/退出按鈕，將狀態重設為 UNKNOWN 以進行重新定位。")
-                    self.transition_to(self.STATE_UNKNOWN)
-                    return
         else:
             self.consecutive_stuck_count = 0
+
 
         # 3. 全域彈窗與任務完成處理 (低頻率檢測)
         if should_check_low_freq:

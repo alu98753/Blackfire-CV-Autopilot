@@ -652,3 +652,15 @@ main.py                # 主迴圈
 4. **流程控制**：用狀態機把「開始 → 戰鬥 → 結算 → 再挑戰」串起來。
 
 完成這四步之後，你就已經掌握了大部分 2D 回合制遊戲自動化的核心能力，之後換其他同類型遊戲，通常只需要更換模板圖片和少量流程即可。
+
+---
+
+## 🛡️ 例外處理與卡死修復開發規範 (Exception Subsystem Rules)
+
+1. **嚴禁在業務主迴圈寫 ad-hoc 判斷**：
+   當發現新的意外彈窗或 UI 阻礙時，**嚴禁在 `state_machine.py` 或業務 Handler 裡寫硬編碼點擊**。
+2. **統一擴充 `states/exceptions/subflows/`**：
+   所有意外彈窗必須繼承 `BaseExceptionSubflow` 建立獨立 Subflow，並在 `config/exception_features.json` 與 `UnexpectedPopupRecoveryHandler` 註冊。
+3. **架構說明與 4-Step 開發指引**：
+   詳細開發規範與 Mermaid 圖表請參閱：[docs/exception_subsystem_architecture.md](docs/exception_subsystem_architecture.md)。
+
