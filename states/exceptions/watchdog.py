@@ -101,7 +101,8 @@ class ExceptionWatchdog:
                             return True
 
             # B. 檢測暗色遮罩 is_dimmed (僅在非戰鬥、非探索過渡狀態下生效，避免戰鬥畫面固有暗色背景與特效誤判)
-            if self.machine.current_state not in [self.machine.STATE_BATTLE, self.machine.STATE_EXPLORING]:
+            if self.machine.current_state not in [self.machine.STATE_BATTLE, self.machine.STATE_DUNGEON_EXPLORING]:
+
                 if popup_handler and hasattr(popup_handler, "analyze_dimming_overlay"):
                     dim_info = popup_handler.analyze_dimming_overlay(screen_img)
                     if dim_info.get("is_dimmed", False):
