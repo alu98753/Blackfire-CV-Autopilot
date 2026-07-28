@@ -1,22 +1,33 @@
 
 # 待辦事項與未來優化規劃 (Future Work & Edge Cases)
 
-## 🛡️ 邊界防守與長期掛機防護 (Edge Cases & AFK Stability)
+## 🛡️ 邊界防守與長掛機防護 (Edge Cases & AFK Stability)
 
-🔴 **Edge Case A: 網路連線中斷 / 伺服器斷線彈窗 (Network / Server Disconnect)**
-- **可能發生的狀況**：網路波動或伺服器斷線，遊戲跳出「連線逾時」、「重新連接」或「回到標題」彈窗。
-- **現有防禦與補強**：雖然目前有 `login_flow.py`，但需確保當斷線彈窗出現時，能自動點擊「重新連線」，或當遊戲崩潰時能嘗試從 Steam 重新開啟遊戲並自動點擊回到遊戲大廳。
+### 🌴 出國五天長掛機注意事項與維護指南
 
-- **[待辦] 出國五天長掛機注意事項與維護**：
-  - [已完成]血池可能滿出來要清 時間點 背包滿了 清背包的時候標記 此時就要回去town 再開始該子流程
-    - 尚未測試背包滿的情況 等下面那個做完一起測試
-  - [已經完成]特定的灰色物品要賣
-      要有true,false 在config中 因為有些有時很費 但是有時會需要,因此有時要賣有時不賣
-  - [已驗證無風險] 長時間運轉資源與記憶體管理 (實測 1,000 次循環淨增量僅 1.09MB，無洩漏)，確定無需額外處理。
-  - 斷線：看能不能從 Steam 重新開啟遊戲
-  - [已經完成]每天打首領
-  - [已經完成] 每天領任務與抽獎 (參見 [daily8.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily8.md))
-  - [cpu優化](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)
+#### 💡 1. 五天長掛機 3 大架構支柱
+1. **狀態持久化 ([DailyManager](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py))**：所有完成子流程與 08:05 重置週期自動記錄於 [daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json)，確保斷線重啟能無縫接續進度。
+2. **全局看門狗與自癒修復 ([Watchdog](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py) & [UnexpectedPopupRecoveryHandler](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/handler.py))**：超過 N 分鐘未推進時自動觸發全圖意外彈窗清理 (參見 [exception_subsystem_architecture.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/exception_subsystem_architecture.md))。
+3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止點擊未生效導致狀態過早推進。
+
+#### 🎯 2. 優化優先級矩陣 (Priority Hierarchy)
+- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換階段、按鈕點擊未驗證消失、全螢幕意外彈窗。**必須 100% 優先修復！**
+- **P1 級 (中高優先 / 長期穩定與資源防護)**：
+  - **CPU 功耗控管**：主迴圈保持 `0.05s` 適當睡眠，Python 佔用率維持在 $< 2\%$，防熱防死鎖 (參見 [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md))。
+  - **記憶體洩漏 (RAM Footprint)**：驗證長途運算無 Memory Leak，保持記憶體平穩。
+  - **每日 08:05 重置**：確保跨日自動觸發重置與狀態更新。
+- **P2 級 (最低優先 / 微幅速度與延遲)**：單次辨識或動作慢 0.2~0.5 秒完全不影響 5 天掛機穩定度，有空再優化。
+
+#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
+- [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Blood_Altar.md)]
+- [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md)]
+- [已完成] **每日討伐首領領主** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]
+- [已完成] **每日任務與免費抽獎** [REF: [daily8.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily8.md)]
+- [已完成] **CPU 低功耗睡眠控管** [REF: [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)]
+- [已驗證] **長時間運轉資源與記憶體無洩漏** (1,000 次循環僅增 1.09MB)
+
+#### 📌 4. 長掛機剩餘待補強項目
+- [ ] **Steam/網路嚴重斷線重連防護**：網路崩潰或遊戲關閉時，嘗試自動重新連接或從 Steam 重新拉起遊戲。
 
 ---
 
