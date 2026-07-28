@@ -137,7 +137,7 @@ class LordBossHandler(BaseStateHandler):
                         if fresh_img is not None:
                             for feat in battle_features:
                                 if os.path.exists(os.path.join("templates", feat)):
-                                    p_f, _ = self.matcher.match(fresh_img, feat, threshold=0.75, quiet=True)
+                                    p_f, _ = self.matcher.match(fresh_img, feat, threshold=0.85, quiet=True)
                                     if p_f:
                                         battle_entered = True
                                         break
@@ -271,7 +271,7 @@ class LordBossHandler(BaseStateHandler):
                                     if fresh_img is not None:
                                         for feat in battle_features:
                                             if os.path.exists(os.path.join("templates", feat)):
-                                                p_f, _ = self.matcher.match(fresh_img, feat, threshold=0.75, quiet=True)
+                                                p_f, _ = self.matcher.match(fresh_img, feat, threshold=0.85, quiet=True)
                                                 if p_f:
                                                     battle_entered = True
                                                     break
