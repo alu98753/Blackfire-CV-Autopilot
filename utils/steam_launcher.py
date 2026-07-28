@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 class LauncherPhase(Enum):
     SEARCH_WINDOWS = auto()           # 階段 1: 尋找並點擊 Windows 搜尋
     LAUNCH_STEAM = auto()             # 階段 2: 點擊 Steam 圖示並等待 Steam 視窗開啟
-    START_OR_UNSTUCK_GAME = auto()    # 階段 3: 檢查 Steam 介面並進行解卡或觸發開始遊戲
+    START_OR_UNSTUCK_GAME = auto()    # 階段 3: 檢查 Steam 介面並進行解卡或觸發開始遊戲 (Click Until 重試機制)
     WAIT_GAME_WINDOW = auto()         # 階段 4: 等待遊戲視窗開啟並定位
     COMPLETED = auto()                # 階段 5: 第一階段流程完成
     FAILED = auto()                   # 流程失敗/超時
@@ -25,7 +25,7 @@ class LauncherPhase(Enum):
 class SteamGameLauncher:
     """
     從 Windows 桌面/工作列自動開啟 Steam 並啟動/解卡遊戲的 Phase 狀態機類別 (Steam Game Launcher Subflow)。
-    完全以 DPI-unaware 模式與 Multi-Scale 多重縮放比對運作。
+    採用 Click Until 持續點擊與雙重自動重試機制，完全以 DPI-unaware 模式與 Multi-Scale 多重縮放比對運作。
     """
 
     TPL_SEARCH = "reload_game/search.png"
@@ -334,6 +334,7 @@ class SteamGameLauncher:
         self.phase = LauncherPhase.SEARCH_WINDOWS
         start_time = time.time()
         last_action_time = 0.0
+        start_click_count = 0
 
         while time.time() - start_time < timeout:
             if self.phase == LauncherPhase.COMPLETED:
@@ -346,13 +347,25 @@ class SteamGameLauncher:
 
             now = time.time()
 
-            # 階段 4：等待遊戲視窗開啟 (不需要全圖截圖)
+            # ----------------------------------------------------
+            # 階段 4: WAIT_GAME_WINDOW (等待遊戲視窗開啟 + 自動重試 Click Until)
+            # ----------------------------------------------------
             if self.phase == LauncherPhase.WAIT_GAME_WINDOW:
                 rect = self.capturer.get_window_rect(quiet=True)
                 if rect is not None:
                     logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟與定位: {rect}")
                     self.transition_to(LauncherPhase.COMPLETED, "已偵測到遊戲視窗")
                     continue
+
+                # 若超過 2.5 秒遊戲視窗仍未開啟，抓取畫面檢查 start_game.png 是否仍然存在 (點擊未成功觸發)
+                if now - last_action_time >= 2.5:
+                    img_chk = self.capturer.capture(full_screen=True)
+                    if img_chk is not None:
+                        start_pos, _, _ = self._match_anywhere(img_chk, self.TPL_START_GAME, threshold=0.65)
+                        if start_pos:
+                            logging.info("🔄 [SteamGameLauncher] 偵測到 start_game.png 仍存在 (先前點擊未觸發)，返回 START_OR_UNSTUCK_GAME 再次點擊...")
+                            self.transition_to(LauncherPhase.START_OR_UNSTUCK_GAME, "自動重試點擊開始遊戲")
+                            continue
                 time.sleep(poll_interval)
                 continue
 
@@ -371,7 +384,7 @@ class SteamGameLauncher:
             bottom_fifth_roi = (0, int(sh * 0.8), sw, int(sh * 0.2))
 
             # ----------------------------------------------------
-            # 階段 1: SEARCH_WINDOWS
+            # 階段 1: SEARCH_WINDOWS (Click Until 機制)
             # ----------------------------------------------------
             if self.phase == LauncherPhase.SEARCH_WINDOWS:
                 start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
@@ -398,7 +411,7 @@ class SteamGameLauncher:
                     self.transition_to(LauncherPhase.LAUNCH_STEAM, "已點擊 Windows 搜尋並輸入 steam")
 
             # ----------------------------------------------------
-            # 階段 2: LAUNCH_STEAM (Click until Steam opened)
+            # 階段 2: LAUNCH_STEAM (Click Until Steam 開啟)
             # ----------------------------------------------------
             elif self.phase == LauncherPhase.LAUNCH_STEAM:
                 start_pos, _, _ = self._match_anywhere(img, self.TPL_START_GAME, threshold=0.65)
@@ -414,7 +427,7 @@ class SteamGameLauncher:
                     last_action_time = now
 
             # ----------------------------------------------------
-            # 階段 3: START_OR_UNSTUCK_GAME (解卡與啟動)
+            # 階段 3: START_OR_UNSTUCK_GAME (Click Until 解卡與啟動)
             # ----------------------------------------------------
             elif self.phase == LauncherPhase.START_OR_UNSTUCK_GAME:
                 stop_pos, stop_conf, stop_abs = self._match_anywhere(img, self.TPL_STOP_GAME, threshold=0.65)
@@ -427,10 +440,12 @@ class SteamGameLauncher:
                     continue
 
                 if start_pos and not stop_pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"▶️ [SteamGameLauncher] 點擊「開始遊戲」 (start_game.png, 座標: {start_abs})，寫入 debug_click.png 並點擊...")
+                    start_click_count += 1
+                    logging.info(f"▶️ [SteamGameLauncher] [Click Until 第 {start_click_count} 次] 點擊「開始遊戲」 (start_game.png, 座標: {start_abs})，寫入 debug_click.png 並點擊...")
                     self._visualize_and_click(img, self.TPL_START_GAME, start_pos, start_conf, abs_click_pos=start_abs)
                     last_action_time = now
-                    self.transition_to(LauncherPhase.WAIT_GAME_WINDOW, "已點擊開始遊戲")
+                    self.transition_to(LauncherPhase.WAIT_GAME_WINDOW, f"已觸發第 {start_click_count} 次點擊開始遊戲")
+                    continue
 
             time.sleep(poll_interval)
 
