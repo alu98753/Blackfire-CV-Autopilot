@@ -137,9 +137,19 @@ class ScreenCapturer:
                     )
                     time.sleep(0.15)
 
-                    # 3. 在目標顯示器上呼叫 SW_MAXIMIZE 填滿全螢幕
-                    win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
-                    time.sleep(0.3)
+                    # 3. 搶佔前景焦點並發起 SW_SHOWMAXIMIZED / SC_MAXIMIZE 強制填滿全螢幕
+                    try:
+                        ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    except Exception:
+                        pass
+                    win32gui.ShowWindow(hwnd, win32con.SW_SHOWMAXIMIZED)
+                    time.sleep(0.2)
+
+                    # 雙重護欄：若仍未處於 IsZoomed 狀態，對 HWND 發送標題列最大化按鈕訊息 (WM_SYSCOMMAND, SC_MAXIMIZE)
+                    if not bool(ctypes.windll.user32.IsZoomed(hwnd)):
+                        logging.info("🔄 [ScreenCapturer] SW_SHOWMAXIMIZED 未即時生效，對視窗發送 SC_MAXIMIZE 標題列訊息強制最大化...")
+                        win32gui.SendMessage(hwnd, win32con.WM_SYSCOMMAND, win32con.SC_MAXIMIZE, 0)
+                        time.sleep(0.2)
 
                     # 4. 驗證移動結果
                     new_rect = win32gui.GetWindowRect(hwnd)
