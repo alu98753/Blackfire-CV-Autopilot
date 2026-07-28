@@ -79,17 +79,15 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
 
             logging.info(f"🛡️ [{self.name}] 成功匹配 Wheel_of_Fortune [{tpl_box}] (相似度: {conf_box:.4f}) 與 quit [{matched_tpl}] (相似度: {conf_quit:.4f})，準備點擊退出: ({abs_x}, {abs_y})")
             
-            # 呼叫 DebugVisualizer 畫出 Wheel_of_Fortune.png 的紅色空心框與點擊位置
-            DebugVisualizer.draw_detection(
+            # 使用基類通用方法畫出 trigger_template (exceptions/Wheel_of_Fortune.png) 的紅色空心框，並調用 5.0 秒開發現場暫停
+            self.draw_trigger_visualizer(
                 screen_img,
+                trigger_tpl=tpl_box,
+                matched_center=pos_box,
+                confidence=conf_box,
                 click_pos=click_pt,
-                matched_bbox=wheel_bbox,
-                labels={"match": f"Wheel_of_Fortune ({conf_box:.2f})", "click": "Click Quit"}
+                pause_sec=5.0
             )
-
-            # ⏸️ 開發者中斷點 (Breakpoint)：在點擊前暫停供檢查 debug_click.png
-            logging.info(f"⏸️ [Debug Breakpoint] 已成功在 Wheel_of_Fortune.png (位址 {wheel_bbox}) 劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
-            time.sleep(5.0)
 
             if mouse:
                 mouse.click(abs_x, abs_y)
@@ -105,16 +103,14 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
 
                         logging.info(f"🛡️ [{self.name}] 全圖備援成功匹配退出按鈕 [{quit_tpl}] (信心度: {conf_quit:.4f})，準備點擊: ({abs_x}, {abs_y})")
                         
-                        DebugVisualizer.draw_detection(
+                        self.draw_trigger_visualizer(
                             screen_img,
+                            trigger_tpl=tpl_box,
+                            matched_center=pos_box,
+                            confidence=conf_box,
                             click_pos=click_pt,
-                            matched_bbox=wheel_bbox,
-                            labels={"match": f"Wheel_of_Fortune ({conf_box:.2f})", "click": "Click Quit"}
+                            pause_sec=5.0
                         )
-
-                        # ⏸️ 開發者中斷點 (Breakpoint)
-                        logging.info(f"⏸️ [Debug Breakpoint] 已成功在 Wheel_of_Fortune.png (位址 {wheel_bbox}) 劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
-                        time.sleep(5.0)
 
                         if mouse:
                             mouse.click(abs_x, abs_y)
@@ -124,17 +120,18 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                 cx = rect["left"] + box_x + 500
                 cy = rect["top"] + box_y + 40
                 logging.info(f"🛡️ [{self.name}] 未精確匹配到 quit 按鈕，點擊 Wheel_of_Fortune 右上角預設退出座標: ({cx}, {cy})")
-                DebugVisualizer.draw_detection(
+                self.draw_trigger_visualizer(
                     screen_img,
+                    trigger_tpl=tpl_box,
+                    matched_center=pos_box,
+                    confidence=conf_box,
                     click_pos=(box_x + 500, box_y + 40),
-                    matched_bbox=wheel_bbox,
-                    labels={"match": f"Wheel_of_Fortune ({conf_box:.2f})", "click": "Fallback Click"}
+                    pause_sec=5.0
                 )
-                logging.info(f"⏸️ [Debug Breakpoint] 已成功在 Wheel_of_Fortune.png (位址 {wheel_bbox}) 劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
-                time.sleep(5.0)
 
                 if mouse:
                     mouse.click(cx, cy)
+
 
 
 

@@ -1,6 +1,8 @@
 import os
+import time
 import logging
 from typing import Optional, Tuple
+import numpy as np
 
 
 def safe_match(matcher, screen_img, template_name, threshold=0.75) -> Tuple[Optional[Tuple[int, int]], float]:
@@ -36,11 +38,53 @@ class BaseExceptionSubflow:
     def execute(self, screen_img, mouse, rect, matcher=None) -> bool:
         """
         執行本 Subflow 的單步點擊/關閉處置邏輯 (純化執行，無狀態操控)。
-        
-        :param screen_img: 遊戲畫面影像
-        :param mouse: 滑鼠控制物件
-        :param rect: 視窗座標範圍字典
-        :param matcher: TemplateMatcher 實例
-        :return: True 代表 Subflow 處置完成且視窗已點擊關閉；False 代表仍需後續步驟
         """
         raise NotImplementedError
+
+    def draw_trigger_visualizer(
+        self,
+        screen_img: np.ndarray,
+        trigger_tpl: str,
+        matched_center: Tuple[int, int],
+        confidence: float,
+        click_pos: Optional[Tuple[int, int]] = None,
+        pause_sec: float = 0.0,
+        filename: str = "debug_click.png"
+    ) -> bool:
+        """
+        通用 Subflow trigger_template 紅色空心框視覺化繪圖方法。
+        
+        :param screen_img: 原始截圖
+        :param trigger_tpl: 觸發圖案檔名 (例如 "exceptions/Wheel_of_Fortune.png")
+        :param matched_center: 匹配到的中心座標 (x, y)
+        :param confidence: 匹配相似度
+        :param click_pos: 點擊座標 (x, y)
+        :param pause_sec: 開發現場暫停秒數 (預設 0.0 秒；Wheel_of_Fortune 可設為 5.0s)
+        :param filename: 存檔檔名 (預設 debug_click.png)
+        """
+        import cv2
+        from states.debug import DebugVisualizer
+
+        bw, bh = 100, 100
+        tpl_path = os.path.join("templates", trigger_tpl)
+        if os.path.exists(tpl_path):
+            img = cv2.imread(tpl_path)
+            if img is not None and len(img.shape) >= 2:
+                bh, bw = img.shape[:2]
+
+        box_x, box_y = matched_center
+        matched_bbox = (max(0, box_x - bw // 2), max(0, box_y - bh // 2), bw, bh)
+
+        res = DebugVisualizer.draw_detection(
+            screen_img,
+            click_pos=click_pos,
+            matched_bbox=matched_bbox,
+            labels={"match": f"{self.name} ({confidence:.2f})", "click": f"Click {self.name}"},
+            filename=filename
+        )
+
+        if pause_sec > 0:
+            logging.info(f"⏸️ [Debug Breakpoint] [{self.name}] 已在 [{trigger_tpl}] (位址 {matched_bbox}) 劃出紅色空心框並寫入 {filename}！暫停 {pause_sec:.1f} 秒供開發者對照檢查...")
+            time.sleep(pause_sec)
+
+        return res
