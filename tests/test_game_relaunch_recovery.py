@@ -129,6 +129,26 @@ class TestGameRelaunchRecovery(unittest.TestCase):
                 self.assertNotIn(f"taskkill /f /pid {script_pid}", cmd_str)
                 self.assertNotIn("WINDOWTITLE", cmd_str)
 
+    @patch.object(GameRelaunchSubflow, "execute", return_value=True)
+    def test_6_window_lost_5times_auto_relaunch(self, mock_relaunch_execute):
+        """
+        測試 6：當連刷 5 次 rect is None (找不到視窗) 時，自動發起 GameRelaunchSubflow 重啟遊戲
+        """
+        self.machine.window_lost_count = 0
+        self.mock_capturer.get_window_rect.return_value = None
+
+        # 前 4 次回傳 None，僅印 warning，不發起重啟
+        for i in range(4):
+            self.machine.step()
+            mock_relaunch_execute.assert_not_called()
+            self.assertEqual(self.machine.window_lost_count, i + 1)
+
+        # 第 5 次回傳 None，應自動發起 GameRelaunchSubflow
+        self.machine.step()
+        mock_relaunch_execute.assert_called_once()
+        self.assertEqual(mock_relaunch_execute.call_args[1]["reason"], "game_window_closed_by_user")
+        self.assertEqual(self.machine.window_lost_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

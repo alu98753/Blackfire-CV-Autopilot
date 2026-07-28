@@ -350,9 +350,23 @@ class GameStateMachine:
         self.last_rect = rect # 快取當前幀最穩定的物理邊界
         
         if rect is None:
-            logging.warning("⚠️ 找不到遊戲視窗，請確認遊戲未縮小且視窗名稱符合設定。")
+            self.window_lost_count = getattr(self, "window_lost_count", 0) + 1
+            logging.warning(f"⚠️ 找不到遊戲視窗 (連續第 {self.window_lost_count} 次)，請確認遊戲未縮小且視窗名稱符合設定。")
+            
+            # 若連續 5 次 (~2.5s) 找不到遊戲視窗，判定遊戲已被使用者手動關閉或崩潰，觸發 GameRelaunchSubflow 自動重開
+            if self.window_lost_count >= 5:
+                logging.warning("🚨 連續 5 次偵測不到遊戲視窗 (遊戲已被手動關閉或崩潰)，發起 GameRelaunchSubflow 自動重開流程！")
+                self.window_lost_count = 0
+                from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
+                relaunch_subflow = GameRelaunchSubflow()
+                relaunch_subflow.execute(self, reason="game_window_closed_by_user")
+                return
+
             time.sleep(0.5)
             return
+
+        # 視窗存在，重置視窗遺失計數器
+        self.window_lost_count = 0
             
         screen_img = self.capturer.capture(rect)
         if screen_img is None:
