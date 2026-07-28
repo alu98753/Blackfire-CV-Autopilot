@@ -50,6 +50,17 @@ class ScreenCapturer:
                     logging.warning(f"偵測到視窗 '{self.window_title}' 已最小化，請還原視窗以進行截圖。")
                 return None
 
+            if bool(ctypes.windll.user32.IsZoomed(hwnd)):
+                client_pt = win32gui.ClientToScreen(hwnd, (0, 0))
+                client_rect = win32gui.GetClientRect(hwnd)
+                return {
+                    "left": client_pt[0],
+                    "top": client_pt[1],
+                    "width": client_rect[2],
+                    "height": client_rect[3],
+                    "title": self.window_title
+                }
+
             rect = win32gui.GetWindowRect(hwnd)
             return {
                 "left": rect[0],
