@@ -41,6 +41,14 @@ class GenericAntiStuckSubflow(BaseExceptionSubflow):
                     cx = rect["left"] + pos[0]
                     cy = rect["top"] + pos[1]
                     logging.info(f"🛡️ [{self.name}] 偵測到通用防卡死全域按鈕 [{tpl}] (相似度: {conf:.4f})，進行點擊以清除阻礙: ({cx}, {cy})")
+                    self.draw_trigger_visualizer(
+                        screen_img,
+                        trigger_tpl=tpl,
+                        matched_center=pos,
+                        confidence=conf,
+                        click_pos=pos,
+                        pause_sec=0.0
+                    )
                     if mouse:
                         mouse.click(cx, cy)
                     time.sleep(0.5)
