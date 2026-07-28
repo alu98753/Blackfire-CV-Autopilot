@@ -109,6 +109,29 @@ class TestSubflowDeveloperContract(unittest.TestCase):
                 f"Subflow '{subflow_name}' 註冊的 trigger_template 檔案不存在：{full_path}"
             )
 
+    def test_notify_ui_progress_guidelines_and_contract(self):
+        """[規範 5] 心跳規範：GameStateMachine.notify_ui_progress 必須具備明確開發原則 Docstring，且能重置卡住狀態"""
+        from states.state_machine import GameStateMachine
+        import time
+
+        # A. Docstring 規範斷言：必須包含開發原則與 Valid Progress 關鍵字
+        doc = GameStateMachine.notify_ui_progress.__doc__
+        self.assertIsNotNone(doc, "GameStateMachine.notify_ui_progress 必須撰寫 Docstring！")
+        self.assertIn("Valid UI Progress", doc, "notify_ui_progress Docstring 必須強調『真實有效之 UI 狀態進展』！")
+        self.assertIn("開發者呼叫原則", doc, "notify_ui_progress Docstring 必須包含『開發者呼叫原則』！")
+
+        # B. 功能契約斷言：調用 notify_ui_progress 必須刷新 last_state_change 並歸零 consecutive_stuck_count
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+
+        sm.last_state_change = time.time() - 50.0
+        sm.consecutive_stuck_count = 5
+
+        sm.notify_ui_progress()
+
+        self.assertAlmostEqual(sm.last_state_change, time.time(), delta=1.0)
+        self.assertEqual(sm.consecutive_stuck_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

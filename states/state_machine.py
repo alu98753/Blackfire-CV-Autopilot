@@ -254,11 +254,22 @@ class GameStateMachine:
 
     def notify_ui_progress(self):
         """
-        當 Handler 內部進行了有效 UI 操作 (如滑動、點擊商品、確定出售等) 時呼叫，
-        主動重置 last_state_change 與卡住計數，防止 ExceptionWatchdog 在長途流程中誤判卡死。
+        通知狀態機當前 Handler 內部發生了「真實有效之 UI 狀態進展 (Valid UI Progress)」。
+        更新 last_state_change 與連鎖卡住計數，防止 ExceptionWatchdog 在長途流程中誤判卡死。
+
+        ⚠️ [開發者呼叫原則 (Developer Call Guidelines)]：
+        1. ✅ 允許呼叫時機 (Valid Progress)：
+           - 確定完成一次真實交易/選單操作 (如成功點擊 confirm/ok，或商品完成出售)。
+           - 內部 Iterator 索引成功推進 (如商品 index + 1、關卡清單翻頁)。
+           - 畫面 Phase 階段真實轉移 (如 INIT -> ENTERED_BUILDING -> SELL_MENU_OPEN)。
+        2. ❌ 嚴禁呼叫時機 (Invalid Progress / False Reset)：
+           - 剛發起盲點或未確認 UI 是否回應前。
+           - 模板比對失敗、找不到按鈕時的單純 return / sleep。
+           - 重複對無反應區域發起點擊時 (若在此呼叫會破壞 Watchdog 卡死救援能力)。
         """
         self.last_state_change = time.time()
         self.consecutive_stuck_count = 0
+
 
 
 
