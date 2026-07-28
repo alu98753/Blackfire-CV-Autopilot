@@ -288,16 +288,28 @@ class SteamGameLauncher:
             except Exception:
                 pass
 
-            # 1. 檢查 common/door.png 是否已在城鎮 (若已經在城鎮中則免登入)
+            # 1. 檢查 common/door.png 是否已在城鎮 (若已經在城鎮中則畫面已完全載入完成)
             door_pos, _ = self._safe_match(screen_img, "common/door.png", threshold=0.65)
             if door_pos:
-                logging.info("🏰 [SteamGameLauncher] 遊戲已直接處於城鎮大門畫面 (door.png 可見)，無需登入。")
+                logging.info("🏰 [SteamGameLauncher] 遊戲畫面載入完成且直接處於城鎮大門 (door.png 可見)！進行視窗移動與最大化全螢幕...")
+                if hasattr(self.capturer, "ensure_window_on_monitor"):
+                    self.capturer.ensure_window_on_monitor()
                 return True
 
             # 2. 檢查登入主畫面 login/login.png
             login_pos, conf = self._safe_match(screen_img, "login/login.png", threshold=0.65)
             if login_pos:
-                logging.info(f"🔑 [SteamGameLauncher] 在遊戲視窗內偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！開始執行登入流程...")
+                logging.info(f"🔑 [SteamGameLauncher] 遊戲畫面載入完成，偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！開始視窗移動與最大化全螢幕...")
+                
+                # 確定畫面完全載入渲染後，再觸發傳送與最大化全螢幕，100% 成功不卡頓！
+                if hasattr(self.capturer, "ensure_window_on_monitor"):
+                    self.capturer.ensure_window_on_monitor()
+
+                # 移動與最大化後，重新獲取最新的全螢幕視窗座標與畫面進行點擊
+                rect = self.capturer.get_window_rect() or rect
+                new_img = self.capturer.capture(rect)
+                if new_img is not None:
+                    screen_img = new_img
 
                 confirm_pos, conf_confirm = self._safe_match(screen_img, "login/login_confirm.png", threshold=0.65)
                 if confirm_pos:
@@ -326,8 +338,7 @@ class SteamGameLauncher:
         全流程開關與登入檢測入口：
         1. 判斷 is_game_open()
         2. 若未開啟，跑 run_launch_subflow() 啟動遊戲
-        3. 自動將遊戲視窗定位移動至 1 號筆電螢幕 (Monitor 1)
-        4. 遊戲開啟後，在「遊戲視窗」(非全螢幕) 中等待登入畫面並執行登入
+        3. 在「遊戲視窗」中等待畫面完全載入 (login.png) 後，自動移動至 1 號筆電螢幕並最大化全螢幕
         """
         logging.info("[SteamGameLauncher] 開始執行 ensure_game_ready 檢查與啟動流程...")
 
@@ -338,10 +349,6 @@ class SteamGameLauncher:
                 return False
         else:
             logging.info("✅ 偵測到遊戲已開啟，跳過 Steam 啟動流程。")
-
-        # 自動將遊戲視窗移動至指定筆電螢幕 (Monitor 1)
-        if hasattr(self.capturer, "ensure_window_on_monitor"):
-            self.capturer.ensure_window_on_monitor()
 
         return self.wait_and_handle_login()
 
@@ -371,10 +378,7 @@ class SteamGameLauncher:
             for _ in range(max_ticks):
                 rect = self.capturer.get_window_rect(quiet=True)
                 if rect is not None:
-                    # 自動將遊戲視窗定位移動至 1 號筆電螢幕
-                    if hasattr(self.capturer, "ensure_window_on_monitor"):
-                        self.capturer.ensure_window_on_monitor()
-                    logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟並定位於 1 號筆電螢幕: {rect}")
+                    logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗 HWND 已成功建立: {rect}")
                     self.transition_to(LauncherPhase.COMPLETED, "已偵測到遊戲視窗")
                     logging.info("✅ [SteamGameLauncher] 第一階段 Steam 啟動遊戲 Subflow 成功執行完畢！")
                     return True
