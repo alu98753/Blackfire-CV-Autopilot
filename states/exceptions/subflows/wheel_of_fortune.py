@@ -22,20 +22,20 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
         self.box_templates = ["exceptions/Wheel_of_Fortune.png"]
         self.quit_candidates = ["common/quit.png"]
 
-    def _find_box(self, screen_img, matcher) -> Tuple[Optional[Tuple[int, int]], str]:
+    def _find_box(self, screen_img, matcher) -> Tuple[Optional[Tuple[int, int]], float, str]:
         for tpl in self.box_templates:
             if os.path.exists(os.path.join("templates", tpl)):
                 pos, conf = safe_match(matcher, screen_img, tpl, threshold=0.75)
                 if pos:
-                    return pos, tpl
-        return None, ""
+                    return pos, conf, tpl
+        return None, 0.0, ""
 
     def can_handle(self, screen_img, matcher, detector=None) -> bool:
-        pos, _ = self._find_box(screen_img, matcher)
+        pos, _, _ = self._find_box(screen_img, matcher)
         return pos is not None
 
     def execute(self, screen_img, mouse, rect, matcher=None) -> bool:
-        pos_box, tpl_box = self._find_box(screen_img, matcher)
+        pos_box, conf_box, tpl_box = self._find_box(screen_img, matcher)
         if not pos_box:
             return True
 
@@ -43,6 +43,16 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
         crop_top = max(0, box_y)
         crop_left = max(0, box_x)
         crop_w, crop_h = 900, 700
+
+        # 動態計算 Wheel_of_Fortune.png 模板圖案本身的紅色空心 Bounding Box
+        bw, bh = 800, 600
+        tpl_box_path = os.path.join("templates", tpl_box)
+        if os.path.exists(tpl_box_path):
+            box_img = cv2.imread(tpl_box_path)
+            if box_img is not None and len(box_img.shape) >= 2:
+                bh, bw = box_img.shape[:2]
+
+        wheel_bbox = (max(0, box_x - bw // 2), max(0, box_y - bh // 2), bw, bh)
 
         # 1. 於 Wheel_of_Fortune ROI 內部尋找 quit 按鈕 (嚴格門檻 0.75 避免假陽性誤配)
         wheel_crop = screen_img
@@ -61,34 +71,24 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                     break
 
         from states.debug import DebugVisualizer
-        roi_box = (crop_left, crop_top, crop_w, crop_h)
 
         if pos_quit:
             abs_x = rect["left"] + crop_left + pos_quit[0]
             abs_y = rect["top"] + crop_top + pos_quit[1]
+            click_pt = (crop_left + pos_quit[0], crop_top + pos_quit[1])
 
-            # 動態讀取模板實際寬高，計算 Bounding Box 左上角
-            tw, th = 40, 40
-            tpl_path = os.path.join("templates", matched_tpl)
-            if os.path.exists(tpl_path):
-                tpl_img = cv2.imread(tpl_path)
-                if tpl_img is not None and len(tpl_img.shape) >= 2:
-                    th, tw = tpl_img.shape[:2]
-
-            matched_bbox = (crop_left + pos_quit[0] - tw // 2, crop_top + pos_quit[1] - th // 2, tw, th)
-            logging.info(f"🛡️ [{self.name}] 成功在 Wheel_of_Fortune ROI 內部匹配 [{matched_tpl}] (信心度: {conf_quit:.4f})，準備點擊退出: ({abs_x}, {abs_y})")
+            logging.info(f"🛡️ [{self.name}] 成功匹配 Wheel_of_Fortune [{tpl_box}] (相似度: {conf_box:.4f}) 與 quit [{matched_tpl}] (相似度: {conf_quit:.4f})，準備點擊退出: ({abs_x}, {abs_y})")
             
-            # 呼叫 DebugVisualizer 繪製紅色空心 ROI 框、Match BBox 與 Click Point
+            # 呼叫 DebugVisualizer 畫出 Wheel_of_Fortune.png 的紅色空心框與點擊位置
             DebugVisualizer.draw_detection(
                 screen_img,
-                click_pos=(crop_left + pos_quit[0], crop_top + pos_quit[1]),
-                matched_bbox=matched_bbox,
-                roi_box=roi_box,
-                labels={"roi": "Wheel_of_Fortune ROI", "match": f"Quit ({conf_quit:.2f})", "click": "Click Quit"}
+                click_pos=click_pt,
+                matched_bbox=wheel_bbox,
+                labels={"match": f"Wheel_of_Fortune ({conf_box:.2f})", "click": "Click Quit"}
             )
 
-            # ⏸️ 開發者中斷點 (Breakpoint)：在發起點擊退出前暫停供檢查 debug_click.png
-            logging.info("⏸️ [Debug Breakpoint] 已成功劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
+            # ⏸️ 開發者中斷點 (Breakpoint)：在點擊前暫停供檢查 debug_click.png
+            logging.info(f"⏸️ [Debug Breakpoint] 已成功在 Wheel_of_Fortune.png (位址 {wheel_bbox}) 劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
             time.sleep(5.0)
 
             if mouse:
@@ -101,27 +101,19 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                     if pos_quit:
                         abs_x = rect["left"] + pos_quit[0]
                         abs_y = rect["top"] + pos_quit[1]
+                        click_pt = (pos_quit[0], pos_quit[1])
 
-                        tw, th = 40, 40
-                        tpl_path = os.path.join("templates", quit_tpl)
-                        if os.path.exists(tpl_path):
-                            tpl_img = cv2.imread(tpl_path)
-                            if tpl_img is not None and len(tpl_img.shape) >= 2:
-                                th, tw = tpl_img.shape[:2]
-
-                        matched_bbox = (pos_quit[0] - tw // 2, pos_quit[1] - th // 2, tw, th)
                         logging.info(f"🛡️ [{self.name}] 全圖備援成功匹配退出按鈕 [{quit_tpl}] (信心度: {conf_quit:.4f})，準備點擊: ({abs_x}, {abs_y})")
                         
                         DebugVisualizer.draw_detection(
                             screen_img,
-                            click_pos=(pos_quit[0], pos_quit[1]),
-                            matched_bbox=matched_bbox,
-                            roi_box=roi_box,
-                            labels={"roi": "Wheel_of_Fortune ROI", "match": f"Quit ({conf_quit:.2f})", "click": "Click Quit"}
+                            click_pos=click_pt,
+                            matched_bbox=wheel_bbox,
+                            labels={"match": f"Wheel_of_Fortune ({conf_box:.2f})", "click": "Click Quit"}
                         )
 
                         # ⏸️ 開發者中斷點 (Breakpoint)
-                        logging.info("⏸️ [Debug Breakpoint] 已成功劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
+                        logging.info(f"⏸️ [Debug Breakpoint] 已成功在 Wheel_of_Fortune.png (位址 {wheel_bbox}) 劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
                         time.sleep(5.0)
 
                         if mouse:
@@ -135,14 +127,15 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                 DebugVisualizer.draw_detection(
                     screen_img,
                     click_pos=(box_x + 500, box_y + 40),
-                    roi_box=roi_box,
-                    labels={"roi": "Wheel_of_Fortune ROI", "click": "Fallback Click"}
+                    matched_bbox=wheel_bbox,
+                    labels={"match": f"Wheel_of_Fortune ({conf_box:.2f})", "click": "Fallback Click"}
                 )
-                logging.info("⏸️ [Debug Breakpoint] 已成功寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
+                logging.info(f"⏸️ [Debug Breakpoint] 已成功在 Wheel_of_Fortune.png (位址 {wheel_bbox}) 劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
                 time.sleep(5.0)
 
                 if mouse:
                     mouse.click(cx, cy)
+
 
 
         time.sleep(0.5)
