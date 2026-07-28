@@ -1,0 +1,200 @@
+{
+  "deterministic_quests": [
+    "清除骷髏",
+    "清除蜘蛛",
+    "清除樹人",
+    "清除野豬",
+    "清除熊",
+    "清除沙蟲",
+    "清除蛙人",
+    "清除蛤蟆",
+    "討伐惡魔",
+    "擊敗冰元素"
+  ],
+  "banner_verify_quests": [
+    "冰雪洞窟的暴君",
+    "史萊姆王的毀滅",
+    "破除森林的枷鎖",
+    "消滅蛛王與蛛後",
+    "雪山詛咒"
+  ],
+  "ignored_quests": [
+    "獵金之蟲",
+    "完成任何地下城",
+    "敵人剿滅",
+    "擊殺首領",
+    "虛空行者的審判"
+  ],
+  "typo_groups": {
+    "毀滅": [
+      "致滅",
+      "毀減"
+    ],
+    "蛛後": [
+      "蛛后",
+      "蛛俊"
+    ],
+    "野豬": [
+      "野瀦",
+      "野玫",
+      "野猞",
+      "野猾"
+    ],
+    "擊敗": [
+      "擎敗",
+      "肇敗",
+      "望敗",
+      "堅敗"
+    ],
+    "擊殺": [
+      "堅殺",
+      "擎殺"
+    ],
+    "首領": [
+      "苜領",
+      "苜貊",
+      "苜項",
+      "直領"
+    ],
+    "惡魔": [
+      "忠魔"
+    ],
+    "樹人": [
+      "樹入"
+    ],
+    "骷髏": [
+      "骷饌",
+      "枯樓",
+      "骷饞"
+    ],
+    "遺跡": [
+      "逍跡",
+      "祺跡"
+    ],
+    "暴君": [
+      "景君"
+    ],
+    "獸王": [
+      "默王"
+    ],
+    "終結": [
+      "絲結"
+    ],
+    "冰元素": [
+      "冰元奏",
+      "冰元奉"
+    ],
+    "敵人剿滅": [
+      "敵人巢"
+    ],
+    "枷鎖": [
+      "加鎖",
+      "架鎖"
+    ],
+    "詛咒": [
+      "姐咒",
+      "詛祝"
+    ],
+    "獵金": [
+      "獵全"
+    ],
+    "虛空行者的審判": [
+      "虛f行者昀番判",
+      "虛空行者審判"
+    ],
+    "雪山詛咒": [
+      "害山詛咒"
+    ]
+  },
+  "dungeon_rules": [
+    {
+      "pattern": "(史萊姆王的毀滅|史萊姆王)",
+      "dungeon_index": 0,
+      "policy": "banner_verify_only"
+    },
+    {
+      "pattern": "(清除史萊姆|黏糊糊的石窟)",
+      "dungeon_index": 0,
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(消滅蛛王與蛛後|蛛王與蛛後)",
+      "dungeon_index": 1,
+      "policy": "banner_verify_only"
+    },
+    {
+      "pattern": "(清除蜘蛛|幽影地穴)",
+      "dungeon_index": 1,
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(破除森林的枷鎖)",
+      "dungeon_index": 2,
+      "policy": "banner_verify_only"
+    },
+    {
+      "pattern": "(清除樹人|森林迷宮)",
+      "dungeon_index": 2,
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒)",
+      "dungeon_index": 3,
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(冰雪洞窟的暴君|終結寒冰獸王|雪山詛咒)",
+      "dungeon_index": 4,
+      "policy": "banner_verify_only"
+    },
+    {
+      "pattern": "(冰雪洞窟)",
+      "dungeon_index": 4,
+      "policy": "deterministic_count"
+    }
+  ],
+  "stage_rules": [
+    {
+      "pattern": "(清除野豬|野豬)",
+      "stage_level": 1,
+      "sub_stage": "final",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(清除熊|熊)",
+      "stage_level": 3,
+      "sub_stage": "final",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(清除沙蟲|沙蟲)",
+      "stage_level": 4,
+      "sub_stage": "middle",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(清除蛙人|蛙人)",
+      "stage_level": 5,
+      "sub_stage": "first",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(清除蛤蟆|蛤蟆)",
+      "stage_level": 5,
+      "sub_stage": "six",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(討伐惡魔|惡魔)",
+      "stage_level": 6,
+      "sub_stage": "six",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(擊敗冰元素|冰元素)",
+      "stage_level": 6,
+      "sub_stage": "first",
+      "policy": "deterministic_count"
+    }
+  ]
+}

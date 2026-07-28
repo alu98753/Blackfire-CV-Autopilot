@@ -53,6 +53,53 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node_snow.counting_policy, TaskNode.POLICY_BANNER_VERIFY)
         self.assertIn("--mode dungeon --dungeon 5", node_snow.to_cli_args())
 
+    def test_missing_quest_rules_json_raises_value_error(self):
+        """
+        [防呆斷言] 驗證當 config/quest_rules.json 不存在或 JSON 損壞時，
+        QuestMapper 初始化或載入必須顯式拋出 ValueError。
+        """
+        fake_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "non_existent_rules.json")
+        with self.assertRaises(ValueError):
+            QuestMapper(rules_file=fake_path)
+
+    def test_dynamic_hot_reload_from_quest_rules_json(self):
+        """
+        [熱重載測試] 驗證當在運行過程中修改 config/quest_rules.json 檔期內容時，
+        QuestMapper 能秒級感知並重載新規則，無需重新啟動程式。
+        """
+        test_json = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scratch", "test_hot_reload_rules.json")
+        os.makedirs(os.path.dirname(test_json), exist_ok=True)
+        import json, time
+
+        initial_data = {
+            "deterministic_quests": ["清除骷髏"],
+            "banner_verify_quests": [],
+            "ignored_quests": [],
+            "typo_groups": {},
+            "dungeon_rules": [{"pattern": "(清除骷髏)", "dungeon_index": 3, "policy": "deterministic_count"}],
+            "stage_rules": []
+        }
+        with open(test_json, "w", encoding="utf-8") as f:
+            json.dump(initial_data, f, ensure_ascii=False)
+
+        mapper = QuestMapper(rules_file=test_json)
+        self.assertIsNotNone(mapper.parse_quest("清除骷髏"))
+        self.assertIsNone(mapper.parse_quest("火焰龍王"))
+
+        time.sleep(0.01)
+        initial_data["deterministic_quests"].append("火焰龍王")
+        initial_data["dungeon_rules"].append({"pattern": "(火焰龍王)", "dungeon_index": 0, "policy": "deterministic_count"})
+        with open(test_json, "w", encoding="utf-8") as f:
+            json.dump(initial_data, f, ensure_ascii=False)
+
+        node = mapper.parse_quest("火焰龍王")
+        self.assertIsNotNone(node)
+        self.assertEqual(node.mode_type, "dungeon")
+        self.assertEqual(node.dungeon_index, 0)
+
+        if os.path.exists(test_json):
+            os.remove(test_json)
+
     def test_exact_full_name_match_prevent_unknown_false_positive(self):
         """
         驗證全新未知任務 (如 '龍騎士的毀滅'、'瘋狂鬼魂') 不會因為部分關鍵字重疊而被誤判，

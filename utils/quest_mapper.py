@@ -151,148 +151,139 @@ class TaskNode:
                 f"progress={self.completed_count}/{self.target_count} "
                 f"dungeon_idx={self.dungeon_index} stage_lvl={self.stage_level} sub='{self.sub_stage}'>")
 
-# ------------------ 懸賞任務全名與計數分類資料庫 ------------------
-DETERMINISTIC_QUESTS = [
-    "清除骷髏",
-    "清除蜘蛛",
-    "清除樹人",
-    "清除野豬",
-    "清除熊",
-    "清除沙蟲",
-    "清除蛙人",
-    "清除蛤蟆",
-    "討伐惡魔",
-    "擊敗冰元素",
-]
+import os
+import json
 
-BANNER_VERIFY_QUESTS = [
-    "冰雪洞窟的暴君",
-    "史萊姆王的毀滅",
-    "破除森林的枷鎖",
-    "消滅蛛王與蛛後",
-    "雪山詛咒",
-]
+DEFAULT_RULES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "quest_rules.json")
 
-IGNORED_QUESTS = [
-    "獵金之蟲",
-    "完成任何地下城",
-    "敵人剿滅",
-    "擊殺首領",
-    "虛空行者的審判",
-]
+# 模組層級全域變數 (對外維持向下相容)
+DETERMINISTIC_QUESTS = []
+BANNER_VERIFY_QUESTS = []
+IGNORED_QUESTS = []
+TYPO_GROUPS = {}
+OCR_TYPO_MAP = {}
 
 import difflib
 
-# ------------------ 常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 ------------------
-# 結構：以「正確官方字」為 Key ➔ 「EasyOCR 易看錯的錯字清單 List」為 Value，極致提升維護性
-TYPO_GROUPS = {
-    "毀滅": ["致滅", "毀減"],
-    "蛛後": ["蛛后", "蛛俊"],
-    "野豬": ["野瀦", "野玫", "野猞", "野猾"],
-    "擊敗": ["擎敗", "肇敗", "望敗", "堅敗"],
-    "擊殺": ["堅殺", "擎殺"],
-    "首領": ["苜領", "苜貊", "苜項", "直領"],
-    "惡魔": ["忠魔"],
-    "樹人": ["樹入"],
-    "骷髏": ["骷饌", "枯樓", "骷饞"],
-    "遺跡": ["逍跡", "祺跡"],
-    "暴君": ["景君"],
-    "獸王": ["默王"],
-    "終結": ["絲結"],
-    "冰元素": ["冰元奏", "冰元奉"],
-    "敵人剿滅": ["敵人巢"],
-    "枷鎖": ["加鎖", "架鎖"],
-    "詛咒": ["姐咒", "詛祝"],
-    "獵金": ["獵全"],
-    "虛空行者的審判": ["虛f行者昀番判", "虛空行者審判"],
-    "雪山詛咒": ["害山詛咒"],
-}
 
-# 自動將 TYPO_GROUPS 展平為一對一匹配字典 OCR_TYPO_MAP
-OCR_TYPO_MAP = {typo: correct for correct, typos in TYPO_GROUPS.items() for typo in typos}
+def load_rules_from_json(rules_file=None):
+    if rules_file is None:
+        rules_file = DEFAULT_RULES_FILE
+    if not os.path.exists(rules_file):
+        raise ValueError(f"懸賞對照規則檔缺失: {rules_file}")
+    try:
+        with open(rules_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        raise ValueError(f"懸賞對照規則檔 JSON 語法無效 ({e})")
+    return data
 
 
 def normalize_quest_title(title):
     """
-    三合一複合自動正名校正管道：
-    1.0 確定性字典 (OCR_TYPO_MAP) ➔ 2.0 difflib 編輯距離對齊 ➔ 2.5 中文筆畫與子字串自動正名。
+    三合一複合自動正名校正管道。
     """
-    if not title:
-        return ""
-
-    # 1️⃣ 第一重：1.0 確定性字典替換
-    cleaned = title
-    for typo, correct in OCR_TYPO_MAP.items():
-        cleaned = cleaned.replace(typo, correct)
-
-    all_known_full_names = DETERMINISTIC_QUESTS + BANNER_VERIFY_QUESTS + IGNORED_QUESTS
-
-    # 若已經完全相符，直接回傳
-    if cleaned in all_known_full_names:
-        return cleaned
-
-    # 2️⃣ 第二重：2.0 difflib 編輯距離 (Levenshtein Distance) 自動對齊 (門檻提高至 0.65，防止新任務如'龍騎士的毀滅'誤判)
-    matches = difflib.get_close_matches(cleaned, all_known_full_names, n=1, cutoff=0.65)
-    if matches:
-        return matches[0]
-
-    # 3️⃣ 第三重：包含/被包含關係與關鍵字匹配兜底
-    for name in all_known_full_names:
-        if name in cleaned or cleaned in name:
-            return name
-
-    # 核心關鍵字特例對齊（如 '討伐忠魔' ➔ '討伐惡魔'）
-    if "忠魔" in cleaned:
-        return "討伐惡魔"
-
-    return cleaned
+    mapper = QuestMapper()
+    return mapper.normalize_quest_title(title)
 
 
 class QuestMapper:
     """
-    懸賞任務與指令映射器 (Quest-to-CLI Mapper) [全域對照字典唯一定義檔]。
-
-    📌 任務對照表維護與擴充說明：
-    1. 確定性可計數任務：DETERMINISTIC_QUESTS
-    2. 僅彈窗核銷任務：BANNER_VERIFY_QUESTS
-    3. 顯式忽略任務：IGNORED_QUESTS
+    懸賞任務與指令映射器 (Quest-to-CLI Mapper) [支援 config/quest_rules.json 熱重載與 ValueError 防呆]。
     """
-    def __init__(self):
+    def __init__(self, rules_file=None):
+        self.rules_file = rules_file or DEFAULT_RULES_FILE
+        self._last_mtime = 0.0
+        self.deterministic_quests = []
+        self.banner_verify_quests = []
+        self.ignored_quests = []
+        self.typo_groups = {}
+        self.ocr_typo_map = {}
+        self.ignored_rules = []
+        self.dungeon_rules = []
+        self.stage_rules = []
+        self.reload_if_modified(force=True)
 
-        # 1. 顯式忽略/跳過執行的任務關鍵字 (動態由 IGNORED_QUESTS 構建正則，避免 Hardcode 重覆維護)
-        if IGNORED_QUESTS:
-            escaped_items = [re.escape(q) for q in IGNORED_QUESTS]
-            self.ignored_rules = [f"({'|'.join(escaped_items)})"]
-        else:
-            self.ignored_rules = []
+    def reload_if_modified(self, force=False):
+        if not os.path.exists(self.rules_file):
+            raise ValueError(f"懸賞對照規則檔缺失: {self.rules_file}")
 
-        # 2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4, counting_policy)
-        # 📌 註記：dungeon_rules 要記錄的是「完整的官方任務全名」或「特有地圖名」
-        # 0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 冰雪洞窟
-        self.dungeon_rules = [
-            (r"(史萊姆王的毀滅|史萊姆王)", 0, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除史萊姆|黏糊糊的石窟)", 0, TaskNode.POLICY_DETERMINISTIC),
-            (r"(消滅蛛王與蛛後|蛛王與蛛後)", 1, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除蜘蛛|幽影地穴)", 1, TaskNode.POLICY_DETERMINISTIC),
-            (r"(破除森林的枷鎖)", 2, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(清除樹人|森林迷宮)", 2, TaskNode.POLICY_DETERMINISTIC),
-            (r"(清除骷髏|神秘遺跡|破除遺跡|遺跡的詛咒)", 3, TaskNode.POLICY_DETERMINISTIC),
-            (r"(冰雪洞窟的暴君|終結寒冰獸王|雪山詛咒)", 4, TaskNode.POLICY_BANNER_VERIFY),
-            (r"(冰雪洞窟)", 4, TaskNode.POLICY_DETERMINISTIC),
-        ]
+        try:
+            current_mtime = os.path.getmtime(self.rules_file)
+        except Exception as e:
+            raise ValueError(f"無法讀取懸賞對照規則檔修改時間: {e}")
 
-        # 3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型, counting_policy)
-        # 📌 註記：stage_rules 要記錄的是「完整的官方任務全名」
-        # Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷
-        self.stage_rules = [
-            (r"(清除野豬|野豬)", 1, "final", TaskNode.POLICY_DETERMINISTIC),
-            (r"(清除熊|熊)", 3, "final", TaskNode.POLICY_DETERMINISTIC),
-            (r"(清除沙蟲|沙蟲)", 4, "middle", TaskNode.POLICY_DETERMINISTIC),
-            (r"(清除蛙人|蛙人)", 5, "first", TaskNode.POLICY_DETERMINISTIC),
-            (r"(清除蛤蟆|蛤蟆)", 5, "six", TaskNode.POLICY_DETERMINISTIC),
-            (r"(討伐惡魔|惡魔)", 6, "six", TaskNode.POLICY_DETERMINISTIC),
-            (r"(擊敗冰元素|冰元素)", 6, "first", TaskNode.POLICY_DETERMINISTIC),
-        ]
+        if force or current_mtime > self._last_mtime:
+            data = load_rules_from_json(self.rules_file)
+            self.deterministic_quests = data.get("deterministic_quests", [])
+            self.banner_verify_quests = data.get("banner_verify_quests", [])
+            self.ignored_quests = data.get("ignored_quests", [])
+            self.typo_groups = data.get("typo_groups", {})
+            self.ocr_typo_map = {typo: correct for correct, typos in self.typo_groups.items() for typo in typos}
+
+            global DETERMINISTIC_QUESTS, BANNER_VERIFY_QUESTS, IGNORED_QUESTS, TYPO_GROUPS, OCR_TYPO_MAP
+            DETERMINISTIC_QUESTS = self.deterministic_quests
+            BANNER_VERIFY_QUESTS = self.banner_verify_quests
+            IGNORED_QUESTS = self.ignored_quests
+            TYPO_GROUPS = self.typo_groups
+            OCR_TYPO_MAP = self.ocr_typo_map
+
+            if self.ignored_quests:
+                escaped_items = [re.escape(q) for q in self.ignored_quests]
+                self.ignored_rules = [f"({'|'.join(escaped_items)})"]
+            else:
+                self.ignored_rules = []
+
+            policy_map = {
+                "banner_verify_only": TaskNode.POLICY_BANNER_VERIFY,
+                "deterministic_count": TaskNode.POLICY_DETERMINISTIC
+            }
+
+            self.dungeon_rules = []
+            for item in data.get("dungeon_rules", []):
+                pat = item.get("pattern", "")
+                idx = item.get("dungeon_index", 0)
+                pol_str = item.get("policy", "deterministic_count")
+                pol = policy_map.get(pol_str, TaskNode.POLICY_DETERMINISTIC)
+                self.dungeon_rules.append((pat, idx, pol))
+
+            self.stage_rules = []
+            for item in data.get("stage_rules", []):
+                pat = item.get("pattern", "")
+                lvl = item.get("stage_level", 1)
+                sub = item.get("sub_stage", "first")
+                pol_str = item.get("policy", "deterministic_count")
+                pol = policy_map.get(pol_str, TaskNode.POLICY_DETERMINISTIC)
+                self.stage_rules.append((pat, lvl, sub, pol))
+
+            self._last_mtime = current_mtime
+
+    def normalize_quest_title(self, title):
+        self.reload_if_modified()
+        if not title:
+            return ""
+
+        cleaned = title
+        for typo, correct in self.ocr_typo_map.items():
+            cleaned = cleaned.replace(typo, correct)
+
+        all_known_full_names = self.deterministic_quests + self.banner_verify_quests + self.ignored_quests
+
+        if cleaned in all_known_full_names:
+            return cleaned
+
+        matches = difflib.get_close_matches(cleaned, all_known_full_names, n=1, cutoff=0.65)
+        if matches:
+            return matches[0]
+
+        for name in all_known_full_names:
+            if name in cleaned or cleaned in name:
+                return name
+
+        if "忠魔" in cleaned:
+            return "討伐惡魔"
+
+        return cleaned
 
     def get_quest_sort_key(self, title):
         """
@@ -354,11 +345,12 @@ class QuestMapper:
         :param requirement_text: 擊殺目標文字 (例如 "擊殺: [史萊姆王] x 1" 或 "擊殺: 冰元素 x 10")
         :return: TaskNode 實例
         """
-        norm_title = normalize_quest_title(title)
+        self.reload_if_modified()
+        norm_title = self.normalize_quest_title(title)
         combined_text = f"{norm_title} {description} {requirement_text}"
 
         # 1. 檢查是否命中明確設定「跳過/不執行 (ignored)」的任務規則
-        if norm_title in IGNORED_QUESTS:
+        if norm_title in self.ignored_quests:
             logging.info(f"🚫 懸賞任務 '{norm_title}' 在 IGNORED_QUESTS 清單中 (顯式跳過，不上報 unknown_quests)。")
             return TaskNode(
                 quest_title=norm_title,
@@ -383,7 +375,7 @@ class QuestMapper:
         target_count = 10
 
         # 判定預設政策 (若在 BANNER_VERIFY_QUESTS 全名清單中)
-        default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in BANNER_VERIFY_QUESTS else TaskNode.POLICY_DETERMINISTIC
+        default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in self.banner_verify_quests else TaskNode.POLICY_DETERMINISTIC
 
         # 2. 檢查地下城專屬任務 (地下城不受固定次數限制，由 30 分鐘冷卻倒數與告示牌領獎動態控管)
         # 必須與候選完整標題/關鍵字完全相等 ==，避免 '龍騎士的毀滅' 誤判)
