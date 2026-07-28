@@ -33,14 +33,15 @@ class ScreenCapturer:
             self._hwnd = win32gui.FindWindow(None, self.window_title)
         return self._hwnd
 
-    def get_window_rect(self):
+    def get_window_rect(self, quiet: bool = False):
         """
         取得指定視窗在虛擬螢幕座標系下的絕對位置與大小。
         """
         try:
             hwnd = self.get_hwnd()
             if not hwnd:
-                logging.warning(f"找不到視窗標題為 '{self.window_title}' 的視窗。")
+                if not quiet:
+                    logging.warning(f"找不到視窗標題為 '{self.window_title}' 的視窗。")
                 return None
             
             if win32gui.IsIconic(hwnd):

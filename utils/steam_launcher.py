@@ -348,7 +348,7 @@ class SteamGameLauncher:
 
             # 階段 4：等待遊戲視窗開啟 (不需要全圖截圖)
             if self.phase == LauncherPhase.WAIT_GAME_WINDOW:
-                rect = self.capturer.get_window_rect()
+                rect = self.capturer.get_window_rect(quiet=True)
                 if rect is not None:
                     logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟與定位: {rect}")
                     self.transition_to(LauncherPhase.COMPLETED, "已偵測到遊戲視窗")
