@@ -223,20 +223,25 @@ class ScreenCapturer:
                 dpi_factor = 1.0
             
             self.last_monitor = monitor
-            screenshot = self.sct.grab(monitor)
-            img = np.array(screenshot)
-            img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-            
-            # 診斷：將 MSS 擷取結果存檔 (已註解)
-            # try:
-            #     cv2.imwrite("debug_mss.png", img_bgr)
-            #     logging.info(f"📸 [前台 MSS 截圖成功] 邏輯座標: {monitor}，物理尺寸: {img_bgr.shape}，已存檔為 debug_mss.png")
-            # except Exception:
-            #     pass
-                
-            return img_bgr
+            try:
+                screenshot = self.sct.grab(monitor)
+                img = np.array(screenshot)
+                img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+                return img_bgr
+            except Exception as e_grab:
+                logging.warning(f"mss 針對指定螢幕區域 {monitor} 擷取失敗 ({e_grab})，嘗試全區域 monitors[0] 相對裁切...")
+                full_shot = self.sct.grab(self.sct.monitors[0])
+                full_img = cv2.cvtColor(np.array(full_shot), cv2.COLOR_BGRA2BGR)
+                v_left = self.sct.monitors[0].get("left", 0)
+                v_top = self.sct.monitors[0].get("top", 0)
+                ml = max(0, monitor["left"] - v_left)
+                mt = max(0, monitor["top"] - v_top)
+                mw = monitor["width"]
+                mh = monitor["height"]
+                cropped = full_img[mt:mt+mh, ml:ml+mw]
+                return cropped
         except Exception as e:
-            logging.warning(f"mss 擷取失敗 ({e})，嘗試使用 PIL ImageGrab 作為備份方案...")
+            logging.warning(f"mss 跨螢幕擷取失敗 ({e})，嘗試使用 PIL ImageGrab 備用方案...")
             try:
                 from PIL import ImageGrab
                 if rect is None:

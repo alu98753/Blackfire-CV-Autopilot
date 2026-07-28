@@ -262,6 +262,30 @@ class SteamGameLauncher:
                     continue
 
                 pos, conf = self._safe_match(img, self.TPL_SEARCH)
+                if not pos:
+                    # 雙螢幕備用：若指定顯示器未找到 search.png，自動掃描主顯示器工作列
+                    try:
+                        primary_mon = next((m for m in self.capturer.sct.monitors[1:] if m.get("is_primary")), None)
+                        if primary_mon:
+                            pri_shot = self.capturer.sct.grab(primary_mon)
+                            pri_img = cv2.cvtColor(np.array(pri_shot), cv2.COLOR_BGRA2BGR)
+                            pri_pos, pri_conf = self._safe_match(pri_img, self.TPL_SEARCH)
+                            if pri_pos and (now - last_action_time >= self.action_cooldown):
+                                abs_x = primary_mon["left"] + pri_pos[0]
+                                abs_y = primary_mon["top"] + pri_pos[1]
+                                logging.info(f"🔍 [SteamGameLauncher] 在主顯示器找到搜尋圖示 (座標: ({abs_x}, {abs_y}), 置信度: {pri_conf:.2f})，寫入 debug_click.png 並點擊...")
+                                self._visualize_and_click(pri_img, self.TPL_SEARCH, pri_pos, pri_conf, abs_click_pos=(abs_x, abs_y))
+                                try:
+                                    import pyautogui
+                                    pyautogui.write("steam", interval=0.05)
+                                except Exception:
+                                    pass
+                                last_action_time = now
+                                self.transition_to(LauncherPhase.LAUNCH_STEAM, "已點擊主顯示器 Windows 搜尋並輸入 steam")
+                                continue
+                    except Exception as e_pri:
+                        logging.debug(f"主顯示器搜尋備用掃描異常: {e_pri}")
+
                 if pos and (now - last_action_time >= self.action_cooldown):
                     logging.info(f"🔍 [SteamGameLauncher] 找到搜尋圖示 (座標: {pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
                     self._visualize_and_click(img, self.TPL_SEARCH, pos, conf)
