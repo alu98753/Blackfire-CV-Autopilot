@@ -61,9 +61,9 @@ class TestDebugVisualizer(unittest.TestCase):
 
         saved_img = cv2.imread(self.test_filename)
         self.assertIsNotNone(saved_img)
-        # 斷言綠色 Channel (BBox) 與紅色 Channel (Click) 均有繪製像素
-        self.assertGreater(np.sum(saved_img[:, :, 1]), 0)  # G Channel > 0
+        # 斷言紅色 Channel (RED_COLOR (0,0,255) 標記) 有成功繪製像素
         self.assertGreater(np.sum(saved_img[:, :, 2]), 0)  # R Channel > 0
+
 
     def test_mouse_draw_debug_click_delegation(self):
         """[測試 4] 驗證 MouseController._draw_debug_click 完整委派 DebugVisualizer.draw_detection"""

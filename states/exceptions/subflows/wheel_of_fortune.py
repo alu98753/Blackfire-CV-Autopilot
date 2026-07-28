@@ -1,8 +1,10 @@
 import os
 import time
 import logging
+import cv2
 from typing import Tuple, Optional
 from states.exceptions.subflows.base import BaseExceptionSubflow, safe_match
+
 
 
 class WheelOfFortuneSubflow(BaseExceptionSubflow):
@@ -64,17 +66,31 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
         if pos_quit:
             abs_x = rect["left"] + crop_left + pos_quit[0]
             abs_y = rect["top"] + crop_top + pos_quit[1]
-            matched_bbox = (crop_left + pos_quit[0], crop_top + pos_quit[1], 40, 40)
-            logging.info(f"🛡️ [{self.name}] 成功在 Wheel_of_Fortune ROI 內部匹配 [{matched_tpl}] (信心度: {conf_quit:.4f})，點擊退出: ({abs_x}, {abs_y})")
+
+            # 動態讀取模板實際寬高，計算 Bounding Box 左上角
+            tw, th = 40, 40
+            tpl_path = os.path.join("templates", matched_tpl)
+            if os.path.exists(tpl_path):
+                tpl_img = cv2.imread(tpl_path)
+                if tpl_img is not None and len(tpl_img.shape) >= 2:
+                    th, tw = tpl_img.shape[:2]
+
+            matched_bbox = (crop_left + pos_quit[0] - tw // 2, crop_top + pos_quit[1] - th // 2, tw, th)
+            logging.info(f"🛡️ [{self.name}] 成功在 Wheel_of_Fortune ROI 內部匹配 [{matched_tpl}] (信心度: {conf_quit:.4f})，準備點擊退出: ({abs_x}, {abs_y})")
             
-            # 呼叫 DebugVisualizer 繪製 ROI、Match BBox 與 Click Point
+            # 呼叫 DebugVisualizer 繪製紅色空心 ROI 框、Match BBox 與 Click Point
             DebugVisualizer.draw_detection(
                 screen_img,
-                click_pos=(abs_x - rect["left"], abs_y - rect["top"]),
+                click_pos=(crop_left + pos_quit[0], crop_top + pos_quit[1]),
                 matched_bbox=matched_bbox,
                 roi_box=roi_box,
                 labels={"roi": "Wheel_of_Fortune ROI", "match": f"Quit ({conf_quit:.2f})", "click": "Click Quit"}
             )
+
+            # ⏸️ 開發者中斷點 (Breakpoint)：在發起點擊退出前暫停供檢查 debug_click.png
+            logging.info("⏸️ [Debug Breakpoint] 已成功劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
+            time.sleep(5.0)
+
             if mouse:
                 mouse.click(abs_x, abs_y)
         else:
@@ -85,8 +101,16 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                     if pos_quit:
                         abs_x = rect["left"] + pos_quit[0]
                         abs_y = rect["top"] + pos_quit[1]
-                        matched_bbox = (pos_quit[0], pos_quit[1], 40, 40)
-                        logging.info(f"🛡️ [{self.name}] 全圖備援成功匹配退出按鈕 [{quit_tpl}] (信心度: {conf_quit:.4f})，點擊: ({abs_x}, {abs_y})")
+
+                        tw, th = 40, 40
+                        tpl_path = os.path.join("templates", quit_tpl)
+                        if os.path.exists(tpl_path):
+                            tpl_img = cv2.imread(tpl_path)
+                            if tpl_img is not None and len(tpl_img.shape) >= 2:
+                                th, tw = tpl_img.shape[:2]
+
+                        matched_bbox = (pos_quit[0] - tw // 2, pos_quit[1] - th // 2, tw, th)
+                        logging.info(f"🛡️ [{self.name}] 全圖備援成功匹配退出按鈕 [{quit_tpl}] (信心度: {conf_quit:.4f})，準備點擊: ({abs_x}, {abs_y})")
                         
                         DebugVisualizer.draw_detection(
                             screen_img,
@@ -95,6 +119,11 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                             roi_box=roi_box,
                             labels={"roi": "Wheel_of_Fortune ROI", "match": f"Quit ({conf_quit:.2f})", "click": "Click Quit"}
                         )
+
+                        # ⏸️ 開發者中斷點 (Breakpoint)
+                        logging.info("⏸️ [Debug Breakpoint] 已成功劃出紅色空心框並寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
+                        time.sleep(5.0)
+
                         if mouse:
                             mouse.click(abs_x, abs_y)
                         break
@@ -109,8 +138,12 @@ class WheelOfFortuneSubflow(BaseExceptionSubflow):
                     roi_box=roi_box,
                     labels={"roi": "Wheel_of_Fortune ROI", "click": "Fallback Click"}
                 )
+                logging.info("⏸️ [Debug Breakpoint] 已成功寫入 debug_click.png！暫停 5.0 秒供開發者對照檢查...")
+                time.sleep(5.0)
+
                 if mouse:
                     mouse.click(cx, cy)
+
 
         time.sleep(0.5)
 
