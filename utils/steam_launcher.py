@@ -326,7 +326,8 @@ class SteamGameLauncher:
         全流程開關與登入檢測入口：
         1. 判斷 is_game_open()
         2. 若未開啟，跑 run_launch_subflow() 啟動遊戲
-        3. 遊戲開啟後，在「遊戲視窗」(非全螢幕) 中等待登入畫面並執行登入
+        3. 自動將遊戲視窗定位移動至 1 號筆電螢幕 (Monitor 1)
+        4. 遊戲開啟後，在「遊戲視窗」(非全螢幕) 中等待登入畫面並執行登入
         """
         logging.info("[SteamGameLauncher] 開始執行 ensure_game_ready 檢查與啟動流程...")
 
@@ -337,6 +338,10 @@ class SteamGameLauncher:
                 return False
         else:
             logging.info("✅ 偵測到遊戲已開啟，跳過 Steam 啟動流程。")
+
+        # 自動將遊戲視窗移動至指定筆電螢幕 (Monitor 1)
+        if hasattr(self.capturer, "ensure_window_on_monitor"):
+            self.capturer.ensure_window_on_monitor()
 
         return self.wait_and_handle_login()
 
@@ -366,7 +371,10 @@ class SteamGameLauncher:
             for _ in range(max_ticks):
                 rect = self.capturer.get_window_rect(quiet=True)
                 if rect is not None:
-                    logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟與定位: {rect}")
+                    # 自動將遊戲視窗定位移動至 1 號筆電螢幕
+                    if hasattr(self.capturer, "ensure_window_on_monitor"):
+                        self.capturer.ensure_window_on_monitor()
+                    logging.info(f"🎉 [SteamGameLauncher] 遊戲視窗成功開啟並定位於 1 號筆電螢幕: {rect}")
                     self.transition_to(LauncherPhase.COMPLETED, "已偵測到遊戲視窗")
                     logging.info("✅ [SteamGameLauncher] 第一階段 Steam 啟動遊戲 Subflow 成功執行完畢！")
                     return True

@@ -10,6 +10,7 @@ import mss
 import win32gui
 import win32ui
 import win32con
+from typing import Optional, Tuple, Dict, Any
 
 
 class ScreenCapturer:
@@ -61,6 +62,52 @@ class ScreenCapturer:
             if not quiet:
                 logging.error(f"取得視窗座標時發生錯誤: {e}")
             return None
+
+    def ensure_window_on_monitor(self, monitor_index: Optional[int] = None) -> bool:
+        """
+        將遊戲視窗自動移動並定位到指定的顯示器 (預設 self.monitor_index 筆電螢幕 1)。
+        若視窗當前不在指定螢幕上，調用 SetWindowPos 將視窗移至目標顯示器左上角。
+        """
+        target_idx = monitor_index if monitor_index is not None else self.monitor_index
+        if target_idx is None:
+            return False
+
+        try:
+            hwnd = self.get_hwnd()
+            if not hwnd:
+                return False
+
+            import win32api
+            monitors = win32api.EnumDisplayMonitors(None, None)
+            if 0 < target_idx <= len(monitors):
+                hmon, _, _ = monitors[target_idx - 1]
+                info = win32api.GetMonitorInfo(hmon)
+                mon_rect = info["Monitor"]
+                mon_l, mon_t = mon_rect[0], mon_rect[1]
+
+                w_left, w_top, w_right, w_bottom = win32gui.GetWindowRect(hwnd)
+                w_w = w_right - w_left
+                w_h = w_bottom - w_top
+
+                if abs(w_left - mon_l) > 50 or abs(w_top - mon_t) > 50:
+                    logging.info(f"🚚 [ScreenCapturer] 將遊戲視窗自動移動至 Monitor {target_idx} 筆電螢幕 ({mon_l}, {mon_t})...")
+                    if win32gui.IsIconic(hwnd):
+                        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+
+                    win32gui.SetWindowPos(
+                        hwnd,
+                        win32con.HWND_TOP,
+                        mon_l,
+                        mon_t,
+                        w_w,
+                        w_h,
+                        win32con.SWP_SHOWWINDOW
+                    )
+                    time.sleep(0.3)
+                    return True
+        except Exception as e:
+            logging.debug(f"自動移動視窗至 Monitor {target_idx} 失敗: {e}")
+        return False
 
     def get_logical_window_rect(self, phys_rect):
         """
