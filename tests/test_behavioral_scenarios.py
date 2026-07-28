@@ -2357,7 +2357,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         handler.reset_state()
 
-        # Step 1: INIT 點擊建築進屋
+        # Step 1: INIT 點擊建築進屋 (保持在 INIT 等待 UI 渲染)
         def match_step1(img, name, **kw):
             if name == "common/door.png":
                 return ((100, 100), 0.90)
@@ -2365,6 +2365,16 @@ class TestBehavioralScenarios(unittest.TestCase):
                 return ((500, 500), 0.90)
             return (None, 0.0)
         self.mock_matcher.match.side_effect = match_step1
+        handler.handle()
+        self.assertEqual(handler.step_phase, "INIT")
+
+        # Step 1.5: 辨識到 exitfromhouse_and_to_town.png 畫面穩定 ➔ 切換至 ENTERED_BUILDING
+        handler.last_action_time = 0.0
+        def match_step1_5(img, name, **kw):
+            if name == "town_building/exitfromhouse_and_to_town.png":
+                return ((50, 50), 0.90)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_step1_5
         handler.handle()
         self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
 
