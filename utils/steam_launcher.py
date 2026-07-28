@@ -292,7 +292,13 @@ class SteamGameLauncher:
             # 專心比對登入主畫面 login/login.png
             login_pos, conf = self._safe_match(screen_img, "login/login.png", threshold=0.65)
             if login_pos:
-                logging.info(f"🔑 [SteamGameLauncher] 遊戲畫面載入完成，偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！準備交由主狀態機 LoginFlow 執行登入...")
+                logging.info(f"🔑 [SteamGameLauncher] 遊戲畫面載入完成，偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！開始視窗移動與最大化全螢幕...")
+                
+                # 確定畫面完全載入渲染後，觸發傳送與最大化全螢幕
+                if hasattr(self.capturer, "ensure_window_on_monitor"):
+                    self.capturer.ensure_window_on_monitor()
+
+                logging.info("✅ [SteamGameLauncher] 遊戲視窗已定位至 1 號筆電螢幕並最大化，準備交由主狀態機 LoginFlow 執行登入！")
                 return True
 
             time.sleep(poll_interval)
