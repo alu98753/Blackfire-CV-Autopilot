@@ -272,14 +272,17 @@ class QuestMapper:
         if cleaned in all_known_full_names:
             return cleaned
 
+    # 2️⃣ 第二重：2.0 difflib 編輯距離 (Levenshtein Distance) 自動對齊 (門檻提高至 0.65，防止新任務如'龍騎士的毀滅'誤判)
         matches = difflib.get_close_matches(cleaned, all_known_full_names, n=1, cutoff=0.65)
         if matches:
             return matches[0]
 
+    # 3️⃣ 第三重：包含/被包含關係與關鍵字匹配兜底
         for name in all_known_full_names:
             if name in cleaned or cleaned in name:
                 return name
 
+    # 核心關鍵字特例對齊（如 '討伐忠魔' ➔ '討伐惡魔'）
         if "忠魔" in cleaned:
             return "討伐惡魔"
 

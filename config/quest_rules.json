@@ -1,4 +1,19 @@
 {
+  "_doc": {
+    "deterministic_quests": "確定性可計數任務全名清單 (每場戰鬥/通關 100% 必然累加進度)",
+    "banner_verify_quests": "無法自動累計/僅憑彈窗核銷任務全名清單 (Boss 隨機刷新或條件不透明)",
+    "ignored_quests": "1. 顯式忽略/跳過執行的任務關鍵字 (告示牌掃描直接跳過不接取，不上報 unknown_quests)",
+    "typo_groups": "常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 (正確字為 Key -> 錯字陣列為 Value)",
+    "dungeon_rules_info": {
+      "note": "2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4, counting_policy)。註記：dungeon_rules 要記錄的是「完整的官方任務全名」或「特有地圖名」",
+      "dungeon_index_map": "0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 冰雪洞窟"
+    },
+    "stage_rules_info": {
+      "note": "3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型, counting_policy)。註記：stage_rules 要記錄的是「完整的官方任務全名」",
+      "stage_level_map": "Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷",
+      "sub_stage_map": "first: 第一關, middle: 中間關, six: 第六關, final: 魔王關"
+    }
+  },
   "deterministic_quests": [
     "清除骷髏",
     "清除蜘蛛",
