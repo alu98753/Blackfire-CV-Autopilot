@@ -1115,6 +1115,12 @@ class GameStateMachine:
             if not self.daily_manager:
                 return False
 
+            # 0. 若目前處於體力退避冷卻復歸期間 (stamina_retreat_start_time 存在)，優先執行使用者指定之 Tier 4 退守地下城
+            if getattr(self, "stamina_retreat_start_time", None) is not None:
+                logging.info("🔄 [Daily Master Pipeline] 偵測到處於體力退避冷卻復歸期間 ➔ 自動切回執行使用者指定之 Tier 4 退守地下城！")
+                self.apply_mix_fallback_config()
+                return True
+
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar)
             pending_town = self.daily_manager.get_pending_town_subflows()
             if pending_town and not self.town_subflow_queue:

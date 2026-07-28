@@ -74,6 +74,39 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         self.assertFalse(scheduled_fallback) # apply_mix_fallback_config returns False
         self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
 
+    def test_dungeon_resume_executes_designated_tier4_fallback_dungeon_during_retreat(self):
+        """
+        [使用者指定退守驗證] 驗證當處於體力退避倒數期間 (stamina_retreat_start_time 存在)，
+        地下城冷卻結束 (auto_resume) 切回時，Daily Master Pipeline 必定精準執行使用者設定之 Tier 4 退守地下城，
+        而不是嘗試執行 accepted_quests 中的任務。
+        """
+        daily_cfg = GAME_CONFIGS["daily"].copy()
+        # 假設使用者 CLI 選定了 Tier 4 退守地下城 #5 (冰雪洞窟, index 4)
+        tier4_cfg = {
+            "name": "每日懸賞任務 - 冰雪洞窟 (關卡: default)",
+            "type": "mix",
+            "dungeon_index": 4,
+            "is_tier4_fallback": True,
+            "auto_resume_dungeon_on_cd": True
+        }
+        self.state_machine.config = daily_cfg
+        self.state_machine.primary_config = tier4_cfg.copy()
+
+        # 設定 accepted_quests 裡面有其他懸賞任務 (例如地下城 #1 史萊姆, index 0)
+        node1 = TaskNode("史萊姆王的毀滅", "dungeon", dungeon_index=0)
+        scheduler = QuestScheduler(daily_manager=self.daily_manager)
+        scheduler.add_task(node1)
+        self.state_machine.quest_scheduler = scheduler
+
+        # 模擬正處於體力退避倒數中
+        self.state_machine.stamina_retreat_start_time = time.time() - 600.0
+
+        # 觸發調度 ➔ 斷言必須執行 primary_config 中指定的 Tier 4 退守地下城 (#5 冰雪洞窟, index 4)，而非 accepted_quests (#1 史萊姆, index 0)
+        scheduled = self.state_machine.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled)
+        self.assertEqual(self.state_machine.config["dungeon_index"], 4)
+        self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
+
     def test_stamina_retreat_timestamp_preserved_across_re_retreat(self):
         """
         [防護斷言] 驗證從 collect_only Resume 切回打地下城，但實機無體力再次撞到 no_bread 時，
