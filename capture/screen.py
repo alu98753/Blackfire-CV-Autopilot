@@ -125,15 +125,15 @@ class ScreenCapturer:
                         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                         time.sleep(0.15)
 
-                    # 2. 將未最大化的視窗移入目標顯示器內部
+                    # 2. 將未最大化的視窗移入目標顯示器內部 (使用 SWP_NOSIZE 標記，禁止發送 1280x720 縮小訊息)
                     win32gui.SetWindowPos(
                         hwnd,
                         win32con.HWND_TOP,
-                        mon_l + 50,
-                        mon_t + 50,
-                        1280,
-                        720,
-                        win32con.SWP_SHOWWINDOW
+                        mon_l + 10,
+                        mon_t + 10,
+                        0,
+                        0,
+                        win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW
                     )
                     time.sleep(0.15)
 
