@@ -14,6 +14,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 class ScreenCapturer:
     def __init__(self, window_title="Blackfire Crusade", backend_mode=False, monitor_index=1):
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            pass
         self.window_title = window_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
