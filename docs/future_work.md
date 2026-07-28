@@ -25,6 +25,11 @@
 - [已完成] **每日任務與免費抽獎** [REF: [daily8.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily8.md)]
 - [已完成] **CPU 低功耗睡眠控管** [REF: [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)]
 - [已驗證] **長時間運轉資源與記憶體無洩漏** (1,000 次循環僅增 1.09MB)
+- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_watchdog_collect_only_exemption.py)]
+- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_deadlock_risk_prevention.py)]
+- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_phase_transition_stability.py)]
+- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
+- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]
 
 #### 📌 4. 長掛機剩餘待補強項目
 - [ ] **Steam/網路嚴重斷線重連防護**：網路崩潰或遊戲關閉時，嘗試自動重新連接或從 Steam 重新拉起遊戲。
