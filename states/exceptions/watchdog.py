@@ -43,10 +43,20 @@ class ExceptionWatchdog:
 
         state_duration = now_t - last_change
 
-        # 門檻判斷：戰鬥與探索 90 秒；其餘狀態 30 秒
+        # 門檻判斷：戰鬥、探索與長城鎮任務 (抽卡/領懸賞/Boss/獻祭/寶箱/珠寶加工) 給予 90 秒寬鬆門檻；其餘短狀態 30 秒
+        long_subflow_states = [
+            self.machine.STATE_BATTLE,
+            self.machine.STATE_DUNGEON_EXPLORING,
+            self.machine.STATE_LORD_BOSS,
+            self.machine.STATE_HERO_DRAW,
+            self.machine.STATE_BULLETIN_BOARD,
+            self.machine.STATE_BLOOD_ALTAR,
+            self.machine.STATE_JEWELRY_WORKSHOP,
+            self.machine.STATE_CHEST
+        ]
         stuck_timeout = (
-            cfg.get("battle_stuck_timeout_sec", 90.0)
-            if self.machine.current_state in [self.machine.STATE_BATTLE, self.machine.STATE_DUNGEON_EXPLORING]
+            cfg.get("long_subflow_timeout_sec", 90.0)
+            if self.machine.current_state in long_subflow_states
             else cfg.get("non_battle_stuck_timeout_sec", 30.0)
         )
 
