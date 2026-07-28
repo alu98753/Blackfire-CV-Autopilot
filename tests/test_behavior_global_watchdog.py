@@ -50,10 +50,9 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         self.assertEqual(self.machine.stashed_state, GameStateMachine.STATE_BATTLE)
 
     def test_mismatch_critical_template_and_dimming_scan(self):
-        """驗證 30 秒低頻率特徵與遮罩衝突攔截 (Mismatch Interceptor)"""
+        """驗證卡住達 30 秒後觸發圖像特徵與彈窗掃描 (Dual-Condition Interceptor)"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
-        self.machine.last_state_change = time.time()
-        self.watchdog.last_mismatch_check_time = 0.0  # 觸發低頻檢查
+        self.machine.last_state_change = time.time() - 31.0  # 卡住達 31 秒才進行特徵掃描
 
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
 
@@ -70,6 +69,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
             self.assertTrue(res)
             self.assertEqual(self.machine.current_state, GameStateMachine.STATE_POPUP_RECOVERY)
             self.assertEqual(self.machine.stashed_state, GameStateMachine.STATE_NAVIGATING)
+
 
     def test_hot_reload_and_dynamic_directory_discovery(self):
         """驗證 config/exception_features.json 熱重載與 templates/exceptions/ 動態目錄發現"""
