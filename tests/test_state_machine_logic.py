@@ -1608,6 +1608,8 @@ class TestStateMachineLogic(unittest.TestCase):
             
         self.mock_matcher.match.side_effect = match_side_effect
         self.mock_mouse.click.reset_mock()
+        self.state_machine.last_state_change = time.time()
+
         
         # 以 patch 縮短 stamina_flow 的 sleep 時間以加快測試速度
         with patch('states.stamina_flow.time.sleep') as mock_sleep:
