@@ -5,10 +5,19 @@ from utils.steam_launcher import SteamGameLauncher, LauncherPhase
 
 
 class TestSteamGameLauncherStateMachine(unittest.TestCase):
+    """
+    SteamGameLauncher 狀態機單元測試。
+    註釋：本單元測試預設使用 unittest.mock 隔離實體 Steam 遊戲與 subprocess 啟動。
+    只有在需要手動實體測試遊戲啟動時，才可解除 Popen 的 Mock。
+    """
     def setUp(self):
         self.mock_capturer = MagicMock()
         self.mock_mouse = MagicMock()
         self.mock_matcher = MagicMock()
+        self.patcher_popen = patch("subprocess.Popen")
+        self.mock_popen = self.patcher_popen.start()
+        self.addCleanup(self.patcher_popen.stop)
+
         self.launcher = SteamGameLauncher(
             capturer=self.mock_capturer,
             mouse=self.mock_mouse,
