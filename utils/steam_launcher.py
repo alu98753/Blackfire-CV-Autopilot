@@ -1,10 +1,14 @@
 import time
 import logging
+import os
+import cv2
+import numpy as np
 from enum import Enum, auto
 from typing import Optional, Tuple
 from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
+from states.debug import DebugVisualizer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -34,39 +38,168 @@ class SteamGameLauncher:
         mouse: Optional[MouseController] = None,
         matcher: Optional[TemplateMatcher] = None,
         game_title: str = "Blackfire Crusade",
+        backend_mode: bool = False,
         action_cooldown: float = 1.0
     ):
-        self.capturer = capturer or ScreenCapturer(window_title=game_title)
-        self.mouse = mouse or MouseController(window_title=game_title)
-        self.matcher = matcher or TemplateMatcher()
         self.game_title = game_title
+        self.backend_mode = backend_mode
+        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode)
+        self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode)
+        self.matcher = matcher or TemplateMatcher()
         self.action_cooldown = action_cooldown
         self.phase = LauncherPhase.SEARCH_WINDOWS
 
     def _safe_match(self, screen_img, template_name: str, threshold: float = 0.75) -> Tuple[Optional[Tuple[int, int]], float]:
         """
-        安全呼叫 TemplateMatcher.match()，傳回 (中心座標 (x,y), 相似度)。
+        安全呼叫 TemplateMatcher.match()，防範模板尺寸大於畫面尺寸之異常。
         """
+        if screen_img is None or not hasattr(screen_img, "shape"):
+            return None, 0.0
+
+        tpl_path = os.path.join("templates", template_name)
+        if os.path.exists(tpl_path):
+            tpl_img = cv2.imread(tpl_path)
+            if tpl_img is not None and hasattr(tpl_img, "shape"):
+                sh, sw = screen_img.shape[:2]
+                th, tw = tpl_img.shape[:2]
+                if th > sh or tw > sw:
+                    return None, 0.0
+
         if matcher_func := getattr(self.matcher, "match", None):
-            res = matcher_func(screen_img, template_name, threshold=threshold)
-            if isinstance(res, (tuple, list)) and len(res) >= 2:
-                pos = res[0]
-                conf = float(res[1]) if res[1] is not None else 0.0
-                return pos, conf
+            try:
+                res = matcher_func(screen_img, template_name, threshold=threshold)
+                if isinstance(res, (tuple, list)) and len(res) >= 2 and res[0]:
+                    pos = res[0]
+                    conf = float(res[1]) if res[1] is not None else 0.0
+                    return pos, conf
+            except Exception as e:
+                logging.debug(f"_safe_match 比對異常: {e}")
         return None, 0.0
 
+    def _visualize_and_click(
+        self,
+        screen_img: np.ndarray,
+        template_name: str,
+        pos_in_img: Tuple[int, int],
+        confidence: float,
+        abs_click_pos: Optional[Tuple[int, int]] = None,
+        filename: str = "debug_click.png"
+    ):
+        """
+        調用 DebugVisualizer 統一將點擊座標與匹配 Bounding Box 寫入 debug_click.png，並執行點擊。
+        """
+        bw, bh = 60, 60
+        tpl_path = os.path.join("templates", template_name)
+        if os.path.exists(tpl_path):
+            img_tpl = cv2.imread(tpl_path)
+            if img_tpl is not None and len(img_tpl.shape) >= 2:
+                bh, bw = img_tpl.shape[:2]
+
+        box_x, box_y = pos_in_img
+        matched_bbox = (max(0, box_x - bw // 2), max(0, box_y - bh // 2), bw, bh)
+        click_target = abs_click_pos if abs_click_pos else pos_in_img
+
+        try:
+            DebugVisualizer.draw_detection(
+                screen_img=screen_img,
+                click_pos=pos_in_img,
+                matched_bbox=matched_bbox,
+                labels={"match": f"{template_name} ({confidence:.2f})", "click": f"Click {template_name}"},
+                filename=filename
+            )
+        except Exception as e:
+            logging.debug(f"DebugVisualizer 繪圖失敗: {e}")
+
+        self.mouse.click(click_target[0], click_target[1])
+
+    def is_game_open(self) -> bool:
+        """
+        檢查遊戲視窗是否已經在 Windows 中開啟 (無論是否被遮擋或最小化)。
+        """
+        try:
+            import win32gui
+            hwnd = win32gui.FindWindow(None, self.game_title)
+            return hwnd != 0 and bool(win32gui.IsWindow(hwnd))
+        except Exception as e:
+            logging.debug(f"is_game_open 檢查失敗: {e}")
+            return False
+
+    def wait_and_handle_login(self, timeout: float = 45.0, poll_interval: float = 1.0) -> bool:
+        """
+        在「遊戲視窗畫面」(非全螢幕) 中輪詢搜尋登入畫面 [login/login.png]，
+        一旦偵測到登入畫面，便寫入 debug_click.png 並執行登入點擊。
+        """
+        logging.info("[SteamGameLauncher] 正在「遊戲視窗」(非全螢幕) 中搜尋登入畫面 [login/login.png]...")
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            rect = self.capturer.get_window_rect()
+            if not rect:
+                time.sleep(poll_interval)
+                continue
+
+            screen_img = self.capturer.capture(rect)
+            if screen_img is None:
+                time.sleep(poll_interval)
+                continue
+
+            # 1. 檢查 common/door.png 是否已在城鎮 (若已經在城鎮中則免登入)
+            door_pos, _ = self._safe_match(screen_img, "common/door.png", threshold=0.75)
+            if door_pos:
+                logging.info("🏰 [SteamGameLauncher] 遊戲已直接處於城鎮大門畫面 (door.png 可見)，無需登入。")
+                return True
+
+            # 2. 檢查登入主畫面 login/login.png
+            login_pos, conf = self._safe_match(screen_img, "login/login.png", threshold=0.75)
+            if login_pos:
+                logging.info(f"🔑 [SteamGameLauncher] 在遊戲視窗內偵測到登入畫面 [login/login.png] (相似度: {conf:.2f})！開始執行登入流程...")
+
+                confirm_pos, conf_confirm = self._safe_match(screen_img, "login/login_confirm.png", threshold=0.75)
+                if confirm_pos:
+                    abs_x = rect["left"] + confirm_pos[0]
+                    abs_y = rect["top"] + confirm_pos[1]
+                    logging.info(f"👉 [SteamGameLauncher] 定位「開始冒險」 [login_confirm.png] (相似度: {conf_confirm:.2f})，寫入 debug_click.png 並點擊...")
+                    self._visualize_and_click(
+                        screen_img, "login/login_confirm.png", confirm_pos, conf_confirm, abs_click_pos=(abs_x, abs_y)
+                    )
+                else:
+                    abs_x = rect["left"] + login_pos[0] - 3
+                    abs_y = rect["top"] + login_pos[1] + 253
+                    logging.info(f"👉 [SteamGameLauncher] 採用相對 login.png 垂直偏移點擊 ({abs_x}, {abs_y})...")
+                    self._visualize_and_click(
+                        screen_img, "login/login.png", login_pos, conf, abs_click_pos=(abs_x, abs_y)
+                    )
+                return True
+
+            time.sleep(poll_interval)
+
+        logging.warning("⚠️ [SteamGameLauncher] 超時未在遊戲視窗內偵測到登入畫面或城鎮。")
+        return False
+
+    def ensure_game_ready(self) -> bool:
+        """
+        全流程開關與登入檢測入口：
+        1. 判斷 is_game_open()
+        2. 若未開啟，跑 run_launch_subflow() 啟動遊戲
+        3. 遊戲開啟後，在「遊戲視窗」(非全螢幕) 中等待登入畫面並執行登入
+        """
+        logging.info("[SteamGameLauncher] 開始執行 ensure_game_ready 檢查與啟動流程...")
+
+        if not self.is_game_open():
+            logging.info("🌐 偵測到遊戲未開啟，發起 Steam 啟動 Subflow...")
+            if not self.run_launch_subflow():
+                logging.error("❌ Steam 啟動遊戲失敗！")
+                return False
+        else:
+            logging.info("✅ 偵測到遊戲已開啟，跳過 Steam 啟動流程。")
+
+        return self.wait_and_handle_login()
+
     def transition_to(self, next_phase: LauncherPhase, reason: str = ""):
-        """
-        顯式狀態轉移方法。
-        """
         logging.info(f"🔄 [SteamGameLauncher] 狀態轉移: {self.phase.name} ➔ {next_phase.name} ({reason})")
         self.phase = next_phase
 
     def run_launch_subflow(self, timeout: float = 60.0, poll_interval: float = 0.5) -> bool:
-        """
-        以 Phase 狀態機驅動的控制迴圈 (State Machine While Loop)。
-        每個 Phase 均有嚴格的轉移條件與防呆，一個階段未完絕不進入下一個階段。
-        """
         logging.info("==================================================")
         logging.info(" 🚀 [SteamGameLauncher] 開始執行 Steam 啟動遊戲 狀態機 Subflow")
         logging.info("==================================================")
@@ -78,8 +211,6 @@ class SteamGameLauncher:
         while time.time() - start_time < timeout:
             if self.phase == LauncherPhase.COMPLETED:
                 logging.info("✅ [SteamGameLauncher] 第一階段 Steam 啟動遊戲 Subflow 成功執行完成！")
-                # TODO: 步驟 5: 遊戲載入與關閉更新/登入彈窗處置
-                # TODO: 步驟 6: 進入城鎮主畫面之狀態同步
                 return True
 
             if self.phase == LauncherPhase.FAILED:
@@ -88,7 +219,7 @@ class SteamGameLauncher:
 
             now = time.time()
 
-            # 階段 4：等待遊戲視窗開啟 (不需要全圖截圖，直接檢查視窗 controls)
+            # 階段 4：等待遊戲視窗開啟 (不需要全圖截圖)
             if self.phase == LauncherPhase.WAIT_GAME_WINDOW:
                 rect = self.capturer.get_window_rect()
                 if rect is not None:
@@ -108,7 +239,6 @@ class SteamGameLauncher:
             # 階段 1: SEARCH_WINDOWS
             # ----------------------------------------------------
             if self.phase == LauncherPhase.SEARCH_WINDOWS:
-                # 判斷是否已經看到 Steam 或開始/停止按鈕 (跳轉備援)
                 start_pos, _ = self._safe_match(img, self.TPL_START_GAME)
                 stop_pos, _ = self._safe_match(img, self.TPL_STOP_GAME)
                 if start_pos or stop_pos:
@@ -122,27 +252,31 @@ class SteamGameLauncher:
 
                 pos, conf = self._safe_match(img, self.TPL_SEARCH)
                 if pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"🔍 [SteamGameLauncher] 找到搜尋圖示 (座標: {pos}, 置信度: {conf:.2f})，執行點擊...")
-                    self.mouse.click(pos[0], pos[1])
+                    logging.info(f"🔍 [SteamGameLauncher] 找到搜尋圖示 (座標: {pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
+                    self._visualize_and_click(img, self.TPL_SEARCH, pos, conf)
+                    # 輸入 "steam" 關鍵字搜尋
+                    try:
+                        import pyautogui
+                        pyautogui.write("steam", interval=0.05)
+                    except Exception:
+                        pass
                     last_action_time = now
-                    self.transition_to(LauncherPhase.LAUNCH_STEAM, "已點擊 Windows 搜尋")
+                    self.transition_to(LauncherPhase.LAUNCH_STEAM, "已點擊 Windows 搜尋並輸入 steam")
 
             # ----------------------------------------------------
             # 階段 2: LAUNCH_STEAM (Click until Steam opened)
             # ----------------------------------------------------
             elif self.phase == LauncherPhase.LAUNCH_STEAM:
-                # 轉移條件：若偵測到 start_game.png 或 stop_game.png，代表 Steam 已開啟
                 start_pos, _ = self._safe_match(img, self.TPL_START_GAME)
                 stop_pos, _ = self._safe_match(img, self.TPL_STOP_GAME)
                 if start_pos or stop_pos:
                     self.transition_to(LauncherPhase.START_OR_UNSTUCK_GAME, "Steam 遊戲介面按鈕已呈現")
                     continue
 
-                # 尋找並點擊 Steam 圖示 (click until)
                 steam_pos, conf = self._safe_match(img, self.TPL_STEAM)
                 if steam_pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"🚀 [SteamGameLauncher] 點擊 Steam 圖示 (座標: {steam_pos}, 置信度: {conf:.2f})...")
-                    self.mouse.click(steam_pos[0], steam_pos[1])
+                    logging.info(f"🚀 [SteamGameLauncher] 找到 Steam 圖示 (座標: {steam_pos}, 置信度: {conf:.2f})，寫入 debug_click.png 並點擊...")
+                    self._visualize_and_click(img, self.TPL_STEAM, steam_pos, conf)
                     last_action_time = now
 
             # ----------------------------------------------------
@@ -152,18 +286,15 @@ class SteamGameLauncher:
                 stop_pos, stop_conf = self._safe_match(img, self.TPL_STOP_GAME)
                 start_pos, start_conf = self._safe_match(img, self.TPL_START_GAME)
 
-                # 情況 A：若遊戲卡死/執行中 (顯示 stop_game.png)，優先點擊解卡
                 if stop_pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"🛑 [SteamGameLauncher] 偵測到遊戲卡死 (stop_game.png, 座標: {stop_pos}, 信心度: {stop_conf:.2f})，點擊解卡停止...")
-                    self.mouse.click(stop_pos[0], stop_pos[1])
+                    logging.info(f"🛑 [SteamGameLauncher] 偵測到遊戲卡死 (stop_game.png, 座標: {stop_pos})，寫入 debug_click.png 並點擊解卡...")
+                    self._visualize_and_click(img, self.TPL_STOP_GAME, stop_pos, stop_conf)
                     last_action_time = now
-                    # 保持在本 phase，直到 stop_game 消失且 start_game 出現
                     continue
 
-                # 情況 B：當且僅當 start_game.png 出現，且 stop_game.png 不存在時
                 if start_pos and not stop_pos and (now - last_action_time >= self.action_cooldown):
-                    logging.info(f"▶️ [SteamGameLauncher] 點擊「開始遊戲」按鈕 (start_game.png, 座標: {start_pos}, 信心度: {start_conf:.2f})...")
-                    self.mouse.click(start_pos[0], start_pos[1])
+                    logging.info(f"▶️ [SteamGameLauncher] 點擊「開始遊戲」 (start_game.png, 座標: {start_pos})，寫入 debug_click.png 並點擊...")
+                    self._visualize_and_click(img, self.TPL_START_GAME, start_pos, start_conf)
                     last_action_time = now
                     self.transition_to(LauncherPhase.WAIT_GAME_WINDOW, "已點擊開始遊戲")
 

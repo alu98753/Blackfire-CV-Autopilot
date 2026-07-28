@@ -20,6 +20,7 @@ from states.state_machine import GameStateMachine
 from config import GAME_CONFIGS, PRIMARY_MODES, STAGE_CONFIGS, normalize_config, SUBFLOW_CONFIGS
 from utils import get_stage_configs
 from utils.daily_manager import DailyManager
+from utils.steam_launcher import SteamGameLauncher
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -587,6 +588,13 @@ def run_main_loop(state_machine, interval):
 def main():
     setup_utf8_encoding()
     args = parse_arguments()
+
+    # 在 setup config 前，先檢查遊戲是否已開啟並自動處置登入 (帶入 backend_mode 參數)
+    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend)
+    if not launcher.ensure_game_ready():
+        print("[!] 遊戲啟動或登入準備失敗，終止腳本。")
+        sys.exit(1)
+
     config = setup_mode_config(args)
     setup_equipment_config(config)
     state_machine = init_state_machine_system(args, config)
