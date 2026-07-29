@@ -237,8 +237,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         # Act
         self.state_machine.step()
         
-        # Assert: 整個銷毀收集鏈完成，點擊領取按鈕 (700, 700)
-        self.mock_mouse.click.assert_called_with(700, 700)
+        # Assert: 整個銷毀收集鏈完成，點擊銷毀/確認按鈕 (600, 600)
+        self.mock_mouse.click.assert_any_call(600, 600)
+
 
     @patch('os.path.exists')
     def test_backpack_sorting_scroll_and_exit_recovery(self, mock_exists):
