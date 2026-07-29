@@ -4,115 +4,119 @@
 
 ---
 
-## 1. Entity (靜態實體 / 畫面與特徵)
+## 1. Entity (靜態實體 / 畫面與特徵) & 對應 State 映射
 
-### 🏰 `TOWN_MAIN`: 城鎮主畫面 / 大門 (Town Main Scene)
+### 🏰 `TOWN_MAIN`: 城鎮主畫面 / 大門 (Town Main Scene) `[⏳ 待檢查]`
 * **建築門牌與地圖圖示 (Buildings & Nav Icons)**:
-  * `door.png`: [common/door.png](../templates/common/door.png) - 城鎮大門 / 冒險入口 (傳送門)
-  * `blood_altar`: [town_building/Blood_Altar/Blood_Altar.png](../templates/town_building/Blood_Altar/Blood_Altar.png) - 血之祭壇門牌
-  * `jewelry_workshop`: [town_building/Jewelry_workshop/Jewelry_workshop.png](../templates/town_building/Jewelry_workshop/Jewelry_workshop.png) - 珠寶加工廠門牌
-  * `tavern`: [town_building/Tavern/Tavern.png](../templates/town_building/Tavern/Tavern.png) - 酒館門牌 (抽英雄)
-  * `bulletin_board`: [town_building/bulletin_board/bulletin_board.png](../templates/town_building/bulletin_board/bulletin_board.png) - 懸賞告示牌門牌
-  * `chest`: [town_building/mysterious_treasure/mysterious_treasure.png](../templates/town_building/mysterious_treasure/mysterious_treasure.png) - 神秘寶箱門牌
-  * `exit_house`: [town_building/exitfromhouse_and_to_town.png](../templates/town_building/exitfromhouse_and_to_town.png) - 建築屋內返回城鎮圖示
+  * `door.png`: [common/door.png](../templates/common/door.png) - 城鎮大門 ➔ 切換進入 `STATE_LOBBY` / 觸發 `STATE_BREAD_COLLECTION` / `STATE_DIAMOND_COLLECTION`
+  * `blood_altar`: [town_building/Blood_Altar/Blood_Altar.png](../templates/town_building/Blood_Altar/Blood_Altar.png) - 血之祭壇門牌 ➔ 對應 **`STATE_BLOOD_ALTAR`** ([BloodAltarHandler](../states/handlers/blood_altar.py))
+  * `jewelry_workshop`: [town_building/Jewelry_workshop/Jewelry_workshop.png](../templates/town_building/Jewelry_workshop/Jewelry_workshop.png) - 珠寶加工廠門牌 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`** ([JewelryWorkshopHandler](../states/handlers/jewelry_workshop.py))
+  * `tavern`: [town_building/Tavern/Tavern.png](../templates/town_building/Tavern/Tavern.png) - 酒館門牌 ➔ 對應 **`STATE_HERO_DRAW`** ([HeroDrawHandler](../states/handlers/hero_draw.py))
+  * `bulletin_board`: [town_building/bulletin_board/bulletin_board.png](../templates/town_building/bulletin_board/bulletin_board.png) - 懸賞告示牌門牌 ➔ 對應 **`STATE_BULLETIN_BOARD`** ([BulletinBoardHandler](../states/handlers/bulletin_board.py))
+  * `chest`: [town_building/mysterious_treasure/mysterious_treasure.png](../templates/town_building/mysterious_treasure/mysterious_treasure.png) - 神秘寶箱門牌 ➔ 對應 **`STATE_CHEST`** ([ChestHandler](../states/handlers/chest.py))
+  * `exit_house`: [town_building/exitfromhouse_and_to_town.png](../templates/town_building/exitfromhouse_and_to_town.png) - 建築屋內返回城鎮圖示 ➔ 各城鎮 Handler 退回城鎮 (`TOWN_MAIN`)
 * **UI 互動與功能圖示 (UI Controls)**:
-  * `bread.png`: [common/bread.png](../templates/common/bread.png) - 體力/麵包對話框發射按鈕
-  * `diamond.png`: [diamond.png](../templates/diamond.png) - 鑽石對話框發射按鈕
-  * `bag.png`: [common/bag.png](../templates/common/bag.png) - 背包打開按鈕
-  * `wheel_of_fortune_popup`: [exceptions/Wheel_of_Fortune.png](../templates/exceptions/Wheel_of_Fortune.png) - 幸運輪盤彈窗
+  * `bread.png`: [common/bread.png](../templates/common/bread.png) - 體力發射按鈕 ➔ 對應 **`STATE_BREAD_COLLECTION`** ([BreadCollectionHandler](../states/handlers/bread_collection.py))
+  * `diamond.png`: [diamond.png](../templates/diamond.png) - 鑽石發射按鈕 ➔ 對應 **`STATE_DIAMOND_COLLECTION`** ([DiamondCollectionHandler](../states/handlers/diamond_collection.py))
+  * `bag.png`: [common/bag.png](../templates/common/bag.png) - 背包打開按鈕 ➔ 對應 **`STATE_BAG_CLEANING`** ([BagCleaningHandler](../states/handlers/bag_cleaning.py)) / **`STATE_BACKPACK_FULL_SORTING`** ([BackpackFullSortingHandler](../states/handlers/backpack_full_sorting.py))
+  * `wheel_of_fortune_popup`: [exceptions/Wheel_of_Fortune.png](../templates/exceptions/Wheel_of_Fortune.png) - 幸運輪盤彈窗 ➔ 卡死逾時由 Watchdog 切換至 **`STATE_POPUP_RECOVERY`** (喚起 [WheelOfFortuneSubflow](../states/exceptions/subflows/wheel_of_fortune.py) 自動關閉並復原原狀態)
 
-### ⚔️ `DUNGEON_SCENE`: 地下城探索畫面 (Dungeon Scene)
+### ⚔️ `DUNGEON_SCENE`: 地下城探索畫面 (Dungeon Scene) `[⏳ 待檢查]`
 * **關卡與事件特徵 (Cards & Events)**:
-  * `dungeon_cards`: 地下城探索關卡卡片範本
+  * `dungeon_cards`: 地下城探索關卡卡片範本 ➔ 對應 **`STATE_DUNGEON_EXPLORING`** ([ExploreHandler](../states/handlers/explore.py))
     * `Slime`: [dungeons/Slime_entry.png](../templates/dungeons/Slime_entry.png) (黏糊糊的石窟)
     * `Ghost`: [dungeons/Ghost_entry.png](../templates/dungeons/Ghost_entry.png) (幽影地穴)
     * `Forest`: [dungeons/Forest_entry.png](../templates/dungeons/Forest_entry.png) (森林迷宮)
     * `Ruins`: [dungeons/Ruins_entry.png](../templates/dungeons/Ruins_entry.png) (神秘遺跡)
     * `Ice`: [dungeons/Ice_entry.png](../templates/dungeons/Ice_entry.png) (冰雪洞窟)
-  * `cooldown_sign`: [dungeons/cooldown_left.png](../templates/dungeons/cooldown_left.png) & [dungeons/cooldown_right.png](../templates/dungeons/cooldown_right.png) - 卡片冷卻木牌
-  * `dungeon_bless`: [dungeons/dungeon_bless.png](../templates/dungeons/dungeon_bless.png) & [dungeons/bless_combat.png](../templates/dungeons/bless_combat.png) - 祝福選擇畫面
-  * `gungeon_godown`: [dungeons/gungeon_godown.png](../templates/dungeons/gungeon_godown.png) - 下樓/進入下層圖示
-  * `Treasure`: [dungeons/Treasure.png](../templates/dungeons/Treasure.png) - 寶箱特徵圖示
+  * `cooldown_sign`: [dungeons/cooldown_left.png](../templates/dungeons/cooldown_left.png) & [dungeons/cooldown_right.png](../templates/dungeons/cooldown_right.png) - 卡片冷卻木牌 ➔ 對應 **`STATE_DUNGEON_EXPLORING`** (OCR 讀取 CD 秒數)
+  * `dungeon_bless`: [dungeons/dungeon_bless.png](../templates/dungeons/dungeon_bless.png) & [dungeons/bless_combat.png](../templates/dungeons/bless_combat.png) - 祝福選擇畫面 ➔ 對應 **`STATE_DUNGEON_EXPLORING`**
+  * `gungeon_godown`: [dungeons/gungeon_godown.png](../templates/dungeons/gungeon_godown.png) - 下樓圖示 ➔ 對應 **`STATE_DUNGEON_EXPLORING`**
+  * `Treasure`: [dungeons/Treasure.png](../templates/dungeons/Treasure.png) - 寶箱特徵圖示 ➔ 對應 **`STATE_DUNGEON_EXPLORING`**
 * **操作按鈕 (Buttons)**:
-  * `dungeon_fight`: [dungeons/dungeon_fight.png](../templates/dungeons/dungeon_fight.png) - 地下城備戰/開始挑戰按鈕
-  * `leave`: [dungeons/leave.png](../templates/dungeons/leave.png) - 離開地下城按鈕
+  * `dungeon_fight`: [dungeons/dungeon_fight.png](../templates/dungeons/dungeon_fight.png) - 地下城備戰按鈕 ➔ 點擊切換進入 **`STATE_BATTLE`** ([BattleHandler](../states/handlers/battle.py))
+  * `leave`: [dungeons/leave.png](../templates/leave.png) - 離開地下城按鈕 ➔ 對應 **`STATE_DUNGEON_EXPLORING`** (點擊離開退回城鎮)
 
-### 🚩 `LOBBY_PANEL`: 關卡準備大廳 (Lobby Stage/Dungeon Panel)
+### 🚩 `LOBBY_PANEL`: 關卡準備大廳 (Lobby Stage/Dungeon Panel) `[⏳ 待檢查]`
 * **頁籤與導航 (Tabs & Nav)**:
-  * `stage_tab`: [dungeons/stage.png](../templates/dungeons/stage.png) & [dungeons/stage_after.png](../templates/dungeons/stage_after.png) - 一般關卡頁籤
-  * `dungeon_tab`: [dungeons/dungeon.png](../templates/dungeons/dungeon.png) & [dungeons/dungeon_after.png](../templates/dungeons/dungeon_after.png) - 地下城頁籤
-  * `Lord_entry.png`: [load/Lord_entry.png](../templates/load/Lord_entry.png) & [load/Lord_entry_after.png](../templates/load/Lord_entry_after.png) - 首領大廳頁籤 (Before/After)
-  * `goback_town`: [goback_town.png](../templates/goback_town.png) - 返回城鎮按鈕
+  * `stage_tab`: [dungeons/stage.png](../templates/dungeons/stage.png) & [dungeons/stage_after.png](../templates/dungeons/stage_after.png) - 一般關卡頁籤 ➔ 對應 **`STATE_NAVIGATING`** ([NavigationHandler](../states/handlers/navigation.py)) / **`STATE_LOBBY`** ([LobbyHandler](../states/handlers/lobby.py))
+  * `dungeon_tab`: [dungeons/dungeon.png](../templates/dungeons/dungeon.png) & [dungeons/dungeon_after.png](../templates/dungeons/dungeon_after.png) - 地下城頁籤 ➔ 對應 **`STATE_NAVIGATING`** / **`STATE_LOBBY`**
+  * `Lord_entry.png`: [load/Lord_entry.png](../templates/load/Lord_entry.png) & [load/Lord_entry_after.png](../templates/load/Lord_entry_after.png) - 首領大廳頁籤 ➔ 對應 **`STATE_LORD_BOSS`** ([LordBossHandler](../states/handlers/lord_boss.py))
+  * `goback_town`: [goback_town.png](../templates/goback_town.png) - 返回城鎮按鈕 ➔ 對應 **`STATE_NAVIGATING`** / **`STATE_LOBBY`**
 * **操作按鈕 (Buttons)**:
-  * `start.png`: [stages/start.png](../templates/stages/start.png) - 開始戰鬥按鈕
-  * `raid_box_popup`: [exceptions/Raid_Box.png](../templates/exceptions/Raid_Box.png) - 突襲彈窗
-  * `task_complete_popup`: [task_complete.png](../templates/task_complete.png) - 任務完成彈窗
+  * `start.png`: [stages/start.png](../templates/stages/start.png) - 開始戰鬥按鈕 ➔ 對應 **`STATE_LOBBY`** (點擊進入 **`STATE_BATTLE`**)
+  * `raid_box_popup`: [exceptions/Raid_Box.png](../templates/exceptions/Raid_Box.png) - 掃蕩/突襲獎勵彈窗 ➔ 卡死逾時由 Watchdog 切換至 **`STATE_POPUP_RECOVERY`** (喚起 [RaidBoxSubflow](../states/exceptions/subflows/raid_box.py) 自動關閉並復原原狀態)
+  * `task_complete_popup`: [task_complete.png](../templates/task_complete.png) - 懸賞任務完成彈窗 ➔ [SceneDetector](../utils/scene_detector.py) 全域最高優先主動攔截 ➔ 調度主流程 `_run_task_complete_subflow()` (OCR 辨識任務標題並點擊核銷領取)
 
-### ⚔️ `BATTLE_SCENE`: 戰鬥進行中畫面 (Battle Scene)
+### ⚔️ `BATTLE_SCENE`: 戰鬥進行中畫面 (Battle Scene) `[⏳ 待檢查]`
 * **狀態與操作元件 (Battle Controls)**:
-  * `auto.png`: [common/auto.png](../templates/common/auto.png) - 自動戰鬥啟用/切換按鈕
-  * `battle_features`: [battle/battle_features_1.png](../templates/battle/battle_features_1.png) & [battle/battle_features_2.png](../templates/battle/battle_features_2.png) - 戰鬥介面特徵
-  * `defeat.png`: [defeat.png](../templates/defeat.png) - 戰鬥失敗標題
-  * `exit_battle`: [exit_battle.png](../templates/exit_battle.png) - 退出戰鬥按鈕
+  * `auto.png`: [common/auto.png](../templates/common/auto.png) - 自動戰鬥切換按鈕 ➔ 對應 **`STATE_BATTLE`** ([BattleHandler](../states/handlers/battle.py))
+  * `battle_features`: [battle/battle_features_1.png](../templates/battle/battle_features_1.png) & [battle/battle_features_2.png](../templates/battle/battle_features_2.png) - 戰鬥介面特徵 ➔ 對應 **`STATE_BATTLE`**
+  * `defeat.png`: [defeat.png](../templates/defeat.png) - 戰鬥失敗標題 ➔ 對應 **`STATE_BATTLE`** / 切換至 **`STATE_RESULT`**
+  * `exit_battle`: [exit_battle.png](../templates/exit_battle.png) - 退出戰鬥按鈕 ➔ 對應 **`STATE_BATTLE`**
 * **結算按鈕 (Result Buttons)**:
-  * `continue.png`: [common/continue.png](../templates/common/continue.png) / [common/continue1.png](../templates/common/continue1.png) / [common/continue2.png](../templates/common/continue2.png) - 戰鬥結算繼續按鈕
-  * `retry.png`: [stages/retry.png](../templates/stages/retry.png) / [defeat_retry.png](../templates/defeat_retry.png) - 再次挑戰按鈕
+  * `continue.png`: [common/continue.png](../templates/common/continue.png) / [common/continue1.png](../templates/common/continue1.png) / [common/continue2.png](../templates/common/continue2.png) - 戰鬥結算繼續按鈕 ➔ 對應 **`STATE_RESULT`** ([ResultHandler](../states/handlers/result.py))
+  * `retry.png`: [stages/retry.png](../templates/stages/retry.png) / [defeat_retry.png](../templates/defeat_retry.png) - 再次挑戰按鈕 ➔ 對應 **`STATE_RESULT`** (點擊回到 **`STATE_BATTLE`**)
 
-### 🎒 `BACKPACK_PANEL`: 背包介面 (Backpack Sorting & Cleaning Panel)
+### 🎒 `BACKPACK_PANEL`: 背包介面 (Backpack Sorting & Cleaning Panel) `[⏳ 待檢查]`
 * **網格與裝備品質 (Grids & Tiers)**:
-  * `backpack_full.png`: [backpack_full.png](../templates/backpack_full.png) - 背包已滿告示按鈕/標題
-  * `bag_text.png`: [common/bag_text.png](../templates/common/bag_text.png) - 背包標題列錨點
-  * `backpack_grid_18`: 背包 18 格掃描辨識區域 (`R0C0` ~ `R2C5`)
-  * `equipment_tier_colors`: 裝備品質框色 (紫 `purple` / 藍 `blue` / 綠 `green` / 紅 `red` / 橙黃 `orange_yellow` / 灰 `gray_or_empty`)
+  * `backpack_full.png`: [backpack_full.png](../templates/backpack_full.png) - 背包已滿告示按鈕/標題 ➔ 對應 **`STATE_BAG_CLEANING`** ([BagCleaningHandler](../states/handlers/bag_cleaning.py)) / **`STATE_BACKPACK_FULL_SORTING`** ([BackpackFullSortingHandler](../states/handlers/backpack_full_sorting.py))
+  * `bag_text.png`: [common/bag_text.png](../templates/common/bag_text.png) - 背包標題列錨點 ➔ 對應 **`STATE_BAG_CLEANING`**
+  * `backpack_grid_18`: 背包 18 格掃描辨識區域 ➔ 對應 **`STATE_BACKPACK_FULL_SORTING`**
+  * `equipment_tier_colors`: 裝備品質框色 ➔ 對應 **`STATE_BACKPACK_FULL_SORTING`**
 * **處置按鈕 (Action Buttons)**:
-  * `select_all.png`: [common/select_all.png](../templates/common/select_all.png) - 一鍵全選按鈕
-  * `Disassembly.png`: [common/Disassembly.png](../templates/common/Disassembly.png) - 裝備分解按鈕
-  * `destroy.png`: [common/destroy.png](../templates/common/destroy.png) - 裝備/道具銷毀按鈕
-  * `tidy.png`: [common/tidy.png](../templates/common/tidy.png) - 整理背包按鈕
+  * `select_all.png`: [common/select_all.png](../templates/common/select_all.png) - 一鍵全選按鈕 ➔ 對應 **`STATE_BAG_CLEANING`** / **`STATE_BACKPACK_FULL_SORTING`**
+  * `Disassembly.png`: [common/Disassembly.png](../templates/common/Disassembly.png) - 裝備分解按鈕 ➔ 對應 **`STATE_BAG_CLEANING`** / **`STATE_BACKPACK_FULL_SORTING`**
+  * `destroy.png`: [common/destroy.png](../templates/common/destroy.png) - 裝備/道具銷毀按鈕 ➔ 對應 **`STATE_BACKPACK_FULL_SORTING`**
+  * `tidy.png`: [common/tidy.png](../templates/common/tidy.png) - 整理背包按鈕 ➔ 對應 **`STATE_BAG_CLEANING`**
 
-### 🩸 `BLOOD_ALTAR_PANEL`: 血之祭壇介面 (Blood Altar Panel)
+### 🩸 `BLOOD_ALTAR_PANEL`: 血之祭壇介面 (Blood Altar Panel) `[⏳ 待檢查]`
 * **互動元件 (Altar Controls)**:
-  * `Blood_Altar.png`: [town_building/Blood_Altar/Blood_Altar.png](../templates/town_building/Blood_Altar/Blood_Altar.png) - 血之祭壇標題列錨點
-  * `alter.png`: [town_building/Blood_Altar/alter.png](../templates/town_building/Blood_Altar/alter.png) - 祭壇頁籤
-  * `Sacrifice.png`: [town_building/Blood_Altar/Sacrifice.png](../templates/town_building/Blood_Altar/Sacrifice.png) - 獻祭按鈕
-  * `receive_entry.png`: [town_building/Blood_Altar/receive_entry.png](../templates/town_building/Blood_Altar/receive_entry.png) - 領取頁籤入口
-  * `receive_daily.png`: [town_building/Blood_Altar/receive_daily.png](../templates/town_building/Blood_Altar/receive_daily.png) - 領取每日獎勵按鈕
+  * `Blood_Altar.png`: [town_building/Blood_Altar/Blood_Altar.png](../templates/town_building/Blood_Altar/Blood_Altar.png) - 血之祭壇標題錨點 ➔ 對應 **`STATE_BLOOD_ALTAR`** ([BloodAltarHandler](../states/handlers/blood_altar.py))
+  * `alter.png`: [town_building/Blood_Altar/alter.png](../templates/town_building/Blood_Altar/alter.png) - 祭壇頁籤 ➔ 對應 **`STATE_BLOOD_ALTAR`**
+  * `Sacrifice.png`: [town_building/Blood_Altar/Sacrifice.png](../templates/town_building/Blood_Altar/Sacrifice.png) - 獻祭按鈕 ➔ 對應 **`STATE_BLOOD_ALTAR`**
+  * `receive_entry.png`: [town_building/Blood_Altar/receive_entry.png](../templates/town_building/Blood_Altar/receive_entry.png) - 領取頁籤入口 ➔ 對應 **`STATE_BLOOD_ALTAR`**
+  * `receive_daily.png`: [town_building/Blood_Altar/receive_daily.png](../templates/town_building/Blood_Altar/receive_daily.png) - 領取每日獎勵按鈕 ➔ 對應 **`STATE_BLOOD_ALTAR`**
 
-### 💎 `JEWELRY_WORKSHOP_PANEL`: 珠寶加工廠介面 (Jewelry Workshop Panel)
+### 💎 `JEWELRY_WORKSHOP_PANEL`: 珠寶加工廠介面 (Jewelry Workshop Panel) `[⏳ 待檢查]`
 * **道具與出售元件 (Goods & Trade)**:
-  * `Jewelry_workshop.png`: [town_building/Jewelry_workshop/Jewelry_workshop.png](../templates/town_building/Jewelry_workshop/Jewelry_workshop.png) - 珠寶加工廠標題列錨點
-  * `goods_items`: 材料/道具範本 (例如 [Scorpion_Shell.png](../templates/town_building/Jewelry_workshop/goods/green/Scorpion_Shell.png), [Toad_Venom.png](../templates/town_building/Jewelry_workshop/goods/green/Toad_Venom.png), [Dead_Soul_Core.png](../templates/town_building/Jewelry_workshop/goods/green/Dead_Soul_Core.png) 等)
-  * `sell.png`: [town_building/sell.png](../templates/town_building/sell.png) - 出售按鈕
-  * `sell_max.png`: [town_building/sell_max.png](../templates/town_building/sell_max.png) - 最大數量出售按鈕
+  * `Jewelry_workshop.png`: [town_building/Jewelry_workshop/Jewelry_workshop.png](../templates/town_building/Jewelry_workshop/Jewelry_workshop.png) - 珠寶加工廠標題列錨點 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`** ([JewelryWorkshopHandler](../states/handlers/jewelry_workshop.py))
+  * `goods_items`: 材料/道具範本 (例如 [Scorpion_Shell.png](../templates/town_building/Jewelry_workshop/goods/green/Scorpion_Shell.png) 等) ➔ 對應 **`STATE_JEWELRY_WORKSHOP`**
+  * `sell.png`: [town_building/sell.png](../templates/town_building/sell.png) - 出售按鈕 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`**
+  * `sell_max.png`: [town_building/sell_max.png](../templates/town_building/sell_max.png) - 最大數量出售按鈕 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`**
 
-### 👹 `LORD_BOSS_PANEL`: 首領領主介面 (Lord Boss Panel)
+### 👹 `LORD_BOSS_PANEL`: 首領領主介面 (Lord Boss Panel) `[⏳ 待檢查]`
 * **首領卡片與冷卻 (Boss Cards & Cooldown)**:
-  * `lord_spider`: [load/lord_spider.png](../templates/load/lord_spider.png) (育母蜘蛛麗拉西亞卡片)
-  * `lord_spectre`: [load/lord_spectre.png](../templates/load/lord_spectre.png) (古代惡靈伊瑟倫卡片)
-  * `cooldown_sign`: [load/cooldown_sign.png](../templates/load/cooldown_sign.png) - 首領冷卻木牌
+  * `lord_spider`: [load/lord_spider.png](../templates/load/lord_spider.png) (育母蜘蛛麗拉西亞卡片) ➔ 對應 **`STATE_LORD_BOSS`** ([LordBossHandler](../states/handlers/lord_boss.py))
+  * `lord_spectre`: [load/lord_spectre.png](../templates/load/lord_spectre.png) (古代惡靈伊瑟倫卡片) ➔ 對應 **`STATE_LORD_BOSS`**
+  * `cooldown_sign`: [load/cooldown_sign.png](../templates/load/cooldown_sign.png) - 首領冷卻木牌 ➔ 對應 **`STATE_LORD_BOSS`**
 
-### 🍺 `HERO_DRAW_PANEL`: 酒館招募介面 (Hero Draw Panel / Tavern)
+### 🍺 `HERO_DRAW_PANEL`: 酒館招募介面 (Hero Draw Panel / Tavern) `[⏳ 待檢查]`
 * **招募元件 (Draw Controls)**:
-  * `Tavern.png`: [town_building/Tavern/Tavern.png](../templates/town_building/Tavern/Tavern.png) - 酒館標題列錨點
-  * `free_recruitment.png`: [town_building/Tavern/free_recruitment.png](../templates/town_building/Tavern/free_recruitment.png) - 免費招募按鈕
-  * `deassemble_hero.png`: [town_building/Tavern/deassemble_hero.png](../templates/town_building/Tavern/deassemble_hero.png) - 英雄解雇/分解按鈕
+  * `Tavern.png`: [town_building/Tavern/Tavern.png](../templates/town_building/Tavern/Tavern.png) - 酒館標題列錨點 ➔ 對應 **`STATE_HERO_DRAW`** ([HeroDrawHandler](../states/handlers/hero_draw.py))
+  * `free_recruitment.png`: [town_building/Tavern/free_recruitment.png](../templates/town_building/Tavern/free_recruitment.png) - 免費招募按鈕 ➔ 對應 **`STATE_HERO_DRAW`**
+  * `deassemble_hero.png`: [town_building/Tavern/deassemble_hero.png](../templates/town_building/Tavern/deassemble_hero.png) - 英雄解雇按鈕 ➔ 對應 **`STATE_HERO_DRAW`**
 
-### 🎁 `CHEST_PANEL`: 神秘寶箱介面 (Chest Panel)
+### 🎁 `CHEST_PANEL`: 神秘寶箱介面 (Chest Panel) `[⏳ 待檢查]`
 * **寶箱元件 (Chest Controls)**:
-  * `mysterious_treasure.png`: [town_building/mysterious_treasure/mysterious_treasure.png](../templates/town_building/mysterious_treasure/mysterious_treasure.png) - 神秘寶箱標題列錨點
-  * `free_treasure.png`: [town_building/mysterious_treasure/free_treasure.png](../templates/town_building/mysterious_treasure/free_treasure.png) - 免費開啟寶箱按鈕
+  * `mysterious_treasure.png`: [town_building/mysterious_treasure/mysterious_treasure.png](../templates/town_building/mysterious_treasure/mysterious_treasure.png) - 神秘寶箱標題列錨點 ➔ 對應 **`STATE_CHEST`** ([ChestHandler](../states/handlers/chest.py))
+  * `free_treasure.png`: [town_building/mysterious_treasure/free_treasure.png](../templates/town_building/mysterious_treasure/free_treasure.png) - 免費開啟寶箱按鈕 ➔ 對應 **`STATE_CHEST`**
 
-### 📋 `BULLETIN_BOARD_PANEL`: 懸賞告示牌介面 (Bulletin Board Panel)
+### 📋 `BULLETIN_BOARD_PANEL`: 懸賞告示牌介面 (Bulletin Board Panel) `[⏳ 待檢查]`
 * **任務與調度元件 (Quests & Schedule)**:
-  * `bulletin_board.png`: [town_building/bulletin_board/bulletin_board.png](../templates/town_building/bulletin_board/bulletin_board.png) - 懸賞告示牌標題列錨點
-  * `task.png`: [town_building/bulletin_board/task.png](../templates/town_building/bulletin_board/task.png) & [town_building/bulletin_board/task_after.png](../templates/town_building/bulletin_board/task_after.png) - 任務頁籤 (Before/After)
-  * `reset.png`: [town_building/bulletin_board/reset.png](../templates/town_building/bulletin_board/reset.png) - 刷新任務按鈕
-  * `accept_task.png`: [town_building/bulletin_board/accept_task.png](../templates/town_building/bulletin_board/accept_task.png) - 接取任務按鈕
-  * `task_already_full.png`: [town_building/bulletin_board/task_already_full.png](../templates/town_building/bulletin_board/task_already_full.png) - 任務已滿告示
+  * `bulletin_board.png`: [town_building/bulletin_board/bulletin_board.png](../templates/town_building/bulletin_board/bulletin_board.png) - 懸賞告示牌標題列錨點 ➔ 對應 **`STATE_BULLETIN_BOARD`** ([BulletinBoardHandler](../states/handlers/bulletin_board.py))
+  * `task.png`: [town_building/bulletin_board/task.png](../templates/town_building/bulletin_board/task.png) & [town_building/bulletin_board/task_after.png](../templates/town_building/bulletin_board/task_after.png) - 任務頁籤 ➔ 對應 **`STATE_BULLETIN_BOARD`**
+  * `reset.png`: [town_building/bulletin_board/reset.png](../templates/town_building/bulletin_board/reset.png) - 刷新任務按鈕 ➔ 對應 **`STATE_BULLETIN_BOARD`**
+  * `accept_task.png`: [town_building/bulletin_board/accept_task.png](../templates/town_building/bulletin_board/accept_task.png) - 接取任務按鈕 ➔ 對應 **`STATE_BULLETIN_BOARD`**
+  * `task_already_full.png`: [town_building/bulletin_board/task_already_full.png](../templates/town_building/bulletin_board/task_already_full.png) - 任務已滿告示 ➔ 對應 **`STATE_BULLETIN_BOARD`**
 
-### ⚠️ `POPUPS_AND_OVERLAYS`: 通用彈窗與覆蓋物 (Popups & Overlays)
-* `cancel.png`: [exceptions/cancel.png](../templates/exceptions/cancel.png) - 彈窗關閉/取消按鈕
-* `quit.png`: [common/quit.png](../templates/common/quit.png) - 視窗離開按鈕
+### ⚠️ `POPUPS_AND_OVERLAYS`: 通用彈窗與覆蓋物 (Popups & Overlays) `[⏳ 待檢查]`
+* `cancel.png`: [exceptions/cancel.png](../templates/exceptions/cancel.png) - 彈窗關閉按鈕 ➔ 切換至 **`STATE_POPUP_RECOVERY`** ([GenericAntiStuckSubflow](../states/exceptions/subflows/generic_anti_stuck.py))
+* `quit.png`: [common/quit.png](../templates/common/quit.png) - 視窗離開按鈕 ➔ 各類 Handler 子流程退出階段通用
+
+---
+
+
 
 ---
 

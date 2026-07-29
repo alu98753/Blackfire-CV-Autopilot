@@ -301,10 +301,31 @@ class BackpackFullSortingHandler(BaseStateHandler):
         target_right_slot = None  # (row, col, color)
         right_slots_data = []
 
+        # 收集 goods_settings 中所有授權為 True 的品項圖片檔名與相對路徑
+        from config import SUBFLOW_CONFIGS, PRIMARY_MODES
+        jw_config = SUBFLOW_CONFIGS.get("jewelry_workshop", {}) or PRIMARY_MODES.get("jewelry_workshop", {})
+        cfg = getattr(self.machine, "config", {}) or {}
+        goods_settings = cfg.get("goods_settings") or jw_config.get("goods_settings", {})
+        goods_dir = cfg.get("goods_dir") or jw_config.get("goods_dir", "town_building/Jewelry_workshop/goods")
+
+        authorized_templates = []  # list of (color_key, item_name, tpl_rel_path)
+        for quality_key, items_dict in goods_settings.items():
+            if isinstance(items_dict, dict):
+                for item_name, is_enabled in items_dict.items():
+                    if is_enabled is True:
+                        color_key = "gray" if quality_key in ["gray", "gray_or_empty"] else quality_key
+                        tpl_rel_path = f"{goods_dir}/{color_key}/{item_name}.png"
+                        full_tpl_path = os.path.join("templates", tpl_rel_path)
+                        if os.path.exists(full_tpl_path):
+                            authorized_templates.append((color_key, item_name, tpl_rel_path))
+
         def find_authorized_target_in_screen(cur_screen):
             nonlocal right_slots_data
             right_slots_data.clear()
             candidates = []
+
+            # 1. 對右側 4x4 網格進行 Slot 顏色與標準差初步掃描 (診斷與邊界判定)
+            grid_color_map = {}  # (r, c) -> (color, whole_std, center_std)
             for r in range(4):
                 for c in range(4):
                     cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
@@ -323,8 +344,37 @@ class BackpackFullSortingHandler(BaseStateHandler):
                     center_std = np.std(center_crop) if center_crop.size > 0 else 0.0
                     
                     right_slots_data.append((r, c, color, whole_std, center_std))
-                    if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
-                        candidates.append((r, c, color))
+                    grid_color_map[(r, c)] = (color, whole_std, center_std)
+
+            # 2. 【核心優化】網格點擊前預先比對 (Pre-Click Template Match)：
+            # 若有收集到授權品項範本，直接對右側畫面發起主動比對，定位授權材料 Slot
+            if authorized_templates:
+                for color_key, item_name, tpl_rel_path in authorized_templates:
+                    pos, conf = self.matcher.match(cur_screen, tpl_rel_path, threshold=0.72, quiet=True)
+                    if pos:
+                        matched_x, matched_y = pos
+                        for (r, c), (color, whole_std, center_std) in grid_color_map.items():
+                            cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
+                            cy = int(pos_full[1] + (right_start_dy + r * step_y) * scale_y)
+                            cw = int(cell_w * scale_x)
+                            ch = int(cell_h * scale_y)
+                            
+                            # 若比對到的物品中心座標落在該 Slot 的相對範圍內
+                            if cx - 15 <= matched_x <= cx + cw + 15 and cy - 15 <= matched_y <= cy + ch + 15:
+                                if color not in keep_colors:
+                                    logging.info(f"🎯 [背包分選Pre-Click] 網格點擊前成功匹配授權物品範本 [{item_name}] (相似度: {conf:.4f}) 於 Slot [{r},{c}] ({color})")
+                                    candidates.append((r, c, color))
+                                    return candidates
+
+                # 若該品質有定義授權範本，但當前網格頁面上完全沒比對到任何授權材料 (代表皆為未授權裝備)
+                # 則直接回傳空 candidates ➔ 觸發 0 延遲滾動向下！
+                logging.info(f"🎒 [背包分選Pre-Click] 當前頁面無任何 goods_settings 授權物品範本，跳過所有裝備格子，發起滾動...")
+                return candidates
+
+            # 3. 兜底備用：若 goods_settings 完全未配置具體範本，回退為邊框顏色粗篩
+            for (r, c), (color, whole_std, center_std) in grid_color_map.items():
+                if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
+                    candidates.append((r, c, color))
             return candidates
 
         # 遍歷頁面與滾動頁面尋找真正獲得物品層級授權銷毀的 Slot
