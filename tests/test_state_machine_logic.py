@@ -1223,8 +1223,7 @@ class TestStateMachineLogic(unittest.TestCase):
         """
         self.state_machine.config = GAME_CONFIGS["stage"].copy()
         # 自訂只分解/銷毀 灰色、綠色、藍色 裝備
-        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue"]
-        self.state_machine.config["backpack_full_destroyable_colors"] = ["gray_or_empty", "green", "blue"]
+        self.state_machine.config["goods_settings"] = {"gray": {"item": True}, "green": {"item": True}, "blue": {"item": True}}
         # 設定保留紫色及以上（藍色不在保留名單中，因此可以被銷毀）
         self.state_machine.config["keep_colors"] = ["purple", "orange_yellow", "red"]
         self.state_machine.current_state = self.state_machine.STATE_BACKPACK_FULL_SORTING
