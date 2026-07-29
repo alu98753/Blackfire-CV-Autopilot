@@ -91,7 +91,8 @@ PRIMARY_MODES = {
             "dungeons/Treasure.png",
             "dungeons/skill_event.png",
             "dungeons/dungeon_bless.png",
-            "dungeons/gungeon_godown.png"
+            "dungeons/gungeon_godown.png",
+            "dungeons/leave.png"
         ]
     },
 
@@ -123,7 +124,8 @@ PRIMARY_MODES = {
             "dungeons/Treasure.png",
             "dungeons/skill_event.png",
             "dungeons/dungeon_bless.png",
-            "dungeons/gungeon_godown.png"
+            "dungeons/gungeon_godown.png",
+            "dungeons/leave.png"
         ],
         # 退守普通關卡配置 (預設為第 6 關第一小關)
         "stage_name": "冰凍峽谷 (first)",

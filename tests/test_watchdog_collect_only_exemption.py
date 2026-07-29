@@ -22,8 +22,9 @@ class TestWatchdogCollectOnlyExemption(unittest.TestCase):
     def test_watchdog_exempts_collect_only_state(self):
         """
         [COLLECT_ONLY 待機豁免斷言] 驗證當狀態為 STATE_COLLECT_ONLY 時，
-        即便停留在該狀態超過 60 秒甚至 3600 秒，Watchdog.check() 亦恆回傳 False。
+        在動態 CD 逾時門檻內 (如 7200 秒 CD + 60 秒緩衝)，Watchdog.check() 恆回傳 False。
         """
+        self.state_machine.config = {"diamond_cd": 7200.0, "bread_cd": 7200.0}
         self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
         self.state_machine.last_state_change = time.time() - 3600.0
 
