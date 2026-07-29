@@ -130,12 +130,18 @@ class UnexpectedPopupRecoveryHandler(BaseStateHandler):
             self.machine.restore_stashed_state()
             return
 
-        # 4. 超過最大重試次數 Fallback (調用 GameRelaunchSubflow 重啟)
+        # 4. 超過最大重試次數 Fallback (未發現遮擋彈窗或 Subflow 失敗)
         self.retry_count += 1
         if self.retry_count >= self.max_retries:
-            logging.warning(f"⚠️ [PopupRecovery] 已達最大重試次數 ({self.max_retries})！彈窗死鎖，發起 GameRelaunchSubflow 殺進程與重啟...")
             self.retry_count = 0
             self.active_subflow = None
-            from states.exceptions.subflows import GameRelaunchSubflow
-            GameRelaunchSubflow().execute(self.machine, reason="popup_recovery_max_retries_exceeded")
-            return
+            if getattr(self.machine, "stashed_state", None):
+                stashed = self.machine.stashed_state
+                logging.warning(f"⚠️ [PopupRecovery] 已達最大重試次數 ({self.max_retries})，未發現遮擋彈窗！恢復原暫存狀態 [{stashed}] (由 Watchdog 連續逾時機制保護)。")
+                self.machine.restore_stashed_state()
+                return
+            else:
+                logging.warning(f"⚠️ [PopupRecovery] 已達最大重試次數 ({self.max_retries}) 且無暫存狀態！發起 GameRelaunchSubflow 殺進程與重啟...")
+                from states.exceptions.subflows import GameRelaunchSubflow
+                GameRelaunchSubflow().execute(self.machine, reason="popup_recovery_max_retries_exceeded")
+                return

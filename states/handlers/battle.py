@@ -56,6 +56,7 @@ class BattleHandler(BaseStateHandler):
                 pos, _ = self.matcher.match(screen_img, feat, threshold=thresh, quiet=True)
                 if pos:
                     has_battle_feature = True
+                    self.notify_ui_progress()
                     break
                     
         # 2. 檢查結算與戰敗特徵
