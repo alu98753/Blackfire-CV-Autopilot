@@ -173,8 +173,27 @@ class TestBackpackFullDynamicDestroyable(unittest.TestCase):
             # （透過完整被測試物件之行為）
             self.assertEqual(len(candidates), 0)
 
+    def test_9_unknown_state_detects_backpack_full_and_transitions(self):
+        """
+        測試 9 (UNKNOWN 初始狀態啟動攔截):
+        驗證當腳本剛啟動、處於 STATE_UNKNOWN 狀態時，若遊戲畫面停留在 backpack_full.png 彈窗，
+        GameStateMachine 全域攔截器能精確識別 backpack_full.png 並自動切換至 STATE_BACKPACK_FULL_SORTING！
+        """
+        self.machine.config = {"type": "dungeon"}
+        self.machine.current_state = self.machine.STATE_UNKNOWN
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        self.mock_matcher.match.side_effect = lambda img, tpl, **kw: ((960, 289), 0.95) if tpl == "backpack_full.png" else (None, 0.0)
+        
+        # 執行 1 次 step
+        with patch('os.path.exists', return_value=True):
+            self.machine.step()
+        
+        # 驗證狀態已由 STATE_UNKNOWN 成功轉移至 STATE_BACKPACK_FULL_SORTING
+        self.assertEqual(self.machine.current_state, self.machine.STATE_BACKPACK_FULL_SORTING)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
