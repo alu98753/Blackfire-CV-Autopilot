@@ -126,11 +126,6 @@ class BackpackFullSortingHandler(BaseStateHandler):
         if not allowed_colors:
             allowed_colors = ["gray_or_empty"]
 
-        explicit_colors = cfg.get("backpack_full_destroyable_colors", [])
-        for col in explicit_colors:
-            if col not in allowed_colors:
-                allowed_colors.append(col)
-
         return allowed_colors
 
     def scroll_grid_rows(self, rows=2, direction="down", right_center_x=0, right_center_y=0, scale_y=1.0):
