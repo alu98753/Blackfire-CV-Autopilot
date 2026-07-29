@@ -109,10 +109,10 @@ class TestUnexpectedPopupDocking(unittest.TestCase):
     def test_watchdog_stashes_state_and_triggers_popup_recovery_on_timeout(self):
         """
         [全螢幕彈窗對接斷言 4: Watchdog 逾時自動觸發]
-        當處於 NAVIGATING 逾時 > 30s 時，Watchdog 自動暫存原狀態並轉移至 STATE_POPUP_RECOVERY。
+        當處於 NAVIGATING 逾時 > 90s 時，Watchdog 自動暫存原狀態並轉移至 STATE_POPUP_RECOVERY。
         """
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.last_state_change = time.time() - 35.0
+        self.state_machine.last_state_change = time.time() - 95.0
 
         with patch('states.exceptions.watchdog.safe_match', return_value=(None, 0.0)):
             triggered = self.watchdog.check(None)
