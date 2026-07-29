@@ -115,6 +115,37 @@ class TestBackpackFullDynamicDestroyable(unittest.TestCase):
         max_scrolls = self.machine.config.get("backpack_full_max_scroll", 5)
         self.assertEqual(max_scrolls, 5)
 
+    def test_7_unauthorized_item_in_goods_settings_is_intercepted_from_destruction(self):
+        """
+        測試 7 (物品層級二次防護)：
+        驗證當彈窗內容為未在 goods_settings 授權的裝備或物品 (Scorpion_Shell = False 或未匹配到範本) 時，
+        is_item_authorized_by_goods_settings 能精確返回 False 進行安全攔截，防止誤刪貴重裝備/物品。
+        """
+        self.machine.config = {
+            "goods_settings": {
+                "gray": {},
+                "green": {"Scorpion_Shell": False, "Toad_Venom": True},
+                "blue": {},
+                "purple": {}
+            }
+        }
+        mock_screen = MagicMock()
+        # 情況 A：彈窗內比對到已設為 False 的 Scorpion_Shell
+        self.mock_matcher.match.side_effect = lambda img, tpl, **kw: ((100, 100), 0.90) if "Scorpion_Shell" in tpl else (None, 0.0)
+        authorized = self.handler.is_item_authorized_by_goods_settings(mock_screen, "green")
+        self.assertFalse(authorized, "Scorpion_Shell 在 goods_settings 設為 False 時必須拒絕銷毀！")
+
+        # 情況 B：彈窗內為綠色裝備，完全沒比對到任何已知的 goods 模板
+        self.mock_matcher.match.side_effect = lambda img, tpl, **kw: (None, 0.0)
+        authorized_equip = self.handler.is_item_authorized_by_goods_settings(mock_screen, "green")
+        self.assertFalse(authorized_equip, "未在 goods_settings 內的綠色裝備/物品必須觸發安全防護攔截！")
+
+        # 情況 C：彈窗內為已授權 True 的 Toad_Venom
+        self.mock_matcher.match.side_effect = lambda img, tpl, **kw: ((100, 100), 0.90) if "Toad_Venom" in tpl else (None, 0.0)
+        authorized_true = self.handler.is_item_authorized_by_goods_settings(mock_screen, "green")
+        self.assertTrue(authorized_true, "Toad_Venom 設為 True 時必須通過授權！")
+
 
 if __name__ == "__main__":
     unittest.main()
+

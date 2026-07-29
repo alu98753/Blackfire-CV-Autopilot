@@ -76,3 +76,13 @@
         .venv\Scripts\python -m coverage report --include="states/handlers/navigation.py,utils/scene_detector.py" -m
         ```
    - **最終全域驗證**：完成所有增量開發準備 Commit 前，才執行全套測試 (`.venv\Scripts\python -m unittest discover tests`) 作為收尾。
+
+### 7. Markdown 文檔與超連結繪製規範 📄
+- **嚴禁使用絕對路徑 `file:///`**：在撰寫 `docs/` 下的 Markdown 技術文檔時，**絕對禁止使用 `file:///...` 絕對路徑**（避免 VS Code Markdown Preview 預覽器無法解析而自動斷行，呈現未解析的長文字網址）。
+- **強制使用標準相對路徑 (Relative Markdown Links)**：
+  - 引用專案範本或模組時，必須依據當前 Markdown 檔案位置使用標準相對路徑。
+  - 例如在 `docs/` 檔案中引用範本圖片與程式碼時，統一採用：
+    - `[common/door.png](../templates/common/door.png)`
+    - `[NavigationHandler](../states/handlers/navigation.py)`
+  - 確保在 GitHub 與 VS Code Preview 預覽時均能呈現乾淨、單行且可點擊的藍色超連結。
+
