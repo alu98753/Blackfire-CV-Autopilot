@@ -173,7 +173,8 @@ class TestStateMachineLogic(unittest.TestCase):
                 return (800, 200), 0.90
             elif name == "dungeons/choice_bless.png" and match_call_count == 7:
                 match_call_count += 1
-                return (450, 200), 0.90  # 局部座標 (450, 200)，加 x_min(350) = 800，完美對齊
+                return (225, 200), 0.90  # 局部座標 (225, 200)，加 x_min(575) = 800，完美對齊
+
             elif name == "common/ok.png" and match_call_count == 8:
                 match_call_count += 1
                 return (810, 210), 0.90
