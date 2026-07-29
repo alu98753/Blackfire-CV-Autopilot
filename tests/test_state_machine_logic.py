@@ -597,6 +597,8 @@ class TestStateMachineLogic(unittest.TestCase):
                 return ((600, 600), 0.9) # 銷毀確認按鈕
             elif name == "common/collect.png":
                 return ((700, 700), 0.9) # 領取按鈕
+            elif "goods" in name or "Jewelry_workshop" in name:
+                return ((400, 400), 0.9)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect
@@ -1240,6 +1242,8 @@ class TestStateMachineLogic(unittest.TestCase):
                 return ((800, 800), 0.9)
             elif name == "common/collect.png":
                 return ((900, 900), 0.9)
+            elif "goods" in name or "Jewelry_workshop" in name:
+                return ((400, 400), 0.9)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect
