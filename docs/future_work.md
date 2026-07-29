@@ -11,7 +11,7 @@
 3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止點擊未生效導致狀態過早推進。
 
 #### 🎯 2. 優化優先級矩陣 (Priority Hierarchy)
-- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換�#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
+- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換�#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
 - [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Blood_Altar.md)]
 - [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md)]
 - [已完成] **每日討伐首領領主 (每次討伐需 5 點體力/麵包)** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]
@@ -35,14 +35,7 @@
 - [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
 - [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]
 
-#### 📌 4. 長掛機剩餘待補強項目
-- [ ] **Steam/網路嚴重斷線重連防護**：網路崩潰或遊戲關閉時，嘗試自動重新連接或從 Steam 重新拉起遊戲。
-
----
-
-### 🧪 邊界模擬測試套件 (Edge Case Test Suite)
-在 [test_behavioral_scenarios.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_behavioral_scenarios.py) 中，為上述 Edge Cases 寫入自動化模擬測試，確保任何異常彈窗跳出時，狀態機都能 100% 依預期防禦。
-
+----
 
 - **[已擱置] 稀有戰利品自動背包鎖定**：於戰鬥結束畫面同時偵測到「獲得戰利品」與「繼續」時，先前往背包進行特定裝備的鎖定防護（此功能目前已由貴重裝備色彩分類保留機制完整覆蓋，暫予擱置）。
 

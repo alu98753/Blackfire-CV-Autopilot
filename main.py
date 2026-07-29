@@ -554,17 +554,22 @@ def run_main_loop(state_machine, interval):
 
                     if is_inside:
                         last_action_diff = time.time() - state_machine.mouse.last_action_time
-                        if last_action_diff > 1.2:
                             if not state_machine.user_operating:
                                 logging.warning(f"⚠️ 偵測到使用者手動操作 (滑鼠移動至 {cur_pos})，自動暫停掛機，鎖定目前狀態: [{state_machine.current_state}]。")
                                 state_machine.user_operating = True
+                                state_machine.user_operation_start_time = time.time()
                             state_machine.last_user_operation_time = time.time()
             
             state_machine.prev_mouse_pos = cur_pos
             
             if state_machine.user_operating:
                 if time.time() - state_machine.last_user_operation_time > 3.0:
-                    logging.info(f"🟢 偵測到使用者已停止手動操作達 3 秒，恢復自動掛機。鎖定狀態: [{state_machine.current_state}]。")
+                    pause_duration = 0.0
+                    if getattr(state_machine, "user_operation_start_time", None) is not None:
+                        pause_duration = max(0.0, time.time() - state_machine.user_operation_start_time)
+                        state_machine.last_state_change += pause_duration
+                        state_machine.user_operation_start_time = None
+                    logging.info(f"🟢 偵測到使用者已停止手動操作達 3 秒，恢復自動掛機 (扣除使用者操作時間 {pause_duration:.1f} 秒)。鎖定狀態: [{state_machine.current_state}]。")
                     state_machine.user_operating = False
                     state_machine.just_resumed_from_user = True
                     state_machine.prev_mouse_pos = pyautogui.position() # 防止瞬間重新觸發

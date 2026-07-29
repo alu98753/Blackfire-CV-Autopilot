@@ -121,6 +121,7 @@ class GameStateMachine:
         
         # 使用者手動介入偵測相關屬性
         self.user_operating = False
+        self.user_operation_start_time = None
         self.last_user_operation_time = 0.0
         self.prev_mouse_pos = None
         self.just_resumed_from_user = False
