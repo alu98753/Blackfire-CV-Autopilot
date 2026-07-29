@@ -95,6 +95,44 @@ class BackpackFullSortingHandler(BaseStateHandler):
         logging.info(f"📸 [背包分選] 已存檔診斷截圖 {filename}。")
         self.screenshot_counter += 1
 
+    def get_dynamic_destroyable_colors(self):
+        """
+        [顏色判定 + jewelry_workshop goods_settings]
+        動態計算右側背包允許被銷毀的品質顏色清單：
+        檢查 jewelry_workshop.goods_settings 中各品質 (gray, green, blue, purple) 是否有任何物品配置為 True。
+        若該品質有至少一個 True 物品，則將對應的顏色納入允許銷毀清單。
+        """
+        from config import SUBFLOW_CONFIGS, PRIMARY_MODES
+        jw_config = SUBFLOW_CONFIGS.get("jewelry_workshop", {}) or PRIMARY_MODES.get("jewelry_workshop", {})
+        
+        cfg = getattr(self.machine, "config", {}) or {}
+        goods_settings = cfg.get("goods_settings") or jw_config.get("goods_settings", {})
+
+        color_mapping = {
+            "gray": ["gray_or_empty", "gray"],
+            "green": ["green"],
+            "blue": ["blue"],
+            "purple": ["purple"]
+        }
+
+        allowed_colors = []
+        for quality_key, items_dict in goods_settings.items():
+            if isinstance(items_dict, dict) and any(val is True for val in items_dict.values()):
+                mapped_colors = color_mapping.get(quality_key, [quality_key])
+                for col in mapped_colors:
+                    if col not in allowed_colors:
+                        allowed_colors.append(col)
+
+        if not allowed_colors:
+            allowed_colors = ["gray_or_empty"]
+
+        explicit_colors = cfg.get("backpack_full_destroyable_colors", [])
+        for col in explicit_colors:
+            if col not in allowed_colors:
+                allowed_colors.append(col)
+
+        return allowed_colors
+
     def handle(self, screen_img, rect):
         """
         處理背包已滿 (無法容納的物品) 畫面。
@@ -123,8 +161,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         step_y = 139.5
 
         keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
-        # 背包已滿溢出銷毀獨立配置項，預設僅允許 ["gray_or_empty"] (與大廳大量分解 disassemble_colors 完全解耦)
-        destroyable_colors = self.machine.config.get("backpack_full_destroyable_colors", ["gray_or_empty"])
+        # 動態計算允許銷毀/覆蓋清單：顏色判定 + 在 jewelry_workshop goods_settings 中不同品質下為 True 的品質
+        destroyable_colors = self.get_dynamic_destroyable_colors()
 
         def is_high_rarity(color):
             return color in keep_colors or color == "unknown_colored"
