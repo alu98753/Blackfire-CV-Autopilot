@@ -363,31 +363,32 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
         # 3.3 城鎮點擊珠寶加工廠建築 (Jewelry_workshop.png) (進場前優先發起城鎮背包預先整理)
         if is_needed:
+            # 3.3.1 若目前背包已處於開啟狀態（不受城鎮大門/建築被背包遮擋影響），優先執行「整理」與「退出」
+            if self.bag_handler.is_backpack_opened(screen_img):
+                if not getattr(self.machine, "bag_tidied", False):
+                    if self.bag_handler.tidy_backpack(screen_img, rect):
+                        self.last_action_time = now
+                        return
+                else:
+                    pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
+                    if pos_quit:
+                        logging.info("💎 [珠寶加工廠] 城鎮背包預先整理完畢，點擊關閉退出背包...")
+                        self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, threshold=0.7)
+                    self.machine.bag_tidied = False
+                    self.machine.bag_opened_clicked = False
+                    self.pre_tidy_done = True
+                    self.last_action_time = now
+                    return
+
+            # 3.3.2 若背包未開啟，且處於城鎮 (pos_building & pos_door 可見)
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
             pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
             if pos_building and pos_door:
-                # 3.3.1 進入前城鎮背包預先整理三連擊 (Pre-Tidy: 開背包 ➔ 整理 ➔ 退出)
                 if not self.pre_tidy_done:
-                    if self.bag_handler.is_backpack_opened(screen_img):
-                        if not getattr(self.machine, "bag_tidied", False):
-                            if self.bag_handler.tidy_backpack(screen_img, rect):
-                                self.last_action_time = now
-                                return
-                        else:
-                            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
-                            if pos_quit:
-                                logging.info("💎 [珠寶加工廠] 城鎮背包預先整理完畢，點擊關閉退出背包...")
-                                self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, threshold=0.7)
-                            self.machine.bag_tidied = False
-                            self.machine.bag_opened_clicked = False
-                            self.pre_tidy_done = True
-                            self.last_action_time = now
-                            return
-                    else:
-                        logging.info("💎 [珠寶加工廠] 進入前執行城鎮背包預先整理，優先開啟背包...")
-                        if self.bag_handler.open_backpack(screen_img, rect):
-                            self.last_action_time = now
-                            return
+                    logging.info("💎 [珠寶加工廠] 進入前執行城鎮背包預先整理，優先開啟背包...")
+                    if self.bag_handler.open_backpack(screen_img, rect):
+                        self.last_action_time = now
+                        return
 
                 logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
                 self.mouse.click(left + pos_building[0], top + pos_building[1])

@@ -60,8 +60,9 @@ class TestJewelryWorkshopPreTidy(unittest.TestCase):
         self.mock_machine.bag_tidied = False
 
         def mock_match(screen_img, template_name, **kw):
+            # 模擬背包彈窗遮擋了城鎮大門與建築 (door, Jewelry_workshop 皆回傳 None)
             if template_name in ["common/door.png", "town_building/Jewelry_workshop/Jewelry_workshop.png"]:
-                return ((100, 100), 0.90)
+                return (None, 0.0)
             elif template_name == "common/tidy.png":
                 return ((300, 800), 0.92)
             return (None, 0.0)
@@ -71,7 +72,7 @@ class TestJewelryWorkshopPreTidy(unittest.TestCase):
         with patch("states.handlers.jewelry_workshop.time.sleep"):
             self.handler.handle(self.fake_img, self.rect)
 
-        # 斷言點擊了整理按鈕，設定 bag_tidied = True
+        # 斷言即使城鎮大門/建築被背包彈窗遮擋，依然成功點擊了整理按鈕，設定 bag_tidied = True
         self.assertTrue(self.mock_machine.bag_tidied)
         self.assertEqual(self.handler.step_phase, "INIT")
 
