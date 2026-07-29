@@ -45,7 +45,7 @@
   * `goback_town`: [goback_town.png](../templates/goback_town.png) - 返回城鎮按鈕
 * **操作按鈕 (Buttons)**:
   * `start.png`: [stages/start.png](../templates/stages/start.png) - 開始戰鬥按鈕
-  * `raid_box_popup`: [exceptions/Raid_Box.png](../templates/exceptions/Raid_Box.png) - 掃蕩 / 寶箱獎勵彈窗
+  * `raid_box_popup`: [exceptions/Raid_Box.png](../templates/exceptions/Raid_Box.png) - 突襲彈窗
   * `task_complete_popup`: [task_complete.png](../templates/task_complete.png) - 任務完成彈窗
 
 ### ⚔️ `BATTLE_SCENE`: 戰鬥進行中畫面 (Battle Scene)
@@ -226,7 +226,7 @@
 | 子流程名稱 (Subflow) | 模組檔案位置 | 專屬處理障礙與行動 |
 | :--- | :--- | :--- |
 | `WheelOfFortuneSubflow` | [wheel_of_fortune.py](../states/exceptions/subflows/wheel_of_fortune.py) | 偵測 [exceptions/Wheel_of_Fortune.png](../templates/exceptions/Wheel_of_Fortune.png) 幸運輪盤彈窗，自動點擊關閉 / 領取 |
-| `RaidBoxSubflow` | [raid_box.py](../states/exceptions/subflows/raid_box.py) | 偵測 [exceptions/Raid_Box.png](../templates/exceptions/Raid_Box.png) 掃蕩 / 寶箱獎勵彈窗，於 ROI 內部尋找 [cancel.png](../templates/exceptions/cancel.png) 自動點擊關閉 |
+| `RaidBoxSubflow` | [raid_box.py](../states/exceptions/subflows/raid_box.py) | 偵測 [exceptions/Raid_Box.png](../templates/exceptions/Raid_Box.png) stage的突襲彈窗，於 ROI 內部尋找 [cancel.png](../templates/exceptions/cancel.png) 自動點擊關閉 |
 | `GenericAntiStuckSubflow` | [generic_anti_stuck.py](../states/exceptions/subflows/generic_anti_stuck.py) | 找不到特定圖片時的通用救援：針對 [exceptions/cancel.png](../templates/exceptions/cancel.png) 盲點或進行微幅位移解鎖死鎖 |
 | `GameRelaunchSubflow` | [game_relaunch.py](../states/exceptions/subflows/game_relaunch.py) | 遊戲崩潰、黑屏或視窗消失時，透過 Steam Launcher 發起重啟並重新恢復進入遊戲狀態 |
 
