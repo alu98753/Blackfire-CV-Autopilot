@@ -121,6 +121,7 @@ class GameStateMachine:
         
         # 使用者手動介入偵測相關屬性
         self.user_operating = False
+        self.user_operation_start_time = None
         self.last_user_operation_time = 0.0
         self.prev_mouse_pos = None
         self.just_resumed_from_user = False
@@ -563,15 +564,23 @@ class GameStateMachine:
                 self.transition_to(next_state)
                 return
                 
-        # 4. 檢查是否在地下城探險中
-        if self.config["type"] == "dungeon":
-            for btn_name in self.config["explore_priorities"]:
-                # 如果看見任何探索或通關完成按鈕，說明處於探索狀態
-                if btn_name in ["dungeons/dungeons_complete.png", "dungeons/gungeon_godown.png", "dungeons/Treasure.png", "dungeons/dungeon_bless.png"]:
-                    pos, _ = self.matcher.match(screen_img, btn_name, threshold=0.8)
-                    if pos:
-                        self.transition_to(self.STATE_DUNGEON_EXPLORING)
-                        return
+        # 4. 檢查是否在地下城探險中 (不限模式 Mode-Agnostic：無論當前設定為 dungeon/mix/daily，只要畫面出現地下城特徵即確定處於地下城)
+        dungeon_features = [
+            "dungeons/leave.png",
+            "dungeons/dungeons_complete.png",
+            "dungeons/gungeon_godown.png",
+            "dungeons/Treasure.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/dungeon_fight.png"
+        ]
+        for btn_name in dungeon_features:
+            if os.path.exists(os.path.join("templates", btn_name)):
+                pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
+                if pos:
+                    logging.info(f"🏰 全域定位：偵測到地下城內部特徵 [{btn_name}] (信心度: {conf:.4f})，鎖定地下城探索狀態！")
+                    self.is_in_dungeon = True
+                    self.transition_to(self.STATE_DUNGEON_EXPLORING)
+                    return
                         
         # 5. 如果是背包整理模式，強制跳轉至 BAG_CLEANING
         if self.config["type"] == "bag_clean":

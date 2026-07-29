@@ -95,6 +95,65 @@ class BackpackFullSortingHandler(BaseStateHandler):
         logging.info(f"📸 [背包分選] 已存檔診斷截圖 {filename}。")
         self.screenshot_counter += 1
 
+    def get_dynamic_destroyable_colors(self):
+        """
+        [顏色判定 + jewelry_workshop goods_settings]
+        動態計算右側背包允許被銷毀的品質顏色清單：
+        檢查 jewelry_workshop.goods_settings 中各品質 (gray, green, blue, purple) 是否有任何物品配置為 True。
+        若該品質有至少一個 True 物品，則將對應的顏色納入允許銷毀清單。
+        """
+        from config import SUBFLOW_CONFIGS, PRIMARY_MODES
+        jw_config = SUBFLOW_CONFIGS.get("jewelry_workshop", {}) or PRIMARY_MODES.get("jewelry_workshop", {})
+        
+        cfg = getattr(self.machine, "config", {}) or {}
+        goods_settings = cfg.get("goods_settings") or jw_config.get("goods_settings", {})
+
+        color_mapping = {
+            "gray": ["gray_or_empty", "gray"],
+            "green": ["green"],
+            "blue": ["blue"],
+            "purple": ["purple"]
+        }
+
+        allowed_colors = []
+        for quality_key, items_dict in goods_settings.items():
+            if isinstance(items_dict, dict) and any(val is True for val in items_dict.values()):
+                mapped_colors = color_mapping.get(quality_key, [quality_key])
+                for col in mapped_colors:
+                    if col not in allowed_colors:
+                        allowed_colors.append(col)
+
+        if not allowed_colors:
+            allowed_colors = ["gray_or_empty"]
+
+        return allowed_colors
+
+    def scroll_grid_rows(self, rows=2, direction="down", right_center_x=0, right_center_y=0, scale_y=1.0):
+        """
+        [精準網格滾動]
+        以 N 個格子高度 (預設 2 格 = 2 * 139.5 * scale_y = 279px) 為單位進行 100% 像素對齊拖曳/滾動。
+        - direction="down": 畫面向下滾動 (列表向上移動 rows 格)
+        - direction="up": 畫面向上滾動 (列表向下移動 rows 格)
+        """
+        step_y = 139.5
+        pixels = int(rows * step_y * scale_y)  # 279px (1080p 解析度下 2 格)
+        half_p = pixels // 2
+
+        if direction == "down":
+            start_y = right_center_y + half_p
+            end_y = right_center_y - half_p
+            logging.info(f"🎒 [背包分選] 向下滾動 {rows} 個格子高度 (精準對齊位移 {pixels}px)...")
+            drag_success = self.mouse.drag(right_center_x, start_y, right_center_x, end_y, duration=0.25)
+            if not drag_success:
+                self.mouse.scroll(-pixels, right_center_x, right_center_y)
+        else:
+            start_y = right_center_y - half_p
+            end_y = right_center_y + half_p
+            logging.info(f"🎒 [背包分選] 向上滾動 {rows} 個格子高度 (精準對齊位移 {pixels}px)...")
+            drag_success = self.mouse.drag(right_center_x, start_y, right_center_x, end_y, duration=0.25)
+            if not drag_success:
+                self.mouse.scroll(pixels, right_center_x, right_center_y)
+
     def handle(self, screen_img, rect):
         """
         處理背包已滿 (無法容納的物品) 畫面。
@@ -123,8 +182,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         step_y = 139.5
 
         keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
-        # 背包已滿溢出銷毀獨立配置項，預設僅允許 ["gray_or_empty"] (與大廳大量分解 disassemble_colors 完全解耦)
-        destroyable_colors = self.machine.config.get("backpack_full_destroyable_colors", ["gray_or_empty"])
+        # 動態計算允許銷毀/覆蓋清單：顏色判定 + 在 jewelry_workshop goods_settings 中不同品質下為 True 的品質
+        destroyable_colors = self.get_dynamic_destroyable_colors()
 
         def is_high_rarity(color):
             return color in keep_colors or color == "unknown_colored"
@@ -210,13 +269,13 @@ class BackpackFullSortingHandler(BaseStateHandler):
             return
 
         scroll_count = 0
+        max_scrolls = self.machine.config.get("backpack_full_max_scroll", 5)
 
-        # 若第一頁沒有，進行向下滾動尋找
+        # 若第一頁沒有，進行向下滾動尋找 (最多 max_scrolls 次，每步精準滾動 2 個格子高度)
         if not target_right_slot:
-            logging.info("🎒 [背包分選] 右側當前頁面無低稀有度物品，開始向下滾動尋找...")
-            for s in range(1, 4):
-                # 向下滾動
-                self.mouse.scroll(-300, right_center_x, right_center_y)
+            logging.info(f"🎒 [背包分選] 右側當前頁面無低稀有度物品，開始向下滾動尋找 (最多 {max_scrolls} 次，每步 2 格)...")
+            for s in range(1, max_scrolls + 1):
+                self.scroll_grid_rows(rows=2, direction="down", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
                 scroll_count += 1
                 time.sleep(0.1)
                 
@@ -258,7 +317,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
         if not target_right_slot:
             logging.warning(f"🎒 [背包分選] ⚠️ 右側背包內無可銷毀的允許物品 ({destroyable_colors})！滾動後仍未尋獲。")
             if scroll_count > 0:
-                self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
+                for _ in range(scroll_count):
+                    self.scroll_grid_rows(rows=2, direction="up", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
                 time.sleep(0.08)
             logging.info("🎒 [背包分選] 點擊關閉退出，避免卡死。")
             # 輸出審計圖 (關閉目標)
@@ -326,14 +386,16 @@ class BackpackFullSortingHandler(BaseStateHandler):
         else:
             logging.warning("🎒 [背包分選] ⚠️ 未能匹配到銷毀按鈕 'destroy.png'，中斷分選。")
             if scroll_count > 0:
-                self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
+                for _ in range(scroll_count):
+                    self.scroll_grid_rows(rows=2, direction="up", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
                 time.sleep(0.08)
             return
 
-        # 滾動回頂端以恢復初始網格位置
+        # 滾動回頂端以恢復初始網格位置 (每步精準滾動 2 格)
         if scroll_count > 0:
-            logging.info("🎒 [背包分選] 正在滾動回背包頂端...")
-            self.mouse.scroll(scroll_count * 300, right_center_x, right_center_y)
+            logging.info(f"🎒 [背包分選] 正在滾動回背包頂端 (共 {scroll_count} 次，每步 2 格)...")
+            for _ in range(scroll_count):
+                self.scroll_grid_rows(rows=2, direction="up", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
             time.sleep(0.25)  # 增加滾動及 UI 重繪的延遲
         else:
             time.sleep(0.1)  # 即使沒滾動也稍微等待，確保確認銷毀後介面完全更新

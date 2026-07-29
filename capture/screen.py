@@ -286,25 +286,28 @@ class ScreenCapturer:
             logging.debug(f"後台截圖發生錯誤: {e}")
             return None
 
-    def capture(self, rect=None):
+    def capture(self, rect=None, full_screen: bool = False):
         """
         擷取螢幕或指定區域，回傳 OpenCV 格式 (BGR) 影像。
         3 層備援截圖瀑布：後台 PrintWindow/BitBlt 優先 ➔ 前台 mss 備用 ➔ PIL ImageGrab 末線防護。
         """
+        if full_screen:
+            rect = None
+
         hwnd = self.get_hwnd()
         
-        # 1. 後台模式優先嘗試 BitBlt/PrintWindow 後台截圖
-        if self.backend_mode and hwnd:
+        # 1. 後台模式優先嘗試 BitBlt/PrintWindow 後台截圖 (全螢幕模式除外)
+        if self.backend_mode and hwnd and not full_screen:
             img = self._capture_backend(hwnd)
             if img is not None:
                 return img
                 
         # 2. 前台 / MSS 螢幕區域截圖 (第二防線)
-        if rect is None:
+        if rect is None and not full_screen:
             rect = self.get_window_rect()
             
         try:
-            if rect is None:
+            if rect is None or full_screen:
                 logging.info("將擷取主螢幕畫面作為備用方案...")
                 monitor = self.sct.monitors[1]
             else:

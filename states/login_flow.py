@@ -39,13 +39,18 @@ def _wait_for_town(state_machine, rect):
         if dismissed_popup:
             continue
             
-        # 2. 只有在無任何彈窗按鈕時，判定遊戲畫面是否已載入 (城鎮大門 door.png、自動戰鬥 auto.png、或選關大廳)
+        # 2. 只有在無任何彈窗按鈕時，判定遊戲畫面是否已載入 (城鎮大門 door.png、自動戰鬥 auto.png、選關大廳、或地下城內部 leave.png)
         ready_found = False
-        for ready_feature in ["common/door.png", "common/auto.png", "common/select_stage.png", "dungeons/dungeon.png"]:
+        for ready_feature in [
+            "common/door.png", "common/auto.png", "common/select_stage.png", "dungeons/dungeon.png",
+            "dungeons/leave.png", "dungeons/dungeon_fight.png", "dungeons/gungeon_godown.png"
+        ]:
             if os.path.exists(os.path.join("templates", ready_feature)):
                 pos_ready, conf_ready = state_machine.matcher.match(screen_img, ready_feature, threshold=0.75)
                 if pos_ready:
                     logging.info(f"🟢 [登入流程] 登入後畫面載入完成！偵測到畫面特徵 [{ready_feature}] (相似度: {conf_ready:.4f})，準備進入全域狀態定位！")
+                    if ready_feature.startswith("dungeons/"):
+                        state_machine.is_in_dungeon = True
                     door_found = True
                     ready_found = True
                     break

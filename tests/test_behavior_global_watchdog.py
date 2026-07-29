@@ -100,9 +100,9 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         self.assertEqual(mock_relaunch_execute.call_args[1]["reason"], "collect_only_cooldown_timeout_exceeded")
 
     def test_timeout_30s_with_matched_specific_subflow_template(self):
-        """[測試 3] 雙重條件：滿 30 秒 + 掃描命中 Wheel_of_Fortune.png 專屬 Subflow 圖案"""
+        """[測試 3] 雙重條件：滿 90 秒 + 掃描命中 Wheel_of_Fortune.png 專屬 Subflow 圖案"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
-        self.machine.last_state_change = time.time() - 31.0  # 卡住達 31 秒 (滿 30s)
+        self.machine.last_state_change = time.time() - 95.0  # 卡住達 95 秒 (滿 90s)
 
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
 

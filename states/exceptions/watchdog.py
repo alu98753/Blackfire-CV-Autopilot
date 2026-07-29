@@ -29,8 +29,8 @@ class ExceptionWatchdog:
         :param screen_img: 擷取到的遊戲畫面影像
         :return: True 代表已觸發例外並完成 stash_current_state()；False 代表畫面正常
         """
-        # 1. 意外彈窗處置中豁免 (由 UnexpectedPopupRecoveryHandler 5 次重試控制)
-        if self.machine.current_state == self.machine.STATE_POPUP_RECOVERY:
+        # 1. 意外彈窗處置中豁免 (由 UnexpectedPopupRecoveryHandler 5 次重試控制) 與 使用者手動操作中豁免
+        if self.machine.current_state == self.machine.STATE_POPUP_RECOVERY or getattr(self.machine, "user_operating", False):
             return False
 
         now_t = time.time()
@@ -68,8 +68,9 @@ class ExceptionWatchdog:
 
             return False
 
-        # 門檻判斷：戰鬥、探索、背包整理與長城鎮任務 (抽卡/領懸賞/Boss/獻祭/寶箱/珠寶加工) 給予 90 秒寬鬆門檻；其餘短狀態 30 秒
+        # 門檻判斷：導航、戰鬥、探索、背包整理與長城鎮任務 (導航/抽卡/領懸賞/Boss/獻祭/寶箱/珠寶加工) 給予 90 秒寬鬆門檻；其餘短狀態 30 秒
         long_subflow_states = [
+            self.machine.STATE_NAVIGATING,
             self.machine.STATE_BATTLE,
             self.machine.STATE_DUNGEON_EXPLORING,
             self.machine.STATE_LORD_BOSS,

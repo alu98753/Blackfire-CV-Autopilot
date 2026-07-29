@@ -11,14 +11,7 @@
 3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止點擊未生效導致狀態過早推進。
 
 #### 🎯 2. 優化優先級矩陣 (Priority Hierarchy)
-- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換階段、按鈕點擊未驗證消失、全螢幕意外彈窗。**必須 100% 優先修復！**
-- **P1 級 (中高優先 / 長期穩定與資源防護)**：
-  - **CPU 功耗控管**：主迴圈保持 `0.05s` 適當睡眠，Python 佔用率維持在 $< 2\%$，防熱防死鎖 (參見 [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md))。
-  - **記憶體洩漏 (RAM Footprint)**：驗證長途運算無 Memory Leak，保持記憶體平穩。
-  - **每日 08:05 重置**：確保跨日自動觸發重置與狀態更新。
-- **P2 級 (最低優先 / 微幅速度與延遲)**：單次辨識或動作慢 0.2~0.5 秒完全不影響 5 天掛機穩定度，有空再優化。
-
-#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
+- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換�#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
 - [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Blood_Altar.md)]
 - [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md)]
 - [已完成] **每日討伐首領領主 (每次討伐需 5 點體力/麵包)** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]
@@ -30,15 +23,19 @@
 - [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_phase_transition_stability.py)]
 - [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
 - [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]
+- [已完成並驗證] **Mode-Agnostic 地下城斷線與遊戲重開自癒** (全模式辨識 `dungeons/leave.png` 起點恢復探索) [REF: [test_dungeon_relaunch_recovery.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_dungeon_relaunch_recovery.py)]
+- [已完成並驗證] **DailyManager 跨日 08:05 自動標籤比對與強制清零** (比對持久化 Date Tag 解決跨日未重置) [REF: [daily_manager.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py)]
+- [已完成並驗證] **Watchdog 1st Timeout 降級恢復與戰鬥進度刷新** (第一次逾時無彈窗恢復原狀態，並於戰鬥中刷新 UI 進度) [REF: [test_popup_recovery_retry_behavior.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_popup_recovery_retry_behavior.py)]
+- [已完成並驗證] **背包已滿 goods_settings 單一權威來源與 2 格 (279px) 精準像素 Drag 位移** (銷毀授權與 goods_settings 100% 同步，全 False 安全兜底；按 2 格步進精準像素對齊) [REF: [test_backpack_full_dynamic_destroyable.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_backpack_full_dynamic_destroyable.py)]
+- [已完成並驗證] **導航狀態 Watchdog 90 秒寬鬆門檻** (將 `STATE_NAVIGATING` 放寬至 90 秒，排除選關卡卡片與翻頁導航誤判) [REF: [watchdog.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py)]
+- [已完成並驗證] **測試套件遊戲啟動與殺進程生命週期隔離** (統一集中至 `test_game_process_lifecycle.py` 並標註 `@unittest.skip`，防範自動測試誤觸發) [REF: [test_game_process_lifecycle.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_game_process_lifecycle.py)]次循環僅增 1.09MB)
+- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_watchdog_collect_only_exemption.py)]
+- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_deadlock_risk_prevention.py)]
+- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_phase_transition_stability.py)]
+- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
+- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]
 
-#### 📌 4. 長掛機剩餘待補強項目
-- [ ] **Steam/網路嚴重斷線重連防護**：網路崩潰或遊戲關閉時，嘗試自動重新連接或從 Steam 重新拉起遊戲。
-
----
-
-### 🧪 邊界模擬測試套件 (Edge Case Test Suite)
-在 [test_behavioral_scenarios.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_behavioral_scenarios.py) 中，為上述 Edge Cases 寫入自動化模擬測試，確保任何異常彈窗跳出時，狀態機都能 100% 依預期防禦。
-
+----
 
 - **[已擱置] 稀有戰利品自動背包鎖定**：於戰鬥結束畫面同時偵測到「獲得戰利品」與「繼續」時，先前往背包進行特定裝備的鎖定防護（此功能目前已由貴重裝備色彩分類保留機制完整覆蓋，暫予擱置）。
 

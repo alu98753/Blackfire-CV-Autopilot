@@ -133,6 +133,12 @@ class ExploreHandler(BaseStateHandler):
                     # 我們將等待畫面出現 auto.png 後，由本方法最上方的判定自動轉入戰鬥狀態。
                     time.sleep(0.03)
                     
+                elif btn_name == "dungeons/leave.png":
+                    self.machine.is_in_dungeon = True
+                    if getattr(self.machine, "dungeon_floor_transitioning", False):
+                        self._reset_floor_memory_transition()
+                    logging.info(f"🏰 偵測到地下城樓層起點/錨點 [{btn_name}] (信心度: {conf:.4f})，維護地下城探索狀態。")
+                    
                 else:
                     logging.info(f"👉 偵測到探險事件 [{btn_name}]，信心度: {conf:.4f}，點擊處理。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])

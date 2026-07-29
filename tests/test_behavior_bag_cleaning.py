@@ -46,6 +46,7 @@ class TestBehaviorBagCleaning(unittest.TestCase):
         handler.classify_slot_color = MagicMock(side_effect=classify_returns)
         mock_std.return_value = 25.0
 
+        handler.machine.config = {"goods_settings": {"gray": {"item": True}, "green": {}}}
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
 
         with patch('states.handlers.backpack_full_sorting.time.sleep'):

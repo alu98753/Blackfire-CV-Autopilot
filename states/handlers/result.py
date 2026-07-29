@@ -162,7 +162,7 @@ class ResultHandler(BaseStateHandler):
                 dungeon_cooldowns=self.machine.dungeon_cooldowns
             )
 
-        is_in_tier4 = is_daily and (getattr(self.machine, "quest_scheduler", None) is None or self.machine.quest_scheduler.is_all_completed())
+        is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
 
         should_exit_battle = (
             getattr(self.machine, "pending_daily_reset_exit", False) or

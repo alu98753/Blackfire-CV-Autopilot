@@ -112,6 +112,12 @@ class DailyManager:
 
         self.reevaluate_unknown_quests()
 
+        # 💡 [跨日自癒] 載入存檔時若偵測到日期標籤 (last_daily_reset_date) 與當前 08:05 週期標籤不一致，強制發起清零重置
+        current_tag = self.get_today_reset_tag()
+        if self.status.get("last_daily_reset_date") != current_tag:
+            logging.info(f"🌅 [DailyManager] 載入存檔時偵測到過期日期標籤 ({self.status.get('last_daily_reset_date')} ➔ {current_tag})，立即執行跨日清零！")
+            self.check_and_reset_daily(force=True)
+
     def reevaluate_unknown_quests(self):
         """
         當 QuestMapper 新增規則或正名對齊後，自動重新掃描存檔中的 unknown_quests：
@@ -202,15 +208,15 @@ class DailyManager:
             return False
         self.last_check_ts = now_ts
 
-        # 2. 浮點數極速比對：若當前時間尚未到達預算的時間戳，直接 False
-        if not force and now_ts < self.next_reset_timestamp:
-            return False
-
-        # 3. 超過時間戳，觸發重置並重新預算下一天時間戳
+        # 2. 計算日期標籤：若存檔日期 (last_tag) 與當前 08:05 週期標籤 (current_tag) 不符，無視時間戳強制觸發清零
         now_dt = datetime.fromtimestamp(now_ts)
         current_tag = self.get_today_reset_tag(now_dt)
         last_tag = self.status.get("last_daily_reset_date", "")
 
+        if not force and last_tag == current_tag and now_ts < self.next_reset_timestamp:
+            return False
+
+        # 3. 觸發重置並重新預算下一天時間戳
         logging.info(f"🌅 [DailyManager] 偵測到跨越每日重置線 ({last_tag} ➔ {current_tag})！進行日常任務清零。")
         self.status["last_daily_reset_date"] = current_tag
 
