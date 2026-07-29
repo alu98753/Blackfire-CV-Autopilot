@@ -68,8 +68,9 @@ class ExceptionWatchdog:
 
             return False
 
-        # 門檻判斷：戰鬥、探索、背包整理與長城鎮任務 (抽卡/領懸賞/Boss/獻祭/寶箱/珠寶加工) 給予 90 秒寬鬆門檻；其餘短狀態 30 秒
+        # 門檻判斷：導航、戰鬥、探索、背包整理與長城鎮任務 (導航/抽卡/領懸賞/Boss/獻祭/寶箱/珠寶加工) 給予 90 秒寬鬆門檻；其餘短狀態 30 秒
         long_subflow_states = [
+            self.machine.STATE_NAVIGATING,
             self.machine.STATE_BATTLE,
             self.machine.STATE_DUNGEON_EXPLORING,
             self.machine.STATE_LORD_BOSS,

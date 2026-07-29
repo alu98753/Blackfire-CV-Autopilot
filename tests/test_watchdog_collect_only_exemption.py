@@ -59,9 +59,9 @@ class TestWatchdogCollectOnlyExemption(unittest.TestCase):
         [冷卻 Resume 狀態恢復 30s/90s 監視斷言] 驗證 Resume 切回 NAVIGATING (>30s) 或 BATTLE (>90s) 時，
         Watchdog 恢復嚴格逾時監控並回傳 True 發起救援。
         """
-        # 1. NAVIGATING > 30s
+        # 1. NAVIGATING > 90s
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.last_state_change = time.time() - 35.0
+        self.state_machine.last_state_change = time.time() - 95.0
 
         mock_handler = MagicMock()
         mock_handler.subflows_map = {}
