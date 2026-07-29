@@ -109,9 +109,7 @@ class TestBackpackFullDestroyableColorsDecoupling(unittest.TestCase):
         handler.classify_slot_color = MagicMock(side_effect=classify_returns)
         mock_std.return_value = 25.0  # 標準差皆達標
 
-        import numpy as np
-        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        machine.config = {"goods_settings": {"gray": {"item": True}, "green": {}}}
 
         with patch('states.handlers.backpack_full_sorting.time.sleep'):
             handler.handle(fake_img, rect)
