@@ -554,6 +554,7 @@ def run_main_loop(state_machine, interval):
 
                     if is_inside:
                         last_action_diff = time.time() - state_machine.mouse.last_action_time
+                        if last_action_diff > 1.2:
                             if not state_machine.user_operating:
                                 logging.warning(f"⚠️ 偵測到使用者手動操作 (滑鼠移動至 {cur_pos})，自動暫停掛機，鎖定目前狀態: [{state_machine.current_state}]。")
                                 state_machine.user_operating = True
