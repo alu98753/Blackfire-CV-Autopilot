@@ -63,6 +63,10 @@
    > 1. **僅修改測試檔案 (Test-Only Modification)**：**嚴禁執行全套測試！只精確執行該修改的測試檔案或方法** (例如: `.venv\Scripts\python -m unittest tests.test_xxx`)。
    > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後才執行全套驗證。
    > 3. **有修改核心程式碼 (Code Modification)**：修改 `states/`, `utils/`, `config.py` 或 `main.py` 時，**必須執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
+   > 4. **開發與除錯階段動態切換規則 (Phase Transition Rule)**：
+   >    - **核心實作階段**：修改核心邏輯完畢後，執行全套測試確認全域零 Regression。
+   >    - **測試微調階段**：全套測試驗證後，若僅剩 `tests/` 底下的舊 Mock/斷言案例需要修復，**即刻判定進入「純測試除錯模式」，嚴禁再次發起全套測試！必須且只能精確執行正在修復的單一測試檔案**。
+
 
 4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
    - 當僅更新、編寫或補強單一行為測試檔，而沒有修改邏輯實作時，**禁止盲目每次重新執行 4 分鐘全套測試**。
