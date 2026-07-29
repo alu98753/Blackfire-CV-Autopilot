@@ -421,56 +421,6 @@ class BackpackFullSortingHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
             return
 
-        # F. 步驟 4: 執行銷毀流程 (存檔診斷截圖)
-        r_row, r_col, r_color = target_right_slot
-        
-        # 計算點擊座標 (邏輯相對)
-        tx_rel = int((right_start_dx + r_col * step_x + cell_w // 2) * scale_x)
-        ty_rel = int((right_start_dy + r_row * step_y + cell_h // 2) * scale_y)
-        rx_click = rect["left"] + int(pos_full[0] + tx_rel)
-        ry_click = rect["top"] + int(pos_full[1] + ty_rel)
-
-        # 儲存診斷圖像 (點擊右側垃圾)
-        self.save_diagnostic_image(screen_img, pos_full, scale_x, scale_y, 
-                                   left_slots_data, right_slots_data, 
-                                   click_target=(int(pos_full[0] + tx_rel), int(pos_full[1] + ty_rel), f"Right Slot [{r_row},{r_col}] ({r_color})"))
-
-        logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
-        self.notify_ui_progress()
-        self.mouse.click(rx_click, ry_click)
-        time.sleep(0.1) # 等待詳情面板彈出
-
-        new_screen = self.machine.capturer.capture(rect)
-        if new_screen is None:
-            return
-            
-        pos_dest, conf_dest = self.matcher.match(new_screen, "common/destroy.png", threshold=0.8)
-        if pos_dest:
-            dest_x = rect["left"] + pos_dest[0]
-            dest_y = rect["top"] + pos_dest[1]
-            logging.info(f"🎒 [背包分選] 偵測到銷毀按鈕 [{conf_dest:.4f}]，進行點擊座標: ({dest_x}, {dest_y})。")
-            self.notify_ui_progress()
-            self.mouse.click(dest_x, dest_y)
-            time.sleep(0.1)
-
-            new_screen = self.machine.capturer.capture(rect)
-            if new_screen is not None:
-                pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
-                if pos_conf:
-                    conf_x = rect["left"] + pos_conf[0]
-                    conf_y = rect["top"] + pos_conf[1]
-                    logging.info(f"🎒 [背包分選] 偵測到銷毀確認按鈕 [{conf_conf:.4f}]，點擊確認。")
-                    self.notify_ui_progress()
-                    self.mouse.click(conf_x, conf_y)
-                    time.sleep(0.1)
-        else:
-            logging.warning("🎒 [背包分選] ⚠️ 未能匹配到銷毀按鈕 'destroy.png'，中斷分選。")
-            if scroll_count > 0:
-                for _ in range(scroll_count):
-                    self.scroll_grid_rows(rows=2, direction="up", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
-                time.sleep(0.08)
-            return
-
         # 滾動回頂端以恢復初始網格位置 (每步精準滾動 2 格)
         if scroll_count > 0:
             logging.info(f"🎒 [背包分選] 正在滾動回背包頂端 (共 {scroll_count} 次，每步 2 格)...")
