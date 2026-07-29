@@ -60,7 +60,7 @@ def main():
         time.sleep(1)
     
     print("[*] 正在擷取畫面...")
-    img = capturer.capture(rect=rect, full_screen=args.full_screen)
+    img = capturer.capture(rect=rect)
     
     if img is None:
         print("[!] 擷取畫面失敗！")
