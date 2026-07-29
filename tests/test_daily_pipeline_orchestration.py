@@ -4,7 +4,7 @@ import time
 import unittest
 import tempfile
 import numpy as np
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from utils.daily_manager import DailyManager, DEFAULT_DAILY_STATUS
 from states.state_machine import GameStateMachine
 from utils.quest_scheduler import QuestScheduler
@@ -554,8 +554,45 @@ class TestTierConfigMatrix(unittest.TestCase):
         )
         self.assertTrue(should_exit, "懸賞最後一關第 10 場戰鬥結束時 should_exit 必須為 True！")
 
+    def test_tier4_fallback_switch_to_stage_navigates_to_fallback_stage(self):
+        """[Tier 4 導航測試] 驗證當懸賞全數完成、進入 Tier 4 退守模式且地下城冷卻時，_switch_to_stage_or_back 會精確點擊 common/select_stage.png 切換至退守關卡，不再被 early-return 死鎖"""
+        from states.handlers.navigation import NavigationHandler
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.quest_scheduler = None  # 所有懸賞均已 100% 完成
+        tier4_cfg = {
+            "name": "每日懸賞任務 (Tier 4 退守: 冰凍峽谷)",
+            "type": "mix",
+            "is_tier4_fallback": True,
+            "greedy_allowed_indices": [0, 1, 2, 3, 4],
+            "dungeon_names": ["Slime", "Ghost", "Forest", "Ruins", "Ice"]
+        }
+        sm.set_config(tier4_cfg)
+
+        # 模擬所有地下城均處於冷卻中
+        for idx in range(5):
+            sm.dungeon_cooldowns[idx] = 9999999999.0
+
+        nav_handler = NavigationHandler(sm)
+        nav_handler.matcher = MagicMock()
+        nav_handler.mouse = MagicMock()
+
+        # 模擬畫面上 match 到 common/select_stage.png
+        nav_handler.matcher.match.side_effect = lambda img, tpl, **kw: ((500, 300), 0.90) if tpl == "common/select_stage.png" else (None, 0.0)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        with patch("states.handlers.navigation.time.sleep"):
+            nav_handler._switch_to_stage_or_back(fake_img, rect, "測試地下城全冷卻")
+
+        # 斷言發起點擊切換頁籤，未被 early return 攔截
+        nav_handler.mouse.click.assert_called_once_with(500, 300)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
