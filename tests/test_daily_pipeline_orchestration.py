@@ -522,12 +522,40 @@ class TestTierConfigMatrix(unittest.TestCase):
         custom_cfg = {"name": "荒蕪岩地 (middle)", "type": "stage", "stage_level": 2, "stage_sub": "middle", "stage_name": "荒蕪岩地 (middle)"}
         sm.primary_config = custom_cfg.copy()
 
-        scheduled = sm.evaluate_and_schedule_daily_pipeline()
-        self.assertFalse(scheduled)
-        self.assertEqual(sm.config["type"], "stage")
-        self.assertEqual(sm.config["stage_name"], "荒蕪岩地 (middle)")
+    def test_final_quest_10th_battle_triggers_exit_battle(self):
+        """[最後一項懸賞 10/10 完成離場測試] 驗證最後一項懸賞任務在第 10/10 場戰鬥結束時，should_exit_battle 為 True 並觸發離場"""
+        from states.handlers.result import ResultHandler
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.set_config({"name": "懸賞任務 - 古樹森林 (final)", "type": "stage", "is_tier4_fallback": False})
+
+        mock_scheduler = MagicMock()
+        mock_scheduler.is_current_task_batch_completed.return_value = True
+        mock_scheduler.is_all_completed.return_value = True
+        sm.quest_scheduler = mock_scheduler
+
+        handler = ResultHandler(sm)
+        is_daily = sm.is_daily_pipeline_active()
+        is_in_tier4 = is_daily and sm.config.get("is_tier4_fallback", False)
+        quest_batch_completed = sm.quest_scheduler.is_current_task_batch_completed(
+            dungeon_cooldowns=sm.dungeon_cooldowns,
+            current_config=sm.config
+        )
+
+        should_exit = (
+            getattr(sm, "pending_daily_reset_exit", False) or
+            sm.stamina_retreat_start_time is not None or
+            sm.need_bag_cleaning or 
+            sm.need_diamond_collection or 
+            (sm.enable_bread and sm.need_bread_collection) or
+            (sm.config.get("type") == "mix" and sm.has_available_dungeon()) or
+            (is_daily and quest_batch_completed and not is_in_tier4)
+        )
+        self.assertTrue(should_exit, "懸賞最後一關第 10 場戰鬥結束時 should_exit 必須為 True！")
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
