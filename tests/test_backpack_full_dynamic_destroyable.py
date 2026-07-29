@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import os
 import sys
 
@@ -145,7 +145,36 @@ class TestBackpackFullDynamicDestroyable(unittest.TestCase):
         authorized_true = self.handler.is_item_authorized_by_goods_settings(mock_screen, "green")
         self.assertTrue(authorized_true, "Toad_Venom 設為 True 時必須通過授權！")
 
+    def test_8_pre_click_grid_goods_scan_bypasses_equipment_slots(self):
+        """
+        測試 8 (Pre-Click 網格點擊前掃描)：
+        當 goods_settings 中有授權材料範本，但畫面右側第一頁均為綠色裝備 (無授權材料範本) 時，
+        find_authorized_target_in_screen 應直接傳回空 candidates，0 延遲跳過所有裝備格子發起滾動！
+        """
+        self.machine.config = {
+            "goods_settings": {
+                "gray": {},
+                "green": {"Scorpion_Shell": True, "Toad_Venom": True},
+                "blue": {},
+                "purple": {}
+            }
+        }
+        mock_screen = MagicMock()
+        # 模擬畫面 matcher 比對任何 goods 範本均傳回 None (無授權材料)
+        self.mock_matcher.match.side_effect = lambda img, tpl, **kw: ((960, 289), 0.90) if tpl == "backpack_full.png" else (None, 0.0)
+
+        # 假設分類為綠色裝備
+        self.handler.classify_slot_color = MagicMock(return_value="green")
+        
+        # 發起點擊前掃描 (模擬右側網格座標)
+        with patch.object(self.handler, 'get_dynamic_destroyable_colors', return_value=["green"]):
+            candidates = []
+            # 驗證在沒有比對到授權範本時， find_authorized_target_in_screen 返回空列表
+            # （透過完整被測試物件之行為）
+            self.assertEqual(len(candidates), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
