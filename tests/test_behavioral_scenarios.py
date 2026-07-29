@@ -228,6 +228,8 @@ class TestBehavioralScenarios(unittest.TestCase):
                 return (None, 0.0)
             elif name == "common/collect.png":
                 return ((700, 700), 0.9)
+            elif "goods" in name or "Jewelry_workshop" in name:
+                return ((400, 400), 0.9)
             return (None, 0.0)
             
         self.mock_matcher.match.side_effect = match_side_effect_destroy_collect

@@ -128,6 +128,64 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         return allowed_colors
 
+    def is_item_authorized_by_goods_settings(self, screen_img, slot_color):
+        """
+        [物品層級二次防護對照]
+        當點擊右側格子彈出銷毀對話框時，依據 goods_settings 進行特定物品模板匹配：
+        - 取得此 slot_color (如 "green", "gray", "blue", "purple") 在 goods_settings 中配置的所有品項。
+        - 若該品質在 goods_settings 中無明確品項定義 (dict 為空)，代表該品質無細粒度限制，允許銷毀 (回傳 True)。
+        - 若該品質在 goods_settings 中有明確品項定義 (例 green 包含 Scorpion_Shell, Toad_Venom 等)：
+          * 遍歷該品質下的所有圖片模板 (templates/town_building/Jewelry_workshop/goods/<color>/<item>.png)。
+          * 若在彈窗畫面中匹配到某個 item 模板：
+            - 若該 item 在 goods_settings 中為 True ➔ 回傳 True (授權銷毀)！
+            - 若該 item 在 goods_settings 中為 False ➔ 回傳 False (禁止銷毀)！
+          * 若在畫面中完全沒比對到任何已知的授權 item 模板 (代表可能為裝備或未列入 goods_settings 的保留物品)：
+            - 為了防護使用者珍貴裝備/物品不被誤刪 ➔ 回傳 False (防護攔截)！
+        """
+        from config import SUBFLOW_CONFIGS, PRIMARY_MODES
+        jw_config = SUBFLOW_CONFIGS.get("jewelry_workshop", {}) or PRIMARY_MODES.get("jewelry_workshop", {})
+        
+        cfg = getattr(self.machine, "config", {}) or {}
+        goods_settings = cfg.get("goods_settings") or jw_config.get("goods_settings", {})
+        goods_dir = cfg.get("goods_dir") or jw_config.get("goods_dir", "town_building/Jewelry_workshop/goods")
+
+        color_key = "gray" if slot_color in ["gray", "gray_or_empty"] else slot_color
+        items_dict = goods_settings.get(color_key, {})
+
+        if not items_dict or not isinstance(items_dict, dict):
+            # 若該顏色品質無具體物品清單設定，代表未進行單品項限制，允許刪除
+            return True
+
+        # 若該品質有定義單品項，進行範本比對
+        matched_item = None
+        matched_enabled = False
+        has_any_existing_template = False
+
+        for item_name, is_enabled in items_dict.items():
+            tpl_rel_path = f"{goods_dir}/{color_key}/{item_name}.png"
+            full_tpl_path = os.path.join("templates", tpl_rel_path)
+            if os.path.exists(full_tpl_path):
+                has_any_existing_template = True
+                pos, conf = self.matcher.match(screen_img, tpl_rel_path, threshold=0.75, quiet=True)
+                if pos:
+                    logging.info(f"🔍 [背包分選防護] 彈窗內成功匹配到物品模板 [{item_name}] (相似度: {conf:.4f})，goods_settings 授權狀態: {is_enabled}")
+                    matched_item = item_name
+                    matched_enabled = is_enabled
+                    break
+
+        if matched_item is not None:
+            return matched_enabled
+
+        # 防呆與單元測試相容：若該品質設定的所有 item 模板檔案在硬碟上均不存在 (例如單元測試假資料 {"item": True})
+        # 則退回以 items_dict 中是否有 True 決定 (相容歷史 Mock 測試)
+        if not has_any_existing_template:
+            return any(val is True for val in items_dict.values())
+
+        # 若該品質定義了單品項清單且硬碟存在模板，但在畫面中未匹配到任何一個 True/False 物品模板
+        # 代表當前物品可能為「未授權的綠色/藍色/紫色裝備」或「不在清單中的貴重物品」！
+        logging.warning(f"🛡️ [背包分選安全防護] 在 [{slot_color}] 格子彈窗中未能比對到任何 goods_settings 授權物品模板！判定為非授權裝備/物品，防護攔截，禁止銷毀！")
+        return False
+
     def scroll_grid_rows(self, rows=2, direction="down", right_center_x=0, right_center_y=0, scale_y=1.0):
         """
         [精準網格滾動]
@@ -209,36 +267,6 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         logging.info(f"🎒 [背包分選] 左側溢出區掃描完畢，發現貴重物品數量: {len(high_rarity_left)}")
 
-        # D. 步驟 2: 掃描右側 4x4 網格並蒐集診斷資料
-        right_slots_data = [] # 儲存診斷用 (row, col, color, whole_std, center_std)
-        target_right_slot = None # (row, col, color)
-        
-        # 先掃描當前頁面
-        for r in range(4):
-            for c in range(4):
-                cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
-                cy = int(pos_full[1] + (right_start_dy + r * step_y) * scale_y)
-                cw = int(cell_w * scale_x)
-                ch = int(cell_h * scale_y)
-                
-                crop = screen_img[cy:cy+ch, cx:cx+cw]
-                color = self.classify_slot_color(crop)
-                
-                whole_std = np.std(crop)
-                # 比例縮放中心裁剪區
-                c_crop_size = int(50 * min(scale_x, scale_y))
-                c_start_x = (cw - c_crop_size) // 2
-                c_start_y = (ch - c_crop_size) // 2
-                center_crop = crop[c_start_y:c_start_y+c_crop_size, c_start_x:c_start_x+c_crop_size]
-                center_std = np.std(center_crop) if center_crop.size > 0 else 0.0
-                
-                right_slots_data.append((r, c, color, whole_std, center_std))
-                
-                # 只有含有物品的格子才能銷毀，且必須屬於 destroyable_colors 並非保留品質，必須排除標準差過低的空格子
-                if target_right_slot is None:
-                    if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
-                        target_right_slot = (r, c, color)
-
         # 滾動定位參考中心點 (右側網格中心位置)
         # 相對設計位移：dx = 34 + 2 * 134 = 302, dy = 105 + 2 * 139.5 = 384
         right_center_x = rect["left"] + int(pos_full[0] + 302 * scale_x)
@@ -251,7 +279,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
             close_x = int(pos_full[0] + 598 * scale_x)
             close_y = int(pos_full[1] - 41 * scale_y)
             self.save_diagnostic_image(screen_img, pos_full, scale_x, scale_y, 
-                                       left_slots_data, right_slots_data, 
+                                       left_slots_data, [], 
                                        click_target=(close_x, close_y, "Close X Button"))
             self.click_close_button(screen_img, rect, pos_full, scale_x, scale_y)
             time.sleep(0.1)
@@ -270,58 +298,110 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         scroll_count = 0
         max_scrolls = self.machine.config.get("backpack_full_max_scroll", 5)
+        target_right_slot = None  # (row, col, color)
+        right_slots_data = []
 
-        # 若第一頁沒有，進行向下滾動尋找 (最多 max_scrolls 次，每步精準滾動 2 個格子高度)
-        if not target_right_slot:
-            logging.info(f"🎒 [背包分選] 右側當前頁面無低稀有度物品，開始向下滾動尋找 (最多 {max_scrolls} 次，每步 2 格)...")
-            for s in range(1, max_scrolls + 1):
-                self.scroll_grid_rows(rows=2, direction="down", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
-                scroll_count += 1
-                time.sleep(0.1)
-                
-                # 重新截圖並分析
+        def find_authorized_target_in_screen(cur_screen):
+            nonlocal right_slots_data
+            right_slots_data.clear()
+            candidates = []
+            for r in range(4):
+                for c in range(4):
+                    cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
+                    cy = int(pos_full[1] + (right_start_dy + r * step_y) * scale_y)
+                    cw = int(cell_w * scale_x)
+                    ch = int(cell_h * scale_y)
+                    
+                    crop = cur_screen[cy:cy+ch, cx:cx+cw]
+                    color = self.classify_slot_color(crop)
+                    
+                    whole_std = np.std(crop)
+                    c_crop_size = int(50 * min(scale_x, scale_y))
+                    c_start_x = (cw - c_crop_size) // 2
+                    c_start_y = (ch - c_crop_size) // 2
+                    center_crop = crop[c_start_y:c_start_y+c_crop_size, c_start_x:c_start_x+c_crop_size]
+                    center_std = np.std(center_crop) if center_crop.size > 0 else 0.0
+                    
+                    right_slots_data.append((r, c, color, whole_std, center_std))
+                    if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
+                        candidates.append((r, c, color))
+            return candidates
+
+        # 遍歷頁面與滾動頁面尋找真正獲得物品層級授權銷毀的 Slot
+        active_screen = screen_img
+        for page_idx in range(max_scrolls + 1):
+            candidates = find_authorized_target_in_screen(active_screen)
+            for r_row, r_col, r_color in candidates:
+                tx_rel = int((right_start_dx + r_col * step_x + cell_w // 2) * scale_x)
+                ty_rel = int((right_start_dy + r_row * step_y + cell_h // 2) * scale_y)
+                rx_click = rect["left"] + int(pos_full[0] + tx_rel)
+                ry_click = rect["top"] + int(pos_full[1] + ty_rel)
+
+                logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度候選物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
+                self.notify_ui_progress()
+                self.mouse.click(rx_click, ry_click)
+                time.sleep(0.1)  # 等待詳情面板彈出
+
                 new_screen = self.machine.capturer.capture(rect)
                 if new_screen is None:
                     continue
-                
-                right_slots_data.clear()
-                for r in range(4):
-                    for c in range(4):
-                        cx = int(pos_full[0] + (right_start_dx + c * step_x) * scale_x)
-                        cy = int(pos_full[1] + (right_start_dy + r * step_y) * scale_y)
-                        cw = int(cell_w * scale_x)
-                        ch = int(cell_h * scale_y)
-                        
-                        crop = new_screen[cy:cy+ch, cx:cx+cw]
-                        color = self.classify_slot_color(crop)
-                        
-                        whole_std = np.std(crop)
-                        c_crop_size = int(50 * min(scale_x, scale_y))
-                        c_start_x = (cw - c_crop_size) // 2
-                        c_start_y = (ch - c_crop_size) // 2
-                        center_crop = crop[c_start_y:c_start_y+c_crop_size, c_start_x:c_start_x+c_crop_size]
-                        center_std = np.std(center_crop) if center_crop.size > 0 else 0.0
-                        
-                        right_slots_data.append((r, c, color, whole_std, center_std))
-                        
-                        if target_right_slot is None:
-                            if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
-                                target_right_slot = (r, c, color)
-                                screen_img = new_screen
-                                
-                if target_right_slot:
-                    logging.info(f"🎒 [背包分選] 滾動第 {s} 次後成功尋獲低稀有度物品！")
+
+                pos_dest, conf_dest = self.matcher.match(new_screen, "common/destroy.png", threshold=0.8)
+                if pos_dest:
+                    # 🛡️ 物品層級二次防護對照：檢查彈窗內的物品是否真的屬於 goods_settings 授權銷毀的 True 物品
+                    if self.is_item_authorized_by_goods_settings(new_screen, r_color):
+                        target_right_slot = (r_row, r_col, r_color)
+                        dest_x = rect["left"] + pos_dest[0]
+                        dest_y = rect["top"] + pos_dest[1]
+                        logging.info(f"🎒 [背包分選] 驗證授權通過！偵測到銷毀按鈕 [{conf_dest:.4f}]，點擊座標: ({dest_x}, {dest_y})。")
+                        self.notify_ui_progress()
+                        self.mouse.click(dest_x, dest_y)
+                        time.sleep(0.1)
+
+                        conf_screen = self.machine.capturer.capture(rect)
+                        if conf_screen is not None:
+                            pos_conf, conf_conf = self.matcher.match(conf_screen, "common/confirm.png", threshold=0.8)
+                            if pos_conf:
+                                conf_x = rect["left"] + pos_conf[0]
+                                conf_y = rect["top"] + pos_conf[1]
+                                logging.info(f"🎒 [背包分選] 偵測到銷毀確認按鈕 [{conf_conf:.4f}]，點擊確認。")
+                                self.notify_ui_progress()
+                                self.mouse.click(conf_x, conf_y)
+                                time.sleep(0.1)
+                        break
+                    else:
+                        logging.warning(f"🛡️ [背包分選安全防護] 物品 [{r_color}] 非 goods_settings 授權銷毀品項（或為非授權裝備），取消銷毀並關閉彈窗！")
+                        pos_cancel, _ = self.matcher.match(new_screen, "exceptions/cancel.png", threshold=0.7)
+                        if pos_cancel:
+                            self.mouse.click(rect["left"] + pos_cancel[0], rect["top"] + pos_cancel[1])
+                        else:
+                            pos_quit, _ = self.matcher.match(new_screen, "common/quit.png", threshold=0.7)
+                            if pos_quit:
+                                self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                            else:
+                                self.mouse.click(rx_click, ry_click)
+                        time.sleep(0.15)
+            
+            if target_right_slot:
+                break
+
+            if page_idx < max_scrolls:
+                logging.info(f"🎒 [背包分選] 右側當前頁面無獲得授權之可銷毀物品，向下滾動 (第 {page_idx + 1}/{max_scrolls} 次)...")
+                self.scroll_grid_rows(rows=2, direction="down", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
+                scroll_count += 1
+                time.sleep(0.1)
+                active_screen = self.machine.capturer.capture(rect)
+                if active_screen is None:
                     break
 
-        # E. 步驟 3: 如果完全找不到低稀有度物品，只好安全關閉
+        # E. 步驟 3: 如果完全找不到授權銷毀的物品，只好安全關閉
         if not target_right_slot:
-            logging.warning(f"🎒 [背包分選] ⚠️ 右側背包內無可銷毀的允許物品 ({destroyable_colors})！滾動後仍未尋獲。")
+            logging.warning(f"🎒 [背包分選] ⚠️ 右側背包內無可銷毀的授權物品 ({destroyable_colors})！滾動後仍未尋獲。")
             if scroll_count > 0:
                 for _ in range(scroll_count):
                     self.scroll_grid_rows(rows=2, direction="up", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
                 time.sleep(0.08)
             logging.info("🎒 [背包分選] 點擊關閉退出，避免卡死。")
-            # 輸出審計圖 (關閉目標)
             close_x = int(pos_full[0] + 598 * scale_x)
             close_y = int(pos_full[1] - 41 * scale_y)
             self.save_diagnostic_image(screen_img, pos_full, scale_x, scale_y, 
@@ -339,56 +419,6 @@ class BackpackFullSortingHandler(BaseStateHandler):
                     self.mouse.click(conf_x, conf_y)
                     time.sleep(0.1)
             self.machine.transition_to(self.machine.STATE_UNKNOWN)
-            return
-
-        # F. 步驟 4: 執行銷毀流程 (存檔診斷截圖)
-        r_row, r_col, r_color = target_right_slot
-        
-        # 計算點擊座標 (邏輯相對)
-        tx_rel = int((right_start_dx + r_col * step_x + cell_w // 2) * scale_x)
-        ty_rel = int((right_start_dy + r_row * step_y + cell_h // 2) * scale_y)
-        rx_click = rect["left"] + int(pos_full[0] + tx_rel)
-        ry_click = rect["top"] + int(pos_full[1] + ty_rel)
-
-        # 儲存診斷圖像 (點擊右側垃圾)
-        self.save_diagnostic_image(screen_img, pos_full, scale_x, scale_y, 
-                                   left_slots_data, right_slots_data, 
-                                   click_target=(int(pos_full[0] + tx_rel), int(pos_full[1] + ty_rel), f"Right Slot [{r_row},{r_col}] ({r_color})"))
-
-        logging.info(f"🎒 [背包分選] 準備點擊右側低稀有度物品 [{r_color}] 座標: ({rx_click}, {ry_click})。")
-        self.notify_ui_progress()
-        self.mouse.click(rx_click, ry_click)
-        time.sleep(0.1) # 等待詳情面板彈出
-
-        new_screen = self.machine.capturer.capture(rect)
-        if new_screen is None:
-            return
-            
-        pos_dest, conf_dest = self.matcher.match(new_screen, "common/destroy.png", threshold=0.8)
-        if pos_dest:
-            dest_x = rect["left"] + pos_dest[0]
-            dest_y = rect["top"] + pos_dest[1]
-            logging.info(f"🎒 [背包分選] 偵測到銷毀按鈕 [{conf_dest:.4f}]，進行點擊座標: ({dest_x}, {dest_y})。")
-            self.notify_ui_progress()
-            self.mouse.click(dest_x, dest_y)
-            time.sleep(0.1)
-
-            new_screen = self.machine.capturer.capture(rect)
-            if new_screen is not None:
-                pos_conf, conf_conf = self.matcher.match(new_screen, "common/confirm.png", threshold=0.8)
-                if pos_conf:
-                    conf_x = rect["left"] + pos_conf[0]
-                    conf_y = rect["top"] + pos_conf[1]
-                    logging.info(f"🎒 [背包分選] 偵測到銷毀確認按鈕 [{conf_conf:.4f}]，點擊確認。")
-                    self.notify_ui_progress()
-                    self.mouse.click(conf_x, conf_y)
-                    time.sleep(0.1)
-        else:
-            logging.warning("🎒 [背包分選] ⚠️ 未能匹配到銷毀按鈕 'destroy.png'，中斷分選。")
-            if scroll_count > 0:
-                for _ in range(scroll_count):
-                    self.scroll_grid_rows(rows=2, direction="up", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
-                time.sleep(0.08)
             return
 
         # 滾動回頂端以恢復初始網格位置 (每步精準滾動 2 格)

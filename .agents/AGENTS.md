@@ -63,6 +63,10 @@
    > 1. **僅修改測試檔案 (Test-Only Modification)**：**嚴禁執行全套測試！只精確執行該修改的測試檔案或方法** (例如: `.venv\Scripts\python -m unittest tests.test_xxx`)。
    > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後才執行全套驗證。
    > 3. **有修改核心程式碼 (Code Modification)**：修改 `states/`, `utils/`, `config.py` 或 `main.py` 時，**必須執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
+   > 4. **開發與除錯階段動態切換規則 (Phase Transition Rule)**：
+   >    - **核心實作階段**：修改核心邏輯完畢後，執行全套測試確認全域零 Regression。
+   >    - **測試微調階段**：全套測試驗證後，若僅剩 `tests/` 底下的舊 Mock/斷言案例需要修復，**即刻判定進入「純測試除錯模式」，嚴禁再次發起全套測試！必須且只能精確執行正在修復的單一測試檔案**。
+
 
 4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
    - 當僅更新、編寫或補強單一行為測試檔，而沒有修改邏輯實作時，**禁止盲目每次重新執行 4 分鐘全套測試**。
@@ -76,3 +80,13 @@
         .venv\Scripts\python -m coverage report --include="states/handlers/navigation.py,utils/scene_detector.py" -m
         ```
    - **最終全域驗證**：完成所有增量開發準備 Commit 前，才執行全套測試 (`.venv\Scripts\python -m unittest discover tests`) 作為收尾。
+
+### 7. Markdown 文檔與超連結繪製規範 📄
+- **嚴禁使用絕對路徑 `file:///`**：在撰寫 `docs/` 下的 Markdown 技術文檔時，**絕對禁止使用 `file:///...` 絕對路徑**（避免 VS Code Markdown Preview 預覽器無法解析而自動斷行，呈現未解析的長文字網址）。
+- **強制使用標準相對路徑 (Relative Markdown Links)**：
+  - 引用專案範本或模組時，必須依據當前 Markdown 檔案位置使用標準相對路徑。
+  - 例如在 `docs/` 檔案中引用範本圖片與程式碼時，統一採用：
+    - `[common/door.png](../templates/common/door.png)`
+    - `[NavigationHandler](../states/handlers/navigation.py)`
+  - 確保在 GitHub 與 VS Code Preview 預覽時均能呈現乾淨、單行且可點擊的藍色超連結。
+

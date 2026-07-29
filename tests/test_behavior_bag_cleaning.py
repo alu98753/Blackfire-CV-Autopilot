@@ -39,11 +39,24 @@ class TestBehaviorBagCleaning(unittest.TestCase):
         handler.mouse = MagicMock()
         handler.save_diagnostic_image = MagicMock()
 
-        handler.matcher.match.side_effect = lambda img, tpl, **kw: ((500, 300), 0.90) if tpl == "backpack_full.png" else (None, 0.0)
+        def mock_match_side_effect(img, tpl, **kw):
+            if tpl == "backpack_full.png":
+                return ((500, 300), 0.90)
+            elif tpl == "common/destroy.png":
+                return ((500, 500), 0.90)
+            elif tpl == "common/confirm.png":
+                return ((600, 600), 0.90)
+            elif tpl == "common/collect.png":
+                return ((700, 700), 0.90)
+            elif "goods" in tpl or "Jewelry_workshop" in tpl:
+                return ((400, 400), 0.90)
+            return (None, 0.0)
+
+        handler.matcher.match.side_effect = mock_match_side_effect
 
         # 模擬右側第 0 格為 green，第 1 格為 gray_or_empty
         classify_returns = ["purple"] + ["gray_or_empty"] * 15 + ["green", "gray_or_empty"] + ["gray_or_empty"] * 14
-        handler.classify_slot_color = MagicMock(side_effect=classify_returns)
+        handler.classify_slot_color = MagicMock(side_effect=lambda crop: classify_returns.pop(0) if classify_returns else "gray_or_empty")
         mock_std.return_value = 25.0
 
         handler.machine.config = {"goods_settings": {"gray": {"item": True}, "green": {}}}
