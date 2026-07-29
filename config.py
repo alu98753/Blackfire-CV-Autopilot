@@ -14,6 +14,8 @@ GLOBAL_SETTINGS = {
     # 背包已滿彈窗 (backpack_full) 中，右側背包區允許被「單個銷毀/覆蓋」以騰出空間放置左側貴重物品的品質清單
     # 安全防呆：目前預設僅開放 ["gray_or_empty"] (普通灰色/無特色裝備)，其餘品質不能丟
     "default_backpack_full_destroyable_colors": ["gray_or_empty"],
+    # 背包已滿彈窗中向下滾動搜尋與向上復原的最多滾動次數 (預設為 5 次)
+    "default_backpack_full_max_scroll": 5,
 }
 
 DUNGEON_NAMES = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]

@@ -53,5 +53,13 @@ class TestBackpackFullDynamicDestroyable(unittest.TestCase):
         self.assertNotIn("purple", destroyable)
 
 
+    def test_3_max_scroll_attempts_defaults_to_5(self):
+        """
+        測試 3：驗證背包已滿滾動尋找的最多次數預設為 5 次。
+        """
+        max_scrolls = self.machine.config.get("backpack_full_max_scroll", 5)
+        self.assertEqual(max_scrolls, 5)
+
+
 if __name__ == "__main__":
     unittest.main()

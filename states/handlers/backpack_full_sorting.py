@@ -274,11 +274,12 @@ class BackpackFullSortingHandler(BaseStateHandler):
             return
 
         scroll_count = 0
+        max_scrolls = self.machine.config.get("backpack_full_max_scroll", 5)
 
-        # 若第一頁沒有，進行向下滾動尋找 (每步精準滾動 2 個格子高度)
+        # 若第一頁沒有，進行向下滾動尋找 (最多 max_scrolls 次，每步精準滾動 2 個格子高度)
         if not target_right_slot:
-            logging.info("🎒 [背包分選] 右側當前頁面無低稀有度物品，開始向下滾動尋找 (每步 2 格)...")
-            for s in range(1, 4):
+            logging.info(f"🎒 [背包分選] 右側當前頁面無低稀有度物品，開始向下滾動尋找 (最多 {max_scrolls} 次，每步 2 格)...")
+            for s in range(1, max_scrolls + 1):
                 self.scroll_grid_rows(rows=2, direction="down", right_center_x=right_center_x, right_center_y=right_center_y, scale_y=scale_y)
                 scroll_count += 1
                 time.sleep(0.1)
