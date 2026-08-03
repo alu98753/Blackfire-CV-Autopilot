@@ -155,7 +155,7 @@ class TestBehaviorPopupRecovery(unittest.TestCase):
             self.assertEqual(self.machine.current_state, GameStateMachine.STATE_NAVIGATING)
 
     def test_unhandled_popup_triggers_max_retries_fallback(self):
-        """[階段 3-C] 驗證當優先級 1 與 2 均無法匹配時，達到 max_retries 後發起 Fallback 降級復原"""
+        """[階段 3-C] 驗證當優先級 1 與 2 均無法匹配時，達到 max_retries 後發起 GameRelaunchSubflow 轉移至 STATE_NAVIGATING"""
         self.handler.max_retries = 3
 
         self.machine.current_state = GameStateMachine.STATE_LOBBY
@@ -169,16 +169,7 @@ class TestBehaviorPopupRecovery(unittest.TestCase):
             for _ in range(3):
                 self.handler.handle(dummy_img, rect)
 
-            # 驗證達到 max_retries 後執行 restore_stashed_state() 恢復暫存狀態 STATE_LOBBY
-            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOBBY)
-
-        # 2. 測試無暫存狀態時，達到 max_retries 觸發 GameRelaunchSubflow 重置並轉移至 STATE_NAVIGATING
-        self.machine.stashed_state = None
-        self.machine.current_state = GameStateMachine.STATE_POPUP_RECOVERY
-        with patch("utils.steam_launcher.SteamGameLauncher.ensure_game_ready", return_value=True), \
-             patch("subprocess.run"):
-            for _ in range(3):
-                self.handler.handle(dummy_img, rect)
+            # 驗證達到 max_retries 後發起 GameRelaunchSubflow 強行重開遊戲並轉移至 STATE_NAVIGATING
             self.assertEqual(self.machine.current_state, GameStateMachine.STATE_NAVIGATING)
 
     def test_context_preservation_and_stash_lock(self):

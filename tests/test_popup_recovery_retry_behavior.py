@@ -30,10 +30,10 @@ class TestPopupRecoveryRetryBehavior(unittest.TestCase):
         self.rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
 
     @patch("states.exceptions.subflows.GameRelaunchSubflow.execute")
-    def test_1_first_watchdog_timeout_popup_recovery_max_retries_restores_state(self, mock_relaunch):
+    def test_1_popup_recovery_max_retries_triggers_relaunch(self, mock_relaunch):
         """
-        測試 1：第 1 次 Watchdog 逾時進入 POPUP_RECOVERY，連續 5 次未偵測到彈窗時，
-        應發起 restore_stashed_state() 恢復原狀態，絕不直接發起 GameRelaunchSubflow 殺進程。
+        測試 1：第 1 次 Watchdog 逾時進入 POPUP_RECOVERY，連續 5 次未偵測到彈窗/救援失敗時，
+        應直接發起 GameRelaunchSubflow 殺進程與重開遊戲，絕不回歸無效的循環狀態。
         """
         self.machine.current_state = self.machine.STATE_BATTLE
         self.machine.stash_current_state(reason="test_timeout")
@@ -51,10 +51,9 @@ class TestPopupRecoveryRetryBehavior(unittest.TestCase):
 
             # 第 5 次嘗試（達到 max_retries=5）
             handler.handle(self.fake_img, self.rect)
-            # 斷言：絕不呼叫 GameRelaunchSubflow
-            mock_relaunch.assert_not_called()
-            # 斷言：應回復原暫存狀態 STATE_BATTLE
-            self.assertEqual(self.machine.current_state, self.machine.STATE_BATTLE)
+            # 斷言：應直接呼叫 GameRelaunchSubflow.execute 發起重開自癒
+            mock_relaunch.assert_called_once()
+            self.assertEqual(mock_relaunch.call_args[1]["reason"], "popup_recovery_max_retries_exceeded")
 
     @patch("os.path.exists", return_value=True)
     def test_2_battle_handler_notifies_ui_progress_when_auto_visible(self, mock_exists):
