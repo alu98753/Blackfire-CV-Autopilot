@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from states.exceptions.subflows import GameRelaunchSubflow
 
 def _wait_for_town(state_machine, rect):
     """
@@ -81,7 +82,12 @@ def _wait_for_town(state_machine, rect):
         time.sleep(0.5)
             
     if not door_found:
-        logging.warning("⚠️ [登入流程] 等待城鎮大門超時 (35 秒)，嘗試繼續後續流程。")
+        logging.error("❌ [登入流程] 等待城鎮大門超時 (35 秒) 仍未進入城鎮，認定登入失敗！發起 GameRelaunchSubflow 強制重開自癒...")
+        relaunch_subflow = GameRelaunchSubflow()
+        relaunch_subflow.execute(state_machine, reason="login_timeout_failed")
+        return False
+
+    return True
 
 def handle_global_login(state_machine, screen_img, rect):
     """
@@ -103,16 +109,18 @@ def handle_global_login(state_machine, screen_img, rect):
         
     logging.info(f"🔑 偵測到遊戲登入主畫面 [login.png] (信心度: {conf_login:.4f})。")
     
-    # 1. 優先尋找開始冒險按鈕直接點擊
+    # 1. 優先尋找開始冒險按鈕點擊
     confirm_template = os.path.join("templates", "login/login_confirm.png")
     if os.path.exists(confirm_template):
         pos_btn, conf_btn = state_machine.matcher.match(screen_img, "login/login_confirm.png", threshold=0.8)
         if pos_btn:
             logging.info(f"👉 成功定位「開始冒險」按鈕 [login_confirm.png] (信心度: {conf_btn:.4f})，進行點擊...")
             state_machine.mouse.click(rect["left"] + pos_btn[0], rect["top"] + pos_btn[1])
-            _wait_for_town(state_machine, rect)
-            state_machine.consecutive_stuck_count = 0
-            return True
+            success = _wait_for_town(state_machine, rect)
+            if success:
+                state_machine.consecutive_stuck_count = 0
+                return True
+            return False
             
     # 2. 備用：無 login_confirm.png 時，計算相對於 login.png 中心的偏移量
     height_to_use = 1080
@@ -135,6 +143,8 @@ def handle_global_login(state_machine, screen_img, rect):
     click_y = rect["top"] + pos_login[1] + dy
     logging.info(f"👉 未找到/匹配 login_confirm.png，採用相對中心偏移點擊座標 ({click_x}, {click_y})...")
     state_machine.mouse.click(click_x, click_y)
-    _wait_for_town(state_machine, rect)
-    state_machine.consecutive_stuck_count = 0
-    return True
+    success = _wait_for_town(state_machine, rect)
+    if success:
+        state_machine.consecutive_stuck_count = 0
+        return True
+    return False
