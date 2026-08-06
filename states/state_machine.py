@@ -625,7 +625,7 @@ class GameStateMachine:
                     has_auto = True
             
             if has_auto:
-                logging.info("❓ 未能辨識出關卡大廳特徵，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
+                logging.info("⚔️ 未能辨識出關卡大廳特徵，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
                 self.transition_to(self.STATE_BATTLE)
             else:
                 logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")

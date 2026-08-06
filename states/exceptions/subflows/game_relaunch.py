@@ -86,7 +86,7 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
             machine.exception_watchdog.last_stuck_state = None
 
 
-        # 5. 轉移至 NAVIGATING 狀態，全域 handle_global_login 會自動進行登入與進城
-        logging.info("🔄 [GameRelaunchSubflow] 重啟完成！轉移狀態至 STATE_NAVIGATING 交由 LoginFlow 接管...")
-        machine.transition_to(machine.STATE_NAVIGATING)
+        # 5. 轉移至 STATE_UNKNOWN 狀態，全域 detect_current_state 與 handle_global_login 會自動進行全域定位與登入
+        logging.info("🔄 [GameRelaunchSubflow] 重啟完成！轉移狀態至 STATE_UNKNOWN 交由全域掃描與 LoginFlow 接管...")
+        machine.transition_to(machine.STATE_UNKNOWN)
         return True

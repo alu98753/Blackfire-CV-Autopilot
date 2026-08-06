@@ -92,7 +92,7 @@ class TestEntityTownMain(unittest.TestCase):
         mock_machine.diamond_window_opened = True
         mock_machine.stashed_state = "BREAD_COLLECTION"
         mock_machine.stashed_context = {"test": 1}
-        mock_machine.STATE_NAVIGATING = "NAVIGATING"
+        mock_machine.STATE_UNKNOWN = "UNKNOWN"
 
         subflow = GameRelaunchSubflow()
 
@@ -106,7 +106,7 @@ class TestEntityTownMain(unittest.TestCase):
         self.assertFalse(mock_machine.bread_window_opened)
         self.assertFalse(mock_machine.diamond_window_opened)
         self.assertIsNone(mock_machine.stashed_state)
-        mock_machine.transition_to.assert_called_with("NAVIGATING")
+        mock_machine.transition_to.assert_called_with("UNKNOWN")
 
 
 if __name__ == "__main__":

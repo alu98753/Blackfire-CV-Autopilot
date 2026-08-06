@@ -169,8 +169,8 @@ class TestBehaviorPopupRecovery(unittest.TestCase):
             for _ in range(3):
                 self.handler.handle(dummy_img, rect)
 
-            # 驗證達到 max_retries 後發起 GameRelaunchSubflow 強行重開遊戲並轉移至 STATE_NAVIGATING
-            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_NAVIGATING)
+            # 驗證達到 max_retries 後發起 GameRelaunchSubflow 強行重開遊戲並轉移至 STATE_UNKNOWN
+            self.assertEqual(self.machine.current_state, GameStateMachine.STATE_UNKNOWN)
 
     def test_context_preservation_and_stash_lock(self):
         """[階段 3-D] 驗證 Context 數據深拷貝備份/還原，以及 Stash Lock 防護二次暫存不覆蓋原狀態"""
