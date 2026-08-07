@@ -144,7 +144,8 @@ class TestBehaviorBagCleaning(unittest.TestCase):
 
         with patch('states.handlers.bag_cleaning.time.sleep'):
             with patch('states.handlers.bag_cleaning.time.time', return_value=105.0):
-                handler.handle(fake_img, self.rect)
+                for _ in range(3):
+                    handler.handle(fake_img, self.rect)
 
         handler.click_and_wait_until_gone.assert_called_once()
         self.assertFalse(self.mock_machine.need_bag_cleaning)

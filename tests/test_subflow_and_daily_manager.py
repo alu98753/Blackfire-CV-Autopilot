@@ -471,7 +471,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 期望排序 (mode_score: dungeon 0 > stage 1)：
         # 1. "清除骷髏" (dungeon index 3, DETERMINISTIC)
         # 2. "清除樹人" (dungeon index 2, DETERMINISTIC)
-        # 3. "消滅蛛王與蛛後" (dungeon index 0, BANNER_VERIFY)
+        # 3. "消滅蛛王與蛛後" (dungeon index 1, BANNER_VERIFY)
         # 4. "清除野豬" (stage level 1, DETERMINISTIC)
         expected_sorted_order = ["清除骷髏", "清除樹人", "消滅蛛王與蛛後", "清除野豬"]
         self.assertEqual(accepted, expected_sorted_order)
