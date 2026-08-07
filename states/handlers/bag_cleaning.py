@@ -315,80 +315,126 @@ class BagCleaningHandler(BaseStateHandler):
         """
         8. 獨立 Function：點擊退出按鈕關閉背包，重置狀態並觸發後續銜接
         """
-        if os.path.exists(os.path.join("templates", "common/quit.png")):
-            pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
-            if pos_quit:
-                logging.info(f"🎒 背包清理：已整理完畢，點擊退出按鈕 [common/quit.png] (信心度: {conf_quit:.4f}) 關閉背包 (配對確認直到消失)...")
-                self._save_step_screenshot(screen_img, "9_quit")
-                self.notify_ui_progress()
-                self.click_and_wait_until_gone("common/quit.png", rect["left"] + pos_quit[0], rect["top"] + pos_quit[1], rect, threshold=0.7)
-
-                self.machine.need_bag_cleaning = False
-                self.machine.bag_tidied = False
-                self.machine.bag_disassembled = False
-                self.machine.bag_select_all_clicked = False
-                self.machine.bag_deselected = False
-                self.machine.bag_opened_clicked = False
-                self.machine.bag_clean_step = 0
-                time.sleep(0.1)
-
-                is_dungeon_context = (
-                    getattr(self.machine, "is_in_dungeon", False) or
-                    self.machine.config.get("type") == "dungeon" or
-                    getattr(self.machine, "previous_state", None) == self.machine.STATE_DUNGEON_EXPLORING
-                )
-
-                if is_dungeon_context:
-                    logging.info("🏰 [地下城背包清理] 已清理完畢，暫緩城鎮流水線，標記 pending_town_subflows，恢復地下城探索打完本趟副本...")
-                    self.machine.pending_town_subflows = True
-                    target_state = self.machine.previous_state if getattr(self.machine, "previous_state", None) else self.machine.STATE_DUNGEON_EXPLORING
-                    self.machine.transition_to(target_state)
-                else:
-                    logging.info("🏛️ [城鎮/關卡背包清理] 背包清理完成，立即觸發城鎮任務流水線佇列...")
-                    self.machine.trigger_town_subflow_chain()
-                return True
+        pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
+        if pos_quit:
+            logging.info(f"🎒 背包清理：已整理完畢，點擊退出按鈕 [common/quit.png] (信心度: {conf_quit:.4f}) 關閉背包 (配對確認直到消失)...")
+            self._save_step_screenshot(screen_img, "9_quit")
+            self.notify_ui_progress()
+            self.click_and_wait_until_gone("common/quit.png", rect["left"] + pos_quit[0], rect["top"] + pos_quit[1], rect, threshold=0.7)
+            self._reset_and_exit_bag_cleaning()
+            time.sleep(0.1)
+            return True
         return False
+
+    def _reset_and_exit_bag_cleaning(self):
+        """重置背包清理所有標記並退出 BAG_CLEANING 狀態"""
+        self.machine.need_bag_cleaning = False
+        self.machine.bag_tidied = False
+        self.machine.bag_disassembled = False
+        self.machine.bag_select_all_clicked = False
+        self.machine.bag_deselected = False
+        self.machine.bag_opened_clicked = False
+        self.machine.bag_clean_step = 0
+        self.machine.bag_clean_start_time = None
+        self.machine.bag_wait_count = 0
+        self.machine.bag_no_feature_count = 0
+
+        is_dungeon_context = (
+            getattr(self.machine, "is_in_dungeon", False) or
+            self.machine.config.get("type") == "dungeon" or
+            getattr(self.machine, "previous_state", None) == self.machine.STATE_DUNGEON_EXPLORING
+        )
+
+        if is_dungeon_context:
+            logging.info("🏰 [地下城背包清理] 已清理完畢，暫緩城鎮流水線，標記 pending_town_subflows，恢復地下城探索打完本趟副本...")
+            self.machine.pending_town_subflows = True
+            target_state = self.machine.previous_state if getattr(self.machine, "previous_state", None) else self.machine.STATE_DUNGEON_EXPLORING
+            self.machine.transition_to(target_state)
+        else:
+            logging.info("🏛️ [城鎮/關卡背包清理] 背包清理完成，立即觸發城鎮任務流水線佇列...")
+            self.machine.trigger_town_subflow_chain()
 
     def handle(self, screen_img, rect):
         """
         背包清理狀態主調度器。
         依序呼叫模組化 Functions：打開背包 ➔ 大量分解 ➔ 全選 ➔ 反選貴重物品 ➔ 分解 ➔ 確認 ➔ 整理 ➔ 退出背包。
         """
-        # 0. 判斷背包是否已經打開
+        # 0. 防卡死總超時 (Timeout Watchdog)
+        now = time.time()
+        start_time = getattr(self.machine, "bag_clean_start_time", None)
+        if not isinstance(start_time, (int, float)):
+            start_time = None
+
+        if start_time is None:
+            self.machine.bag_clean_start_time = now
+        elif now - start_time > 30.0:
+            logging.warning("⚠️ [防卡死防禦] 背包清理狀態停留已超過 30 秒，自動重置狀態標記並退回探索/導航流程。")
+            self._reset_and_exit_bag_cleaning()
+            return
+
+        # 1. 判斷背包是否已經打開
         if not self.is_backpack_opened(screen_img):
             if self.open_backpack(screen_img, rect):
+                self.machine.bag_wait_count = 0
                 return
             logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
             return
 
-        # 1. 優先處理確認與 OK 彈窗
+        # 2. 優先處理確認與 OK 彈窗
         if self.confirm_popups(screen_img, rect):
+            self.machine.bag_wait_count = 0
             return
 
-        # 2. 如果已經整理過，點擊退出關閉背包
+        # 3. 如果已經整理過，點擊退出關閉背包
         if getattr(self.machine, "bag_tidied", False):
             if self.quit_backpack(screen_img, rect):
+                self.machine.bag_wait_count = 0
                 return
 
-        # 3. 如果已經分解完畢，則點擊「整理」
+        # 4. 如果已經分解完畢，則點擊「整理」
         if getattr(self.machine, "bag_disassembled", False):
             if self.tidy_backpack(screen_img, rect):
+                self.machine.bag_wait_count = 0
                 return
 
-        # 4. 如果尚未分解，則執行分解流程
+        # 5. 如果尚未分解，則執行分解流程
         else:
             if not getattr(self.machine, "bag_select_all_clicked", False):
                 if self.select_all_items(screen_img, rect):
+                    self.machine.bag_wait_count = 0
                     return
             elif not getattr(self.machine, "bag_deselected", False):
                 if self.deselect_valuable_items(screen_img, rect):
+                    self.machine.bag_wait_count = 0
                     return
             else:
                 if self.execute_disassembly(screen_img, rect):
+                    self.machine.bag_wait_count = 0
                     return
 
             if self.enter_mass_disassembly(screen_img, rect):
+                self.machine.bag_wait_count = 0
                 return
+
+        # 6. 無動作計數與嘗試重新開啟/備援退出
+        wait_count = getattr(self.machine, "bag_wait_count", 0)
+        if not isinstance(wait_count, int):
+            wait_count = 0
+        wait_count += 1
+        self.machine.bag_wait_count = wait_count
+
+        if wait_count >= 3:
+            # 備援：若已分解完畢，連續 3 幀無動作，嘗試點擊 quit.png 退出背包
+            if getattr(self.machine, "bag_disassembled", False):
+                if self.quit_backpack(screen_img, rect):
+                    self.machine.bag_wait_count = 0
+                    return
+
+            # 若 bag_opened_clicked 為 True 但連續 3 幀無動作，重置 bag_opened_clicked 允許重新點擊開啟背包
+            if getattr(self.machine, "bag_opened_clicked", False):
+                logging.warning("🎒 背包清理：連續 3 次掃描無可執行動作，重置 bag_opened_clicked 以允許重新打開背包。")
+                self.machine.bag_opened_clicked = False
+                self.machine.bag_wait_count = 0
 
         logging.info("⌛ 背包清理流程中，正在等待背包相關畫面或按鈕載入...")
 
