@@ -86,6 +86,16 @@ class LordBossHandler(BaseStateHandler):
             self.machine.pop_and_next_town_subflow()
             return True
 
+        # 0. 全域最高優先防護：若畫面上出現歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防止遮罩擋住選關與大門
+        for popup_btn in ["common/confirm.png", "common/ok.png"]:
+            if os.path.exists(os.path.join("templates", popup_btn)):
+                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.90)
+                if pos_popup:
+                    logging.info(f"👉 [首領討伐全域防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
+                    self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])
+                    time.sleep(0.5)
+                    return True
+
         # 1. 檢查並使用相對優勢 API 比對領主頁籤是否已開啟
         entry_after = self.machine.config.get("entry_after_btn", "load/Lord_entry_after.png")
         entry_before = self.machine.config.get("entry_btn", "load/Lord_entry.png")

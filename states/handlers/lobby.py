@@ -19,6 +19,16 @@ class LobbyHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_BATTLE)
                     return
 
+        # 0.1 全域最高優先防護：若畫面上出現歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防止遮罩擋住開始按鈕
+        for popup_btn in ["common/confirm.png", "common/ok.png"]:
+            if os.path.exists(os.path.join("templates", popup_btn)):
+                pos_popup, conf_popup = self.matcher.match(screen_img, popup_btn, threshold=0.90)
+                if pos_popup:
+                    logging.info(f"👉 [大廳全域防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
+                    self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])
+                    time.sleep(0.5)
+                    return
+
         # 如果是背包整理模式，優先轉移至 BAG_CLEANING 狀態
         if self.machine.config["type"] == "bag_clean":
             logging.info("🎒 大廳：偵測到為背包整理模式，優先轉移至 BAG_CLEANING 狀態。")
