@@ -1,0 +1,22 @@
+{
+  "party": {
+    "enemy": "敵方",
+    "ally": "友方",
+    "self": "自身",
+    "all": "全體"
+  },
+  "target": {
+    "single": "單體",
+    "range": "遠程/全範圍",
+    "melee": "近戰目標",
+    "neighbor": "相鄰目標",
+    "dead": "陣亡目標",
+    "all": "全體",
+    "front_row": "前排",
+    "back_row": "後排",
+    "lowest_hp": "最低生命值目標",
+    "highest_atk": "最高攻擊目標",
+    "random": "隨機目標",
+    "self": "自身"
+  }
+}
