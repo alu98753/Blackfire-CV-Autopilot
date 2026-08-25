@@ -212,8 +212,8 @@
       "crimson_threshold"
     ],
     "skill_names_zh": [
-      "bloodfang_mark",
-      "rend_frenzy",
+      "血牙印記",
+      "狂亂撕裂",
       "血液回收 (被動)",
       "裂血追擊",
       "血怒覺醒 (被動)",
@@ -444,7 +444,7 @@
       "鋼鐵堡壘",
       "深鍛記憶 (被動)",
       "不滅誓言 (被動)",
-      "oathforge_transmute"
+      "誓鍛轉化"
     ]
   },
   {
@@ -530,7 +530,7 @@
       "scorching_touch"
     ],
     "skill_names_zh": [
-      "scorching_touch"
+      "灼熱之觸"
     ]
   },
   {
@@ -552,7 +552,7 @@
       "flame_dart"
     ],
     "skill_names_zh": [
-      "scorching_touch",
+      "灼熱之觸",
       "烈焰飛鏢"
     ]
   },
@@ -602,7 +602,7 @@
       "blaze_wrath"
     ],
     "skill_names_zh": [
-      "scorching_touch",
+      "灼熱之觸",
       "烈焰飛鏢",
       "火球術",
       "熾烈之怒"
@@ -662,7 +662,7 @@
     "skill_names_zh": [
       "魂火巨口",
       "烈焰飛鏢",
-      "flamebound_sacrifice",
+      "縛焰祭獻",
       "餘燼灌注 (被動)",
       "火焰掌控 (被動)",
       "滾動巨炎球"
@@ -1019,7 +1019,7 @@
       "猩紅冥想 (被動)",
       "血肉祭壇",
       "噬魂咆哮",
-      "remote_eecortication",
+      "隔空剝蝕",
       "地獄契約重置 (被動)",
       "殉道之勇 (被動)"
     ]
@@ -1177,7 +1177,7 @@
       "潛行伏擊",
       "無聲處決",
       "死亡預兆",
-      "deathbound_pressure"
+      "死縛威壓"
     ]
   },
   {
@@ -1237,10 +1237,10 @@
       "deathmark_verdict"
     ],
     "skill_names_zh": [
-      "darkfeather_flurry",
+      "暗羽狂襲",
       "夜鴉穿刺",
       "鴉羽追獵",
-      "darkfeather_impale",
+      "暗羽穿刺",
       "影步復甦 (被動)",
       "夜鴉飛昇 (被動)",
       "死印判決"
@@ -1275,7 +1275,7 @@
       "深淵穿刺突進",
       "深淵撕裂",
       "深淵異變",
-      "mutant_flame_stalk",
+      "變異炎莖",
       "深淵蔓延異變 (被動)"
     ]
   },
@@ -1401,7 +1401,7 @@
       "嗜血連擊",
       "深度重傷",
       "創傷猛擊",
-      "blood_extraction"
+      "汲血之術"
     ]
   },
   {
@@ -1527,7 +1527,7 @@
     "skill_names_zh": [
       "血誓順劈斬",
       "不息怒火 (被動)",
-      "commanding_roar",
+      "統御咆哮",
       "處刑者之刃 (被動)",
       "野蠻壓制",
       "劍刃風暴震盪",
@@ -1644,7 +1644,7 @@
       "霜鋼衝擊",
       "極凍裝甲 (被動)",
       "碎裂線爆發",
-      "iceline_afterblow",
+      "冰脈餘勁",
       "霜鋼體質 (被動)",
       "霜震共鳴"
     ]

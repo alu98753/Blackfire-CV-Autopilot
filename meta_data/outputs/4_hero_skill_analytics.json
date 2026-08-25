@@ -1161,7 +1161,7 @@
         "skill_type_zh": "主動",
         "damage_type": "physical",
         "damage_type_zh": "物理傷害",
-        "damage_offset": 0.5,
+        "damage_offset": 999999.0,
         "cool_round": 5.0,
         "sp": 1.0,
         "target": "range",
@@ -1170,13 +1170,13 @@
         "party": "enemy",
         "party_zh": "敵方",
         "attr": {
-          "damage_offset": 0.5
+          "damage_offset": 999999.0
         },
         "attr_zh": {
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
-            "value": 0.5,
-            "display": "傷害係數/倍率: 0.5"
+            "value": 999999.0,
+            "display": "傷害係數/倍率: 999999.0"
           }
         },
         "attr_per_level": {
@@ -1192,7 +1192,7 @@
         "raw_data": {
           "ap": 0.0,
           "attr": {
-            "damage_offset": 0.5
+            "damage_offset": 999999.0
           },
           "attr_per_level": {
             "damage_offset": 0.025
@@ -1213,7 +1213,7 @@
         "skill_type_zh": "主動",
         "damage_type": "physical",
         "damage_type_zh": "物理傷害",
-        "damage_offset": 1.2,
+        "damage_offset": 999999.0,
         "cool_round": 3.0,
         "sp": 0.0,
         "target": "range",
@@ -1222,15 +1222,15 @@
         "party": "enemy",
         "party_zh": "敵方",
         "attr": {
-          "damage_offset": 1.2,
+          "damage_offset": 999999.0,
           "poison_max": 5.0,
           "poison_min": 1.0
         },
         "attr_zh": {
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
-            "value": 1.2,
-            "display": "傷害係數/倍率: 1.2"
+            "value": 999999.0,
+            "display": "傷害係數/倍率: 999999.0"
           },
           "poison_max": {
             "name_zh": "中毒層數上限",
@@ -1255,7 +1255,7 @@
         },
         "raw_data": {
           "attr": {
-            "damage_offset": 1.2,
+            "damage_offset": 999999.0,
             "poison_max": 5.0,
             "poison_min": 1.0
           },
@@ -1277,7 +1277,7 @@
         "skill_type_zh": "主動",
         "damage_type": "physical",
         "damage_type_zh": "物理傷害",
-        "damage_offset": 1.6,
+        "damage_offset": 999999.0,
         "cool_round": 3.0,
         "sp": -3.0,
         "target": "range",
@@ -1288,7 +1288,7 @@
         "attr": {
           "ap_chance": 0.75,
           "ap_count": 1.0,
-          "damage_offset": 1.6
+          "damage_offset": 999999.0
         },
         "attr_zh": {
           "ap_chance": {
@@ -1303,8 +1303,8 @@
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
-            "value": 1.6,
-            "display": "傷害係數/倍率: 1.6"
+            "value": 999999.0,
+            "display": "傷害係數/倍率: 999999.0"
           }
         },
         "attr_per_level": {
@@ -1321,7 +1321,7 @@
           "attr": {
             "ap_chance": 0.75,
             "ap_count": 1.0,
-            "damage_offset": 1.6
+            "damage_offset": 999999.0
           },
           "attr_per_level": {
             "damage_offset": 0.06
@@ -1561,7 +1561,7 @@
         "skill_type_zh": "主動",
         "damage_type": "physical",
         "damage_type_zh": "物理傷害",
-        "damage_offset": 0.5,
+        "damage_offset": 999999.0,
         "cool_round": 5.0,
         "sp": 1.0,
         "target": "range",
@@ -1570,13 +1570,13 @@
         "party": "enemy",
         "party_zh": "敵方",
         "attr": {
-          "damage_offset": 0.5
+          "damage_offset": 999999.0
         },
         "attr_zh": {
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
-            "value": 0.5,
-            "display": "傷害係數/倍率: 0.5"
+            "value": 999999.0,
+            "display": "傷害係數/倍率: 999999.0"
           }
         },
         "attr_per_level": {
@@ -1592,7 +1592,7 @@
         "raw_data": {
           "ap": 0.0,
           "attr": {
-            "damage_offset": 0.5
+            "damage_offset": 999999.0
           },
           "attr_per_level": {
             "damage_offset": 0.025
@@ -2019,7 +2019,7 @@
         "skill_type_zh": "主動",
         "damage_type": "physical",
         "damage_type_zh": "物理傷害",
-        "damage_offset": 0.5,
+        "damage_offset": 999999.0,
         "cool_round": 5.0,
         "sp": 1.0,
         "target": "range",
@@ -2028,13 +2028,13 @@
         "party": "enemy",
         "party_zh": "敵方",
         "attr": {
-          "damage_offset": 0.5
+          "damage_offset": 999999.0
         },
         "attr_zh": {
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
-            "value": 0.5,
-            "display": "傷害係數/倍率: 0.5"
+            "value": 999999.0,
+            "display": "傷害係數/倍率: 999999.0"
           }
         },
         "attr_per_level": {
@@ -2050,7 +2050,7 @@
         "raw_data": {
           "ap": 0.0,
           "attr": {
-            "damage_offset": 0.5
+            "damage_offset": 999999.0
           },
           "attr_per_level": {
             "damage_offset": 0.025
@@ -2096,9 +2096,9 @@
             "display": "標記層數: 3.0"
           },
           "vulnerability_count": {
-            "name_zh": "vulnerability_count",
+            "name_zh": "易傷層數",
             "value": 5.0,
-            "display": "vulnerability_count: 5.0"
+            "display": "易傷層數: 5.0"
           }
         },
         "attr_per_level": {
@@ -2150,9 +2150,9 @@
         },
         "attr_zh": {
           "reset_chance": {
-            "name_zh": "reset_chance",
+            "name_zh": "重置冷卻機率",
             "value": 0.15,
-            "display": "reset_chance: 0.15"
+            "display": "重置冷卻機率: 0.15"
           }
         },
         "attr_per_level": {
@@ -2160,9 +2160,9 @@
         },
         "attr_per_level_zh": {
           "reset_chance": {
-            "name_zh": "reset_chance",
+            "name_zh": "重置冷卻機率",
             "value": 0.01,
-            "display": "reset_chance: 0.01"
+            "display": "重置冷卻機率: 0.01"
           }
         },
         "raw_data": {
@@ -2201,9 +2201,9 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "skill_count": {
-            "name_zh": "skill_count",
+            "name_zh": "額外技能釋放次數",
             "value": 2.0,
-            "display": "skill_count: 2.0"
+            "display": "額外技能釋放次數: 2.0"
           }
         },
         "attr_per_level": {
@@ -2273,9 +2273,9 @@
             "display": "標記基礎層數: 3.0"
           },
           "vulnerability_count": {
-            "name_zh": "vulnerability_count",
+            "name_zh": "易傷層數",
             "value": 5.0,
-            "display": "vulnerability_count: 5.0"
+            "display": "易傷層數: 5.0"
           }
         },
         "attr_per_level": {
@@ -2330,14 +2330,14 @@
             "display": "增益觸發機率: 0.45"
           },
           "buff_max": {
-            "name_zh": "buff_max",
+            "name_zh": "增益層數上限",
             "value": 7.0,
-            "display": "buff_max: 7.0"
+            "display": "增益層數上限: 7.0"
           },
           "buff_min": {
-            "name_zh": "buff_min",
+            "name_zh": "增益基礎層數",
             "value": 5.0,
-            "display": "buff_min: 5.0"
+            "display": "增益基礎層數: 5.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -2395,9 +2395,9 @@
         },
         "attr_zh": {
           "beast_power_chance": {
-            "name_zh": "beast_power_chance",
+            "name_zh": "野獸之力觸發機率",
             "value": 0.35,
-            "display": "beast_power_chance: 0.35"
+            "display": "野獸之力觸發機率: 0.35"
           }
         },
         "attr_per_level": {
@@ -2405,9 +2405,9 @@
         },
         "attr_per_level_zh": {
           "beast_power_chance": {
-            "name_zh": "beast_power_chance",
+            "name_zh": "野獸之力觸發機率",
             "value": 0.05,
-            "display": "beast_power_chance: 0.05"
+            "display": "野獸之力觸發機率: 0.05"
           }
         },
         "raw_data": {
@@ -2525,7 +2525,7 @@
     "skills": [
       {
         "skill_id": "bloodfang_mark",
-        "skill_name_zh": "bloodfang_mark",
+        "skill_name_zh": "血牙印記",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "physical",
@@ -2545,9 +2545,9 @@
         },
         "attr_zh": {
           "bloodlust_count": {
-            "name_zh": "bloodlust_count",
+            "name_zh": "嗜血/血怒層數",
             "value": 1.0,
-            "display": "bloodlust_count: 1.0"
+            "display": "嗜血/血怒層數: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -2591,7 +2591,7 @@
       },
       {
         "skill_id": "rend_frenzy",
-        "skill_name_zh": "rend_frenzy",
+        "skill_name_zh": "狂亂撕裂",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "physical",
@@ -2610,9 +2610,9 @@
         },
         "attr_zh": {
           "bloodlust_count": {
-            "name_zh": "bloodlust_count",
+            "name_zh": "嗜血/血怒層數",
             "value": 1.0,
-            "display": "bloodlust_count: 1.0"
+            "display": "嗜血/血怒層數: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -2670,19 +2670,19 @@
         },
         "attr_zh": {
           "bloodlust_chance": {
-            "name_zh": "bloodlust_chance",
+            "name_zh": "嗜血/血怒觸發機率",
             "value": 0.45,
-            "display": "bloodlust_chance: 0.45"
+            "display": "嗜血/血怒觸發機率: 0.45"
           },
           "bloodlust_count": {
-            "name_zh": "bloodlust_count",
+            "name_zh": "嗜血/血怒層數",
             "value": 3.0,
-            "display": "bloodlust_count: 3.0"
+            "display": "嗜血/血怒層數: 3.0"
           },
           "bloodthirst_power_count": {
-            "name_zh": "bloodthirst_power_count",
+            "name_zh": "渴血之力層數",
             "value": 3.0,
-            "display": "bloodthirst_power_count: 3.0"
+            "display": "渴血之力層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -2690,9 +2690,9 @@
         },
         "attr_per_level_zh": {
           "bloodlust_chance": {
-            "name_zh": "bloodlust_chance",
+            "name_zh": "嗜血/血怒觸發機率",
             "value": 0.03,
-            "display": "bloodlust_chance: 0.03"
+            "display": "嗜血/血怒觸發機率: 0.03"
           }
         },
         "raw_data": {
@@ -2789,24 +2789,24 @@
         },
         "attr_zh": {
           "bloodlust_count": {
-            "name_zh": "bloodlust_count",
+            "name_zh": "嗜血/血怒層數",
             "value": 3.0,
-            "display": "bloodlust_count: 3.0"
+            "display": "嗜血/血怒層數: 3.0"
           },
           "hp_offset_1": {
-            "name_zh": "hp_offset_1",
+            "name_zh": "一段生命係數",
             "value": 0.25,
-            "display": "hp_offset_1: 0.25"
+            "display": "一段生命係數: 0.25"
           },
           "hp_offset_2": {
-            "name_zh": "hp_offset_2",
+            "name_zh": "二段生命係數",
             "value": 0.25,
-            "display": "hp_offset_2: 0.25"
+            "display": "二段生命係數: 0.25"
           },
           "manic_count": {
-            "name_zh": "manic_count",
+            "name_zh": "狂躁層數",
             "value": 5.0,
-            "display": "manic_count: 5.0"
+            "display": "狂躁層數: 5.0"
           }
         },
         "attr_per_level": {
@@ -2814,9 +2814,9 @@
         },
         "attr_per_level_zh": {
           "hp_offset_2": {
-            "name_zh": "hp_offset_2",
+            "name_zh": "二段生命係數",
             "value": -0.01,
-            "display": "hp_offset_2: -0.01"
+            "display": "二段生命係數: -0.01"
           }
         },
         "raw_data": {
@@ -2855,14 +2855,14 @@
         },
         "attr_zh": {
           "bloodlust_chance": {
-            "name_zh": "bloodlust_chance",
+            "name_zh": "嗜血/血怒觸發機率",
             "value": 0.25,
-            "display": "bloodlust_chance: 0.25"
+            "display": "嗜血/血怒觸發機率: 0.25"
           },
           "bloodlust_count": {
-            "name_zh": "bloodlust_count",
+            "name_zh": "嗜血/血怒層數",
             "value": 3.0,
-            "display": "bloodlust_count: 3.0"
+            "display": "嗜血/血怒層數: 3.0"
           },
           "damage_bouns": {
             "name_zh": "額外傷害加成",
@@ -2881,9 +2881,9 @@
         },
         "attr_per_level_zh": {
           "bloodlust_chance": {
-            "name_zh": "bloodlust_chance",
+            "name_zh": "嗜血/血怒觸發機率",
             "value": 0.02,
-            "display": "bloodlust_chance: 0.02"
+            "display": "嗜血/血怒觸發機率: 0.02"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -3094,14 +3094,14 @@
             "display": "傷害係數/倍率: 0.6"
           },
           "deepsea_resonance_chance": {
-            "name_zh": "deepsea_resonance_chance",
+            "name_zh": "深海共鳴觸發機率",
             "value": 0.75,
-            "display": "deepsea_resonance_chance: 0.75"
+            "display": "深海共鳴觸發機率: 0.75"
           },
           "deepsea_resonance_count": {
-            "name_zh": "deepsea_resonance_count",
+            "name_zh": "深海共鳴層數",
             "value": 1.0,
-            "display": "deepsea_resonance_count: 1.0"
+            "display": "深海共鳴層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -3163,14 +3163,14 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "deepsea_resonance_count": {
-            "name_zh": "deepsea_resonance_count",
+            "name_zh": "深海共鳴層數",
             "value": 1.0,
-            "display": "deepsea_resonance_count: 1.0"
+            "display": "深海共鳴層數: 1.0"
           },
           "immobilize_count": {
-            "name_zh": "immobilize_count",
+            "name_zh": "定身層數",
             "value": 2.0,
-            "display": "immobilize_count: 2.0"
+            "display": "定身層數: 2.0"
           },
           "weakness_chance": {
             "name_zh": "虛弱觸發機率",
@@ -3178,9 +3178,9 @@
             "display": "虛弱觸發機率: 0.45"
           },
           "weakness_count": {
-            "name_zh": "weakness_count",
+            "name_zh": "虛弱層數",
             "value": 3.0,
-            "display": "weakness_count: 3.0"
+            "display": "虛弱層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -3317,14 +3317,14 @@
             "display": "傷害係數/倍率: 1.6"
           },
           "damage_offset_magic": {
-            "name_zh": "damage_offset_magic",
+            "name_zh": "魔法傷害係數",
             "value": 0.3,
-            "display": "damage_offset_magic: 0.3"
+            "display": "魔法傷害係數: 0.3"
           },
           "drowning_chance": {
-            "name_zh": "drowning_chance",
+            "name_zh": "溺亡觸發機率",
             "value": 0.45,
-            "display": "drowning_chance: 0.45"
+            "display": "溺亡觸發機率: 0.45"
           },
           "random_count": {
             "name_zh": "隨機連擊次數",
@@ -3348,9 +3348,9 @@
             "display": "傷害係數/倍率: 0.08"
           },
           "damage_offset_magic": {
-            "name_zh": "damage_offset_magic",
+            "name_zh": "魔法傷害係數",
             "value": 0.02,
-            "display": "damage_offset_magic: 0.02"
+            "display": "魔法傷害係數: 0.02"
           }
         },
         "raw_data": {
@@ -3396,14 +3396,14 @@
         },
         "attr_zh": {
           "mag_chance": {
-            "name_zh": "mag_chance",
+            "name_zh": "魔法協同機率",
             "value": 0.025,
-            "display": "mag_chance: 0.025"
+            "display": "魔法協同機率: 0.025"
           },
           "phy_chance": {
-            "name_zh": "phy_chance",
+            "name_zh": "物理協同機率",
             "value": 0.05,
-            "display": "phy_chance: 0.05"
+            "display": "物理協同機率: 0.05"
           }
         },
         "attr_per_level": {
@@ -3412,14 +3412,14 @@
         },
         "attr_per_level_zh": {
           "mag_chance": {
-            "name_zh": "mag_chance",
+            "name_zh": "魔法協同機率",
             "value": 0.005,
-            "display": "mag_chance: 0.005"
+            "display": "魔法協同機率: 0.005"
           },
           "phy_chance": {
-            "name_zh": "phy_chance",
+            "name_zh": "物理協同機率",
             "value": 0.01,
-            "display": "phy_chance: 0.01"
+            "display": "物理協同機率: 0.01"
           }
         },
         "raw_data": {
@@ -3477,34 +3477,34 @@
             "display": "二段傷害倍率: 1.25"
           },
           "deepsea_resonance_count": {
-            "name_zh": "deepsea_resonance_count",
+            "name_zh": "深海共鳴層數",
             "value": 1.0,
-            "display": "deepsea_resonance_count: 1.0"
+            "display": "深海共鳴層數: 1.0"
           },
           "phase_1_count": {
-            "name_zh": "phase_1_count",
+            "name_zh": "一階段層數",
             "value": 3.0,
-            "display": "phase_1_count: 3.0"
+            "display": "一階段層數: 3.0"
           },
           "phase_2_count": {
-            "name_zh": "phase_2_count",
+            "name_zh": "二階段層數",
             "value": 6.0,
-            "display": "phase_2_count: 6.0"
+            "display": "二階段層數: 6.0"
           },
           "phase_3_count": {
-            "name_zh": "phase_3_count",
+            "name_zh": "三階段層數",
             "value": 9.0,
-            "display": "phase_3_count: 9.0"
+            "display": "三階段層數: 9.0"
           },
           "vulnerability_count": {
-            "name_zh": "vulnerability_count",
+            "name_zh": "易傷層數",
             "value": 3.0,
-            "display": "vulnerability_count: 3.0"
+            "display": "易傷層數: 3.0"
           },
           "weakness_count": {
-            "name_zh": "weakness_count",
+            "name_zh": "虛弱層數",
             "value": 3.0,
-            "display": "weakness_count: 3.0"
+            "display": "虛弱層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -3568,9 +3568,9 @@
             "display": "傷害係數/倍率: 0.2"
           },
           "drowning_chance": {
-            "name_zh": "drowning_chance",
+            "name_zh": "溺亡觸發機率",
             "value": 0.15,
-            "display": "drowning_chance: 0.15"
+            "display": "溺亡觸發機率: 0.15"
           }
         },
         "attr_per_level": {
@@ -3584,9 +3584,9 @@
             "display": "傷害係數/倍率: 0.03"
           },
           "drowning_chance": {
-            "name_zh": "drowning_chance",
+            "name_zh": "溺亡觸發機率",
             "value": 0.01,
-            "display": "drowning_chance: 0.01"
+            "display": "溺亡觸發機率: 0.01"
           }
         },
         "raw_data": {
@@ -3727,14 +3727,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -3889,14 +3889,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -3955,14 +3955,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "hp_max": {
             "name_zh": "最大生命值",
@@ -3970,9 +3970,9 @@
             "display": "最大生命值: 80.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 40.0,
-            "display": "hp_min: 40.0"
+            "display": "最低生命保障: 40.0"
           }
         },
         "attr_per_level": {
@@ -3986,9 +3986,9 @@
             "display": "最大生命值: 6.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 3.0,
-            "display": "hp_min: 3.0"
+            "display": "最低生命保障: 3.0"
           }
         },
         "raw_data": {
@@ -4135,14 +4135,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -4200,19 +4200,19 @@
         },
         "attr_zh": {
           "battle_fury_chance": {
-            "name_zh": "battle_fury_chance",
+            "name_zh": "戰意狂怒觸發機率",
             "value": 0.25,
-            "display": "battle_fury_chance: 0.25"
+            "display": "戰意狂怒觸發機率: 0.25"
           },
           "battle_fury_max": {
-            "name_zh": "battle_fury_max",
+            "name_zh": "戰意狂怒上限",
             "value": 5.0,
-            "display": "battle_fury_max: 5.0"
+            "display": "戰意狂怒上限: 5.0"
           },
           "battle_fury_min": {
-            "name_zh": "battle_fury_min",
+            "name_zh": "戰意狂怒基礎層數",
             "value": 3.0,
-            "display": "battle_fury_min: 3.0"
+            "display": "戰意狂怒基礎層數: 3.0"
           }
         },
         "attr_per_level": {},
@@ -4253,14 +4253,14 @@
         },
         "attr_zh": {
           "battle_fury_max": {
-            "name_zh": "battle_fury_max",
+            "name_zh": "戰意狂怒上限",
             "value": 5.0,
-            "display": "battle_fury_max: 5.0"
+            "display": "戰意狂怒上限: 5.0"
           },
           "battle_fury_min": {
-            "name_zh": "battle_fury_min",
+            "name_zh": "戰意狂怒基礎層數",
             "value": 3.0,
-            "display": "battle_fury_min: 3.0"
+            "display": "戰意狂怒基礎層數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -4479,14 +4479,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "hp_max": {
             "name_zh": "最大生命值",
@@ -4494,9 +4494,9 @@
             "display": "最大生命值: 80.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 40.0,
-            "display": "hp_min: 40.0"
+            "display": "最低生命保障: 40.0"
           }
         },
         "attr_per_level": {
@@ -4510,9 +4510,9 @@
             "display": "最大生命值: 6.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 3.0,
-            "display": "hp_min: 3.0"
+            "display": "最低生命保障: 3.0"
           }
         },
         "raw_data": {
@@ -4633,24 +4633,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 100.0,
-            "display": "armor_max: 100.0"
+            "display": "護甲增加上限: 100.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 60.0,
-            "display": "armor_min: 60.0"
+            "display": "護甲增加下限: 60.0"
           },
           "damage_surge_max": {
-            "name_zh": "damage_surge_max",
+            "name_zh": "傷害激增上限",
             "value": 2.0,
-            "display": "damage_surge_max: 2.0"
+            "display": "傷害激增上限: 2.0"
           },
           "damage_surge_min": {
-            "name_zh": "damage_surge_min",
+            "name_zh": "傷害激增基礎層數",
             "value": 1.0,
-            "display": "damage_surge_min: 1.0"
+            "display": "傷害激增基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -4659,14 +4659,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 10.0,
-            "display": "armor_max: 10.0"
+            "display": "護甲增加上限: 10.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 6.0,
-            "display": "armor_min: 6.0"
+            "display": "護甲增加下限: 6.0"
           }
         },
         "raw_data": {
@@ -4814,14 +4814,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -4880,14 +4880,14 @@
         },
         "attr_zh": {
           "bulwark_hp": {
-            "name_zh": "bulwark_hp",
+            "name_zh": "堡壘護盾生命吸收值",
             "value": 20.0,
-            "display": "bulwark_hp: 20.0"
+            "display": "堡壘護盾生命吸收值: 20.0"
           },
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 5.0,
-            "display": "bulwark_max: 5.0"
+            "display": "堡壘護盾上限: 5.0"
           },
           "hp_max": {
             "name_zh": "最大生命值",
@@ -4895,9 +4895,9 @@
             "display": "最大生命值: 80.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 40.0,
-            "display": "hp_min: 40.0"
+            "display": "最低生命保障: 40.0"
           }
         },
         "attr_per_level": {
@@ -4907,9 +4907,9 @@
         },
         "attr_per_level_zh": {
           "bulwark_hp": {
-            "name_zh": "bulwark_hp",
+            "name_zh": "堡壘護盾生命吸收值",
             "value": 1.0,
-            "display": "bulwark_hp: 1.0"
+            "display": "堡壘護盾生命吸收值: 1.0"
           },
           "hp_max": {
             "name_zh": "最大生命值",
@@ -4917,9 +4917,9 @@
             "display": "最大生命值: 6.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 3.0,
-            "display": "hp_min: 3.0"
+            "display": "最低生命保障: 3.0"
           }
         },
         "raw_data": {
@@ -4970,24 +4970,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 40.0,
-            "display": "armor_max: 40.0"
+            "display": "護甲增加上限: 40.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 20.0,
-            "display": "armor_min: 20.0"
+            "display": "護甲增加下限: 20.0"
           },
           "battle_fury_max": {
-            "name_zh": "battle_fury_max",
+            "name_zh": "戰意狂怒上限",
             "value": 7.0,
-            "display": "battle_fury_max: 7.0"
+            "display": "戰意狂怒上限: 7.0"
           },
           "battle_fury_min": {
-            "name_zh": "battle_fury_min",
+            "name_zh": "戰意狂怒基礎層數",
             "value": 5.0,
-            "display": "battle_fury_min: 5.0"
+            "display": "戰意狂怒基礎層數: 5.0"
           }
         },
         "attr_per_level": {
@@ -4996,14 +4996,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 8.0,
-            "display": "armor_max: 8.0"
+            "display": "護甲增加上限: 8.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 4.0,
-            "display": "armor_min: 4.0"
+            "display": "護甲增加下限: 4.0"
           }
         },
         "raw_data": {
@@ -5053,19 +5053,19 @@
             "display": "傷害係數/倍率: 1.4"
           },
           "silence_chance": {
-            "name_zh": "silence_chance",
+            "name_zh": "沉默施加機率",
             "value": 0.25,
-            "display": "silence_chance: 0.25"
+            "display": "沉默施加機率: 0.25"
           },
           "silence_max": {
-            "name_zh": "silence_max",
+            "name_zh": "沉默上限",
             "value": 5.0,
-            "display": "silence_max: 5.0"
+            "display": "沉默上限: 5.0"
           },
           "silence_min": {
-            "name_zh": "silence_min",
+            "name_zh": "沉默基礎值",
             "value": 3.0,
-            "display": "silence_min: 3.0"
+            "display": "沉默基礎值: 3.0"
           }
         },
         "attr_per_level": {
@@ -5120,24 +5120,24 @@
         },
         "attr_zh": {
           "bulwark_chance": {
-            "name_zh": "bulwark_chance",
+            "name_zh": "堡壘護盾觸發機率",
             "value": 0.1,
-            "display": "bulwark_chance: 0.1"
+            "display": "堡壘護盾觸發機率: 0.1"
           },
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "bulwark_round": {
-            "name_zh": "bulwark_round",
+            "name_zh": "堡壘護盾回合數",
             "value": 9.0,
-            "display": "bulwark_round: 9.0"
+            "display": "堡壘護盾回合數: 9.0"
           }
         },
         "attr_per_level": {
@@ -5145,9 +5145,9 @@
         },
         "attr_per_level_zh": {
           "bulwark_chance": {
-            "name_zh": "bulwark_chance",
+            "name_zh": "堡壘護盾觸發機率",
             "value": 0.015,
-            "display": "bulwark_chance: 0.015"
+            "display": "堡壘護盾觸發機率: 0.015"
           }
         },
         "raw_data": {
@@ -5297,9 +5297,9 @@
         },
         "attr_zh": {
           "attack_times": {
-            "name_zh": "attack_times",
+            "name_zh": "連擊/攻擊次數",
             "value": 2.0,
-            "display": "attack_times: 2.0"
+            "display": "連擊/攻擊次數: 2.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -5307,19 +5307,19 @@
             "display": "傷害係數/倍率: 0.85"
           },
           "silence_chance": {
-            "name_zh": "silence_chance",
+            "name_zh": "沉默施加機率",
             "value": 0.25,
-            "display": "silence_chance: 0.25"
+            "display": "沉默施加機率: 0.25"
           },
           "silence_max": {
-            "name_zh": "silence_max",
+            "name_zh": "沉默上限",
             "value": 2.0,
-            "display": "silence_max: 2.0"
+            "display": "沉默上限: 2.0"
           },
           "silence_min": {
-            "name_zh": "silence_min",
+            "name_zh": "沉默基礎值",
             "value": 1.0,
-            "display": "silence_min: 1.0"
+            "display": "沉默基礎值: 1.0"
           }
         },
         "attr_per_level": {
@@ -5381,14 +5381,14 @@
             "display": "額外傷害加成: 0.05"
           },
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.05,
-            "display": "damage_bouns_1: 0.05"
+            "display": "一段額外增傷: 0.05"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.05,
-            "display": "damage_bouns_2: 0.05"
+            "display": "二段額外增傷: 0.05"
           }
         },
         "attr_per_level": {
@@ -5403,14 +5403,14 @@
             "display": "額外傷害加成: 0.01"
           },
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.01,
-            "display": "damage_bouns_1: 0.01"
+            "display": "一段額外增傷: 0.01"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.01,
-            "display": "damage_bouns_2: 0.01"
+            "display": "二段額外增傷: 0.01"
           }
         },
         "raw_data": {
@@ -5452,14 +5452,14 @@
         },
         "attr_zh": {
           "battle_fury_max": {
-            "name_zh": "battle_fury_max",
+            "name_zh": "戰意狂怒上限",
             "value": 5.0,
-            "display": "battle_fury_max: 5.0"
+            "display": "戰意狂怒上限: 5.0"
           },
           "battle_fury_min": {
-            "name_zh": "battle_fury_min",
+            "name_zh": "戰意狂怒基礎層數",
             "value": 3.0,
-            "display": "battle_fury_min: 3.0"
+            "display": "戰意狂怒基礎層數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -5538,24 +5538,24 @@
         },
         "attr_zh": {
           "bulwark_chance": {
-            "name_zh": "bulwark_chance",
+            "name_zh": "堡壘護盾觸發機率",
             "value": 0.15,
-            "display": "bulwark_chance: 0.15"
+            "display": "堡壘護盾觸發機率: 0.15"
           },
           "bulwark_count": {
-            "name_zh": "bulwark_count",
+            "name_zh": "堡壘護盾層數",
             "value": 3.0,
-            "display": "bulwark_count: 3.0"
+            "display": "堡壘護盾層數: 3.0"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.1,
-            "display": "heal_offset_max: 0.1"
+            "display": "最大治療倍率: 0.1"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.05,
-            "display": "heal_offset_min: 0.05"
+            "display": "最小治療倍率: 0.05"
           }
         },
         "attr_per_level": {
@@ -5565,19 +5565,19 @@
         },
         "attr_per_level_zh": {
           "bulwark_chance": {
-            "name_zh": "bulwark_chance",
+            "name_zh": "堡壘護盾觸發機率",
             "value": 0.01,
-            "display": "bulwark_chance: 0.01"
+            "display": "堡壘護盾觸發機率: 0.01"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.005,
-            "display": "heal_offset_max: 0.005"
+            "display": "最大治療倍率: 0.005"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.005,
-            "display": "heal_offset_min: 0.005"
+            "display": "最小治療倍率: 0.005"
           }
         },
         "raw_data": {
@@ -5624,19 +5624,19 @@
             "display": "傷害係數/倍率: 2.0"
           },
           "sacred_scorch_chance": {
-            "name_zh": "sacred_scorch_chance",
+            "name_zh": "聖炎灼燒機率",
             "value": 0.25,
-            "display": "sacred_scorch_chance: 0.25"
+            "display": "聖炎灼燒機率: 0.25"
           },
           "sacred_scorch_max": {
-            "name_zh": "sacred_scorch_max",
+            "name_zh": "聖炎灼燒上限",
             "value": 5.0,
-            "display": "sacred_scorch_max: 5.0"
+            "display": "聖炎灼燒上限: 5.0"
           },
           "sacred_scorch_min": {
-            "name_zh": "sacred_scorch_min",
+            "name_zh": "聖炎灼燒基礎值",
             "value": 3.0,
-            "display": "sacred_scorch_min: 3.0"
+            "display": "聖炎灼燒基礎值: 3.0"
           }
         },
         "attr_per_level": {
@@ -5725,9 +5725,9 @@
             "display": "物理抗性 (%): 5.0"
           },
           "silence_immuned": {
-            "name_zh": "silence_immuned",
+            "name_zh": "免疫沉默",
             "value": 1.0,
-            "display": "silence_immuned: 1.0"
+            "display": "免疫沉默: 1.0"
           }
         },
         "attr_per_level": {
@@ -5771,9 +5771,9 @@
             "display": "物理抗性 (%): 1.0"
           },
           "silence_immuned": {
-            "name_zh": "silence_immuned",
+            "name_zh": "免疫沉默",
             "value": 1.0,
-            "display": "silence_immuned: 1.0"
+            "display": "免疫沉默: 1.0"
           }
         },
         "raw_data": {
@@ -5819,9 +5819,9 @@
         },
         "attr_zh": {
           "afterglow_chance": {
-            "name_zh": "afterglow_chance",
+            "name_zh": "餘暉觸發機率",
             "value": 0.45,
-            "display": "afterglow_chance: 0.45"
+            "display": "餘暉觸發機率: 0.45"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -5835,9 +5835,9 @@
         },
         "attr_per_level_zh": {
           "afterglow_chance": {
-            "name_zh": "afterglow_chance",
+            "name_zh": "餘暉觸發機率",
             "value": 0.05,
-            "display": "afterglow_chance: 0.05"
+            "display": "餘暉觸發機率: 0.05"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -5996,19 +5996,19 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "ironoath_chance": {
-            "name_zh": "ironoath_chance",
+            "name_zh": "鐵誓觸發機率",
             "value": 0.45,
-            "display": "ironoath_chance: 0.45"
+            "display": "鐵誓觸發機率: 0.45"
           },
           "ironoath_max": {
-            "name_zh": "ironoath_max",
+            "name_zh": "鐵誓上限",
             "value": 5.0,
-            "display": "ironoath_max: 5.0"
+            "display": "鐵誓上限: 5.0"
           },
           "ironoath_min": {
-            "name_zh": "ironoath_min",
+            "name_zh": "鐵誓基礎層數",
             "value": 3.0,
-            "display": "ironoath_min: 3.0"
+            "display": "鐵誓基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -6063,19 +6063,19 @@
         },
         "attr_zh": {
           "armor_offset_max": {
-            "name_zh": "armor_offset_max",
+            "name_zh": "最大護甲加成係數",
             "value": 0.15,
-            "display": "armor_offset_max: 0.15"
+            "display": "最大護甲加成係數: 0.15"
           },
           "armor_offset_min": {
-            "name_zh": "armor_offset_min",
+            "name_zh": "最小護甲加成係數",
             "value": 0.05,
-            "display": "armor_offset_min: 0.05"
+            "display": "最小護甲加成係數: 0.05"
           },
           "barrier_count": {
-            "name_zh": "barrier_count",
+            "name_zh": "屏障層數/格擋次數",
             "value": 3.0,
-            "display": "barrier_count: 3.0"
+            "display": "屏障層數/格擋次數: 3.0"
           }
         },
         "attr_per_level": {
@@ -6084,14 +6084,14 @@
         },
         "attr_per_level_zh": {
           "armor_offset_max": {
-            "name_zh": "armor_offset_max",
+            "name_zh": "最大護甲加成係數",
             "value": 0.01,
-            "display": "armor_offset_max: 0.01"
+            "display": "最大護甲加成係數: 0.01"
           },
           "armor_offset_min": {
-            "name_zh": "armor_offset_min",
+            "name_zh": "最小護甲加成係數",
             "value": 0.01,
-            "display": "armor_offset_min: 0.01"
+            "display": "最小護甲加成係數: 0.01"
           }
         },
         "raw_data": {
@@ -6141,14 +6141,14 @@
             "display": "傷害係數/倍率: 1.6"
           },
           "ironoath_max": {
-            "name_zh": "ironoath_max",
+            "name_zh": "鐵誓上限",
             "value": 5.0,
-            "display": "ironoath_max: 5.0"
+            "display": "鐵誓上限: 5.0"
           },
           "ironoath_min": {
-            "name_zh": "ironoath_min",
+            "name_zh": "鐵誓基礎層數",
             "value": 3.0,
-            "display": "ironoath_min: 3.0"
+            "display": "鐵誓基礎層數: 3.0"
           },
           "stun_chance": {
             "name_zh": "眩暈觸發機率",
@@ -6207,14 +6207,14 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.15,
-            "display": "armor_offset: 0.15"
+            "display": "護甲加成係數: 0.15"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 1.0,
-            "display": "hp_min: 1.0"
+            "display": "最低生命保障: 1.0"
           }
         },
         "attr_per_level": {
@@ -6222,9 +6222,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.02,
-            "display": "armor_offset: 0.02"
+            "display": "護甲加成係數: 0.02"
           }
         },
         "raw_data": {
@@ -6258,9 +6258,9 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.045,
-            "display": "armor_offset: 0.045"
+            "display": "護甲加成係數: 0.045"
           }
         },
         "attr_per_level": {
@@ -6268,9 +6268,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.003,
-            "display": "armor_offset: 0.003"
+            "display": "護甲加成係數: 0.003"
           }
         },
         "raw_data": {
@@ -6305,19 +6305,19 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.15,
-            "display": "armor_offset: 0.15"
+            "display": "護甲加成係數: 0.15"
           },
           "barrier_count": {
-            "name_zh": "barrier_count",
+            "name_zh": "屏障層數/格擋次數",
             "value": 9.0,
-            "display": "barrier_count: 9.0"
+            "display": "屏障層數/格擋次數: 9.0"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.45,
-            "display": "hp_offset: 0.45"
+            "display": "生命回復/扣除比例: 0.45"
           }
         },
         "attr_per_level": {
@@ -6325,9 +6325,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.02,
-            "display": "armor_offset: 0.02"
+            "display": "護甲加成係數: 0.02"
           }
         },
         "raw_data": {
@@ -6344,7 +6344,7 @@
       },
       {
         "skill_id": "oathforge_transmute",
-        "skill_name_zh": "oathforge_transmute",
+        "skill_name_zh": "誓鍛轉化",
         "skill_type": "passive",
         "skill_type_zh": "被動",
         "damage_type": "none",
@@ -6363,14 +6363,14 @@
         },
         "attr_zh": {
           "buff_offset": {
-            "name_zh": "buff_offset",
+            "name_zh": "增益效果係數",
             "value": 0.05,
-            "display": "buff_offset: 0.05"
+            "display": "增益效果係數: 0.05"
           },
           "ironoath_count": {
-            "name_zh": "ironoath_count",
+            "name_zh": "鐵誓層數",
             "value": 3.0,
-            "display": "ironoath_count: 3.0"
+            "display": "鐵誓層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -6378,9 +6378,9 @@
         },
         "attr_per_level_zh": {
           "buff_offset": {
-            "name_zh": "buff_offset",
+            "name_zh": "增益效果係數",
             "value": 0.005,
-            "display": "buff_offset: 0.005"
+            "display": "增益效果係數: 0.005"
           }
         },
         "raw_data": {
@@ -6536,9 +6536,9 @@
             "display": "二段傷害倍率: 0.4"
           },
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.25,
-            "display": "extra_chance: 0.25"
+            "display": "額外連鎖機率: 0.25"
           }
         },
         "attr_per_level": {
@@ -6627,9 +6627,9 @@
             "display": "充能層數: 1.0"
           },
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.75,
-            "display": "extra_chance: 0.75"
+            "display": "額外連鎖機率: 0.75"
           }
         },
         "attr_per_level": {
@@ -6688,29 +6688,29 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.15,
-            "display": "armor_offset: 0.15"
+            "display": "護甲加成係數: 0.15"
           },
           "damage_reduction_max": {
-            "name_zh": "damage_reduction_max",
+            "name_zh": "減傷層數上限",
             "value": 3.0,
-            "display": "damage_reduction_max: 3.0"
+            "display": "減傷層數上限: 3.0"
           },
           "damage_reduction_min": {
-            "name_zh": "damage_reduction_min",
+            "name_zh": "減傷基礎層數",
             "value": 1.0,
-            "display": "damage_reduction_min: 1.0"
+            "display": "減傷基礎層數: 1.0"
           },
           "provocation_max": {
-            "name_zh": "provocation_max",
+            "name_zh": "嘲諷上限",
             "value": 3.0,
-            "display": "provocation_max: 3.0"
+            "display": "嘲諷上限: 3.0"
           },
           "provocation_min": {
-            "name_zh": "provocation_min",
+            "name_zh": "嘲諷基礎值",
             "value": 1.0,
-            "display": "provocation_min: 1.0"
+            "display": "嘲諷基礎值: 1.0"
           }
         },
         "attr_per_level": {
@@ -6718,9 +6718,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.01,
-            "display": "armor_offset: 0.01"
+            "display": "護甲加成係數: 0.01"
           }
         },
         "raw_data": {
@@ -6778,19 +6778,19 @@
             "display": "二段傷害倍率: 0.4"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.75,
-            "display": "fire_chance: 0.75"
+            "display": "點燃/灼燒機率: 0.75"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 3.0,
-            "display": "fire_min: 3.0"
+            "display": "灼燒基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -6857,9 +6857,9 @@
             "display": "額外傷害加成: 0.015"
           },
           "energy_charge_chance": {
-            "name_zh": "energy_charge_chance",
+            "name_zh": "充能獲得機率",
             "value": 0.45,
-            "display": "energy_charge_chance: 0.45"
+            "display": "充能獲得機率: 0.45"
           }
         },
         "attr_per_level": {
@@ -6873,9 +6873,9 @@
             "display": "額外傷害加成: 0.001"
           },
           "energy_charge_chance": {
-            "name_zh": "energy_charge_chance",
+            "name_zh": "充能獲得機率",
             "value": 0.03,
-            "display": "energy_charge_chance: 0.03"
+            "display": "充能獲得機率: 0.03"
           }
         },
         "raw_data": {
@@ -6918,9 +6918,9 @@
         },
         "attr_zh": {
           "ally_chance": {
-            "name_zh": "ally_chance",
+            "name_zh": "友軍協同機率",
             "value": 0.25,
-            "display": "ally_chance: 0.25"
+            "display": "友軍協同機率: 0.25"
           },
           "buff_chance": {
             "name_zh": "增益觸發機率",
@@ -6928,14 +6928,14 @@
             "display": "增益觸發機率: 0.75"
           },
           "buff_max": {
-            "name_zh": "buff_max",
+            "name_zh": "增益層數上限",
             "value": 5.0,
-            "display": "buff_max: 5.0"
+            "display": "增益層數上限: 5.0"
           },
           "buff_min": {
-            "name_zh": "buff_min",
+            "name_zh": "增益基礎層數",
             "value": 3.0,
-            "display": "buff_min: 3.0"
+            "display": "增益基礎層數: 3.0"
           },
           "damage_offset_1": {
             "name_zh": "一段傷害倍率",
@@ -6948,19 +6948,19 @@
             "display": "二段傷害倍率: 2.0"
           },
           "disordered_directive_chance": {
-            "name_zh": "disordered_directive_chance",
+            "name_zh": "混亂指令觸發機率",
             "value": 0.35,
-            "display": "disordered_directive_chance: 0.35"
+            "display": "混亂指令觸發機率: 0.35"
           },
           "disordered_directive_max": {
-            "name_zh": "disordered_directive_max",
+            "name_zh": "混亂指令上限",
             "value": 2.0,
-            "display": "disordered_directive_max: 2.0"
+            "display": "混亂指令上限: 2.0"
           },
           "disordered_directive_min": {
-            "name_zh": "disordered_directive_min",
+            "name_zh": "混亂指令基礎層數",
             "value": 1.0,
-            "display": "disordered_directive_min: 1.0"
+            "display": "混亂指令基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -6968,9 +6968,9 @@
         },
         "attr_per_level_zh": {
           "disordered_directive_chance": {
-            "name_zh": "disordered_directive_chance",
+            "name_zh": "混亂指令觸發機率",
             "value": 0.04,
-            "display": "disordered_directive_chance: 0.04"
+            "display": "混亂指令觸發機率: 0.04"
           }
         },
         "raw_data": {
@@ -7017,14 +7017,14 @@
         },
         "attr_zh": {
           "active_count": {
-            "name_zh": "active_count",
+            "name_zh": "特異觸發次數/層數",
             "value": 5.0,
-            "display": "active_count: 5.0"
+            "display": "特異觸發次數/層數: 5.0"
           },
           "count": {
-            "name_zh": "count",
+            "name_zh": "生效次數/數量",
             "value": 1.0,
-            "display": "count: 1.0"
+            "display": "生效次數/數量: 1.0"
           },
           "create_chance": {
             "name_zh": "生成/召喚機率",
@@ -7037,19 +7037,19 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.45,
-            "display": "fire_chance: 0.45"
+            "display": "點燃/灼燒機率: 0.45"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 1.0,
-            "display": "fire_min: 1.0"
+            "display": "灼燒基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -7216,14 +7216,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -7282,14 +7282,14 @@
         },
         "attr_zh": {
           "bulwark_max": {
-            "name_zh": "bulwark_max",
+            "name_zh": "堡壘護盾上限",
             "value": 3.0,
-            "display": "bulwark_max: 3.0"
+            "display": "堡壘護盾上限: 3.0"
           },
           "bulwark_min": {
-            "name_zh": "bulwark_min",
+            "name_zh": "堡壘護盾基礎值",
             "value": 1.0,
-            "display": "bulwark_min: 1.0"
+            "display": "堡壘護盾基礎值: 1.0"
           },
           "hp_max": {
             "name_zh": "最大生命值",
@@ -7297,9 +7297,9 @@
             "display": "最大生命值: 80.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 40.0,
-            "display": "hp_min: 40.0"
+            "display": "最低生命保障: 40.0"
           }
         },
         "attr_per_level": {
@@ -7313,9 +7313,9 @@
             "display": "最大生命值: 6.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 3.0,
-            "display": "hp_min: 3.0"
+            "display": "最低生命保障: 3.0"
           }
         },
         "raw_data": {
@@ -7568,24 +7568,24 @@
             "display": "增益觸發機率: 0.1"
           },
           "critical_strike_max": {
-            "name_zh": "critical_strike_max",
+            "name_zh": "爆擊威能上限",
             "value": 3.0,
-            "display": "critical_strike_max: 3.0"
+            "display": "爆擊威能上限: 3.0"
           },
           "critical_strike_min": {
-            "name_zh": "critical_strike_min",
+            "name_zh": "爆擊威能基礎層數",
             "value": 1.0,
-            "display": "critical_strike_min: 1.0"
+            "display": "爆擊威能基礎層數: 1.0"
           },
           "damage_surge_max": {
-            "name_zh": "damage_surge_max",
+            "name_zh": "傷害激增上限",
             "value": 2.0,
-            "display": "damage_surge_max: 2.0"
+            "display": "傷害激增上限: 2.0"
           },
           "damage_surge_min": {
-            "name_zh": "damage_surge_min",
+            "name_zh": "傷害激增基礎層數",
             "value": 1.0,
-            "display": "damage_surge_min: 1.0"
+            "display": "傷害激增基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -7714,7 +7714,7 @@
     "skills": [
       {
         "skill_id": "scorching_touch",
-        "skill_name_zh": "scorching_touch",
+        "skill_name_zh": "灼熱之觸",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "fire",
@@ -7740,19 +7740,19 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.75,
-            "display": "fire_chance: 0.75"
+            "display": "點燃/灼燒機率: 0.75"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 3.0,
-            "display": "fire_min: 3.0"
+            "display": "灼燒基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -7885,7 +7885,7 @@
     "skills": [
       {
         "skill_id": "scorching_touch",
-        "skill_name_zh": "scorching_touch",
+        "skill_name_zh": "灼熱之觸",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "fire",
@@ -7911,19 +7911,19 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.75,
-            "display": "fire_chance: 0.75"
+            "display": "點燃/灼燒機率: 0.75"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 3.0,
-            "display": "fire_min: 3.0"
+            "display": "灼燒基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -7984,14 +7984,14 @@
             "display": "傷害係數/倍率: 0.45"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.25,
-            "display": "fire_chance: 0.25"
+            "display": "點燃/灼燒機率: 0.25"
           },
           "fire_count": {
-            "name_zh": "fire_count",
+            "name_zh": "灼燒層數/火球數",
             "value": 2.0,
-            "display": "fire_count: 2.0"
+            "display": "灼燒層數/火球數: 2.0"
           }
         },
         "attr_per_level": {
@@ -8200,19 +8200,19 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 80.0,
-            "display": "armor_max: 80.0"
+            "display": "護甲增加上限: 80.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 40.0,
-            "display": "armor_min: 40.0"
+            "display": "護甲增加下限: 40.0"
           },
           "frost_barrier_round": {
-            "name_zh": "frost_barrier_round",
+            "name_zh": "冰霜屏障持續回合",
             "value": 3.0,
-            "display": "frost_barrier_round: 3.0"
+            "display": "冰霜屏障持續回合: 3.0"
           }
         },
         "attr_per_level": {
@@ -8221,14 +8221,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 4.0,
-            "display": "armor_max: 4.0"
+            "display": "護甲增加上限: 4.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 2.0,
-            "display": "armor_min: 2.0"
+            "display": "護甲增加下限: 2.0"
           }
         },
         "raw_data": {
@@ -8276,14 +8276,14 @@
             "display": "傷害係數/倍率: 1.5"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.45,
-            "display": "fire_chance: 0.45"
+            "display": "點燃/灼燒機率: 0.45"
           },
           "fire_round": {
-            "name_zh": "fire_round",
+            "name_zh": "燃燒持續回合數",
             "value": 3.0,
-            "display": "fire_round: 3.0"
+            "display": "燃燒持續回合數: 3.0"
           }
         },
         "attr_per_level": {
@@ -8418,7 +8418,7 @@
     "skills": [
       {
         "skill_id": "scorching_touch",
-        "skill_name_zh": "scorching_touch",
+        "skill_name_zh": "灼熱之觸",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "fire",
@@ -8444,19 +8444,19 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.75,
-            "display": "fire_chance: 0.75"
+            "display": "點燃/灼燒機率: 0.75"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 3.0,
-            "display": "fire_min: 3.0"
+            "display": "灼燒基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -8517,14 +8517,14 @@
             "display": "傷害係數/倍率: 0.45"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.25,
-            "display": "fire_chance: 0.25"
+            "display": "點燃/灼燒機率: 0.25"
           },
           "fire_count": {
-            "name_zh": "fire_count",
+            "name_zh": "灼燒層數/火球數",
             "value": 2.0,
-            "display": "fire_count: 2.0"
+            "display": "灼燒層數/火球數: 2.0"
           }
         },
         "attr_per_level": {
@@ -8582,14 +8582,14 @@
             "display": "傷害係數/倍率: 1.5"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.45,
-            "display": "fire_chance: 0.45"
+            "display": "點燃/灼燒機率: 0.45"
           },
           "fire_round": {
-            "name_zh": "fire_round",
+            "name_zh": "燃燒持續回合數",
             "value": 3.0,
-            "display": "fire_round: 3.0"
+            "display": "燃燒持續回合數: 3.0"
           }
         },
         "attr_per_level": {
@@ -8650,24 +8650,24 @@
             "display": "傷害係數/倍率: 0.8"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.25,
-            "display": "fire_chance: 0.25"
+            "display": "點燃/灼燒機率: 0.25"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 1.0,
-            "display": "fire_min: 1.0"
+            "display": "灼燒基礎層數: 1.0"
           },
           "fire_offset": {
-            "name_zh": "fire_offset",
+            "name_zh": "火焰傷害係數",
             "value": 0.25,
-            "display": "fire_offset: 0.25"
+            "display": "火焰傷害係數: 0.25"
           },
           "random_count": {
             "name_zh": "隨機連擊次數",
@@ -8950,24 +8950,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 60.0,
-            "display": "armor_max: 60.0"
+            "display": "護甲增加上限: 60.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 30.0,
-            "display": "armor_min: 30.0"
+            "display": "護甲增加下限: 30.0"
           },
           "frost_barrier_max": {
-            "name_zh": "frost_barrier_max",
+            "name_zh": "冰霜屏障上限",
             "value": 7.0,
-            "display": "frost_barrier_max: 7.0"
+            "display": "冰霜屏障上限: 7.0"
           },
           "frost_barrier_min": {
-            "name_zh": "frost_barrier_min",
+            "name_zh": "冰霜屏障基礎值",
             "value": 5.0,
-            "display": "frost_barrier_min: 5.0"
+            "display": "冰霜屏障基礎值: 5.0"
           }
         },
         "attr_per_level": {
@@ -8976,14 +8976,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 6.0,
-            "display": "armor_max: 6.0"
+            "display": "護甲增加上限: 6.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 3.0,
-            "display": "armor_min: 3.0"
+            "display": "護甲增加下限: 3.0"
           }
         },
         "raw_data": {
@@ -9269,9 +9269,9 @@
             "display": "傷害係數/倍率: 0.6"
           },
           "energy_count": {
-            "name_zh": "energy_count",
+            "name_zh": "獲得能量點數",
             "value": 1.0,
-            "display": "energy_count: 1.0"
+            "display": "獲得能量點數: 1.0"
           }
         },
         "attr_per_level": {
@@ -9328,14 +9328,14 @@
             "display": "傷害係數/倍率: 0.45"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.25,
-            "display": "fire_chance: 0.25"
+            "display": "點燃/灼燒機率: 0.25"
           },
           "fire_count": {
-            "name_zh": "fire_count",
+            "name_zh": "灼燒層數/火球數",
             "value": 2.0,
-            "display": "fire_count: 2.0"
+            "display": "灼燒層數/火球數: 2.0"
           }
         },
         "attr_per_level": {
@@ -9368,7 +9368,7 @@
       },
       {
         "skill_id": "flamebound_sacrifice",
-        "skill_name_zh": "flamebound_sacrifice",
+        "skill_name_zh": "縛焰祭獻",
         "skill_type": "passive",
         "skill_type_zh": "被動",
         "damage_type": "none",
@@ -9394,19 +9394,19 @@
             "display": "額外傷害加成: 0.05"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 9.0,
-            "display": "fire_max: 9.0"
+            "display": "灼燒層數上限: 9.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 7.0,
-            "display": "fire_min: 7.0"
+            "display": "灼燒基礎層數: 7.0"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.15,
-            "display": "hp_offset: 0.15"
+            "display": "生命回復/扣除比例: 0.15"
           }
         },
         "attr_per_level": {
@@ -9420,9 +9420,9 @@
             "display": "額外傷害加成: 0.01"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.01,
-            "display": "hp_offset: 0.01"
+            "display": "生命回復/扣除比例: 0.01"
           }
         },
         "raw_data": {
@@ -9587,24 +9587,24 @@
             "display": "傷害係數/倍率: 2.0"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.25,
-            "display": "fire_chance: 0.25"
+            "display": "點燃/灼燒機率: 0.25"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 3.0,
-            "display": "fire_min: 3.0"
+            "display": "灼燒基礎層數: 3.0"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.2,
-            "display": "hp_offset: 0.2"
+            "display": "生命回復/扣除比例: 0.2"
           }
         },
         "attr_per_level": {
@@ -9773,19 +9773,19 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "immobilize_chance": {
-            "name_zh": "immobilize_chance",
+            "name_zh": "定身/纏繞機率",
             "value": 0.25,
-            "display": "immobilize_chance: 0.25"
+            "display": "定身/纏繞機率: 0.25"
           },
           "immobilize_max": {
-            "name_zh": "immobilize_max",
+            "name_zh": "定身上限",
             "value": 3.0,
-            "display": "immobilize_max: 3.0"
+            "display": "定身上限: 3.0"
           },
           "immobilize_min": {
-            "name_zh": "immobilize_min",
+            "name_zh": "定身基礎層數",
             "value": 1.0,
-            "display": "immobilize_min: 1.0"
+            "display": "定身基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -9846,14 +9846,14 @@
             "display": "額外傷害加成: 0.1"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.3,
-            "display": "hp_offset: 0.3"
+            "display": "生命回復/扣除比例: 0.3"
           },
           "red_chance": {
-            "name_zh": "red_chance",
+            "name_zh": "致命暴擊率",
             "value": 0.4,
-            "display": "red_chance: 0.4"
+            "display": "致命暴擊率: 0.4"
           }
         },
         "attr_per_level": {
@@ -9867,9 +9867,9 @@
             "display": "額外傷害加成: 0.005"
           },
           "red_chance": {
-            "name_zh": "red_chance",
+            "name_zh": "致命暴擊率",
             "value": 0.01,
-            "display": "red_chance: 0.01"
+            "display": "致命暴擊率: 0.01"
           }
         },
         "raw_data": {
@@ -9912,14 +9912,14 @@
             "display": "傷害係數/倍率: 0.6"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.05,
-            "display": "heal_offset_max: 0.05"
+            "display": "最大治療倍率: 0.05"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.01,
-            "display": "heal_offset_min: 0.01"
+            "display": "最小治療倍率: 0.01"
           }
         },
         "attr_per_level": {
@@ -10046,19 +10046,19 @@
         },
         "attr_zh": {
           "wither_chance": {
-            "name_zh": "wither_chance",
+            "name_zh": "枯萎感染機率",
             "value": 0.1,
-            "display": "wither_chance: 0.1"
+            "display": "枯萎感染機率: 0.1"
           },
           "wither_max": {
-            "name_zh": "wither_max",
+            "name_zh": "枯萎上限",
             "value": 3.0,
-            "display": "wither_max: 3.0"
+            "display": "枯萎上限: 3.0"
           },
           "wither_min": {
-            "name_zh": "wither_min",
+            "name_zh": "枯萎基礎層數",
             "value": 1.0,
-            "display": "wither_min: 1.0"
+            "display": "枯萎基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -10066,9 +10066,9 @@
         },
         "attr_per_level_zh": {
           "wither_chance": {
-            "name_zh": "wither_chance",
+            "name_zh": "枯萎感染機率",
             "value": 0.01,
-            "display": "wither_chance: 0.01"
+            "display": "枯萎感染機率: 0.01"
           }
         },
         "raw_data": {
@@ -10110,14 +10110,14 @@
             "display": "傷害係數/倍率: 2.0"
           },
           "wither_max": {
-            "name_zh": "wither_max",
+            "name_zh": "枯萎上限",
             "value": 5.0,
-            "display": "wither_max: 5.0"
+            "display": "枯萎上限: 5.0"
           },
           "wither_min": {
-            "name_zh": "wither_min",
+            "name_zh": "枯萎基礎層數",
             "value": 3.0,
-            "display": "wither_min: 3.0"
+            "display": "枯萎基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -10176,9 +10176,9 @@
         },
         "attr_zh": {
           "active_chance": {
-            "name_zh": "active_chance",
+            "name_zh": "被動/特異觸發機率",
             "value": 0.45,
-            "display": "active_chance: 0.45"
+            "display": "被動/特異觸發機率: 0.45"
           },
           "bleed_chance": {
             "name_zh": "流血觸發機率",
@@ -10196,14 +10196,14 @@
             "display": "流血基礎層數: 3.0"
           },
           "count_max": {
-            "name_zh": "count_max",
+            "name_zh": "數量上限",
             "value": 5.0,
-            "display": "count_max: 5.0"
+            "display": "數量上限: 5.0"
           },
           "count_min": {
-            "name_zh": "count_min",
+            "name_zh": "基礎數量",
             "value": 3.0,
-            "display": "count_min: 3.0"
+            "display": "基礎數量: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -10217,9 +10217,9 @@
         },
         "attr_per_level_zh": {
           "active_chance": {
-            "name_zh": "active_chance",
+            "name_zh": "被動/特異觸發機率",
             "value": 0.03,
-            "display": "active_chance: 0.03"
+            "display": "被動/特異觸發機率: 0.03"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -10937,29 +10937,29 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "damage_offset_extra": {
-            "name_zh": "damage_offset_extra",
+            "name_zh": "額外附加傷害係數",
             "value": 0.5,
-            "display": "damage_offset_extra: 0.5"
+            "display": "額外附加傷害係數: 0.5"
           },
           "darkness_max": {
-            "name_zh": "darkness_max",
+            "name_zh": "暗影侵蝕上限",
             "value": 5.0,
-            "display": "darkness_max: 5.0"
+            "display": "暗影侵蝕上限: 5.0"
           },
           "darkness_min": {
-            "name_zh": "darkness_min",
+            "name_zh": "暗影侵蝕基礎層數",
             "value": 3.0,
-            "display": "darkness_min: 3.0"
+            "display": "暗影侵蝕基礎層數: 3.0"
           },
           "energy_charge_max": {
-            "name_zh": "energy_charge_max",
+            "name_zh": "充能層數上限",
             "value": 3.0,
-            "display": "energy_charge_max: 3.0"
+            "display": "充能層數上限: 3.0"
           },
           "energy_charge_min": {
-            "name_zh": "energy_charge_min",
+            "name_zh": "充能基礎層數",
             "value": 1.0,
-            "display": "energy_charge_min: 1.0"
+            "display": "充能基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -11022,14 +11022,14 @@
             "display": "充能層數: 3.0"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.15,
-            "display": "heal_offset_max: 0.15"
+            "display": "最大治療倍率: 0.15"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.05,
-            "display": "heal_offset_min: 0.05"
+            "display": "最小治療倍率: 0.05"
           }
         },
         "attr_per_level": {
@@ -11038,14 +11038,14 @@
         },
         "attr_per_level_zh": {
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.01,
-            "display": "heal_offset_max: 0.01"
+            "display": "最大治療倍率: 0.01"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.01,
-            "display": "heal_offset_min: 0.01"
+            "display": "最小治療倍率: 0.01"
           }
         },
         "raw_data": {
@@ -11210,9 +11210,9 @@
         },
         "attr_zh": {
           "energy_charge_chance": {
-            "name_zh": "energy_charge_chance",
+            "name_zh": "充能獲得機率",
             "value": 0.15,
-            "display": "energy_charge_chance: 0.15"
+            "display": "充能獲得機率: 0.15"
           },
           "energy_charge_count": {
             "name_zh": "充能層數",
@@ -11220,9 +11220,9 @@
             "display": "充能層數: 1.0"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.5,
-            "display": "hp_offset: 0.5"
+            "display": "生命回復/扣除比例: 0.5"
           }
         },
         "attr_per_level": {
@@ -11230,9 +11230,9 @@
         },
         "attr_per_level_zh": {
           "energy_charge_chance": {
-            "name_zh": "energy_charge_chance",
+            "name_zh": "充能獲得機率",
             "value": 0.01,
-            "display": "energy_charge_chance: 0.01"
+            "display": "充能獲得機率: 0.01"
           }
         },
         "raw_data": {
@@ -11270,9 +11270,9 @@
         },
         "attr_zh": {
           "beast_power_count": {
-            "name_zh": "beast_power_count",
+            "name_zh": "野獸之力層數",
             "value": 1.0,
-            "display": "beast_power_count: 1.0"
+            "display": "野獸之力層數: 1.0"
           },
           "buff_chance": {
             "name_zh": "增益觸發機率",
@@ -11280,9 +11280,9 @@
             "display": "增益觸發機率: 0.25"
           },
           "check_count": {
-            "name_zh": "check_count",
+            "name_zh": "檢定次數/判定層數",
             "value": 4.0,
-            "display": "check_count: 4.0"
+            "display": "檢定次數/判定層數: 4.0"
           },
           "energy_charge_count": {
             "name_zh": "充能層數",
@@ -11347,19 +11347,19 @@
             "display": "二段傷害倍率: 0.8"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.45,
-            "display": "fire_chance: 0.45"
+            "display": "點燃/灼燒機率: 0.45"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 3.0,
-            "display": "fire_min: 3.0"
+            "display": "灼燒基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -11524,29 +11524,29 @@
         },
         "attr_zh": {
           "buff_heal_chance": {
-            "name_zh": "buff_heal_chance",
+            "name_zh": "受癒增益機率",
             "value": 0.25,
-            "display": "buff_heal_chance: 0.25"
+            "display": "受癒增益機率: 0.25"
           },
           "buff_heal_max": {
-            "name_zh": "buff_heal_max",
+            "name_zh": "受癒增益上限",
             "value": 3.0,
-            "display": "buff_heal_max: 3.0"
+            "display": "受癒增益上限: 3.0"
           },
           "buff_heal_min": {
-            "name_zh": "buff_heal_min",
+            "name_zh": "受癒增益下限",
             "value": 1.0,
-            "display": "buff_heal_min: 1.0"
+            "display": "受癒增益下限: 1.0"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.2,
-            "display": "heal_offset_max: 0.2"
+            "display": "最大治療倍率: 0.2"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.1,
-            "display": "heal_offset_min: 0.1"
+            "display": "最小治療倍率: 0.1"
           }
         },
         "attr_per_level": {
@@ -11555,14 +11555,14 @@
         },
         "attr_per_level_zh": {
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.01,
-            "display": "heal_offset_max: 0.01"
+            "display": "最大治療倍率: 0.01"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.01,
-            "display": "heal_offset_min: 0.01"
+            "display": "最小治療倍率: 0.01"
           }
         },
         "raw_data": {
@@ -11705,29 +11705,29 @@
         },
         "attr_zh": {
           "buff_heal_chance": {
-            "name_zh": "buff_heal_chance",
+            "name_zh": "受癒增益機率",
             "value": 0.25,
-            "display": "buff_heal_chance: 0.25"
+            "display": "受癒增益機率: 0.25"
           },
           "buff_heal_max": {
-            "name_zh": "buff_heal_max",
+            "name_zh": "受癒增益上限",
             "value": 3.0,
-            "display": "buff_heal_max: 3.0"
+            "display": "受癒增益上限: 3.0"
           },
           "buff_heal_min": {
-            "name_zh": "buff_heal_min",
+            "name_zh": "受癒增益下限",
             "value": 1.0,
-            "display": "buff_heal_min: 1.0"
+            "display": "受癒增益下限: 1.0"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.2,
-            "display": "heal_offset_max: 0.2"
+            "display": "最大治療倍率: 0.2"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.1,
-            "display": "heal_offset_min: 0.1"
+            "display": "最小治療倍率: 0.1"
           }
         },
         "attr_per_level": {
@@ -11736,14 +11736,14 @@
         },
         "attr_per_level_zh": {
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.01,
-            "display": "heal_offset_max: 0.01"
+            "display": "最大治療倍率: 0.01"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.01,
-            "display": "heal_offset_min: 0.01"
+            "display": "最小治療倍率: 0.01"
           }
         },
         "raw_data": {
@@ -11945,29 +11945,29 @@
         },
         "attr_zh": {
           "buff_heal_chance": {
-            "name_zh": "buff_heal_chance",
+            "name_zh": "受癒增益機率",
             "value": 0.25,
-            "display": "buff_heal_chance: 0.25"
+            "display": "受癒增益機率: 0.25"
           },
           "buff_heal_max": {
-            "name_zh": "buff_heal_max",
+            "name_zh": "受癒增益上限",
             "value": 3.0,
-            "display": "buff_heal_max: 3.0"
+            "display": "受癒增益上限: 3.0"
           },
           "buff_heal_min": {
-            "name_zh": "buff_heal_min",
+            "name_zh": "受癒增益下限",
             "value": 1.0,
-            "display": "buff_heal_min: 1.0"
+            "display": "受癒增益下限: 1.0"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.2,
-            "display": "heal_offset_max: 0.2"
+            "display": "最大治療倍率: 0.2"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.1,
-            "display": "heal_offset_min: 0.1"
+            "display": "最小治療倍率: 0.1"
           }
         },
         "attr_per_level": {
@@ -11976,14 +11976,14 @@
         },
         "attr_per_level_zh": {
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.01,
-            "display": "heal_offset_max: 0.01"
+            "display": "最大治療倍率: 0.01"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.01,
-            "display": "heal_offset_min: 0.01"
+            "display": "最小治療倍率: 0.01"
           }
         },
         "raw_data": {
@@ -12032,14 +12032,14 @@
         },
         "attr_zh": {
           "blessing_chance": {
-            "name_zh": "blessing_chance",
+            "name_zh": "祈福觸發機率",
             "value": 0.25,
-            "display": "blessing_chance: 0.25"
+            "display": "祈福觸發機率: 0.25"
           },
           "blessing_round": {
-            "name_zh": "blessing_round",
+            "name_zh": "祈福持續回合數",
             "value": 3.0,
-            "display": "blessing_round: 3.0"
+            "display": "祈福持續回合數: 3.0"
           }
         },
         "attr_per_level": {},
@@ -12081,29 +12081,29 @@
         },
         "attr_zh": {
           "buff_heal_chance": {
-            "name_zh": "buff_heal_chance",
+            "name_zh": "受癒增益機率",
             "value": 0.25,
-            "display": "buff_heal_chance: 0.25"
+            "display": "受癒增益機率: 0.25"
           },
           "buff_heal_max": {
-            "name_zh": "buff_heal_max",
+            "name_zh": "受癒增益上限",
             "value": 3.0,
-            "display": "buff_heal_max: 3.0"
+            "display": "受癒增益上限: 3.0"
           },
           "buff_heal_min": {
-            "name_zh": "buff_heal_min",
+            "name_zh": "受癒增益下限",
             "value": 1.0,
-            "display": "buff_heal_min: 1.0"
+            "display": "受癒增益下限: 1.0"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.2,
-            "display": "heal_offset_max: 0.2"
+            "display": "最大治療倍率: 0.2"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.1,
-            "display": "heal_offset_min: 0.1"
+            "display": "最小治療倍率: 0.1"
           }
         },
         "attr_per_level": {
@@ -12112,14 +12112,14 @@
         },
         "attr_per_level_zh": {
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.01,
-            "display": "heal_offset_max: 0.01"
+            "display": "最大治療倍率: 0.01"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.01,
-            "display": "heal_offset_min: 0.01"
+            "display": "最小治療倍率: 0.01"
           }
         },
         "raw_data": {
@@ -12260,14 +12260,14 @@
         },
         "attr_zh": {
           "count_max": {
-            "name_zh": "count_max",
+            "name_zh": "數量上限",
             "value": 3.0,
-            "display": "count_max: 3.0"
+            "display": "數量上限: 3.0"
           },
           "count_min": {
-            "name_zh": "count_min",
+            "name_zh": "基礎數量",
             "value": 2.0,
-            "display": "count_min: 2.0"
+            "display": "基礎數量: 2.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -12332,19 +12332,19 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "darkness_chance": {
-            "name_zh": "darkness_chance",
+            "name_zh": "暗影侵蝕機率",
             "value": 0.25,
-            "display": "darkness_chance: 0.25"
+            "display": "暗影侵蝕機率: 0.25"
           },
           "darkness_count": {
-            "name_zh": "darkness_count",
+            "name_zh": "暗影侵蝕層數",
             "value": 3.0,
-            "display": "darkness_count: 3.0"
+            "display": "暗影侵蝕層數: 3.0"
           },
           "restore_rate": {
-            "name_zh": "restore_rate",
+            "name_zh": "回復比例",
             "value": 0.25,
-            "display": "restore_rate: 0.25"
+            "display": "回復比例: 0.25"
           }
         },
         "attr_per_level": {
@@ -12400,19 +12400,19 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.2,
-            "display": "armor_offset: 0.2"
+            "display": "護甲加成係數: 0.2"
           },
           "darkness_max": {
-            "name_zh": "darkness_max",
+            "name_zh": "暗影侵蝕上限",
             "value": 6.0,
-            "display": "darkness_max: 6.0"
+            "display": "暗影侵蝕上限: 6.0"
           },
           "darkness_min": {
-            "name_zh": "darkness_min",
+            "name_zh": "暗影侵蝕基礎層數",
             "value": 3.0,
-            "display": "darkness_min: 3.0"
+            "display": "暗影侵蝕基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -12420,9 +12420,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.015,
-            "display": "armor_offset: 0.015"
+            "display": "護甲加成係數: 0.015"
           }
         },
         "raw_data": {
@@ -12465,14 +12465,14 @@
         },
         "attr_zh": {
           "count_max": {
-            "name_zh": "count_max",
+            "name_zh": "數量上限",
             "value": 3.0,
-            "display": "count_max: 3.0"
+            "display": "數量上限: 3.0"
           },
           "count_min": {
-            "name_zh": "count_min",
+            "name_zh": "基礎數量",
             "value": 2.0,
-            "display": "count_min: 2.0"
+            "display": "基礎數量: 2.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -12633,14 +12633,14 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "silence_chance": {
-            "name_zh": "silence_chance",
+            "name_zh": "沉默施加機率",
             "value": 0.25,
-            "display": "silence_chance: 0.25"
+            "display": "沉默施加機率: 0.25"
           },
           "silence_round": {
-            "name_zh": "silence_round",
+            "name_zh": "沉默持續回合",
             "value": 2.0,
-            "display": "silence_round: 2.0"
+            "display": "沉默持續回合: 2.0"
           }
         },
         "attr_per_level": {
@@ -12752,29 +12752,29 @@
         },
         "attr_zh": {
           "buff_heal_chance": {
-            "name_zh": "buff_heal_chance",
+            "name_zh": "受癒增益機率",
             "value": 0.25,
-            "display": "buff_heal_chance: 0.25"
+            "display": "受癒增益機率: 0.25"
           },
           "buff_heal_max": {
-            "name_zh": "buff_heal_max",
+            "name_zh": "受癒增益上限",
             "value": 3.0,
-            "display": "buff_heal_max: 3.0"
+            "display": "受癒增益上限: 3.0"
           },
           "buff_heal_min": {
-            "name_zh": "buff_heal_min",
+            "name_zh": "受癒增益下限",
             "value": 1.0,
-            "display": "buff_heal_min: 1.0"
+            "display": "受癒增益下限: 1.0"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.2,
-            "display": "heal_offset_max: 0.2"
+            "display": "最大治療倍率: 0.2"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.1,
-            "display": "heal_offset_min: 0.1"
+            "display": "最小治療倍率: 0.1"
           }
         },
         "attr_per_level": {
@@ -12783,14 +12783,14 @@
         },
         "attr_per_level_zh": {
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.01,
-            "display": "heal_offset_max: 0.01"
+            "display": "最大治療倍率: 0.01"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.01,
-            "display": "heal_offset_min: 0.01"
+            "display": "最小治療倍率: 0.01"
           }
         },
         "raw_data": {
@@ -12894,19 +12894,19 @@
         },
         "attr_zh": {
           "dreadlight_mark_chance": {
-            "name_zh": "dreadlight_mark_chance",
+            "name_zh": "懼光印記機率",
             "value": 0.15,
-            "display": "dreadlight_mark_chance: 0.15"
+            "display": "懼光印記機率: 0.15"
           },
           "dreadlight_mark_max": {
-            "name_zh": "dreadlight_mark_max",
+            "name_zh": "懼光印記上限",
             "value": 3.0,
-            "display": "dreadlight_mark_max: 3.0"
+            "display": "懼光印記上限: 3.0"
           },
           "dreadlight_mark_min": {
-            "name_zh": "dreadlight_mark_min",
+            "name_zh": "懼光印記基礎層數",
             "value": 1.0,
-            "display": "dreadlight_mark_min: 1.0"
+            "display": "懼光印記基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -12914,9 +12914,9 @@
         },
         "attr_per_level_zh": {
           "dreadlight_mark_chance": {
-            "name_zh": "dreadlight_mark_chance",
+            "name_zh": "懼光印記機率",
             "value": 0.01,
-            "display": "dreadlight_mark_chance: 0.01"
+            "display": "懼光印記機率: 0.01"
           }
         },
         "raw_data": {
@@ -13053,14 +13053,14 @@
         },
         "attr_zh": {
           "count_max": {
-            "name_zh": "count_max",
+            "name_zh": "數量上限",
             "value": 3.0,
-            "display": "count_max: 3.0"
+            "display": "數量上限: 3.0"
           },
           "count_min": {
-            "name_zh": "count_min",
+            "name_zh": "基礎數量",
             "value": 2.0,
-            "display": "count_min: 2.0"
+            "display": "基礎數量: 2.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -13123,9 +13123,9 @@
             "display": "傷害係數/倍率: 0.8"
           },
           "energy_count": {
-            "name_zh": "energy_count",
+            "name_zh": "獲得能量點數",
             "value": 1.0,
-            "display": "energy_count: 1.0"
+            "display": "獲得能量點數: 1.0"
           }
         },
         "attr_per_level": {
@@ -13177,19 +13177,19 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.2,
-            "display": "armor_offset: 0.2"
+            "display": "護甲加成係數: 0.2"
           },
           "darkness_max": {
-            "name_zh": "darkness_max",
+            "name_zh": "暗影侵蝕上限",
             "value": 6.0,
-            "display": "darkness_max: 6.0"
+            "display": "暗影侵蝕上限: 6.0"
           },
           "darkness_min": {
-            "name_zh": "darkness_min",
+            "name_zh": "暗影侵蝕基礎層數",
             "value": 3.0,
-            "display": "darkness_min: 3.0"
+            "display": "暗影侵蝕基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -13197,9 +13197,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.015,
-            "display": "armor_offset: 0.015"
+            "display": "護甲加成係數: 0.015"
           }
         },
         "raw_data": {
@@ -13252,9 +13252,9 @@
             "display": "能量獲得機率: 0.25"
           },
           "energy_count": {
-            "name_zh": "energy_count",
+            "name_zh": "獲得能量點數",
             "value": 1.0,
-            "display": "energy_count: 1.0"
+            "display": "獲得能量點數: 1.0"
           }
         },
         "attr_per_level": {
@@ -13312,14 +13312,14 @@
             "display": "傷害係數/倍率: 2.0"
           },
           "vital_blockade_max": {
-            "name_zh": "vital_blockade_max",
+            "name_zh": "氣血封鎖上限",
             "value": 7.0,
-            "display": "vital_blockade_max: 7.0"
+            "display": "氣血封鎖上限: 7.0"
           },
           "vital_blockade_min": {
-            "name_zh": "vital_blockade_min",
+            "name_zh": "氣血封鎖基礎層數",
             "value": 5.0,
-            "display": "vital_blockade_min: 5.0"
+            "display": "氣血封鎖基礎層數: 5.0"
           }
         },
         "attr_per_level": {
@@ -13375,19 +13375,19 @@
         },
         "attr_zh": {
           "darkness_max": {
-            "name_zh": "darkness_max",
+            "name_zh": "暗影侵蝕上限",
             "value": 7.0,
-            "display": "darkness_max: 7.0"
+            "display": "暗影侵蝕上限: 7.0"
           },
           "darkness_min": {
-            "name_zh": "darkness_min",
+            "name_zh": "暗影侵蝕基礎層數",
             "value": 5.0,
-            "display": "darkness_min: 5.0"
+            "display": "暗影侵蝕基礎層數: 5.0"
           },
           "energy_count": {
-            "name_zh": "energy_count",
+            "name_zh": "獲得能量點數",
             "value": 1.0,
-            "display": "energy_count: 1.0"
+            "display": "獲得能量點數: 1.0"
           },
           "heal_offset": {
             "name_zh": "治療係數/倍率",
@@ -13395,14 +13395,14 @@
             "display": "治療係數/倍率: 0.4"
           },
           "heal_times": {
-            "name_zh": "heal_times",
+            "name_zh": "治療次數",
             "value": 3.0,
-            "display": "heal_times: 3.0"
+            "display": "治療次數: 3.0"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.5,
-            "display": "hp_offset: 0.5"
+            "display": "生命回復/扣除比例: 0.5"
           }
         },
         "attr_per_level": {
@@ -13551,9 +13551,9 @@
         },
         "attr_zh": {
           "brooding_egg_round": {
-            "name_zh": "brooding_egg_round",
+            "name_zh": "育卵孵化回合數",
             "value": 3.0,
-            "display": "brooding_egg_round: 3.0"
+            "display": "育卵孵化回合數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -13742,14 +13742,14 @@
         },
         "attr_zh": {
           "buff_max": {
-            "name_zh": "buff_max",
+            "name_zh": "增益層數上限",
             "value": 6.0,
-            "display": "buff_max: 6.0"
+            "display": "增益層數上限: 6.0"
           },
           "buff_min": {
-            "name_zh": "buff_min",
+            "name_zh": "增益基礎層數",
             "value": 4.0,
-            "display": "buff_min: 4.0"
+            "display": "增益基礎層數: 4.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -13757,9 +13757,9 @@
             "display": "傷害係數/倍率: 0.8"
           },
           "egg_chance": {
-            "name_zh": "egg_chance",
+            "name_zh": "蟲卵生成機率",
             "value": 0.15,
-            "display": "egg_chance: 0.15"
+            "display": "蟲卵生成機率: 0.15"
           }
         },
         "attr_per_level": {
@@ -13773,9 +13773,9 @@
             "display": "傷害係數/倍率: 0.04"
           },
           "egg_chance": {
-            "name_zh": "egg_chance",
+            "name_zh": "蟲卵生成機率",
             "value": 0.01,
-            "display": "egg_chance: 0.01"
+            "display": "蟲卵生成機率: 0.01"
           }
         },
         "raw_data": {
@@ -13897,9 +13897,9 @@
             "display": "額外傷害加成: 0.1"
           },
           "egg_chance": {
-            "name_zh": "egg_chance",
+            "name_zh": "蟲卵生成機率",
             "value": 0.15,
-            "display": "egg_chance: 0.15"
+            "display": "蟲卵生成機率: 0.15"
           }
         },
         "attr_per_level": {
@@ -13913,9 +13913,9 @@
             "display": "額外傷害加成: 0.01"
           },
           "egg_chance": {
-            "name_zh": "egg_chance",
+            "name_zh": "蟲卵生成機率",
             "value": 0.01,
-            "display": "egg_chance: 0.01"
+            "display": "蟲卵生成機率: 0.01"
           }
         },
         "raw_data": {
@@ -13980,9 +13980,9 @@
             "display": "中毒基礎層數: 1.0"
           },
           "spider_round": {
-            "name_zh": "spider_round",
+            "name_zh": "蜘蛛召喚持續回合",
             "value": 5.0,
-            "display": "spider_round: 5.0"
+            "display": "蜘蛛召喚持續回合: 5.0"
           }
         },
         "attr_per_level": {
@@ -14141,19 +14141,19 @@
         },
         "attr_zh": {
           "blessing_count": {
-            "name_zh": "blessing_count",
+            "name_zh": "祈福層數",
             "value": 3.0,
-            "display": "blessing_count: 3.0"
+            "display": "祈福層數: 3.0"
           },
           "heal_offset_1": {
-            "name_zh": "heal_offset_1",
+            "name_zh": "一段治療倍率",
             "value": 0.15,
-            "display": "heal_offset_1: 0.15"
+            "display": "一段治療倍率: 0.15"
           },
           "heal_offset_2": {
-            "name_zh": "heal_offset_2",
+            "name_zh": "二段治療倍率",
             "value": 0.1,
-            "display": "heal_offset_2: 0.1"
+            "display": "二段治療倍率: 0.1"
           },
           "round": {
             "name_zh": "持續回合數",
@@ -14167,14 +14167,14 @@
         },
         "attr_per_level_zh": {
           "heal_offset_1": {
-            "name_zh": "heal_offset_1",
+            "name_zh": "一段治療倍率",
             "value": 0.01,
-            "display": "heal_offset_1: 0.01"
+            "display": "一段治療倍率: 0.01"
           },
           "heal_offset_2": {
-            "name_zh": "heal_offset_2",
+            "name_zh": "二段治療倍率",
             "value": 0.005,
-            "display": "heal_offset_2: 0.005"
+            "display": "二段治療倍率: 0.005"
           }
         },
         "raw_data": {
@@ -14223,9 +14223,9 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "damage_offset_extra": {
-            "name_zh": "damage_offset_extra",
+            "name_zh": "額外附加傷害係數",
             "value": 0.5,
-            "display": "damage_offset_extra: 0.5"
+            "display": "額外附加傷害係數: 0.5"
           }
         },
         "attr_per_level": {
@@ -14281,29 +14281,29 @@
         },
         "attr_zh": {
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.25,
-            "display": "extra_chance: 0.25"
+            "display": "額外連鎖機率: 0.25"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.15,
-            "display": "heal_offset_max: 0.15"
+            "display": "最大治療倍率: 0.15"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.05,
-            "display": "heal_offset_min: 0.05"
+            "display": "最小治療倍率: 0.05"
           },
           "remove_count": {
-            "name_zh": "remove_count",
+            "name_zh": "驅散狀態數量",
             "value": 2.0,
-            "display": "remove_count: 2.0"
+            "display": "驅散狀態數量: 2.0"
           },
           "remove_count_extra": {
-            "name_zh": "remove_count_extra",
+            "name_zh": "額外驅散數量",
             "value": 1.0,
-            "display": "remove_count_extra: 1.0"
+            "display": "額外驅散數量: 1.0"
           }
         },
         "attr_per_level": {
@@ -14313,19 +14313,19 @@
         },
         "attr_per_level_zh": {
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.02,
-            "display": "extra_chance: 0.02"
+            "display": "額外連鎖機率: 0.02"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.01,
-            "display": "heal_offset_max: 0.01"
+            "display": "最大治療倍率: 0.01"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.05,
-            "display": "heal_offset_min: 0.05"
+            "display": "最小治療倍率: 0.05"
           }
         },
         "raw_data": {
@@ -14381,24 +14381,24 @@
             "display": "傷害係數/倍率: 0.6"
           },
           "dreadlight_mark_chance": {
-            "name_zh": "dreadlight_mark_chance",
+            "name_zh": "懼光印記機率",
             "value": 0.45,
-            "display": "dreadlight_mark_chance: 0.45"
+            "display": "懼光印記機率: 0.45"
           },
           "dreadlight_mark_max": {
-            "name_zh": "dreadlight_mark_max",
+            "name_zh": "懼光印記上限",
             "value": 3.0,
-            "display": "dreadlight_mark_max: 3.0"
+            "display": "懼光印記上限: 3.0"
           },
           "dreadlight_mark_min": {
-            "name_zh": "dreadlight_mark_min",
+            "name_zh": "懼光印記基礎層數",
             "value": 1.0,
-            "display": "dreadlight_mark_min: 1.0"
+            "display": "懼光印記基礎層數: 1.0"
           },
           "times": {
-            "name_zh": "times",
+            "name_zh": "生效次數",
             "value": 3.0,
-            "display": "times: 3.0"
+            "display": "生效次數: 3.0"
           }
         },
         "attr_per_level": {
@@ -14454,14 +14454,14 @@
         },
         "attr_zh": {
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.15,
-            "display": "damage_bouns_1: 0.15"
+            "display": "一段額外增傷: 0.15"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.15,
-            "display": "damage_bouns_2: 0.15"
+            "display": "二段額外增傷: 0.15"
           }
         },
         "attr_per_level": {
@@ -14470,14 +14470,14 @@
         },
         "attr_per_level_zh": {
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.01,
-            "display": "damage_bouns_1: 0.01"
+            "display": "一段額外增傷: 0.01"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.01,
-            "display": "damage_bouns_2: 0.01"
+            "display": "二段額外增傷: 0.01"
           }
         },
         "raw_data": {
@@ -14516,29 +14516,29 @@
         },
         "attr_zh": {
           "buff_heal_max": {
-            "name_zh": "buff_heal_max",
+            "name_zh": "受癒增益上限",
             "value": 3.0,
-            "display": "buff_heal_max: 3.0"
+            "display": "受癒增益上限: 3.0"
           },
           "buff_heal_min": {
-            "name_zh": "buff_heal_min",
+            "name_zh": "受癒增益下限",
             "value": 1.0,
-            "display": "buff_heal_min: 1.0"
+            "display": "受癒增益下限: 1.0"
           },
           "heal_chance": {
-            "name_zh": "heal_chance",
+            "name_zh": "治療觸發機率",
             "value": 0.35,
-            "display": "heal_chance: 0.35"
+            "display": "治療觸發機率: 0.35"
           },
           "heal_offset_max": {
-            "name_zh": "heal_offset_max",
+            "name_zh": "最大治療倍率",
             "value": 0.15,
-            "display": "heal_offset_max: 0.15"
+            "display": "最大治療倍率: 0.15"
           },
           "heal_offset_min": {
-            "name_zh": "heal_offset_min",
+            "name_zh": "最小治療倍率",
             "value": 0.05,
-            "display": "heal_offset_min: 0.05"
+            "display": "最小治療倍率: 0.05"
           }
         },
         "attr_per_level": {
@@ -14546,9 +14546,9 @@
         },
         "attr_per_level_zh": {
           "heal_chance": {
-            "name_zh": "heal_chance",
+            "name_zh": "治療觸發機率",
             "value": 0.02,
-            "display": "heal_chance: 0.02"
+            "display": "治療觸發機率: 0.02"
           }
         },
         "raw_data": {
@@ -14586,9 +14586,9 @@
         },
         "attr_zh": {
           "blessing_count": {
-            "name_zh": "blessing_count",
+            "name_zh": "祈福層數",
             "value": 6.0,
-            "display": "blessing_count: 6.0"
+            "display": "祈福層數: 6.0"
           },
           "heal_offset": {
             "name_zh": "治療係數/倍率",
@@ -14602,9 +14602,9 @@
         },
         "attr_per_level_zh": {
           "blessing_count": {
-            "name_zh": "blessing_count",
+            "name_zh": "祈福層數",
             "value": 1.0,
-            "display": "blessing_count: 1.0"
+            "display": "祈福層數: 1.0"
           },
           "heal_offset": {
             "name_zh": "治療係數/倍率",
@@ -14755,9 +14755,9 @@
         },
         "attr_zh": {
           "heal_bouns": {
-            "name_zh": "heal_bouns",
+            "name_zh": "額外治療量加成",
             "value": 0.05,
-            "display": "heal_bouns: 0.05"
+            "display": "額外治療量加成: 0.05"
           },
           "heal_offset": {
             "name_zh": "治療係數/倍率",
@@ -14765,9 +14765,9 @@
             "display": "治療係數/倍率: 0.05"
           },
           "vital_blockade_count": {
-            "name_zh": "vital_blockade_count",
+            "name_zh": "氣血封鎖層數",
             "value": 3.0,
-            "display": "vital_blockade_count: 3.0"
+            "display": "氣血封鎖層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -14775,9 +14775,9 @@
         },
         "attr_per_level_zh": {
           "heal_bouns": {
-            "name_zh": "heal_bouns",
+            "name_zh": "額外治療量加成",
             "value": 0.005,
-            "display": "heal_bouns: 0.005"
+            "display": "額外治療量加成: 0.005"
           }
         },
         "raw_data": {
@@ -14819,14 +14819,14 @@
         },
         "attr_zh": {
           "vital_blockade_chance": {
-            "name_zh": "vital_blockade_chance",
+            "name_zh": "氣血封鎖機率",
             "value": 0.45,
-            "display": "vital_blockade_chance: 0.45"
+            "display": "氣血封鎖機率: 0.45"
           },
           "vital_blockade_count": {
-            "name_zh": "vital_blockade_count",
+            "name_zh": "氣血封鎖層數",
             "value": 1.0,
-            "display": "vital_blockade_count: 1.0"
+            "display": "氣血封鎖層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -14834,9 +14834,9 @@
         },
         "attr_per_level_zh": {
           "vital_blockade_chance": {
-            "name_zh": "vital_blockade_chance",
+            "name_zh": "氣血封鎖機率",
             "value": 0.03,
-            "display": "vital_blockade_chance: 0.03"
+            "display": "氣血封鎖機率: 0.03"
           }
         },
         "raw_data": {
@@ -14923,9 +14923,9 @@
             "display": "傷害係數/倍率: 1.0"
           },
           "vital_blockade_count": {
-            "name_zh": "vital_blockade_count",
+            "name_zh": "氣血封鎖層數",
             "value": 5.0,
-            "display": "vital_blockade_count: 5.0"
+            "display": "氣血封鎖層數: 5.0"
           },
           "weakness_max": {
             "name_zh": "虛弱層數上限",
@@ -14971,7 +14971,7 @@
       },
       {
         "skill_id": "remote_eecortication",
-        "skill_name_zh": "remote_eecortication",
+        "skill_name_zh": "隔空剝蝕",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "physical",
@@ -14995,9 +14995,9 @@
             "display": "傷害係數/倍率: 0.8"
           },
           "flayed_chance": {
-            "name_zh": "flayed_chance",
+            "name_zh": "剝皮削防機率",
             "value": 0.75,
-            "display": "flayed_chance: 0.75"
+            "display": "剝皮削防機率: 0.75"
           }
         },
         "attr_per_level": {
@@ -15052,24 +15052,24 @@
         },
         "attr_zh": {
           "active_chance": {
-            "name_zh": "active_chance",
+            "name_zh": "被動/特異觸發機率",
             "value": 0.25,
-            "display": "active_chance: 0.25"
+            "display": "被動/特異觸發機率: 0.25"
           },
           "active_round": {
-            "name_zh": "active_round",
+            "name_zh": "特異持續回合數",
             "value": 5.0,
-            "display": "active_round: 5.0"
+            "display": "特異持續回合數: 5.0"
           },
           "buff_max": {
-            "name_zh": "buff_max",
+            "name_zh": "增益層數上限",
             "value": 5.0,
-            "display": "buff_max: 5.0"
+            "display": "增益層數上限: 5.0"
           },
           "buff_min": {
-            "name_zh": "buff_min",
+            "name_zh": "增益基礎層數",
             "value": 1.0,
-            "display": "buff_min: 1.0"
+            "display": "增益基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -15077,9 +15077,9 @@
         },
         "attr_per_level_zh": {
           "active_chance": {
-            "name_zh": "active_chance",
+            "name_zh": "被動/特異觸發機率",
             "value": 0.05,
-            "display": "active_chance: 0.05"
+            "display": "被動/特異觸發機率: 0.05"
           }
         },
         "raw_data": {
@@ -15117,19 +15117,19 @@
         },
         "attr_zh": {
           "active_chance": {
-            "name_zh": "active_chance",
+            "name_zh": "被動/特異觸發機率",
             "value": 0.15,
-            "display": "active_chance: 0.15"
+            "display": "被動/特異觸發機率: 0.15"
           },
           "vital_blockade_max": {
-            "name_zh": "vital_blockade_max",
+            "name_zh": "氣血封鎖上限",
             "value": 3.0,
-            "display": "vital_blockade_max: 3.0"
+            "display": "氣血封鎖上限: 3.0"
           },
           "vital_blockade_min": {
-            "name_zh": "vital_blockade_min",
+            "name_zh": "氣血封鎖基礎層數",
             "value": 1.0,
-            "display": "vital_blockade_min: 1.0"
+            "display": "氣血封鎖基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -15137,9 +15137,9 @@
         },
         "attr_per_level_zh": {
           "active_chance": {
-            "name_zh": "active_chance",
+            "name_zh": "被動/特異觸發機率",
             "value": 0.03,
-            "display": "active_chance: 0.03"
+            "display": "被動/特異觸發機率: 0.03"
           }
         },
         "raw_data": {
@@ -15276,9 +15276,9 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "poison_round": {
-            "name_zh": "poison_round",
+            "name_zh": "中毒持續回合",
             "value": 3.0,
-            "display": "poison_round: 3.0"
+            "display": "中毒持續回合: 3.0"
           }
         },
         "attr_per_level": {
@@ -15426,9 +15426,9 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "poison_round": {
-            "name_zh": "poison_round",
+            "name_zh": "中毒持續回合",
             "value": 3.0,
-            "display": "poison_round: 3.0"
+            "display": "中毒持續回合: 3.0"
           }
         },
         "attr_per_level": {
@@ -15636,9 +15636,9 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "poison_round": {
-            "name_zh": "poison_round",
+            "name_zh": "中毒持續回合",
             "value": 3.0,
-            "display": "poison_round: 3.0"
+            "display": "中毒持續回合: 3.0"
           }
         },
         "attr_per_level": {
@@ -15751,29 +15751,29 @@
         },
         "attr_zh": {
           "buff_dodge_chance": {
-            "name_zh": "buff_dodge_chance",
+            "name_zh": "閃避增益機率",
             "value": 0.25,
-            "display": "buff_dodge_chance: 0.25"
+            "display": "閃避增益機率: 0.25"
           },
           "buff_dodge_max": {
-            "name_zh": "buff_dodge_max",
+            "name_zh": "最大閃避增益",
             "value": 5.0,
-            "display": "buff_dodge_max: 5.0"
+            "display": "最大閃避增益: 5.0"
           },
           "buff_dodge_min": {
-            "name_zh": "buff_dodge_min",
+            "name_zh": "最小閃避增益",
             "value": 3.0,
-            "display": "buff_dodge_min: 3.0"
+            "display": "最小閃避增益: 3.0"
           },
           "stealth_max": {
-            "name_zh": "stealth_max",
+            "name_zh": "潛行上限",
             "value": 1.0,
-            "display": "stealth_max: 1.0"
+            "display": "潛行上限: 1.0"
           },
           "stealth_min": {
-            "name_zh": "stealth_min",
+            "name_zh": "潛行基礎值",
             "value": 1.0,
-            "display": "stealth_min: 1.0"
+            "display": "潛行基礎值: 1.0"
           }
         },
         "attr_per_level": {},
@@ -15916,14 +15916,14 @@
             "display": "增益觸發機率: 0.45"
           },
           "buff_max": {
-            "name_zh": "buff_max",
+            "name_zh": "增益層數上限",
             "value": 5.0,
-            "display": "buff_max: 5.0"
+            "display": "增益層數上限: 5.0"
           },
           "buff_min": {
-            "name_zh": "buff_min",
+            "name_zh": "增益基礎層數",
             "value": 3.0,
-            "display": "buff_min: 3.0"
+            "display": "增益基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -16035,29 +16035,29 @@
         },
         "attr_zh": {
           "buff_dodge_chance": {
-            "name_zh": "buff_dodge_chance",
+            "name_zh": "閃避增益機率",
             "value": 0.25,
-            "display": "buff_dodge_chance: 0.25"
+            "display": "閃避增益機率: 0.25"
           },
           "buff_dodge_max": {
-            "name_zh": "buff_dodge_max",
+            "name_zh": "最大閃避增益",
             "value": 5.0,
-            "display": "buff_dodge_max: 5.0"
+            "display": "最大閃避增益: 5.0"
           },
           "buff_dodge_min": {
-            "name_zh": "buff_dodge_min",
+            "name_zh": "最小閃避增益",
             "value": 3.0,
-            "display": "buff_dodge_min: 3.0"
+            "display": "最小閃避增益: 3.0"
           },
           "stealth_max": {
-            "name_zh": "stealth_max",
+            "name_zh": "潛行上限",
             "value": 1.0,
-            "display": "stealth_max: 1.0"
+            "display": "潛行上限: 1.0"
           },
           "stealth_min": {
-            "name_zh": "stealth_min",
+            "name_zh": "潛行基礎值",
             "value": 1.0,
-            "display": "stealth_min: 1.0"
+            "display": "潛行基礎值: 1.0"
           }
         },
         "attr_per_level": {},
@@ -16269,9 +16269,9 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "poison_round": {
-            "name_zh": "poison_round",
+            "name_zh": "中毒持續回合",
             "value": 3.0,
-            "display": "poison_round: 3.0"
+            "display": "中毒持續回合: 3.0"
           }
         },
         "attr_per_level": {
@@ -16438,9 +16438,9 @@
             "display": "中毒基礎層數: 3.0"
           },
           "stealth_round": {
-            "name_zh": "stealth_round",
+            "name_zh": "潛行持續回合",
             "value": 1.0,
-            "display": "stealth_round: 1.0"
+            "display": "潛行持續回合: 1.0"
           }
         },
         "attr_per_level": {
@@ -16714,9 +16714,9 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "death_mark_round": {
-            "name_zh": "death_mark_round",
+            "name_zh": "死亡標記持續回合",
             "value": 1.0,
-            "display": "death_mark_round: 1.0"
+            "display": "死亡標記持續回合: 1.0"
           }
         },
         "attr_per_level": {
@@ -16790,14 +16790,14 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "death_mark_max": {
-            "name_zh": "death_mark_max",
+            "name_zh": "死亡標記上限",
             "value": 1.0,
-            "display": "death_mark_max: 1.0"
+            "display": "死亡標記上限: 1.0"
           },
           "silence_round": {
-            "name_zh": "silence_round",
+            "name_zh": "沉默持續回合",
             "value": 3.0,
-            "display": "silence_round: 3.0"
+            "display": "沉默持續回合: 3.0"
           }
         },
         "attr_per_level": {
@@ -16854,29 +16854,29 @@
         },
         "attr_zh": {
           "buff_dodge_chance": {
-            "name_zh": "buff_dodge_chance",
+            "name_zh": "閃避增益機率",
             "value": 0.25,
-            "display": "buff_dodge_chance: 0.25"
+            "display": "閃避增益機率: 0.25"
           },
           "buff_dodge_max": {
-            "name_zh": "buff_dodge_max",
+            "name_zh": "最大閃避增益",
             "value": 5.0,
-            "display": "buff_dodge_max: 5.0"
+            "display": "最大閃避增益: 5.0"
           },
           "buff_dodge_min": {
-            "name_zh": "buff_dodge_min",
+            "name_zh": "最小閃避增益",
             "value": 3.0,
-            "display": "buff_dodge_min: 3.0"
+            "display": "最小閃避增益: 3.0"
           },
           "stealth_max": {
-            "name_zh": "stealth_max",
+            "name_zh": "潛行上限",
             "value": 1.0,
-            "display": "stealth_max: 1.0"
+            "display": "潛行上限: 1.0"
           },
           "stealth_min": {
-            "name_zh": "stealth_min",
+            "name_zh": "潛行基礎值",
             "value": 1.0,
-            "display": "stealth_min: 1.0"
+            "display": "潛行基礎值: 1.0"
           }
         },
         "attr_per_level": {},
@@ -16975,9 +16975,9 @@
         },
         "attr_zh": {
           "death_mark_chance": {
-            "name_zh": "death_mark_chance",
+            "name_zh": "死亡標記機率",
             "value": 0.15,
-            "display": "death_mark_chance: 0.15"
+            "display": "死亡標記機率: 0.15"
           }
         },
         "attr_per_level": {
@@ -16985,9 +16985,9 @@
         },
         "attr_per_level_zh": {
           "death_mark_chance": {
-            "name_zh": "death_mark_chance",
+            "name_zh": "死亡標記機率",
             "value": 0.01,
-            "display": "death_mark_chance: 0.01"
+            "display": "死亡標記機率: 0.01"
           }
         },
         "raw_data": {
@@ -17003,7 +17003,7 @@
       },
       {
         "skill_id": "deathbound_pressure",
-        "skill_name_zh": "deathbound_pressure",
+        "skill_name_zh": "死縛威壓",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "physical",
@@ -17033,9 +17033,9 @@
             "display": "傷害係數/倍率: 2.45"
           },
           "kill_chance": {
-            "name_zh": "kill_chance",
+            "name_zh": "斬殺致死機率",
             "value": 0.1,
-            "display": "kill_chance: 0.1"
+            "display": "斬殺致死機率: 0.1"
           }
         },
         "attr_per_level": {
@@ -17340,9 +17340,9 @@
             "display": "二段傷害倍率: 0.5"
           },
           "silence_chance": {
-            "name_zh": "silence_chance",
+            "name_zh": "沉默施加機率",
             "value": 0.45,
-            "display": "silence_chance: 0.45"
+            "display": "沉默施加機率: 0.45"
           }
         },
         "attr_per_level": {
@@ -17396,19 +17396,19 @@
         },
         "attr_zh": {
           "buff_dodge_chance": {
-            "name_zh": "buff_dodge_chance",
+            "name_zh": "閃避增益機率",
             "value": 0.45,
-            "display": "buff_dodge_chance: 0.45"
+            "display": "閃避增益機率: 0.45"
           },
           "buff_dodge_max": {
-            "name_zh": "buff_dodge_max",
+            "name_zh": "最大閃避增益",
             "value": 5.0,
-            "display": "buff_dodge_max: 5.0"
+            "display": "最大閃避增益: 5.0"
           },
           "buff_dodge_min": {
-            "name_zh": "buff_dodge_min",
+            "name_zh": "最小閃避增益",
             "value": 3.0,
-            "display": "buff_dodge_min: 3.0"
+            "display": "最小閃避增益: 3.0"
           }
         },
         "attr_per_level": {
@@ -17416,9 +17416,9 @@
         },
         "attr_per_level_zh": {
           "buff_dodge_chance": {
-            "name_zh": "buff_dodge_chance",
+            "name_zh": "閃避增益機率",
             "value": 0.03,
-            "display": "buff_dodge_chance: 0.03"
+            "display": "閃避增益機率: 0.03"
           }
         },
         "raw_data": {
@@ -17462,24 +17462,24 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "darkness_chance": {
-            "name_zh": "darkness_chance",
+            "name_zh": "暗影侵蝕機率",
             "value": 0.45,
-            "display": "darkness_chance: 0.45"
+            "display": "暗影侵蝕機率: 0.45"
           },
           "darkness_max": {
-            "name_zh": "darkness_max",
+            "name_zh": "暗影侵蝕上限",
             "value": 3.0,
-            "display": "darkness_max: 3.0"
+            "display": "暗影侵蝕上限: 3.0"
           },
           "darkness_min": {
-            "name_zh": "darkness_min",
+            "name_zh": "暗影侵蝕基礎層數",
             "value": 1.0,
-            "display": "darkness_min: 1.0"
+            "display": "暗影侵蝕基礎層數: 1.0"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.5,
-            "display": "hp_offset: 0.5"
+            "display": "生命回復/扣除比例: 0.5"
           }
         },
         "attr_per_level": {
@@ -17532,9 +17532,9 @@
             "display": "額外傷害加成: 0.15"
           },
           "stealth_chance": {
-            "name_zh": "stealth_chance",
+            "name_zh": "進入潛行機率",
             "value": 0.15,
-            "display": "stealth_chance: 0.15"
+            "display": "進入潛行機率: 0.15"
           }
         },
         "attr_per_level": {
@@ -17548,9 +17548,9 @@
             "display": "額外傷害加成: 0.01"
           },
           "stealth_chance": {
-            "name_zh": "stealth_chance",
+            "name_zh": "進入潛行機率",
             "value": 0.01,
-            "display": "stealth_chance: 0.01"
+            "display": "進入潛行機率: 0.01"
           }
         },
         "raw_data": {
@@ -17588,9 +17588,9 @@
         },
         "attr_zh": {
           "count": {
-            "name_zh": "count",
+            "name_zh": "生效次數/數量",
             "value": 5.0,
-            "display": "count: 5.0"
+            "display": "生效次數/數量: 5.0"
           },
           "damage_offset_1": {
             "name_zh": "一段傷害倍率",
@@ -17603,9 +17603,9 @@
             "display": "二段傷害倍率: 0.4"
           },
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.3,
-            "display": "hp_offset: 0.3"
+            "display": "生命回復/扣除比例: 0.3"
           }
         },
         "attr_per_level": {
@@ -17750,7 +17750,7 @@
     "skills": [
       {
         "skill_id": "darkfeather_flurry",
-        "skill_name_zh": "darkfeather_flurry",
+        "skill_name_zh": "暗羽狂襲",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "physical",
@@ -17774,9 +17774,9 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "death_mark_chance": {
-            "name_zh": "death_mark_chance",
+            "name_zh": "死亡標記機率",
             "value": 0.25,
-            "display": "death_mark_chance: 0.25"
+            "display": "死亡標記機率: 0.25"
           }
         },
         "attr_per_level": {
@@ -17834,14 +17834,14 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "damage_offset_darkness": {
-            "name_zh": "damage_offset_darkness",
+            "name_zh": "暗影傷害係數",
             "value": 0.5,
-            "display": "damage_offset_darkness: 0.5"
+            "display": "暗影傷害係數: 0.5"
           },
           "death_mark_chance": {
-            "name_zh": "death_mark_chance",
+            "name_zh": "死亡標記機率",
             "value": 0.75,
-            "display": "death_mark_chance: 0.75"
+            "display": "死亡標記機率: 0.75"
           }
         },
         "attr_per_level": {
@@ -17893,9 +17893,9 @@
         },
         "attr_zh": {
           "reset_chance": {
-            "name_zh": "reset_chance",
+            "name_zh": "重置冷卻機率",
             "value": 0.35,
-            "display": "reset_chance: 0.35"
+            "display": "重置冷卻機率: 0.35"
           }
         },
         "attr_per_level": {
@@ -17903,9 +17903,9 @@
         },
         "attr_per_level_zh": {
           "reset_chance": {
-            "name_zh": "reset_chance",
+            "name_zh": "重置冷卻機率",
             "value": 0.02,
-            "display": "reset_chance: 0.02"
+            "display": "重置冷卻機率: 0.02"
           }
         },
         "raw_data": {
@@ -17920,7 +17920,7 @@
       },
       {
         "skill_id": "darkfeather_impale",
-        "skill_name_zh": "darkfeather_impale",
+        "skill_name_zh": "暗羽穿刺",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "physical",
@@ -17992,19 +17992,19 @@
         },
         "attr_zh": {
           "buff_dodge_chance": {
-            "name_zh": "buff_dodge_chance",
+            "name_zh": "閃避增益機率",
             "value": 0.15,
-            "display": "buff_dodge_chance: 0.15"
+            "display": "閃避增益機率: 0.15"
           },
           "buff_dodge_check_count": {
-            "name_zh": "buff_dodge_check_count",
+            "name_zh": "閃避檢定次數",
             "value": 3.0,
-            "display": "buff_dodge_check_count: 3.0"
+            "display": "閃避檢定次數: 3.0"
           },
           "buff_dodge_count": {
-            "name_zh": "buff_dodge_count",
+            "name_zh": "閃避增益層數",
             "value": 7.0,
-            "display": "buff_dodge_count: 7.0"
+            "display": "閃避增益層數: 7.0"
           }
         },
         "attr_per_level": {
@@ -18012,9 +18012,9 @@
         },
         "attr_per_level_zh": {
           "buff_dodge_chance": {
-            "name_zh": "buff_dodge_chance",
+            "name_zh": "閃避增益機率",
             "value": 0.01,
-            "display": "buff_dodge_chance: 0.01"
+            "display": "閃避增益機率: 0.01"
           }
         },
         "raw_data": {
@@ -18050,9 +18050,9 @@
         },
         "attr_zh": {
           "skill_chance": {
-            "name_zh": "skill_chance",
+            "name_zh": "技能發動機率",
             "value": 0.0,
-            "display": "skill_chance: 0.0"
+            "display": "技能發動機率: 0.0"
           }
         },
         "attr_per_level": {
@@ -18060,9 +18060,9 @@
         },
         "attr_per_level_zh": {
           "skill_chance": {
-            "name_zh": "skill_chance",
+            "name_zh": "技能發動機率",
             "value": 0.1,
-            "display": "skill_chance: 0.1"
+            "display": "技能發動機率: 0.1"
           }
         },
         "raw_data": {
@@ -18114,9 +18114,9 @@
             "display": "傷害係數/倍率: 1.0"
           },
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.45,
-            "display": "extra_chance: 0.45"
+            "display": "額外連鎖機率: 0.45"
           }
         },
         "attr_per_level": {
@@ -18130,9 +18130,9 @@
             "display": "傷害係數/倍率: 0.05"
           },
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.03,
-            "display": "extra_chance: 0.03"
+            "display": "額外連鎖機率: 0.03"
           }
         },
         "raw_data": {
@@ -18278,14 +18278,14 @@
             "display": "增益觸發機率: 0.45"
           },
           "buff_max": {
-            "name_zh": "buff_max",
+            "name_zh": "增益層數上限",
             "value": 5.0,
-            "display": "buff_max: 5.0"
+            "display": "增益層數上限: 5.0"
           },
           "buff_min": {
-            "name_zh": "buff_min",
+            "name_zh": "增益基礎層數",
             "value": 3.0,
-            "display": "buff_min: 3.0"
+            "display": "增益基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -18410,14 +18410,14 @@
         },
         "attr_zh": {
           "abyss_seed_max": {
-            "name_zh": "abyss_seed_max",
+            "name_zh": "深淵種子層數上限",
             "value": 3.0,
-            "display": "abyss_seed_max: 3.0"
+            "display": "深淵種子層數上限: 3.0"
           },
           "abyss_seed_min": {
-            "name_zh": "abyss_seed_min",
+            "name_zh": "深淵種子基礎層數",
             "value": 1.0,
-            "display": "abyss_seed_min: 1.0"
+            "display": "深淵種子基礎層數: 1.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -18476,9 +18476,9 @@
         },
         "attr_zh": {
           "abyss_seed_count": {
-            "name_zh": "abyss_seed_count",
+            "name_zh": "深淵種子層數",
             "value": 3.0,
-            "display": "abyss_seed_count: 3.0"
+            "display": "深淵種子層數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -18543,14 +18543,14 @@
         },
         "attr_zh": {
           "abyss_seed_max": {
-            "name_zh": "abyss_seed_max",
+            "name_zh": "深淵種子層數上限",
             "value": 3.0,
-            "display": "abyss_seed_max: 3.0"
+            "display": "深淵種子層數上限: 3.0"
           },
           "abyss_seed_min": {
-            "name_zh": "abyss_seed_min",
+            "name_zh": "深淵種子基礎層數",
             "value": 1.0,
-            "display": "abyss_seed_min: 1.0"
+            "display": "深淵種子基礎層數: 1.0"
           },
           "damage_bouns": {
             "name_zh": "額外傷害加成",
@@ -18558,9 +18558,9 @@
             "display": "額外傷害加成: 0.05"
           },
           "hp_offset_bouns": {
-            "name_zh": "hp_offset_bouns",
+            "name_zh": "生命百分比額外加成",
             "value": 0.15,
-            "display": "hp_offset_bouns: 0.15"
+            "display": "生命百分比額外加成: 0.15"
           }
         },
         "attr_per_level": {
@@ -18574,9 +18574,9 @@
             "display": "額外傷害加成: 0.01"
           },
           "hp_offset_bouns": {
-            "name_zh": "hp_offset_bouns",
+            "name_zh": "生命百分比額外加成",
             "value": 0.01,
-            "display": "hp_offset_bouns: 0.01"
+            "display": "生命百分比額外加成: 0.01"
           }
         },
         "raw_data": {
@@ -18595,7 +18595,7 @@
       },
       {
         "skill_id": "mutant_flame_stalk",
-        "skill_name_zh": "mutant_flame_stalk",
+        "skill_name_zh": "變異炎莖",
         "skill_type": "passive",
         "skill_type_zh": "被動",
         "damage_type": "none",
@@ -18616,14 +18616,14 @@
         },
         "attr_zh": {
           "active_chance": {
-            "name_zh": "active_chance",
+            "name_zh": "被動/特異觸發機率",
             "value": 0.15,
-            "display": "active_chance: 0.15"
+            "display": "被動/特異觸發機率: 0.15"
           },
           "active_round": {
-            "name_zh": "active_round",
+            "name_zh": "特異持續回合數",
             "value": 5.0,
-            "display": "active_round: 5.0"
+            "display": "特異持續回合數: 5.0"
           },
           "damage_bouns": {
             "name_zh": "額外傷害加成",
@@ -18631,9 +18631,9 @@
             "display": "額外傷害加成: 0.15"
           },
           "stealth_chance": {
-            "name_zh": "stealth_chance",
+            "name_zh": "進入潛行機率",
             "value": 0.15,
-            "display": "stealth_chance: 0.15"
+            "display": "進入潛行機率: 0.15"
           }
         },
         "attr_per_level": {
@@ -18641,9 +18641,9 @@
         },
         "attr_per_level_zh": {
           "active_round": {
-            "name_zh": "active_round",
+            "name_zh": "特異持續回合數",
             "value": 1.0,
-            "display": "active_round: 1.0"
+            "display": "特異持續回合數: 1.0"
           }
         },
         "raw_data": {
@@ -18706,19 +18706,19 @@
             "display": "三段傷害倍率: 1.0"
           },
           "debuff_chance": {
-            "name_zh": "debuff_chance",
+            "name_zh": "減益施加機率",
             "value": 0.45,
-            "display": "debuff_chance: 0.45"
+            "display": "減益施加機率: 0.45"
           },
           "debuff_max": {
-            "name_zh": "debuff_max",
+            "name_zh": "減益層數上限",
             "value": 5.0,
-            "display": "debuff_max: 5.0"
+            "display": "減益層數上限: 5.0"
           },
           "debuff_min": {
-            "name_zh": "debuff_min",
+            "name_zh": "減益基礎層數",
             "value": 1.0,
-            "display": "debuff_min: 1.0"
+            "display": "減益基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -19092,14 +19092,14 @@
         },
         "attr_zh": {
           "armor_bouns": {
-            "name_zh": "armor_bouns",
+            "name_zh": "額外護甲加成",
             "value": 0.1,
-            "display": "armor_bouns: 0.1"
+            "display": "額外護甲加成: 0.1"
           },
           "min_armor": {
-            "name_zh": "min_armor",
+            "name_zh": "保底護甲值",
             "value": 30.0,
-            "display": "min_armor: 30.0"
+            "display": "保底護甲值: 30.0"
           }
         },
         "attr_per_level": {
@@ -19107,9 +19107,9 @@
         },
         "attr_per_level_zh": {
           "armor_bouns": {
-            "name_zh": "armor_bouns",
+            "name_zh": "額外護甲加成",
             "value": 0.01,
-            "display": "armor_bouns: 0.01"
+            "display": "額外護甲加成: 0.01"
           }
         },
         "raw_data": {
@@ -19248,14 +19248,14 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "protection_max": {
-            "name_zh": "protection_max",
+            "name_zh": "保護上限",
             "value": 5.0,
-            "display": "protection_max: 5.0"
+            "display": "保護上限: 5.0"
           },
           "protection_min": {
-            "name_zh": "protection_min",
+            "name_zh": "保護基礎值",
             "value": 3.0,
-            "display": "protection_min: 3.0"
+            "display": "保護基礎值: 3.0"
           }
         },
         "attr_per_level": {
@@ -19307,9 +19307,9 @@
         },
         "attr_zh": {
           "bleed_round": {
-            "name_zh": "bleed_round",
+            "name_zh": "流血持續回合數",
             "value": 3.0,
-            "display": "bleed_round: 3.0"
+            "display": "流血持續回合數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -19367,24 +19367,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 40.0,
-            "display": "armor_max: 40.0"
+            "display": "護甲增加上限: 40.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 20.0,
-            "display": "armor_min: 20.0"
+            "display": "護甲增加下限: 20.0"
           },
           "protection_max": {
-            "name_zh": "protection_max",
+            "name_zh": "保護上限",
             "value": 7.0,
-            "display": "protection_max: 7.0"
+            "display": "保護上限: 7.0"
           },
           "protection_min": {
-            "name_zh": "protection_min",
+            "name_zh": "保護基礎值",
             "value": 5.0,
-            "display": "protection_min: 5.0"
+            "display": "保護基礎值: 5.0"
           }
         },
         "attr_per_level": {
@@ -19393,14 +19393,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 8.0,
-            "display": "armor_max: 8.0"
+            "display": "護甲增加上限: 8.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 4.0,
-            "display": "armor_min: 4.0"
+            "display": "護甲增加下限: 4.0"
           }
         },
         "raw_data": {
@@ -19544,14 +19544,14 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "protection_max": {
-            "name_zh": "protection_max",
+            "name_zh": "保護上限",
             "value": 5.0,
-            "display": "protection_max: 5.0"
+            "display": "保護上限: 5.0"
           },
           "protection_min": {
-            "name_zh": "protection_min",
+            "name_zh": "保護基礎值",
             "value": 3.0,
-            "display": "protection_min: 3.0"
+            "display": "保護基礎值: 3.0"
           }
         },
         "attr_per_level": {
@@ -19603,14 +19603,14 @@
         },
         "attr_zh": {
           "armor_bouns": {
-            "name_zh": "armor_bouns",
+            "name_zh": "額外護甲加成",
             "value": 0.1,
-            "display": "armor_bouns: 0.1"
+            "display": "額外護甲加成: 0.1"
           },
           "min_armor": {
-            "name_zh": "min_armor",
+            "name_zh": "保底護甲值",
             "value": 30.0,
-            "display": "min_armor: 30.0"
+            "display": "保底護甲值: 30.0"
           }
         },
         "attr_per_level": {
@@ -19618,9 +19618,9 @@
         },
         "attr_per_level_zh": {
           "armor_bouns": {
-            "name_zh": "armor_bouns",
+            "name_zh": "額外護甲加成",
             "value": 0.01,
-            "display": "armor_bouns: 0.01"
+            "display": "額外護甲加成: 0.01"
           }
         },
         "raw_data": {
@@ -19662,24 +19662,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 40.0,
-            "display": "armor_max: 40.0"
+            "display": "護甲增加上限: 40.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 20.0,
-            "display": "armor_min: 20.0"
+            "display": "護甲增加下限: 20.0"
           },
           "protection_max": {
-            "name_zh": "protection_max",
+            "name_zh": "保護上限",
             "value": 7.0,
-            "display": "protection_max: 7.0"
+            "display": "保護上限: 7.0"
           },
           "protection_min": {
-            "name_zh": "protection_min",
+            "name_zh": "保護基礎值",
             "value": 5.0,
-            "display": "protection_min: 5.0"
+            "display": "保護基礎值: 5.0"
           }
         },
         "attr_per_level": {
@@ -19688,14 +19688,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 8.0,
-            "display": "armor_max: 8.0"
+            "display": "護甲增加上限: 8.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 4.0,
-            "display": "armor_min: 4.0"
+            "display": "護甲增加下限: 4.0"
           }
         },
         "raw_data": {
@@ -19893,9 +19893,9 @@
         },
         "attr_zh": {
           "bleed_round": {
-            "name_zh": "bleed_round",
+            "name_zh": "流血持續回合數",
             "value": 3.0,
-            "display": "bleed_round: 3.0"
+            "display": "流血持續回合數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -19969,9 +19969,9 @@
             "display": "流血基礎層數: 1.0"
           },
           "combo_times": {
-            "name_zh": "combo_times",
+            "name_zh": "連擊次數",
             "value": 2.0,
-            "display": "combo_times: 2.0"
+            "display": "連擊次數: 2.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -20030,9 +20030,9 @@
         },
         "attr_zh": {
           "bleed_offset": {
-            "name_zh": "bleed_offset",
+            "name_zh": "流血傷害係數",
             "value": 0.5,
-            "display": "bleed_offset: 0.5"
+            "display": "流血傷害係數: 0.5"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -20095,14 +20095,14 @@
             "display": "傷害係數/倍率: 1.7"
           },
           "trauma_chance": {
-            "name_zh": "trauma_chance",
+            "name_zh": "創傷施加機率",
             "value": 1.0,
-            "display": "trauma_chance: 1.0"
+            "display": "創傷施加機率: 1.0"
           },
           "trauma_count": {
-            "name_zh": "trauma_count",
+            "name_zh": "創傷層數",
             "value": 2.0,
-            "display": "trauma_count: 2.0"
+            "display": "創傷層數: 2.0"
           }
         },
         "attr_per_level": {
@@ -20136,7 +20136,7 @@
       },
       {
         "skill_id": "blood_extraction",
-        "skill_name_zh": "blood_extraction",
+        "skill_name_zh": "汲血之術",
         "skill_type": "passive",
         "skill_type_zh": "被動",
         "damage_type": "none",
@@ -20155,14 +20155,14 @@
         },
         "attr_zh": {
           "restore_chance": {
-            "name_zh": "restore_chance",
+            "name_zh": "回復觸發機率",
             "value": 1.0,
-            "display": "restore_chance: 1.0"
+            "display": "回復觸發機率: 1.0"
           },
           "restore_rate": {
-            "name_zh": "restore_rate",
+            "name_zh": "回復比例",
             "value": 0.05,
-            "display": "restore_rate: 0.05"
+            "display": "回復比例: 0.05"
           }
         },
         "attr_per_level": {
@@ -20170,9 +20170,9 @@
         },
         "attr_per_level_zh": {
           "restore_rate": {
-            "name_zh": "restore_rate",
+            "name_zh": "回復比例",
             "value": 0.005,
-            "display": "restore_rate: 0.005"
+            "display": "回復比例: 0.005"
           }
         },
         "raw_data": {
@@ -20307,9 +20307,9 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.5,
-            "display": "armor_offset: 0.5"
+            "display": "護甲加成係數: 0.5"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -20370,24 +20370,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 60.0,
-            "display": "armor_max: 60.0"
+            "display": "護甲增加上限: 60.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 30.0,
-            "display": "armor_min: 30.0"
+            "display": "護甲增加下限: 30.0"
           },
           "provocation_round": {
-            "name_zh": "provocation_round",
+            "name_zh": "嘲諷持續回合",
             "value": 3.0,
-            "display": "provocation_round: 3.0"
+            "display": "嘲諷持續回合: 3.0"
           },
           "weakness_level_chance": {
-            "name_zh": "weakness_level_chance",
+            "name_zh": "虛弱進階機率",
             "value": 0.25,
-            "display": "weakness_level_chance: 0.25"
+            "display": "虛弱進階機率: 0.25"
           },
           "weakness_max": {
             "name_zh": "虛弱層數上限",
@@ -20406,14 +20406,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 6.0,
-            "display": "armor_max: 6.0"
+            "display": "護甲增加上限: 6.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 3.0,
-            "display": "armor_min: 3.0"
+            "display": "護甲增加下限: 3.0"
           }
         },
         "raw_data": {
@@ -20461,24 +20461,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 40.0,
-            "display": "armor_max: 40.0"
+            "display": "護甲增加上限: 40.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 20.0,
-            "display": "armor_min: 20.0"
+            "display": "護甲增加下限: 20.0"
           },
           "protection_max": {
-            "name_zh": "protection_max",
+            "name_zh": "保護上限",
             "value": 7.0,
-            "display": "protection_max: 7.0"
+            "display": "保護上限: 7.0"
           },
           "protection_min": {
-            "name_zh": "protection_min",
+            "name_zh": "保護基礎值",
             "value": 5.0,
-            "display": "protection_min: 5.0"
+            "display": "保護基礎值: 5.0"
           }
         },
         "attr_per_level": {
@@ -20487,14 +20487,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 8.0,
-            "display": "armor_max: 8.0"
+            "display": "護甲增加上限: 8.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 4.0,
-            "display": "armor_min: 4.0"
+            "display": "護甲增加下限: 4.0"
           }
         },
         "raw_data": {
@@ -20536,9 +20536,9 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.3,
-            "display": "armor_offset: 0.3"
+            "display": "護甲加成係數: 0.3"
           }
         },
         "attr_per_level": {
@@ -20546,9 +20546,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.02,
-            "display": "armor_offset: 0.02"
+            "display": "護甲加成係數: 0.02"
           }
         },
         "raw_data": {
@@ -20584,14 +20584,14 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 300.0,
-            "display": "armor_max: 300.0"
+            "display": "護甲增加上限: 300.0"
           },
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.5,
-            "display": "armor_offset: 0.5"
+            "display": "護甲加成係數: 0.5"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -20650,9 +20650,9 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.4,
-            "display": "armor_offset: 0.4"
+            "display": "護甲加成係數: 0.4"
           },
           "round": {
             "name_zh": "持續回合數",
@@ -20660,9 +20660,9 @@
             "display": "持續回合數: 10.0"
           },
           "total_res": {
-            "name_zh": "total_res",
+            "name_zh": "全屬性全抗性",
             "value": 40.0,
-            "display": "total_res: 40.0"
+            "display": "全屬性全抗性: 40.0"
           }
         },
         "attr_per_level": {
@@ -20671,14 +20671,14 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.03,
-            "display": "armor_offset: 0.03"
+            "display": "護甲加成係數: 0.03"
           },
           "total_res": {
-            "name_zh": "total_res",
+            "name_zh": "全屬性全抗性",
             "value": 3.0,
-            "display": "total_res: 3.0"
+            "display": "全屬性全抗性: 3.0"
           }
         },
         "raw_data": {
@@ -20828,19 +20828,19 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "immobilize_chance": {
-            "name_zh": "immobilize_chance",
+            "name_zh": "定身/纏繞機率",
             "value": 0.25,
-            "display": "immobilize_chance: 0.25"
+            "display": "定身/纏繞機率: 0.25"
           },
           "immobilize_max": {
-            "name_zh": "immobilize_max",
+            "name_zh": "定身上限",
             "value": 2.0,
-            "display": "immobilize_max: 2.0"
+            "display": "定身上限: 2.0"
           },
           "immobilize_min": {
-            "name_zh": "immobilize_min",
+            "name_zh": "定身基礎層數",
             "value": 1.0,
-            "display": "immobilize_min: 1.0"
+            "display": "定身基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -20898,24 +20898,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 60.0,
-            "display": "armor_max: 60.0"
+            "display": "護甲增加上限: 60.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 30.0,
-            "display": "armor_min: 30.0"
+            "display": "護甲增加下限: 30.0"
           },
           "provocation_round": {
-            "name_zh": "provocation_round",
+            "name_zh": "嘲諷持續回合",
             "value": 3.0,
-            "display": "provocation_round: 3.0"
+            "display": "嘲諷持續回合: 3.0"
           },
           "weakness_level_chance": {
-            "name_zh": "weakness_level_chance",
+            "name_zh": "虛弱進階機率",
             "value": 0.25,
-            "display": "weakness_level_chance: 0.25"
+            "display": "虛弱進階機率: 0.25"
           },
           "weakness_max": {
             "name_zh": "虛弱層數上限",
@@ -20934,14 +20934,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 6.0,
-            "display": "armor_max: 6.0"
+            "display": "護甲增加上限: 6.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 3.0,
-            "display": "armor_min: 3.0"
+            "display": "護甲增加下限: 3.0"
           }
         },
         "raw_data": {
@@ -20986,9 +20986,9 @@
         },
         "attr_zh": {
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.1,
-            "display": "hp_offset: 0.1"
+            "display": "生命回復/扣除比例: 0.1"
           }
         },
         "attr_per_level": {
@@ -20996,9 +20996,9 @@
         },
         "attr_per_level_zh": {
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.01,
-            "display": "hp_offset: 0.01"
+            "display": "生命回復/扣除比例: 0.01"
           }
         },
         "raw_data": {
@@ -21096,14 +21096,14 @@
         },
         "attr_zh": {
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.25,
-            "display": "hp_offset: 0.25"
+            "display": "生命回復/扣除比例: 0.25"
           },
           "sprite_chance": {
-            "name_zh": "sprite_chance",
+            "name_zh": "精靈召喚機率",
             "value": 0.5,
-            "display": "sprite_chance: 0.5"
+            "display": "精靈召喚機率: 0.5"
           }
         },
         "attr_per_level": {
@@ -21112,14 +21112,14 @@
         },
         "attr_per_level_zh": {
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.025,
-            "display": "hp_offset: 0.025"
+            "display": "生命回復/扣除比例: 0.025"
           },
           "sprite_chance": {
-            "name_zh": "sprite_chance",
+            "name_zh": "精靈召喚機率",
             "value": 0.03,
-            "display": "sprite_chance: 0.03"
+            "display": "精靈召喚機率: 0.03"
           }
         },
         "raw_data": {
@@ -21222,14 +21222,14 @@
         },
         "attr_zh": {
           "attr_bouns": {
-            "name_zh": "attr_bouns",
+            "name_zh": "全屬性增益加成",
             "value": 0.25,
-            "display": "attr_bouns: 0.25"
+            "display": "全屬性增益加成: 0.25"
           },
           "rebirth_chance": {
-            "name_zh": "rebirth_chance",
+            "name_zh": "重生復活機率",
             "value": 0.4,
-            "display": "rebirth_chance: 0.4"
+            "display": "重生復活機率: 0.4"
           }
         },
         "attr_per_level": {
@@ -21237,9 +21237,9 @@
         },
         "attr_per_level_zh": {
           "rebirth_chance": {
-            "name_zh": "rebirth_chance",
+            "name_zh": "重生復活機率",
             "value": 0.06,
-            "display": "rebirth_chance: 0.06"
+            "display": "重生復活機率: 0.06"
           }
         },
         "raw_data": {
@@ -21378,14 +21378,14 @@
         },
         "attr_zh": {
           "buff_block_max": {
-            "name_zh": "buff_block_max",
+            "name_zh": "最大格擋次數",
             "value": 5.0,
-            "display": "buff_block_max: 5.0"
+            "display": "最大格擋次數: 5.0"
           },
           "buff_block_min": {
-            "name_zh": "buff_block_min",
+            "name_zh": "最小格擋次數",
             "value": 3.0,
-            "display": "buff_block_min: 3.0"
+            "display": "最小格擋次數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -21445,24 +21445,24 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.05,
-            "display": "armor_offset: 0.05"
+            "display": "護甲加成係數: 0.05"
           },
           "buff_block_times": {
-            "name_zh": "buff_block_times",
+            "name_zh": "格擋生效次數",
             "value": 3.0,
-            "display": "buff_block_times: 3.0"
+            "display": "格擋生效次數: 3.0"
           },
           "provocation_max": {
-            "name_zh": "provocation_max",
+            "name_zh": "嘲諷上限",
             "value": 2.0,
-            "display": "provocation_max: 2.0"
+            "display": "嘲諷上限: 2.0"
           },
           "provocation_min": {
-            "name_zh": "provocation_min",
+            "name_zh": "嘲諷基礎值",
             "value": 1.0,
-            "display": "provocation_min: 1.0"
+            "display": "嘲諷基礎值: 1.0"
           }
         },
         "attr_per_level": {
@@ -21470,9 +21470,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.01,
-            "display": "armor_offset: 0.01"
+            "display": "護甲加成係數: 0.01"
           }
         },
         "raw_data": {
@@ -21515,9 +21515,9 @@
         },
         "attr_zh": {
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.3,
-            "display": "hp_offset: 0.3"
+            "display": "生命回復/扣除比例: 0.3"
           }
         },
         "attr_per_level": {
@@ -21525,9 +21525,9 @@
         },
         "attr_per_level_zh": {
           "hp_offset": {
-            "name_zh": "hp_offset",
+            "name_zh": "生命回復/扣除比例",
             "value": 0.02,
-            "display": "hp_offset: 0.02"
+            "display": "生命回復/扣除比例: 0.02"
           }
         },
         "raw_data": {
@@ -21607,9 +21607,9 @@
         },
         "attr_zh": {
           "buff_block_count": {
-            "name_zh": "buff_block_count",
+            "name_zh": "格擋增益次數",
             "value": 1.0,
-            "display": "buff_block_count: 1.0"
+            "display": "格擋增益次數: 1.0"
           },
           "buff_chance": {
             "name_zh": "增益觸發機率",
@@ -21617,9 +21617,9 @@
             "display": "增益觸發機率: 0.45"
           },
           "protection_count": {
-            "name_zh": "protection_count",
+            "name_zh": "保護層數",
             "value": 3.0,
-            "display": "protection_count: 3.0"
+            "display": "保護層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -21689,9 +21689,9 @@
             "display": "傷害係數/倍率: 1.8"
           },
           "damage_offset_shield": {
-            "name_zh": "damage_offset_shield",
+            "name_zh": "盾擊傷害係數",
             "value": 1.0,
-            "display": "damage_offset_shield: 1.0"
+            "display": "盾擊傷害係數: 1.0"
           },
           "stun_chance": {
             "name_zh": "眩暈觸發機率",
@@ -21710,9 +21710,9 @@
             "display": "傷害係數/倍率: 0.06"
           },
           "damage_offset_shield": {
-            "name_zh": "damage_offset_shield",
+            "name_zh": "盾擊傷害係數",
             "value": 0.05,
-            "display": "damage_offset_shield: 0.05"
+            "display": "盾擊傷害係數: 0.05"
           }
         },
         "raw_data": {
@@ -21761,14 +21761,14 @@
         },
         "attr_zh": {
           "buff_block_max": {
-            "name_zh": "buff_block_max",
+            "name_zh": "最大格擋次數",
             "value": 7.0,
-            "display": "buff_block_max: 7.0"
+            "display": "最大格擋次數: 7.0"
           },
           "buff_block_min": {
-            "name_zh": "buff_block_min",
+            "name_zh": "最小格擋次數",
             "value": 5.0,
-            "display": "buff_block_min: 5.0"
+            "display": "最小格擋次數: 5.0"
           },
           "damage_bouns": {
             "name_zh": "額外傷害加成",
@@ -21957,9 +21957,9 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "hp_rate": {
-            "name_zh": "hp_rate",
+            "name_zh": "當前生命比例閥值",
             "value": 0.015,
-            "display": "hp_rate: 0.015"
+            "display": "當前生命比例閥值: 0.015"
           }
         },
         "attr_per_level": {
@@ -22016,24 +22016,24 @@
         },
         "attr_zh": {
           "critical_strike_max": {
-            "name_zh": "critical_strike_max",
+            "name_zh": "爆擊威能上限",
             "value": 3.0,
-            "display": "critical_strike_max: 3.0"
+            "display": "爆擊威能上限: 3.0"
           },
           "critical_strike_min": {
-            "name_zh": "critical_strike_min",
+            "name_zh": "爆擊威能基礎層數",
             "value": 1.0,
-            "display": "critical_strike_min: 1.0"
+            "display": "爆擊威能基礎層數: 1.0"
           },
           "sp_chance": {
-            "name_zh": "sp_chance",
+            "name_zh": "能量回復機率",
             "value": 0.15,
-            "display": "sp_chance: 0.15"
+            "display": "能量回復機率: 0.15"
           },
           "sp_count": {
-            "name_zh": "sp_count",
+            "name_zh": "能量點數獲得",
             "value": 1.0,
-            "display": "sp_count: 1.0"
+            "display": "能量點數獲得: 1.0"
           }
         },
         "attr_per_level": {
@@ -22041,9 +22041,9 @@
         },
         "attr_per_level_zh": {
           "sp_chance": {
-            "name_zh": "sp_chance",
+            "name_zh": "能量回復機率",
             "value": 0.01,
-            "display": "sp_chance: 0.01"
+            "display": "能量回復機率: 0.01"
           }
         },
         "raw_data": {
@@ -22061,7 +22061,7 @@
       },
       {
         "skill_id": "commanding_roar",
-        "skill_name_zh": "commanding_roar",
+        "skill_name_zh": "統御咆哮",
         "skill_type": "active",
         "skill_type_zh": "主動",
         "damage_type": "physical",
@@ -22092,14 +22092,14 @@
             "display": "獲得行動點數量: 1.0"
           },
           "battle_fury_max": {
-            "name_zh": "battle_fury_max",
+            "name_zh": "戰意狂怒上限",
             "value": 5.0,
-            "display": "battle_fury_max: 5.0"
+            "display": "戰意狂怒上限: 5.0"
           },
           "battle_fury_min": {
-            "name_zh": "battle_fury_min",
+            "name_zh": "戰意狂怒基礎層數",
             "value": 3.0,
-            "display": "battle_fury_min: 3.0"
+            "display": "戰意狂怒基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -22182,9 +22182,9 @@
             "display": "傷害係數/倍率: 1.7"
           },
           "hp_rate": {
-            "name_zh": "hp_rate",
+            "name_zh": "當前生命比例閥值",
             "value": 0.25,
-            "display": "hp_rate: 0.25"
+            "display": "當前生命比例閥值: 0.25"
           }
         },
         "attr_per_level": {
@@ -22352,19 +22352,19 @@
             "display": "冷卻回合數: 10.0"
           },
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.5,
-            "display": "damage_bouns_1: 0.5"
+            "display": "一段額外增傷: 0.5"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.25,
-            "display": "damage_bouns_2: 0.25"
+            "display": "二段額外增傷: 0.25"
           },
           "damage_round": {
-            "name_zh": "damage_round",
+            "name_zh": "傷害結算回合",
             "value": 5.0,
-            "display": "damage_round: 5.0"
+            "display": "傷害結算回合: 5.0"
           }
         },
         "attr_per_level": {
@@ -22373,14 +22373,14 @@
         },
         "attr_per_level_zh": {
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.05,
-            "display": "damage_bouns_1: 0.05"
+            "display": "一段額外增傷: 0.05"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": -0.01,
-            "display": "damage_bouns_2: -0.01"
+            "display": "二段額外增傷: -0.01"
           }
         },
         "raw_data": {
@@ -22528,9 +22528,9 @@
             "display": "能量獲得機率: 0.25"
           },
           "energy_count": {
-            "name_zh": "energy_count",
+            "name_zh": "獲得能量點數",
             "value": 1.0,
-            "display": "energy_count: 1.0"
+            "display": "獲得能量點數: 1.0"
           },
           "hp_max": {
             "name_zh": "最大生命值",
@@ -22538,9 +22538,9 @@
             "display": "最大生命值: 50.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 30.0,
-            "display": "hp_min: 30.0"
+            "display": "最低生命保障: 30.0"
           }
         },
         "attr_per_level": {
@@ -22554,9 +22554,9 @@
             "display": "最大生命值: 5.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 3.0,
-            "display": "hp_min: 3.0"
+            "display": "最低生命保障: 3.0"
           }
         },
         "raw_data": {
@@ -22611,14 +22611,14 @@
             "display": "能量獲得機率: 0.15"
           },
           "energy_count": {
-            "name_zh": "energy_count",
+            "name_zh": "獲得能量點數",
             "value": 1.0,
-            "display": "energy_count: 1.0"
+            "display": "獲得能量點數: 1.0"
           },
           "extra_energy_count": {
-            "name_zh": "extra_energy_count",
+            "name_zh": "額外能量點數",
             "value": 1.0,
-            "display": "extra_energy_count: 1.0"
+            "display": "額外能量點數: 1.0"
           }
         },
         "attr_per_level": {
@@ -22677,9 +22677,9 @@
             "display": "能量獲得機率: 0.25"
           },
           "energy_count": {
-            "name_zh": "energy_count",
+            "name_zh": "獲得能量點數",
             "value": 1.0,
-            "display": "energy_count: 1.0"
+            "display": "獲得能量點數: 1.0"
           },
           "hp_max": {
             "name_zh": "最大生命值",
@@ -22687,9 +22687,9 @@
             "display": "最大生命值: 100.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 80.0,
-            "display": "hp_min: 80.0"
+            "display": "最低生命保障: 80.0"
           }
         },
         "attr_per_level": {
@@ -22703,9 +22703,9 @@
             "display": "最大生命值: 5.0"
           },
           "hp_min": {
-            "name_zh": "hp_min",
+            "name_zh": "最低生命保障",
             "value": 4.0,
-            "display": "hp_min: 4.0"
+            "display": "最低生命保障: 4.0"
           }
         },
         "raw_data": {
@@ -23108,19 +23108,19 @@
             "display": "傷害係數/倍率: 1.6"
           },
           "trauma_chance": {
-            "name_zh": "trauma_chance",
+            "name_zh": "創傷施加機率",
             "value": 0.25,
-            "display": "trauma_chance: 0.25"
+            "display": "創傷施加機率: 0.25"
           },
           "trauma_max": {
-            "name_zh": "trauma_max",
+            "name_zh": "創傷上限",
             "value": 3.0,
-            "display": "trauma_max: 3.0"
+            "display": "創傷上限: 3.0"
           },
           "trauma_min": {
-            "name_zh": "trauma_min",
+            "name_zh": "創傷基礎層數",
             "value": 1.0,
-            "display": "trauma_min: 1.0"
+            "display": "創傷基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -23175,9 +23175,9 @@
         },
         "attr_zh": {
           "bleed_immuned": {
-            "name_zh": "bleed_immuned",
+            "name_zh": "免疫流血",
             "value": 1.0,
-            "display": "bleed_immuned: 1.0"
+            "display": "免疫流血: 1.0"
           },
           "magic_res": {
             "name_zh": "魔法抗性 (%)",
@@ -23347,14 +23347,14 @@
         },
         "attr_zh": {
           "battle_fury_max": {
-            "name_zh": "battle_fury_max",
+            "name_zh": "戰意狂怒上限",
             "value": 5.0,
-            "display": "battle_fury_max: 5.0"
+            "display": "戰意狂怒上限: 5.0"
           },
           "battle_fury_min": {
-            "name_zh": "battle_fury_min",
+            "name_zh": "戰意狂怒基礎層數",
             "value": 3.0,
-            "display": "battle_fury_min: 3.0"
+            "display": "戰意狂怒基礎層數: 3.0"
           },
           "buff_chance": {
             "name_zh": "增益觸發機率",
@@ -23362,14 +23362,14 @@
             "display": "增益觸發機率: 0.25"
           },
           "critical_strike_max": {
-            "name_zh": "critical_strike_max",
+            "name_zh": "爆擊威能上限",
             "value": 5.0,
-            "display": "critical_strike_max: 5.0"
+            "display": "爆擊威能上限: 5.0"
           },
           "critical_strike_min": {
-            "name_zh": "critical_strike_min",
+            "name_zh": "爆擊威能基礎層數",
             "value": 3.0,
-            "display": "critical_strike_min: 3.0"
+            "display": "爆擊威能基礎層數: 3.0"
           }
         },
         "attr_per_level": {},
@@ -23413,14 +23413,14 @@
         },
         "attr_zh": {
           "critical_strike_max": {
-            "name_zh": "critical_strike_max",
+            "name_zh": "爆擊威能上限",
             "value": 5.0,
-            "display": "critical_strike_max: 5.0"
+            "display": "爆擊威能上限: 5.0"
           },
           "critical_strike_min": {
-            "name_zh": "critical_strike_min",
+            "name_zh": "爆擊威能基礎層數",
             "value": 3.0,
-            "display": "critical_strike_min: 3.0"
+            "display": "爆擊威能基礎層數: 3.0"
           },
           "damage_offset": {
             "name_zh": "傷害係數/倍率",
@@ -23982,19 +23982,19 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.1,
-            "display": "armor_offset: 0.1"
+            "display": "護甲加成係數: 0.1"
           },
           "frost_barrier_count": {
-            "name_zh": "frost_barrier_count",
+            "name_zh": "冰霜屏障層數",
             "value": 5.0,
-            "display": "frost_barrier_count: 5.0"
+            "display": "冰霜屏障層數: 5.0"
           },
           "protection_count": {
-            "name_zh": "protection_count",
+            "name_zh": "保護層數",
             "value": 5.0,
-            "display": "protection_count: 5.0"
+            "display": "保護層數: 5.0"
           }
         },
         "attr_per_level": {
@@ -24002,9 +24002,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.015,
-            "display": "armor_offset: 0.015"
+            "display": "護甲加成係數: 0.015"
           }
         },
         "raw_data": {
@@ -24054,19 +24054,19 @@
             "display": "傷害係數/倍率: 0.85"
           },
           "vulnerability_chance": {
-            "name_zh": "vulnerability_chance",
+            "name_zh": "易傷施加機率",
             "value": 0.25,
-            "display": "vulnerability_chance: 0.25"
+            "display": "易傷施加機率: 0.25"
           },
           "vulnerability_max": {
-            "name_zh": "vulnerability_max",
+            "name_zh": "易傷上限",
             "value": 5.0,
-            "display": "vulnerability_max: 5.0"
+            "display": "易傷上限: 5.0"
           },
           "vulnerability_min": {
-            "name_zh": "vulnerability_min",
+            "name_zh": "易傷基礎層數",
             "value": 1.0,
-            "display": "vulnerability_min: 1.0"
+            "display": "易傷基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -24101,7 +24101,7 @@
       },
       {
         "skill_id": "iceline_afterblow",
-        "skill_name_zh": "iceline_afterblow",
+        "skill_name_zh": "冰脈餘勁",
         "skill_type": "passive",
         "skill_type_zh": "被動",
         "damage_type": "none",
@@ -24175,34 +24175,34 @@
             "display": "額外傷害加成: 0.1"
           },
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.15,
-            "display": "damage_bouns_1: 0.15"
+            "display": "一段額外增傷: 0.15"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.25,
-            "display": "damage_bouns_2: 0.25"
+            "display": "二段額外增傷: 0.25"
           },
           "damage_bouns_3": {
-            "name_zh": "damage_bouns_3",
+            "name_zh": "三段額外增傷",
             "value": 0.35,
-            "display": "damage_bouns_3: 0.35"
+            "display": "三段額外增傷: 0.35"
           },
           "hp_offset_1": {
-            "name_zh": "hp_offset_1",
+            "name_zh": "一段生命係數",
             "value": 0.75,
-            "display": "hp_offset_1: 0.75"
+            "display": "一段生命係數: 0.75"
           },
           "hp_offset_2": {
-            "name_zh": "hp_offset_2",
+            "name_zh": "二段生命係數",
             "value": 0.5,
-            "display": "hp_offset_2: 0.5"
+            "display": "二段生命係數: 0.5"
           },
           "hp_offset_3": {
-            "name_zh": "hp_offset_3",
+            "name_zh": "三段生命係數",
             "value": 0.25,
-            "display": "hp_offset_3: 0.25"
+            "display": "三段生命係數: 0.25"
           }
         },
         "attr_per_level": {
@@ -24212,19 +24212,19 @@
         },
         "attr_per_level_zh": {
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.01,
-            "display": "damage_bouns_1: 0.01"
+            "display": "一段額外增傷: 0.01"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.02,
-            "display": "damage_bouns_2: 0.02"
+            "display": "二段額外增傷: 0.02"
           },
           "damage_bouns_3": {
-            "name_zh": "damage_bouns_3",
+            "name_zh": "三段額外增傷",
             "value": 0.03,
-            "display": "damage_bouns_3: 0.03"
+            "display": "三段額外增傷: 0.03"
           }
         },
         "raw_data": {
@@ -24272,9 +24272,9 @@
             "display": "傷害係數/倍率: 0.5"
           },
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.35,
-            "display": "extra_chance: 0.35"
+            "display": "額外連鎖機率: 0.35"
           },
           "freezing_chance": {
             "name_zh": "冰凍觸發機率",
@@ -24287,9 +24287,9 @@
         },
         "attr_per_level_zh": {
           "extra_chance": {
-            "name_zh": "extra_chance",
+            "name_zh": "額外連鎖機率",
             "value": 0.04,
-            "display": "extra_chance: 0.04"
+            "display": "額外連鎖機率: 0.04"
           }
         },
         "raw_data": {
@@ -24435,19 +24435,19 @@
             "display": "傷害係數/倍率: 1.2"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.25,
-            "display": "fire_chance: 0.25"
+            "display": "點燃/灼燒機率: 0.25"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 3.0,
-            "display": "fire_max: 3.0"
+            "display": "灼燒層數上限: 3.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 1.0,
-            "display": "fire_min: 1.0"
+            "display": "灼燒基礎層數: 1.0"
           }
         },
         "attr_per_level": {
@@ -24506,14 +24506,14 @@
             "display": "傷害係數/倍率: 1.5"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.45,
-            "display": "fire_chance: 0.45"
+            "display": "點燃/灼燒機率: 0.45"
           },
           "fire_round": {
-            "name_zh": "fire_round",
+            "name_zh": "燃燒持續回合數",
             "value": 3.0,
-            "display": "fire_round: 3.0"
+            "display": "燃燒持續回合數: 3.0"
           }
         },
         "attr_per_level": {
@@ -24572,19 +24572,19 @@
             "display": "傷害係數/倍率: 1.6"
           },
           "fire_chance": {
-            "name_zh": "fire_chance",
+            "name_zh": "點燃/灼燒機率",
             "value": 0.85,
-            "display": "fire_chance: 0.85"
+            "display": "點燃/灼燒機率: 0.85"
           },
           "fire_max": {
-            "name_zh": "fire_max",
+            "name_zh": "灼燒層數上限",
             "value": 5.0,
-            "display": "fire_max: 5.0"
+            "display": "灼燒層數上限: 5.0"
           },
           "fire_min": {
-            "name_zh": "fire_min",
+            "name_zh": "灼燒基礎層數",
             "value": 3.0,
-            "display": "fire_min: 3.0"
+            "display": "灼燒基礎層數: 3.0"
           }
         },
         "attr_per_level": {
@@ -24811,14 +24811,14 @@
             "display": "二段傷害倍率: 0.5"
           },
           "protection_max": {
-            "name_zh": "protection_max",
+            "name_zh": "保護上限",
             "value": 5.0,
-            "display": "protection_max: 5.0"
+            "display": "保護上限: 5.0"
           },
           "protection_min": {
-            "name_zh": "protection_min",
+            "name_zh": "保護基礎值",
             "value": 3.0,
-            "display": "protection_min: 3.0"
+            "display": "保護基礎值: 3.0"
           }
         },
         "attr_per_level": {
@@ -24881,24 +24881,24 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 40.0,
-            "display": "armor_max: 40.0"
+            "display": "護甲增加上限: 40.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 20.0,
-            "display": "armor_min: 20.0"
+            "display": "護甲增加下限: 20.0"
           },
           "protection_max": {
-            "name_zh": "protection_max",
+            "name_zh": "保護上限",
             "value": 7.0,
-            "display": "protection_max: 7.0"
+            "display": "保護上限: 7.0"
           },
           "protection_min": {
-            "name_zh": "protection_min",
+            "name_zh": "保護基礎值",
             "value": 5.0,
-            "display": "protection_min: 5.0"
+            "display": "保護基礎值: 5.0"
           }
         },
         "attr_per_level": {
@@ -24907,14 +24907,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 8.0,
-            "display": "armor_max: 8.0"
+            "display": "護甲增加上限: 8.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 4.0,
-            "display": "armor_min: 4.0"
+            "display": "護甲增加下限: 4.0"
           }
         },
         "raw_data": {
@@ -24960,19 +24960,19 @@
         },
         "attr_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 100.0,
-            "display": "armor_max: 100.0"
+            "display": "護甲增加上限: 100.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 50.0,
-            "display": "armor_min: 50.0"
+            "display": "護甲增加下限: 50.0"
           },
           "provocation_round": {
-            "name_zh": "provocation_round",
+            "name_zh": "嘲諷持續回合",
             "value": 3.0,
-            "display": "provocation_round: 3.0"
+            "display": "嘲諷持續回合: 3.0"
           },
           "weakness_max": {
             "name_zh": "虛弱層數上限",
@@ -24991,14 +24991,14 @@
         },
         "attr_per_level_zh": {
           "armor_max": {
-            "name_zh": "armor_max",
+            "name_zh": "護甲增加上限",
             "value": 20.0,
-            "display": "armor_max: 20.0"
+            "display": "護甲增加上限: 20.0"
           },
           "armor_min": {
-            "name_zh": "armor_min",
+            "name_zh": "護甲增加下限",
             "value": 15.0,
-            "display": "armor_min: 15.0"
+            "display": "護甲增加下限: 15.0"
           }
         },
         "raw_data": {
@@ -25043,14 +25043,14 @@
         },
         "attr_zh": {
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.15,
-            "display": "damage_bouns_1: 0.15"
+            "display": "一段額外增傷: 0.15"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.05,
-            "display": "damage_bouns_2: 0.05"
+            "display": "二段額外增傷: 0.05"
           }
         },
         "attr_per_level": {
@@ -25059,14 +25059,14 @@
         },
         "attr_per_level_zh": {
           "damage_bouns_1": {
-            "name_zh": "damage_bouns_1",
+            "name_zh": "一段額外增傷",
             "value": 0.01,
-            "display": "damage_bouns_1: 0.01"
+            "display": "一段額外增傷: 0.01"
           },
           "damage_bouns_2": {
-            "name_zh": "damage_bouns_2",
+            "name_zh": "二段額外增傷",
             "value": 0.005,
-            "display": "damage_bouns_2: 0.005"
+            "display": "二段額外增傷: 0.005"
           }
         },
         "raw_data": {
@@ -25101,9 +25101,9 @@
         },
         "attr_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.4,
-            "display": "armor_offset: 0.4"
+            "display": "護甲加成係數: 0.4"
           }
         },
         "attr_per_level": {
@@ -25111,9 +25111,9 @@
         },
         "attr_per_level_zh": {
           "armor_offset": {
-            "name_zh": "armor_offset",
+            "name_zh": "護甲加成係數",
             "value": 0.06,
-            "display": "armor_offset: 0.06"
+            "display": "護甲加成係數: 0.06"
           }
         },
         "raw_data": {
