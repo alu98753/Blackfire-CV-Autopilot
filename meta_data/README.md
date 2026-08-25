@@ -100,3 +100,10 @@ meta_data/
 ```powershell
 .\.venv\Scripts\python -m unittest tests.test_meta_tres_parser
 ```
+
+---
+
+## ⚠️ 數據來源與版權聲明 (Notice & Disclaimer)
+
+* **檔案來源**：`meta_data/raw_tres/meta_datas.tres` 為《Blackfire Crusade》遊戲原作者/官方遊戲客戶端輸出的底層資源資料檔。
+* **使用授權與公開注意**：本專案對該檔案的使用僅限於個人離線分析、數值校驗與輔助腳本開發。**未來若將本 Repository 公開 (Public)，請務必留意遊戲版權與素材使用協議**，必要時應在公開前自版本控制中排除或抽離原始檔案。
