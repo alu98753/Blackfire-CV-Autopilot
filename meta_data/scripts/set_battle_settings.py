@@ -64,7 +64,7 @@ def get_game_pid():
         pass
     return None
 
-def update_save_file(speed=50.0, auto_battle=None):
+def update_save_file(speed=12.0, auto_battle=None):
     save_file = get_save_path()
     
     # 1. 解除唯讀
@@ -85,7 +85,7 @@ def update_save_file(speed=50.0, auto_battle=None):
     print(f"[DISK] ✅ 已更新實體存檔並鎖定唯讀 (+r)：{save_file}")
     print(f"       內容：{json.dumps(settings)}")
 
-def live_patch_memory(new_speed=50.0):
+def live_patch_memory(new_speed=12.0):
     pid = get_game_pid()
     if not pid:
         print("[RAM] ℹ️ 遊戲目前未運行，存檔已鎖定，下次啟動遊戲自動套用！")
@@ -101,8 +101,8 @@ def live_patch_memory(new_speed=50.0):
     address = 0
     val_target = struct.pack('<d', float(new_speed))
     
-    # 常見的既有倍速特徵 (1.0, 1.45, 2.0, 3.0, 10.0, 50.0)
-    candidate_speeds = [1.0, 1.45, 2.0, 3.0, 10.0, 50.0]
+    # 常見的既有倍速特徵 (1.0, 1.45, 2.0, 3.0, 10.0, 12.0, 50.0)
+    candidate_speeds = [1.0, 1.45, 2.0, 3.0, 10.0, 12.0, 50.0]
     candidate_bytes = [struct.pack('<d', s) for s in candidate_speeds if s != float(new_speed)]
 
     patch_count = 0
@@ -151,7 +151,7 @@ def live_patch_memory(new_speed=50.0):
 
 def main():
     parser = argparse.ArgumentParser(description="Blackfire Crusade 戰鬥主時鐘倍速與自動化設定器")
-    parser.add_argument('-s', '--speed', type=float, default=50.0, help="設定戰鬥倍速 (預設: 50.0，原廠: 2.0)")
+    parser.add_argument('-s', '--speed', type=float, default=12.0, help="設定戰鬥倍速 (預設: 12.0 上限，原廠: 2.0)")
     parser.add_argument('-a', '--auto', action='store_true', help="啟用戰鬥自動施法/普攻 (auto_battle: true)")
     parser.add_argument('-r', '--reset', action='store_true', help="重置回原廠 2.0x 正常倍速")
     args = parser.parse_args()
@@ -161,7 +161,7 @@ def main():
 
     print(f"\n⚡ ========================================================")
     print(f"   Blackfire Crusade 戰鬥主時鐘倍速設定器")
-    print(f"   目標倍速: {target_speed}x {'(原廠預設)' if args.reset else '(超光速模式)'}")
+    print(f"   目標倍速: {target_speed}x {'(原廠預設)' if args.reset else '(極速模式)'}")
     print(f"========================================================\n")
 
     # 1. 更新實體檔案
