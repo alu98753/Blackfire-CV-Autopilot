@@ -628,13 +628,36 @@ $$\text{綜合實力總分 (Total)} = \text{單體爆發 (25\%)} + \text{屬性�
 | **噬魂咆哮**<br>(`soul_rending_roar`) | 主動<br>enemy/all<br>(darkness) | -3 | 7 回合 | 傷害倍率: 100%<br>vital_blockade_count: 5.0<br>weakness_max: 7.0<br>weakness_min: 5.0 | 倍率/級: +5.0% | **傷害倍率**: **130.0%**<br>**vital_blockade_count**: **5.0**<br>**weakness_max**: **7.0**<br>**weakness_min**: **5.0** | 核心輸出 / 削弱技能。 |
 | **隔空剝蝕**<br>(`remote_eecortication`) | 主動<br>enemy/range<br>(physical) | -2 | 5 回合 | 傷害倍率: 80%<br>flayed_chance: 75% | 倍率/級: +2.0% | **傷害倍率**: **92.0%**<br>**flayed_chance**: **75.0%** | 核心輸出 / 削弱技能。 |
 | **地獄契約重置 (被動)**<br>(`hell_pact_reset`) | 被動<br>敵方/單體<br>(physical) | 0 | 無 | active_chance: 25%<br>active_round: 5.0<br>buff_max: 5.0<br>buff_min: 1.0 | active_chance: +5.0% | **active_chance**: **55.0%**<br>**active_round**: **5.0**<br>**buff_max**: **5.0**<br>**buff_min**: **1.0** | 核心輸出 / 削弱技能。 |
-| **殉道之勇 (被動)**<br>(`martyr_rawness`) | 被動<br>敵方/單體<br>(physical) | 0 | 無 | active_chance: 15%<br>vital_blockade_max: 3.0<br>vital_blockade_min: 1.0 | active_chance: +3.0% | **active_chance**: **33.0%**<br>**vital_blockade_max**: **3.0**<br>**vital_blockade_min**: **1.0** | 核心輸出 / 削弱技能。 |
-
-#### ⚔️ 專屬實戰評估與怪物剋制深評：
-- 🔄 **技能循環與戰鬥節奏**：施放【血肉祭壇】消耗自身生命提升全隊傷害 ➔ 釋放【暗影縫合】進行暗影受癒。
-- 🎯 **怪物剋制與實戰優勢**：具備高額吸血與自愈能力。
-- ⚠️ **致命缺陷與死穴**：❌ **雙重致命死穴**：惡魔種族天生自帶 `holy_res: -50%`（極度弱神聖，易被秒）；核心技能均為暗影屬性，同樣被怪物 200% 暗抗嚴重抵銷。
-- 🧩 **與您當前隊伍（艾麗娜+芬奇）之適配性**：🚫 避坑不推薦：千萬不要消耗 12,800 幣購買。
-
 ---
+
+## 🔒 四、領主鎖定 (Locked) 頂級英雄專題解析：【狂暴軍閥】克拉古爾 (Kraghul)
+
+> 註：本英雄在遊戲初始處於鎖定狀態 (`require_unlock: true`)，需在「首領討伐 (Lord Boss)」中擊敗【獸人軍閥】後方可在酒館解鎖購買。本章節為伺服器前段班主流「全彩虹純獸人隊」的核心發動機深度數值拆解。
+
+### 👑 領主神卡：【獸人狂暴軍閥】克拉古爾 (`hero_warrior_kraghul`)
+
+- **品質與職業**：VII 階 彩虹 (稀有度 6.0) | 職業：**WARRIOR** | 種族：**獸人 (`orc`)**
+- **專屬神裝**：
+  - **主手【軍閥狂暴戰斧 (`axe_orc_kraghul`)】**：基礎滿詞條為 **5 個滿暴擊 (`crit`, `crit`, `crit`, `crit`, `crit`)**！
+  - **副手【軍閥重裝鋼盾 (`shield_orc_kraghul`)】**：雙格擋 (`block`) + 雙物理抗性 (`physical_res`) + 魔法抗性 (`magic_res`)。
+- **每級基礎成長**：傷害 +1.0, 物理防禦 +4.0, 魔法防禦 +1.0, 生命值 +8.0 (基礎生命 220.0，天生血牛)
+- **種族天賦特質**：`rough_hide` (魔抗+15%, 物抗+25%), `sturdy_will` (**天生 100% 免疫沉默與眩暈**), `frenzied_might` (**全隊暴擊率 +50%**), `sturdy_physique` (HP+30, 物抗+30%), `beastly_armor` (雙抗+20%)
+- **綜合評分**：**`96.0 分`**（爆發: 25.0 / 泛用: 25.0 / 機制: 16.0 / 循環: 15.0 / 種族: 15.0）
+
+#### 📋 技能組全景與 Level 7 精確數值對照表：
+
+| 技能名稱 (ID) | 類型 / 目標 / 屬性 | SP消耗 | CD | Level 1 初始數值 | 每級成長 (attr_per_level) | **Level 7 實戰數值 (精確計算)** | 機制與連動效果 |
+| :--- | :---: | :---: | :---: | :--- | :--- | :--- | :--- |
+| **血誓順劈**<br>(`blood_oath_cleave`) | 主動<br>敵方/近戰<br>(physical) | -1 | 5 回合 | 傷害倍率: 120%<br>bleed_chance: 25%<br>hp_rate: 1.5% | 倍率/級: +2.0% | **傷害倍率**: **132.0%**<br>**bleed_chance**: **25.0%**<br>**hp_rate**: **1.5%** | 附加流血並按自身最大生命附加傷害。 |
+| **不屈之怒 (被動)**<br>(`unrelenting_fury`) | 被動<br>友方/全體<br>(physical) | 0 | 無 | sp_chance: 15%<br>sp_count: 1.0<br>critical_strike: 1~3 | sp_chance/級: +1.0% | **sp_chance**: **21.0%**<br>**sp_count**: **1.0** | 暴擊或受擊時以 21% 機率**直接為全隊產能 SP +1**！ |
+| **號令怒吼**<br>(`commanding_roar`) | 主動<br>友方/全體<br>(physical) | -3 | 10 回合 | ap_chance: 15%<br>ap_count: 1.0<br>battle_fury: 3~5 | ap_chance/級: +3.0% | **ap_chance**: **33.0%**<br>**ap_count**: **1.0**<br>**battle_fury**: **3~5 層** | **全隊神級增益**：33% 機率讓**全隊全體獲得額外行動點 AP+1 (全隊雙動)**！ |
+| **處決者之刃**<br>(`executioner_edge`) | 主動<br>敵方/全體<br>(physical) | -3 | 5 回合 | 傷害倍率: 170%<br>damage_bouns: 1.0<br>hp_rate: 25% | 倍率/級: +10.0% | **傷害倍率**: **230.0%**<br>**damage_bouns**: **1.0 (額外+100%)**<br>**hp_rate**: **25.0%** | **核彈全體處決**：230% + 100% 增傷 = **330% 全體巨傷 + 25% 最大生命斬殺**！ |
+| **野蠻壓制 (被動)**<br>(`savage_overwhelm`) | 被動<br>敵方/單體<br>(physical) | 0 | 無 | damage_bouns: 15% | damage_bouns/級: +2.0% | **damage_bouns**: **27.0%** | 常駐提升自身所有物理傷害 +27%。 |
+| **劍刃風暴震擊**<br>(`bladestorm_quake`) | 主動<br>敵方/全體<br>(physical) | -3 | 7 回合 | 傷害倍率: 140%<br>stun_chance: 45% | 倍率/級: +8.0% | **傷害倍率**: **188.0%**<br>**stun_chance**: **45.0%** | 全體 AOE 造成 188% 傷害並附加 **45% 全體眩暈**。 |
+| **燃燒狂怒 (被動)**<br>(`burning_rage`) | 被動<br>自身/開場<br>(physical) | 0 | 10 回合 | damage_bouns_1: 50%<br>damage_round: 5.0 | damage_bouns_1/級: +5.0% | **damage_bouns_1**: **80.0%**<br>**damage_round**: **5.0 回合** | **開場核爆發動機**：戰鬥前 5 回合所有傷害直接暴增 **+80%**！ |
+
+#### ⚔️ 專屬實戰評估：
+- 🔄 **技能循環與戰鬥節奏**：開場前 5 回合享受 +80% 增傷 ➔ 釋放【號令怒吼】為全隊提供 33% AP+1 全員雙動 ➔ 釋放【處決者之刃】打出 330% 全體毀滅處決 ➔ 配合德魯戈的雙動核彈收割戰場！
+- 🎯 **怪物剋制與實戰優勢**：純物理傷害無死角，天生免疫沉默與眩暈，身板極其厚實，是全遊戲綜合爆發最高的終極前排。
+
 
