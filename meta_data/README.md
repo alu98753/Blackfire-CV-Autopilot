@@ -79,7 +79,22 @@ meta_data/
 .\.venv\Scripts\python meta_data/dicts/generate_dicts.py
 ```
 
-### 3. 執行單元測試驗證
+### 3. 戰鬥時鐘倍速與自動化設定器 (支援免重開即時生效)
+模組內建專屬輔助工具 [set_battle_settings.py](scripts/set_battle_settings.py)，可自由調整遊戲原生戰鬥時鐘倍速 (`time_scale` 1.0x ~ 100.0x)：
+
+```powershell
+# 設定為 50 倍極速 (1 秒通關，預設推薦)
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 50
+
+# 自由指定任意倍速 (例如 20x 或 100x)
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 20
+
+# 還原為原廠 2.0x 正常倍速
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --reset
+```
+* **特性**：自動處理 Windows 系統唯讀鎖 (`attrib +r`)，且支援**免關閉遊戲現場熱套用**（進入下一場戰鬥即刻生效）。
+
+### 4. 執行單元測試驗證
 本模組具備完整的單元測試防護：
 
 ```powershell

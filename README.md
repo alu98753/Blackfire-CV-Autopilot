@@ -146,6 +146,26 @@
 
 ---
 
+### ⚡ 3. 戰鬥時鐘倍速與自動化設定器 (50x 極速秒殺)
+
+本專案提供專屬輔助工具 [set_battle_settings.py](meta_data/scripts/set_battle_settings.py)，可自由修改遊戲原生戰鬥主時鐘 (`battle_settings.save` ➔ `time_scale` 1.0x ~ 100.0x)：
+
+```powershell
+# 設定為 50 倍極速 (1 秒通關，預設推薦)
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 50
+
+# 自由指定任意倍速 (例如 20x 或 100x)
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 20
+
+# 還原為原廠 2.0x 正常倍速
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --reset
+```
+
+> [!TIP]
+> **免重開即時生效**：本工具內建「存檔唯讀鎖定 (`attrib +r`)」與「運行中進程即時記憶體熱注入 (Live Memory Injection)」。修改後**完全無需重開遊戲**，直接進入下一場戰鬥即可現場享受 50 倍超光速！
+
+---
+
 ### 3. 視覺化調試輔助：`debug_click.png`
 
 在啟用 `--backend`（後台模式）時，程式在送出每次點擊前都會在當前視窗畫面上繪製標記：
