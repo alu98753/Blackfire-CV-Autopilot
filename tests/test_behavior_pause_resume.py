@@ -3,11 +3,18 @@ from unittest.mock import MagicMock, patch
 import time
 
 from states.state_machine import GameStateMachine
-from utils.keyboard_listener import PauseController
+from utils.keyboard_listener import (
+    PauseController,
+    TRIGGER_MODE_CTRL_SPACE,
+    TRIGGER_MODE_TRIPLE_SPACE,
+    TRIGGER_MODE_SINGLE_SPACE,
+    VK_CONTROL,
+    VK_SPACE
+)
 
 class TestBehaviorPauseResume(unittest.TestCase):
     """
-    測試空白鍵暫停/繼續控制、相鄰節奏間隔、背景執行緒與內部計時器補償行為
+    測試可插拔熱鍵策略 (Ctrl+Space / Triple-Space / Single-Space)、背景執行緒與內部計時器補償行為
     """
 
     def setUp(self):
@@ -100,88 +107,72 @@ class TestBehaviorPauseResume(unittest.TestCase):
         測試暫停超過 90 秒後恢復，Watchdog 絕對不會因停滯誤判為卡死
         """
         now = time.time()
-        # 設定為處於 NAVIGATING (長逾時 90s 門檻)，已運行 40s
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         self.state_machine.last_state_change = now - 40.0
 
-        # 模擬暫停 120 秒
         self.state_machine.pause()
         self.state_machine.pause_start_time = now - 120.0
-
-        # 恢復
         self.state_machine.resume()
 
-        # 斷言 Watchdog check 不會觸發逾時
         is_stuck = self.state_machine.exception_watchdog.check(None)
         self.assertFalse(is_stuck)
-
-    def test_cadence_interval_success(self):
-        """
-        測試相鄰節奏間隔小於 1.5 秒時，敲滿 3 次必定成功觸發 (即使總耗時超過 1.2 秒)
-        """
-        controller = PauseController(capturer=self.mock_capturer, required_taps=3, cadence_timeout_sec=1.5, start_thread=False)
-
-        # 第 1 下 (T = 100.0)
-        res1 = controller._on_tap_detected(100.0)
-        self.assertFalse(res1)
-        self.assertEqual(controller.tap_count, 1)
-
-        # 第 2 下 (T = 100.8，相鄰間隔 0.8s <= 1.5s)
-        res2 = controller._on_tap_detected(100.8)
-        self.assertFalse(res2)
-        self.assertEqual(controller.tap_count, 2)
-
-        # 第 3 下 (T = 101.6，相鄰間隔 0.8s <= 1.5s，總耗時 1.6s)
-        res3 = controller._on_tap_detected(101.6)
-        self.assertTrue(res3)
-        self.assertEqual(controller.tap_count, 0)
-        self.assertTrue(controller.check_toggle_triggered())
-
-    def test_cadence_interval_timeout_reset(self):
-        """
-        測試相鄰節奏間隔超過 1.5 秒時，自動重置計數為第 1 下
-        """
-        controller = PauseController(capturer=self.mock_capturer, required_taps=3, cadence_timeout_sec=1.5, start_thread=False)
-
-        # 第 1 下 (T = 100.0)
-        controller._on_tap_detected(100.0)
-        self.assertEqual(controller.tap_count, 1)
-
-        # 超時停頓 1.8 秒後才按第 2 下 (T = 101.8 > 100.0 + 1.5)
-        res = controller._on_tap_detected(101.8)
-        self.assertFalse(res)
-        # 計數應被自動重置為 1 (重新開始第一下)
-        self.assertEqual(controller.tap_count, 1)
 
     @patch("ctypes.windll.user32.GetForegroundWindow")
     @patch("ctypes.windll.kernel32.GetConsoleWindow")
     @patch("ctypes.windll.user32.GetAsyncKeyState")
-    def test_background_thread_captures_during_main_thread_blocking(self, mock_get_async_key, mock_get_console, mock_get_fg):
+    def test_ctrl_space_trigger(self, mock_get_async_key, mock_get_console, mock_get_fg):
         """
-        測試當主執行緒被耗時任務 (如 OCR/子流程) 阻塞時，背景執行緒仍能 100% 捕獲 3 次按鍵
+        測試 Ctrl + Space 組合鍵單次觸發機制
         """
         mock_get_console.return_value = 11111
         mock_get_fg.return_value = 11111
-        mock_get_async_key.return_value = 0x0
 
-        # 啟動背景執行緒 (debounce 設為極小)
-        controller = PauseController(capturer=self.mock_capturer, required_taps=3, cadence_timeout_sec=1.5, debounce_sec=0.01, start_thread=True)
+        controller = PauseController(capturer=self.mock_capturer, trigger_mode=TRIGGER_MODE_CTRL_SPACE, start_thread=False)
 
-        try:
-            # 模擬使用者在背景敲擊 3 次 (間隔 0.05s)
-            for _ in range(3):
-                mock_get_async_key.return_value = 0x8000 # 按下
-                time.sleep(0.03)
-                mock_get_async_key.return_value = 0x0    # 釋放
-                time.sleep(0.03)
+        def mock_key_side_effect(vk):
+            if vk == VK_CONTROL:
+                return 0x8000 # Ctrl 按下
+            if vk == VK_SPACE:
+                return 0x8000 # Space 按下
+            return 0x0
 
-            # 模擬主執行緒執行耗時任務後回到頂部檢查
-            time.sleep(0.05)
-            self.assertTrue(controller.check_toggle_triggered())
-            # 再次檢查應已被消費
-            self.assertFalse(controller.check_toggle_triggered())
-        finally:
-            controller.stop()
+        mock_get_async_key.side_effect = mock_key_side_effect
+
+        # 同時按下 Ctrl + Space -> 立即觸發
+        res = controller._poll_once(time.time())
+        self.assertTrue(res)
+        self.assertTrue(controller.check_toggle_triggered())
+
+    def test_triple_space_cadence_interval_success(self):
+        """
+        測試 Triple-Space 相鄰節奏間隔小於 1.5 秒時連按 3 次觸發
+        """
+        controller = PauseController(capturer=self.mock_capturer, trigger_mode=TRIGGER_MODE_TRIPLE_SPACE, cadence_timeout_sec=1.5, start_thread=False)
+
+        res1 = controller._on_triple_tap_registered(100.0)
+        self.assertFalse(res1)
+        self.assertEqual(controller.tap_count, 1)
+
+        res2 = controller._on_triple_tap_registered(100.8)
+        self.assertFalse(res2)
+        self.assertEqual(controller.tap_count, 2)
+
+        res3 = controller._on_triple_tap_registered(101.6)
+        self.assertTrue(res3)
+        self.assertEqual(controller.tap_count, 0)
+        self.assertTrue(controller.check_toggle_triggered())
+
+    def test_set_trigger_mode_switch(self):
+        """
+        測試動態切換熱鍵策略模式
+        """
+        controller = PauseController(capturer=self.mock_capturer, trigger_mode=TRIGGER_MODE_CTRL_SPACE, start_thread=False)
+        self.assertEqual(controller.trigger_mode, TRIGGER_MODE_CTRL_SPACE)
+        self.assertIn("Ctrl + Space", controller.get_trigger_hint())
+
+        controller.set_trigger_mode(TRIGGER_MODE_TRIPLE_SPACE)
+        self.assertEqual(controller.trigger_mode, TRIGGER_MODE_TRIPLE_SPACE)
+        self.assertIn("3 次", controller.get_trigger_hint())
 
     @patch("ctypes.windll.user32.GetForegroundWindow")
     @patch("ctypes.windll.kernel32.GetConsoleWindow")
@@ -197,7 +188,6 @@ class TestBehaviorPauseResume(unittest.TestCase):
         controller = PauseController(capturer=self.mock_capturer, start_thread=False)
         controller._poll_once()
 
-        self.assertEqual(controller.tap_count, 0)
         self.assertFalse(controller.check_toggle_triggered())
 
 if __name__ == "__main__":

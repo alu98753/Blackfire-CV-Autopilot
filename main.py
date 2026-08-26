@@ -522,7 +522,7 @@ def init_state_machine_system(args, config):
         state_machine.enable_bread = enable_bread
 
     print("[+] 初始化成功！請確認您的遊戲視窗非最小化，且維持在畫面上。")
-    print("[+] 快捷鍵提示：在終端機或遊戲視窗【連按 3 次空白鍵】隨時暫停/繼續；按 [Ctrl + C] 終止程式。")
+    print("[+] 快捷鍵提示：在終端機或遊戲視窗按 [Ctrl + Space] 隨時暫停/繼續；按 [Ctrl + C] 終止程式。")
     print("[*] 將在 3 秒後開始偵測...")
     time.sleep(3)
     return state_machine
@@ -536,7 +536,7 @@ def run_main_loop(state_machine, interval):
         while True:
             start_time = time.time()
             
-            # 1. 優先檢測【連按 3 次空白鍵】暫停/繼續切換
+            # 1. 優先檢測熱鍵暫停/繼續切換 (支援 Ctrl+Space / Triple-Space 可插拔策略)
             if pause_controller.check_toggle_triggered():
                 if state_machine.is_paused:
                     pause_duration = state_machine.resume()
@@ -549,7 +549,7 @@ def run_main_loop(state_machine, interval):
                     state_machine.pause()
                     print("\n" + "=" * 60)
                     print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
-                    print(" 👉 在終端機或遊戲視窗【連按 3 次空白鍵】即可恢復自動掛機...")
+                    print(f" 👉 在終端機或遊戲視窗 {pause_controller.get_trigger_hint()} 即可恢復自動掛機...")
                     print("=" * 60 + "\n")
 
             # 2. 若處於手動暫停狀態，進入輕量休眠迴圈，跳過滑鼠判定與 step()

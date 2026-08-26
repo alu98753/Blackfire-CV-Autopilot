@@ -4,31 +4,46 @@ import time
 import threading
 import logging
 
+VK_CONTROL = 0x11
 VK_SPACE = 0x20
 GA_ROOT = 2
 
+TRIGGER_MODE_CTRL_SPACE = "ctrl_space"
+TRIGGER_MODE_TRIPLE_SPACE = "triple_space"
+TRIGGER_MODE_SINGLE_SPACE = "single_space"
+
 class PauseController:
     """
-    背景守護執行緒熱鍵與前景視窗焦點控制器 (PauseController - Background Daemon Edition)
+    可插拔熱鍵策略與前景視窗焦點控制器 (PauseController - Pluggable Strategy Edition)
     
-    核心機制：
-    1. 【獨立背景守護執行緒 (Background Daemon Thread)】：
-       每 10ms 獨立在背景採樣按鍵與焦點狀態，完全不受主執行緒 OpenCV / OCR / 子流程阻塞的影響！
-    2. 【相鄰節奏間隔判定 (Cadence Interval Timeout)】：
-       只要每次按鍵與上一按鍵間隔不超過 1.5 秒 (cadence_timeout_sec = 1.5)，即視為連續敲擊。
-       連按 3 次即刻標記 toggle_event_pending = True。
-    3. 【即時進度提示】：
-       每按一次即時輸出 [*] [空白鍵 1/3] 於 1.5 秒內再按 2 次切換暫停/繼續...
-    4. 【雙路徑雙重保障】：
-       - 終端機 (CMD / PowerShell / Windows Terminal / VS Code)：msvcrt.kbhit()
-       - 遊戲視窗：GetAsyncKeyState(VK_SPACE) 配合視窗標題與頂層 HWND 比對。
+    支援可插拔觸發策略 (Pluggable Trigger Modes)：
+    1. 【TRIGGER_MODE_CTRL_SPACE ("ctrl_space")】(預設推薦)：
+       按下 Ctrl + Space 立即切換暫停/繼續。乾脆俐落、手感極佳、且絕對不會在遊戲內走位或打字時誤觸。
+    2. 【TRIGGER_MODE_TRIPLE_SPACE ("triple_space")】：
+       在 1.5 秒內連續敲擊 3 次空白鍵觸發，附帶即時進度反饋。
+    3. 【TRIGGER_MODE_SINGLE_SPACE ("single_space")】：
+       單次按空白鍵觸發。
+       
+    核心架構：
+    - 獨立背景守護執行緒 (Background Daemon Thread，每 10ms 採樣) 確保主執行緒 OpenCV/OCR 阻塞時 100% 毫秒級捕獲。
+    - 嚴格雙視窗焦點過濾 (Terminal 或 Game 視窗聚焦時生效，第三方視窗 100% 忽略)。
     """
 
-    def __init__(self, capturer=None, required_taps: int = 3, cadence_timeout_sec: float = 1.5, debounce_sec: float = 0.05, start_thread: bool = True):
+    def __init__(
+        self,
+        capturer=None,
+        trigger_mode: str = TRIGGER_MODE_CTRL_SPACE,
+        required_taps: int = 3,
+        cadence_timeout_sec: float = 1.5,
+        debounce_sec: float = 0.08,
+        start_thread: bool = True
+    ):
         self.capturer = capturer
+        self.trigger_mode = trigger_mode
         self.required_taps = required_taps
         self.cadence_timeout_sec = cadence_timeout_sec
         self.debounce_sec = debounce_sec
+
         self.key_pressed = False
         self.last_press_time = 0.0
         self.last_tap_time = 0.0
@@ -37,11 +52,40 @@ class PauseController:
         self._lock = threading.Lock()
         self._running = True
 
+        # 策略字典映射 (Function Strategy Pattern)
+        self._strategies = {
+            TRIGGER_MODE_CTRL_SPACE: self._poll_ctrl_space,
+            TRIGGER_MODE_TRIPLE_SPACE: self._poll_triple_space,
+            TRIGGER_MODE_SINGLE_SPACE: self._poll_single_space,
+        }
+
         if start_thread:
             self._thread = threading.Thread(target=self._background_loop, daemon=True, name="PauseControllerThread")
             self._thread.start()
         else:
             self._thread = None
+
+    def set_trigger_mode(self, mode: str):
+        """
+        動態切換熱鍵策略模式 ('ctrl_space' | 'triple_space' | 'single_space')。
+        """
+        with self._lock:
+            if mode in self._strategies:
+                self.trigger_mode = mode
+                self.tap_count = 0
+                self.key_pressed = False
+                logging.info(f"🔄 [PauseController] 已切換熱鍵策略模式為: {mode}")
+
+    def get_trigger_hint(self) -> str:
+        """
+        取得當前模式的使用者提示文字。
+        """
+        if self.trigger_mode == TRIGGER_MODE_CTRL_SPACE:
+            return "按 [Ctrl + Space] 隨時暫停/繼續"
+        elif self.trigger_mode == TRIGGER_MODE_TRIPLE_SPACE:
+            return "【連按 3 次空白鍵】隨時暫停/繼續"
+        else:
+            return "按 [Space 空白鍵] 隨時暫停/繼續"
 
     def stop(self):
         """
@@ -130,10 +174,60 @@ class PauseController:
         """
         return self.is_console_window_active() or self.is_game_window_active()
 
-    def _on_tap_detected(self, now: float) -> bool:
-        """
-        記錄一次有效敲擊，採用相鄰節奏間隔 (cadence_timeout_sec) 判定。
-        """
+    # =========================================================================
+    # 策略 1：Ctrl + Space 組合鍵監聽策略 (預設推薦)
+    # =========================================================================
+    def _poll_ctrl_space(self, now: float) -> bool:
+        # 1. 終端機直接字元流檢查 (Ctrl+Space 在 msvcrt 中常為 b'\x00' 或搭配 Ctrl 狀態)
+        try:
+            import msvcrt
+            while msvcrt.kbhit():
+                ch = msvcrt.getch()
+                ctrl_down = bool(ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+                if (ch == b'\x00' or ch == b' ') and ctrl_down:
+                    if now - self.last_press_time >= self.debounce_sec:
+                        with self._lock:
+                            self.toggle_event_pending = True
+                            self.last_press_time = now
+                            try:
+                                print(f"\r[*] [Ctrl + Space 觸發] 正在切換暫停/繼續狀態...                    \n", flush=True)
+                            except Exception:
+                                pass
+                            return True
+        except Exception:
+            pass
+
+        # 2. 物理按鍵檢測 (Ctrl 與 Space 同時處於按下狀態)
+        try:
+            if self.is_target_window_active():
+                ctrl_down = bool(ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+                space_down = bool(ctypes.windll.user32.GetAsyncKeyState(VK_SPACE) & 0x8000)
+
+                if ctrl_down and space_down:
+                    if not self.key_pressed and (now - self.last_press_time >= self.debounce_sec):
+                        self.key_pressed = True
+                        with self._lock:
+                            self.toggle_event_pending = True
+                            self.last_press_time = now
+                            try:
+                                print(f"\r[*] [Ctrl + Space 觸發] 正在切換暫停/繼續狀態...                    \n", flush=True)
+                            except Exception:
+                                pass
+                            return True
+                else:
+                    if not (ctrl_down and space_down):
+                        self.key_pressed = False
+            else:
+                self.key_pressed = False
+        except Exception as e:
+            logging.debug(f"[PauseController] Ctrl+Space 檢測異常: {e}")
+
+        return False
+
+    # =========================================================================
+    # 策略 2：Triple-Space 連按 3 次空白鍵策略
+    # =========================================================================
+    def _on_triple_tap_registered(self, now: float) -> bool:
         with self._lock:
             if now - self.last_tap_time > self.cadence_timeout_sec:
                 self.tap_count = 1
@@ -159,10 +253,80 @@ class PauseController:
                     pass
                 return False
 
+    def _poll_triple_space(self, now: float) -> bool:
+        try:
+            import msvcrt
+            while msvcrt.kbhit():
+                ch = msvcrt.getch()
+                if ch == b' ':
+                    if now - self.last_press_time >= self.debounce_sec:
+                        return self._on_triple_tap_registered(now)
+        except Exception:
+            pass
+
+        try:
+            if self.is_target_window_active():
+                state = ctypes.windll.user32.GetAsyncKeyState(VK_SPACE)
+                is_down = bool(state & 0x8000)
+                # 排除同時按下 Ctrl 的情況
+                ctrl_down = bool(ctypes.windll.user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+
+                if is_down and not ctrl_down:
+                    if not self.key_pressed and (now - self.last_press_time >= self.debounce_sec):
+                        self.key_pressed = True
+                        return self._on_triple_tap_registered(now)
+                else:
+                    self.key_pressed = False
+            else:
+                self.key_pressed = False
+        except Exception as e:
+            logging.debug(f"[PauseController] Triple-Space 檢測異常: {e}")
+
+        return False
+
+    # =========================================================================
+    # 策略 3：Single-Space 單次空白鍵策略
+    # =========================================================================
+    def _poll_single_space(self, now: float) -> bool:
+        try:
+            import msvcrt
+            while msvcrt.kbhit():
+                ch = msvcrt.getch()
+                if ch == b' ':
+                    if now - self.last_press_time >= self.debounce_sec:
+                        with self._lock:
+                            self.toggle_event_pending = True
+                            self.last_press_time = now
+                            return True
+        except Exception:
+            pass
+
+        try:
+            if self.is_target_window_active():
+                state = ctypes.windll.user32.GetAsyncKeyState(VK_SPACE)
+                is_down = bool(state & 0x8000)
+                if is_down:
+                    if not self.key_pressed and (now - self.last_press_time >= self.debounce_sec):
+                        self.key_pressed = True
+                        with self._lock:
+                            self.toggle_event_pending = True
+                            self.last_press_time = now
+                            return True
+                else:
+                    self.key_pressed = False
+            else:
+                self.key_pressed = False
+        except Exception:
+            pass
+        return False
+
+    # =========================================================================
+    # 主執行緒調度與背景執行緒
+    # =========================================================================
     def check_toggle_triggered(self) -> bool:
         """
         主執行緒檢查是否有暫停/恢復切換事件。
-        若未啟動背景執行緒 (例如在單步測試中)，會同步執行一次 _poll_once()。
+        若未啟動背景執行緒 (例如在單步測試中)，會同步執行一次目前策略之 _poll_once()。
         
         :return: True 代表成功觸發切換；False 代表無事件或次數未滿
         """
@@ -177,7 +341,7 @@ class PauseController:
 
     def _background_loop(self):
         """
-        獨立背景守護執行緒主迴圈，每 10ms 採樣一次按鍵。
+        獨立背景守護執行緒主迴圈，每 10ms 依當前策略採樣一次按鍵。
         """
         while self._running:
             try:
@@ -188,41 +352,10 @@ class PauseController:
 
     def _poll_once(self, now=None):
         """
-        單次按鍵採樣檢測。
+        依據目前策略分發單次按鍵檢測。
         """
         if now is None:
             now = time.time()
 
-        # -------------------------------------------------------------
-        # 路徑 1：終端機直接字元流 (msvcrt.kbhit)
-        # -------------------------------------------------------------
-        try:
-            import msvcrt
-            while msvcrt.kbhit():
-                ch = msvcrt.getch()
-                if ch == b' ':
-                    if now - self.last_press_time >= self.debounce_sec:
-                        return self._on_tap_detected(now)
-        except Exception:
-            pass
-
-        # -------------------------------------------------------------
-        # 路徑 2：遊戲或終端機前景物理按鍵 (GetAsyncKeyState)
-        # -------------------------------------------------------------
-        try:
-            if self.is_target_window_active():
-                state = ctypes.windll.user32.GetAsyncKeyState(VK_SPACE)
-                is_down = bool(state & 0x8000)
-
-                if is_down:
-                    if not self.key_pressed and (now - self.last_press_time >= self.debounce_sec):
-                        self.key_pressed = True
-                        return self._on_tap_detected(now)
-                else:
-                    self.key_pressed = False
-            else:
-                self.key_pressed = False
-        except Exception as e:
-            logging.debug(f"[PauseController] 按鍵檢測異常: {e}")
-
-        return False
+        strategy_func = self._strategies.get(self.trigger_mode, self._poll_ctrl_space)
+        return strategy_func(now)
