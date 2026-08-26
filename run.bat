@@ -136,6 +136,7 @@ goto RUN_SCRIPT
 :RUN_SCRIPT
 echo.
 echo [*] 正在啟動腳本，參數: %custom_args%
+echo [*] 快捷鍵提示：在終端機或遊戲視窗按 [Space 空白鍵] 隨時暫停/繼續；按 [Ctrl + C] 終止腳本。
 echo ------------------------------------------------------------
 "%~dp0.venv\Scripts\python.exe" "%~dp0main.py" %custom_args%
 echo ------------------------------------------------------------
