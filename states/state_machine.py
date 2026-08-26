@@ -1216,7 +1216,9 @@ class GameStateMachine:
 
     def is_in_collect_only_mode(self):
         """
-        檢查目前活躍配置或當前狀態是否為定時領取待機 (collect_only)。
+        檢查目前活躍配置是否為定時領取待機 (collect_only)。
+        注意：不應僅以 stamina_retreat_start_time is not None 判定，
+        因為在 auto_resume_dungeon_on_cd 暫時切回打地下城時，stamina_retreat_start_time 仍保留作為背景倒數。
         """
         if getattr(self, "current_state", None) == self.STATE_COLLECT_ONLY:
             return True

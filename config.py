@@ -236,9 +236,9 @@ SUBFLOW_CONFIGS = {
         "alter_btn": "town_building/Blood_Altar/alter.png",
         "exit_building_btn": "town_building/exitfromhouse_and_to_town.png",
         "sacrifice_settings": {
-            "gray": True,
-            "green": True,
-            "blue": True,
+            "gray": False,
+            "green": False,
+            "blue": False,
             "purple": False,  # 預設不獻祭/賣紫色血水 (保留)
         },
         "blood_templates": {
