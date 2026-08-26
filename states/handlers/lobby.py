@@ -66,6 +66,16 @@ class LobbyHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return
 
+        # 若未啟用普通關卡打怪 (enable_stage_farming == False)，且目前非特定子流程或地下城戰鬥
+        if not self.machine.config.get("enable_stage_farming", False) and not getattr(self.machine, "is_in_dungeon", False) and not is_lord_boss_mode:
+            logging.info("💤 [大廳] 未啟用普通關卡打怪 (enable_stage_farming=False) ➔ 點擊返回城鎮轉入 COLLECT_ONLY 待機...")
+            pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75, quiet=True)
+            if pos_back:
+                self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                time.sleep(0.5)
+            self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+            return
+
         lobby_btn = self.machine.config.get("lobby_start_btn", "stages/start.png")
         pos, conf = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
         if pos:

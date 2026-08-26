@@ -232,8 +232,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         """
         mock_exists.return_value = True
         self.mock_machine.stamina_retreat_start_time = None
-        self.mock_machine.original_config = None
-        self.mock_machine.config["type"] = "mix"
+        self.mock_machine.config = GAME_CONFIGS["mix"].copy()
         self.mock_machine.config["greedy_allowed_indices"] = [0]
         self.mock_machine.dungeon_cooldowns = {0: time.time() + 600.0}
         mock_detect_cd.return_value = (True, 600.0, "10:00")

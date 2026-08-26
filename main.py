@@ -313,6 +313,15 @@ def parse_arguments():
     parser.add_argument("--monitor", "--screen", type=int, default=1, help="指定全螢幕擷取/開遊戲的顯示器編號 (預設: 1 為筆電螢幕，2 為外接螢幕)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
+    # 模組化活動開關參數
+    parser.add_argument("--boss", dest="enable_lord_boss", action="store_true", default=None, help="啟用首領領主討伐 (lord_boss)")
+    parser.add_argument("--no-boss", dest="enable_lord_boss", action="store_false", help="停用首領領主討伐")
+    parser.add_argument("--dungeon", dest="enable_dungeon", action="store_true", default=None, help="啟用地下城探索 (dungeon)")
+    parser.add_argument("--no-dungeon", dest="enable_dungeon", action="store_false", help="停用地下城探索")
+    parser.add_argument("--stage", dest="enable_stage_farming", action="store_true", default=None, help="啟用普通關卡打怪 (stage farming)")
+    parser.add_argument("--no-stage", dest="enable_stage_farming", action="store_false", help="停用普通關卡打怪 (冷卻時在城鎮待機，零耗體力)")
+    parser.add_argument("--town", dest="enable_town_daily", action="store_true", default=None, help="啟用每日城鎮速領 (chest, hero, altar, jewelry)")
+    parser.add_argument("--no-town", dest="enable_town_daily", action="store_false", help="停用每日城鎮速領")
     return parser.parse_args()
 
 def setup_mode_config(args):
@@ -328,14 +337,58 @@ def setup_mode_config(args):
     config = GAME_CONFIGS[target_key].copy()
     config["backend_mode"] = args.backend
 
+    # 覆蓋 CLI 明確傳入之活動開關
+    if args.enable_lord_boss is not None:
+        config["enable_lord_boss"] = args.enable_lord_boss
+    if args.enable_dungeon is not None:
+        config["enable_dungeon"] = args.enable_dungeon
+    if args.enable_stage_farming is not None:
+        config["enable_stage_farming"] = args.enable_stage_farming
+    if args.enable_town_daily is not None:
+        config["enable_town_daily"] = args.enable_town_daily
+
     if args.mode == "stage":
         setup_stage_config(config)
-    elif args.mode == "dungeon":
+        config["enable_stage_farming"] = True
+    elif args.mode in ["dungeon", "mix"]:
         setup_dungeon_config(config, args)
-    elif args.mode == "mix":
-        setup_dungeon_config(config, args)
-        setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
-        print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config['stage_name']} ({config['stage_target']})")
+        if args.enable_stage_farming is None:
+            print("\n當地下城冷卻時，是否要前往普通關卡刷怪？")
+            print(" 1) 否 (回到城鎮待機，零浪費體力) - 推薦")
+            print(" 2) 是 (前往普通關卡刷怪)")
+            try:
+                stage_farm_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
+                if not stage_farm_choice:
+                    stage_farm_choice = "1"
+            except KeyboardInterrupt:
+                print("\n[!] 取消啟動。")
+                sys.exit(0)
+            except Exception:
+                stage_farm_choice = "1"
+            config["enable_stage_farming"] = (stage_farm_choice == "2")
+        
+        if config.get("enable_stage_farming", False):
+            setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
+            print(f"[*] 當地下城冷卻時Fallback至普通關卡目標：{config.get('stage_name', '')} ({config.get('stage_target', '')})")
+        else:
+            print("[*] 已設定：當地下城冷卻時回到城鎮待機 (COLLECT_ONLY)，不打小怪。")
+    elif args.mode == "collect_only":
+        if args.enable_lord_boss is None:
+            print("\n在待機領取期間，若 Boss (首領討伐) 冷卻結束，是否要自動去打 Boss？")
+            print(" 1) 是 (打 Boss + 定時領取) - 推薦")
+            print(" 2) 否 (純定時領取待機)")
+            try:
+                boss_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
+                if not boss_choice:
+                    boss_choice = "1"
+            except KeyboardInterrupt:
+                print("\n[!] 取消啟動。")
+                sys.exit(0)
+            except Exception:
+                boss_choice = "1"
+            config["enable_lord_boss"] = (boss_choice == "1")
+            if config["enable_lord_boss"]:
+                print("[*] 已啟用：定時待機期間，Boss 冷卻結束將自動前往討伐！")
     elif args.mode == "daily":
         print("\n[*] 【每日懸賞任務模式】設定 Tier 4 退守目標 (當懸賞全清且無 Boss 可打時)：")
         setup_dungeon_config(config, args)
@@ -344,9 +397,6 @@ def setup_mode_config(args):
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
         print(f"[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行【{config.get('stage_name', '')}】。")
-
-
-
 
     elif args.mode == "blood_altar":
         print("\n請選擇要獻祭/消耗的血水品質（設定為『否/保留』者將不進行點選獻祭）：")

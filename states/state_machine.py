@@ -413,7 +413,7 @@ class GameStateMachine:
         elif new_state == self.STATE_BACKPACK_FULL_SORTING:
             self.need_bag_cleaning = True
             self.handlers[new_state].screenshot_counter = 1
-        elif new_state in [self.STATE_NAVIGATING, self.STATE_COLLECT_ONLY]:
+        elif new_state == self.STATE_NAVIGATING:
             if getattr(self, "pending_town_subflows", False):
                 self.pending_town_subflows = False
                 logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
@@ -1216,10 +1216,10 @@ class GameStateMachine:
 
     def is_in_collect_only_mode(self):
         """
-        檢查目前活躍配置是否為定時領取待機 (collect_only)。
-        注意：不應僅以 stamina_retreat_start_time is not None 判定，
-        因為在 auto_resume_dungeon_on_cd 暫時切回打地下城時，stamina_retreat_start_time 仍保留作為背景倒數。
+        檢查目前活躍配置或當前狀態是否為定時領取待機 (collect_only)。
         """
+        if getattr(self, "current_state", None) == self.STATE_COLLECT_ONLY:
+            return True
         if not getattr(self, "config", None):
             return False
         return self.config.get("type") == "collect_only"
@@ -1237,61 +1237,94 @@ class GameStateMachine:
         return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
 
 
-    def evaluate_and_schedule_daily_pipeline(self):
+    def evaluate_next_activity(self):
         """
-        全域每日大流水線動態調度器 (Daily Master Pipeline Scheduler)。
-        依據四階梯全域優先級自動判斷與發起：
-        - Tier 1: 一極優先 (每日一次性城鎮速領: chest ➔ hero_draw ➔ blood_altar + jewelry_workshop)
-        - Tier 2: 二極優先 (領主 Boss 討伐 lord_boss 計時器調度，優先級 > bulletin_board)
-        - Tier 3: 三極優先 (懸賞告示牌與動態任務 bulletin_board)
-        - Tier 4: 四極退守 (預設 mix 模式: 冰雪洞窟 + 關卡 6-1)
+        全域模組化活動動態調度器 (Modular Activity Dynamic Scheduler)。
+        依據當前 config 的活動開關與遊戲即時狀態評估並切換至下一活動：
+        - 優先級 1: 每日城鎮速領 (enable_town_daily)
+        - 優先級 2: 首領領主討伐 (enable_lord_boss)
+        - 優先級 3: 每日懸賞任務 (enable_quests)
+        - 優先級 4: 地下城探索 (enable_dungeon)
+        - 優先級 5: 普通關卡打怪 (enable_stage_farming)
+        - 優先級 0: 兜底基底待機 (轉入 STATE_COLLECT_ONLY)
         """
         if getattr(self, "_in_scheduling_pipeline", False):
-            return False
-        if self.is_in_collect_only_mode():
             return False
         self._in_scheduling_pipeline = True
 
         try:
-            if not self.daily_manager:
+            cfg = self.config or {}
+            # 0. 體力退避期間冷卻復歸
+            if getattr(self, "stamina_retreat_start_time", None) is not None:
+                if cfg.get("enable_dungeon", True):
+                    logging.info("🔄 [Activity Scheduler] 處於體力退避冷卻復歸期間 ➔ 嘗試執行退守地下城！")
+                    self.apply_mix_fallback_config()
+                    return True
+                else:
+                    return False
+
+            dm = getattr(self, "daily_manager", None)
+            # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
+            if cfg.get("enable_town_daily", True) and dm:
+                pending_town = dm.get_pending_town_subflows()
+                if pending_town and not self.town_subflow_queue:
+                    logging.info(f"🏛️ [Activity Scheduler] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
+                    self.start_subflow_queue(pending_town)
+                    return True
+
+            # 2. 檢查 Tier 2 首領 Boss 討伐 (lord_boss)
+            if cfg.get("enable_lord_boss", True) and dm:
+                if dm.has_available_lord_boss():
+                    avail_bosses = dm.get_available_lord_bosses()
+                    logging.info(f"⚔️ [Activity Scheduler] 觸發 Tier 2 領主 Boss 討伐 (可用 Boss: {avail_bosses}) ➔ 優先插隊討伐！")
+                    self.start_subflow_queue(["lord_boss"])
+                    return True
+
+            # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
+            if self.quest_scheduler:
+                if self.quest_scheduler.is_all_completed():
+                    logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器")
+                    self.quest_scheduler = None
+                else:
+                    scheduled_node = self.check_and_advance_quest_target()
+                    if scheduled_node:
+                        return True
+
+            # 4. 檢查 Tier 4 地下城探索 (dungeon)
+            if cfg.get("enable_dungeon", False):
+                if self.has_available_dungeon():
+                    if self.current_state not in [self.STATE_NAVIGATING, self.STATE_DUNGEON_EXPLORING, self.STATE_BATTLE]:
+                        logging.info("🏰 [Activity Scheduler] 偵測到地下城就緒 ➔ 轉移至 NAVIGATING 前往地下城！")
+                        self.transition_to(self.STATE_NAVIGATING)
+                    return True
+
+            # 5. 退守 Tier 4 Mix / Stage 模式 (當處於 daily/mix/stage 模式或明確開啟 enable_stage_farming 時)
+            mode_type = cfg.get("type")
+            default_stage_farm = True if (mode_type in ["mix", "stage", "daily"] or getattr(self, "is_tier4_fallback", False) or getattr(self, "daily_manager", None) is not None) else False
+            is_stage_farming = cfg.get("enable_stage_farming", default_stage_farm)
+
+            if is_stage_farming:
+                self.apply_mix_fallback_config()
                 return False
 
-            # 0. 若目前處於體力退避冷卻復歸期間 (stamina_retreat_start_time 存在)，優先執行使用者指定之 Tier 4 退守地下城
-            if getattr(self, "stamina_retreat_start_time", None) is not None:
-                logging.info("🔄 [Daily Master Pipeline] 偵測到處於體力退避冷卻復歸期間 ➔ 自動切回執行使用者指定之 Tier 4 退守地下城！")
-                self.apply_mix_fallback_config()
-                return True
+            # 6. 兜底待機：所有啟用活動均在冷卻中，且未開啟普通關卡打怪 ➔ 切換至 COLLECT_ONLY 待機！
+            if not self.is_in_collect_only_mode():
+                logging.info("💤 [Activity Scheduler] 所有啟用的週期性任務均在冷卻中且未開啟普通打怪 ➔ 轉入 COLLECT_ONLY 待機...")
+                self.transition_to(self.STATE_COLLECT_ONLY)
+            return False
 
-            # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar)
-            pending_town = self.daily_manager.get_pending_town_subflows()
-            if pending_town and not self.town_subflow_queue:
-                logging.info(f"🏛️ [Daily Master Pipeline] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
-                self.start_subflow_queue(pending_town)
-                return True
         finally:
             self._in_scheduling_pipeline = False
 
 
-        # 2. 檢查 Tier 2 領主 Boss 討伐 (lord_boss)
-        if self.daily_manager.has_available_lord_boss():
-            avail_bosses = self.daily_manager.get_available_lord_bosses()
-            logging.info(f"⚔️ [Daily Master Pipeline] 觸發 Tier 2 領主 Boss 討伐 (可用 Boss: {avail_bosses}) ➔ 優先插隊討伐！")
-            self.start_subflow_queue(["lord_boss"])
-            return True
-
-        # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
-        if self.quest_scheduler:
-            if self.quest_scheduler.is_all_completed():
-                logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器")
-                self.quest_scheduler = None
-            else:
-                scheduled_node = self.check_and_advance_quest_target()
-                if scheduled_node:
-                    return True
-
-        # 4. 退守 Tier 4 Mix 模式 (當 Tier 1~3 皆無任務可做時，切換至退守配置)
-        self.apply_mix_fallback_config()
-        return False
+    def evaluate_and_schedule_daily_pipeline(self):
+        """
+        全域每日大流水線動態調度器 (Daily Master Pipeline Scheduler)。
+        向後相容包裝，委託至 evaluate_next_activity()。
+        """
+        if self.is_in_collect_only_mode():
+            return False
+        return self.evaluate_next_activity()
 
 
 
