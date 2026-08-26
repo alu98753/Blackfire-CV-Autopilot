@@ -2,6 +2,10 @@
 # 待辦事項與未來優化規劃 (Future Work & Edge Cases)
 
 
+1. 整理config
+2. 補充 黃金古國模式
+
+
 我覺得問題在於 我程式預設有兩個螢幕 但是有時我會移除遠端的大螢幕(benq的) 而只用筆電螢幕 此時他重開的時候 點擊的位置會錯誤 這是根本上的問題
 
 ----
@@ -76,7 +80,7 @@
 3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止點擊未生效導致狀態過早推進。
 
 #### 🎯 2. 優化優先級矩陣 (Priority Hierarchy)
-- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換�#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
+- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換 #### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
 - [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Blood_Altar.md)]
 - [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md)]
 - [已完成] **每日討伐首領領主 (每次討伐需 5 點體力/麵包)** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]

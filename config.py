@@ -56,7 +56,7 @@ PRIMARY_MODES = {
         # 戰鬥結束按鈕 (PK 相似度，挑選最高的點擊)
         "result_buttons": ["stages/retry.png", "common/continue.png", "common/continue_gray.png"],
         # 普通關卡最大戰敗次數限制
-        "stage_max_defeat": 2,
+        "stage_max_defeat": 4,
     },
     
     # ------------------ 地下城模式 ------------------
@@ -131,7 +131,7 @@ PRIMARY_MODES = {
 
         "stage_entry": "stages/level6_ice_cave.png",
         "stage_target": "stages/first_stage.png",
-        "stage_max_defeat": 2,
+        "stage_max_defeat": 4,
         "stage_navigation_path": [
             "common/door.png",
             "common/select_stage.png",

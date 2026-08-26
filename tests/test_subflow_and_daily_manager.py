@@ -784,6 +784,14 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
         self.assertEqual(handler.subflow_step, "INIT_DELAY") # 斷言大廳攔截後子流程已安全重置
 
+    def test_daily_manager_get_boss_status_dict(self):
+        """測試 get_boss_status_dict 能安全取得所有 boss 結構字典"""
+        bosses = self.manager.get_boss_status_dict()
+        self.assertIsInstance(bosses, dict)
+        self.assertIn("lord_spider", bosses)
+        self.assertIn("lord_spectre", bosses)
+        self.assertEqual(bosses["lord_spider"]["name"], "育母蜘蛛麗拉西亞")
+
 if __name__ == "__main__":
     unittest.main()
 

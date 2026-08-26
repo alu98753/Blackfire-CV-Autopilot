@@ -232,6 +232,52 @@ class TestBehaviorModularActivities(unittest.TestCase):
         self.assertIsNone(self.state_machine.stamina_retreat_start_time)
         self.state_machine.trigger_town_subflow_chain.assert_called_once()
 
+    # =========================================================================
+    # 場景 6：真實 DailyManager 整合與待機日誌格式化驗證
+    # =========================================================================
+
+    def test_scenario_6_collect_only_with_real_daily_manager_boss_cooldown_formatting(self):
+        """
+        [Scenario 6 Regression Test]
+        Given: 啟用 enable_lord_boss=True，並搭載真實 DailyManager 物件
+        When: 處於 COLLECT_ONLY 待機狀態且 Boss 在冷卻中
+        Then: handle() 正常執行日誌格式化輸出，不拋出 AttributeError (get_boss_status_dict)
+        """
+        from utils.daily_manager import DailyManager
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            real_dm = DailyManager(data_dir=temp_dir, status_file="test_status.json")
+            # 模擬所有 Boss 均處於冷卻中
+            now_ts = time.time()
+            real_dm.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["last_fight_timestamp"] = now_ts
+            real_dm.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["last_fight_timestamp"] = now_ts
+            self.state_machine.daily_manager = real_dm
+            self.state_machine.config = {
+                "name": "待機Boss監控",
+                "type": "collect_only",
+                "auto_diamond": True,
+                "auto_bread": True,
+                "enable_lord_boss": True,
+                "enable_dungeon": False
+            }
+            self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+            self.state_machine.need_diamond_collection = False
+            self.state_machine.need_bread_collection = False
+
+            handler = self.state_machine.handlers[self.state_machine.STATE_COLLECT_ONLY]
+            handler.matcher = MagicMock()
+            handler.matcher.match.side_effect = lambda img, temp, *args, **kwargs: ((300, 400), 0.90) if temp == "common/door.png" else (None, 0.0)
+
+            mock_img = MagicMock()
+            # 必須正常執行不拋出任何 AttributeError 例外
+            handler.handle(mock_img, self.rect)
+            self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

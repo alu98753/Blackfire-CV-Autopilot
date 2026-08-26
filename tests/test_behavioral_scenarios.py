@@ -1988,6 +1988,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.config["sacrifice_settings"] = {"gray": True, "green": True, "blue": True, "purple": False}
         self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
         if self.state_machine.daily_manager:
             self.state_machine.daily_manager.is_subflow_completed = MagicMock(return_value=False)

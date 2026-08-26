@@ -369,6 +369,13 @@ class DailyManager:
         self.lord_boss_cooldown_until = now_ts + cd_sec
         logging.info(f"⏳ [DailyManager] 動態計算最快 Boss 冷卻恢復時間: 剩餘 {int(cd_sec)} 秒 ({cd_sec / 60:.1f} 分鐘)，設定首領討伐避退冷卻。")
 
+    def get_boss_status_dict(self):
+        """
+        取得所有 Boss 的狀態字典 {boss_key: boss_info}。
+        若狀態結構不完整則自動回傳空字典，保障呼叫端安全。
+        """
+        return self.status.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
+
     def get_available_lord_bosses(self, now_ts=None):
         """
         取得當前冷卻完畢且次數未滿 5 次的可討伐 Boss 鍵名陣列。

@@ -214,7 +214,8 @@ class CollectOnlyHandler(BaseStateHandler):
                     extra_status.append("👑 Boss: 就緒")
                 else:
                     min_boss_rem = float('inf')
-                    for b_key, b_info in dm.get_boss_status_dict().items():
+                    boss_dict = dm.get_boss_status_dict() if hasattr(dm, "get_boss_status_dict") else {}
+                    for b_key, b_info in (boss_dict or {}).items():
                         if not b_info.get("completed_today", False):
                             rem = max(0.0, (b_info.get("last_fight_timestamp", 0.0) + b_info.get("cooldown_seconds", 3600)) - now)
                             if rem < min_boss_rem:
