@@ -78,14 +78,37 @@ class TestEntityTownMain(unittest.TestCase):
         """
         pass
 
-    def test_wheel_of_fortune_stuck_recovery_in_town(self):
+    def test_game_relaunch_resets_window_flags_and_triggers_login(self):
         """
-        [測試案例 3] 城鎮大門出現幸運輪盤彈窗之 Watchdog 閉環救援
-        - 情境描述：在大門畫面時彈出 Wheel_of_Fortune.png 遮擋畫面 30 秒。
-        - 預期動作：Watchdog 發起吹哨，Stash 暫存當前狀態，進入 STATE_POPUP_RECOVERY 喚起 WheelOfFortuneSubflow 關閉彈窗並 Restore 回原狀態。
+        [測試案例 4] 遊戲崩潰重啟時清空 bread_window_opened 與 UI 視窗標記，防止死鎖
+        - 情境描述：當腳本在 BREAD_COLLECTION 狀態崩潰重啟。
+        - 預期動作：GameRelaunchSubflow 重置 bread_window_opened = False 且安全跳轉至 NAVIGATING。
         """
-        pass
+        from unittest.mock import MagicMock, patch
+        from states.exceptions.subflows import GameRelaunchSubflow
+
+        mock_machine = MagicMock()
+        mock_machine.bread_window_opened = True
+        mock_machine.diamond_window_opened = True
+        mock_machine.stashed_state = "BREAD_COLLECTION"
+        mock_machine.stashed_context = {"test": 1}
+        mock_machine.STATE_UNKNOWN = "UNKNOWN"
+
+        subflow = GameRelaunchSubflow()
+
+        with patch("states.exceptions.subflows.game_relaunch.SteamGameLauncher") as mock_launcher_cls, \
+             patch("subprocess.run"):
+            mock_launcher = MagicMock()
+            mock_launcher_cls.return_value = mock_launcher
+
+            subflow.execute(mock_machine, reason="unit_test")
+
+        self.assertFalse(mock_machine.bread_window_opened)
+        self.assertFalse(mock_machine.diamond_window_opened)
+        self.assertIsNone(mock_machine.stashed_state)
+        mock_machine.transition_to.assert_called_with("UNKNOWN")
 
 
 if __name__ == "__main__":
     unittest.main()
+

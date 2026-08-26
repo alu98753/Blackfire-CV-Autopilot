@@ -190,15 +190,28 @@ class GameStateMachine:
     def restore_stashed_state(self):
         """
         復原先前暫存之狀態與 context。若無暫存狀態則安全降級至 STATE_NAVIGATING。
+        並保留原卡死發生的 last_state_change 時間戳與 Watchdog 卡死記憶。
         """
         if self.stashed_state:
             target = self.stashed_state
             logging.info(f"🔄 [StateRestore] 恢復原暫存狀態: {target}")
+            stashed_last_change = self.stashed_context.get("last_state_change") if isinstance(self.stashed_context, dict) else None
             if isinstance(self.stashed_context, dict) and "context" in self.stashed_context:
                 self.context = self.stashed_context["context"]
             self.stashed_state = None
             self.stashed_context = {}
+
+            saved_stuck_count = getattr(self.exception_watchdog, "consecutive_stuck_count", 0) if hasattr(self, "exception_watchdog") else 0
+            saved_stuck_state = getattr(self.exception_watchdog, "last_stuck_state", None) if hasattr(self, "exception_watchdog") else None
+
             self.transition_to(target)
+
+            if hasattr(self, "exception_watchdog"):
+                if saved_stuck_state == target and saved_stuck_count > 0:
+                    self.exception_watchdog.consecutive_stuck_count = saved_stuck_count
+                    self.exception_watchdog.last_stuck_state = saved_stuck_state
+                if stashed_last_change and stashed_last_change > 0:
+                    self.last_state_change = stashed_last_change
             return True
         else:
             logging.warning("⚠️ [StateRestore] 無可恢復之暫存狀態，安全退避至 NAVIGATING")
@@ -535,12 +548,13 @@ class GameStateMachine:
                         self.transition_to(next_state)
                         return
 
-        # 1. 檢查是否在戰鬥中 (看到 common/auto.png 必定在戰鬥)
-        if os.path.exists(os.path.join("templates", "common/auto.png")):
-            pos, _ = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
-            if pos:
-                self.transition_to(self.STATE_BATTLE)
-                return
+        # 1. 檢查是否在戰鬥中 (看到 common/auto.png 或 battle/ 特徵圖案)
+        for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
+            if os.path.exists(os.path.join("templates", feat)):
+                pos, _ = self.matcher.match(screen_img, feat, threshold=0.7)
+                if pos:
+                    self.transition_to(self.STATE_BATTLE)
+                    return
 
         # 2. 檢查是否在普通關卡大廳 (判斷 common/select_stage.png 與 goback_town.png 至少存在一個)
         if self.config["type"] == "stage":
@@ -606,13 +620,15 @@ class GameStateMachine:
         else:
             # 普通關卡模式下，如果能匹配到自動戰鬥特徵，預設為 BATTLE；否則預設為 NAVIGATING 以重啟大廳尋路
             has_auto = False
-            if os.path.exists(os.path.join("templates", "common/auto.png")):
-                pos_auto, _ = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
-                if pos_auto:
-                    has_auto = True
+            for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
+                if os.path.exists(os.path.join("templates", feat)):
+                    pos_auto, _ = self.matcher.match(screen_img, feat, threshold=0.7)
+                    if pos_auto:
+                        has_auto = True
+                        break
             
             if has_auto:
-                logging.info("❓ 未能辨識出關卡大廳特徵，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
+                logging.info("⚔️ 未能辨識出關卡大廳特徵，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
                 self.transition_to(self.STATE_BATTLE)
             else:
                 logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")

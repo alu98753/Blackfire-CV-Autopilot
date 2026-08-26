@@ -1,0 +1,1708 @@
+[
+  {
+    "hero_id": "hero_archer_1",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 0.0,
+    "rarity_zh": "普通 (白)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "bow_001",
+      "off_hand": "quiver_001"
+    },
+    "skill_ids": [
+      "double_shoot"
+    ],
+    "skill_names_zh": [
+      "雙重射擊"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_2",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 1.0,
+    "rarity_zh": "優秀 (綠)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "bow_001",
+      "off_hand": "quiver_001"
+    },
+    "skill_ids": [
+      "double_shoot",
+      "mark_shoot"
+    ],
+    "skill_names_zh": [
+      "雙重射擊",
+      "印記射擊"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_3",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 2.0,
+    "rarity_zh": "稀有 (藍)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "bow_002",
+      "off_hand": "quiver_002"
+    },
+    "skill_ids": [
+      "double_shoot",
+      "scatter_shot",
+      "bandage_wounds"
+    ],
+    "skill_names_zh": [
+      "雙重射擊",
+      "散射連發",
+      "包紮傷口"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_4",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 3.0,
+    "rarity_zh": "史詩 (紫)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "bow_003",
+      "off_hand": "quiver_003"
+    },
+    "skill_ids": [
+      "double_shoot",
+      "scatter_shot",
+      "death_shoot",
+      "rampage_wings"
+    ],
+    "skill_names_zh": [
+      "雙重射擊",
+      "散射連發",
+      "致命射擊",
+      "狂暴龍翼"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_5",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 4.0,
+    "rarity_zh": "傳說 (橘)",
+    "race": "frogman",
+    "race_zh": "蛙人族",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "bow_005",
+      "off_hand": "quiver_005"
+    },
+    "skill_ids": [
+      "lightshot",
+      "toxic_arrow",
+      "swift_shot",
+      "blade_bow",
+      "quick_preparation"
+    ],
+    "skill_names_zh": [
+      "聖光耀射",
+      "劇毒浸染箭",
+      "迅捷射擊",
+      "刃弓疾斬",
+      "快速整裝 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_6",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 5.0,
+    "rarity_zh": "神話 (紅)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "bow_hero_theron",
+      "off_hand": "quiver_hero_theron"
+    },
+    "skill_ids": [
+      "lightshot",
+      "mark_shoot",
+      "bandage_wounds",
+      "multi_mark_shot",
+      "marked_hunter",
+      "deadly_pursuit"
+    ],
+    "skill_names_zh": [
+      "聖光耀射",
+      "印記射擊",
+      "包紮傷口",
+      "多重標記射擊",
+      "獵人印記 (被動)",
+      "死神追擊"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_7",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "dragonkin",
+    "race_zh": "龍裔",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "bow_hero_archer_7",
+      "off_hand": "quiver_archer_7"
+    },
+    "skill_ids": [
+      "lightshot",
+      "dragonbane_arrow",
+      "flowing_arrow",
+      "wingrend_volley",
+      "draconic_doom_mark",
+      "cataclysmic_arrow",
+      "critical_assault"
+    ],
+    "skill_names_zh": [
+      "聖光耀射",
+      "屠龍穿心箭",
+      "流光之箭",
+      "破翼齊射",
+      "龍之厄運印記",
+      "滅世天劫箭",
+      "致命突襲"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_drugor",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "orc",
+    "race_zh": "獸人",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "bow_hero_archer_drugor",
+      "off_hand": "quiver_hero_archer_drugor"
+    },
+    "skill_ids": [
+      "bloodfang_mark",
+      "rend_frenzy",
+      "blood_recycle",
+      "bloodrend_pursuit",
+      "bloodrage_awakening",
+      "bloodburst_execution",
+      "crimson_threshold"
+    ],
+    "skill_names_zh": [
+      "血牙印記",
+      "狂亂撕裂",
+      "血液回收 (被動)",
+      "裂血追擊",
+      "血怒覺醒 (被動)",
+      "爆血處決",
+      "赤紅臨界 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_archer_olaf",
+    "class": "archer",
+    "class_zh": "遊俠 (弓箭手)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "viking",
+    "race_zh": "維京人",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "bow_archer_olaf",
+      "off_hand": "quiver_archer_olaf"
+    },
+    "skill_ids": [
+      "guided_twinshot",
+      "anchored_shot",
+      "sunken_grasp",
+      "helmsman_strike",
+      "dimensional_beacon",
+      "abyssal_resonance",
+      "tidal_pursuit"
+    ],
+    "skill_names_zh": [
+      "導引雙重箭",
+      "定錨強射",
+      "沉沒之握",
+      "掌舵者破浪擊",
+      "維度信標 (被動)",
+      "深淵共鳴 (被動)",
+      "潮汐追襲"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_1",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 0.0,
+    "rarity_zh": "普通 (白)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "spear_wooden",
+      "off_hand": "shield_001"
+    },
+    "skill_ids": [
+      "guardian_blow"
+    ],
+    "skill_names_zh": [
+      "守護重擊"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_2",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 1.0,
+    "rarity_zh": "優秀 (綠)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "spear_wooden",
+      "off_hand": "shield_001"
+    },
+    "skill_ids": [
+      "guardian_blow",
+      "sanctuary_light"
+    ],
+    "skill_names_zh": [
+      "守護重擊",
+      "聖所之光"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_3",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 2.0,
+    "rarity_zh": "稀有 (藍)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "spear_iron",
+      "off_hand": "shield_002"
+    },
+    "skill_ids": [
+      "guardian_blow",
+      "knight_will",
+      "valiant_charge"
+    ],
+    "skill_names_zh": [
+      "守護重擊",
+      "騎士意志",
+      "英勇衝鋒"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_4",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 3.0,
+    "rarity_zh": "史詩 (紫)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "spear_003",
+      "off_hand": "shield_003"
+    },
+    "skill_ids": [
+      "holy_strike",
+      "sanctuary_light",
+      "divine_light_spear",
+      "holy_aegis"
+    ],
+    "skill_names_zh": [
+      "神聖打擊",
+      "聖所之光",
+      "聖光貫穿之槍",
+      "神聖聖盾"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_5",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 4.0,
+    "rarity_zh": "傳說 (橘)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "spear_005",
+      "off_hand": "shield_005"
+    },
+    "skill_ids": [
+      "guardian_blow",
+      "resilient_healing",
+      "holy_light_blessing",
+      "holy_shackles",
+      "light_shield"
+    ],
+    "skill_names_zh": [
+      "守護重擊",
+      "韌性復甦術",
+      "聖光祝福",
+      "聖光桎梏",
+      "聖光護盾"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_askar",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "chest": "chest_holy_siliver",
+      "main_hand": "spear_askar",
+      "off_hand": "shield_askar",
+      "relic": "holy_flame_emblem"
+    },
+    "skill_ids": [
+      "judgment_spear",
+      "lightbound_grace",
+      "holy_spear_charge",
+      "divine_cycle",
+      "piercing_lightflame",
+      "knight_sacred_oath",
+      "sacred_afterglow"
+    ],
+    "skill_names_zh": [
+      "審判之槍",
+      "光縛恩典",
+      "聖槍衝鋒",
+      "神聖循環 (被動)",
+      "穿透聖炎",
+      "騎士誓約",
+      "神聖餘暉 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_bragos",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "dwarf",
+    "race_zh": "矮人",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "spear_knight_bragos",
+      "off_hand": "shield_knight_bragos"
+    },
+    "skill_ids": [
+      "oathlance_brace",
+      "oathbound_bulwark",
+      "ironwall_slam",
+      "iron_bastion",
+      "deepforge_memory",
+      "unbroken_vow",
+      "oathforge_transmute"
+    ],
+    "skill_names_zh": [
+      "誓約長槍架勢",
+      "誓約壁壘",
+      "鐵壁重砸",
+      "鋼鐵堡壘",
+      "深鍛記憶 (被動)",
+      "不滅誓言 (被動)",
+      "誓鍛轉化"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_glig",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "goblin",
+    "race_zh": "哥布林",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "main_hand": "spear_goblin_glig",
+      "off_hand": "shield_goblin_glig",
+      "special": "spceial_goblin_glig"
+    },
+    "skill_ids": [
+      "scrap_toss",
+      "scrap_combo",
+      "pressurized_taunt",
+      "fuel_steamroller",
+      "kinetic_salvage",
+      "out_control_deployment",
+      "scrap_toys"
+    ],
+    "skill_names_zh": [
+      "廢鐵投擲",
+      "廢鐵組合連擊",
+      "蒸氣加壓挑釁",
+      "燃料重輾衝撞",
+      "動能回收 (被動)",
+      "失控部屬",
+      "發條機關玩具"
+    ]
+  },
+  {
+    "hero_id": "hero_knight_yolda",
+    "class": "knight",
+    "class_zh": "騎士 (聖騎士)",
+    "rarity": 5.0,
+    "rarity_zh": "神話 (紅)",
+    "race": "bear_monster",
+    "race_zh": "暴走巨熊",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "main_hand": "spear_bear_yolda",
+      "off_hand": "shield_bear_yolda"
+    },
+    "skill_ids": [
+      "guardian_blow",
+      "sanctuary_light",
+      "snowball_toss",
+      "frost_control",
+      "avalanche_charge",
+      "great_bear_strength"
+    ],
+    "skill_names_zh": [
+      "守護重擊",
+      "聖所之光",
+      "擲雪球",
+      "寒冷掌控",
+      "雪崩衝撞",
+      "巨熊神力 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_1",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 0.0,
+    "rarity_zh": "普通 (白)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "staff_001",
+      "off_hand": "book_001"
+    },
+    "skill_ids": [
+      "scorching_touch"
+    ],
+    "skill_names_zh": [
+      "灼熱之觸"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_2",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 1.0,
+    "rarity_zh": "優秀 (綠)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "staff_001",
+      "off_hand": "book_001"
+    },
+    "skill_ids": [
+      "scorching_touch",
+      "flame_dart"
+    ],
+    "skill_names_zh": [
+      "灼熱之觸",
+      "烈焰飛鏢"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_3",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 2.0,
+    "rarity_zh": "稀有 (藍)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "staff_002",
+      "off_hand": "book_002"
+    },
+    "skill_ids": [
+      "frostbolt",
+      "frost_shield",
+      "fireball"
+    ],
+    "skill_names_zh": [
+      "寒冰箭",
+      "冰霜護盾",
+      "火球術"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_4",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 3.0,
+    "rarity_zh": "史詩 (紫)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "staff_003",
+      "off_hand": "book_003"
+    },
+    "skill_ids": [
+      "scorching_touch",
+      "flame_dart",
+      "fireball",
+      "blaze_wrath"
+    ],
+    "skill_names_zh": [
+      "灼熱之觸",
+      "烈焰飛鏢",
+      "火球術",
+      "熾烈之怒"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_5",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 4.0,
+    "rarity_zh": "傳說 (橘)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "staff_mage_5",
+      "off_hand": "book_mage_5"
+    },
+    "skill_ids": [
+      "frostbolt",
+      "frostshot",
+      "mass_frost_shield",
+      "frost_control",
+      "glacial_impale"
+    ],
+    "skill_names_zh": [
+      "寒冰箭",
+      "冰霜凝結箭",
+      "群體冰霜護盾",
+      "寒冷掌控",
+      "冰川貫穿"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_6",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 5.0,
+    "rarity_zh": "神話 (紅)",
+    "race": "nightshroud",
+    "race_zh": "夜幕幽裔",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "staff_mage_6",
+      "off_hand": "book_mage_6"
+    },
+    "skill_ids": [
+      "soulfire_maw",
+      "flame_dart",
+      "flamebound_sacrifice",
+      "ember_infusion",
+      "fire_control",
+      "rolling_fireball"
+    ],
+    "skill_names_zh": [
+      "魂火巨口",
+      "烈焰飛鏢",
+      "縛焰祭獻",
+      "餘燼灌注 (被動)",
+      "火焰掌控 (被動)",
+      "滾動巨炎球"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_7",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "treant",
+    "race_zh": "樹精/樹人",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "staff_mage_7",
+      "off_hand": "book_mage_7"
+    },
+    "skill_ids": [
+      "root_snare",
+      "ancient_resilience",
+      "forest_wrath",
+      "nature_control",
+      "witherbind",
+      "withering_touch",
+      "thornstorm"
+    ],
+    "skill_names_zh": [
+      "纏繞根鬚",
+      "遠古韌性 (被動)",
+      "森林之怒",
+      "自然掌控 (被動)",
+      "枯萎束縛",
+      "枯萎觸碰",
+      "荊棘風暴"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_ecasia",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "staff_mage_ecasia",
+      "off_hand": "book_mage_ecasia"
+    },
+    "skill_ids": [
+      "frostscar_spike",
+      "shardspire_entombment",
+      "shardspire_cataclysm",
+      "frost_control",
+      "icy_soul_echo",
+      "frostglyph_aegis",
+      "icethorn_demise"
+    ],
+    "skill_names_zh": [
+      "冰痕之刺",
+      "霜棘冰葬",
+      "霜棘殞滅",
+      "寒冷掌控",
+      "冰魂迴響 (被動)",
+      "霜紋庇護",
+      "冰刺終局 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_mage_nobiz",
+    "class": "mage",
+    "class_zh": "法師 (元素使)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "goblin",
+    "race_zh": "哥布林",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "staff_mage_nobiz",
+      "off_hand": "book_mage_nobiz",
+      "special": "spceial_nobiz_aircraft"
+    },
+    "skill_ids": [
+      "chaotic_sparkshot",
+      "tinker_reboot",
+      "scrapline_reboot",
+      "gearburst_surge",
+      "residual_overcharge",
+      "gear_cycle_loop",
+      "gearfire_barrage"
+    ],
+    "skill_names_zh": [
+      "混沌火花射擊",
+      "修補重啟 (被動)",
+      "廢料線重啟 (被動)",
+      "齒輪爆發增幅",
+      "殘餘過載 (被動)",
+      "齒輪循環 (被動)",
+      "齒輪彈雨掃射"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_1",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 0.0,
+    "rarity_zh": "普通 (白)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "scepter_priest_1",
+      "off_hand": "book_001"
+    },
+    "skill_ids": [
+      "lesser_heal"
+    ],
+    "skill_names_zh": [
+      "初級治療術"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_2",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 1.0,
+    "rarity_zh": "優秀 (綠)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "scepter_priest_1",
+      "off_hand": "book_001"
+    },
+    "skill_ids": [
+      "lesser_heal",
+      "holy_strike"
+    ],
+    "skill_names_zh": [
+      "初級治療術",
+      "神聖打擊"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_3",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 2.0,
+    "rarity_zh": "稀有 (藍)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "scepter_priest_2",
+      "off_hand": "book_002"
+    },
+    "skill_ids": [
+      "lesser_heal",
+      "blessing_light",
+      "mass_healing"
+    ],
+    "skill_names_zh": [
+      "初級治療術",
+      "聖光祈福",
+      "群體治療術"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_4",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 3.0,
+    "rarity_zh": "史詩 (紫)",
+    "race": "skeleton",
+    "race_zh": "骷髏",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "scepter_priest_3",
+      "off_hand": "book_003"
+    },
+    "skill_ids": [
+      "curse_agony",
+      "touch_void",
+      "dark_sanctuary",
+      "mass_curse"
+    ],
+    "skill_names_zh": [
+      "痛苦折磨詛咒",
+      "虛空之觸",
+      "暗影庇護所",
+      "群體詛咒"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_5",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 4.0,
+    "rarity_zh": "傳說 (橘)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "scepter_priest_5",
+      "off_hand": "book_priest_5"
+    },
+    "skill_ids": [
+      "divine_verdict",
+      "holy_strike",
+      "mass_healing",
+      "heaven_toll",
+      "dreadlight_echo"
+    ],
+    "skill_names_zh": [
+      "神聖裁決",
+      "神聖打擊",
+      "群體治療術",
+      "天堂鳴鐘",
+      "恐懼光芒迴響"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_6",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 5.0,
+    "rarity_zh": "神話 (紅)",
+    "race": "specter",
+    "race_zh": "幽靈/亡魂",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "main_hand": "scepter_priest_6",
+      "off_hand": "book_priest_6"
+    },
+    "skill_ids": [
+      "curse_agony",
+      "void_fingers",
+      "dark_sanctuary",
+      "darkness_implosion",
+      "soul_rend",
+      "departed_oath"
+    ],
+    "skill_names_zh": [
+      "痛苦折磨詛咒",
+      "虛空指引",
+      "暗影庇護所",
+      "暗影內爆",
+      "靈魂撕裂",
+      "逝者誓約"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_7",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "orc",
+    "race_zh": "獸人",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "main_hand": "scepter_priest_7",
+      "off_hand": "book_priest_7"
+    },
+    "skill_ids": [
+      "shellcurse",
+      "broodmother_command_hero",
+      "toxic_plague",
+      "venomous_wail",
+      "poison_control",
+      "brooding_cycle",
+      "brood_awakening"
+    ],
+    "skill_names_zh": [
+      "甲殼詛咒",
+      "母巢之令",
+      "劇毒瘟疫",
+      "毒液哀嚎",
+      "毒術掌控 (被動)",
+      "育卵輪迴",
+      "巢穴覺醒 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_aldrian",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "main_hand": "scepter_priest_aldrian",
+      "off_hand": "book_priest_aldrian"
+    },
+    "skill_ids": [
+      "benediction_fountain",
+      "divine_revelation_smite",
+      "radiance_purity",
+      "heaven_Judicium",
+      "ancient_ecclesiarch",
+      "dawnlight_renewal",
+      "apostolic_revival"
+    ],
+    "skill_names_zh": [
+      "祝福之泉",
+      "啟示神罰",
+      "純淨光輝",
+      "天堂審判 (被動)",
+      "遠古大主教之魂",
+      "晨光復甦 (被動)",
+      "使徒復生 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_priest_bathory",
+    "class": "priest",
+    "class_zh": "牧師 (神官)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "demon",
+    "race_zh": "惡魔",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "main_hand": "scepter_priest_bathory",
+      "off_hand": "book_priest_bathory",
+      "special": "spceial_demon_bathory"
+    },
+    "skill_ids": [
+      "shadow_stitching",
+      "scarlet_meditation",
+      "flesh_altar",
+      "soul_rending_roar",
+      "remote_eecortication",
+      "hell_pact_reset",
+      "martyr_rawness"
+    ],
+    "skill_names_zh": [
+      "暗影縫合",
+      "猩紅冥想 (被動)",
+      "血肉祭壇",
+      "噬魂咆哮",
+      "隔空剝蝕",
+      "地獄契約重置 (被動)",
+      "殉道之勇 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_1",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 0.0,
+    "rarity_zh": "普通 (白)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "dagger_001",
+      "off_hand": "dagger_001"
+    },
+    "skill_ids": [
+      "toxic_strike"
+    ],
+    "skill_names_zh": [
+      "浸毒打擊"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_2",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 1.0,
+    "rarity_zh": "優秀 (綠)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "dagger_001",
+      "off_hand": "dagger_001"
+    },
+    "skill_ids": [
+      "toxic_strike",
+      "sinister_strike"
+    ],
+    "skill_names_zh": [
+      "浸毒打擊",
+      "邪惡攻擊"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_3",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 2.0,
+    "rarity_zh": "稀有 (藍)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "dagger_002",
+      "off_hand": "dagger_002"
+    },
+    "skill_ids": [
+      "toxic_strike",
+      "sinister_strike",
+      "stealthy_ambush"
+    ],
+    "skill_names_zh": [
+      "浸毒打擊",
+      "邪惡攻擊",
+      "潛行伏擊"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_4",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 3.0,
+    "rarity_zh": "史詩 (紫)",
+    "race": "nightshroud",
+    "race_zh": "夜幕幽裔",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "dagger_003",
+      "off_hand": "dagger_003"
+    },
+    "skill_ids": [
+      "shadow_embrace",
+      "sinister_strike",
+      "stealthy_ambush",
+      "backstab"
+    ],
+    "skill_names_zh": [
+      "暗影擁抱 (被動)",
+      "邪惡攻擊",
+      "潛行伏擊",
+      "背刺"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_5",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 4.0,
+    "rarity_zh": "傳說 (橘)",
+    "race": "skeleton",
+    "race_zh": "骷髏",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "dagger_rogue_5",
+      "off_hand": "dagger_rogue_5"
+    },
+    "skill_ids": [
+      "toxic_strike",
+      "bone_dart",
+      "venomous_veil",
+      "backstab",
+      "venom_recycle"
+    ],
+    "skill_names_zh": [
+      "浸毒打擊",
+      "白骨飛鏢",
+      "毒霧面紗",
+      "背刺",
+      "毒素萃取回收 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_6",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 5.0,
+    "rarity_zh": "神話 (紅)",
+    "race": "undead",
+    "race_zh": "不死族",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "dagger_rogue_6",
+      "off_hand": "dagger_rogue_6"
+    },
+    "skill_ids": [
+      "marking_dagger",
+      "shadowfang_toss",
+      "stealthy_ambush",
+      "silent_execution",
+      "death_omen",
+      "deathbound_pressure"
+    ],
+    "skill_names_zh": [
+      "標記飛匕",
+      "影牙投擲",
+      "潛行伏擊",
+      "無聲處決",
+      "死亡預兆",
+      "死縛威壓"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_7",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "dagger_rogue_7",
+      "off_hand": "dagger_rogue_7"
+    },
+    "skill_ids": [
+      "oath_blade",
+      "duskblade_return",
+      "moonshadow_slash",
+      "shadow_protection",
+      "lunar_judgment",
+      "twilight_dominion",
+      "lunar_bladefall"
+    ],
+    "skill_names_zh": [
+      "誓約之刃",
+      "暮刃歸宗 (被動)",
+      "月影斬",
+      "暗影守護",
+      "月之裁決",
+      "暮光支配 (被動)",
+      "月刃天降"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_sien",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "dagger_rotue_sien",
+      "off_hand": "dagger_rotue_sien"
+    },
+    "skill_ids": [
+      "darkfeather_flurry",
+      "nightcrow_pierce",
+      "ravenfeather_hunt",
+      "darkfeather_impale",
+      "shadowstep_resurgence",
+      "nightcrow_ascension",
+      "deathmark_verdict"
+    ],
+    "skill_names_zh": [
+      "暗羽狂襲",
+      "夜鴉穿刺",
+      "鴉羽追獵",
+      "暗羽穿刺",
+      "影步復甦 (被動)",
+      "夜鴉飛昇 (被動)",
+      "死印判決"
+    ]
+  },
+  {
+    "hero_id": "hero_rogue_vilzaan",
+    "class": "rogue",
+    "class_zh": "刺客 (盜賊)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "demon",
+    "race_zh": "惡魔",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "main_hand": "dagger_demon_vilzaan",
+      "off_hand": "dagger_demon_vilzaan"
+    },
+    "skill_ids": [
+      "shadow_embrace",
+      "oath_blade",
+      "abyssal_lunge",
+      "abyss_sunder",
+      "abyssal_mutation",
+      "mutant_flame_stalk",
+      "abysscreep_mutation"
+    ],
+    "skill_names_zh": [
+      "暗影擁抱 (被動)",
+      "誓約之刃",
+      "深淵穿刺突進",
+      "深淵撕裂",
+      "深淵異變",
+      "變異炎莖",
+      "深淵蔓延異變 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_1",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 0.0,
+    "rarity_zh": "普通 (白)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "sword_001",
+      "off_hand": "shield_001"
+    },
+    "skill_ids": [
+      "thump"
+    ],
+    "skill_names_zh": [
+      "重踏痛擊"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_2",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 1.0,
+    "rarity_zh": "優秀 (綠)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "sword_001",
+      "off_hand": "shield_001"
+    },
+    "skill_ids": [
+      "thump",
+      "taunt_skill"
+    ],
+    "skill_names_zh": [
+      "重踏痛擊",
+      "嘲諷怒吼"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_3",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 2.0,
+    "rarity_zh": "稀有 (藍)",
+    "race": "human",
+    "race_zh": "人類",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "sword_002",
+      "off_hand": "shield_002"
+    },
+    "skill_ids": [
+      "defense_blow",
+      "bloody_blow",
+      "mass_defense"
+    ],
+    "skill_names_zh": [
+      "防禦重擊",
+      "血腥打擊",
+      "群體防禦祈禱"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_4",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 3.0,
+    "rarity_zh": "史詩 (紫)",
+    "race": "elf",
+    "race_zh": "精靈",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "sword_003",
+      "off_hand": "shield_003"
+    },
+    "skill_ids": [
+      "defense_blow",
+      "taunt_skill",
+      "mass_defense",
+      "concussion_blast"
+    ],
+    "skill_names_zh": [
+      "防禦重擊",
+      "嘲諷怒吼",
+      "群體防禦祈禱",
+      "震盪爆破"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_5",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 4.0,
+    "rarity_zh": "傳說 (橘)",
+    "race": "dwarf",
+    "race_zh": "矮人",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "axe_warrior_5",
+      "off_hand": "shield_warrior_5"
+    },
+    "skill_ids": [
+      "bloody_blow",
+      "bloodlust_combo",
+      "deep_wounds",
+      "trauma_blow",
+      "blood_extraction"
+    ],
+    "skill_names_zh": [
+      "血腥打擊",
+      "嗜血連擊",
+      "深度重傷",
+      "創傷猛擊",
+      "汲血之術"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_6",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 5.0,
+    "rarity_zh": "神話 (紅)",
+    "race": "skeleton",
+    "race_zh": "骷髏",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "sword_warrior_6",
+      "off_hand": "shield_warrior_6"
+    },
+    "skill_ids": [
+      "defensive_strike",
+      "provoked_fury",
+      "mass_defense",
+      "protection_wall",
+      "armor_quake",
+      "bone_guardian"
+    ],
+    "skill_names_zh": [
+      "防衛反擊",
+      "激怒狂暴",
+      "群體防禦祈禱",
+      "守護之牆",
+      "碎甲重震",
+      "白骨守衛"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_7",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "treant",
+    "race_zh": "樹精/樹人",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "sword_warrior_7",
+      "off_hand": "shield_warrior_7"
+    },
+    "skill_ids": [
+      "withered_wood_strike",
+      "provoked_fury",
+      "life_source",
+      "woodland_aegis",
+      "restoration_sprite",
+      "earthquake_slam",
+      "tree_sprite_rebirth"
+    ],
+    "skill_names_zh": [
+      "枯木猛擊",
+      "激怒狂暴",
+      "生命之源 (被動)",
+      "林地守護",
+      "復甦妖精",
+      "地裂震擊",
+      "樹靈重生 (被動)"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_hildrena",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "viking",
+    "race_zh": "維京人",
+    "gender": "female",
+    "gender_zh": "女",
+    "equipments": {
+      "main_hand": "axe_warrior_hildrena",
+      "off_hand": "shield_warrior_hildrena"
+    },
+    "skill_ids": [
+      "shieldbound_cleave",
+      "ironwall_provocation",
+      "iron_resolve",
+      "shield_heart",
+      "shieldwall_instinct",
+      "shieldwrath_breaker",
+      "warshield_stance"
+    ],
+    "skill_names_zh": [
+      "盾衛順劈",
+      "鐵壁嘲諷",
+      "鋼鐵堅毅 (被動)",
+      "盾之心 (被動)",
+      "盾牆本能 (被動)",
+      "盾怒破滅擊",
+      "戰盾姿態"
+    ]
+  },
+  {
+    "hero_id": "hero_warrior_kraghul",
+    "class": "warrior",
+    "class_zh": "戰士 (狂戰士)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "orc",
+    "race_zh": "獸人",
+    "gender": "male",
+    "gender_zh": "男",
+    "equipments": {
+      "main_hand": "axe_orc_kraghul",
+      "off_hand": "shield_orc_kraghul"
+    },
+    "skill_ids": [
+      "blood_oath_cleave",
+      "unrelenting_fury",
+      "commanding_roar",
+      "executioner_edge",
+      "savage_overwhelm",
+      "bladestorm_quake",
+      "burning_rage"
+    ],
+    "skill_names_zh": [
+      "血誓順劈斬",
+      "不息怒火 (被動)",
+      "統御咆哮",
+      "處刑者之刃 (被動)",
+      "野蠻壓制",
+      "劍刃風暴震盪",
+      "灼熱狂怒"
+    ]
+  },
+  {
+    "hero_id": "pet_healing_flashling",
+    "class": "pet",
+    "class_zh": "戰寵 (靈獸)",
+    "rarity": 3.0,
+    "rarity_zh": "史詩 (紫)",
+    "race": "vialkin",
+    "race_zh": "魔藥侏儒",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {},
+    "skill_ids": [
+      "glimmer_heal",
+      "gleaming_gift",
+      "instant_droplet",
+      "breath_infusion"
+    ],
+    "skill_names_zh": [
+      "微光治癒",
+      "閃耀贈禮",
+      "瞬發水滴",
+      "龍息灌注 (被動)"
+    ]
+  },
+  {
+    "hero_id": "pet_hound_boneclaw",
+    "class": "pet",
+    "class_zh": "戰寵 (靈獸)",
+    "rarity": 4.0,
+    "rarity_zh": "傳說 (橘)",
+    "race": "wolf",
+    "race_zh": "巨狼族",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "destruction_stone": "destruction_stone_hound_boneclaw"
+    },
+    "skill_ids": [
+      "cursed_fang",
+      "swift_bite",
+      "instinct_ripper",
+      "brutal_maw",
+      "wraithbone_shell"
+    ],
+    "skill_names_zh": [
+      "詛咒毒牙",
+      "迅捷啃咬",
+      "本能撕裂",
+      "狂暴巨口撕咬",
+      "幽魂骨甲"
+    ]
+  },
+  {
+    "hero_id": "pet_savage_grizzly",
+    "class": "pet",
+    "class_zh": "戰寵 (靈獸)",
+    "rarity": 5.0,
+    "rarity_zh": "神話 (紅)",
+    "race": "bear",
+    "race_zh": "熊族",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "destruction_stone": "destruction_stone_bear_crit",
+      "life_stone": "life_stone_bear"
+    },
+    "skill_ids": [
+      "primal_outburst",
+      "rage_claw",
+      "wild_will",
+      "rampaging_claws",
+      "savage_overwhelm",
+      "savage_charge"
+    ],
+    "skill_names_zh": [
+      "原始爆發",
+      "狂怒利爪",
+      "荒野意志 (被動)",
+      "暴走狂爪",
+      "野蠻壓制",
+      "野蠻衝撞"
+    ]
+  },
+  {
+    "hero_id": "pet_slateshard_bruiser",
+    "class": "pet",
+    "class_zh": "戰寵 (靈獸)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "ice_elemental",
+    "race_zh": "冰霜元素",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "destruction_stone": "destruction_stone_froststeel"
+    },
+    "skill_ids": [
+      "froststeel_grasp",
+      "froststeel_charge",
+      "frozen_plating",
+      "shatterline_burst",
+      "iceline_afterblow",
+      "froststeel_constitution",
+      "frostquake_resonance"
+    ],
+    "skill_names_zh": [
+      "霜鋼抓握",
+      "霜鋼衝擊",
+      "極凍裝甲 (被動)",
+      "碎裂線爆發",
+      "冰脈餘勁",
+      "霜鋼體質 (被動)",
+      "霜震共鳴"
+    ]
+  },
+  {
+    "hero_id": "pet_slime_flame",
+    "class": "pet",
+    "class_zh": "戰寵 (靈獸)",
+    "rarity": 2.0,
+    "rarity_zh": "稀有 (藍)",
+    "race": "slime",
+    "race_zh": "史萊姆",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "elemental_stone": "elemental_stone_slime"
+    },
+    "skill_ids": [
+      "support_fire",
+      "fireball",
+      "self_destruction"
+    ],
+    "skill_names_zh": [
+      "火力支援 (被動)",
+      "火球術",
+      "自毀爆炸"
+    ]
+  },
+  {
+    "hero_id": "pet_voidsilver_sentinel",
+    "class": "pet",
+    "class_zh": "戰寵 (靈獸)",
+    "rarity": 6.0,
+    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "race": "voidborn",
+    "race_zh": "虛空後裔",
+    "gender": "unknown",
+    "gender_zh": "unknown",
+    "equipments": {
+      "fortitude_stone": "fortitude_stone_silver"
+    },
+    "skill_ids": [
+      "shield_slam",
+      "silver_barrier_slam",
+      "mass_defense",
+      "mass_provoked_fury",
+      "silver_aegis",
+      "voidwall_conversion",
+      "silver_barrier"
+    ],
+    "skill_names_zh": [
+      "盾牌猛擊",
+      "白銀重盾猛擊",
+      "群體防禦祈禱",
+      "全體狂怒挑釁",
+      "白銀庇護",
+      "虛空之牆轉換 (被動)",
+      "白銀屏障"
+    ]
+  }
+]

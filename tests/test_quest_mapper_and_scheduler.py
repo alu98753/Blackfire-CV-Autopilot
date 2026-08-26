@@ -36,6 +36,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         from utils.quest_mapper import normalize_quest_title
         self.assertEqual(normalize_quest_title("史萊姆王的致滅"), "史萊姆王的毀滅")
         self.assertEqual(normalize_quest_title("消滅蛛王與蛛俊"), "消滅蛛王與蛛後")
+        self.assertEqual(normalize_quest_title("蛛后之死"), "蛛後之死")
         self.assertEqual(normalize_quest_title("擎殺直領"), "擊殺首領")
         node_boss = self.mapper.parse_quest("擎殺直領")
         self.assertEqual(node_boss.mode_type, "ignored")

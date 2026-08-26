@@ -86,5 +86,94 @@ class TestBehaviorBagCleaning(unittest.TestCase):
         self.assertNotIn("orange_yellow", disassemble_colors)
         self.assertNotIn("red", disassemble_colors)
 
+    # =========================================================================
+    # 5.3 防卡死、重新開啟背包與備援退出測試
+    # =========================================================================
+
+    @patch('os.path.exists', return_value=True)
+    def test_5_3_resets_bag_opened_clicked_when_no_features_detected(self, mock_exists):
+        """
+        [5.3 Behavior Test]
+        Given: bag_opened_clicked 為 True，但畫面上無任何可點擊的背包動作按鈕
+        When: 連續呼叫 handle 3 次
+        Then: 重置 bag_opened_clicked 為 False，允許下一輪重新點擊開啟背包
+        """
+        self.mock_machine.bag_wait_count = 0
+        self.mock_machine.bag_opened_clicked = True
+        self.mock_machine.bag_clean_start_time = 100.0
+
+        handler = BagCleaningHandler(self.mock_machine)
+        handler.matcher = MagicMock()
+        handler.matcher.match.return_value = (None, 0.0)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        with patch('states.handlers.bag_cleaning.time.time', return_value=105.0):
+            handler.handle(fake_img, self.rect)
+            handler.handle(fake_img, self.rect)
+            handler.handle(fake_img, self.rect)
+
+        self.assertFalse(self.mock_machine.bag_opened_clicked)
+
+    @patch('os.path.exists', return_value=True)
+    def test_5_4_backup_quit_when_disassembled_without_tidy(self, mock_exists):
+        """
+        [5.4 Behavior Test]
+        Given: bag_disassembled 為 True 且畫面上沒有 tidy.png，但有 quit.png
+        When: 執行 BagCleaningHandler.handle()
+        Then: 觸發 quit_backpack 點擊退出背包並完成狀態重置與轉移
+        """
+        self.mock_machine.bag_clean_start_time = 100.0
+        self.mock_machine.bag_disassembled = True
+        self.mock_machine.bag_tidied = False
+        self.mock_machine.is_in_dungeon = False
+        self.mock_machine.previous_state = "NAVIGATING"
+
+        handler = BagCleaningHandler(self.mock_machine)
+        handler.matcher = MagicMock()
+        handler.mouse = MagicMock()
+        handler.click_and_wait_until_gone = MagicMock()
+
+        def mock_match(img, tpl, **kw):
+            if tpl == "common/quit.png":
+                return ((1100, 150), 0.95)
+            return (None, 0.0)
+
+        handler.matcher.match.side_effect = mock_match
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        with patch('states.handlers.bag_cleaning.time.sleep'):
+            with patch('states.handlers.bag_cleaning.time.time', return_value=105.0):
+                for _ in range(3):
+                    handler.handle(fake_img, self.rect)
+
+        handler.click_and_wait_until_gone.assert_called_once()
+        self.assertFalse(self.mock_machine.need_bag_cleaning)
+
+    @patch('states.handlers.bag_cleaning.time.time')
+    def test_5_5_timeout_watchdog_resets_stuck_cleaning(self, mock_time):
+        """
+        [5.5 Behavior Test]
+        Given: 背包清理狀態停留超過 30 秒
+        When: 執行 BagCleaningHandler.handle()
+        Then: 自動引發 Timeout 防卡死救援，重置所有標記並退出
+        """
+        mock_time.return_value = 100.0
+        self.mock_machine.bag_clean_start_time = None
+        self.mock_machine.is_in_dungeon = True
+
+        handler = BagCleaningHandler(self.mock_machine)
+        handler.matcher = MagicMock()
+        handler.matcher.match.return_value = (None, 0.0)
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        handler.handle(fake_img, self.rect) # 記錄 start_time = 100.0
+        mock_time.return_value = 135.0
+        handler.handle(fake_img, self.rect) # 135.0 > 100.0 + 30.0 -> 超時
+
+        self.assertFalse(self.mock_machine.need_bag_cleaning)
+        self.mock_machine.transition_to.assert_called()
+
 if __name__ == "__main__":
     unittest.main()
+

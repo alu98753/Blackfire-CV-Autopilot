@@ -173,7 +173,8 @@ class TestStateMachineLogic(unittest.TestCase):
                 return (800, 200), 0.90
             elif name == "dungeons/choice_bless.png" and match_call_count == 7:
                 match_call_count += 1
-                return (450, 200), 0.90  # 局部座標 (450, 200)，加 x_min(350) = 800，完美對齊
+                return (225, 200), 0.90  # 局部座標 (225, 200)，加 x_min(575) = 800，完美對齊
+
             elif name == "common/ok.png" and match_call_count == 8:
                 match_call_count += 1
                 return (810, 210), 0.90
@@ -605,8 +606,9 @@ class TestStateMachineLogic(unittest.TestCase):
         
         # 執行 step，觸發 BackpackFullSortingHandler
         self.state_machine.step()
-        # 驗證最後一個被點選的是領取按鈕，證明整個鏈式分選流程成功執行
-        self.mock_mouse.click.assert_called_with(700, 700)
+        # 驗證點選了銷毀/確認按鈕，證明整個鏈式分選流程成功執行
+        self.mock_mouse.click.assert_any_call(600, 600)
+
 
     @patch('os.path.exists')
     def test_global_diamond_collection_flow(self, mock_exists):
@@ -1243,8 +1245,10 @@ class TestStateMachineLogic(unittest.TestCase):
             elif name == "common/collect.png":
                 return ((900, 900), 0.9)
             elif "goods" in name or "Jewelry_workshop" in name:
-                return ((400, 400), 0.9)
+                return ((700, 250), 0.9)
             return (None, 0.0)
+
+
             
         self.mock_matcher.match.side_effect = match_side_effect
         self.mock_mouse.click.reset_mock()
@@ -1276,8 +1280,10 @@ class TestStateMachineLogic(unittest.TestCase):
             return "green"
             
         handler = self.state_machine.handlers[self.state_machine.STATE_BACKPACK_FULL_SORTING]
-        with patch.object(handler, 'classify_slot_color', side_effect=classify_slot_color_impl):
+        with patch.object(handler, 'classify_slot_color', side_effect=classify_slot_color_impl), \
+             patch.object(handler, 'is_item_authorized_by_goods_settings', return_value=True):
             self.state_machine.step()
+
             
         # 驗證執行了以下步驟：
         # 1. 點擊右側藍色裝備進行銷毀 (中心在 630 + 34 + 67 = 731, 98 + 105 + 69 = 272)

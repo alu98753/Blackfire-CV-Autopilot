@@ -1,39 +1,8 @@
 
 # 待辦事項與未來優化規劃 (Future Work & Edge Cases)
 
-## 🛡️ 邊界防守與長掛機防護 (Edge Cases & AFK Stability)
 
-### 🌴 出國五天長掛機注意事項與維護指南
-
-#### 💡 1. 五天長掛機 3 大架構支柱
-1. **狀態持久化 ([DailyManager](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py))**：所有完成子流程與 08:05 重置週期自動記錄於 [daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json)，確保斷線重啟能無縫接續進度。
-2. **全局看門狗與自癒修復 ([Watchdog](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py) & [UnexpectedPopupRecoveryHandler](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/handler.py))**：超過 N 分鐘未推進時自動觸發全圖意外彈窗清理 (參見 [exception_subsystem_architecture.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/exception_subsystem_architecture.md))。
-3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止點擊未生效導致狀態過早推進。
-
-#### 🎯 2. 優化優先級矩陣 (Priority Hierarchy)
-- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換�#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
-- [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Blood_Altar.md)]
-- [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md)]
-- [已完成] **每日討伐首領領主 (每次討伐需 5 點體力/麵包)** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]
-- [已完成] **每日任務與免費抽獎** [REF: [daily8.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily8.md)]
-- [已完成] **CPU 低功耗睡眠控管** [REF: [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)]
-- [已驗證] **長時間運轉資源與記憶體無洩漏** (1,000 次循環僅增 1.09MB)
-- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_watchdog_collect_only_exemption.py)]
-- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_deadlock_risk_prevention.py)]
-- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_phase_transition_stability.py)]
-- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
-- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]
-- [已完成並驗證] **Mode-Agnostic 地下城斷線與遊戲重開自癒** (全模式辨識 `dungeons/leave.png` 起點恢復探索) [REF: [test_dungeon_relaunch_recovery.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_dungeon_relaunch_recovery.py)]
-- [已完成並驗證] **DailyManager 跨日 08:05 自動標籤比對與強制清零** (比對持久化 Date Tag 解決跨日未重置) [REF: [daily_manager.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py)]
-- [已完成並驗證] **Watchdog 1st Timeout 降級恢復與戰鬥進度刷新** (第一次逾時無彈窗恢復原狀態，並於戰鬥中刷新 UI 進度) [REF: [test_popup_recovery_retry_behavior.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_popup_recovery_retry_behavior.py)]
-- [已完成並驗證] **背包已滿 goods_settings 單一權威來源與 2 格 (279px) 精準像素 Drag 位移** (銷毀授權與 goods_settings 100% 同步，全 False 安全兜底；按 2 格步進精準像素對齊) [REF: [test_backpack_full_dynamic_destroyable.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_backpack_full_dynamic_destroyable.py)]
-- [已完成並驗證] **導航狀態 Watchdog 90 秒寬鬆門檻** (將 `STATE_NAVIGATING` 放寬至 90 秒，排除選關卡卡片與翻頁導航誤判) [REF: [watchdog.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py)]
-- [已完成並驗證] **測試套件遊戲啟動與殺進程生命週期隔離** (統一集中至 `test_game_process_lifecycle.py` 並標註 `@unittest.skip`，防範自動測試誤觸發) [REF: [test_game_process_lifecycle.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_game_process_lifecycle.py)]次循環僅增 1.09MB)
-- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_watchdog_collect_only_exemption.py)]
-- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_deadlock_risk_prevention.py)]
-- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_phase_transition_stability.py)]
-- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
-- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]
+我覺得問題在於 我程式預設有兩個螢幕 但是有時我會移除遠端的大螢幕(benq的) 而只用筆電螢幕 此時他重開的時候 點擊的位置會錯誤 這是根本上的問題
 
 ----
 
@@ -96,3 +65,37 @@
 - **[已經解決]** 程式碼內硬編碼預設清單（`dungeon_names`, `greedy_allowed_indices`, `entry_templates`）導致邊界隱患。
   - **原因**：Handler 與狀態機中分散著 fallback 硬編碼預設值。
   - **解法**：貫徹 Single Source of Truth 與 Fail-Fast 原則，所有參數一律由 `config` 驅動，配置缺失時立即拋出 `ValueError` 防禦性中斷。
+
+  
+
+### 🌴 出國五天長掛機注意事項與維護指南
+
+#### 💡 1. 五天長掛機 3 大架構支柱
+1. **狀態持久化 ([DailyManager](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py))**：所有完成子流程與 08:05 重置週期自動記錄於 [daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json)，確保斷線重啟能無縫接續進度。
+2. **全局看門狗與自癒修復 ([Watchdog](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py) & [UnexpectedPopupRecoveryHandler](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/handler.py))**：超過 N 分鐘未推進時自動觸發全圖意外彈窗清理 (參見 [exception_subsystem_architecture.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/exception_subsystem_architecture.md))。
+3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止點擊未生效導致狀態過早推進。
+
+#### 🎯 2. 優化優先級矩陣 (Priority Hierarchy)
+- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換�#### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
+- [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Blood_Altar.md)]
+- [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md)]
+- [已完成] **每日討伐首領領主 (每次討伐需 5 點體力/麵包)** [REF: [lord_boss_story.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/lord_boss/lord_boss_story.md)]
+- [已完成] **每日任務與免費抽獎** [REF: [daily8.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/daily8.md)]
+- [已完成] **CPU 低功耗睡眠控管** [REF: [cpu_optimization.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/cpu_optimization.md)]
+- [已驗證] **長時間運轉資源與記憶體無洩漏** (1,000 次循環僅增 1.09MB)
+- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_watchdog_collect_only_exemption.py)]
+- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_deadlock_risk_prevention.py)]
+- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_phase_transition_stability.py)]
+- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
+- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]
+- [已完成並驗證] **Mode-Agnostic 地下城斷線與遊戲重開自癒** (全模式辨識 `dungeons/leave.png` 起點恢復探索) [REF: [test_dungeon_relaunch_recovery.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_dungeon_relaunch_recovery.py)]
+- [已完成並驗證] **DailyManager 跨日 08:05 自動標籤比對與強制清零** (比對持久化 Date Tag 解決跨日未重置) [REF: [daily_manager.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py)]
+- [已完成並驗證] **Watchdog 1st Timeout 降級恢復與戰鬥進度刷新** (第一次逾時無彈窗恢復原狀態，並於戰鬥中刷新 UI 進度) [REF: [test_popup_recovery_retry_behavior.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_popup_recovery_retry_behavior.py)]
+- [已完成並驗證] **背包已滿 goods_settings 單一權威來源與 2 格 (279px) 精準像素 Drag 位移** (銷毀授權與 goods_settings 100% 同步，全 False 安全兜底；按 2 格步進精準像素對齊) [REF: [test_backpack_full_dynamic_destroyable.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_backpack_full_dynamic_destroyable.py)]
+- [已完成並驗證] **導航狀態 Watchdog 90 秒寬鬆門檻** (將 `STATE_NAVIGATING` 放寬至 90 秒，排除選關卡卡片與翻頁導航誤判) [REF: [watchdog.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py)]
+- [已完成並驗證] **測試套件遊戲啟動與殺進程生命週期隔離** (統一集中至 `test_game_process_lifecycle.py` 並標註 `@unittest.skip`，防範自動測試誤觸發) [REF: [test_game_process_lifecycle.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_game_process_lifecycle.py)]次循環僅增 1.09MB)
+- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_watchdog_collect_only_exemption.py)]
+- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_deadlock_risk_prevention.py)]
+- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_phase_transition_stability.py)]
+- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_click_and_wait_until_gone_closed_loop.py)]
+- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_unexpected_popup_docking.py)]

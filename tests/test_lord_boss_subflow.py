@@ -131,7 +131,11 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
         self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
         self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.50)
-        self.state_machine.matcher.match.side_effect = lambda img, temp, **kw: ((100, 100), 0.9)
+        def fake_match(img, temp, **kw):
+            if temp in ["common/confirm.png", "common/ok.png"]:
+                return (None, 0.0)
+            return ((100, 100), 0.9)
+        self.state_machine.matcher.match.side_effect = fake_match
         
         handler = LordBossHandler(self.state_machine)
         handler.has_reset_to_left = True
@@ -326,6 +330,52 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         # 斷言：因為信心度 < 0.85 被過濾，觸發 quit 退場流程並標記完成
         spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
         self.assertTrue(spider_info["completed_today"])
+
+    @patch('os.path.exists')
+    def test_lord_boss_popup_guard_prioritizes_confirm_over_door(self, mock_exists):
+        """測試：畫面同時存在 confirm 彈窗與城鎮大門時，LORD_BOSS 必須優先點擊 confirm 彈窗而非背景大門"""
+        mock_exists.return_value = True
+
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+
+        def fake_match(img, temp, **kw):
+            if temp == "common/confirm.png":
+                return ((500, 450), 0.95)
+            if temp == "common/door.png":
+                return ((68, 720), 0.94)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        handler = LordBossHandler(self.state_machine)
+
+        res = handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        self.assertTrue(res)
+        # 斷言：發起點擊的是 confirm.png (500, 450)，而非 door.png (68, 720)
+        self.state_machine.mouse.click.assert_called_once_with(500, 450)
+
+    @patch('os.path.exists')
+    def test_lord_boss_popup_guard_prioritizes_ok_over_door(self, mock_exists):
+        """測試：畫面同時存在 ok 彈窗與城鎮大門時，LORD_BOSS 必須優先點擊 ok 彈窗而非背景大門"""
+        mock_exists.return_value = True
+
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS
+
+        def fake_match(img, temp, **kw):
+            if temp == "common/ok.png":
+                return ((520, 460), 0.93)
+            if temp == "common/door.png":
+                return ((68, 720), 0.94)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        handler = LordBossHandler(self.state_machine)
+
+        res = handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        self.assertTrue(res)
+        # 斷言：發起點擊的是 ok.png (520, 460)，而非 door.png (68, 720)
+        self.state_machine.mouse.click.assert_called_once_with(520, 460)
 
 if __name__ == '__main__':
     unittest.main()

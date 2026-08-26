@@ -146,6 +146,26 @@
 
 ---
 
+### ⚡ 3. 戰鬥時鐘倍速與自動化設定器 (50x 極速秒殺)
+
+本專案提供專屬輔助工具 [set_battle_settings.py](meta_data/scripts/set_battle_settings.py)，可自由修改遊戲原生戰鬥主時鐘 (`battle_settings.save` ➔ `time_scale` 1.0x ~ 100.0x)：
+
+```powershell
+# 設定為 12 倍極速上限 (預設推薦，直接執行即可)
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py
+
+# 自由指定任意倍速 (例如 6x 或 12x)
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 6
+
+# 還原為原廠 2.0x 正常倍速
+.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --reset
+```
+
+> [!TIP]
+> **免重開即時生效**：本工具內建「存檔唯讀鎖定 (`attrib +r`)」與「運行中進程即時記憶體熱注入 (Live Memory Injection)」。修改後**完全無需重開遊戲**，直接進入下一場戰鬥即可現場享受 50 倍超光速！
+
+---
+
 ### 3. 視覺化調試輔助：`debug_click.png`
 
 在啟用 `--backend`（後台模式）時，程式在送出每次點擊前都會在當前視窗畫面上繪製標記：
@@ -189,3 +209,11 @@
 ## 📋 開發中與待辦功能 (TODOs)
 
 請參考：[future_work.md](docs/future_work.md)
+
+---
+
+## ⚠️ 數據來源與開源聲明 (Notice & Disclaimer)
+
+* **原始數據說明**：本專案中 `meta_data/raw_tres/meta_datas.tres` 為《Blackfire Crusade》遊戲客戶端/遊戲作者導出之底層數據資源檔，包含遊戲內全英雄、全技能、全職業與數值成長設定。
+* **使用目的**：僅用於個人學術研究、數值模擬、自動化腳本校對與中文化分析圖鑑生成，無任何商業用途。
+* **開源與公開注意事項**：若未來將本儲存庫 (Repository) 轉為公開 (Public) 或轉載分享，**請特別注意遊戲原作者之智慧財產權與版權歸屬**。若有版權或授權相關疑慮，應於公開前將未經授權的原始資源檔案自 Git 歷史或專案目錄中移除。

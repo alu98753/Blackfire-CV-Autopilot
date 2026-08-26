@@ -75,14 +75,18 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         )
         launcher.ensure_game_ready()
 
-        # 4. 清空暫存狀態與連鎖卡死計數器
+        # 4. 清空暫存狀態、UI 視窗殘留標記與連鎖卡死計數器
         machine.stashed_state = None
         machine.stashed_context = {}
+        machine.bread_window_opened = False
+        machine.diamond_window_opened = False
+        machine.task_complete_phase = "INIT_BANNER_CHECK"
         if hasattr(machine, "exception_watchdog"):
             machine.exception_watchdog.consecutive_stuck_count = 0
             machine.exception_watchdog.last_stuck_state = None
 
-        # 5. 轉移至 NAVIGATING 狀態，全域 handle_global_login 會自動進行登入與進城
-        logging.info("🔄 [GameRelaunchSubflow] 重啟完成！轉移狀態至 STATE_NAVIGATING 交由 LoginFlow 接管...")
-        machine.transition_to(machine.STATE_NAVIGATING)
+
+        # 5. 轉移至 STATE_UNKNOWN 狀態，全域 detect_current_state 與 handle_global_login 會自動進行全域定位與登入
+        logging.info("🔄 [GameRelaunchSubflow] 重啟完成！轉移狀態至 STATE_UNKNOWN 交由全域掃描與 LoginFlow 接管...")
+        machine.transition_to(machine.STATE_UNKNOWN)
         return True
