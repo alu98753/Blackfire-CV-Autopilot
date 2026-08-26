@@ -118,48 +118,47 @@ class TestBehaviorPauseResume(unittest.TestCase):
     @patch("ctypes.windll.user32.GetForegroundWindow")
     @patch("ctypes.windll.kernel32.GetConsoleWindow")
     @patch("ctypes.windll.user32.GetAsyncKeyState")
-    def test_pause_controller_focus_filtering(self, mock_get_async_key, mock_get_console, mock_get_fg):
+    def test_pause_controller_focus_filtering_and_triple_tap(self, mock_get_async_key, mock_get_console, mock_get_fg):
         """
-        測試 PauseController 視窗焦點過濾與防抖動機制
+        測試 PauseController 連按 3 次空白鍵 (Triple-Space) 觸發與視窗焦點過濾機制
         """
         mock_get_console.return_value = 11111 # Console HWND
-        controller = PauseController(capturer=self.mock_capturer, debounce_sec=0.1)
+        controller = PauseController(capturer=self.mock_capturer, required_taps=3, window_sec=0.5, debounce_sec=0.01)
 
-        # 1. 前景視窗為 Console 視窗，且按下 Space (0x8000)
+        # 1. 前景視窗為 Console 視窗，第 1 次按 Space -> 尚未滿 3 次，返回 False
         mock_get_fg.return_value = 11111
         mock_get_async_key.return_value = 0x8000
-        triggered = controller.check_toggle_triggered()
-        self.assertTrue(triggered)
+        self.assertFalse(controller.check_toggle_triggered())
 
-        # 2. 防抖動期間再次檢測 -> 應返回 False
-        triggered_again = controller.check_toggle_triggered()
-        self.assertFalse(triggered_again)
-
-        # 3. 等待防抖動時間過後，按鍵持續按著未放開 (Key-Up lock) -> 應返回 False
-        time.sleep(0.15)
-        triggered_hold = controller.check_toggle_triggered()
-        self.assertFalse(triggered_hold)
-
-        # 4. 釋放按鍵 (is_down = False)
+        # 釋放按鍵
+        time.sleep(0.02)
         mock_get_async_key.return_value = 0x0
         controller.check_toggle_triggered()
-        self.assertFalse(controller.key_pressed)
 
-        # 5. 前景視窗為 Game 視窗 (12345)，按下 Space -> 應返回 True
-        time.sleep(0.15)
-        mock_get_fg.return_value = 12345
+        # 第 2 次按 Space -> 尚未滿 3 次，返回 False
+        time.sleep(0.02)
         mock_get_async_key.return_value = 0x8000
-        triggered_game = controller.check_toggle_triggered()
-        self.assertTrue(triggered_game)
+        self.assertFalse(controller.check_toggle_triggered())
 
-        # 6. 前景視窗為第三方視窗 (例如瀏覽器 99999)，按下 Space -> 應被 100% 過濾忽略
+        # 釋放按鍵
+        time.sleep(0.02)
         mock_get_async_key.return_value = 0x0
         controller.check_toggle_triggered()
-        time.sleep(0.15)
+
+        # 第 3 次按 Space -> 滿 3 次，返回 True
+        time.sleep(0.02)
+        mock_get_async_key.return_value = 0x8000
+        self.assertTrue(controller.check_toggle_triggered())
+
+        # 2. 前景視窗為第三方視窗 (例如瀏覽器 99999)，連敲多次 Space 均被 100% 過濾忽略
+        mock_get_async_key.return_value = 0x0
+        controller.check_toggle_triggered()
         mock_get_fg.return_value = 99999 # 瀏覽器
-        mock_get_async_key.return_value = 0x8000
-        triggered_browser = controller.check_toggle_triggered()
-        self.assertFalse(triggered_browser)
+        for _ in range(5):
+            mock_get_async_key.return_value = 0x8000
+            self.assertFalse(controller.check_toggle_triggered())
+            mock_get_async_key.return_value = 0x0
+            controller.check_toggle_triggered()
 
 if __name__ == "__main__":
     unittest.main()

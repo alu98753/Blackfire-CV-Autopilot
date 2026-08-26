@@ -8,20 +8,24 @@ GA_ROOT = 2
 
 class PauseController:
     """
-    熱鍵與前景視窗焦點控制器 (PauseController)
+    熱鍵與前景視窗焦點控制器 (PauseController - Triple-Space Edition)
     
-    雙路徑雙重保障：
-    1. 【終端機焦點路徑】：透過 msvcrt.kbhit() 監聽標準輸入流。
-       只要終端機 (CMD / PowerShell / Windows Terminal / VS Code Terminal) 有焦點並按空白鍵，100% 必定捕獲！
-    2. 【遊戲與終端機前景物理按鍵】：透過 GetAsyncKeyState(VK_SPACE) 配合視窗標題/HWND 根層級判定。
-       當使用者在遊戲視窗或終端機視窗上按空白鍵時，精確觸發暫停/恢復，且不干擾瀏覽器等其他程式。
+    核心機制：
+    1. 【連敲 3 次空白鍵觸發 (Triple-Space)】：在 1.2 秒內連續按下 3 次空白鍵，才切換暫停/繼續，徹底防止遊戲或打字時單次誤觸。
+    2. 【即時回饋提示】：每按一次空白鍵即時印出進度提示 (1/3 -> 2/3 -> 3/3 達成)。
+    3. 【雙路徑雙重保障】：
+       - 終端機 (CMD / PowerShell / Windows Terminal / VS Code)：透過 msvcrt.kbhit() 監聽標準輸入流。
+       - 遊戲視窗：透過 GetAsyncKeyState(VK_SPACE) 配合視窗標題與頂層 HWND 比對。
     """
 
-    def __init__(self, capturer=None, debounce_sec: float = 0.3):
+    def __init__(self, capturer=None, required_taps: int = 3, window_sec: float = 1.2, debounce_sec: float = 0.05):
         self.capturer = capturer
+        self.required_taps = required_taps
+        self.window_sec = window_sec
         self.debounce_sec = debounce_sec
         self.key_pressed = False
-        self.last_toggle_time = 0.0
+        self.last_press_time = 0.0
+        self.tap_timestamps = []
 
     def get_console_hwnd(self):
         """
@@ -104,26 +108,49 @@ class PauseController:
         """
         return self.is_console_window_active() or self.is_game_window_active()
 
-    def check_toggle_triggered(self) -> bool:
+    def _register_tap(self, now: float) -> bool:
         """
-        檢查是否在目標視窗按下了 [Space 空白鍵]。
-        
-        :return: True 代表觸發切換；False 代表無事件或被過濾
+        記錄一次有效空白鍵敲擊，並檢查是否在時間窗口內湊滿 3 次。
         """
-        now = time.time()
-        if now - self.last_toggle_time < self.debounce_sec:
+        # 清除超出時間窗口的過期敲擊記錄
+        self.tap_timestamps = [t for t in self.tap_timestamps if now - t <= self.window_sec]
+        self.tap_timestamps.append(now)
+        self.last_press_time = now
+
+        current_count = len(self.tap_timestamps)
+        if current_count >= self.required_taps:
+            self.tap_timestamps.clear()
+            try:
+                print(f"\r[*] [空白鍵 3/3 達成] 正在切換暫停/繼續狀態...                    \n", flush=True)
+            except Exception:
+                pass
+            return True
+        else:
+            remaining = self.required_taps - current_count
+            try:
+                print(f"\r[*] [空白鍵 {current_count}/3] 於 {self.window_sec:.1f} 秒內再按 {remaining} 次切換暫停/繼續...", end="", flush=True)
+            except Exception:
+                pass
             return False
 
+    def check_toggle_triggered(self) -> bool:
+        """
+        檢查是否在目標視窗連續按下了 3 次 [Space 空白鍵]。
+        
+        :return: True 代表成功觸發暫停/恢復切換；False 代表次數未滿或被過濾
+        """
+        now = time.time()
+
         # -------------------------------------------------------------
-        # 路徑 1：終端機直接字元流 (msvcrt.kbhit) - 最可靠！
+        # 路徑 1：終端機直接字元流 (msvcrt.kbhit)
         # -------------------------------------------------------------
         try:
             import msvcrt
             while msvcrt.kbhit():
                 ch = msvcrt.getch()
                 if ch == b' ':
-                    self.last_toggle_time = now
-                    return True
+                    if now - self.last_press_time >= self.debounce_sec:
+                        return self._register_tap(now)
         except Exception:
             pass
 
@@ -136,10 +163,9 @@ class PauseController:
                 is_down = bool(state & 0x8000)
 
                 if is_down:
-                    if not self.key_pressed:
+                    if not self.key_pressed and (now - self.last_press_time >= self.debounce_sec):
                         self.key_pressed = True
-                        self.last_toggle_time = now
-                        return True
+                        return self._register_tap(now)
                 else:
                     self.key_pressed = False
             else:

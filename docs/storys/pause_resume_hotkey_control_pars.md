@@ -86,9 +86,12 @@ def compensate_internal_timers(self, pause_duration: float):
     self.just_resumed_from_user = True
 ```
 
-### 3. 雙路徑焦點監聽架構 ([PauseController](../../utils/keyboard_listener.py))
+### 3. 雙路徑焦點監聽與 Triple-Space 防誤觸架構 ([PauseController](../../utils/keyboard_listener.py))
+* **連按 3 次空白鍵觸發 (Triple-Space)**：在 1.2 秒內連續按下 3 次空白鍵才切換暫停/繼續，徹底防止遊戲操作或打字時因單次按壓造成誤觸。
+* **即時視覺進度提示**：每按一次即時提示 `[空白鍵 1/3] -> [空白鍵 2/3] -> [3/3 達成]`。
 * **路徑 1 (終端機)**：透過 `msvcrt.kbhit()` 監聽標準輸入字元流。只要終端機獲得焦點，按空白鍵 100% 毫秒級即時捕獲，完全繞開 Windows Terminal 的 HWND 不一致問題。
-* **路徑 2 (遊戲視窗)**：透過 `GetAsyncKeyState(VK_SPACE)` 配合視窗標題 (`Blackfire` / `Crusade` / `Godot`) 與頂層 HWND 比對，當使用者在遊戲視窗中按空白鍵時即刻暫停，且絕不干擾瀏覽器等其他視窗打字。
+* **路徑 2 (遊戲視窗)**：透過 `GetAsyncKeyState(VK_SPACE)` 配合視窗標題 (`Blackfire` / `Crusade` / `Godot`) 與頂層 HWND 比對，當使用者在遊戲視窗中連敲空白鍵時即刻暫停，且絕不干擾瀏覽器等其他視窗打字。
+* **滑鼠手動操作全時段防護**：使用者在遊戲中手動移動滑鼠超過 3 秒後恢復時，同樣執行 `compensate_internal_timers`，確保無論手動操作多久都不會被 Watchdog 誤判卡死。
 
 ---
 

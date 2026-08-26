@@ -37,27 +37,28 @@ graph TD
 
 ---
 
-## 🎯 二、視窗焦點過濾機制 (Focus Window Filter)
+## 🎯 二、連按 3 次空白鍵 (Triple-Space) 與視窗焦點過濾機制
 
-為了達成「使用者在看遊戲或看終端機時隨手按空白鍵即可暫停」，但「切換到瀏覽器、記事本打字時絕對不誤觸」，系統採用 Windows 原生 API 進行嚴格的雙視窗前景焦點判定：
+為了徹底防止使用者在遊戲走位、跳躍或打字時因「單按一次空白鍵」造成意外暫停或無意間恢復掛機，系統採用 **「1.2 秒內連敲 3 次空白鍵 (Triple-Space)」** 搭配 Windows 前景焦點判定：
 
 ```mermaid
 graph TD
-    Key["使用者按下 [Space 空白鍵]"] --> FG["取得目前 Windows 前景作用中視窗<br>fg_hwnd = GetForegroundWindow()"]
+    Key["使用者按下 [Space 空白鍵]"] --> FG["判定作用中視窗 (Terminal 或 Game)"]
     
-    FG --> Check{"fg_hwnd 是否匹配目標？"}
-    Check -->|是: 等於 Console 終端機視窗| Trigger["✅ 觸發暫停 / 恢復切換 (Toggle)"]
-    Check -->|是: 等於 Game 遊戲視窗| Trigger
-    Check -->|否: 為瀏覽器/LINE/其他程式| Ignore["⛔ 忽略按鍵 (不攔截、不觸發)"]
+    FG --> Check{"是否在目標視窗？"}
+    Check -->|否: 瀏覽器/其他程式| Ignore["⛔ 100% 忽略按鍵"]
+    Check -->|是: Terminal 或 Game| Tap["記錄敲擊次數與時間戳 (1.2s 窗口)"]
     
-    Trigger --> Lock["防抖動與釋放鎖 (Debounce & Key-Up Lock)"]
-    Lock --> Exec["執行 StateMachine.toggle_pause()"]
+    Tap --> CountCheck{"1.2 秒內是否累積滿 3 次？"}
+    CountCheck -->|次數 1/3 或 2/3| Prompt["顯示即時進度提示 (再按 N 次切換)"]
+    CountCheck -->|滿 3/3 次| Trigger["✅ 觸發 StateMachine.toggle_pause() 切換暫停/繼續"]
 ```
 
 ### 關鍵 API 與實作規範：
-* **Console HWND**：`ctypes.windll.kernel32.GetConsoleWindow()`
-* **Game HWND**：`capturer.hwnd` (由 `ScreenCapturer` 初始化時取得的遊戲視窗控制代碼)
-* **按鍵狀態偵測**：`ctypes.windll.user32.GetAsyncKeyState(0x20) & 0x8000` (VK_SPACE)
+* **觸發條件**：`1.2 秒 (window_sec)` 內連續按下 `3 次 (required_taps)` 空白鍵。
+* **路徑 1 (終端機焦點)**：透過 `msvcrt.kbhit()` 監聽標準輸入字元流，100% 毫秒級捕獲。
+* **路徑 2 (遊戲視窗焦點)**：透過 `GetAsyncKeyState(VK_SPACE)` 配合視窗標題與頂層 HWND 比對。
+* **即時回饋**：終端機即時輸出 `[*] [空白鍵 1/3] 於 1.2 秒內再按 2 次切換暫停/繼續...`。
 * **防抖動保護 (Debounce)**：單次按下後必須等待 Key-Up（按鍵釋放）或至少間隔 `0.3 秒`，防止單次點擊在多輪迴圈中被反覆觸發。
 
 ---
