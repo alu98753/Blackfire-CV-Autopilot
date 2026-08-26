@@ -2,6 +2,7 @@ import os
 import logging
 from utils.config_helper import get_stage_configs
 
+WINDOW_TITLE = "Blackfire Crusade"
 
 # ==================== 全域冷卻時間與模板清單設定 ====================
 GLOBAL_SETTINGS = {
@@ -490,5 +491,4 @@ def get_subflow_feature_mapping():
     """
     cfg = get_exception_features_config()
     return cfg.get("subflow_feature_mapping", {})
-
 

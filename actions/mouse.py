@@ -5,9 +5,11 @@ import logging
 import win32gui
 import win32api
 import win32con
-import ctypes
 import cv2
 import numpy as np
+
+from config import WINDOW_TITLE
+from utils.window import WindowHandle
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -17,33 +19,20 @@ pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.002
 
 class MouseController:
-    def __init__(self, human_like=False, backend_mode=False, window_title="Blackfire Crusade"):
+    def __init__(self, human_like=False, backend_mode=False, window_title=WINDOW_TITLE):
         self.human_like = human_like
         self.backend_mode = backend_mode
         self.window_title = window_title
         self.last_action_time = 0.0
         self.last_target_pos = None
         self.state_machine = None
-        self._hwnd = None
+        self._window = WindowHandle(window_title)
 
     def get_hwnd(self):
         """
         取得或快取遊戲視窗控制代碼 (hwnd)。
         """
-        if self._hwnd is None or not win32gui.IsWindow(self._hwnd):
-            self._hwnd = win32gui.FindWindow(None, self.window_title)
-        return self._hwnd
-
-    def get_dpi_factor(self, hwnd):
-        """
-        獲取視窗所在顯示器的 DPI 縮放因子。
-        如果 Windows 版本太舊不支持 GetDpiForWindow，則預設回傳 1.0。
-        """
-        try:
-            dpi = ctypes.windll.user32.GetDpiForWindow(hwnd)
-            return dpi / 96.0
-        except Exception:
-            return 1.0
+        return self._window.get()
 
     def _screen_to_client(self, hwnd, x, y):
         """
@@ -58,13 +47,6 @@ class MouseController:
             return client_x, client_y
         except Exception:
             return int(x), int(y)
-
-    def _phys_to_logical(self, hwnd, rect, phys_x, phys_y):
-        """
-        保留向前相容介面。直接傳回純淨的 Client 座標。
-        """
-        cx, cy = self._screen_to_client(hwnd, rect[0] + phys_x if rect else phys_x, rect[1] + phys_y if rect else phys_y)
-        return cx, cy, 1.0
 
     def _draw_debug_click(self, hwnd, rx_physical, ry_physical):
         """
@@ -370,8 +352,10 @@ class MouseController:
         if self.backend_mode:
             hwnd = self.get_hwnd()
             if hwnd:
-                rsx_logical, rsy_logical, _ = self._phys_to_logical(hwnd, rect, safe_rel_x, safe_rel_y)
-                lparam = win32api.MAKELONG(rsx_logical, rsy_logical)
+                safe_x = rect[0] + safe_rel_x if rect else safe_rel_x
+                safe_y = rect[1] + safe_rel_y if rect else safe_rel_y
+                client_x, client_y = self._screen_to_client(hwnd, safe_x, safe_y)
+                lparam = win32api.MAKELONG(client_x, client_y)
                 win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
         else:
             pyautogui.moveTo(rect[0] + safe_rel_x, rect[1] + safe_rel_y)

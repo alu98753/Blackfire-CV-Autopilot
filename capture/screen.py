@@ -1,7 +1,4 @@
 import logging
-import sys
-import os
-import subprocess
 import time
 import ctypes
 import numpy as np
@@ -12,27 +9,26 @@ import win32ui
 import win32con
 from typing import Optional, Tuple, Dict, Any
 
+from config import WINDOW_TITLE
+from utils.window import WindowHandle
+
 
 class ScreenCapturer:
-    def __init__(self, window_title="Blackfire Crusade", backend_mode=False, monitor_index=1):
+    def __init__(self, window_title=WINDOW_TITLE, backend_mode=False, monitor_index=1):
         # 已關閉 DPI Awareness 宣告以符合專案與使用者需求
         self.window_title = window_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
         self.sct = mss.MSS()
-        self._hwnd = None
+        self._window = WindowHandle(window_title)
         self.last_monitor = None
         self._backend_printwindow_supported = True
-        self._cached_phys_rect = None
-        self._cached_log_rect = None
 
     def get_hwnd(self):
         """
         取得遊戲視窗控制代碼 (HWnd)，包含防快取失效重查。
         """
-        if not self._hwnd or not win32gui.IsWindow(self._hwnd):
-            self._hwnd = win32gui.FindWindow(None, self.window_title)
-        return self._hwnd
+        return self._window.get()
 
     def get_window_rect(self, quiet: bool = False):
         """
@@ -162,66 +158,6 @@ class ScreenCapturer:
         except Exception as e:
             logging.error(f"❌ 自動移動視窗至 Monitor {target_idx} 失敗: {e}", exc_info=True)
         return False
-
-    def get_logical_window_rect(self, phys_rect):
-        """
-        優先使用 Windows 原生 PhysicalToLogicalPointForWindow API 獲取 100% 精準的邏輯座標。
-        若 API 呼叫失敗，則退回使用 DPI Unaware 子進程快取方案。
-        """
-        if phys_rect is None:
-            return None
-            
-        hwnd = self.get_hwnd()
-        if hwnd:
-            try:
-                class POINT(ctypes.Structure):
-                    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-                
-                pt_tl = POINT(phys_rect["left"], phys_rect["top"])
-                pt_br = POINT(phys_rect["left"] + phys_rect["width"], phys_rect["top"] + phys_rect["height"])
-                
-                res_tl = ctypes.windll.user32.PhysicalToLogicalPointForWindow(hwnd, ctypes.byref(pt_tl))
-                res_br = ctypes.windll.user32.PhysicalToLogicalPointForWindow(hwnd, ctypes.byref(pt_br))
-                
-                if res_tl and res_br:
-                    log_rect = {
-                        "left": pt_tl.x,
-                        "top": pt_tl.y,
-                        "width": pt_br.x - pt_tl.x,
-                        "height": pt_br.y - pt_tl.y
-                    }
-                    return log_rect
-            except Exception as e_api:
-                logging.debug(f"使用 PhysicalToLogicalPointForWindow API 轉換失敗: {e_api}")
-
-        # ⚡ 恢復舊版快取機制：若座標無變化，直接傳回快取結果避開 subprocess 開銷
-        if hasattr(self, "_cached_phys_rect") and self._cached_phys_rect == phys_rect:
-            if hasattr(self, "_cached_log_rect") and self._cached_log_rect is not None:
-                return self._cached_log_rect
-
-        # 🛡️ 補上新版保底容錯：預設等於 phys_rect
-        log_rect = phys_rect
-        try:
-            cmd = [
-                sys.executable,
-                "-c",
-                f"import win32gui; hwnd = win32gui.FindWindow(None, '{self.window_title}'); print(win32gui.GetWindowRect(hwnd)) if hwnd else print('None')"
-            ]
-            out = subprocess.check_output(cmd, timeout=0.8).decode().strip()
-            if out and out != "None":
-                val = eval(out)
-                log_rect = {
-                    "left": val[0],
-                    "top": val[1],
-                    "width": val[2] - val[0],
-                    "height": val[3] - val[1]
-                }
-        except Exception as e:
-            logging.debug(f"獲取邏輯座標失敗: {e}")
-            
-        self._cached_phys_rect = phys_rect
-        self._cached_log_rect = log_rect
-        return log_rect
 
     def _capture_backend(self, hwnd):
         """

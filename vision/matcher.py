@@ -3,6 +3,9 @@ import os
 import logging
 import numpy as np
 
+BASE_RESOLUTION_WIDTH = 1920.0
+MIN_AUTO_SCALE_WIDTH = 1200
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class TemplateMatcher:
@@ -12,6 +15,12 @@ class TemplateMatcher:
         self.auto_scale = auto_scale
         self._raw_templates = {}
         self._cached_templates = {}
+
+    def _compute_auto_scale(self, screen_width):
+        """依目前畫面寬度計算模板自動縮放比例。"""
+        if self.auto_scale and screen_width >= MIN_AUTO_SCALE_WIDTH:
+            return screen_width / BASE_RESOLUTION_WIDTH
+        return self.template_scale
 
     def _load_template(self, template_name, scale=1.0):
         """
@@ -61,15 +70,8 @@ class TemplateMatcher:
         """
         對比兩個互斥 UI 頁籤/按鈕的相對匹配度，回傳 (is_a_active, is_b_active, conf_a, conf_b)。
         """
-        try:
-            res_a = self.match(screen_img, template_a, threshold)
-        except Exception:
-            res_a = self.match(screen_img, template_a, threshold=threshold)
-
-        try:
-            res_b = self.match(screen_img, template_b, threshold)
-        except Exception:
-            res_b = self.match(screen_img, template_b, threshold=threshold)
+        res_a = self.match(screen_img, template_a, threshold)
+        res_b = self.match(screen_img, template_b, threshold)
 
         c_a = res_a[1] if (isinstance(res_a, (tuple, list)) and len(res_a) >= 2 and res_a[1] is not None) else 0.0
         c_b = res_b[1] if (isinstance(res_b, (tuple, list)) and len(res_b) >= 2 and res_b[1] is not None) else 0.0
@@ -94,14 +96,8 @@ class TemplateMatcher:
             return None, 0.0
 
         if scale is None:
-            if self.auto_scale and hasattr(screen_img, "shape") and len(screen_img.shape) >= 2:
-                screen_w = screen_img.shape[1]
-                if screen_w >= 1200:
-                    scale = screen_w / 1920.0
-                else:
-                    scale = self.template_scale
-            else:
-                scale = self.template_scale
+            screen_w = screen_img.shape[1] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else 0
+            scale = self._compute_auto_scale(screen_w)
 
         template_img = self._load_template(template_name, scale=scale)
         if template_img is None:
@@ -209,10 +205,7 @@ class TemplateMatcher:
             return []
 
         screen_h, screen_w = screen_img.shape[:2]
-        if self.auto_scale:
-            auto_factor = (screen_w / 1920.0) if screen_w >= 1200 else self.template_scale
-        else:
-            auto_factor = self.template_scale
+        auto_factor = self._compute_auto_scale(screen_w)
         base_scales = scales or [1.0, 0.863, 0.75]
         scales_to_try = [round(s * auto_factor, 4) for s in base_scales]
 
