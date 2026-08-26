@@ -90,3 +90,9 @@
     - `[NavigationHandler](../states/handlers/navigation.py)`
   - 確保在 GitHub 與 VS Code Preview 預覽時均能呈現乾淨、單行且可點擊的藍色超連結。
 
+### 8. MetaData 腳本與資料庫維護規範 🗃️
+- **`meta_data/scripts/` 分類與 Git Track 原則**：
+  1. **核心工具與生成器 (強制 Track)**：具備長期復用價值、機率算法計算（如 `calc_treasure_probs.py`）、文檔自動化生成（如 `update_all_hero_docs.py`）與關卡/任務鏈解析（如 `map_all_quests.py`）之腳本，必須規範命名並納入 Git 追蹤。
+  2. **拋棄式探索腳本 (禁止 Track / 主動清理)**：回答臨時疑問或除錯產生的一次性查詢腳本（如 `inspect_*.py`, `query_*.py`, `temp_*.py`），應優先置於 `.gitignore` 的 `scratch/` 目錄，或在任務結束前**主動清理刪除**，嚴禁遺留雜亂檔案於 `meta_data/scripts/`。
+- **自主閉環與做完即回報原則 (End-to-End Delivery & Report)**：
+  - AI 協同開發時，面對分析與文檔維護需求，必須主動完成「資料解析 ➔ 文檔精確更新 ➔ 工具腳本分類保留/臨時檔清理 ➔ 狀態核驗」，做到完整無缺漏後才回報給使用者。
