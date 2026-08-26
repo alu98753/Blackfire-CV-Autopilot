@@ -236,9 +236,9 @@ SUBFLOW_CONFIGS = {
         "alter_btn": "town_building/Blood_Altar/alter.png",
         "exit_building_btn": "town_building/exitfromhouse_and_to_town.png",
         "sacrifice_settings": {
-            "gray": True,
-            "green": True,
-            "blue": True,
+            "gray": False,
+            "green": False,
+            "blue": False,
             "purple": False,  # 預設不獻祭/賣紫色血水 (保留)
         },
         "blood_templates": {
@@ -266,7 +266,7 @@ SUBFLOW_CONFIGS = {
                 "Sandworm_scales": True,
                 "Spider_silk": True,
                 "Spider_venom_glands": True,
-                "Warcraft_Fang": True,
+                "Warcraft_Fang": False,
                 "lizard_skin": True,
                 "scrap": True,
                 "Frog_Skin": True,
@@ -277,7 +277,7 @@ SUBFLOW_CONFIGS = {
             },
             "green": {
                 "The_cloth_wrapped_around_the_dead": True,
-                "Giant_Beast_Gold_Tooth": True,
+                "Giant_Beast_Gold_Tooth": False,
                 "Toad_Venom": True,
                 "Dead_Soul_Core": True,
                 "Wild_boar_tusk": True,
