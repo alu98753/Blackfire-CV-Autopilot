@@ -29,8 +29,8 @@ class ExceptionWatchdog:
         :param screen_img: 擷取到的遊戲畫面影像
         :return: True 代表已觸發例外並完成 stash_current_state()；False 代表畫面正常
         """
-        # 1. 意外彈窗處置中豁免 (由 UnexpectedPopupRecoveryHandler 5 次重試控制) 與 使用者手動操作中豁免
-        if self.machine.current_state == self.machine.STATE_POPUP_RECOVERY or getattr(self.machine, "user_operating", False):
+        # 1. 意外彈窗處置中豁免 (由 UnexpectedPopupRecoveryHandler 5 次重試控制) 與 手動暫停中豁免
+        if self.machine.current_state == self.machine.STATE_POPUP_RECOVERY or getattr(self.machine, "is_paused", False):
             return False
 
         now_t = time.time()

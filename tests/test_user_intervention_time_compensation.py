@@ -25,22 +25,19 @@ class TestUserInterventionTimeCompensation(unittest.TestCase):
 
     def test_1_user_intervention_time_offset_compensation(self):
         """
-        測試 1：手動操作 106 秒後恢復，last_state_change 正確增加 106 秒，使實際狀態持續時間不被誤計。
+        測試 1：手動暫停 106 秒後恢復，last_state_change 正確增加 106 秒，使實際狀態持續時間不被誤計。
         """
-        # 假設 146 秒前進入 BATTLE 戰鬥狀態，其中包含 106 秒使用者手動操作
+        # 假設 146 秒前進入 BATTLE 戰鬥狀態，其中包含 106 秒使用者手動暫停
         now = time.time()
         self.machine.current_state = self.machine.STATE_BATTLE
         self.machine.last_state_change = now - 146.0
 
-        # 模擬使用者手動操作 (持續 106 秒)
-        self.machine.user_operating = True
-        self.machine.user_operation_start_time = now - 106.0
+        # 模擬手動暫停 (持續 106 秒)
+        self.machine.is_paused = True
+        self.machine.pause_start_time = now - 106.0
 
-        # 模擬結束手動操作，計算時間補償
-        pause_duration = now - self.machine.user_operation_start_time
-        self.machine.last_state_change += pause_duration
-        self.machine.user_operating = False
-        self.machine.user_operation_start_time = None
+        # 模擬呼叫 resume() 結束暫停並自動補償時間
+        self.machine.resume()
 
         # 斷言：扣除 106 秒後，腳本實際狀態時間為 40.0 秒 (未滿 90 秒門檻)
         state_duration = time.time() - self.machine.last_state_change
@@ -52,20 +49,20 @@ class TestUserInterventionTimeCompensation(unittest.TestCase):
 
     def test_2_watchdog_exempt_during_active_user_operating(self):
         """
-        測試 2：在 user_operating == True 期間，即便狀態時間超過 200 秒，Watchdog 亦絕對回傳 False 放行。
+        測試 2：在 is_paused == True 期間，即便狀態時間超過 200 秒，Watchdog 亦絕對回傳 False 放行。
         """
         now = time.time()
         self.machine.current_state = self.machine.STATE_BATTLE
         self.machine.last_state_change = now - 200.0  # 已遠超 90 秒門檻
 
-        # 標記使用者正在手動操作
-        self.machine.user_operating = True
-        self.machine.user_operation_start_time = now - 150.0
+        # 標記處於暫停狀態
+        self.machine.is_paused = True
+        self.machine.pause_start_time = now - 150.0
 
         # 檢測 Watchdog
         triggered = self.watchdog.check(screen_img=None)
 
-        # 斷言：使用者操作期間必須回傳 False 豁免
+        # 斷言：暫停期間必須回傳 False 豁免
         self.assertFalse(triggered)
 
     def test_3_multiple_user_interventions_compensation_accumulated(self):

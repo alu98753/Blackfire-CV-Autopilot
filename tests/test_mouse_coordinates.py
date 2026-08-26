@@ -11,6 +11,7 @@ from actions.mouse import MouseController
 class TestMouseCoordinates(unittest.TestCase):
     def setUp(self):
         self.mock_state_machine = MagicMock()
+        self.mock_state_machine.is_paused = False
         self.mock_state_machine.user_operating = False
         self.mock_state_machine.capturer = None
         self.mouse = MouseController()

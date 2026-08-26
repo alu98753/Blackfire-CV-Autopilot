@@ -84,41 +84,14 @@ class MouseController:
 
     def check_user_intervention(self):
         """
-        檢查使用者是否手動移動了滑鼠。如果是，則更新狀態機為暫停狀態並回傳 True。
+        檢查狀態機是否處於手動暫停狀態。若是則回傳 True。
         """
         if self.state_machine is None:
             return False
             
-        if self.state_machine.user_operating:
+        if getattr(self.state_machine, "is_paused", False):
             return True
 
-        cur_pos = pyautogui.position()
-        if self.last_target_pos is not None:
-            last_action_diff = time.time() - self.last_action_time
-            if last_action_diff < 0.5:
-                is_inside = True
-                if self.backend_mode:
-                    hwnd = self.get_hwnd()
-                    if hwnd:
-                        try:
-                            rect = win32gui.GetWindowRect(hwnd)
-                            mx, my = cur_pos
-                            is_inside = (rect[0] <= mx <= rect[2] and rect[1] <= my <= rect[3])
-                        except Exception:
-                            is_inside = False
-                    else:
-                        is_inside = False
-                
-                if is_inside:
-                    dx = abs(cur_pos[0] - self.last_target_pos[0])
-                    dy = abs(cur_pos[1] - self.last_target_pos[1])
-                    if dx > 5 or dy > 5:
-                        logging.warning(f"⚠️ [MouseController] 偵測到使用者在連點間隙中操作滑鼠 (移至 {cur_pos})，禁止腳本移動滑鼠。")
-                        self.state_machine.user_operating = True
-                        self.state_machine.last_user_operation_time = time.time()
-                        return True
-        else:
-            self.last_target_pos = cur_pos
         return False
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(0.03, 0.07)):

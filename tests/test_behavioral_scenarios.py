@@ -441,90 +441,31 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertFalse(self.state_machine.chest_opened_this_floor)
         self.assertIsNone(self.state_machine.last_godown_click_time)
 
-    @patch('pyautogui.position')
-    @patch('time.time')
-    def test_manual_pause_and_resume(self, mock_time, mock_pyautogui_pos):
+    def test_manual_pause_and_resume(self):
         """
-        [行為場景 7] 滑鼠手動介入自動暫停與恢復行為：
-        Given: 狀態機掛機中，滑鼠初始座標為 (100, 100)。
+        [行為場景 7] 手動暫停與恢復行為：
+        Given: 狀態機掛機中。
         When:
-          1. 模擬滑鼠沒有移動 ➔ 狀態機正常執行單步步進。
-          2. 模擬滑鼠移動至 (200, 200) (位移 dx=100 > 5)，且距離腳本上一次操作時間大於 1.2 秒。
-          3. 模擬滑鼠靜止 3 秒後。
-        Then:
-          1. 滑鼠移動後，狀態機應標記 `user_operating = True`，暫停自動決策。
-          2. 靜止 3 秒後，自動解除暫停，`user_operating = False`。
+          1. 呼叫 state_machine.pause() ➔ is_paused 為 True，狀態機鎖定當前狀態且跳過步進。
+          2. 呼叫 state_machine.resume() ➔ is_paused 為 False，狀態機恢復步進。
         """
-        # Arrange
-        self.state_machine.mouse.last_action_time = 1000.0 # 腳本上次動作時間為 1000s
-        self.state_machine.user_operating = False
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.assertFalse(self.state_machine.is_paused)
         
-        # 1. 初始滑鼠座標為 (100, 100)
-        mock_pyautogui_pos.return_value = (100, 100)
-        mock_time.return_value = 1002.0  # 當前時間 1002s (間隔 2.0s > 1.2s)
-        self.state_machine.prev_mouse_pos = (100, 100)
+        # 1. 進入暫停
+        self.state_machine.pause()
+        self.assertTrue(self.state_machine.is_paused)
         
-        # 模擬 main 迴圈邏輯 (比照 main.py 138-167 實作的外部介入行為)
-        def run_main_loop_step(sm):
-            cur_pos = pyautogui_pos_fn()
-            cur_time = time_fn()
-            
-            if sm.prev_mouse_pos is not None:
-                dx = abs(cur_pos[0] - sm.prev_mouse_pos[0])
-                dy = abs(cur_pos[1] - sm.prev_mouse_pos[1])
-                if dx > 5 or dy > 5:
-                    last_action_diff = cur_time - sm.mouse.last_action_time
-                    if last_action_diff > 1.2:
-                        if not sm.user_operating:
-                            sm.user_operating = True
-                        sm.last_user_operation_time = cur_time
-            
-            sm.prev_mouse_pos = cur_pos
-            
-            if sm.user_operating:
-                if cur_time - sm.last_user_operation_time > 3.0:
-                    sm.user_operating = False
-                    sm.prev_mouse_pos = cur_pos
-                    # 執行 step()
-                    sm.step()
-            else:
-                # 執行 step()
-                sm.step()
+        # 2. 恢復執行
+        self.state_machine.resume()
+        self.assertFalse(self.state_machine.is_paused)
+        self.assertTrue(self.state_machine.just_resumed_from_user)
 
-        # 設定外部函數指標
-        pyautogui_pos_fn = lambda: mock_pyautogui_pos.return_value
-        time_fn = lambda: mock_time.return_value
-        
-        # Step 1: 滑鼠未移動，呼叫 step() 應被執行一次
-        with patch.object(self.state_machine, 'step') as mock_step:
-            run_main_loop_step(self.state_machine)
-            mock_step.assert_called_once()
-            self.assertFalse(self.state_machine.user_operating)
-            
-        # Step 2: 模擬滑鼠移動至 (200, 200)
-        mock_pyautogui_pos.return_value = (200, 200)
-        mock_time.return_value = 1003.0 # 當前時間 1003s
-        with patch.object(self.state_machine, 'step') as mock_step:
-            run_main_loop_step(self.state_machine)
-            # step() 不應該被執行 (因為手動操作介入，掛機暫停)
-            mock_step.assert_not_called()
-            self.assertTrue(self.state_machine.user_operating)
-            
-        # Step 3: 模擬滑鼠維持在 (200, 200) 靜止超過 3 秒 (時間到 1007s)
-        mock_time.return_value = 1007.0 # 當前時間 1007s (> 3秒)
-        with patch.object(self.state_machine, 'step') as mock_step:
-            run_main_loop_step(self.state_machine)
-            # step() 應該恢復被執行
-            mock_step.assert_called_once()
-            self.assertFalse(self.state_machine.user_operating)
-
-    @patch('pyautogui.position')
-    @patch('time.time')
     @patch('pyautogui.moveTo')
-    def test_mouse_controller_prohibits_movement_on_user_operating(self, mock_move_to, mock_time, mock_pyautogui_pos):
+    def test_mouse_controller_prohibits_movement_on_user_operating(self, mock_move_to):
         """
         [行為場景 8] 腳本防搶滑鼠控制行為：
-        Given: 腳本已與狀態機建立關聯，且狀態機中 user_operating 為 True。
+        Given: 狀態機處於暫停狀態 (is_paused == True)。
         When: 腳本調用 mouse.click() 或 mouse.scroll()。
         Then:
           1. 應拒絕執行動作（立即回傳 False），且不呼叫 pyautogui.moveTo。
@@ -533,9 +474,8 @@ class TestBehavioralScenarios(unittest.TestCase):
         controller = MouseController(human_like=False)
         controller.state_machine = self.state_machine
         
-        # 模擬狀態為使用者介入中
-        self.state_machine.user_operating = True
-        mock_pyautogui_pos.return_value = (100, 100)
+        # 模擬狀態機處於手動暫停
+        self.state_machine.is_paused = True
         
         # 呼叫 click 應拒絕並回傳 False
         res = controller.click(500, 500)
@@ -547,40 +487,20 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.assertFalse(res_scroll)
         mock_move_to.assert_not_called()
 
-    @patch('pyautogui.position')
-    @patch('time.time')
     @patch('pyautogui.moveTo')
-    def test_mouse_controller_detects_shift_and_prohibits_movement(self, mock_move_to, mock_time, mock_pyautogui_pos):
+    def test_mouse_controller_detects_shift_and_prohibits_movement(self, mock_move_to):
         """
-        [行為場景 9] 腳本執行點擊前，主動檢查滑鼠是否已被使用者移動：
-        Given: 狀態機中 user_operating 為 False，但實際滑鼠游標位置已被手動移開。
-        When: 腳本調用 mouse.click()。
-        Then:
-          1. 偵測到滑鼠游標從上次操作點 (100, 100) 移到了 (200, 200)，時間間隔大於 1.2 秒。
-          2. 點擊被拒絕（回傳 False）。
-          3. 狀態機的 user_operating 標記被強制更新為 True。
+        [行為場景 9] 狀態機恢復後，滑鼠控制器正常恢復點擊能力。
         """
         from actions.mouse import MouseController
         controller = MouseController(human_like=False)
         controller.state_machine = self.state_machine
         
+        self.state_machine.is_paused = False
         self.state_machine.user_operating = False
         
-        # 模擬上一次點擊位置為 (100, 100)，操作時間為 1000s
-        controller.last_target_pos = (100, 100)
-        controller.last_action_time = 1000.0
-        
-        # 當前時間為 1000.2s (間隔 0.2s < 0.5s)，且手動移到 (200, 200)
-        mock_time.return_value = 1000.2
-        mock_pyautogui_pos.return_value = (200, 200)
-        
-        # 呼叫 click
-        res = controller.click(500, 500)
-        
-        # 應點擊失敗並更新狀態為 True
-        self.assertFalse(res)
-        self.assertTrue(self.state_machine.user_operating)
-        mock_move_to.assert_not_called()
+        # 正常狀態下 check_user_intervention 應為 False
+        self.assertFalse(controller.check_user_intervention())
 
     @patch('os.path.exists')
     def test_bag_cleaning_only_opens_bag_when_not_opened(self, mock_exists):
