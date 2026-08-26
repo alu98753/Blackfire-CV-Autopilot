@@ -134,7 +134,44 @@ class CollectOnlyHandler(BaseStateHandler):
                 self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
                 return
 
-        # 4. 如果不需要任何領取，執行待機/返回邏輯
+        # 3.5 [模組化活動主動喚醒] 當無領取任務時，檢查啟用的週期性活動是否已冷卻結束就緒
+        dm = getattr(self.machine, "daily_manager", None)
+        # 3.5.1 檢查每日城鎮速領 (enable_town_daily)
+        if self.machine.config.get("enable_town_daily", False) and dm:
+            pending_town = dm.get_pending_town_subflows()
+            if pending_town and not getattr(self.machine, "town_subflow_queue", []):
+                logging.info(f"🏛️ [定時待機喚醒] 偵測到有待執行的每日城鎮速領任務: {pending_town} ➔ 喚醒發起城鎮佇列！")
+                self.machine.start_subflow_queue(pending_town)
+                return
+
+        # 3.5.2 檢查首領領主討伐 (enable_lord_boss)
+        if self.machine.config.get("enable_lord_boss", False) and dm:
+            if dm.has_available_lord_boss():
+                avail_bosses = dm.get_available_lord_bosses()
+                logging.info(f"👑 [定時待機喚醒] 偵測到首領 Boss 冷卻結束 (可用: {avail_bosses}) ➔ 喚醒轉入 LORD_BOSS！")
+                self.machine.start_subflow_queue(["lord_boss"])
+                return
+
+        # 3.5.3 檢查地下城探索 (enable_dungeon)
+        if self.machine.config.get("enable_dungeon", False):
+            dungeon_ready = False
+            try:
+                dungeon_ready = self.machine.has_available_dungeon()
+            except Exception:
+                dungeon_ready = False
+            if dungeon_ready:
+                logging.info("🏰 [定時待機喚醒] 偵測到地下城冷卻結束 ➔ 喚醒轉入 NAVIGATING 前往地下城！")
+                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return
+
+        # 3.5.4 檢查每日懸賞任務 (enable_quests)
+        if self.machine.config.get("enable_quests", False) and getattr(self.machine, "quest_scheduler", None):
+            scheduled_node = self.machine.check_and_advance_quest_target()
+            if scheduled_node:
+                logging.info("📋 [定時待機喚醒] 偵測到懸賞任務目標就緒 ➔ 喚醒切換至懸賞目標！")
+                return
+
+        # 4. 如果不需要任何領取與活動，執行待機/返回邏輯
         now = time.time()
         last_log = getattr(self, "last_log_time", 0.0)
         
@@ -171,7 +208,30 @@ class CollectOnlyHandler(BaseStateHandler):
             dia_str = format_time(dia_rem)
             brd_str = format_time(brd_rem) if self.machine.enable_bread else "已停用"
             
-            logging.info(f"⌛ [定時領取狀態] 運作中。距離下一次領取 💎 鑽石還剩: {dia_str}，🍞 體力還剩: {brd_str}。")
+            extra_status = []
+            if self.machine.config.get("enable_lord_boss", False) and dm:
+                if dm.has_available_lord_boss():
+                    extra_status.append("👑 Boss: 就緒")
+                else:
+                    min_boss_rem = float('inf')
+                    for b_key, b_info in dm.get_boss_status_dict().items():
+                        if not b_info.get("completed_today", False):
+                            rem = max(0.0, (b_info.get("last_fight_timestamp", 0.0) + b_info.get("cooldown_seconds", 3600)) - now)
+                            if rem < min_boss_rem:
+                                min_boss_rem = rem
+                    if min_boss_rem < float('inf'):
+                        extra_status.append(f"👑 Boss: {format_time(min_boss_rem)}")
+                    else:
+                        extra_status.append("👑 Boss: 今日已滿")
+            if self.machine.config.get("enable_dungeon", False):
+                status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                if avail_names:
+                    extra_status.append(f"🏰 地下城: 就緒 ({', '.join(avail_names)})")
+                else:
+                    extra_status.append("🏰 地下城: 全冷卻")
+
+            extra_str = (" | " + " | ".join(extra_status)) if extra_status else ""
+            logging.info(f"⌛ [定時待機狀態] 運作中。距離下一次 💎 鑽石: {dia_str}，🍞 體力: {brd_str}{extra_str}。")
 
         # 4.1 [心跳防斷線] 每 1 分鐘在城鎮畫面執行一次微幅水平拖曳，模擬活躍操作防止閒置斷線
         last_heartbeat = getattr(self, "last_heartbeat_time", 0.0)

@@ -71,6 +71,20 @@ class NavigationHandler(BaseStateHandler):
             self.machine.evaluate_and_schedule_daily_pipeline()
             return
 
+        # 若未啟用普通關卡打怪 (enable_stage_farming == False)，直接返回城鎮轉入 COLLECT_ONLY 待機
+        mode_type = self.machine.config.get("type")
+        default_stage_farm = True if (mode_type in ["mix", "stage", "daily"] or self.machine.config.get("is_tier4_fallback", False)) else False
+        is_stage_farming = self.machine.config.get("enable_stage_farming", default_stage_farm)
+
+        if not is_stage_farming:
+            logging.info("💤 [模組化活動調度] 未啟用普通關卡打怪 (enable_stage_farming=False) ➔ 地下城冷卻中，點擊返回城鎮轉入 COLLECT_ONLY 待機...")
+            pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75, quiet=True)
+            if pos_back:
+                self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                time.sleep(0.5)
+            self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+            return
+
         pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
         if pos_st:
             logging.info(f"👉 點擊 [common/select_stage.png] ({conf_st:.4f}) 切換至普通關卡頁籤！")
@@ -534,7 +548,7 @@ class NavigationHandler(BaseStateHandler):
 
 
 
-        if self.machine.config.get("type") == "mix":
+        if self.machine.config.get("type") == "mix" or (self.machine.config.get("enable_dungeon", False) and self.machine.config.get("enable_stage_farming", False)):
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()
@@ -548,6 +562,18 @@ class NavigationHandler(BaseStateHandler):
                     return
                 nav_path = ["common/door.png", "dungeons/dungeon.png"]
             else:
+                # 若未啟用普通關卡打怪 (enable_stage_farming == False)，直接轉入 COLLECT_ONLY 待機
+                mode_t = self.machine.config.get("type")
+                default_farm = True if (mode_t in ["mix", "stage", "daily"] or self.machine.config.get("is_tier4_fallback", False)) else False
+                if not self.machine.config.get("enable_stage_farming", default_farm):
+                    logging.info("💤 [導航] 地下城全冷卻且未啟用普通關卡打怪 (enable_stage_farming=False) ➔ 轉入 COLLECT_ONLY 待機...")
+                    pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75, quiet=True)
+                    if pos_back:
+                        self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                        time.sleep(0.5)
+                    self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                    return
+
                 # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤，點擊 select_stage.png 切換！
                 status_str, _ = self.machine.get_dungeon_cooldown_status()
                 pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)

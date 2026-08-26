@@ -357,11 +357,21 @@ SUBFLOW_CONFIGS = {
 DEFAULT_DISASSEMBLE_COLORS = ["gray_or_empty", "green", "blue"]
 DEFAULT_KEEP_COLORS = ["purple", "orange_yellow", "red"]
 
+DEFAULT_ACTIVITIES = {
+    "auto_diamond": True,          # 內建定時領鑽石
+    "auto_bread": True,            # 內建定時領體力
+    "enable_lord_boss": True,      # 啟用首領領主討伐 (lord_boss)
+    "enable_dungeon": True,        # 啟用地下城探索 (dungeon)
+    "enable_town_daily": True,     # 啟用每日城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
+    "enable_quests": False,        # 啟用懸賞告示牌與動態任務 (bulletin_board)
+    "enable_stage_farming": False, # 是否在週期性任務冷卻時去刷普通關卡/打怪 (預設關閉，零浪費體力)
+}
+
 def normalize_config(config):
     """
     中央配置規範化器 (Centralized Config Normalizer)
     確保在任何模式 (daily, mix, dungeon, stage, subflow 等) 與啟動管道下，
-    config 字典都 100% 擁有精準的 disassemble_colors 與 keep_colors 狀態。
+    config 字典都 100% 擁有精準的活動開關、disassemble_colors 與 keep_colors 狀態。
     """
     if not isinstance(config, dict):
         return config
@@ -374,6 +384,24 @@ def normalize_config(config):
 
     if "keep_colors" not in cfg or cfg["keep_colors"] is None or len(cfg["keep_colors"]) == 0:
         cfg["keep_colors"] = list(DEFAULT_KEEP_COLORS)
+
+    # 注入模組化活動預設開關 (依模式類型智能設定預設值，若無特別指定則帶入 DEFAULT_ACTIVITIES)
+    mode_type = cfg.get("type")
+    for act_key, act_val in DEFAULT_ACTIVITIES.items():
+        if act_key not in cfg:
+            if act_key == "enable_stage_farming":
+                # 若為 stage 或 mix 模式，預設允許打怪；若為 collect_only/dungeon 等則預設不打怪
+                cfg[act_key] = True if mode_type in ["stage", "mix", "daily"] else False
+            elif act_key == "enable_dungeon":
+                cfg[act_key] = False if mode_type in ["stage", "collect_only"] else act_val
+            elif act_key == "enable_lord_boss":
+                cfg[act_key] = False if mode_type == "collect_only" else act_val
+            elif act_key == "enable_town_daily":
+                cfg[act_key] = False if mode_type == "collect_only" else act_val
+            elif act_key == "enable_quests":
+                cfg[act_key] = True if mode_type == "daily" else False
+            else:
+                cfg[act_key] = act_val
 
     return cfg
 
