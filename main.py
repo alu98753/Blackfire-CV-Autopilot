@@ -18,7 +18,7 @@ from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
 from config import GAME_CONFIGS, PRIMARY_MODES, STAGE_CONFIGS, normalize_config, SUBFLOW_CONFIGS
-from utils import get_stage_configs
+from utils import get_stage_configs, PauseController
 from utils.daily_manager import DailyManager
 from utils.steam_launcher import SteamGameLauncher
 
@@ -522,7 +522,7 @@ def init_state_machine_system(args, config):
         state_machine.enable_bread = enable_bread
 
     print("[+] 初始化成功！請確認您的遊戲視窗非最小化，且維持在畫面上。")
-    print("[+] 按 [Ctrl + C] 可以隨時終止本程式。")
+    print("[+] 快捷鍵提示：在終端機或遊戲視窗按 [Space 空白鍵] 隨時暫停/繼續；按 [Ctrl + C] 終止程式。")
     print("[*] 將在 3 秒後開始偵測...")
     time.sleep(3)
     return state_machine
@@ -531,9 +531,32 @@ def run_main_loop(state_machine, interval):
     try:
         import pyautogui
         state_machine.prev_mouse_pos = pyautogui.position()
+        pause_controller = PauseController(capturer=getattr(state_machine, "capturer", None))
         
         while True:
             start_time = time.time()
+            
+            # 1. 優先檢測 [Space 空白鍵] 暫停/繼續切換
+            if pause_controller.check_toggle_triggered():
+                if state_machine.is_paused:
+                    pause_duration = state_machine.resume()
+                    state_machine.prev_mouse_pos = pyautogui.position()
+                    print("\n" + "=" * 60)
+                    print(f" ▶️ [RESUMED] 腳本已恢復掛機 (已補償內部防卡死計時器: {pause_duration:.1f} 秒)")
+                    print(f" 👉 繼續執行狀態: [{state_machine.current_state}]")
+                    print("=" * 60 + "\n")
+                else:
+                    state_machine.pause()
+                    print("\n" + "=" * 60)
+                    print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
+                    print(" 👉 在終端機或遊戲視窗按下 [Space 空白鍵] 即可恢復自動掛機...")
+                    print("=" * 60 + "\n")
+
+            # 2. 若處於手動暫停狀態，進入輕量休眠迴圈，跳過滑鼠判定與 step()
+            if state_machine.is_paused:
+                time.sleep(0.05)
+                continue
+
             cur_pos = pyautogui.position()
             
             if state_machine.prev_mouse_pos is not None:

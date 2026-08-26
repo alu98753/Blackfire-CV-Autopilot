@@ -145,6 +145,10 @@ class GameStateMachine:
         self.stashed_context = {}
         self.exception_watchdog = ExceptionWatchdog(self)
 
+        # 手動暫停與恢復 (Pause/Resume) 控制屬性
+        self.is_paused = False
+        self.pause_start_time = None
+
 
 
         # 初始化註冊所有狀態處理器
@@ -218,10 +222,93 @@ class GameStateMachine:
             self.transition_to(self.STATE_NAVIGATING)
             return False
 
+    def pause(self):
+        """
+        進入手動暫停狀態，記錄暫停起點時間。
+        """
+        if not self.is_paused:
+            self.is_paused = True
+            self.pause_start_time = time.time()
+            logging.info(f"⏸️ [StateMachine] 腳本已暫停，鎖定當前狀態: [{self.current_state}]。")
 
+    def resume(self) -> float:
+        """
+        退出手動暫停狀態，原子化執行內部安全/防卡死計時器補償。
+        
+        :return: pause_duration (暫停總秒數)
+        """
+        pause_duration = 0.0
+        if self.is_paused:
+            if self.pause_start_time is not None:
+                pause_duration = max(0.0, time.time() - self.pause_start_time)
+                self.compensate_internal_timers(pause_duration)
+            self.is_paused = False
+            self.pause_start_time = None
+            self.just_resumed_from_user = True
+            logging.info(f"▶️ [StateMachine] 腳本已恢復運行 (已補償內部計時器 {pause_duration:.1f} 秒)。繼續執行狀態: [{self.current_state}]。")
+        return pause_duration
 
+    def toggle_pause(self) -> bool:
+        """
+        切換暫停/恢復狀態。
+        
+        :return: True 代表切換後處於暫停中；False 代表切換後已恢復運行
+        """
+        if self.is_paused:
+            self.resume()
+            return False
+        else:
+            self.pause()
+            return True
 
+    def compensate_internal_timers(self, pause_duration: float):
+        """
+        【Clean Code 內部安全時鐘補償】
+        僅補償腳本自設的防卡死、過渡等待與單場戰鬥統計計時器。
+        
+        注意：
+        1. 絕不修改 dungeon_cooldowns、lord_boss_cooldowns 或每日任務重置等客觀遊戲冷卻！
+        2. 確保在暫停超過 90 秒後恢復時，ExceptionWatchdog 絕對不會因停滯誤判為卡死。
+        """
+        if pause_duration <= 0.0:
+            return
 
+        now = time.time()
+
+        # 1. 補償狀態轉移 Watchdog (最關鍵：防止暫停 90s 後一恢復就被 Watchdog 誤判卡死)
+        if self.last_state_change > 0:
+            self.last_state_change += pause_duration
+
+        # 2. 補償戰鬥計時器
+        if self.battle_start_time is not None:
+            self.battle_start_time += pause_duration
+
+        # 3. 補償例外彈窗暫存時間
+        if isinstance(self.stashed_context, dict) and "timestamp" in self.stashed_context:
+            self.stashed_context["timestamp"] += pause_duration
+
+        # 4. 補償 Handler 內部的過渡時間戳
+        battle_handler = self.handlers.get(self.STATE_BATTLE)
+        if battle_handler and getattr(battle_handler, "non_battle_feature_start_time", None) is not None:
+            battle_handler.non_battle_feature_start_time += pause_duration
+
+        loading_handler = self.handlers.get(self.STATE_LOADING)
+        if loading_handler and getattr(loading_handler, "loading_start_time", None) is not None:
+            loading_handler.loading_start_time += pause_duration
+
+        # 5. 補償滑鼠動作與手動介入判定時間戳 (防止恢復瞬間因時間差誤觸手動移動偵測)
+        if hasattr(self, "mouse") and self.mouse:
+            self.mouse.last_action_time = now
+        self.last_user_operation_time = 0.0
+        self.user_operating = False
+        self.just_resumed_from_user = True
+
+        # 6. 反射自動補償所有動態 missing_time_* 模板記憶
+        for attr in list(self.__dict__.keys()):
+            if attr.startswith("missing_time_"):
+                val = getattr(self, attr)
+                if isinstance(val, (int, float)):
+                    setattr(self, attr, val + pause_duration)
 
     @property
     def dungeon_defeat_count(self):

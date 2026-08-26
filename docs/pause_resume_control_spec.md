@@ -1,0 +1,120 @@
+# ⏸️ 終端機與遊戲視窗空白鍵暫停/繼續技術規格與架構手冊 (Pause/Resume Control Spec)
+
+> 本文檔詳細規範「終端機 (Terminal) 與 遊戲視窗 (Game) 雙焦點 [Space 空白鍵] 隨時暫停與繼續」之底層架構、Clean Code 邏輯時鐘與內部防卡死計時器補償機制。
+
+---
+
+## 🏛️ 一、架構背景與核心設計哲學
+
+### 1. 痛點分析
+在自動掛機運行期間，若使用者欲臨時手動操作遊戲（如手動調整裝備、臨時領取獎勵或查看狀態），過去僅能依賴 `Ctrl + C` 強制終止 Python 行程並透過 `run.bat` 重啟。這會導致：
+* 當前巡邏/尋路進度中斷，必須重新執行完整的登入與尋路判定。
+* 長任務（如地下城多層探索、每日任務流水線）狀態遺失。
+
+### 2. Clean Code 核心哲學：時鐘職責分離 (Clock Separation)
+為避免計時器散落於各 Handler 導致未來維護時「漏補償某個時間變數而引發逾時誤判」，系統明確劃分兩大時鐘體系：
+
+```mermaid
+graph TD
+    subgraph 🌐 1. 客觀真實時鐘 (Wall Clock / Real Time)
+        RC["真實世界時間 (time.time())<br>【暫停期間不凍結，正常流逝】"]
+        RC --> R1["地下城 30 分鐘 CD (dungeon_cooldowns)"]
+        RC --> R2["首領討伐 120 分鐘 CD (lord_boss_cooldowns)"]
+        RC --> R3["定時領麵包/鑽石冷卻 (last_bread_collection_time)"]
+        RC --> R4["每日懸賞重置時間 (daily_manager)"]
+    end
+
+    subgraph 🛡️ 2. 腳本內部安全時鐘 (Internal Logic Clock / Watchdog)
+        IC["內部安全與防卡死計時器<br>【暫停期間完全凍結，恢復時完整補償】"]
+        IC --> I1["狀態變更 Watchdog 90s/30s 門檻 (last_state_change)"]
+        IC --> I2["單場戰鬥逾時與統計計時 (battle_start_time)"]
+        IC --> I3["畫面過渡 15s 逾時判定 (loading_start_time)"]
+        IC --> I4["例外彈窗暫存狀態時間戳 (stashed_state_time)"]
+        IC --> I5["動態模板防重複冷卻時間戳 (missing_time_*)"]
+        IC --> I6["滑鼠動作與手動介入時間戳 (mouse.last_action_time)"]
+    end
+```
+
+---
+
+## 🎯 二、視窗焦點過濾機制 (Focus Window Filter)
+
+為了達成「使用者在看遊戲或看終端機時隨手按空白鍵即可暫停」，但「切換到瀏覽器、記事本打字時絕對不誤觸」，系統採用 Windows 原生 API 進行嚴格的雙視窗前景焦點判定：
+
+```mermaid
+graph TD
+    Key["使用者按下 [Space 空白鍵]"] --> FG["取得目前 Windows 前景作用中視窗<br>fg_hwnd = GetForegroundWindow()"]
+    
+    FG --> Check{"fg_hwnd 是否匹配目標？"}
+    Check -->|是: 等於 Console 終端機視窗| Trigger["✅ 觸發暫停 / 恢復切換 (Toggle)"]
+    Check -->|是: 等於 Game 遊戲視窗| Trigger
+    Check -->|否: 為瀏覽器/LINE/其他程式| Ignore["⛔ 忽略按鍵 (不攔截、不觸發)"]
+    
+    Trigger --> Lock["防抖動與釋放鎖 (Debounce & Key-Up Lock)"]
+    Lock --> Exec["執行 StateMachine.toggle_pause()"]
+```
+
+### 關鍵 API 與實作規範：
+* **Console HWND**：`ctypes.windll.kernel32.GetConsoleWindow()`
+* **Game HWND**：`capturer.hwnd` (由 `ScreenCapturer` 初始化時取得的遊戲視窗控制代碼)
+* **按鍵狀態偵測**：`ctypes.windll.user32.GetAsyncKeyState(0x20) & 0x8000` (VK_SPACE)
+* **防抖動保護 (Debounce)**：單次按下後必須等待 Key-Up（按鍵釋放）或至少間隔 `0.3 秒`，防止單次點擊在多輪迴圈中被反覆觸發。
+
+---
+
+## 🔄 三、暫停與恢復完整生命週期 (Lifecycle & Hooks)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 使用者
+    participant ML as main.py (Main Loop)
+    participant PC as PauseController (Listener)
+    participant SM as GameStateMachine
+    participant WD as ExceptionWatchdog
+
+    Note over User, SM: 【正常掛機運行中】
+    ML->>SM: step() 執行畫面偵測與狀態轉移
+    
+    User->>PC: 在 Terminal 或 Game 視窗按下 [Space]
+    PC->>SM: pause()
+    SM->>SM: is_paused = True, 記錄 pause_start_time = now
+    ML->>ML: 進入極低 CPU 休眠迴圈 (time.sleep(0.05))
+    Note over ML, WD: ⏸️ 暫停期間：不截圖、不點擊、不執行 step()
+    
+    User->>PC: 再次按下 [Space] 恢復掛機
+    PC->>SM: resume()
+    SM->>SM: 計算 pause_duration = now - pause_start_time
+    SM->>SM: compensate_internal_timers(pause_duration)
+    Note over SM, WD: 🛡️ 自動將 last_state_change 等內部時鐘加上 pause_duration
+    SM->>SM: is_paused = False, 重置 prev_mouse_pos
+    ML->>SM: 恢復 step() 正常調度
+    Note over ML, WD: ▶️ 恢復運行：Watchdog 不會因暫停時間誤判卡死！
+```
+
+---
+
+## 🧮 四、內部計時器集中補償規格 (`compensate_internal_timers`)
+
+當暫停期間經過 $\Delta t_{\text{pause}} = \text{now} - t_{\text{pause\_start}}$ 秒時，狀態機內部必須原子化完成以下補償：
+
+| 補償對象 | 變數名稱 / 位置 | 補償公式 | 目的與防護效果 |
+| :--- | :--- | :--- | :--- |
+| **全域狀態卡死 Watchdog** | `state_machine.last_state_change` | `+= pause_duration` | 防止暫停超過 90 秒後，恢復瞬間被 Watchdog 誤判為卡死而發起遊戲重啟。 |
+| **單場戰鬥逾時統計** | `state_machine.battle_start_time` | `+= pause_duration` (若非 None) | 保持戰鬥實際作戰時長統計精確，防止戰鬥逾時例外誤觸。 |
+| **例外彈窗暫存狀態** | `state_machine.stashed_state_time` | `+= pause_duration` (若非 None) | 保持 POPUP_RECOVERY 例外處理生命週期精確。 |
+| **畫面載入過渡逾時** | `LoadingHandler.loading_start_time`| `+= pause_duration` (若非 None) | 防止載入畫面暫停後被誤判為載入超時 (15s)。 |
+| **結算畫面偵測逾時** | `BattleHandler.non_battle_feature_start_time` | `+= pause_duration` (若非 None) | 防止戰鬥結算特徵等待被誤判為結算丟失。 |
+| **動態模板冷卻記憶** | `state_machine.missing_time_*` | `+= pause_duration` (自動反射) | 遍歷所有以 `missing_time_` 開頭之屬性，全自動補償。 |
+| **滑鼠手動操作防呆重置** | `mouse.last_action_time`<br>`prev_mouse_pos` | 重置為當前時間與當前座標 | 防止恢復瞬間因滑鼠位置差觸發「使用者手動操作」暫停。 |
+
+---
+
+## 🧪 五、驗證標準與測試規格
+
+1. **單元測試 (`tests/test_behavior_pause_resume.py`)**：
+   * **Test 1**: 驗證暫停 100 秒後呼叫 `compensate_internal_timers(100.0)`，`ExceptionWatchdog.check()` **絕對不觸發逾時**。
+   * **Test 2**: 驗證 `dungeon_cooldowns` 與定時領取冷卻在補償後**數值維持不變**（真實時間正常流逝）。
+   * **Test 3**: 驗證 `PauseController` 焦點過濾：當前景 HWND 為非目標視窗時，空白鍵被 100% 忽略。
+2. **實機端到端驗證**：
+   * 啟動 `run.bat`，在導航中按下 [Space] 暫停，等待 2 分鐘，再按 [Space] 恢復，確認腳本無縫繼續尋路且不觸發任何重啟或報錯。
