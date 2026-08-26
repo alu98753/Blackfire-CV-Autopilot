@@ -45,27 +45,26 @@ class MouseController:
         except Exception:
             return 1.0
 
-    def _phys_to_logical(self, hwnd, rect, phys_x, phys_y):
+    def _screen_to_client(self, hwnd, x, y):
         """
-        將物理視窗相對座標轉換為 PostMessage lParam 所需的座標。
-        由於本程式已宣告為 Per-Monitor DPI Aware (2)，Windows 的 DPI 虛擬化機制
-        在向 DPI Unaware 的遊戲視窗傳遞 PostMessage 時，會自動將 lParam
-        座標從物理像素除以縮放因子 (如 1.25) 轉換為邏輯像素。
-        因此，我們只需將「物理視窗相對座標」減去「物理邊框/標題列」，轉換成
-        「物理視窗 Client 區域相對座標」直接傳入即可，Windows 會代勞縮放。
+        將螢幕座標 (或視窗相對座標) 統一轉換為視窗內部客戶區座標 (Client Coordinates)。
         """
+        if not hwnd or not win32gui.IsWindow(hwnd):
+            return int(x), int(y)
         try:
             client_pt = win32gui.ClientToScreen(hwnd, (0, 0))
-            border_left = client_pt[0] - rect[0]
-            border_top = client_pt[1] - rect[1]
+            client_x = int(x) - client_pt[0]
+            client_y = int(y) - client_pt[1]
+            return client_x, client_y
         except Exception:
-            border_left = 0
-            border_top = 0
-            
-        lx = phys_x - border_left
-        ly = phys_y - border_top
-        dpi_factor = self.get_dpi_factor(hwnd)
-        return lx, ly, dpi_factor
+            return int(x), int(y)
+
+    def _phys_to_logical(self, hwnd, rect, phys_x, phys_y):
+        """
+        保留向前相容介面。直接傳回純淨的 Client 座標。
+        """
+        cx, cy = self._screen_to_client(hwnd, rect[0] + phys_x if rect else phys_x, rect[1] + phys_y if rect else phys_y)
+        return cx, cy, 1.0
 
     def _draw_debug_click(self, hwnd, rx_physical, ry_physical):
         """
@@ -95,8 +94,6 @@ class MouseController:
 
         cur_pos = pyautogui.position()
         if self.last_target_pos is not None:
-            # 只有當距離上次腳本動作時間極短（如 0.5 秒內）
-            # 才需要在 click 呼叫前比對位移，防範在連點間隙中使用者動了滑鼠
             last_action_diff = time.time() - self.last_action_time
             if last_action_diff < 0.5:
                 is_inside = True
@@ -121,17 +118,18 @@ class MouseController:
                         self.state_machine.last_user_operation_time = time.time()
                         return True
         else:
-            # 首次運行，初始化
             self.last_target_pos = cur_pos
         return False
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(0.03, 0.07)):
         """
         進行點擊，防作弊隨機偏移。
-        在後台模式下發送 PostMessage 訊息，在前台模式下使用 pyautogui 移動並點擊。
+        以視窗內部客戶區座標 (Client Coordinates) 為核心：
+        - 後台模式直接發送 Client 座標之 PostMessage 訊息，免除螢幕與 DPI 干擾；
+        - 前台模式透過 ClientToScreen 自動換算為當前螢幕之實體滑鼠座標。
         
-        :param x: 全域絕對目標 X 座標
-        :param y: 全域絕對目標 Y 座標
+        :param x: 目標 X 座標 (支援 Client 座標或全域絕對座標)
+        :param y: 目標 Y 座標 (支援 Client 座標或全域絕對座標)
         """
         if self.check_user_intervention():
             logging.info("🚫 使用者介入中，取消點擊動作。")
@@ -142,30 +140,18 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    # 優先使用狀態機當前幀快取的正確物理 rect，防範 win32gui.GetWindowRect 在跨 DPI 螢幕時隨機發生的 DPI 虛擬化回退
-                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
-                        rect_box = self.state_machine.last_rect
-                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
-                    else:
-                        rect = win32gui.GetWindowRect(hwnd)
-                        
-                    rx_physical = int(x) - rect[0]
-                    ry_physical = int(y) - rect[1]
+                    client_x, client_y = self._screen_to_client(hwnd, x, y)
                     
                     dx = random.randint(offset_range[0], offset_range[1])
                     dy = random.randint(offset_range[0], offset_range[1])
-                    rx_offset_phys = rx_physical + dx
-                    ry_offset_phys = ry_physical + dy
+                    cx = client_x + dx
+                    cy = client_y + dy
                     
-                    rx_logical, ry_logical, dpi_factor = self._phys_to_logical(hwnd, rect, rx_offset_phys, ry_offset_phys)
+                    # 繪製 Debug 紅圈圖檔，保存為 debug_click.png
+                    self._draw_debug_click(hwnd, cx, cy)
                     
-                    # logging.info(f"[後台點擊] 物理相對: ({rx_offset_phys}, {ry_offset_phys}) -> 邏輯相對: ({rx_logical}, {ry_logical}) [DPI 縮放: {dpi_factor}]")
-                    
-                    # 繪製 Debug 紅圈圖檔，保存為 debug_click.png 與實時畫面 debug_running_screen.png
-                    self._draw_debug_click(hwnd, rx_offset_phys, ry_offset_phys)
-                    
-                    lParam = win32api.MAKELONG(rx_logical, ry_logical)
-                    # 先發送滑鼠移動消息以在後台觸發按鈕的 Hover (懸停) 狀態，確保點擊穩定性
+                    lParam = win32api.MAKELONG(int(cx), int(cy))
+                    # 先發送滑鼠移動消息以在後台觸發按鈕的 Hover (懸停) 狀態
                     win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lParam)
                     time.sleep(0.01) # 微小延遲供遊戲引擎反應
                     win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lParam)
@@ -174,7 +160,6 @@ class MouseController:
                     
                     time.sleep(0.04) # 點擊後冷卻
                     
-                    # 鎖定實體滑鼠當前位置，避免點擊訊息引發防搶誤判
                     self.last_target_pos = pyautogui.position()
                     self.last_action_time = time.time()
                     if self.state_machine is not None:
@@ -189,10 +174,15 @@ class MouseController:
         try:
             dx = random.randint(offset_range[0], offset_range[1])
             dy = random.randint(offset_range[0], offset_range[1])
-            target_x = x + dx
-            target_y = y + dy
-
-            # logging.info(f"準備點擊座標: ({target_x}, {target_y})，隨機偏移: ({dx}, {dy})")
+            
+            hwnd = self.get_hwnd()
+            if hwnd:
+                client_x, client_y = self._screen_to_client(hwnd, x, y)
+                screen_pt = win32gui.ClientToScreen(hwnd, (int(client_x + dx), int(client_y + dy)))
+                target_x, target_y = screen_pt[0], screen_pt[1]
+            else:
+                target_x = int(x) + dx
+                target_y = int(y) + dy
 
             if self.human_like:
                 duration = random.uniform(move_duration[0], move_duration[1])
@@ -241,33 +231,27 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
-                        rect_box = self.state_machine.last_rect
-                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
+                    client_rect = win32gui.GetClientRect(hwnd)
+                    center_x = client_rect[2] // 2
+                    center_y = client_rect[3] // 2
+                    
+                    if x is not None and y is not None:
+                        client_x, client_y = self._screen_to_client(hwnd, x, y)
                     else:
-                        rect = win32gui.GetWindowRect(hwnd)
-                    center_x = rect[0] + (rect[2] - rect[0]) // 2
-                    center_y = rect[1] + (rect[3] - rect[1]) // 2
-                    
-                    target_x = x if x is not None else center_x
-                    target_y = y if y is not None else center_y
-                    
+                        client_x, client_y = center_x, center_y
+                        
                     wheel_delta = clicks * 120
                     wparam = win32api.MAKELONG(0, wheel_delta)
-                    lparam = win32api.MAKELONG(target_x, target_y)
+                    lparam_move = win32api.MAKELONG(int(client_x), int(client_y))
                     
-                    # 1. 計算用於 WM_MOUSEMOVE 的視窗相對座標 (Client Coordinates)
-                    rx_client = target_x - rect[0]
-                    ry_client = target_y - rect[1]
-                    lparam_move = win32api.MAKELONG(rx_client, ry_client)
-                    
-                    # 2. 先在後台將滑鼠焦點移入滾動區域
+                    # 1. 先在後台將滑鼠焦點移入滾動區域
                     win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam_move)
-                    time.sleep(0.05)  # 提供微小延遲讓遊戲引擎響應移入
+                    time.sleep(0.05)
                     
-                    # 3. 發送滾動消息 (lparam 為螢幕絕對座標)
-                    # logging.info(f"[後台滾輪] delta={wheel_delta}, 目標座標: ({target_x}, {target_y})")
-                    win32gui.PostMessage(hwnd, win32con.WM_MOUSEWHEEL, wparam, lparam)
+                    # 2. 獲取螢幕實體座標以傳遞給 WM_MOUSEWHEEL
+                    screen_pt = win32gui.ClientToScreen(hwnd, (int(client_x), int(client_y)))
+                    lparam_wheel = win32api.MAKELONG(screen_pt[0], screen_pt[1])
+                    win32gui.PostMessage(hwnd, win32con.WM_MOUSEWHEEL, wparam, lparam_wheel)
                     
                     self.last_target_pos = pyautogui.position()
                     self.last_action_time = time.time()
@@ -310,57 +294,38 @@ class MouseController:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
-                    # 優先使用狀態機當前幀快取的正確物理 rect，防範 win32gui.GetWindowRect 在跨 DPI 螢幕時隨機發生的 DPI 虛擬化回退
-                    if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
-                        rect_box = self.state_machine.last_rect
-                        rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
-                    else:
-                        rect = win32gui.GetWindowRect(hwnd)
-                        
-                    rsx_phys = int(start_x) - rect[0]
-                    rsy_phys = int(start_y) - rect[1]
-                    rex_phys = int(end_x) - rect[0]
-                    rey_phys = int(end_y) - rect[1]
+                    rsx, rsy = self._screen_to_client(hwnd, start_x, start_y)
+                    rex, rey = self._screen_to_client(hwnd, end_x, end_y)
                     
-                    rsx_logical, rsy_logical, dpi_factor = self._phys_to_logical(hwnd, rect, rsx_phys, rsy_phys)
-                    rex_logical, rey_logical, _ = self._phys_to_logical(hwnd, rect, rex_phys, rey_phys)
-                    
-                    # logging.info(f"[後台拖曳] 物理相對起點 ({rsx_phys}, {rsy_phys}) -> 邏輯相對起點 ({rsx_logical}, {rsy_logical}) [DPI 縮放: {dpi_factor}]")
-                    
-                    # 1. 預先將滑鼠游標移動到起點 (不帶 MK_LBUTTON)，強迫遊戲引擎更新滑鼠座標快取，避免被判定為反向位移
-                    lparam_start = win32api.MAKELONG(rsx_logical, rsy_logical)
+                    # 1. 預先將滑鼠游標移動到起點 (不帶 MK_LBUTTON)，強迫遊戲引擎更新滑鼠座標快取
+                    lparam_start = win32api.MAKELONG(int(rsx), int(rsy))
                     win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam_start)
-                    time.sleep(0.03) # 給予遊戲引擎微小的更新快取時間
+                    time.sleep(0.03)
                     
                     # 2. 按下 (使用 SendMessage 確保同步按下)
                     win32gui.SendMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam_start)
                     time.sleep(0.05)
                     
-                    # 2. 插值模擬移動軌跡 (使用 SendMessage 確保每一步軌跡均同步更新且不被合併)
+                    # 3. 插值模擬移動軌跡
                     steps = max(5, int(duration / 0.02))
                     step_sleep = duration / steps
                     for i in range(1, steps + 1):
-                        curr_x_phys = int(rsx_phys + (rex_phys - rsx_phys) * (i / steps))
-                        curr_y_phys = int(rsy_phys + (rey_phys - rsy_phys) * (i / steps))
-                        curr_x_logical, curr_y_logical, _ = self._phys_to_logical(hwnd, rect, curr_x_phys, curr_y_phys)
-                        
-                        lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
+                        curr_x = int(rsx + (rex - rsx) * (i / steps))
+                        curr_y = int(rsy + (rey - rsy) * (i / steps))
+                        lparam_move = win32api.MAKELONG(curr_x, curr_y)
                         win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
                         time.sleep(step_sleep)
                         
-                    # 2.5 停頓以消除釋放慣性並確保釋放穩定性
+                    # 3.5 停頓以消除釋放慣性並確保釋放穩定性
                     if not inertia:
                         time.sleep(0.15)
                     else:
                         time.sleep(0.02)
                     
-                    # 3. 確保最後一個移動點和釋放動作使用 SendMessage 同步發送，防止消息在隊列中被合併或遺漏，保證滑鼠放開狀態 100% 被即時接收
-                    curr_x_logical, curr_y_logical, _ = self._phys_to_logical(hwnd, rect, rex_phys, rey_phys)
-                    lparam_move = win32api.MAKELONG(curr_x_logical, curr_y_logical)
-                    win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_move)
+                    # 4. 確保最後一個移動點和釋放動作使用 SendMessage 同步發送
+                    lparam_end = win32api.MAKELONG(int(rex), int(rey))
+                    win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, lparam_end)
                     time.sleep(0.02)
-                    
-                    lparam_end = win32api.MAKELONG(rex_logical, rey_logical)
                     win32gui.SendMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam_end)
                     
                     self.last_target_pos = pyautogui.position()
@@ -376,13 +341,25 @@ class MouseController:
 
         # 前台拖曳實體點擊
         try:
-            if inertia:
-                pyautogui.moveTo(start_x, start_y)
-                pyautogui.dragTo(end_x, end_y, duration=duration, button='left')
+            hwnd = self.get_hwnd()
+            if hwnd:
+                rsx, rsy = self._screen_to_client(hwnd, start_x, start_y)
+                rex, rey = self._screen_to_client(hwnd, end_x, end_y)
+                pt_start = win32gui.ClientToScreen(hwnd, (int(rsx), int(rsy)))
+                pt_end = win32gui.ClientToScreen(hwnd, (int(rex), int(rey)))
+                s_x, s_y = pt_start[0], pt_start[1]
+                e_x, e_y = pt_end[0], pt_end[1]
             else:
-                pyautogui.moveTo(start_x, start_y)
+                s_x, s_y = int(start_x), int(start_y)
+                e_x, e_y = int(end_x), int(end_y)
+
+            if inertia:
+                pyautogui.moveTo(s_x, s_y)
+                pyautogui.dragTo(e_x, e_y, duration=duration, button='left')
+            else:
+                pyautogui.moveTo(s_x, s_y)
                 pyautogui.mouseDown(button='left')
-                pyautogui.moveTo(end_x, end_y, duration=duration)
+                pyautogui.moveTo(e_x, e_y, duration=duration)
                 time.sleep(0.1)  # 關鍵暫停：消除釋放時的慣性速度
                 pyautogui.mouseUp(button='left')
             self.last_target_pos = (end_x, end_y)

@@ -551,7 +551,7 @@ def init_state_machine_system(args, config):
 
     # 初始化模組
     capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend)
-    matcher = TemplateMatcher(templates_dir="templates", template_scale=0.8)
+    matcher = TemplateMatcher(templates_dir="templates", template_scale=1.0, auto_scale=True)
     mouse = MouseController(human_like=True, backend_mode=args.backend)
     
     # 初始化狀態機

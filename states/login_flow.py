@@ -28,7 +28,7 @@ def _wait_for_town(state_machine, rect):
         dismissed_popup = False
         for btn in ["common/quit.png", "common/confirm.png", "common/ok.png"]:
             if os.path.exists(os.path.join("templates", btn)):
-                pos_btn, conf_btn = state_machine.matcher.match(screen_img, btn, threshold=0.75)
+                pos_btn, conf_btn = state_machine.matcher.match(screen_img, btn, threshold=0.8)
                 if pos_btn:
                     logging.info(f"👉 [登入流程] 偵測到可能遮擋的彈窗按鈕 [{btn}] (相似度: {conf_btn:.4f})，進行關閉...")
                     state_machine.mouse.click(rect_current["left"] + pos_btn[0], rect_current["top"] + pos_btn[1])

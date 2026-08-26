@@ -59,5 +59,38 @@ class TestVisionMatcher(unittest.TestCase):
         self.assertAlmostEqual(pos[0], 125, delta=5)
         self.assertAlmostEqual(pos[1], 125, delta=5)
 
+    def test_auto_scale_1080p_and_1536p(self):
+        """
+        測試 TemplateMatcher 的 auto_scale 機制在 1920 寬度 (1.0x) 與 1536 寬度 (0.8x) 雙環境下自動適應。
+        """
+        # 1. 建立 1080p 基準模板 (50x50)
+        template_w, template_h = 50, 50
+        template_img = np.zeros((template_h, template_w, 3), dtype=np.uint8)
+        cv2.rectangle(template_img, (0, 0), (50, 50), (60, 120, 180), -1)
+        cv2.circle(template_img, (25, 25), 12, (200, 200, 50), -1)
+        
+        template_name = "icon_1080p.png"
+        cv2.imwrite(os.path.join(self.templates_dir, template_name), template_img)
+
+        # 2. 測試場景 A: 1920 寬度畫面 (單螢幕 1.0x)
+        screen_1080p = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        screen_1080p[200:250, 500:550] = template_img
+        
+        pos_1080, conf_1080 = self.matcher.match(screen_1080p, template_name, threshold=0.90)
+        self.assertIsNotNone(pos_1080)
+        self.assertGreaterEqual(conf_1080, 0.95)
+        self.assertEqual(pos_1080, (525, 225))
+
+        # 3. 測試場景 B: 1536 寬度畫面 (多螢幕 0.8x)
+        screen_1536p = np.zeros((864, 1536, 3), dtype=np.uint8)
+        # 在 1536 畫面上，目標圖示尺寸應為 50 * 0.8 = 40x40
+        scaled_icon = cv2.resize(template_img, (40, 40), interpolation=cv2.INTER_AREA)
+        screen_1536p[160:200, 400:440] = scaled_icon
+        
+        pos_1536, conf_1536 = self.matcher.match(screen_1536p, template_name, threshold=0.90)
+        self.assertIsNotNone(pos_1536)
+        self.assertGreaterEqual(conf_1536, 0.95)
+        self.assertEqual(pos_1536, (420, 180))
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,70 +10,66 @@ from actions.mouse import MouseController
 
 class TestMouseCoordinates(unittest.TestCase):
     def setUp(self):
-        # 建立 Mock 的 state_machine
         self.mock_state_machine = MagicMock()
+        self.mock_state_machine.user_operating = False
+        self.mock_state_machine.capturer = None
         self.mouse = MouseController()
         self.mouse.state_machine = self.mock_state_machine
         
+    @patch('actions.mouse.win32gui.IsWindow', return_value=True)
     @patch('actions.mouse.win32gui.ClientToScreen')
-    @patch('actions.mouse.ctypes.windll.user32.GetDpiForWindow')
-    def test_phys_to_logical_100_percent_dpi(self, mock_get_dpi, mock_client_to_screen):
+    def test_screen_to_client(self, mock_client_to_screen, mock_is_window):
         """
-        測試在大螢幕 (100% DPI 縮放) 下的物理到邏輯座標轉換。
+        測試螢幕座標轉客戶區相對座標 (Client Coordinates) 轉換。
         """
-        # 模擬 GetDpiForWindow 回傳 96 (100% DPI)
-        mock_get_dpi.return_value = 96
+        # 模擬 ClientToScreen 回傳客戶區在螢幕上的起點 (X=100, Y=200)
+        mock_client_to_screen.return_value = (100, 200)
         
-        # 模擬 ClientToScreen 回傳客戶區起點 (X=9, Y=38)
-        # 假設視窗外框左上角為 (0, 0)
-        mock_client_to_screen.return_value = (9, 38)
+        # 傳入絕對螢幕座標 (1100, 700)
+        cx, cy = self.mouse._screen_to_client(12345, 1100, 700)
         
-        # 模擬視窗物理外框 Rect
-        rect = (0, 0, 1550, 830)
-        
-        # 輸入物理座標 (比如匹配到的按鈕中心)
-        phys_x = 1000
-        phys_y = 500
-        
-        lx, ly, factor = self.mouse._phys_to_logical(None, rect, phys_x, phys_y)
-        
-        # 預期：
-        # border_left = 9 - 0 = 9
-        # border_top = 38 - 0 = 38
-        # lx = phys_x - border_left = 1000 - 9 = 991
-        # ly = phys_y - border_top = 500 - 38 = 462
-        self.assertEqual(factor, 1.0)
-        self.assertEqual(lx, 991)
-        self.assertEqual(ly, 462)
+        # 預期：1100 - 100 = 1000, 700 - 200 = 500
+        self.assertEqual(cx, 1000)
+        self.assertEqual(cy, 500)
 
+    @patch('actions.mouse.win32gui.PostMessage')
+    @patch('actions.mouse.win32gui.IsWindow', return_value=True)
     @patch('actions.mouse.win32gui.ClientToScreen')
-    @patch('actions.mouse.ctypes.windll.user32.GetDpiForWindow')
-    def test_phys_to_logical_125_percent_dpi(self, mock_get_dpi, mock_client_to_screen):
+    def test_click_backend_mode_client_coords(self, mock_client_to_screen, mock_is_window, mock_post_message):
         """
-        測試在筆電螢幕 (125% DPI 縮放) 下的物理到邏輯座標轉換。
+        測試在後台模式下發送以 Client 座標為基底的 PostMessage。
         """
-        # 模擬 GetDpiForWindow 回傳 120 (125% DPI)
-        mock_get_dpi.return_value = 120
+        self.mouse.backend_mode = True
+        self.mouse.get_hwnd = MagicMock(return_value=12345)
+        mock_client_to_screen.return_value = (0, 0)
         
-        # 模擬 ClientToScreen 回傳客戶區起點 (X=9, Y=38)
-        mock_client_to_screen.return_value = (9, 38)
+        # 點擊 (500, 300)，偏移 range=(0, 0)
+        success = self.mouse.click(500, 300, offset_range=(0, 0))
+        self.assertTrue(success)
+        self.assertTrue(mock_post_message.called)
+
+    @patch('actions.mouse.pyautogui.mouseUp')
+    @patch('actions.mouse.pyautogui.mouseDown')
+    @patch('actions.mouse.pyautogui.moveTo')
+    @patch('actions.mouse.win32gui.IsWindow', return_value=True)
+    @patch('actions.mouse.win32gui.ClientToScreen')
+    def test_click_foreground_mode_client_to_screen(self, mock_client_to_screen, mock_is_window, mock_move_to, mock_down, mock_up):
+        """
+        測試在前台模式下透過 ClientToScreen 轉換為實體螢幕座標並點擊。
+        """
+        self.mouse.backend_mode = False
+        self.mouse.get_hwnd = MagicMock(return_value=12345)
+        # 模擬 ClientToScreen: (0,0)->(100, 200)，(500, 300)->(600, 500)
+        def client_to_screen_side_effect(hwnd, pt):
+            return (pt[0] + 100, pt[1] + 200)
+        mock_client_to_screen.side_effect = client_to_screen_side_effect
         
-        # 模擬視窗物理外框 Rect
-        rect = (0, 0, 1938, 1038)
-        
-        phys_x = 1105
-        phys_y = 899
-        
-        lx, ly, factor = self.mouse._phys_to_logical(None, rect, phys_x, phys_y)
-        
-        # 預期：
-        # border_left = 9
-        # border_top = 38
-        # lx = 1105 - 9 = 1096
-        # ly = 899 - 38 = 861
-        self.assertEqual(factor, 1.25)
-        self.assertEqual(lx, 1096)
-        self.assertEqual(ly, 861)
+        # 點擊 (500, 300)，偏移 range=(0, 0)
+        success = self.mouse.click(600, 500, offset_range=(0, 0))
+        self.assertTrue(success)
+        mock_move_to.assert_any_call(600, 500)
+        self.assertTrue(mock_down.called)
+        self.assertTrue(mock_up.called)
 
 if __name__ == "__main__":
     unittest.main()

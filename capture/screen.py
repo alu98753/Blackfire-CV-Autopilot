@@ -54,23 +54,13 @@ class ScreenCapturer:
                         logging.warning(f"⚠️ 嘗試自動還原最小化視窗 '{self.window_title}' 失敗。")
                     return None
 
-            if bool(ctypes.windll.user32.IsZoomed(hwnd)):
-                client_pt = win32gui.ClientToScreen(hwnd, (0, 0))
-                client_rect = win32gui.GetClientRect(hwnd)
-                return {
-                    "left": client_pt[0],
-                    "top": client_pt[1],
-                    "width": client_rect[2],
-                    "height": client_rect[3],
-                    "title": self.window_title
-                }
-
-            rect = win32gui.GetWindowRect(hwnd)
+            client_pt = win32gui.ClientToScreen(hwnd, (0, 0))
+            client_rect = win32gui.GetClientRect(hwnd)
             return {
-                "left": rect[0],
-                "top": rect[1],
-                "width": rect[2] - rect[0],
-                "height": rect[3] - rect[1],
+                "left": client_pt[0],
+                "top": client_pt[1],
+                "width": client_rect[2],
+                "height": client_rect[3],
                 "title": self.window_title
             }
         except Exception as e:
@@ -239,9 +229,9 @@ class ScreenCapturer:
         若 PrintWindow 失敗則降階為 BitBlt 複製。若繪製結果為全黑空影像，自動回傳 None 以降階前台截圖。
         """
         try:
-            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-            width = right - left
-            height = bottom - top
+            client_rect = win32gui.GetClientRect(hwnd)
+            width = client_rect[2]
+            height = client_rect[3]
             
             if width <= 0 or height <= 0:
                 return None

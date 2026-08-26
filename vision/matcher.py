@@ -6,47 +6,55 @@ import numpy as np
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class TemplateMatcher:
-    def __init__(self, templates_dir="templates", template_scale=1.0):
+    def __init__(self, templates_dir="templates", template_scale=1.0, auto_scale=True):
         self.templates_dir = templates_dir
         self.template_scale = template_scale
+        self.auto_scale = auto_scale
+        self._raw_templates = {}
         self._cached_templates = {}
 
-    def _load_template(self, template_name):
+    def _load_template(self, template_name, scale=1.0):
         """
-        延遲載入並快取模板圖片。
+        延遲載入並快取模板圖片，支援依據 scale 多尺度快取。
         """
-        if template_name in self._cached_templates:
-            return self._cached_templates[template_name]
+        scale_key = round(float(scale), 4)
+        cache_key = (template_name, scale_key)
+        if cache_key in self._cached_templates:
+            return self._cached_templates[cache_key]
 
-        # 支援直接傳入檔名或完整路徑
-        if os.path.isabs(template_name) or template_name.startswith("."):
-            path = os.path.normpath(template_name)
+        # 1. 取得原始 1.0 模板原圖
+        if template_name in self._raw_templates:
+            raw_img = self._raw_templates[template_name]
         else:
-            path = os.path.normpath(os.path.join(self.templates_dir, template_name))
+            if os.path.isabs(template_name) or template_name.startswith("."):
+                path = os.path.normpath(template_name)
+            else:
+                path = os.path.normpath(os.path.join(self.templates_dir, template_name))
 
-        if not os.path.exists(path):
-            logging.error(f"找不到模板圖片檔案: {path}")
-            return None
+            if not os.path.exists(path):
+                logging.error(f"找不到模板圖片檔案: {path}")
+                return None
 
-        # 讀取圖片，預設讀取彩色 BGR 影像
-        template_img = cv2.imread(path)
-        if template_img is None:
-            logging.error(f"無法解析/讀取圖片: {path}")
-            return None
+            raw_img = cv2.imread(path)
+            if raw_img is None:
+                logging.error(f"無法解析/讀取圖片: {path}")
+                return None
+            self._raw_templates[template_name] = raw_img
 
-        # 如果設定了縮放比例且不為 1.0，動態對模板進行縮放
-        if self.template_scale != 1.0:
-            h, w = template_img.shape[:2]
-            nw = int(w * self.template_scale)
-            nh = int(h * self.template_scale)
-            if nw > 0 and nh > 0:
-                template_img = cv2.resize(
-                    template_img, 
-                    (nw, nh), 
-                    interpolation=cv2.INTER_AREA if self.template_scale < 1.0 else cv2.INTER_CUBIC
-                )
+        # 2. 縮放處理
+        if abs(scale_key - 1.0) < 1e-4:
+            template_img = raw_img
+        else:
+            h, w = raw_img.shape[:2]
+            nw = max(1, int(round(w * scale_key)))
+            nh = max(1, int(round(h * scale_key)))
+            template_img = cv2.resize(
+                raw_img, 
+                (nw, nh), 
+                interpolation=cv2.INTER_AREA if scale_key < 1.0 else cv2.INTER_LINEAR
+            )
 
-        self._cached_templates[template_name] = template_img
+        self._cached_templates[cache_key] = template_img
         return template_img
 
     def match_mutually_exclusive_tabs(self, screen_img, template_a, template_b, margin=0.02, threshold=0.70):
@@ -70,25 +78,38 @@ class TemplateMatcher:
         is_b_active = (c_b >= threshold and c_b > c_a + margin)
         return is_a_active, is_b_active, c_a, c_b
 
-    def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0, quiet=False):
+    def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0, quiet=False, scale=None):
         """
         在 screen_img 中尋找與 template_name 匹配度最高的位置。
+        支援 auto_scale 自動依據畫面解析度換算縮放因子。
         
         :param screen_img: 來源畫面 (numpy array)
         :param template_name: 模板檔名或路徑
         :param threshold: 信心度閥值 (0.0 ~ 1.0)
         :param brightness_threshold: 亮度比例門檻 (0.0代表不啟用，大於0代表低於此比例則過濾，並進行最亮點選擇)
+        :param scale: 指定縮放比例 (若為 None 且 auto_scale=True 則自動以 screen_width / 1920 計算)
         :return: (center_x, center_y), confidence. 若未達閥值，回傳 None, confidence
         """
-        template_img = self._load_template(template_name)
-        if template_img is None or screen_img is None:
+        if screen_img is None:
+            return None, 0.0
+
+        if scale is None:
+            if self.auto_scale and hasattr(screen_img, "shape") and len(screen_img.shape) >= 2:
+                screen_w = screen_img.shape[1]
+                if screen_w >= 1200:
+                    scale = screen_w / 1920.0
+                else:
+                    scale = self.template_scale
+            else:
+                scale = self.template_scale
+
+        template_img = self._load_template(template_name, scale=scale)
+        if template_img is None:
             return None, 0.0
 
         screen_h, screen_w = screen_img.shape[:2]
         temp_h, temp_w = template_img.shape[:2]
         
-        # logging.info(f"[除錯-比對大小] 模板 '{template_name}' 大小: {temp_w}x{temp_h}, 來源畫面大小: {screen_w}x{screen_h}")
-
         # 如果模板比來源畫面大，必無法匹配，直接回傳 None 以免 OpenCV 崩潰
         if temp_h > screen_h or temp_w > screen_w:
             if not quiet:
@@ -102,7 +123,7 @@ class TemplateMatcher:
             small_temp = cv2.resize(template_img, (max(1, temp_w // 2), max(1, temp_h // 2)), interpolation=cv2.INTER_AREA)
             res_small = cv2.matchTemplate(small_screen, small_temp, cv2.TM_CCOEFF_NORMED)
             _, max_val_small, _, _ = cv2.minMaxLoc(res_small)
-            if max_val_small < threshold - 0.05:
+            if max_val_small < threshold - 0.10:
                 return None, max_val_small
 
         # 使用標準化相關係數配對方法
@@ -183,22 +204,22 @@ class TemplateMatcher:
         在 screen_img 中尋找所有與 template_name 匹配度高於 threshold 的位置 (支援自適應多尺度測試與相對亮度比過濾)。
         :return: [(center_x, center_y, confidence), ...]
         """
-        base_template = self._load_template(template_name)
+        base_template = self._load_template(template_name, scale=1.0)
         if base_template is None or screen_img is None:
             return []
 
         screen_h, screen_w = screen_img.shape[:2]
-        scales_to_try = scales or [1.0, 0.863, 0.75]
+        if self.auto_scale:
+            auto_factor = (screen_w / 1920.0) if screen_w >= 1200 else self.template_scale
+        else:
+            auto_factor = self.template_scale
+        base_scales = scales or [1.0, 0.863, 0.75]
+        scales_to_try = [round(s * auto_factor, 4) for s in base_scales]
 
         for s in scales_to_try:
-            if s == 1.0:
-                template_img = base_template
-            else:
-                nw = int(base_template.shape[1] * s)
-                nh = int(base_template.shape[0] * s)
-                if nw <= 0 or nh <= 0 or nh > screen_h or nw > screen_w:
-                    continue
-                template_img = cv2.resize(base_template, (nw, nh), interpolation=cv2.INTER_AREA)
+            template_img = self._load_template(template_name, scale=s)
+            if template_img is None:
+                continue
 
             temp_h, temp_w = template_img.shape[:2]
             if temp_h > screen_h or temp_w > screen_w:
