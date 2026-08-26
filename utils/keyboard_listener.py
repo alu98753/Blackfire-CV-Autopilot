@@ -1,6 +1,7 @@
 import ctypes
 import os
 import time
+import threading
 import logging
 
 VK_SPACE = 0x20
@@ -8,24 +9,45 @@ GA_ROOT = 2
 
 class PauseController:
     """
-    熱鍵與前景視窗焦點控制器 (PauseController - Triple-Space Edition)
+    背景守護執行緒熱鍵與前景視窗焦點控制器 (PauseController - Background Daemon Edition)
     
     核心機制：
-    1. 【連敲 3 次空白鍵觸發 (Triple-Space)】：在 1.2 秒內連續按下 3 次空白鍵，才切換暫停/繼續，徹底防止遊戲或打字時單次誤觸。
-    2. 【即時回饋提示】：每按一次空白鍵即時印出進度提示 (1/3 -> 2/3 -> 3/3 達成)。
-    3. 【雙路徑雙重保障】：
-       - 終端機 (CMD / PowerShell / Windows Terminal / VS Code)：透過 msvcrt.kbhit() 監聽標準輸入流。
-       - 遊戲視窗：透過 GetAsyncKeyState(VK_SPACE) 配合視窗標題與頂層 HWND 比對。
+    1. 【獨立背景守護執行緒 (Background Daemon Thread)】：
+       每 10ms 獨立在背景採樣按鍵與焦點狀態，完全不受主執行緒 OpenCV / OCR / 子流程阻塞的影響！
+    2. 【相鄰節奏間隔判定 (Cadence Interval Timeout)】：
+       只要每次按鍵與上一按鍵間隔不超過 1.5 秒 (cadence_timeout_sec = 1.5)，即視為連續敲擊。
+       連按 3 次即刻標記 toggle_event_pending = True。
+    3. 【即時進度提示】：
+       每按一次即時輸出 [*] [空白鍵 1/3] 於 1.5 秒內再按 2 次切換暫停/繼續...
+    4. 【雙路徑雙重保障】：
+       - 終端機 (CMD / PowerShell / Windows Terminal / VS Code)：msvcrt.kbhit()
+       - 遊戲視窗：GetAsyncKeyState(VK_SPACE) 配合視窗標題與頂層 HWND 比對。
     """
 
-    def __init__(self, capturer=None, required_taps: int = 3, window_sec: float = 1.2, debounce_sec: float = 0.05):
+    def __init__(self, capturer=None, required_taps: int = 3, cadence_timeout_sec: float = 1.5, debounce_sec: float = 0.05, start_thread: bool = True):
         self.capturer = capturer
         self.required_taps = required_taps
-        self.window_sec = window_sec
+        self.cadence_timeout_sec = cadence_timeout_sec
         self.debounce_sec = debounce_sec
         self.key_pressed = False
         self.last_press_time = 0.0
-        self.tap_timestamps = []
+        self.last_tap_time = 0.0
+        self.tap_count = 0
+        self.toggle_event_pending = False
+        self._lock = threading.Lock()
+        self._running = True
+
+        if start_thread:
+            self._thread = threading.Thread(target=self._background_loop, daemon=True, name="PauseControllerThread")
+            self._thread.start()
+        else:
+            self._thread = None
+
+    def stop(self):
+        """
+        停止背景監聽執行緒。
+        """
+        self._running = False
 
     def get_console_hwnd(self):
         """
@@ -108,38 +130,68 @@ class PauseController:
         """
         return self.is_console_window_active() or self.is_game_window_active()
 
-    def _register_tap(self, now: float) -> bool:
+    def _on_tap_detected(self, now: float) -> bool:
         """
-        記錄一次有效空白鍵敲擊，並檢查是否在時間窗口內湊滿 3 次。
+        記錄一次有效敲擊，採用相鄰節奏間隔 (cadence_timeout_sec) 判定。
         """
-        # 清除超出時間窗口的過期敲擊記錄
-        self.tap_timestamps = [t for t in self.tap_timestamps if now - t <= self.window_sec]
-        self.tap_timestamps.append(now)
-        self.last_press_time = now
+        with self._lock:
+            if now - self.last_tap_time > self.cadence_timeout_sec:
+                self.tap_count = 1
+            else:
+                self.tap_count += 1
 
-        current_count = len(self.tap_timestamps)
-        if current_count >= self.required_taps:
-            self.tap_timestamps.clear()
-            try:
-                print(f"\r[*] [空白鍵 3/3 達成] 正在切換暫停/繼續狀態...                    \n", flush=True)
-            except Exception:
-                pass
-            return True
-        else:
-            remaining = self.required_taps - current_count
-            try:
-                print(f"\r[*] [空白鍵 {current_count}/3] 於 {self.window_sec:.1f} 秒內再按 {remaining} 次切換暫停/繼續...", end="", flush=True)
-            except Exception:
-                pass
-            return False
+            self.last_tap_time = now
+            self.last_press_time = now
+
+            if self.tap_count >= self.required_taps:
+                self.tap_count = 0
+                self.toggle_event_pending = True
+                try:
+                    print(f"\r[*] [空白鍵 3/3 達成] 正在切換暫停/繼續狀態...                    \n", flush=True)
+                except Exception:
+                    pass
+                return True
+            else:
+                remaining = self.required_taps - self.tap_count
+                try:
+                    print(f"\r[*] [空白鍵 {self.tap_count}/3] 於 {self.cadence_timeout_sec:.1f} 秒內再按 {remaining} 次切換暫停/繼續...", end="", flush=True)
+                except Exception:
+                    pass
+                return False
 
     def check_toggle_triggered(self) -> bool:
         """
-        檢查是否在目標視窗連續按下了 3 次 [Space 空白鍵]。
+        主執行緒檢查是否有暫停/恢復切換事件。
+        若未啟動背景執行緒 (例如在單步測試中)，會同步執行一次 _poll_once()。
         
-        :return: True 代表成功觸發暫停/恢復切換；False 代表次數未滿或被過濾
+        :return: True 代表成功觸發切換；False 代表無事件或次數未滿
         """
-        now = time.time()
+        if not self._thread or not self._thread.is_alive():
+            self._poll_once()
+
+        with self._lock:
+            if self.toggle_event_pending:
+                self.toggle_event_pending = False
+                return True
+            return False
+
+    def _background_loop(self):
+        """
+        獨立背景守護執行緒主迴圈，每 10ms 採樣一次按鍵。
+        """
+        while self._running:
+            try:
+                self._poll_once()
+            except Exception as e:
+                logging.debug(f"[PauseController] 背景監聽異常: {e}")
+            time.sleep(0.01)
+
+    def _poll_once(self, now=None):
+        """
+        單次按鍵採樣檢測。
+        """
+        if now is None:
+            now = time.time()
 
         # -------------------------------------------------------------
         # 路徑 1：終端機直接字元流 (msvcrt.kbhit)
@@ -150,7 +202,7 @@ class PauseController:
                 ch = msvcrt.getch()
                 if ch == b' ':
                     if now - self.last_press_time >= self.debounce_sec:
-                        return self._register_tap(now)
+                        return self._on_tap_detected(now)
         except Exception:
             pass
 
@@ -165,7 +217,7 @@ class PauseController:
                 if is_down:
                     if not self.key_pressed and (now - self.last_press_time >= self.debounce_sec):
                         self.key_pressed = True
-                        return self._register_tap(now)
+                        return self._on_tap_detected(now)
                 else:
                     self.key_pressed = False
             else:

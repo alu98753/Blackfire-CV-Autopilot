@@ -7,7 +7,7 @@ from utils.keyboard_listener import PauseController
 
 class TestBehaviorPauseResume(unittest.TestCase):
     """
-    測試空白鍵暫停/繼續控制與內部計時器補償行為
+    測試空白鍵暫停/繼續控制、相鄰節奏間隔、背景執行緒與內部計時器補償行為
     """
 
     def setUp(self):
@@ -115,50 +115,90 @@ class TestBehaviorPauseResume(unittest.TestCase):
         is_stuck = self.state_machine.exception_watchdog.check(None)
         self.assertFalse(is_stuck)
 
+    def test_cadence_interval_success(self):
+        """
+        測試相鄰節奏間隔小於 1.5 秒時，敲滿 3 次必定成功觸發 (即使總耗時超過 1.2 秒)
+        """
+        controller = PauseController(capturer=self.mock_capturer, required_taps=3, cadence_timeout_sec=1.5, start_thread=False)
+
+        # 第 1 下 (T = 100.0)
+        res1 = controller._on_tap_detected(100.0)
+        self.assertFalse(res1)
+        self.assertEqual(controller.tap_count, 1)
+
+        # 第 2 下 (T = 100.8，相鄰間隔 0.8s <= 1.5s)
+        res2 = controller._on_tap_detected(100.8)
+        self.assertFalse(res2)
+        self.assertEqual(controller.tap_count, 2)
+
+        # 第 3 下 (T = 101.6，相鄰間隔 0.8s <= 1.5s，總耗時 1.6s)
+        res3 = controller._on_tap_detected(101.6)
+        self.assertTrue(res3)
+        self.assertEqual(controller.tap_count, 0)
+        self.assertTrue(controller.check_toggle_triggered())
+
+    def test_cadence_interval_timeout_reset(self):
+        """
+        測試相鄰節奏間隔超過 1.5 秒時，自動重置計數為第 1 下
+        """
+        controller = PauseController(capturer=self.mock_capturer, required_taps=3, cadence_timeout_sec=1.5, start_thread=False)
+
+        # 第 1 下 (T = 100.0)
+        controller._on_tap_detected(100.0)
+        self.assertEqual(controller.tap_count, 1)
+
+        # 超時停頓 1.8 秒後才按第 2 下 (T = 101.8 > 100.0 + 1.5)
+        res = controller._on_tap_detected(101.8)
+        self.assertFalse(res)
+        # 計數應被自動重置為 1 (重新開始第一下)
+        self.assertEqual(controller.tap_count, 1)
+
     @patch("ctypes.windll.user32.GetForegroundWindow")
     @patch("ctypes.windll.kernel32.GetConsoleWindow")
     @patch("ctypes.windll.user32.GetAsyncKeyState")
-    def test_pause_controller_focus_filtering_and_triple_tap(self, mock_get_async_key, mock_get_console, mock_get_fg):
+    def test_background_thread_captures_during_main_thread_blocking(self, mock_get_async_key, mock_get_console, mock_get_fg):
         """
-        測試 PauseController 連按 3 次空白鍵 (Triple-Space) 觸發與視窗焦點過濾機制
+        測試當主執行緒被耗時任務 (如 OCR/子流程) 阻塞時，背景執行緒仍能 100% 捕獲 3 次按鍵
         """
-        mock_get_console.return_value = 11111 # Console HWND
-        controller = PauseController(capturer=self.mock_capturer, required_taps=3, window_sec=0.5, debounce_sec=0.01)
-
-        # 1. 前景視窗為 Console 視窗，第 1 次按 Space -> 尚未滿 3 次，返回 False
+        mock_get_console.return_value = 11111
         mock_get_fg.return_value = 11111
-        mock_get_async_key.return_value = 0x8000
-        self.assertFalse(controller.check_toggle_triggered())
-
-        # 釋放按鍵
-        time.sleep(0.02)
         mock_get_async_key.return_value = 0x0
-        controller.check_toggle_triggered()
 
-        # 第 2 次按 Space -> 尚未滿 3 次，返回 False
-        time.sleep(0.02)
-        mock_get_async_key.return_value = 0x8000
-        self.assertFalse(controller.check_toggle_triggered())
+        # 啟動背景執行緒 (debounce 設為極小)
+        controller = PauseController(capturer=self.mock_capturer, required_taps=3, cadence_timeout_sec=1.5, debounce_sec=0.01, start_thread=True)
 
-        # 釋放按鍵
-        time.sleep(0.02)
-        mock_get_async_key.return_value = 0x0
-        controller.check_toggle_triggered()
+        try:
+            # 模擬使用者在背景敲擊 3 次 (間隔 0.05s)
+            for _ in range(3):
+                mock_get_async_key.return_value = 0x8000 # 按下
+                time.sleep(0.03)
+                mock_get_async_key.return_value = 0x0    # 釋放
+                time.sleep(0.03)
 
-        # 第 3 次按 Space -> 滿 3 次，返回 True
-        time.sleep(0.02)
-        mock_get_async_key.return_value = 0x8000
-        self.assertTrue(controller.check_toggle_triggered())
-
-        # 2. 前景視窗為第三方視窗 (例如瀏覽器 99999)，連敲多次 Space 均被 100% 過濾忽略
-        mock_get_async_key.return_value = 0x0
-        controller.check_toggle_triggered()
-        mock_get_fg.return_value = 99999 # 瀏覽器
-        for _ in range(5):
-            mock_get_async_key.return_value = 0x8000
+            # 模擬主執行緒執行耗時任務後回到頂部檢查
+            time.sleep(0.05)
+            self.assertTrue(controller.check_toggle_triggered())
+            # 再次檢查應已被消費
             self.assertFalse(controller.check_toggle_triggered())
-            mock_get_async_key.return_value = 0x0
-            controller.check_toggle_triggered()
+        finally:
+            controller.stop()
+
+    @patch("ctypes.windll.user32.GetForegroundWindow")
+    @patch("ctypes.windll.kernel32.GetConsoleWindow")
+    @patch("ctypes.windll.user32.GetAsyncKeyState")
+    def test_focus_window_filter(self, mock_get_async_key, mock_get_console, mock_get_fg):
+        """
+        測試視窗焦點過濾：前景視窗為第三方視窗時被 100% 過濾
+        """
+        mock_get_console.return_value = 11111
+        mock_get_fg.return_value = 99999 # 瀏覽器等非目標視窗
+        mock_get_async_key.return_value = 0x8000
+
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False)
+        controller._poll_once()
+
+        self.assertEqual(controller.tap_count, 0)
+        self.assertFalse(controller.check_toggle_triggered())
 
 if __name__ == "__main__":
     unittest.main()
