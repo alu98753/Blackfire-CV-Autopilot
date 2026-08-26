@@ -7,14 +7,13 @@ from utils.keyboard_listener import (
     PauseController,
     TRIGGER_MODE_CTRL_SPACE,
     TRIGGER_MODE_TRIPLE_SPACE,
-    TRIGGER_MODE_SINGLE_SPACE,
     VK_CONTROL,
     VK_SPACE
 )
 
 class TestBehaviorPauseResume(unittest.TestCase):
     """
-    測試可插拔熱鍵策略 (Ctrl+Space / Triple-Space / Single-Space)、背景執行緒與內部計時器補償行為
+    測試可插拔熱鍵策略 (Ctrl+Space / Triple-Space)、背景執行緒與內部計時器補償行為
     """
 
     def setUp(self):

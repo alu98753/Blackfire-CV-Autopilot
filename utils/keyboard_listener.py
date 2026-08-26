@@ -10,7 +10,6 @@ GA_ROOT = 2
 
 TRIGGER_MODE_CTRL_SPACE = "ctrl_space"
 TRIGGER_MODE_TRIPLE_SPACE = "triple_space"
-TRIGGER_MODE_SINGLE_SPACE = "single_space"
 
 class PauseController:
     """
@@ -21,8 +20,6 @@ class PauseController:
        按下 Ctrl + Space 立即切換暫停/繼續。乾脆俐落、手感極佳、且絕對不會在遊戲內走位或打字時誤觸。
     2. 【TRIGGER_MODE_TRIPLE_SPACE ("triple_space")】：
        在 1.5 秒內連續敲擊 3 次空白鍵觸發，附帶即時進度反饋。
-    3. 【TRIGGER_MODE_SINGLE_SPACE ("single_space")】：
-       單次按空白鍵觸發。
        
     核心架構：
     - 獨立背景守護執行緒 (Background Daemon Thread，每 10ms 採樣) 確保主執行緒 OpenCV/OCR 阻塞時 100% 毫秒級捕獲。
@@ -56,7 +53,6 @@ class PauseController:
         self._strategies = {
             TRIGGER_MODE_CTRL_SPACE: self._poll_ctrl_space,
             TRIGGER_MODE_TRIPLE_SPACE: self._poll_triple_space,
-            TRIGGER_MODE_SINGLE_SPACE: self._poll_single_space,
         }
 
         if start_thread:
@@ -282,42 +278,6 @@ class PauseController:
         except Exception as e:
             logging.debug(f"[PauseController] Triple-Space 檢測異常: {e}")
 
-        return False
-
-    # =========================================================================
-    # 策略 3：Single-Space 單次空白鍵策略
-    # =========================================================================
-    def _poll_single_space(self, now: float) -> bool:
-        try:
-            import msvcrt
-            while msvcrt.kbhit():
-                ch = msvcrt.getch()
-                if ch == b' ':
-                    if now - self.last_press_time >= self.debounce_sec:
-                        with self._lock:
-                            self.toggle_event_pending = True
-                            self.last_press_time = now
-                            return True
-        except Exception:
-            pass
-
-        try:
-            if self.is_target_window_active():
-                state = ctypes.windll.user32.GetAsyncKeyState(VK_SPACE)
-                is_down = bool(state & 0x8000)
-                if is_down:
-                    if not self.key_pressed and (now - self.last_press_time >= self.debounce_sec):
-                        self.key_pressed = True
-                        with self._lock:
-                            self.toggle_event_pending = True
-                            self.last_press_time = now
-                            return True
-                else:
-                    self.key_pressed = False
-            else:
-                self.key_pressed = False
-        except Exception:
-            pass
         return False
 
     # =========================================================================
