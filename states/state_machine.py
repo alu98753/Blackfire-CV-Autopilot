@@ -552,7 +552,7 @@ class GameStateMachine:
                 return
 
             # C. 體力不足（食物不足）退避處理
-            if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING]:
+            if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING, self.STATE_DOMAIN_EXPLORE]:
                 from states.stamina_flow import handle_insufficient_stamina
                 if handle_insufficient_stamina(self, screen_img, rect):
                     return

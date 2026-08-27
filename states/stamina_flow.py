@@ -57,7 +57,7 @@ def handle_insufficient_stamina(state_machine, screen_img, rect):
         found_pos = None
         found_conf = 0.0
         
-        for btn in ["common/quit.png", "exit_battle.png"]:
+        for btn in ["common/quit.png", "exit_battle.png", "domains/common/exit_to_lobby.png"]:
             if os.path.exists(os.path.join("templates", btn)):
                 pos, conf = state_machine.matcher.match(screen_current, btn, threshold=0.8)
                 if pos:
@@ -67,12 +67,12 @@ def handle_insufficient_stamina(state_machine, screen_img, rect):
                     break
                     
         if found_btn:
-            logging.info(f"👉 偵測到關閉按鈕 [{found_btn}] (信心度: {found_conf:.4f})，進行點擊...")
+            logging.info(f"👉 偵測到關閉/退場按鈕 [{found_btn}] (信心度: {found_conf:.4f})，進行點擊...")
             state_machine.mouse.click(rect_current["left"] + found_pos[0], rect_current["top"] + found_pos[1])
             time.sleep(0.8) # 等待視窗關閉動畫
             loop_count += 1
         else:
-            logging.info("🟢 已無 quit 或 exit_battle 按鈕，結束清除循環。")
+            logging.info("🟢 已無 quit、exit_battle 或 exit_to_lobby 按鈕，結束清除循環。")
             break
             
     # 3. 僅能判斷並點 goback_town.png 返回城鎮
