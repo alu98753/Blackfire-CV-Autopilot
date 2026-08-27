@@ -74,7 +74,8 @@ class DomainExploreHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", "common/auto.png")):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.70)
             if pos_auto:
-                logging.info(f"⚔️ [領地探索] 偵測到戰鬥開始 (auto 按鈕信心度: {conf_auto:.4f})，轉移至 STATE_BATTLE！")
+                logging.info(f"⚔️ [領地探索] 偵測到戰鬥開始 (auto 按鈕信心度: {conf_auto:.4f})，重置單場戰敗次數並轉移至 STATE_BATTLE！")
+                self.machine.defeat_count = 0
                 self.machine.battle_start_time = time.time()
                 self.machine.transition_to(self.machine.STATE_BATTLE)
                 return True

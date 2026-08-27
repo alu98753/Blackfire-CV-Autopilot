@@ -19,6 +19,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.STATE_COLLECT_ONLY = "COLLECT_ONLY"
         self.mock_machine.STATE_BREAD_COLLECTION = "BREAD_COLLECTION"
         self.mock_machine.STATE_LOBBY = "LOBBY"
+        self.mock_machine.STATE_LOADING = "LOADING"
 
         self.mock_machine.need_bag_cleaning = False
         self.mock_machine.need_diamond_collection = False
@@ -213,7 +214,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         """
         Given: 戰鬥中遭遇強敵 Boss (golden_king.png)
         When: 執行 BattleHandler.handle()
-        Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 累加戰敗次數並切回 DOMAIN_EXPLORE
+        Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 不增加戰敗計數 (維持 0) 並切回 DOMAIN_EXPLORE
         """
         from states.handlers.battle import BattleHandler
         battle_handler = BattleHandler(self.mock_machine)
@@ -241,10 +242,47 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         with patch("os.path.exists", return_value=True):
             battle_handler.handle(mock_img, self.rect)
 
-        # 斷言點擊過設定與放棄按鈕
+        # 斷言點擊過設定與放棄按鈕，且強敵放棄不增加戰敗計數
         self.assertTrue(self.mock_machine.mouse.click.called)
-        self.assertEqual(self.mock_machine.defeat_count, 1)
+        self.assertEqual(self.mock_machine.defeat_count, 0)
         self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
+
+    # =========================================================================
+    # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試
+    # =========================================================================
+
+    def test_regular_battle_defeat_retry_uses_domain_max_defeat(self):
+        """
+        Given: 領地模式常規戰鬥戰敗 (defeat.png)，當前 defeat_count = 3 (< domain_max_defeat - 1 = 4)
+        When: 執行 ResultHandler.handle()
+        Then: 點擊重新開始按鈕，defeat_count 累加為 4，進入 STATE_LOADING 繼續重試
+        """
+        from states.handlers.result import ResultHandler
+        result_handler = ResultHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config["type"] = "domain"
+        self.mock_machine.config["domain"] = "golden_empire"
+        self.mock_machine.config["domain_max_defeat"] = 5
+        self.mock_machine.is_in_dungeon = False
+        self.mock_machine.defeat_count = 3
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "defeat.png":
+                return ((960, 400), 0.85)
+            if template in ["defeat_retry.png", "stages/retry.png"]:
+                return ((960, 800), 0.90)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            result_handler.subflow_step = "CONTINUE_LOOP"
+            result_handler.handle(mock_img, self.rect)
+
+        # 斷言戰敗重試次數累加至 4，並切換至 LOADING 狀態
+        self.assertEqual(self.mock_machine.defeat_count, 4)
+        self.mock_machine.transition_to.assert_called_with("LOADING")
 
 
 if __name__ == "__main__":

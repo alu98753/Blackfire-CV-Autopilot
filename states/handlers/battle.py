@@ -260,23 +260,18 @@ class BattleHandler(BaseStateHandler):
                         time.sleep(0.3)
                         break
 
-        # 4. 戰敗/撤退計數處理
-        self.machine.defeat_count += 1
+        # 4. 強敵撤退處置 (主動放棄不計入單場戰敗次數，重置為 0)
+        self.machine.defeat_count = 0
         self.non_battle_feature_start_time = None
         self.machine.battle_start_time = None
 
         mode_type = self.machine.config.get("type") if self.machine.config else None
-        max_defeat = self.machine.config.get("domain_max_defeat", self.machine.config.get("stage_max_defeat", 5)) if mode_type == "domain" else 2
+        logging.info("👉 [戰鬥撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，安全返回繼續探索。")
 
-        logging.warning(f"⚠️ [戰鬥撤退] 已完成放棄戰鬥，累計戰敗/撤退次數: {self.machine.defeat_count}/{max_defeat}")
-        if self.machine.defeat_count >= max_defeat:
-            logging.warning(f"🚨 已達最大戰敗/撤退次數 ({max_defeat})，轉移至 NAVIGATING 重新導航或退避！")
-            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        if mode_type == "domain":
+            self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
         else:
-            if mode_type == "domain":
-                self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
-            else:
-                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
         return True
 
     def log_battle_duration(self):

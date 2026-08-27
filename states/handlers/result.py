@@ -105,7 +105,16 @@ class ResultHandler(BaseStateHandler):
                     self.machine.config.get("type") == "dungeon" or
                     getattr(self.machine, "is_in_dungeon", False)
                 )
-                max_defeat = 2 if is_dungeon else self.machine.config.get("stage_max_defeat", 2)
+                is_domain = (
+                    self.machine.config.get("type") == "domain" or
+                    bool(self.machine.config.get("domain"))
+                )
+                if is_dungeon:
+                    max_defeat = 2
+                elif is_domain:
+                    max_defeat = self.machine.config.get("domain_max_defeat", 5)
+                else:
+                    max_defeat = self.machine.config.get("stage_max_defeat", 2)
                 
                 if self.machine.defeat_count >= (max_defeat - 1):
                     self.reset_state()

@@ -65,13 +65,16 @@ graph TD
     1. 點擊 `templates/battle/setting.png`（戰鬥設定）
     2. 點擊 `templates/battle/giveup_battle.png`（放棄挑戰）
     3. 點擊 `templates/common/confirm.png` / `ok.png`（確認放棄）
-  * **重試上限**：黃金古國專屬戰敗/放棄上限設定為 **5 次 (`domain_max_defeat: 5`)**。未達 5 次時自動切回 `STATE_DOMAIN_EXPLORE` 繼續探索；滿 5 次則退回大廳重新導航或退避。
+  * **計數規則**：強敵主動撤退**不計入戰敗計數**，直接返回領地主場景（`STATE_DOMAIN_EXPLORE`）繼續探索。
+* **⚔️ 常規戰鬥與單場重試上限 (Single-Battle Defeat Retry)**：
+  * **獨立計算**：`domain_max_defeat: 5` 為**單一場常規戰鬥的戰敗重試上限**。每場新戰鬥均獨立刷新（`defeat_count` 重置為 0）。
+  * 若在同一場戰鬥中連續戰敗未滿 5 次，點擊 `defeat_retry.png` 重新嘗試；若同一場戰鬥連續戰敗達 5 次，則觸發放棄並退回大廳重新導航。
 * **結算處理**：
   * 戰鬥勝利後連續點擊 **2 次 Continue 按鈕**（`common/continue.png` / `common/continue_gray.png`）直到按鈕完全消失。
   * 檢查是否觸發背包滿（`backpack_full.png`），若滿則自動切換至裝備分選與清理流程。
   * 結算完畢後自動回到黃金古國主場景，繼續點擊 `explore_btn.png`。
 * **戰敗處置**：
-  * 若常規戰鬥不幸戰敗（`defeat.png`），點擊放棄/返回退回大廳（Lobby）。
+  * 若常規戰鬥不幸達最大戰敗次數（5次），點擊放棄退回大廳（Lobby）。
   * 狀態機轉移至 `NAVIGATING`，重新執行進場導航（`Domains_entry` ➔ `entry` ➔ `start_btn`）重新進入古國。
 
 ---
