@@ -19,7 +19,7 @@ class ResultHandler(BaseStateHandler):
     def _check_final_buttons_exist(self, screen_img, should_exit_battle):
         """檢查終局離場或再戰按鈕是否已經出現在畫面上"""
         if should_exit_battle:
-            exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
+            exit_candidates = ["exit_battle.png", "goback_town.png", "domains/common/exit_to_lobby.png", "common/quit.png"]
             for exit_btn in exit_candidates:
                 if os.path.exists(os.path.join("templates", exit_btn)):
                     pos, _ = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
@@ -70,6 +70,18 @@ class ResultHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return True
 
+        # 0.1 優先檢查是否已回到領地主場景 (看到 explore_btn 代表戰鬥結算已結束並已回到領地)
+        cur_type = self.machine.config.get("type") if self.machine.config else None
+        if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
+            for d_btn in ["domains/golden_empire/explore_btn.png", "domains/common/exit_to_lobby.png"]:
+                if os.path.exists(os.path.join("templates", d_btn)):
+                    pos_d, conf_d = self.matcher.match(screen_img, d_btn, threshold=0.75, quiet=True)
+                    if pos_d:
+                        logging.info(f"👉 結算辨識：偵測到領地主場景特徵 [{d_btn}] (相似度: {conf_d:.4f})，戰鬥結算已結束並已回到領地，轉移至 DOMAIN_EXPLORE。")
+                        self.reset_state()
+                        self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+                        return True
+
         # =========================================================================
         # 步驟 1：結算初登場沉澱 (INIT_DELAY)
         # =========================================================================
@@ -93,7 +105,16 @@ class ResultHandler(BaseStateHandler):
                     self.machine.config.get("type") == "dungeon" or
                     getattr(self.machine, "is_in_dungeon", False)
                 )
-                max_defeat = 2 if is_dungeon else self.machine.config.get("stage_max_defeat", 2)
+                is_domain = (
+                    self.machine.config.get("type") == "domain" or
+                    bool(self.machine.config.get("domain"))
+                )
+                if is_dungeon:
+                    max_defeat = 2
+                elif is_domain:
+                    max_defeat = self.machine.config.get("domain_max_defeat", 5)
+                else:
+                    max_defeat = self.machine.config.get("stage_max_defeat", 2)
                 
                 if self.machine.defeat_count >= (max_defeat - 1):
                     self.reset_state()
@@ -235,6 +256,13 @@ class ResultHandler(BaseStateHandler):
                 return True
 
             # 3. 只有當 continue 與 confirm 均徹底消失，且終局按鈕 (retry/exit) 已顯現時，才轉移至 FINAL_MATCH
+            cur_type = self.machine.config.get("type") if self.machine.config else None
+            if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
+                logging.info("👉 [結算 Step 2] (領地模式) continue 已點擊完畢且消失，戰鬥結算順暢結束，轉移至 DOMAIN_EXPLORE！")
+                self.reset_state()
+                self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+                return True
+
             final_btn_found = self._check_final_buttons_exist(screen_img, should_exit_battle)
             if final_btn_found:
                 logging.info("👉 [結算 Step 2] 畫面上已無 continue/confirm，且終局按鈕 (retry/exit) 已顯現，確信 continue 階段結束，切換至 FINAL_MATCH！")
@@ -249,7 +277,7 @@ class ResultHandler(BaseStateHandler):
         if self.subflow_step == "FINAL_MATCH":
             if should_exit_battle:
                 # 情況 B：第 4、8、10 場 ➔ 僅能配對離場按鈕
-                exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
+                exit_candidates = ["exit_battle.png", "goback_town.png", "domains/common/exit_to_lobby.png", "common/quit.png"]
                 for exit_btn in exit_candidates:
                     if os.path.exists(os.path.join("templates", exit_btn)):
                         pos_exit, conf_exit = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
@@ -294,6 +322,13 @@ class ResultHandler(BaseStateHandler):
                     self.reset_state()
                     self.machine.transition_to(self.machine.STATE_LORD_BOSS)
                     return True
+
+        # 領地模式 (Domain Mode)：結算完成後切回 DOMAIN_EXPLORE
+        if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
+            logging.info("👉 結算辨識 (領地模式)：戰鬥結算已結束，轉移回 DOMAIN_EXPLORE 繼續探索。")
+            self.reset_state()
+            self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+            return True
             
         # D. 檢查是否已經進入戰鬥狀態 (避免人手點擊或自動戰鬥提早開始時卡在結算超時)
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:

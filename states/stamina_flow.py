@@ -14,50 +14,75 @@ def handle_insufficient_stamina(state_machine, screen_img, rect):
     :param rect: 遊戲視窗物理邊界 (dict)
     :return: bool. 若觸發並執行了體力不足自癒操作則回傳 True，否則回傳 False。
     """
-    no_bread_template = os.path.join("templates", "no_bread/no_bread.png")
-    if not os.path.exists(no_bread_template):
+    NO_BREAD_STYLES = [
+        {
+            "template": "no_bread/no_bread.png",
+            "threshold": 0.90,
+            "close_candidates": ["no_bread/cancel.png", "common/quit.png"],
+            "fallback_offset": (-100, 80)
+        },
+        {
+            "template": "no_bread/no_bread2.png",
+            "threshold": 0.85,
+            "close_candidates": ["common/confirm.png", "common/ok.png", "no_bread/cancel.png"],
+            "fallback_offset": (0, 100)
+        }
+    ]
+
+    matched_style = None
+    pos_nobread = None
+    conf_nobread = 0.0
+
+    for style in NO_BREAD_STYLES:
+        t_path = os.path.join("templates", style["template"])
+        if os.path.exists(t_path):
+            pos, conf = state_machine.matcher.match(screen_img, style["template"], threshold=style["threshold"])
+            if pos:
+                matched_style = style
+                pos_nobread = pos
+                conf_nobread = conf
+                break
+
+    if not matched_style or not pos_nobread:
         return False
-        
-    pos_nobread, conf_nobread = state_machine.matcher.match(screen_img, "no_bread/no_bread.png", threshold=0.90)
-    if not pos_nobread:
-        return False
-        
-    logging.warning(f"🍞 偵測到【食物不足】彈窗 (信心度: {conf_nobread:.4f})，啟動體力不足退避子流程。")
-    
-    # 1. 點擊「取消」按鈕 (templates/no_bread/cancel.png)
-    cancel_template = os.path.join("templates", "no_bread/cancel.png")
-    if os.path.exists(cancel_template):
-        pos_cancel, conf_cancel = state_machine.matcher.match(screen_img, "no_bread/cancel.png", threshold=0.8)
-        if pos_cancel:
-            logging.info(f"👉 點擊【取消】按鈕 (信心度: {conf_cancel:.4f})。")
-            state_machine.mouse.click(rect["left"] + pos_cancel[0], rect["top"] + pos_cancel[1])
-            time.sleep(0.5) # 等待彈窗關閉動畫
-        else:
-            logging.warning("⚠️ 無法定位【取消】按鈕，嘗試防呆點擊左側「取消」位置...")
-            # 依據 no_bread.png 位置向左下方進行防呆偏移點擊 (大約在確認/取消左右兩端)
-            # 食物不足彈窗大小約為 500x250, 取消按鈕位於左側
-            state_machine.mouse.click(rect["left"] + pos_nobread[0] - 100, rect["top"] + pos_nobread[1] + 80)
-            time.sleep(0.5)
+
+    logging.warning(f"🍞 偵測到【食物不足】彈窗 [{matched_style['template']}] (信心度: {conf_nobread:.4f})，啟動體力不足退避子流程。")
+
+    # 1. 點擊對應之關閉/確認按鈕
+    clicked_close = False
+    for c_name in matched_style["close_candidates"]:
+        if os.path.exists(os.path.join("templates", c_name)):
+            pos_close, conf_close = state_machine.matcher.match(screen_img, c_name, threshold=0.8)
+            if pos_close:
+                logging.info(f"👉 點擊食物不足關閉按鈕 [{c_name}] (信心度: {conf_close:.4f})。")
+                state_machine.mouse.click(rect["left"] + pos_close[0], rect["top"] + pos_close[1])
+                time.sleep(0.5)  # 等待彈窗關閉動畫
+                clicked_close = True
+                break
+
+    if not clicked_close:
+        logging.warning("⚠️ 無法定位專屬關閉按鈕，嘗試依基準點執行防呆偏移點擊...")
+        dx, dy = matched_style.get("fallback_offset", (0, 80))
+        state_machine.mouse.click(rect["left"] + pos_nobread[0] + dx, rect["top"] + pos_nobread[1] + dy)
+        time.sleep(0.5)
             
     # 2. 僅能判斷 quit / exit_battle 直到沒有 (期間不判斷其他圖片，帶超時防呆)
     logging.info("⏳ 開始執行清除 quit.png 與 exit_battle.png 循環...")
     max_loops = 10
     loop_count = 0
     while loop_count < max_loops:
-        rect_current = state_machine.capturer.get_window_rect()
+        rect_current = state_machine.capturer.get_window_rect() if state_machine.capturer else None
         if not rect_current:
-            time.sleep(0.3)
-            continue
+            break
         screen_current = state_machine.capturer.capture(rect_current)
         if screen_current is None:
-            time.sleep(0.3)
-            continue
+            break
             
         found_btn = None
         found_pos = None
         found_conf = 0.0
         
-        for btn in ["common/quit.png", "exit_battle.png"]:
+        for btn in ["common/quit.png", "exit_battle.png", "domains/common/exit_to_lobby.png"]:
             if os.path.exists(os.path.join("templates", btn)):
                 pos, conf = state_machine.matcher.match(screen_current, btn, threshold=0.8)
                 if pos:
@@ -67,12 +92,12 @@ def handle_insufficient_stamina(state_machine, screen_img, rect):
                     break
                     
         if found_btn:
-            logging.info(f"👉 偵測到關閉按鈕 [{found_btn}] (信心度: {found_conf:.4f})，進行點擊...")
+            logging.info(f"👉 偵測到關閉/退場按鈕 [{found_btn}] (信心度: {found_conf:.4f})，進行點擊...")
             state_machine.mouse.click(rect_current["left"] + found_pos[0], rect_current["top"] + found_pos[1])
             time.sleep(0.8) # 等待視窗關閉動畫
             loop_count += 1
         else:
-            logging.info("🟢 已無 quit 或 exit_battle 按鈕，結束清除循環。")
+            logging.info("🟢 已無 quit、exit_battle 或 exit_to_lobby 按鈕，結束清除循環。")
             break
             
     # 3. 僅能判斷並點 goback_town.png 返回城鎮

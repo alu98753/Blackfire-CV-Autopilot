@@ -62,6 +62,15 @@ def check_mode_templates(config):
             if not os.path.exists(os.path.join("templates", btn)):
                 missing.append(btn)
                 
+    elif config["type"] == "domain":
+        # 領地模式檢查探索優先級按鈕與結算按鈕
+        for btn in config.get("explore_priorities", []):
+            if not os.path.exists(os.path.join("templates", btn)):
+                missing.append(btn)
+        for btn in config.get("result_buttons", []):
+            if not os.path.exists(os.path.join("templates", btn)):
+                missing.append(btn)
+
     elif config["type"] == "bag_clean":
         # 背包整理需要相關按鈕
         bag_files = [
@@ -306,7 +315,7 @@ def parse_arguments():
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
     parser.add_argument("--mode", type=str, default="mix", choices=list(PRIMARY_MODES.keys()), 
-                        help="主掛機模式：mix (混合模式，預設)、dungeon (地下城)、stage (普通關卡)、collect_only (純領取)")
+                        help="主掛機模式：mix (混合模式，預設)、dungeon (地下城)、stage (普通關卡)、golden_empire (黃金古國領地)、collect_only (純領取)")
     parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
                         help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
@@ -412,6 +421,10 @@ def setup_mode_config(args):
             print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將回到城鎮待機 (COLLECT_ONLY)，不打小怪。")
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+
+    elif args.mode == "golden_empire" or config.get("type") == "domain":
+        domain_name = config.get("name", "黃金古國")
+        print(f"\n🏛️ [領地模式] 啟動【{domain_name}】自動探索 (每次消耗 3 麵包，含挖寶與戰鬥處理)...")
 
     elif args.mode == "blood_altar":
         print("\n請選擇要獻祭/消耗的血水品質（設定為『否/保留』者將不進行點選獻祭）：")
@@ -529,11 +542,12 @@ def init_state_machine_system(args, config):
         "common/ok.png",
         "common/quit.png"
     ]
-    enable_bread = True
-    for bf in bread_files:
-        if not os.path.exists(os.path.join("templates", bf)):
-            enable_bread = False
-            break
+    enable_bread = config.get("auto_bread", True)
+    if enable_bread:
+        for bf in bread_files:
+            if not os.path.exists(os.path.join("templates", bf)):
+                enable_bread = False
+                break
 
     if enable_bread:
         # 額外檢查收集按鈕，collect.png 或 bread_collection.png 必須至少存在一個
@@ -545,6 +559,8 @@ def init_state_machine_system(args, config):
     if enable_bread:
         cd_msg = "每 2 小時" if args.mode == "collect_only" else "每 30 分鐘"
         print(f"[*] 自動領體力功能: 啟用 (啟動時與{cd_msg}執行一次)")
+    elif not config.get("auto_bread", True):
+        print("[*] 自動領體力功能: 停用 (配置設定 auto_bread = false)")
     else:
         print("[*] 自動領體力功能: 停用 (缺少部分體力相關模板，已自動忽略)")
     print("=" * 60)
@@ -590,12 +606,14 @@ def init_state_machine_system(args, config):
 
 
 
-    if config["type"] in ["bag_clean", "blood_altar"]:
+    if config["type"] in ["bag_clean", "blood_altar"] or not config.get("auto_bread", True):
         state_machine.enable_bread = False
-        state_machine.need_diamond_collection = False
         state_machine.need_bread_collection = False
     else:
         state_machine.enable_bread = enable_bread
+
+    if not config.get("auto_diamond", True):
+        state_machine.need_diamond_collection = False
 
     print("[+] 初始化成功！請確認您的遊戲視窗非最小化，且維持在畫面上。")
     print("[+] 快捷鍵提示：在終端機或遊戲視窗按 [Ctrl + Space] 隨時暫停/繼續；按 [Ctrl + C] 終止程式。")

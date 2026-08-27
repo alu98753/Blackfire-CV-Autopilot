@@ -410,5 +410,36 @@ class TestBehaviorNavigation(unittest.TestCase):
         # 驗證發射 mouse.drag 向下拖曳
         self.mock_machine.mouse.drag.assert_called_once()
 
+    @patch("os.path.exists")
+    def test_1_9_diamond_collection_closes_sub_modal_first_when_retreating(self, mock_exists):
+        """
+        [1.9 Behavior Test]
+        Given: 在領地/大廳選單打開了子視窗/卡片 (畫面上存在 common/quit.png 與 goback_town.png)，且系統需要領鑽石 (need_diamond_collection=True)
+        When: 執行 NavigationHandler.handle()
+        Then: 優先使用 click_and_wait_until_gone 點擊關閉 common/quit.png 以收合前景，而非直接盲點被阻擋的 goback_town.png
+        """
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        self.mock_machine.need_diamond_collection = True
+        self.handler.click_and_wait_until_gone = MagicMock()
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "goback_town.png":
+                return ((80, 920), 0.90)
+            if template == "common/quit.png":
+                return ((1500, 200), 0.90)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        # 斷言優先點擊了 quit.png
+        self.handler.click_and_wait_until_gone.assert_called_once()
+        args, _ = self.handler.click_and_wait_until_gone.call_args
+        self.assertEqual(args[0], "common/quit.png")
+
+
 if __name__ == "__main__":
     unittest.main()

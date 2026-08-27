@@ -22,16 +22,16 @@ class TestBackpackFullDynamicDestroyable(unittest.TestCase):
         self.machine = GameStateMachine(self.mock_capturer, self.mock_matcher, self.mock_mouse)
         self.handler = BackpackFullSortingHandler(self.machine)
 
-    def test_1_default_jewelry_workshop_goods_settings_includes_gray_and_green(self):
+    def test_1_default_jewelry_workshop_goods_settings_includes_gray_green_and_blue(self):
         """
-        測試 1：預設 SUBFLOW_CONFIGS 中 jewelry_workshop 的 goods_settings 包含 gray(True) 與 green(True)，
-        計算出之 destroyable_colors 應包含 gray_or_empty, gray, green。
+        測試 1：預設 SUBFLOW_CONFIGS 中 jewelry_workshop 的 goods_settings 包含 gray(True)、green(True) 與 blue(rune_shard=True)，
+        計算出之 destroyable_colors 應包含 gray_or_empty, gray, green, blue。
         """
         destroyable = self.handler.get_dynamic_destroyable_colors()
         self.assertIn("gray_or_empty", destroyable)
         self.assertIn("gray", destroyable)
         self.assertIn("green", destroyable)
-        self.assertNotIn("blue", destroyable)
+        self.assertIn("blue", destroyable)
         self.assertNotIn("purple", destroyable)
 
     def test_2_custom_goods_settings_enables_blue_destroyable(self):

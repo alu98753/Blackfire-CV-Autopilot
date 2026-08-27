@@ -22,7 +22,8 @@ from states.handlers import (
     LordBossHandler,
     ChestHandler,
     HeroDrawHandler,
-    BulletinBoardHandler
+    BulletinBoardHandler,
+    DomainExploreHandler
 )
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 
@@ -54,6 +55,7 @@ class GameStateMachine:
     STATE_HERO_DRAW = "HERO_DRAW"                        # 抽英雄 (酒館招募) 流程
     STATE_BULLETIN_BOARD = "BULLETIN_BOARD"              # 懸賞告示牌 (領任務) 流程
     STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
+    STATE_DOMAIN_EXPLORE = "DOMAIN_EXPLORE"
 
 
 
@@ -185,6 +187,7 @@ class GameStateMachine:
             self.STATE_HERO_DRAW: HeroDrawHandler(self),
             self.STATE_BULLETIN_BOARD: BulletinBoardHandler(self),
             self.STATE_POPUP_RECOVERY: UnexpectedPopupRecoveryHandler(self),
+            self.STATE_DOMAIN_EXPLORE: DomainExploreHandler(self),
         }
 
     def stash_current_state(self, reason="unexpected_popup"):
@@ -549,7 +552,7 @@ class GameStateMachine:
                 return
 
             # C. 體力不足（食物不足）退避處理
-            if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING]:
+            if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING, self.STATE_DOMAIN_EXPLORE]:
                 from states.stamina_flow import handle_insufficient_stamina
                 if handle_insufficient_stamina(self, screen_img, rect):
                     return
@@ -1412,6 +1415,5 @@ class GameStateMachine:
         if self.is_in_collect_only_mode():
             return False
         return self.evaluate_next_activity()
-
 
 
