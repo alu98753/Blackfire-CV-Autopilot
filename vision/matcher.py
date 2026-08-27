@@ -6,6 +6,12 @@ import numpy as np
 BASE_RESOLUTION_WIDTH = 1920.0
 MIN_AUTO_SCALE_WIDTH = 1200
 
+# 預設多尺度掃描比例清單：
+# - 1.000: 原生 1920x1080 (1080p) 設計基準
+# - 0.863: 常見 1656x931 縮放視窗比例 (~1656/1920 ≈ 0.8625)
+# - 0.750: 常見 1440x810 縮放視窗比例 (1440/1920 = 0.7500)
+DEFAULT_MATCH_SCALES = (1.0, 0.863, 0.75)
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class TemplateMatcher:
@@ -206,7 +212,7 @@ class TemplateMatcher:
 
         screen_h, screen_w = screen_img.shape[:2]
         auto_factor = self._compute_auto_scale(screen_w)
-        base_scales = scales or [1.0, 0.863, 0.75]
+        base_scales = scales or DEFAULT_MATCH_SCALES
         scales_to_try = [round(s * auto_factor, 4) for s in base_scales]
 
         for s in scales_to_try:

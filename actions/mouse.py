@@ -18,6 +18,8 @@ pyautogui.FAILSAFE = True
 # 每次呼叫 pyautogui 後暫停微小的時間
 pyautogui.PAUSE = 0.002
 
+SAFE_AREA_CLIENT_POS = (15, 15)
+
 class MouseController:
     def __init__(self, human_like=False, backend_mode=False, window_title=WINDOW_TITLE):
         self.human_like = human_like
@@ -27,6 +29,30 @@ class MouseController:
         self.last_target_pos = None
         self.state_machine = None
         self._window = WindowHandle(window_title)
+
+    def _finalize_action(self, target_pos=None, cooldown: float = 0.0, move_safe: bool = True) -> bool:
+        """
+        統一動作成功後的狀態更新、冷卻與安全區復位。
+        """
+        if target_pos is not None:
+            self.last_target_pos = target_pos
+        else:
+            try:
+                self.last_target_pos = pyautogui.position()
+            except Exception:
+                self.last_target_pos = None
+
+        self.last_action_time = time.time()
+        if self.state_machine is not None:
+            self.state_machine.consecutive_stuck_count = 0
+
+        if cooldown > 0:
+            time.sleep(cooldown)
+
+        if move_safe:
+            self.move_to_safe_area()
+
+        return True
 
     def get_hwnd(self):
         """
@@ -114,13 +140,7 @@ class MouseController:
                     win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lParam)
                     
                     time.sleep(0.04) # 點擊後冷卻
-                    
-                    self.last_target_pos = pyautogui.position()
-                    self.last_action_time = time.time()
-                    if self.state_machine is not None:
-                        self.state_machine.consecutive_stuck_count = 0
-                    self.move_to_safe_area()
-                    return True
+                    return self._finalize_action(move_safe=True)
                 except Exception as e:
                     logging.error(f"[後台] 點擊操作失敗: {e}")
                     return False
@@ -151,12 +171,7 @@ class MouseController:
             pyautogui.mouseUp()
             time.sleep(0.04)
 
-            self.last_target_pos = (target_x, target_y)
-            self.last_action_time = time.time()
-            if self.state_machine is not None:
-                self.state_machine.consecutive_stuck_count = 0
-            self.move_to_safe_area()
-            return True
+            return self._finalize_action(target_pos=(target_x, target_y), move_safe=True)
         except pyautogui.FailSafeException:
             logging.error("🔴 觸發 PyAutoGUI 安全終止 (FailSafe) 機制！滑鼠已移至螢幕角落。")
             raise
@@ -208,12 +223,7 @@ class MouseController:
                     lparam_wheel = win32api.MAKELONG(screen_pt[0], screen_pt[1])
                     win32gui.PostMessage(hwnd, win32con.WM_MOUSEWHEEL, wparam, lparam_wheel)
                     
-                    self.last_target_pos = pyautogui.position()
-                    self.last_action_time = time.time()
-                    if self.state_machine is not None:
-                        self.state_machine.consecutive_stuck_count = 0
-                    time.sleep(0.3)
-                    return True
+                    return self._finalize_action(cooldown=0.3, move_safe=False)
                 except Exception as e:
                     logging.error(f"[後台] 滾動操作失敗: {e}")
                     return False
@@ -222,15 +232,11 @@ class MouseController:
         try:
             if x is not None and y is not None:
                 pyautogui.moveTo(x, y)
-                self.last_target_pos = (x, y)
+                pos = (x, y)
             else:
-                self.last_target_pos = pyautogui.position()
+                pos = None
             pyautogui.scroll(clicks)
-            self.last_action_time = time.time()
-            if self.state_machine is not None:
-                self.state_machine.consecutive_stuck_count = 0
-            time.sleep(0.3)
-            return True
+            return self._finalize_action(target_pos=pos, cooldown=0.3, move_safe=False)
         except Exception as e:
             logging.error(f"滾動操作失敗: {e}")
             return False
@@ -283,13 +289,7 @@ class MouseController:
                     time.sleep(0.02)
                     win32gui.SendMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam_end)
                     
-                    self.last_target_pos = pyautogui.position()
-                    self.last_action_time = time.time()
-                    if self.state_machine is not None:
-                        self.state_machine.consecutive_stuck_count = 0
-                    time.sleep(0.3)
-                    self.move_to_safe_area()
-                    return True
+                    return self._finalize_action(cooldown=0.3, move_safe=True)
                 except Exception as e:
                     logging.error(f"[後台] 拖曳操作失敗: {e}")
                     return False
@@ -317,45 +317,34 @@ class MouseController:
                 pyautogui.moveTo(e_x, e_y, duration=duration)
                 time.sleep(0.1)  # 關鍵暫停：消除釋放時的慣性速度
                 pyautogui.mouseUp(button='left')
-            self.last_target_pos = (end_x, end_y)
-            self.last_action_time = time.time()
-            if self.state_machine is not None:
-                self.state_machine.consecutive_stuck_count = 0
-            time.sleep(0.3)
-            self.move_to_safe_area()
-            return True
+            return self._finalize_action(target_pos=(end_x, end_y), cooldown=0.3, move_safe=True)
         except Exception as e:
             logging.error(f"拖曳操作失敗: {e}")
             return False
 
     def move_to_safe_area(self):
         """
-        將滑鼠游標移動到遊戲視窗邊角的安全區域（例如左上角 15, 15），
+        將滑鼠游標移動到遊戲視窗邊角的安全區域（左上角 15, 15），
         以清除遊戲中因為滑鼠懸停 (hover) 產生的亮邊或高亮效果，避免干擾模板匹配。
         """
+        safe_x, safe_y = SAFE_AREA_CLIENT_POS
+        hwnd = self.get_hwnd()
+
+        if self.backend_mode:
+            if hwnd:
+                lparam = win32api.MAKELONG(safe_x, safe_y)
+                win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
+            return
+
+        # 前台模式
+        if hwnd:
+            try:
+                screen_pt = win32gui.ClientToScreen(hwnd, (safe_x, safe_y))
+                pyautogui.moveTo(screen_pt[0], screen_pt[1])
+                return
+            except Exception:
+                pass
+
         if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
             rect_box = self.state_machine.last_rect
-            rect = (rect_box["left"], rect_box["top"], rect_box["left"] + rect_box["width"], rect_box["top"] + rect_box["height"])
-        else:
-            hwnd = self.get_hwnd()
-            if hwnd:
-                try:
-                    rect = win32gui.GetWindowRect(hwnd)
-                except Exception:
-                    return
-            else:
-                return
-                
-        safe_rel_x = 15
-        safe_rel_y = 15
-        
-        if self.backend_mode:
-            hwnd = self.get_hwnd()
-            if hwnd:
-                safe_x = rect[0] + safe_rel_x if rect else safe_rel_x
-                safe_y = rect[1] + safe_rel_y if rect else safe_rel_y
-                client_x, client_y = self._screen_to_client(hwnd, safe_x, safe_y)
-                lparam = win32api.MAKELONG(client_x, client_y)
-                win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
-        else:
-            pyautogui.moveTo(rect[0] + safe_rel_x, rect[1] + safe_rel_y)
+            pyautogui.moveTo(rect_box["left"] + safe_x, rect_box["top"] + safe_y)
