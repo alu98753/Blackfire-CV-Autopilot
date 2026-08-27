@@ -28,6 +28,90 @@ class TemplateMatcher:
             return screen_width / BASE_RESOLUTION_WIDTH
         return self.template_scale
 
+    def _nms(self, raw_candidates, min_dist_x: int, min_dist_y: int):
+        """
+        Non-Maximum Suppression：從按信心度由高到低排序的候選點中，
+        逐一收錄，跳過與已收錄點距離均在 (min_dist_x, min_dist_y) 以內的重疊候選點。
+
+        :param raw_candidates: [(x, y, conf), ...] 已按 conf 由高到低排序
+        :param min_dist_x: X 軸方向最小距離（通常為 temp_w // 2）
+        :param min_dist_y: Y 軸方向最小距離（通常為 temp_h // 2）
+        :return: 抑制後的代表點清單 [(x, y, conf), ...]
+        """
+        candidates = []
+        for x, y, conf in raw_candidates:
+            if not any(abs(x - cx) < min_dist_x and abs(y - cy) < min_dist_y
+                       for cx, cy, _ in candidates):
+                candidates.append((x, y, conf))
+        return candidates
+
+    def _pyramid_precheck(self, screen_img, template_img, threshold):
+        """
+        快速金字塔下採樣初步篩選（Image Pyramids Acceleration）。
+        對大尺寸畫面（>= 720p）且足夠大的模板（>= 50x50），先以 1/2 縮放圖進行極速預檢，
+        避免在顯然無法匹配的畫面上執行耗時的全解析度比對。
+
+        :return: (passed: bool, max_val: float)
+                 passed=True  → 允許繼續全解析度比對
+                 passed=False → 預檢信心度太低，可直接提早回傳
+        """
+        screen_h, screen_w = screen_img.shape[:2]
+        temp_h, temp_w = template_img.shape[:2]
+
+        if screen_h >= 720 and temp_h >= 50 and temp_w >= 50:
+            small_screen = cv2.resize(screen_img, (screen_w // 2, screen_h // 2), interpolation=cv2.INTER_AREA)
+            small_temp = cv2.resize(template_img, (max(1, temp_w // 2), max(1, temp_h // 2)), interpolation=cv2.INTER_AREA)
+            res_small = cv2.matchTemplate(small_screen, small_temp, cv2.TM_CCOEFF_NORMED)
+            _, max_val_small, _, _ = cv2.minMaxLoc(res_small)
+            if max_val_small < threshold - 0.10:
+                return False, max_val_small
+
+        return True, None
+
+    def _apply_brightness_filter(self, candidates, screen_gray, template_gray,
+                                 temp_h, temp_w, brightness_threshold, template_name=""):
+        """
+        計算每個候選點的相對亮度比，並在啟用 brightness_threshold 時過濾暗區候選點。
+
+        :param candidates: [(x, y, conf), ...] 已通過 NMS 的候選點
+        :param screen_gray: 灰階畫面
+        :param template_gray: 灰階模板
+        :param temp_h: 模板高度
+        :param temp_w: 模板寬度
+        :param brightness_threshold: > 0 時啟用亮度過濾
+        :param template_name: 模板名稱（供日誌使用）
+        :return: (best_x, best_y, best_conf, best_ratio) 最優候選點，
+                 若所有候選點亮度均不足，回傳 None。
+        """
+        mean_temp = np.mean(template_gray)
+        evaluated = []
+        for x, y, conf in candidates:
+            crop = screen_gray[y:y + temp_h, x:x + temp_w]
+            mean_crop = np.mean(crop)
+            ratio = mean_crop / max(1.0, mean_temp)
+            evaluated.append((x, y, conf, ratio))
+
+        if brightness_threshold > 0.0:
+            passed = [c for c in evaluated if c[3] >= brightness_threshold]
+            if not passed:
+                best_raw = max(evaluated, key=lambda c: c[2])
+                try:
+                    from tools.analyze_template_brightness import save_diagnostic_images
+                    save_diagnostic_images(
+                        None, None, (best_raw[0], best_raw[1]),
+                        temp_w, temp_h, best_raw[2], best_raw[3], template_name
+                    )
+                except Exception as e:
+                    logging.error(f"無法調用 tools/save_diagnostic_images: {e}")
+                logging.warning(
+                    f"⚠️ 模板 '{template_name}' 匹配到 {len(candidates)} 個候選點，"
+                    f"但所有點的亮度比例均低於門檻 {brightness_threshold:.2f}，判定為背景暗區按鈕，予以過濾！"
+                )
+                return None
+            return max(passed, key=lambda c: c[2])
+
+        return max(evaluated, key=lambda c: c[2])
+
     def _load_template(self, template_name, scale=1.0):
         """
         延遲載入並快取模板圖片，支援依據 scale 多尺度快取。
@@ -101,6 +185,7 @@ class TemplateMatcher:
         if screen_img is None:
             return None, 0.0
 
+        # 1. Scale 計算
         if scale is None:
             screen_w = screen_img.shape[1] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else 0
             scale = self._compute_auto_scale(screen_w)
@@ -111,88 +196,46 @@ class TemplateMatcher:
 
         screen_h, screen_w = screen_img.shape[:2]
         temp_h, temp_w = template_img.shape[:2]
-        
+
         # 如果模板比來源畫面大，必無法匹配，直接回傳 None 以免 OpenCV 崩潰
         if temp_h > screen_h or temp_w > screen_w:
             if not quiet:
                 logging.warning(f"模板尺寸 ({temp_w}x{temp_h}) 大於來源畫面尺寸 ({screen_w}x{screen_h})。")
             return None, 0.0
 
-        # 1. 快速金字塔下採樣初步檢測 (Image Pyramids Acceleration)
-        # 對於大尺寸畫面 (>= 720p)，僅對足夠大的模板 (>= 50x50) 先以 1/2 縮放圖進行極速預檢，避免微小圖標失真
-        if screen_h >= 720 and temp_h >= 50 and temp_w >= 50:
-            small_screen = cv2.resize(screen_img, (screen_w // 2, screen_h // 2), interpolation=cv2.INTER_AREA)
-            small_temp = cv2.resize(template_img, (max(1, temp_w // 2), max(1, temp_h // 2)), interpolation=cv2.INTER_AREA)
-            res_small = cv2.matchTemplate(small_screen, small_temp, cv2.TM_CCOEFF_NORMED)
-            _, max_val_small, _, _ = cv2.minMaxLoc(res_small)
-            if max_val_small < threshold - 0.10:
-                return None, max_val_small
+        # 2. 金字塔預檢（快速排除）
+        passed, precheck_val = self._pyramid_precheck(screen_img, template_img, threshold)
+        if not passed:
+            return None, precheck_val
 
-        # 使用標準化相關係數配對方法
+        # 3. 主比對 + NMS 聚類抑制
+        # NMS 半徑與模板尺寸對齊（temp_w // 2, temp_h // 2），確保和 match_all() 一致。
+        # 舊版使用固定 20px，對小模板（< 40px）抑制半徑過大，可能誤合併相鄰的獨立目標。
         res = cv2.matchTemplate(screen_img, template_img, cv2.TM_CCOEFF_NORMED)
-        
-        # 2. 找出所有相似度大於等於門檻的候選點，並按相似度從大到小排序進行 Non-Maximum Suppression (NMS)
         loc = np.where(res >= threshold)
         pts = list(zip(*loc[::-1]))
         raw_candidates = [(pt[0], pt[1], res[pt[1], pt[0]]) for pt in pts]
         raw_candidates.sort(key=lambda x: x[2], reverse=True)
-
-        candidates = []
-        for x, y, conf in raw_candidates:
-            # 進行簡單的聚類抑制，避免重疊框
-            too_close = False
-            for cx, cy, c_conf in candidates:
-                if abs(x - cx) < 20 and abs(y - cy) < 20:
-                    too_close = True
-                    break
-            if not too_close:
-                candidates.append((x, y, conf))
+        candidates = self._nms(raw_candidates, min_dist_x=temp_w // 2, min_dist_y=temp_h // 2)
 
         if not candidates:
-            # 若無任何達標點，回傳最大相似度
             _, max_val, _, _ = cv2.minMaxLoc(res)
             return None, max_val
 
-        # 2. 計算每個候選點的亮度比例
+        # 4. 亮度過濾與最優點選取
         temp_gray = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
-        mean_temp = np.mean(temp_gray)
         screen_gray = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+        best_selected = self._apply_brightness_filter(
+            candidates, screen_gray, temp_gray,
+            temp_h=temp_h, temp_w=temp_w,
+            brightness_threshold=brightness_threshold,
+            template_name=template_name,
+        )
 
-        evaluated_candidates = []
-        for x, y, conf in candidates:
-            crop = screen_gray[y:y+temp_h, x:x+temp_w]
-            mean_crop = np.mean(crop)
-            ratio = mean_crop / max(1.0, mean_temp)
-            evaluated_candidates.append((x, y, conf, ratio))
+        if best_selected is None:
+            return None, max(candidates, key=lambda c: c[2])[2]
 
-        # 3. 執行自適應亮度過濾與最亮排序選擇
-        if brightness_threshold > 0.0:
-            # (a) 基本亮度底線過濾
-            passed = [c for c in evaluated_candidates if c[3] >= brightness_threshold]
-            
-            if not passed:
-                # 若全部都小於及格門檻，說明全是背景被調暗的按鈕，予以過濾
-                best_raw = max(evaluated_candidates, key=lambda c: c[2])
-                try:
-                    from tools.analyze_template_brightness import save_diagnostic_images
-                    save_diagnostic_images(screen_img, template_img, (best_raw[0], best_raw[1]), temp_w, temp_h, best_raw[2], best_raw[3], template_name)
-                except Exception as e:
-                    logging.error(f"無法調用 tools/save_diagnostic_images: {e}")
-                
-                base = os.path.splitext(os.path.basename(template_name))[0]
-                logging.warning(
-                    f"⚠️ 模板 '{template_name}' 匹配到 {len(candidates)} 個候選點，"
-                    f"但所有點的亮度比例均低於門檻 {brightness_threshold:.2f}，判定為背景暗區按鈕，予以過濾！"
-                )
-                return None, best_raw[2]
-            
-            # (b) 相似度最大化排序：在亮度合格的候選點中，選擇相似度最高的那一個
-            best_selected = max(passed, key=lambda c: c[2])
-        else:
-            # 若未啟用亮度檢查，直接抓取相似度最高的點
-            best_selected = max(evaluated_candidates, key=lambda c: c[2])
-
-        # 4. 回傳最優點的中心座標與相似度
+        # 5. 回傳最優點的中心座標與相似度
         final_x, final_y, final_conf, final_ratio = best_selected
         center_x = final_x + temp_w // 2
         center_y = final_y + temp_h // 2
@@ -233,15 +276,7 @@ class TemplateMatcher:
             raw_candidates = [(pt[0], pt[1], float(res[pt[1], pt[0]])) for pt in pts]
             raw_candidates.sort(key=lambda x: x[2], reverse=True)
 
-            candidates = []
-            for x, y, conf in raw_candidates:
-                too_close = False
-                for cx, cy, _ in candidates:
-                    if abs(x - cx) < temp_w // 2 and abs(y - cy) < temp_h // 2:
-                        too_close = True
-                        break
-                if not too_close:
-                    candidates.append((x, y, conf))
+            candidates = self._nms(raw_candidates, min_dist_x=temp_w // 2, min_dist_y=temp_h // 2)
 
             # 相對亮度比例過濾 (Relative Brightness Ratio Filter)
             if brightness_threshold > 0.0 and candidates:
