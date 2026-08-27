@@ -206,7 +206,7 @@
 在進行任何代碼重構或新 Feature 開發後，請務必執行全套單元測試以確保邏輯綠燈通過：
 
 ```powershell
-# 執行全套單元測試 (共 217+ 項測試)
+# 執行全套單元測試 (共 520+ 項測試)
 .\.venv\Scripts\python.exe -m unittest discover tests
 
 # 單獨執行懸賞任務與狀態機整合測試
