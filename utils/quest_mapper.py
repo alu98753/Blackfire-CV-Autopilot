@@ -176,6 +176,7 @@ class TaskNode:
 
 import os
 import json
+from utils.config_manager import ConfigLoadError, JsonConfigManager
 
 DEFAULT_RULES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "quest_rules.json")
 
@@ -216,7 +217,7 @@ class QuestMapper:
     """
     def __init__(self, rules_file=None):
         self.rules_file = rules_file or DEFAULT_RULES_FILE
-        self._last_mtime = 0.0
+        self._rules_config = JsonConfigManager(self.rules_file)
         self.deterministic_quests = []
         self.banner_verify_quests = []
         self.ignored_quests = []
@@ -228,16 +229,13 @@ class QuestMapper:
         self.reload_if_modified(force=True)
 
     def reload_if_modified(self, force=False):
-        if not os.path.exists(self.rules_file):
-            raise ValueError(f"懸賞對照規則檔缺失: {self.rules_file}")
-
         try:
-            current_mtime = os.path.getmtime(self.rules_file)
-        except Exception as e:
-            raise ValueError(f"無法讀取懸賞對照規則檔修改時間: {e}")
+            was_reloaded = self._rules_config.reload_if_changed(force=force)
+            data = self._rules_config.snapshot()
+        except ConfigLoadError as error:
+            raise ValueError(str(error)) from error
 
-        if force or current_mtime > self._last_mtime:
-            data = load_rules_from_json(self.rules_file)
+        if force or was_reloaded:
             self.deterministic_quests = data.get("deterministic_quests", [])
             self.banner_verify_quests = data.get("banner_verify_quests", [])
             self.ignored_quests = data.get("ignored_quests", [])
@@ -279,7 +277,6 @@ class QuestMapper:
                 pol = policy_map.get(pol_str, TaskNode.POLICY_DETERMINISTIC)
                 self.stage_rules.append((pat, lvl, sub, pol))
 
-            self._last_mtime = current_mtime
 
     def normalize_quest_title(self, title):
         self.reload_if_modified()
@@ -451,5 +448,4 @@ class QuestMapper:
         # 5. 無法精確映射：未定義任務預設為 BANNER_VERIFY_QUESTS 防呆保護
         logging.warning(f"⚠️ 懸賞任務 '{title}' 無法對應到已知規則庫 (未定義任務)，回傳 None 紀錄至 unknown_quests。")
         return None
-
 

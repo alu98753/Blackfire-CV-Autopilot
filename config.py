@@ -1,6 +1,7 @@
-import os
 import logging
+import os
 from utils.config_helper import get_stage_configs
+from utils.config_manager import JsonConfigManager
 
 WINDOW_TITLE = "Blackfire Crusade"
 
@@ -432,15 +433,14 @@ from utils.config_helper import get_stage_configs
 # 預設維護匯入時動態讀取 STAGE_CONFIGS 並自動進行 normalize_config
 STAGE_CONFIGS = {k: normalize_config(v) for k, v in get_stage_configs(BASE_STAGE_LEVELS).items()}
 
-_EXCEPTION_CONFIG_CACHE = None
-_EXCEPTION_CONFIG_MTIME = 0.0
+_EXCEPTION_CONFIG_MANAGER = None
 
 def get_exception_features_config():
     """
     動態載入並熱重載 (Hot Reload) config/exception_features.json 設定檔。
     若檔案修改時間 mtime 發生變化自動重新載入。
     """
-    global _EXCEPTION_CONFIG_CACHE, _EXCEPTION_CONFIG_MTIME
+    global _EXCEPTION_CONFIG_MANAGER
     json_path = os.path.join("config", "exception_features.json")
     
     default_config = {
@@ -451,22 +451,15 @@ def get_exception_features_config():
         "battle_stuck_timeout_sec": 90.0
     }
 
-    if not os.path.exists(json_path):
-        return default_config
+    if _EXCEPTION_CONFIG_MANAGER is None:
+        _EXCEPTION_CONFIG_MANAGER = JsonConfigManager(json_path, default=default_config)
 
-    try:
-        cur_mtime = os.path.getmtime(json_path)
-        if _EXCEPTION_CONFIG_CACHE is None or cur_mtime > _EXCEPTION_CONFIG_MTIME:
-            with open(json_path, "r", encoding="utf-8") as f:
-                import json
-                _EXCEPTION_CONFIG_CACHE = json.load(f)
-                _EXCEPTION_CONFIG_MTIME = cur_mtime
-                logging.info(f"🔄 [HotReload] 已動態加載/更新 config/exception_features.json (mtime: {cur_mtime})")
-    except Exception as e:
-        logging.warning(f"⚠️ [HotReload] 讀取 exception_features.json 失敗: {e}，回退使用預設設定")
-        return default_config
-
-    return _EXCEPTION_CONFIG_CACHE or default_config
+    was_reloaded = _EXCEPTION_CONFIG_MANAGER.reload_if_changed()
+    if was_reloaded:
+        logging.info("🔄 [HotReload] 已動態套用 config/exception_features.json")
+    elif _EXCEPTION_CONFIG_MANAGER.last_error is not None:
+        logging.warning("⚠️ [HotReload] exception_features.json 無法套用，保留上一份有效設定：%s", _EXCEPTION_CONFIG_MANAGER.last_error)
+    return _EXCEPTION_CONFIG_MANAGER.snapshot()
 
 def get_critical_exception_templates():
     """
@@ -498,4 +491,3 @@ def get_subflow_feature_mapping():
     """
     cfg = get_exception_features_config()
     return cfg.get("subflow_feature_mapping", {})
-
