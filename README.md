@@ -72,13 +72,13 @@
 3. **確認遊戲視窗**：
    開啟遊戲（必須保持前台可見，不能最小化），執行視窗偵測腳本：
    ```powershell
-   .\.venv\Scripts\python list_windows.py
+   .\.venv\Scripts\python scripts/list_windows.py
    ```
    確認輸出中包含遊戲視窗標題 `Blackfire Crusade`。
 4. **裁剪自定義範本圖片 (選用)**：
    若因解析度差異需重新裁剪模板，可執行模板裁剪工具：
    ```powershell
-   .\.venv\Scripts\python crop_tool.py
+   .\.venv\Scripts\python scripts/crop_tool.py
    ```
    * 程式倒數 5 秒後擷取視窗，在畫面上拖曳滑鼠框選按鈕，按 `Enter` 鍵確認選取，輸入檔名並儲存到 `templates/` 下的對應文件夾中。
 

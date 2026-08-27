@@ -517,7 +517,7 @@ def init_state_machine_system(args, config):
         for m in missing:
             print(f"    - templates/{m}")
         print("\n[!] 請先執行以下命令使用裁剪工具建立對應的模板圖片：")
-        print("    python crop_tool.py")
+        print("    python scripts/crop_tool.py")
         print("=" * 60)
         sys.exit(1)
 

@@ -12,6 +12,7 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+*.log
 
 # Ignore all png files by default
 *.png
