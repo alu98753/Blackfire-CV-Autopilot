@@ -106,13 +106,11 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         """
         Given: 處於 STATE_DOMAIN_EXPLORE，畫面出現挖寶畫面 (domains/golden_empire/open.png)
         When: 執行 DomainExploreHandler.handle()
-        Then: 觸發挖寶子流程：優先點擊 open.png 免費按鈕 ➔ 點擊確認 (common/confirm.png) ➔ 點擊退出 (common/quit.png)
+        Then: 觸發挖寶子流程：使用 click_and_wait_until_gone 閉環點擊 open.png、confirm.png 與 quit.png
         """
         mock_img = MagicMock()
 
-        matched_calls = []
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
-            matched_calls.append(template)
             if template in ["domains/golden_empire/open.png", "domains/open.png"]:
                 return ((1045, 615), 0.92)
             if template in ["domains/golden_empire/find_treasure.png", "domains/golden_empire/treasure.png", "domains/find_treasure.png", "domains/treasure.png"]:
@@ -124,13 +122,17 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
             return (None, 0.0)
 
         self.mock_machine.matcher.match.side_effect = fake_match
+        self.handler.click_and_wait_until_gone = MagicMock()
 
         with patch("os.path.exists", return_value=True):
             self.handler.handle(mock_img, self.rect)
 
-        # 斷言發起點擊
-        self.assertTrue(self.mock_machine.mouse.click.called)
-        self.mock_machine.notify_ui_progress.assert_called()
+        # 斷言調用 click_and_wait_until_gone 閉環點擊 open.png、confirm.png 與 quit.png
+        self.assertTrue(self.handler.click_and_wait_until_gone.called)
+        called_templates = [call.args[0] for call in self.handler.click_and_wait_until_gone.call_args_list]
+        self.assertIn("domains/golden_empire/open.png", called_templates)
+        self.assertIn("common/confirm.png", called_templates)
+        self.assertIn("common/quit.png", called_templates)
 
     # =========================================================================
     # 4. 戰鬥跳轉行為測試
