@@ -1,0 +1,10 @@
+GDRE Tools v2.6.4
+Windows 10.0.26200, headless
+ERROR: Not a Godot directory: E:/Side_Project/BlackfireCrusade_tool
+   at: GDRESettings::sort_and_validate_pck_files (modules\gdsdecomp\utility\gdre_settings.cpp:552)
+ERROR: No valid paths provided!
+   at: GDRESettings::load_project (modules\gdsdecomp\utility\gdre_settings.cpp:724)
+
+Error: Failed to open ["BlackfireCrusade_tool"]:
+ERROR: Not a Godot directory: E:/Side_Project/BlackfireCrusade_tool
+ERROR: No valid paths provided!

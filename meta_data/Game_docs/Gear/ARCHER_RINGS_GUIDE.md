@@ -17,93 +17,106 @@
 
 ---
 
-## 🏹 二、3 星 ➔ 6 星 弓箭手戒指階梯梯隊
+## 🏹 二、真實可取得的戒指養成階梯梯隊 (已修正商店機制)
 
 ```mermaid
 graph TD
-    A["【3星過渡】暗影青蛙遺物戒指<br/>(ring_darkfrog_relic)<br/>詞條: 暴擊 + 雙閃避"] --> B["【4星進階】榮耀競技場戒指 II<br/>(ring_glory_arena_2)<br/>詞條: 雙增傷 + 雙暴擊"]
-    B --> C["【5星畢業】榮耀競技場戒指 III<br/>(ring_glory_arena_3)<br/>詞條: 三增傷 + 雙暴擊"]
-    C --> D1["【6星神裝 A】羅蘭魔像戒指<br/>(ring_golem_roland)<br/>詞條: 四增傷 + 雙暴擊 + 殘火餘燼被動"]
-    C --> D2["【6星神裝 B】榮耀競技場戒指 IV<br/>(ring_glory_arena_4)<br/>固定基礎: +26 全域傷害"]
+    subgraph 🎯 前期~中期實戰可取得戒指
+        A1["【2星過渡】碎骨之戒 (ring_bear_bone_fragment)<br/>詞條: 雙暴擊 (crit x2) - 鐵匠合成"]
+        A2["【3星核心】暗影青蛙遺物戒指 (ring_darkfrog_relic)<br/>詞條: 暴擊 + 雙閃避 - 鐵匠合成"]
+        A3["【3星戰士/坦】符文魔像之戒 (ring_golem_runic)<br/>詞條: 雙物抗 + 生命 (physical_res x2 + hp) - 副本神秘廢墟掉落"]
+    end
+
+    subgraph 🏆 中後期積攢直購 (18,000 點)
+        B1["【5星輸出神戒】榮耀競技場戒指 III (ring_glory_arena_3)<br/>詞條: 三增傷 + 雙暴擊 (damage x3 + crit x2)<br/>🌟 競技場商店直接 18,000 點兌換 (不需從1星合起)"]
+        B2["【5星防禦/血量】血之祭壇戒指 III (ring_blood_altar_3)<br/>詞條: 5條極限生命 (hp x5)<br/>🩸 血之祭壇商店 36,000 血液兌換"]
+    end
+
+    subgraph 👑 6星終極畢業神裝
+        C1["【6星輸出終極】羅蘭魔像戒指 (ring_golem_roland)<br/>詞條: 四增傷 + 雙暴擊 + 殘火餘燼被動<br/>配方: ring_glory_arena_3 + 無名英雄餘燼x16 + 6階精華"]
+        C2["【6星固定增傷】榮耀競技場戒指 IV (ring_glory_arena_4)<br/>固定基礎: +26 全域傷害<br/>配方: ring_glory_arena_3 x4 + 6階精華"]
+        C3["【6星前排終極】深淵巨獸之戒 (ring_abyssbeast)<br/>詞條: 四生命 + 雙抗 (hp x4 + 物抗 + 魔抗)<br/>配方: ring_blood_altar_3 + 深淵材料 + 6階精華"]
+        C4["【6星極限狂暴】阿茲里姆之戒 (ring_demon_azrim)<br/>詞條: 四增傷 + 雙暴擊<br/>配方: 鍛血碎片x32 + 血契x32 + 6階精華"]
+    end
+
+    A1 --> A2
+    A2 --> B1
+    A3 --> B2
+    B1 --> C1
+    B1 --> C2
+    B2 --> C3
 ```
 
 ---
 
-## 📋 三、詳細戒指數值與取得途徑
+## 📋 三、全遊戲「實際可取得」戒指全景總覽 (1星 ~ 6星)
 
-### 🔹 3 星（史詩級 Purple）
+依據底層數據庫 `meta_datas.tres`，全遊戲所有實際存在產出途徑的戒指分類如下：
 
-#### 1. 🥇 首選推薦：暗影青蛙遺物戒指 (`ring_darkfrog_relic`)
-* **屬性池 (`rare_attributes`)**：`crit` (暴擊率), `dodge` (閃避率), `dodge` (閃避率)
-* **合成配方**：
-  * `frog_eye_crystal` (青蛙眼晶石) × 4
-  * `dark_slime_mucus` (黑色史萊姆黏液) × 4
-  * `essence_3` (三階精華) × 1
-* **素材取得來源**：
-  * **青蛙眼晶石**：擊敗關卡/副本中的蛙人族怪物（`frogman_archer`, `frogman_hunter`, `frogman_warrior`，主要分佈於 **黑暗沼澤 `dark_swamp`** 與 **遠古森林 `ancient_woodlands`**）。
-  * **黑色史萊姆黏液**：**史萊姆洞窟 (`slime_cave`)** Boss 群組中的 `slime_dark` (黑史萊姆) 或 `slime_dark_baby` (小黑史萊姆)。
-  * **三階精華**：由 1 階 ➔ 2 階 ➔ 3 階精華合成，或分解中階裝備獲得。
+| 星級品質 | 戒指名稱 (底層 ID) | 基礎屬性 / 詞條庫 (`rare_attributes`) | 實際取得來源 | 職業定位推薦 |
+| :---: | :--- | :--- | :--- | :--- |
+| **1星 綠色** | **史萊姆之戒** (`ring_slime`) | `exp_bouns` (經驗加成) | 鐵匠鋪合成：史萊姆黏液x4 + 1階精華 | 全員前期衝等 |
+| **1星 綠色** | **黑史萊姆之戒** (`ring_slime_dark`) | `dodge` (閃避率) | 鐵匠鋪合成：黑史萊姆黏液x4 + 1階精華 | 弓箭手前期生存 |
+| **1星 綠色** | **蜘蛛之戒** (`ring_spider`) | `crit` (暴擊率) | 各種蜘蛛怪物直接掉落 | 物理暴擊過渡 |
+| **2星 藍色** | **碎骨之戒** (`ring_bear_bone_fragment`) | **`crit`, `crit` (雙暴擊！)** | 鐵匠鋪合成：巨齒x4 + 粗鐵錠x4 + 2階精華 | 🏹 **弓箭手/輸出前期神戒** |
+| **2星 藍色** | **森林巨熊之戒** (`ring_bear_forest_giant`) | `hp`, `hp` (雙生命) | 遠古森林第10關 Boss 巨熊掉落 | 🛡️ **戰士/騎士前期防暴斃** |
+| **3星 紫色** | **暗影青蛙遺物戒** (`ring_darkfrog_relic`) | **`crit`, `dodge`, `dodge` (暴擊+雙閃避)** | 鐵匠鋪合成：青蛙眼晶石x4 + 黑黏液x4 + 3階精華 | 🏹 **弓箭手/遊俠 3~4星唯一真神** |
+| **3星 紫色** | **黃金史萊姆戒** (`ring_slime_golden`) | `exp_bouns x3` (三重經驗加成) | 鐵匠鋪合成：黃金史萊姆黏液x6 + 2階精華 | 經驗衝等專用 |
+| **3星 紫色** | **符文魔像之戒** (`ring_golem_runic`) | **`physical_res`, `physical_res`, `hp` (雙物抗+生命)** | 地下城【神秘廢墟】符文魔像掉落 | 🛡️ **戰士/騎士 3~4星核心坦戒** |
+| **4星 橘色** | **霜縛之戒** (`ring_frostbinder`) | `damage`, `magic_con`, `ice_con`, `ice_con` | 鐵匠鋪合成：急凍錠x2 + 冰晶碎片x4 + 4階精華 | 冰系法師/特定特化 |
+| **4星 橘色** | **光輝之戒** (`ring_radiance`) | `magic_con`, `holy_con x2`, `darkness_res` | 神聖領域【黃金帝國】寶箱開出 | 聖光牧師/神聖騎士 |
+| **5星 紅色** | **榮耀競技場戒指 III** (`ring_glory_arena_3`) | **`damage x3`, `crit x2` (三增傷+雙暴擊！)** | 🎯 **競技場商店直接 18,000 點兌換** (無需1星合成) | 🏹 **弓箭手/全體物理輸出 5星畢業** |
+| **5星 紅色** | **血之祭壇戒指 III** (`ring_blood_altar_3`) | **`hp x5` (5條極限生命加成！)** | 🩸 **血之祭壇商店直接 36,000 血液兌換** | 🛡️ **戰士/騎士 5星極限血牛坦戒** |
+| **5星 紅色** | **凜冬之戒** (`ring_endwinter`) | `luck`, `ice_con x2`, `ice_res x2` | 領域【寒誓堡壘】寶箱產出 | 冰霜特化 |
+| **5星 紅色** | **瑪利亞娜之戒** (`ring_mariana`) | `luck`, `fire_con x2`, `fire_res x2` | 主線任務【荒野快遞】獎勵 | 火焰特化 |
+| **6星 彩虹** | **羅蘭魔像戒指** (`ring_golem_roland`) | **`damage x4`, `crit x2` + 殘火餘燼鎖血被動** | 鐵匠鋪合成：`ring_glory_arena_3` + 英雄餘燼x16 + 6階精華 | 🏹 **弓箭手/物理主C 終極全能神戒** |
+| **6星 彩虹** | **阿茲里姆之戒** (`ring_demon_azrim`) | **`damage x4`, `crit x2` (純極致爆發)** | 鐵匠鋪合成：鍛血碎片x32 + 惡魔血契x32 + 6階精華 | 🏹 **極致純暴擊傷害輸出戒指** |
+| **6星 彩虹** | **深淵巨獸之戒** (`ring_abyssbeast`) | **`hp x4`, `physical_res`, `magic_res` (四血雙抗)** | 鐵匠鋪合成：`ring_blood_altar_3` + 深淵材料 + 6階精華 | 🛡️ **戰士/坦克 終極不朽神戒** |
+| **6星 彩虹** | **榮耀競技場戒指 IV** (`ring_glory_arena_4`) | **固定基礎 `damage: +26`** | 鐵匠鋪合成：`ring_glory_arena_3` x4 + 6階精華 | 穩定直傷增幅 |
 
-#### 2. 🔹 基礎底材：榮耀競技場戒指 I (`ring_glory_arena_1`)
-* **固定屬性**：`damage: 6.0` (基礎增傷 +6)
-* **取得途徑**：榮耀競技場 (`glory_arena`) 商店兌換 / 賽事獎勵。
-
----
-
-### 🔹 4 星（傳說級 Orange）
-
-#### 1. 🥇 輸出核心：榮耀競技場戒指 II (`ring_glory_arena_2`)
-* **屬性池 (`rare_attributes`)**：`damage`, `damage`, `crit`, `crit`（雙增傷 + 雙暴擊）
-* **合成配方**：
-  * `ring_glory_arena_1` × 4
-  * `essence_4` (四階精華) × 1
-* **評價**：極致純輸出戒指，提供高額面板傷害與雙重暴擊機率，是弓箭手爆發流質變起點。
-
-#### 2. 🥈 冰霜特化：霜縛之戒 (`ring_frostbinder`)
-* **屬性池**：`damage`, `magic_con`, `ice_con`, `ice_con`
-* **合成配方**：`ingot_frezon` × 2 + `ice_crystal_shard` × 4 + `essence_4` × 1
-* **評價**：適合冰霜屬性英雄；若弓箭手未綁定冰系技能則優先選榮耀競技場戒指。
+> ⚠️ **注釋說明**：底層代碼雖存在 `ring_glory_arena_1` (3星) 與 `ring_glory_arena_2` (4星) 的數據結構，但**遊戲商店未上架 1 星兌換**，而是直接以 18,000 榮耀點兌換 5星 `ring_glory_arena_3`。因此在 3~4 星階段，物理主 C 應以 **`ring_darkfrog_relic` (青蛙戒指)** 為絕對主力！
 
 ---
 
-### 🔹 5 星（神話級 Red）
+## 🎯 四、弓箭手 vs 戰士/坦克：各階段配裝路線對比
 
-#### 1. 🥇 巔峰純輸出：榮耀競技場戒指 III (`ring_glory_arena_3`)
-* **屬性池 (`rare_attributes`)**：`damage`, `damage`, `damage`, `crit`, `crit`（三增傷 + 雙暴擊）
-* **合成配方**：
-  * `ring_glory_arena_2` × 4
-  * `essence_5` (五階精華) × 1
-  * （或於競技場商店以 18,000 榮耀點數直接兌換）
-* **評價**：5 條詞條全為極品物理/全域增傷與暴擊，無論是給 5 階蛙人還是 7 階滅世弓箭手都能輸出最大化。
+```mermaid
+graph LR
+    subgraph 🏹 弓箭手 / 遊俠路線 (追求 暴擊 + 傷害 + 閃避)
+        A1["2星: 碎骨之戒 (雙暴擊)"] --> A2["3星: 暗影青蛙戒指 (暴擊+雙閃避)"]
+        A2 --> A3["5星: 榮耀競技場戒指 III (18,000點兌換)"]
+        A3 --> A4["6星: 羅蘭魔像之戒 (四增傷+雙暴擊+被動防暴斃)"]
+    end
 
----
+    subgraph 🛡️ 戰士 / 騎士路線 (追求 生命 + 物理防禦 + 雙抗)
+        W1["2星: 森林巨熊之戒 (雙生命)"] --> W2["3星: 符文魔像之戒 (雙物抗+生命)"]
+        W2 --> W3["5星: 血之祭壇戒指 III (36,000血量兌換)"]
+        W3 --> W4["6星: 深淵巨獸之戒 (四生命+雙抗)"]
+    end
+```
 
-### 🔹 6 星（超越/不朽級 Rainbow）
+### 1. 🏹 弓箭手（遊俠）核心著重點：
+* **核心需求**：`crit` (暴擊) > `damage` (增傷) > `dodge` (閃避)。
+* **實戰階段養成推薦**：
+  * **前期 (Lv.1~30)**：製作 **碎骨之戒 (`ring_bear_bone_fragment`)**（自帶 2 條暴擊）或刷蜘蛛掉落 **蜘蛛之戒 (`ring_spider`)**。
+  * **中期過渡 (Lv.30~65 / 當前階段)**：全力佩戴 **暗影青蛙遺物戒 (`ring_darkfrog_relic`)**（暴擊 + 雙閃避），提供高額推圖生存與爆發。
+  * **後期畢業 (Lv.65+)**：競技場積攢 18,000 點直換 **榮耀競技場戒指 III (`ring_glory_arena_3`)**，後續進階為 **羅蘭魔像之戒 (`ring_golem_roland`)**。
 
-#### 1. 👑 終極畢業神戒：羅蘭魔像之戒 (`ring_golem_roland`)
-* **職業限制**：全職業通用 (`all`)
-* **屬性池 (`rare_attributes`)**：`damage`, `damage`, `damage`, `damage`, `crit`, `crit`（**四增傷 + 雙暴擊！全遊戲物理天花板**）
-* **自帶被動技能 (`ember_afterglow` 殘火餘燼)**：
-  * 當生命值低於 35% (`hp_rate: 0.35`) 時觸發，賦予高額增益護身（`buff_count: 9.0`），完美彌補弓箭手脆皮容易暴斃的痛點！
-* **合成配方**：
-  * `ring_glory_arena_3` (五星競技場戒指) × 1
-  * `unnamed_hero_afterglow` (無名英雄餘燼) × 16
-  * `essence_6` (六階精華) × 1
-* **材料獲取來源**：
-  * **無名英雄餘燼 (`unnamed_hero_afterglow`)**：
-    * 擊敗 Boss **`golem_roland` (魔像羅蘭)** 掉落
-    * 遠征商店 (`expedition_exchange_dic`) 兌換 (16 遠征幣/個)
-    * 帳號每日重置稀有獎勵機率取得
-
-#### 2. 🥈 穩定常規選擇：榮耀競技場戒指 IV (`ring_glory_arena_4`)
-* **固定屬性**：`damage: 26.0` (全域直接增傷 +26)
-* **合成配方**：`ring_glory_arena_3` × 4 + `essence_6` × 1
+### 2. 🛡️ 戰士 / 騎士（坦克）核心著重點：
+* **核心需求**：`hp` (生命) > `physical_res` (物抗) > `def` (防禦) > `magic_res` (魔抗)。
+* **實戰階段養成推薦**：
+  * **前期 (Lv.1~30)**：刷遠古森林第 10 關獲取 **森林巨熊之戒 (`ring_bear_forest_giant`)**（雙生命）。
+  * **中期過渡 (Lv.30~65 / 當前階段)**：地下城【神秘廢墟】獲取 **符文魔像之戒 (`ring_golem_runic`)**（物理抗性 x2 + 生命），大幅減免前排承受的物理普攻與重擊！
+  * **後期畢業 (Lv.65+)**：血之祭壇 36,000 血液兌換 **血之祭壇戒指 III (`ring_blood_altar_3`)**（5 條滿生命詞條），大後期進階為 **深淵巨獸之戒 (`ring_abyssbeast`)**。
 
 ---
 
-## 🎯 四、目標英雄專屬配裝指南
+## 📊 五、目標英雄專屬配裝一覽表
 
-| 目標英雄 | 英雄定位 | 3~4 星推薦 | 5~6 星終極畢業 | 核心分析 |
+| 目標英雄 | 英雄定位 | 2~4 星平民過渡首選 | 5~6 星終極畢業推薦 | 核心搭配原因 |
 | :--- | :--- | :--- | :--- | :--- |
-| **五階 蛙人弓箭手 (`hero_archer_5`)** | 聖光/劇毒/迅捷爆發 | **`ring_darkfrog_relic`** | **`ring_glory_arena_3`** | 青蛙戒指提供雙閃避與暴擊，極度契合其 `swift_shot` 迅捷戰鬥風格與生存。 |
-| **七階 滅世龍裔弓箭手 (`hero_archer_7`)** | 毀滅級單體/全體貫穿 | **`ring_glory_arena_2`** | **`ring_golem_roland`** | 終極追求「四增傷+雙暴擊」，配合其 `draconic_doom_mark` 與 `cataclysmic_arrow` 瞬間清場。 |
+| **疾弓芬奇 (`hero_archer_5`)** | 迅捷射擊/物理雙動 | **`ring_darkfrog_relic`** (青蛙戒) | **`ring_glory_arena_3`** | 青蛙戒指提供雙閃避與暴擊，契合其迅捷雙動與脆皮生存。 |
+| **德魯戈 (`hero_archer_drugor`)** | 獸人血獵/處決主C | **`ring_bear_bone_fragment`** / **`ring_darkfrog_relic`** | **`ring_golem_roland`** | 德魯戈需要高暴擊觸發【赤紅臨界 AP+1 雙動】，羅蘭魔像戒提供極致暴擊增傷與鎖血保命。 |
+| **光輝艾麗娜 (`hero_knight_5`)** | 前排聖光護盾坦 | **`ring_golem_runic`** (符文魔像戒) | **`ring_blood_altar_3`** | 雙物理抗性大幅減少前期被秒機率；後期轉血之祭壇 5 生命戒指極限撐血。 |
+| **阿斯卡 (`hero_knight_askar`)** | 神聖裁決/免沉默坦 | **`ring_golem_runic`** | **`ring_abyssbeast`** | 四生命 + 物理抗性 + 魔法抗性，結合阿斯卡天生免沉默，打造永不倒下的終極鋼鐵之軀。 |
+
