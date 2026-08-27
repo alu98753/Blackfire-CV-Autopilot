@@ -80,7 +80,13 @@ class GoldenEmpireStrategy(BaseDomainStrategy):
 
                 return True
 
-        # 2. 獨立檢查畫面上殘留的確認或退出按鈕 (防遮罩殘留)
+        # 2. 獨立檢查畫面上殘留的確認按鈕 (先排除食物不足彈窗 no_bread2.png)
+        if os.path.exists(os.path.join("templates", "no_bread/no_bread2.png")):
+            pos_nb2, _ = self.matcher.match(screen_img, "no_bread/no_bread2.png", threshold=0.85)
+            if pos_nb2:
+                # 由全域 stamina_flow 統一處理食物不足退避，此處不執行盲點
+                return False
+
         for c_temp in self.CONFIRM_TEMPLATES:
             if os.path.exists(os.path.join("templates", c_temp)):
                 pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=0.85)

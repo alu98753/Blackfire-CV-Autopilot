@@ -339,5 +339,37 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.transition_to.assert_called_with("NAVIGATING")
 
 
+    # =========================================================================
+    # 10. 黃金古國食物不足彈窗 (no_bread2.png) 觸發體力退避測試
+    # =========================================================================
+
+    def test_no_bread2_triggers_stamina_retreat(self):
+        """
+        Given: 處於黃金古國領地探索時，畫面彈出食物不足彈窗 (no_bread/no_bread2.png 與 common/confirm.png)
+        When: 執行 handle_insufficient_stamina()
+        Then: 點擊 confirm.png 關閉彈窗，並切換至 STATE_COLLECT_ONLY 進行定時領取待機
+        """
+        from states.stamina_flow import handle_insufficient_stamina
+        mock_img = MagicMock()
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "no_bread/no_bread2.png":
+                return ((960, 400), 0.90)
+            if template in ["common/confirm.png", "common/ok.png"]:
+                return ((960, 600), 0.95)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+        self.mock_machine.capturer.get_window_rect.return_value = self.rect
+        self.mock_machine.capturer.capture.return_value = None
+
+        with patch("os.path.exists", return_value=True):
+            triggered = handle_insufficient_stamina(self.mock_machine, mock_img, self.rect)
+
+        self.assertTrue(triggered)
+        self.mock_machine.mouse.click.assert_called()
+        self.mock_machine.transition_to.assert_called_with("COLLECT_ONLY")
+
+
 if __name__ == "__main__":
     unittest.main()
