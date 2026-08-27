@@ -480,8 +480,56 @@ class TestBehaviorPauseResume(unittest.TestCase):
         t.join(timeout=1.0)
         self.assertEqual(execution_order, ["step_1_done", "step_2_entering", "step_2_finished"])
 
+    def test_capturer_freezes_in_place_when_paused(self):
+        """
+        【全域感知定格驗證】驗證 ScreenCapturer 在注入 resume_event 後，
+        當處於手動暫停 (resume_event.clear()) 期間，任何 capture() 呼叫均在背景執行緒中原地定格，
+        直到 resume_event.set() 後立即放行並成功回傳畫面。
+        """
+        import threading
+        from capture.screen import ScreenCapturer
+
+        resume_event = threading.Event()
+        resume_event.set() # 預設放行
+        capturer = ScreenCapturer(window_title="TestWindow", resume_event=resume_event)
+
+        # 1. 正常放行狀態
+        with patch.object(capturer, '_capture_backend', return_value="img_mock"):
+            capturer.backend_mode = True
+            capturer.get_hwnd = MagicMock(return_value=12345)
+            img = capturer.capture()
+            self.assertEqual(img, "img_mock")
+
+        # 2. 測試阻斷與恢復
+        resume_event.clear() # 阻斷
+        execution_order = []
+
+        def capture_worker():
+            execution_order.append("capture_start")
+            with patch.object(capturer, '_capture_backend', return_value="img_mock_2"):
+                capturer.backend_mode = True
+                capturer.get_hwnd = MagicMock(return_value=12345)
+                res = capturer.capture()
+                execution_order.append(f"capture_done_{res}")
+
+        t = threading.Thread(target=capture_worker)
+        t.start()
+        time.sleep(0.05)
+
+        # 斷言：執行緒在暫停期間處於 capture() 定格等待
+        self.assertEqual(execution_order, ["capture_start"])
+        self.assertTrue(t.is_alive())
+
+        # 恢復放行
+        resume_event.set()
+        t.join(timeout=1.0)
+
+        # 斷言：恢復後順利完成截圖
+        self.assertEqual(execution_order, ["capture_start", "capture_done_img_mock_2"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

@@ -14,17 +14,19 @@ from utils.window import WindowHandle
 
 
 class ScreenCapturer:
-    def __init__(self, window_title=WINDOW_TITLE, backend_mode=False, monitor_index=1):
+    def __init__(self, window_title=WINDOW_TITLE, backend_mode=False, monitor_index=1, resume_event=None):
         """
         :param window_title:  遊戲視窗標題，預設讀取 config.WINDOW_TITLE。
         :param backend_mode:  True 時使用後台截圖 (PrintWindow/BitBlt)，False 時使用前台 mss 截圖。
         :param monitor_index: 目標顯示器索引（1-indexed，對應 win32api.EnumDisplayMonitors 回傳順序）。
                               1 = 系統第一台顯示器（筆電主螢幕），2 = 外接第二台，以此類推。
+        :param resume_event:  全域通行門閥 (threading.Event)，暫停時於截圖前沿原地定格 (Freeze-in-Place)。
         """
         # 已關閉 DPI Awareness 宣告以符合專案與使用者需求
         self.window_title = window_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
+        self._resume_event = resume_event
         self.sct = mss.MSS()
         self._window = WindowHandle(window_title)
         self.last_monitor = None
@@ -258,6 +260,9 @@ class ScreenCapturer:
         擷取螢幕或指定區域，回傳 OpenCV 格式 (BGR) 影像。
         3 層備援截圖瀑布：後台 PrintWindow/BitBlt 優先 ➔ 前台 mss 備用 ➔ PIL ImageGrab 末線防護。
         """
+        if getattr(self, "_resume_event", None) is not None:
+            self._resume_event.wait()
+
         if full_screen:
             rect = None
 
