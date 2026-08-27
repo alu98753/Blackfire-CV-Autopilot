@@ -577,6 +577,9 @@ def init_state_machine_system(args, config, target_hwnd=None):
     # 初始化狀態機
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
     state_machine.backend_mode = args.backend
+    state_machine.window_title = args.title
+    state_machine.target_hwnd = target_hwnd
+    state_machine.is_sandbox = ("[#]" in args.title)
     config = normalize_config(config)
     # Callback 接線：解耦 MouseController 與 GameStateMachine (Issue #11)
     # 動作成功後通知 SM 重置卡死計數（告知而非詢問，單向依賴）
