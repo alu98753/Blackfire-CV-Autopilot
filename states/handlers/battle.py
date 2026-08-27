@@ -265,13 +265,8 @@ class BattleHandler(BaseStateHandler):
         self.non_battle_feature_start_time = None
         self.machine.battle_start_time = None
 
-        mode_type = self.machine.config.get("type") if self.machine.config else None
-        logging.info("👉 [戰鬥撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，安全返回繼續探索。")
-
-        if mode_type == "domain":
-            self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
-        else:
-            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        logging.info("👉 [戰鬥撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 NAVIGATING 重新進場探索。")
+        self.machine.transition_to(self.machine.STATE_NAVIGATING)
         return True
 
     def log_battle_duration(self):

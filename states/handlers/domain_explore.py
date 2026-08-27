@@ -52,6 +52,16 @@ class DomainExploreHandler(BaseStateHandler):
             time.sleep(0.1)
             return
 
+        # 6. 檢查是否處於大廳或領地選擇畫面 (導航路徑特徵)
+        nav_path = self.machine.config.get("navigation_path", [])
+        for nav_btn in nav_path:
+            if os.path.exists(os.path.join("templates", nav_btn)):
+                pos, conf = self.matcher.match(screen_img, nav_btn, threshold=0.75, quiet=True)
+                if pos:
+                    logging.info(f"🧭 [領地探索] 偵測到尋路按鈕 [{nav_btn}] (相似度: {conf:.4f})，判定已在外部選單，轉移至 NAVIGATING 進入古國。")
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    return
+
         logging.debug("⌛ [領地探索] 等待主場景探索按鈕或事件加載中...")
 
     def _check_bag_full(self, screen_img) -> bool:

@@ -242,10 +242,10 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         with patch("os.path.exists", return_value=True):
             battle_handler.handle(mock_img, self.rect)
 
-        # 斷言點擊過設定與放棄按鈕，且強敵放棄不增加戰敗計數
+        # 斷言點擊過設定與放棄按鈕，且強敵放棄不增加戰敗計數，並轉移至 NAVIGATING 重新進場
         self.assertTrue(self.mock_machine.mouse.click.called)
         self.assertEqual(self.mock_machine.defeat_count, 0)
-        self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
+        self.mock_machine.transition_to.assert_called_with("NAVIGATING")
 
     # =========================================================================
     # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試
@@ -283,6 +283,30 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         # 斷言戰敗重試次數累加至 4，並切換至 LOADING 狀態
         self.assertEqual(self.mock_machine.defeat_count, 4)
         self.mock_machine.transition_to.assert_called_with("LOADING")
+
+    # =========================================================================
+    # 9. 領地探索處於外部選單自動導航重新進場測試
+    # =========================================================================
+
+    def test_domain_explore_navigates_when_outside_buttons_detected(self):
+        """
+        Given: 處於 STATE_DOMAIN_EXPLORE 但畫面處於外部選單 (例如 domains/golden_empire/entry.png)
+        When: 執行 DomainExploreHandler.handle()
+        Then: 正確偵測到導航按鈕，轉移至 STATE_NAVIGATING 重新進場
+        """
+        mock_img = MagicMock()
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/golden_empire/entry.png":
+                return ((500, 500), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            self.handler.handle(mock_img, self.rect)
+
+        self.mock_machine.transition_to.assert_called_with("NAVIGATING")
 
 
 if __name__ == "__main__":
