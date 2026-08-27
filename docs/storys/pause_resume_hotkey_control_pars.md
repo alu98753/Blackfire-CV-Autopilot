@@ -95,17 +95,29 @@ def compensate_internal_timers(self, pause_duration: float):
 
 ---
 
+### 4. `threading.Event` 底層動作原地定格門閥 (Freeze-in-Place Gate)
+* **痛點突破**：過去若腳本正處於長流程 Handler（如背包滿分選 5 段滾動、或 `click_and_wait_until_gone` 4 秒輪詢）內部時，即便主迴圈檢測到暫停，Handler 內部長迴圈仍會繼續執行後續點擊。
+* **原地定格實作**：
+  * 在 [GameStateMachine](../../states/state_machine.py) 初始化 `self.resume_event = threading.Event()`，`pause()` 時 `clear()` 阻斷，`resume()` 時 `set()` 放行。
+  * 透過依賴倒置注入 [MouseController](../../actions/mouse.py) 的 `_wait_if_paused()`。所有 `click()`、`drag()`、`scroll()` 動作在發起前自動門閥檢查，一旦處於暫停狀態立即在該行**原地瞬間定格 (Freeze)**。
+  * 在 [BaseStateHandler](../../states/handlers/base.py) 的 `click_and_wait_until_gone()` 閉環輪詢中加入 `resume_event.wait()`，徹底杜絕暫停期間盲目補點。
+  * 當使用者按繼續時，動作執行緒 **0 延遲原位無縫繼續執行**，不遺失上下文、不漏點、不重測。
+
+---
+
 ## 📊 三、Result (成效與驗證)
 
 1. **單元測試全綠通過**：
-   * 建立獨立行為測試檔 [tests/test_behavior_pause_resume.py](../../tests/test_behavior_pause_resume.py)，5 項測試案例 100% 通過：
+   * 擴充獨立行為測試檔 [tests/test_behavior_pause_resume.py](../../tests/test_behavior_pause_resume.py)，15 項測試案例 100% 通過：
      * `test_pause_resume_lifecycle`：暫停/恢復狀態機生命週期。
      * `test_internal_timers_compensation_math`：內部防卡死計時器精確補償。
      * `test_game_cooldowns_not_affected`：客觀遊戲冷卻未受篡改。
      * `test_watchdog_immunity_after_long_pause`：暫停 120 秒後恢復，Watchdog 零誤判。
      * `test_pause_controller_focus_filtering`：視窗焦點過濾與防抖動。
+     * `test_mouse_freeze_in_place_with_resume_event`：驗證暫停時滑鼠動作在背景執行緒精確定格、恢復時 0 延遲放行。
+     * `test_click_and_wait_until_gone_freezes_on_pause`：驗證配對確認閉環在暫停時凍結等待。
 2. **實機操作體驗大幅提升**：
-   * 使用者在大廳、尋路、戰鬥或領取時，隨時按 [Space] 即刻暫停，終端機顯示醒目橫幅；手動操作完再按 [Space]，無縫接續掛機。
+   * 使用者在背包分選滾動中、大廳尋路、戰鬥或領取時，隨時按 [Ctrl + Space] 即刻原地定格，完全不會搶奪滑鼠或亂點；手動操作完再按 [Ctrl + Space]，原位無縫接續掛機。
 
 ---
 

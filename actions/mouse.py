@@ -22,17 +22,19 @@ SAFE_AREA_CLIENT_POS = (15, 15)
 
 class MouseController:
     def __init__(self, human_like=False, backend_mode=False, window_title=WINDOW_TITLE,
-                 on_action_success=None, is_paused_fn=None, capturer=None):
+                 on_action_success=None, is_paused_fn=None, capturer=None, resume_event=None):
         self.human_like = human_like
         self.backend_mode = backend_mode
         self.window_title = window_title
         self.last_action_time = 0.0
         self.last_target_pos = None
-        # --- Callback 注入 (取代跨層直接存取 state_machine) ---
+        # --- Callback / Event 注入 (取代跨層直接存取 state_machine) ---
         # Callable[[], None]：每次動作成功後呼叫，由外部通知上層狀態機重置卡死計數
         self._on_action_success = on_action_success
         # Callable[[], bool]：查詢目前是否處於手動暫停狀態
         self._is_paused_fn = is_paused_fn
+        # threading.Event：全域通行門閥，暫停時自動原地定格等待 (Freeze-in-Place)
+        self._resume_event = resume_event
         # 截圖器參考 (可選)：供 _draw_debug_click 擷取畫面
         self._capturer = capturer
         self._window = WindowHandle(window_title)
@@ -100,6 +102,15 @@ class MouseController:
                 )
 
 
+    def _wait_if_paused(self):
+        """
+        [原地定格門閥 Freeze-in-Place Gate]
+        若注入了 _resume_event，當使用者觸發手動暫停時，底層動作執行緒將在此原地等待，
+        直到使用者恢復掛機 (resume) 時 0 延遲無縫放行繼續執行。
+        """
+        if self._resume_event is not None:
+            self._resume_event.wait()
+
     def check_user_intervention(self):
         """
         透過 _is_paused_fn callback 查詢目前是否處於手動暫停狀態。
@@ -119,6 +130,7 @@ class MouseController:
         :param x: 目標 X 座標 (支援 Client 座標或全域絕對座標)
         :param y: 目標 Y 座標 (支援 Client 座標或全域絕對座標)
         """
+        self._wait_if_paused()
         if self.check_user_intervention():
             logging.info("🚫 使用者介入中，取消點擊動作。")
             return False
@@ -199,6 +211,7 @@ class MouseController:
         滾動滑鼠滾輪。
         在後台模式下發送 WM_MOUSEWHEEL 訊息給視窗，在前台模式下使用 pyautogui.scroll。
         """
+        self._wait_if_paused()
         if self.check_user_intervention():
             logging.info("🚫 使用者介入中，取消滾動動作。")
             return False
@@ -253,6 +266,7 @@ class MouseController:
         在絕對螢幕座標上執行滑鼠左鍵拖曳。
         在後台模式下發送 WM_LBUTTONDOWN -> MOUSEMOVE -> LBUTTONUP，在前台使用 pyautogui.dragTo。
         """
+        self._wait_if_paused()
         if self.check_user_intervention():
             logging.info("🚫 使用者介入中，取消拖曳動作。")
             return False

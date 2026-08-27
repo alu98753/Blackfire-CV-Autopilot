@@ -320,5 +320,101 @@ class TestBehaviorPauseResume(unittest.TestCase):
         self.assertFalse(res_drag)
 
 
+    def test_mouse_freeze_in_place_with_resume_event(self):
+        """
+        【門閥定格驗證】驗證 MouseController 搭配 resume_event 時：
+        1. 在暫停 (clear) 期間，動作執行緒在 _wait_if_paused() 原地定格等待；
+        2. 當上層觸發恢復 (set) 時，動作執行緒立即解除定格並順利放行執行。
+        """
+        import threading
+        from actions.mouse import MouseController
+
+        resume_event = threading.Event()
+        resume_event.set() # 預設放行
+        mouse = MouseController(human_like=False, resume_event=resume_event)
+
+        # 1. 正常放行狀態
+        with patch.object(mouse, '_finalize_action', return_value=True):
+            with patch('pyautogui.moveTo'), patch('pyautogui.mouseDown'), patch('pyautogui.mouseUp'):
+                res = mouse.click(100, 200)
+                self.assertTrue(res)
+
+        # 2. 測試阻斷與恢復
+        resume_event.clear() # 阻斷
+        execution_order = []
+
+        def worker():
+            execution_order.append("start")
+            with patch.object(mouse, '_finalize_action', return_value=True):
+                with patch('pyautogui.moveTo'), patch('pyautogui.mouseDown'), patch('pyautogui.mouseUp'):
+                    mouse.click(100, 200)
+            execution_order.append("finished")
+
+        t = threading.Thread(target=worker)
+        t.start()
+        time.sleep(0.05)
+
+        # 斷言：執行緒在暫停期間處於定格等待，尚未完成
+        self.assertEqual(execution_order, ["start"])
+        self.assertTrue(t.is_alive())
+
+        # 恢復放行
+        resume_event.set()
+        t.join(timeout=1.0)
+
+        # 斷言：恢復後順利放行完畢
+        self.assertEqual(execution_order, ["start", "finished"])
+
+    def test_click_and_wait_until_gone_freezes_on_pause(self):
+        """
+        【輪詢定格驗證】驗證 BaseStateHandler.click_and_wait_until_gone 在輪詢途中若被暫停，
+        會在 resume_event.wait() 原地等待，不盲目發起補點擊或超時。
+        """
+        import threading
+        from states.handlers.base import BaseStateHandler
+
+        class DummyHandler(BaseStateHandler):
+            def handle(self, screen_img, rect):
+                pass
+
+        handler = DummyHandler(self.state_machine)
+        self.state_machine.resume_event.set()
+
+        # 暫停狀態機
+        self.state_machine.pause()
+        self.assertFalse(self.state_machine.resume_event.is_set())
+
+        execution_order = []
+
+        def worker():
+            execution_order.append("waiting_start")
+            with patch.object(handler.mouse, 'click'):
+                with patch('os.path.exists', return_value=True):
+                    self.mock_capturer.capture.return_value = "dummy_img"
+                    self.mock_matcher.match.return_value = (None, 0.0) # 消失
+                    handler.click_and_wait_until_gone(
+                        "common/quit.png", 100, 200, 
+                        {"left": 0, "top": 0, "width": 800, "height": 600}, 
+                        timeout=1.0, check_interval=0.02, post_delay=0.0
+                    )
+            execution_order.append("waiting_done")
+
+        t = threading.Thread(target=worker)
+        t.start()
+        time.sleep(0.05)
+
+        # 斷言：輪詢在暫停狀態下被定格
+        self.assertEqual(execution_order, ["waiting_start"])
+        self.assertTrue(t.is_alive())
+
+        # 恢復狀態機
+        self.state_machine.resume()
+        t.join(timeout=2.0)
+
+        # 斷言：恢復後完成輪詢退出
+        self.assertEqual(execution_order, ["waiting_start", "waiting_done"])
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -150,9 +150,11 @@ class GameStateMachine:
         self.stashed_context = {}
         self.exception_watchdog = ExceptionWatchdog(self)
 
-        # 手動暫停與恢復 (Pause/Resume) 控制屬性
+        # 手動暫停與恢復 (Pause/Resume) 控制屬性 (含 threading.Event 原地定格門閥)
         self.is_paused = False
         self.pause_start_time = None
+        self.resume_event = threading.Event()
+        self.resume_event.set()
 
         # EasyOCR 背景非同步預熱 (Background Warmup)
         if preload_ocr:
@@ -230,16 +232,18 @@ class GameStateMachine:
 
     def pause(self):
         """
-        進入手動暫停狀態，記錄暫停起點時間。
+        進入手動暫停狀態，記錄暫停起點時間並阻斷底層動作門閥。
         """
         if not self.is_paused:
             self.is_paused = True
+            if hasattr(self, "resume_event") and self.resume_event:
+                self.resume_event.clear()
             self.pause_start_time = time.time()
             logging.info(f"⏸️ [StateMachine] 腳本已暫停，鎖定當前狀態: [{self.current_state}]。")
 
     def resume(self) -> float:
         """
-        退出手動暫停狀態，原子化執行內部安全/防卡死計時器補償。
+        退出手動暫停狀態，原子化執行內部安全/防卡死計時器補償並放行底層動作門閥。
         
         :return: pause_duration (暫停總秒數)
         """
@@ -250,6 +254,8 @@ class GameStateMachine:
                 self.compensate_internal_timers(pause_duration)
             self.is_paused = False
             self.pause_start_time = None
+            if hasattr(self, "resume_event") and self.resume_event:
+                self.resume_event.set()
             self.just_resumed_from_user = True
             logging.info(f"▶️ [StateMachine] 腳本已恢復運行 (已補償內部計時器 {pause_duration:.1f} 秒)。繼續執行狀態: [{self.current_state}]。")
         return pause_duration
@@ -1002,6 +1008,8 @@ class GameStateMachine:
         start_t = time.time()
         last_click_t = start_t
         while time.time() - start_t < timeout:
+            if hasattr(self, "resume_event") and self.resume_event:
+                self.resume_event.wait()
             time.sleep(check_interval)
             if self.capturer:
                 fresh_img = self.capturer.capture(rect)

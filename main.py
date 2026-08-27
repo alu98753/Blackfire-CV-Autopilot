@@ -564,6 +564,8 @@ def init_state_machine_system(args, config):
     mouse._on_action_success = lambda: setattr(state_machine, 'consecutive_stuck_count', 0)
     # 查詢 SM 暫停狀態，由上層提供查詢函式（依賴倒置）
     mouse._is_paused_fn = lambda: getattr(state_machine, 'is_paused', False)
+    # 注入 threading.Event 門閥供底層動作進行原地定格 (Freeze-in-Place)
+    mouse._resume_event = state_machine.resume_event
     state_machine.config = config
     state_machine.primary_config = config.copy()
     daily_manager = DailyManager()
