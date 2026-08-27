@@ -102,9 +102,27 @@ flowchart TD
 
 ---
 
-## 五、 相關模組與測試索引
+## 五、 雙開掛機下的熱鍵暫停操作規範 (實務操作備忘)
+
+> [!IMPORTANT]
+> **雙開暫停操作兩大實務鐵律**：
+> 1. **必須點擊「遊戲畫面」而非 Terminal**：
+>    - 當雙開掛機時，若想暫停其中一邊（例如沙盒實例），**請滑鼠左鍵點一下該遊戲視窗畫面**（使其獲得 Windows 前景焦點），然後按下 **`Ctrl + Space`**。
+>    - **嚴禁點擊 Terminal 終端機視窗後按熱鍵**（因為 Windows Terminal 多頁籤/多終端機的焦點事件容易交疊，點擊遊戲畫面才是 100% 精確區分目標實例的唯一基準）。
+> 2. **點擊哪一個遊戲視窗，就只暫停哪一個**：
+>    - 點選沙盒遊戲畫面 ➔ 按 `Ctrl + Space` ➔ **僅沙盒腳本暫停/繼續**。
+>    - 點選本機遊戲畫面 ➔ 按 `Ctrl + Space` ➔ **僅本機腳本暫停/繼續**。
+>    - 另一邊正常掛機中的實例完全不受干擾！
+
+---
+
+## 六、 相關模組與測試索引
+* 沙盒管理器模組：[`utils/sandbox_manager.py`](../utils/sandbox_manager.py)
 * 視窗管理器模組：[`utils/window.py`](../utils/window.py)
+* 鍵盤熱鍵控制器：[`utils/keyboard_listener.py`](../utils/keyboard_listener.py)
 * 啟動器與視窗準備：[`utils/steam_launcher.py`](../utils/steam_launcher.py)
 * 截圖前沿控制器：[`capture/screen.py`](../capture/screen.py)
 * 滑鼠與點擊控制器：[`actions/mouse.py`](../actions/mouse.py)
 * 視窗管理單元測試：[`tests/test_window_handle.py`](../tests/test_window_handle.py)
+* 沙盒管理單元測試：[`tests/test_sandbox_manager.py`](../tests/test_sandbox_manager.py)
+* 暫停控制行為測試：[`tests/test_behavior_pause_resume.py`](../tests/test_behavior_pause_resume.py)
