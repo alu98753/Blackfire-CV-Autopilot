@@ -223,6 +223,15 @@ class NavigationHandler(BaseStateHandler):
             time.sleep(0.5)
             return
 
+        # 領地主場景優先判定：若畫面上已經出現領地探索按鈕，說明已進入領地，轉移狀態至 DOMAIN_EXPLORE
+        domain_explore_btn = "domains/golden_empire/explore_btn.png"
+        if os.path.exists(os.path.join("templates", domain_explore_btn)):
+            pos_de, conf_de = self.matcher.match(screen_img, domain_explore_btn, threshold=0.80)
+            if pos_de:
+                logging.info(f"🧭 尋路成功！偵測到領地探索按鈕 [{domain_explore_btn}] (信心度: {conf_de:.4f})，已進入領地，狀態轉移至 DOMAIN_EXPLORE。")
+                self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+                return
+
         # 0. 背包清理優先防護：如果需要整理背包，尋路只能引導我們退回大廳，不得前進
         if self.machine.need_bag_cleaning:
             if scene.is_town or scene.is_lobby:

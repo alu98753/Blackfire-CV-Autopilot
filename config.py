@@ -107,13 +107,15 @@ def normalize_config(config):
         if activity_key == "enable_stage_farming":
             cfg[activity_key] = mode_type in ["stage", "mix", "daily"]
         elif activity_key == "enable_dungeon":
-            cfg[activity_key] = False if mode_type in ["stage", "collect_only"] else default_value
+            cfg[activity_key] = False if mode_type in ["stage", "collect_only", "domain"] else default_value
         elif activity_key == "enable_lord_boss":
-            cfg[activity_key] = False if mode_type == "collect_only" else default_value
+            cfg[activity_key] = False if mode_type in ["collect_only", "domain"] else default_value
         elif activity_key == "enable_town_daily":
             cfg[activity_key] = False if mode_type == "collect_only" else default_value
         elif activity_key == "enable_quests":
             cfg[activity_key] = mode_type == "daily"
+        elif activity_key == "enable_golden_empire":
+            cfg[activity_key] = (mode_type == "domain" and cfg.get("domain") == "golden_empire")
         else:
             cfg[activity_key] = default_value
     return cfg

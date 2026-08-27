@@ -45,8 +45,18 @@ enable_dungeon = true
 enable_town_daily = true
 enable_quests = false
 enable_stage_farming = false
+enable_golden_empire = false
 
 [primary_modes]
+
+[primary_modes.golden_empire]
+name = "黃金古國"
+type = "domain"
+domain = "golden_empire"
+bread_cost = 3
+navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
+explore_priorities = ["domains/golden_empire/explore_btn.png"]
+result_buttons = ["common/continue.png", "common/continue_gray.png"]
 
 [primary_modes.stage]
 name = "普通關卡"

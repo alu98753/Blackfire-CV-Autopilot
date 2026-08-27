@@ -294,6 +294,13 @@ class ResultHandler(BaseStateHandler):
                     self.reset_state()
                     self.machine.transition_to(self.machine.STATE_LORD_BOSS)
                     return True
+
+        # 領地模式 (Domain Mode)：結算完成後切回 DOMAIN_EXPLORE
+        if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
+            logging.info("👉 結算辨識 (領地模式)：戰鬥結算已結束，轉移回 DOMAIN_EXPLORE 繼續探索。")
+            self.reset_state()
+            self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+            return True
             
         # D. 檢查是否已經進入戰鬥狀態 (避免人手點擊或自動戰鬥提早開始時卡在結算超時)
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:

@@ -101,3 +101,6 @@ graph TD
 | `templates/common/confirm.png` | 通用確認按鈕 (挖寶獎勵確認) | ✅ 現有共用資源 |
 | `templates/common/quit.png` | 通用退出按鈕 (挖寶結束退出) | ✅ 現有共用資源 |
 | `templates/backpack_full.png` | 背包滿全域攔截特徵 | ✅ 現有共用資源 |
+| `templates/domains/golden_empire/exception/golden_king.png` | 古國 Boss「黃金君王」遭遇特徵 | ✅ 已就緒 |
+| `templates/battle/setting.png` | 戰鬥中設定按鈕 (放棄選單) | ✅ 已就緒 |
+| `templates/battle/giveup_battle.png` | 戰鬥中放棄挑戰按鈕 | ✅ 已就緒 |
