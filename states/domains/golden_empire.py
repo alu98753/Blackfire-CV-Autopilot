@@ -9,9 +9,13 @@ class GoldenEmpireStrategy(BaseDomainStrategy):
     負責：探索按鈕點擊、古國寶藏挖寶事件（第 1 次免費開箱 ➔ 確認 ➔ 離開）。
     """
     EXPLORE_BUTTON = "domains/golden_empire/explore_btn.png"
+    OPEN_BUTTON_TEMPLATES = [
+        "domains/golden_empire/open.png",
+    ]
     TREASURE_FEATURE_TEMPLATES = [
-        "domains/find_treasure.png",
-        "domains/treasure.png"
+        "domains/golden_empire/open.png",
+        "domains/golden_empire/find_treasure.png",
+        "domains/golden_empire/treasure.png"
     ]
     CONFIRM_TEMPLATES = [
         "common/confirm.png",
@@ -32,6 +36,7 @@ class GoldenEmpireStrategy(BaseDomainStrategy):
     def handle_custom_events(self, screen_img, rect) -> bool:
         """
         檢查並處理黃金古國挖寶事件 (Treasure Subflow)。
+        優先精確比對「打開 (open.png)」按鈕，點擊免費開箱。
         """
         # 1. 檢查是否處於挖寶介面
         is_treasure_screen = False
@@ -48,12 +53,27 @@ class GoldenEmpireStrategy(BaseDomainStrategy):
             logging.info("🎁 [黃金古國] 偵測到古國寶藏挖寶畫面，執行單次免費開箱流程...")
             self.handler.notify_ui_progress()
             
-            # 點擊免費寶箱
-            if treasure_pos:
+            # 優先精確點擊「打開」按鈕 (open.png)
+            clicked_open = False
+            for open_temp in self.OPEN_BUTTON_TEMPLATES:
+                if os.path.exists(os.path.join("templates", open_temp)):
+                    pos_open, conf_o = self.matcher.match(screen_img, open_temp, threshold=0.75)
+                    if pos_open:
+                        click_x = rect["left"] + pos_open[0]
+                        click_y = rect["top"] + pos_open[1]
+                        logging.info(f"👉 [黃金古國] 精確點擊免費開箱【打開】按鈕 [{open_temp}] (信心度: {conf_o:.4f})")
+                        self.mouse.click(click_x, click_y)
+                        clicked_open = True
+                        time.sleep(0.4)
+                        break
+
+            # 若未匹配到獨立 open 按鈕，則回退點擊寶箱大圖座標
+            if not clicked_open and treasure_pos:
                 click_x = rect["left"] + treasure_pos[0]
                 click_y = rect["top"] + treasure_pos[1]
+                logging.info(f"👉 [黃金古國] 點擊寶物特徵座標 ({click_x}, {click_y}) 進行開箱...")
                 self.mouse.click(click_x, click_y)
-                time.sleep(0.3)
+                time.sleep(0.4)
 
             # 檢查並點擊確認按鈕（若有獲得獎勵彈窗）
             for c_temp in self.CONFIRM_TEMPLATES:

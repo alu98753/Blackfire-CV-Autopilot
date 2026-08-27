@@ -104,16 +104,18 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
     def test_treasure_event_free_box_subflow(self):
         """
-        Given: 處於 STATE_DOMAIN_EXPLORE，畫面出現挖寶畫面 (domains/find_treasure.png)
+        Given: 處於 STATE_DOMAIN_EXPLORE，畫面出現挖寶畫面 (domains/golden_empire/open.png)
         When: 執行 DomainExploreHandler.handle()
-        Then: 觸發挖寶子流程：點擊免費寶箱 ➔ 點擊確認 (common/confirm.png) ➔ 點擊退出 (common/quit.png)
+        Then: 觸發挖寶子流程：優先點擊 open.png 免費按鈕 ➔ 點擊確認 (common/confirm.png) ➔ 點擊退出 (common/quit.png)
         """
         mock_img = MagicMock()
 
         matched_calls = []
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             matched_calls.append(template)
-            if template in ["domains/find_treasure.png", "domains/treasure.png"]:
+            if template in ["domains/golden_empire/open.png", "domains/open.png"]:
+                return ((1045, 615), 0.92)
+            if template in ["domains/golden_empire/find_treasure.png", "domains/golden_empire/treasure.png", "domains/find_treasure.png", "domains/treasure.png"]:
                 return ((960, 540), 0.88)
             if template in ["common/confirm.png", "common/ok.png"]:
                 return ((960, 700), 0.85)

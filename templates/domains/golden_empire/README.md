@@ -101,8 +101,9 @@ graph TD
 | `templates/domains/golden_empire/entry.png` | 第一領地：黃金古國選擇卡片 | ✅ 已就緒 |
 | `templates/domains/common/start_btn.png` | 領地啟動/開始探索按鈕 | ✅ 已就緒 |
 | `templates/domains/golden_empire/explore_btn.png` | 古國主場景探索按鈕 (消耗 3 麵包) | ✅ 已就緒 |
-| `templates/domains/find_treasure.png` | 挖寶事件特徵圖 | ✅ 已就緒 |
-| `templates/domains/treasure.png` | 寶物/寶箱特徵圖 | ✅ 已就緒 |
+| `templates/domains/golden_empire/open.png` | 挖寶「打開」精確點擊按鈕 (免費開箱) | ✅ 已就緒 |
+| `templates/domains/golden_empire/find_treasure.png` | 挖寶事件標題/視窗特徵圖 | ✅ 已就緒 |
+| `templates/domains/golden_empire/treasure.png` | 寶箱/寶物卡片特徵圖 | ✅ 已就緒 |
 | `templates/domains/common/exit_to_lobby.png` | 領地返回大廳按鈕 | ✅ 已就緒 |
 | `templates/common/continue.png` | 戰鬥結算繼續按鈕 (點擊 2 次) | ✅ 現有共用資源 |
 | `templates/common/confirm.png` | 通用確認按鈕 (挖寶獎勵確認) | ✅ 現有共用資源 |
