@@ -552,14 +552,18 @@ def init_state_machine_system(args, config):
     # 初始化模組
     capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend)
     matcher = TemplateMatcher(templates_dir="templates", template_scale=1.0, auto_scale=True)
-    mouse = MouseController(human_like=True, backend_mode=args.backend, window_title=args.title)
-    
+    mouse = MouseController(human_like=True, backend_mode=args.backend, window_title=args.title,
+                            capturer=capturer)
+
     # 初始化狀態機
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
     state_machine.backend_mode = args.backend
     config = normalize_config(config)
-    # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
-    mouse.state_machine = state_machine
+    # Callback 接線：解耦 MouseController 與 GameStateMachine (Issue #11)
+    # 動作成功後通知 SM 重置卡死計數（告知而非詢問，單向依賴）
+    mouse._on_action_success = lambda: setattr(state_machine, 'consecutive_stuck_count', 0)
+    # 查詢 SM 暫停狀態，由上層提供查詢函式（依賴倒置）
+    mouse._is_paused_fn = lambda: getattr(state_machine, 'is_paused', False)
     state_machine.config = config
     state_machine.primary_config = config.copy()
     daily_manager = DailyManager()

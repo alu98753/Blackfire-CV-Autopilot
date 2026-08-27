@@ -291,23 +291,26 @@ class TestBehaviorPauseResume(unittest.TestCase):
         self.assertTrue(controller.is_game_window_active())
         self.assertTrue(controller.is_target_window_active())
 
+
     def test_mouse_click_aborts_immediately_when_state_machine_is_paused(self):
         """
-        【雙層防護驗證】測試當 state_machine.is_paused == True 時，
+        【雙層防護驗證】測試當 is_paused_fn() == True 時，
         底層 mouse.click() / mouse.drag() 於發射前透過 check_user_intervention() 立刻熔斷攔截。
         """
         from actions.mouse import MouseController
-        mouse = MouseController(human_like=False)
-        mouse.state_machine = self.state_machine
 
-        # 1. 正常運行狀態 (is_paused == False) -> check_user_intervention 應為 False
-        self.state_machine.is_paused = False
+        # 以可變旗標模擬 state_machine.is_paused 的切換 (Issue #11 callback 接線)
+        paused_flag = [False]
+        mouse = MouseController(human_like=False, is_paused_fn=lambda: paused_flag[0])
+
+        # 1. 正常運行狀態 (is_paused_fn 回傳 False) -> check_user_intervention 應為 False
+        paused_flag[0] = False
         self.assertFalse(mouse.check_user_intervention())
 
-        # 2. 手動暫停狀態 (is_paused == True) -> check_user_intervention 應為 True，且 click() 直接回傳 False
-        self.state_machine.is_paused = True
+        # 2. 手動暫停狀態 (is_paused_fn 回傳 True) -> check_user_intervention 應為 True，且 click() 直接回傳 False
+        paused_flag[0] = True
         self.assertTrue(mouse.check_user_intervention())
-        
+
         # 呼叫 click 應被立即攔截拒絕
         res_click = mouse.click(500, 500)
         self.assertFalse(res_click)
@@ -315,6 +318,7 @@ class TestBehaviorPauseResume(unittest.TestCase):
         # 呼叫 drag 應被立即攔截拒絕
         res_drag = mouse.drag(500, 500, 600, 600)
         self.assertFalse(res_drag)
+
 
 if __name__ == "__main__":
     unittest.main()

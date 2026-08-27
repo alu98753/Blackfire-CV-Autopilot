@@ -67,15 +67,12 @@ class TestDebugVisualizer(unittest.TestCase):
 
     def test_mouse_draw_debug_click_delegation(self):
         """[測試 4] 驗證 MouseController._draw_debug_click 完整委派 DebugVisualizer.draw_detection"""
-        mouse = MouseController()
-
         mock_capturer = MagicMock()
         mock_screen = np.zeros((500, 500, 3), dtype=np.uint8)
         mock_capturer.capture.return_value = mock_screen
 
-        mock_machine = MagicMock()
-        mock_machine.capturer = mock_capturer
-        mouse.state_machine = mock_machine
+        # 直接注入 capturer (Issue #11: 取代 state_machine.capturer 間接存取)
+        mouse = MouseController(capturer=mock_capturer)
 
         with patch("states.debug.DebugVisualizer.draw_detection") as mock_draw:
             mouse._draw_debug_click(hwnd=12345, rx_physical=250, ry_physical=150)
@@ -85,6 +82,7 @@ class TestDebugVisualizer(unittest.TestCase):
             _, kwargs = mock_draw.call_args
             self.assertEqual(kwargs["click_pos"], (250, 150))
             self.assertEqual(kwargs["filename"], "debug_click.png")
+
 
 
 if __name__ == "__main__":

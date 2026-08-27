@@ -21,18 +21,26 @@ pyautogui.PAUSE = 0.002
 SAFE_AREA_CLIENT_POS = (15, 15)
 
 class MouseController:
-    def __init__(self, human_like=False, backend_mode=False, window_title=WINDOW_TITLE):
+    def __init__(self, human_like=False, backend_mode=False, window_title=WINDOW_TITLE,
+                 on_action_success=None, is_paused_fn=None, capturer=None):
         self.human_like = human_like
         self.backend_mode = backend_mode
         self.window_title = window_title
         self.last_action_time = 0.0
         self.last_target_pos = None
-        self.state_machine = None
+        # --- Callback 注入 (取代跨層直接存取 state_machine) ---
+        # Callable[[], None]：每次動作成功後呼叫，由外部通知上層狀態機重置卡死計數
+        self._on_action_success = on_action_success
+        # Callable[[], bool]：查詢目前是否處於手動暫停狀態
+        self._is_paused_fn = is_paused_fn
+        # 截圖器參考 (可選)：供 _draw_debug_click 擷取畫面
+        self._capturer = capturer
         self._window = WindowHandle(window_title)
 
     def _finalize_action(self, target_pos=None, cooldown: float = 0.0, move_safe: bool = True) -> bool:
         """
         統一動作成功後的狀態更新、冷卻與安全區復位。
+        透過 _on_action_success callback 通知上層狀態機，不直接存取其內部屬性。
         """
         if target_pos is not None:
             self.last_target_pos = target_pos
@@ -43,8 +51,9 @@ class MouseController:
                 self.last_target_pos = None
 
         self.last_action_time = time.time()
-        if self.state_machine is not None:
-            self.state_machine.consecutive_stuck_count = 0
+
+        if self._on_action_success:
+            self._on_action_success()
 
         if cooldown > 0:
             time.sleep(cooldown)
@@ -77,9 +86,10 @@ class MouseController:
     def _draw_debug_click(self, hwnd, rx_physical, ry_physical):
         """
         擷取當前畫面並繪製點擊位置紅圈，存檔為 debug_click.png 供調試排查。
+        需於構造時注入 capturer 參考，否則 no-op。
         """
-        if self.state_machine and self.state_machine.capturer:
-            img = self.state_machine.capturer.capture()
+        if self._capturer:
+            img = self._capturer.capture()
             if img is not None:
                 from states.debug import DebugVisualizer
                 DebugVisualizer.draw_detection(
@@ -92,14 +102,11 @@ class MouseController:
 
     def check_user_intervention(self):
         """
-        檢查狀態機是否處於手動暫停狀態。若是則回傳 True。
+        透過 _is_paused_fn callback 查詢目前是否處於手動暫停狀態。
+        若未注入 callback 則永遠回傳 False（不攔截）。
         """
-        if self.state_machine is None:
-            return False
-            
-        if getattr(self.state_machine, "is_paused", False):
+        if self._is_paused_fn and self._is_paused_fn():
             return True
-
         return False
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(0.03, 0.07)):
@@ -326,6 +333,7 @@ class MouseController:
         """
         將滑鼠游標移動到遊戲視窗邊角的安全區域（左上角 15, 15），
         以清除遊戲中因為滑鼠懸停 (hover) 產生的亮邊或高亮效果，避免干擾模板匹配。
+        若找不到視窗 hwnd，則 no-op（遊戲關閉時由 ExceptionWatchdog 負責重啟）。
         """
         safe_x, safe_y = SAFE_AREA_CLIENT_POS
         hwnd = self.get_hwnd()
@@ -336,15 +344,10 @@ class MouseController:
                 win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)
             return
 
-        # 前台模式
+        # 前台模式：透過 ClientToScreen 取得實體座標；找不到 hwnd 則 no-op
         if hwnd:
             try:
                 screen_pt = win32gui.ClientToScreen(hwnd, (safe_x, safe_y))
                 pyautogui.moveTo(screen_pt[0], screen_pt[1])
-                return
             except Exception:
                 pass
-
-        if self.state_machine and getattr(self.state_machine, "last_rect", None) is not None:
-            rect_box = self.state_machine.last_rect
-            pyautogui.moveTo(rect_box["left"] + safe_x, rect_box["top"] + safe_y)

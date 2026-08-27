@@ -10,13 +10,13 @@ from actions.mouse import MouseController
 
 class TestMouseCoordinates(unittest.TestCase):
     def setUp(self):
-        self.mock_state_machine = MagicMock()
-        self.mock_state_machine.is_paused = False
-        self.mock_state_machine.user_operating = False
-        self.mock_state_machine.capturer = None
-        self.mouse = MouseController()
-        self.mouse.state_machine = self.mock_state_machine
-        
+        # 以 callback 注入取代 state_machine 直接倘注 (Issue #11)
+        self.on_success_count = [0]
+        self.mouse = MouseController(
+            on_action_success=lambda: self.on_success_count.__setitem__(0, self.on_success_count[0] + 1),
+            is_paused_fn=lambda: False,  # 預設不暂停
+        )
+
     @patch('actions.mouse.win32gui.IsWindow', return_value=True)
     @patch('actions.mouse.win32gui.ClientToScreen')
     def test_screen_to_client(self, mock_client_to_screen, mock_is_window):
