@@ -542,11 +542,12 @@ def init_state_machine_system(args, config):
         "common/ok.png",
         "common/quit.png"
     ]
-    enable_bread = True
-    for bf in bread_files:
-        if not os.path.exists(os.path.join("templates", bf)):
-            enable_bread = False
-            break
+    enable_bread = config.get("auto_bread", True)
+    if enable_bread:
+        for bf in bread_files:
+            if not os.path.exists(os.path.join("templates", bf)):
+                enable_bread = False
+                break
 
     if enable_bread:
         # 額外檢查收集按鈕，collect.png 或 bread_collection.png 必須至少存在一個
@@ -558,6 +559,8 @@ def init_state_machine_system(args, config):
     if enable_bread:
         cd_msg = "每 2 小時" if args.mode == "collect_only" else "每 30 分鐘"
         print(f"[*] 自動領體力功能: 啟用 (啟動時與{cd_msg}執行一次)")
+    elif not config.get("auto_bread", True):
+        print("[*] 自動領體力功能: 停用 (配置設定 auto_bread = false)")
     else:
         print("[*] 自動領體力功能: 停用 (缺少部分體力相關模板，已自動忽略)")
     print("=" * 60)
@@ -603,12 +606,14 @@ def init_state_machine_system(args, config):
 
 
 
-    if config["type"] in ["bag_clean", "blood_altar"]:
+    if config["type"] in ["bag_clean", "blood_altar"] or not config.get("auto_bread", True):
         state_machine.enable_bread = False
-        state_machine.need_diamond_collection = False
         state_machine.need_bread_collection = False
     else:
         state_machine.enable_bread = enable_bread
+
+    if not config.get("auto_diamond", True):
+        state_machine.need_diamond_collection = False
 
     print("[+] 初始化成功！請確認您的遊戲視窗非最小化，且維持在畫面上。")
     print("[+] 快捷鍵提示：在終端機或遊戲視窗按 [Ctrl + Space] 隨時暫停/繼續；按 [Ctrl + C] 終止程式。")

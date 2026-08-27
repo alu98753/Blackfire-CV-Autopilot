@@ -39,7 +39,7 @@ keep_colors = ["purple", "orange_yellow", "red"]
 
 [defaults.activities]
 auto_diamond = true
-auto_bread = true
+auto_bread = true # true, false
 enable_lord_boss = true
 enable_dungeon = true
 enable_town_daily = true
