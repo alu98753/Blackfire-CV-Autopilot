@@ -527,6 +527,60 @@ class TestBehaviorPauseResume(unittest.TestCase):
         # 斷言：恢復後順利完成截圖
         self.assertEqual(execution_order, ["capture_start", "capture_done_img_mock_2"])
 
+    def test_is_game_window_hovered_detection(self):
+        """
+        【滑鼠游標懸停感知驗證】驗證 PauseController 能正確識別滑鼠是否懸停在目標遊戲視窗範圍內。
+        """
+        self.mock_capturer.get_hwnd.return_value = 0x1111
+        self.mock_capturer.get_window_rect.return_value = (100, 100, 500, 500)
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False)
+
+        # 1. 游標落在目標視窗內 (x=200, y=200)
+        with patch("ctypes.windll.user32.GetCursorPos", side_effect=lambda pt: setattr(pt._obj, 'x', 200) or setattr(pt._obj, 'y', 200) or True):
+            with patch("ctypes.windll.user32.WindowFromPoint", return_value=0x1111):
+                self.assertTrue(controller.is_game_window_hovered())
+                self.assertTrue(controller.is_target_window_active())
+
+        # 2. 游標落在目標視窗外 (x=800, y=800) 且非目標 HWND
+        with patch("ctypes.windll.user32.GetCursorPos", side_effect=lambda pt: setattr(pt._obj, 'x', 800) or setattr(pt._obj, 'y', 800) or True):
+            with patch("ctypes.windll.user32.WindowFromPoint", return_value=0x9999):
+                with patch("ctypes.windll.user32.GetForegroundWindow", return_value=0x9999):
+                    self.assertFalse(controller.is_game_window_hovered())
+                    self.assertFalse(controller.is_target_window_active())
+
+    def test_dual_instance_hover_isolation(self):
+        """
+        【雙開實例懸停隔離驗證】模擬兩隻腳本同時運行（實例 1: 本機 0x1111，實例 2: 沙盒 0x2222）。
+        驗證當滑鼠懸停於沙盒視窗上方按 Ctrl+Space 時，只有沙盒實例切換暫停，本機實例不受影響。
+        """
+        capturer_native = MagicMock()
+        capturer_native.get_hwnd.return_value = 0x1111
+        capturer_native.get_window_rect.return_value = (0, 0, 800, 600)
+
+        capturer_sandbox = MagicMock()
+        capturer_sandbox.get_hwnd.return_value = 0x2222
+        capturer_sandbox.get_window_rect.return_value = (800, 0, 1600, 600)
+
+        on_toggle_native = MagicMock()
+        on_toggle_sandbox = MagicMock()
+
+        ctrl_native = PauseController(capturer=capturer_native, start_thread=False, on_toggle=on_toggle_native)
+        ctrl_sandbox = PauseController(capturer=capturer_sandbox, start_thread=False, on_toggle=on_toggle_sandbox)
+
+        # 模擬滑鼠位於沙盒視窗上 (x=1000, y=300) 且按下 Ctrl + Space
+        with patch("ctypes.windll.user32.GetCursorPos", side_effect=lambda pt: setattr(pt._obj, 'x', 1000) or setattr(pt._obj, 'y', 300) or True):
+            with patch("ctypes.windll.user32.WindowFromPoint", return_value=0x2222):
+                with patch("ctypes.windll.user32.GetForegroundWindow", return_value=0x2222):
+                    with patch("ctypes.windll.user32.GetAsyncKeyState", side_effect=lambda vk: 0x8000 if vk in (VK_CONTROL, VK_SPACE) else 0):
+                        now = time.time()
+                        # 觸發兩邊的 poll_once
+                        ctrl_native._poll_once(now)
+                        ctrl_sandbox._poll_once(now)
+
+        # 斷言：只有沙盒實例觸發了 toggle，本機實例完全沒動作
+        on_toggle_native.assert_not_called()
+        on_toggle_sandbox.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
