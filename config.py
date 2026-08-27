@@ -11,6 +11,7 @@ from utils.config_manager import JsonConfigManager, TomlConfigManager
 
 
 WINDOW_TITLE = "Blackfire Crusade"
+STEAM_APP_ID = "1765770"
 CONFIG_DIR = Path(__file__).with_name("config")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
 LOCAL_CONFIG_PATH = CONFIG_DIR / "local.toml"
