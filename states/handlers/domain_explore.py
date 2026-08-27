@@ -32,7 +32,7 @@ class DomainExploreHandler(BaseStateHandler):
             self._init_strategy()
 
         # 1. 背包滿全域防護攔截
-        if self._check_bag_full(screen_img):
+        if self._check_bag_full(screen_img, rect):
             return
 
         # 2. 優先檢查是否已經進入戰鬥畫面 (common/auto.png)
@@ -64,19 +64,32 @@ class DomainExploreHandler(BaseStateHandler):
 
         logging.debug("⌛ [領地探索] 等待主場景探索按鈕或事件加載中...")
 
-    def _check_bag_full(self, screen_img) -> bool:
+    def _check_bag_full(self, screen_img, rect) -> bool:
         """檢查背包是否已滿"""
-        if self.machine.need_bag_cleaning:
-            logging.info("🎒 [領地探索] 偵測到需要整理背包，轉移至 BACKPACK_FULL_SORTING。")
-            self.machine.transition_to(self.machine.STATE_BACKPACK_FULL_SORTING)
-            return True
-
+        # 1. 畫面上實際存在背包已滿彈窗 (backpack_full.png)
         if os.path.exists(os.path.join("templates", "backpack_full.png")):
             pos_bf, conf_bf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
             if pos_bf:
                 logging.warning(f"🎒 [領地探索] 畫面上出現背包已滿彈窗 (信心度: {conf_bf:.4f})，轉移至 BACKPACK_FULL_SORTING。")
                 self.machine.transition_to(self.machine.STATE_BACKPACK_FULL_SORTING)
                 return True
+
+        # 2. 若先前已標記 need_bag_cleaning == True (分選完成需回城清理)
+        if self.machine.need_bag_cleaning:
+            for exit_btn in ["domains/common/exit_to_lobby.png", "goback_town.png", "common/quit.png"]:
+                if os.path.exists(os.path.join("templates", exit_btn)):
+                    pos_exit, conf_exit = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
+                    if pos_exit:
+                        logging.info(f"🎒 [領地探索] 背包已滿需回城清理，偵測到退場按鈕 [{exit_btn}] (信心度: {conf_exit:.4f})，點擊退出領地...")
+                        self.click_and_wait_until_gone(exit_btn, rect["left"] + pos_exit[0], rect["top"] + pos_exit[1], rect)
+                        self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                        return True
+
+            # 若畫面未找到 exit_to_lobby (可能已在領地選單)，轉移至 NAVIGATING
+            logging.info("🎒 [領地探索] 需回城清理背包，轉移至 STATE_NAVIGATING 尋路回城。")
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return True
+
         return False
 
     def _check_battle_entry(self, screen_img) -> bool:

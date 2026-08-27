@@ -160,21 +160,51 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.transition_to.assert_called_with("BATTLE")
 
     # =========================================================================
-    # 5. 背包已滿攔截測試
+    # 5. 背包已滿攔截與退場測試
     # =========================================================================
 
-    def test_backpack_full_interception(self):
+    def test_backpack_full_popup_transfers_to_sorting(self):
         """
-        Given: 處於 STATE_DOMAIN_EXPLORE，need_bag_cleaning=True 或偵測到 backpack_full
+        Given: 處於 STATE_DOMAIN_EXPLORE，畫面出現背包已滿彈窗 (backpack_full.png)
         When: 執行 DomainExploreHandler.handle()
-        Then: 攔截並轉移至 STATE_BACKPACK_FULL_SORTING
+        Then: 攔截並轉移至 STATE_BACKPACK_FULL_SORTING 進行就地分選
+        """
+        mock_img = MagicMock()
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "backpack_full.png":
+                return ((960, 200), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            self.handler.handle(mock_img, self.rect)
+
+        self.mock_machine.transition_to.assert_called_with("BACKPACK_FULL_SORTING")
+
+    def test_need_bag_cleaning_exits_to_lobby_and_navigates(self):
+        """
+        Given: 處於 STATE_DOMAIN_EXPLORE，無彈窗但已標記 need_bag_cleaning = True
+        When: 執行 DomainExploreHandler.handle()
+        Then: 偵測到 exit_to_lobby.png 並點擊退場，轉移至 STATE_NAVIGATING
         """
         mock_img = MagicMock()
         self.mock_machine.need_bag_cleaning = True
 
-        self.handler.handle(mock_img, self.rect)
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "domains/common/exit_to_lobby.png":
+                return ((100, 100), 0.85)
+            return (None, 0.0)
 
-        self.mock_machine.transition_to.assert_called_with("BACKPACK_FULL_SORTING")
+        self.mock_machine.matcher.match.side_effect = fake_match
+        self.handler.click_and_wait_until_gone = MagicMock()
+
+        with patch("os.path.exists", return_value=True):
+            self.handler.handle(mock_img, self.rect)
+
+        self.handler.click_and_wait_until_gone.assert_called()
+        self.mock_machine.transition_to.assert_called_with("NAVIGATING")
 
     # =========================================================================
     # 6. 戰鬥結算回歸探索測試

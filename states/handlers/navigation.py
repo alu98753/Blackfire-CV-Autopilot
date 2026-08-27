@@ -223,9 +223,9 @@ class NavigationHandler(BaseStateHandler):
             time.sleep(0.5)
             return
 
-        # 領地主場景優先判定：若畫面上已經出現領地探索按鈕，說明已進入領地，轉移狀態至 DOMAIN_EXPLORE
+        # 領地主場景優先判定：若未標記清理背包且畫面上已經出現領地探索按鈕，說明已進入領地，轉移狀態至 DOMAIN_EXPLORE
         domain_explore_btn = "domains/golden_empire/explore_btn.png"
-        if os.path.exists(os.path.join("templates", domain_explore_btn)):
+        if not self.machine.need_bag_cleaning and os.path.exists(os.path.join("templates", domain_explore_btn)):
             pos_de, conf_de = self.matcher.match(screen_img, domain_explore_btn, threshold=0.80)
             if pos_de:
                 logging.info(f"🧭 尋路成功！偵測到領地探索按鈕 [{domain_explore_btn}] (信心度: {conf_de:.4f})，已進入領地，狀態轉移至 DOMAIN_EXPLORE。")
@@ -240,11 +240,11 @@ class NavigationHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
                 return
 
-            for back_btn in ["exit_battle.png", "goback_town.png"]:
+            for back_btn in ["domains/common/exit_to_lobby.png", "exit_battle.png", "goback_town.png"]:
                 if os.path.exists(os.path.join("templates", back_btn)):
                     pos_b, conf_b = self.matcher.match(screen_img, back_btn, threshold=0.8)
                     if pos_b:
-                        logging.info(f"🎒 尋路中：需要清理背包，點擊回城按鈕 [{back_btn}] 退回城鎮。")
+                        logging.info(f"🎒 尋路中：需要清理背包，點擊回城/退場按鈕 [{back_btn}] 退回城鎮。")
                         self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                         time.sleep(0.1)
                         return
