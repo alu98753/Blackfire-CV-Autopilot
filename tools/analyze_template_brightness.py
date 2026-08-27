@@ -8,6 +8,8 @@ def save_diagnostic_images(screen_img, template_img, top_left, temp_w, temp_h, m
     """
     畫紅框標記並保存全螢幕與切片診斷圖片，方便調試。
     """
+    if screen_img is None or not hasattr(screen_img, "copy"):
+        return None, None
     base = os.path.splitext(os.path.basename(template_name))[0]
     marked_screen = screen_img.copy()
     cv2.rectangle(marked_screen, top_left, (top_left[0] + temp_w, top_left[1] + temp_h), (0, 0, 255), 3)

@@ -98,7 +98,7 @@ class TemplateMatcher:
                 try:
                     from tools.analyze_template_brightness import save_diagnostic_images
                     save_diagnostic_images(
-                        None, None, (best_raw[0], best_raw[1]),
+                        screen_gray, template_gray, (best_raw[0], best_raw[1]),
                         temp_w, temp_h, best_raw[2], best_raw[3], template_name
                     )
                 except Exception as e:
