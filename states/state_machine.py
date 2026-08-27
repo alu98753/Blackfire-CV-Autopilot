@@ -2,6 +2,7 @@ import time
 import os
 import cv2
 import logging
+import threading
 from config import GAME_CONFIGS, normalize_config
 from states.handlers import (
     NavigationHandler,
@@ -28,6 +29,9 @@ from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+_SHARED_OCR_READERS = {}
+_SHARED_OCR_LOCK = threading.Lock()
+
 class GameStateMachine:
     # 定義遊戲狀態
     STATE_UNKNOWN = "UNKNOWN"
@@ -53,7 +57,7 @@ class GameStateMachine:
 
 
     
-    def __init__(self, capturer, matcher, mouse):
+    def __init__(self, capturer, matcher, mouse, preload_ocr: bool = True):
         self.capturer = capturer
         self.matcher = matcher
         self.mouse = mouse
@@ -138,7 +142,8 @@ class GameStateMachine:
 
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"
-        self._ocr_reader = None
+        self._ocr_readers = _SHARED_OCR_READERS
+        self._ocr_lock = _SHARED_OCR_LOCK
         
         # 意外彈窗處置與 Watchdog 監控器元件 (來自 states.exceptions)
         self.stashed_state = None
@@ -148,6 +153,10 @@ class GameStateMachine:
         # 手動暫停與恢復 (Pause/Resume) 控制屬性
         self.is_paused = False
         self.pause_start_time = None
+
+        # EasyOCR 背景非同步預熱 (Background Warmup)
+        if preload_ocr:
+            self.preload_ocr_models()
 
 
 
@@ -315,22 +324,58 @@ class GameStateMachine:
     def dungeon_defeat_count(self, value):
         self.defeat_count = value
 
-    def get_ocr_reader(self, lang_list=None):
+    def preload_ocr_models(self, lang_list=None, async_mode: bool = True):
         """
-        延遲載入並取得 EasyOCR 讀取器實例，預設載入繁體中文與英文 ['ch_tra', 'en']。
+        在背景守護執行緒 (Daemon Thread) 或同步預載 EasyOCR 辨識模型，避免於遊戲主迴圈中產生 5~6 秒的卡頓。
+        若全域快取中已存在對應模型，則立即跳過，絕不重複建立背景執行緒。
         """
         if lang_list is None:
             lang_list = ['ch_tra', 'en']
-            
         key = "_".join(lang_list)
-        if not hasattr(self, "_ocr_readers"):
-            self._ocr_readers = {}
-            
-        if key not in self._ocr_readers:
-            import easyocr
-            logging.info(f"⚙️ 正在首次載入 EasyOCR 辨識模型 ({lang_list}) (使用 CPU)...")
-            self._ocr_readers[key] = easyocr.Reader(lang_list, gpu=False)
-        return self._ocr_readers[key]
+
+        # 快速路徑：若已載入過，直接返回
+        if key in _SHARED_OCR_READERS:
+            return None
+
+        def _worker():
+            try:
+                logging.info(f"⚙️ [OCR Preload] 正在背景預熱載入 EasyOCR 辨識模型 ({lang_list})...")
+                self.get_ocr_reader(lang_list)
+                logging.info("✅ [OCR Preload] EasyOCR 辨識模型預熱載入完成！")
+            except Exception as e:
+                logging.warning(f"⚠️ [OCR Preload] 背景預熱載入 EasyOCR 失敗 (後續調用時將重新嘗試): {e}")
+
+        if async_mode:
+            with _SHARED_OCR_LOCK:
+                if key in _SHARED_OCR_READERS:
+                    return None
+                t = threading.Thread(target=_worker, daemon=True, name="EasyOCRPreloadThread")
+                t.start()
+                return t
+        else:
+            _worker()
+            return None
+
+    def get_ocr_reader(self, lang_list=None):
+        """
+        執行緒安全地取得 EasyOCR 讀取器實例，預設載入繁體中文與英文 ['ch_tra', 'en']。
+        若模型尚未載入則現場載入並快取；若載入失敗則拋出例外 (Fail-Fast)。
+        """
+        if lang_list is None:
+            lang_list = ['ch_tra', 'en']
+
+        key = "_".join(lang_list)
+
+        with _SHARED_OCR_LOCK:
+            if key not in _SHARED_OCR_READERS:
+                try:
+                    import easyocr
+                    logging.info(f"⚙️ 正在載入 EasyOCR 辨識模型 ({lang_list}) (使用 CPU)...")
+                    _SHARED_OCR_READERS[key] = easyocr.Reader(lang_list, gpu=False)
+                except Exception as e:
+                    logging.error(f"❌ [OCR] 無法載入 EasyOCR 辨識模型: {e}")
+                    raise RuntimeError(f"EasyOCR 辨識模型載入失敗: {e}") from e
+            return _SHARED_OCR_READERS[key]
 
 
 
@@ -1005,7 +1050,7 @@ class GameStateMachine:
                 if self.quest_scheduler:
                     try:
                         recognized_title = self.quest_scheduler.process_task_complete_banner(
-                            screen_img, cached_pos, ocr_reader=self._ocr_reader
+                            screen_img, cached_pos, ocr_reader=self.get_ocr_reader
                         )
                         if recognized_title:
                             logging.info(f"✅ [Phase 2: OCR_RECOGNIZE] 第 {attempt} 次 Match/辨識成功核銷任務: [{recognized_title}]。")
