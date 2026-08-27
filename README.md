@@ -148,17 +148,17 @@
 
 ### ⚡ 3. 戰鬥時鐘倍速與自動化設定器 (50x 極速秒殺)
 
-本專案提供專屬輔助工具 [set_battle_settings.py](meta_data/scripts/set_battle_settings.py)，可自由修改遊戲原生戰鬥主時鐘 (`battle_settings.save` ➔ `time_scale` 1.0x ~ 100.0x)：
+本專案提供專屬輔助工具 [set_battle_settings.py](scripts/set_battle_settings.py)，可自由修改遊戲原生戰鬥主時鐘 (`battle_settings.save` ➔ `time_scale` 1.0x ~ 100.0x)：
 
 ```powershell
 # 設定為 12 倍極速上限 (預設推薦，直接執行即可)
-.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py
+.\.venv\Scripts\python scripts/set_battle_settings.py
 
 # 自由指定任意倍速 (例如 6x 或 12x)
-.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 6
+.\.venv\Scripts\python scripts/set_battle_settings.py --speed 6
 
 # 還原為原廠 2.0x 正常倍速
-.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --reset
+.\.venv\Scripts\python scripts/set_battle_settings.py --reset
 ```
 
 > [!TIP]

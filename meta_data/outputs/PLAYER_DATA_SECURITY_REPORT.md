@@ -81,7 +81,7 @@ flowchart TD
 
 ```powershell
 # 1. 套用 50 倍戰鬥時鐘設定 (免重開遊戲即時生效)
-.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 50
+.\.venv\Scripts\python scripts/set_battle_settings.py --speed 50
 
 # 2. 啟動自動化掛機狀態機
 .\.venv\Scripts\python main.py --mode dungeon --backend
