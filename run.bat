@@ -31,11 +31,12 @@ echo  3. 貪婪地下城模式:                 --backend --mode dungeon
 echo  4. 普通關卡模式:                 --backend --mode stage
 echo  5. 背包整理模式:                 --backend --mode bag_clean
 echo  6. 定時領取體力與鑽石:           --backend --mode collect_only
-echo  7. Dev 城鎮子流程獨立測試:       --subflow 選單 (獨立測試單一建築)
-echo  8. 查看遊戲理智公約:             顯示防制衝動消費心態指引
+echo  7. 領地探索模式 (黃金古國):         --backend --mode golden_empire
+echo  8. Dev 城鎮子流程獨立測試:       --subflow 選單 (獨立測試單一建築)
+echo  9. 查看遊戲理智公約:             顯示防制衝動消費心態指引
 echo ------------------------------------------------------------
 echo 參數說明：
-echo  --mode [名稱]      : 設定運行主模式 (daily / mix / dungeon / stage)
+echo  --mode [名稱]      : 設定運行主模式 (daily / mix / dungeon / stage / golden_empire)
 echo  --subflow [子任務]  : 發起獨立子流程測試 (chest / blood_altar / lord_boss)
 echo  --backend          : 啟用後台點擊與截圖 (推薦)
 echo  --interval [秒]    : 偵測時間間隔 (預設: 0.5)
@@ -43,12 +44,12 @@ echo ============================================================
 echo.
 
 set "custom_args="
-set /p custom_args="請輸入選單編號 [1-8] 或自訂參數 (直接 Enter 預設為 1: Daily Master): "
+set /p custom_args="請輸入選單編號 [1-9] 或自訂參數 (直接 Enter 預設為 1: Daily Master): "
 
-if "%custom_args%"=="8" goto VIEW_COVENANT
+if "%custom_args%"=="9" goto VIEW_COVENANT
 if /i "%custom_args%"=="covenant" goto VIEW_COVENANT
 
-if "%custom_args%"=="7" goto SUBFLOW_MENU
+if "%custom_args%"=="8" goto SUBFLOW_MENU
 if /i "%custom_args%"=="subflow" goto SUBFLOW_MENU
 
 if "%custom_args%"=="1" set custom_args=--backend --mode daily
@@ -57,6 +58,7 @@ if "%custom_args%"=="3" set custom_args=--backend --mode dungeon
 if "%custom_args%"=="4" set custom_args=--backend --mode stage
 if "%custom_args%"=="5" set custom_args=--backend --mode bag_clean
 if "%custom_args%"=="6" set custom_args=--backend --mode collect_only
+if "%custom_args%"=="7" set custom_args=--backend --mode golden_empire
 
 if "%custom_args%"=="" set custom_args=--backend --mode daily
 
