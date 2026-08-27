@@ -517,7 +517,7 @@ def init_state_machine_system(args, config):
         for m in missing:
             print(f"    - templates/{m}")
         print("\n[!] 請先執行以下命令使用裁剪工具建立對應的模板圖片：")
-        print("    python crop_tool.py")
+        print("    python scripts/crop_tool.py")
         print("=" * 60)
         sys.exit(1)
 
@@ -552,16 +552,27 @@ def init_state_machine_system(args, config):
     # 初始化模組
     capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend)
     matcher = TemplateMatcher(templates_dir="templates", template_scale=1.0, auto_scale=True)
-    mouse = MouseController(human_like=True, backend_mode=args.backend)
-    
+    mouse = MouseController(human_like=True, backend_mode=args.backend, window_title=args.title,
+                            capturer=capturer)
+
     # 初始化狀態機
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
     state_machine.backend_mode = args.backend
     config = normalize_config(config)
-    # 建立滑鼠控制器與狀態機的關聯以支援防搶滑鼠保護
-    mouse.state_machine = state_machine
+    # Callback 接線：解耦 MouseController 與 GameStateMachine (Issue #11)
+    # 動作成功後通知 SM 重置卡死計數（告知而非詢問，單向依賴）
+    mouse._on_action_success = lambda: setattr(state_machine, 'consecutive_stuck_count', 0)
+    # 查詢 SM 暫停狀態，由上層提供查詢函式（依賴倒置）
+    mouse._is_paused_fn = lambda: getattr(state_machine, 'is_paused', False)
+    # 注入 threading.Event 門閥供底層動作進行原地定格 (Freeze-in-Place)
+    mouse._resume_event = state_machine.resume_event
+    capturer._resume_event = state_machine.resume_event
     state_machine.config = config
     state_machine.primary_config = config.copy()
+    state_machine.enable_runtime_config_refresh(
+        args.subflow[0] if getattr(args, "subflow", None) else args.mode,
+        config,
+    )
     daily_manager = DailyManager()
     state_machine.daily_manager = daily_manager
 
@@ -595,33 +606,39 @@ def init_state_machine_system(args, config):
 def run_main_loop(state_machine, interval):
     try:
         import pyautogui
-        state_machine.prev_mouse_pos = pyautogui.position()
-        pause_controller = PauseController(capturer=getattr(state_machine, "capturer", None))
+        def on_pause_toggle():
+            if state_machine.is_paused:
+                pause_duration = state_machine.resume()
+                state_machine.prev_mouse_pos = pyautogui.position()
+                print("\n" + "=" * 60)
+                print(f" ▶️ [RESUMED] 腳本已恢復掛機 (已補償內部防卡死計時器: {pause_duration:.1f} 秒)")
+                print(f" 👉 繼續執行狀態: [{state_machine.current_state}]")
+                print("=" * 60 + "\n", flush=True)
+            else:
+                state_machine.pause()
+                print("\n" + "=" * 60)
+                print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
+                print(f" 👉 在終端機或遊戲視窗 按 [Ctrl + Space] 隨時暫停/繼續 即可恢復自動掛機...")
+                print("=" * 60 + "\n", flush=True)
+
+        pause_controller = PauseController(
+            capturer=getattr(state_machine, "capturer", None),
+            on_toggle=on_pause_toggle
+        )
         
         while True:
             start_time = time.time()
             
-            # 1. 優先檢測熱鍵暫停/繼續切換 (支援 Ctrl+Space / Triple-Space 可插拔策略)
-            if pause_controller.check_toggle_triggered():
-                if state_machine.is_paused:
-                    pause_duration = state_machine.resume()
-                    state_machine.prev_mouse_pos = pyautogui.position()
-                    print("\n" + "=" * 60)
-                    print(f" ▶️ [RESUMED] 腳本已恢復掛機 (已補償內部防卡死計時器: {pause_duration:.1f} 秒)")
-                    print(f" 👉 繼續執行狀態: [{state_machine.current_state}]")
-                    print("=" * 60 + "\n")
-                else:
-                    state_machine.pause()
-                    print("\n" + "=" * 60)
-                    print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
-                    print(f" 👉 在終端機或遊戲視窗 {pause_controller.get_trigger_hint()} 即可恢復自動掛機...")
-                    print("=" * 60 + "\n")
+            # 1. 檢測熱鍵事件標記 (若為非執行緒模式之備用輪詢)
+            if pause_controller.check_toggle_triggered() and not pause_controller._thread:
+                on_pause_toggle()
 
             # 2. 若處於手動暫停狀態，進入輕量休眠迴圈，跳過 step()
             if state_machine.is_paused:
                 time.sleep(0.05)
                 continue
 
+            state_machine.refresh_config_at_safe_point()
             state_machine.step()
             
             elapsed = time.time() - start_time

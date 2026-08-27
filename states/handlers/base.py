@@ -63,6 +63,8 @@ class BaseStateHandler:
         start_t = time.time()
         last_click_t = start_t
         while time.time() - start_t < timeout:
+            if hasattr(self.machine, "resume_event") and self.machine.resume_event:
+                self.machine.resume_event.wait()
             time.sleep(check_interval)
             if self.capturer:
                 fresh_img = self.capturer.capture(rect)

@@ -2,7 +2,9 @@ import time
 import os
 import cv2
 import logging
-from config import GAME_CONFIGS, normalize_config
+import threading
+from copy import deepcopy
+from config import GAME_CONFIGS, get_runtime_game_config, normalize_config, refresh_runtime_config
 from states.handlers import (
     NavigationHandler,
     LobbyHandler,
@@ -27,6 +29,9 @@ from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+_SHARED_OCR_READERS = {}
+_SHARED_OCR_LOCK = threading.Lock()
 
 class GameStateMachine:
     # 定義遊戲狀態
@@ -53,7 +58,7 @@ class GameStateMachine:
 
 
     
-    def __init__(self, capturer, matcher, mouse):
+    def __init__(self, capturer, matcher, mouse, preload_ocr: bool = True):
         self.capturer = capturer
         self.matcher = matcher
         self.mouse = mouse
@@ -100,6 +105,8 @@ class GameStateMachine:
         self.daily_manager = None
         self.config = {}
         self.primary_config = {}
+        self.runtime_config_key = None
+        self.runtime_config_overrides = {}
         self.pending_daily_reset_exit = False
 
 
@@ -138,16 +145,23 @@ class GameStateMachine:
 
         # 定義單一繼續模板路徑
         self.continue_template = "common/continue.png"
-        self._ocr_reader = None
+        self._ocr_readers = _SHARED_OCR_READERS
+        self._ocr_lock = _SHARED_OCR_LOCK
         
         # 意外彈窗處置與 Watchdog 監控器元件 (來自 states.exceptions)
         self.stashed_state = None
         self.stashed_context = {}
         self.exception_watchdog = ExceptionWatchdog(self)
 
-        # 手動暫停與恢復 (Pause/Resume) 控制屬性
+        # 手動暫停與恢復 (Pause/Resume) 控制屬性 (含 threading.Event 原地定格門閥)
         self.is_paused = False
         self.pause_start_time = None
+        self.resume_event = threading.Event()
+        self.resume_event.set()
+
+        # EasyOCR 背景非同步預熱 (Background Warmup)
+        if preload_ocr:
+            self.preload_ocr_models()
 
 
 
@@ -194,12 +208,11 @@ class GameStateMachine:
     def restore_stashed_state(self):
         """
         復原先前暫存之狀態與 context。若無暫存狀態則安全降級至 STATE_NAVIGATING。
-        並保留原卡死發生的 last_state_change 時間戳與 Watchdog 卡死記憶。
+        保留 Watchdog 連續卡死次數記憶，但由 transition_to 賦予全新寬限期 (Grace Period)。
         """
         if self.stashed_state:
             target = self.stashed_state
             logging.info(f"🔄 [StateRestore] 恢復原暫存狀態: {target}")
-            stashed_last_change = self.stashed_context.get("last_state_change") if isinstance(self.stashed_context, dict) else None
             if isinstance(self.stashed_context, dict) and "context" in self.stashed_context:
                 self.context = self.stashed_context["context"]
             self.stashed_state = None
@@ -214,8 +227,6 @@ class GameStateMachine:
                 if saved_stuck_state == target and saved_stuck_count > 0:
                     self.exception_watchdog.consecutive_stuck_count = saved_stuck_count
                     self.exception_watchdog.last_stuck_state = saved_stuck_state
-                if stashed_last_change and stashed_last_change > 0:
-                    self.last_state_change = stashed_last_change
             return True
         else:
             logging.warning("⚠️ [StateRestore] 無可恢復之暫存狀態，安全退避至 NAVIGATING")
@@ -224,16 +235,18 @@ class GameStateMachine:
 
     def pause(self):
         """
-        進入手動暫停狀態，記錄暫停起點時間。
+        進入手動暫停狀態，記錄暫停起點時間並阻斷底層動作門閥。
         """
         if not self.is_paused:
             self.is_paused = True
+            if hasattr(self, "resume_event") and self.resume_event:
+                self.resume_event.clear()
             self.pause_start_time = time.time()
             logging.info(f"⏸️ [StateMachine] 腳本已暫停，鎖定當前狀態: [{self.current_state}]。")
 
     def resume(self) -> float:
         """
-        退出手動暫停狀態，原子化執行內部安全/防卡死計時器補償。
+        退出手動暫停狀態，原子化執行內部安全/防卡死計時器補償並放行底層動作門閥。
         
         :return: pause_duration (暫停總秒數)
         """
@@ -244,6 +257,8 @@ class GameStateMachine:
                 self.compensate_internal_timers(pause_duration)
             self.is_paused = False
             self.pause_start_time = None
+            if hasattr(self, "resume_event") and self.resume_event:
+                self.resume_event.set()
             self.just_resumed_from_user = True
             logging.info(f"▶️ [StateMachine] 腳本已恢復運行 (已補償內部計時器 {pause_duration:.1f} 秒)。繼續執行狀態: [{self.current_state}]。")
         return pause_duration
@@ -318,22 +333,58 @@ class GameStateMachine:
     def dungeon_defeat_count(self, value):
         self.defeat_count = value
 
-    def get_ocr_reader(self, lang_list=None):
+    def preload_ocr_models(self, lang_list=None, async_mode: bool = True):
         """
-        延遲載入並取得 EasyOCR 讀取器實例，預設載入繁體中文與英文 ['ch_tra', 'en']。
+        在背景守護執行緒 (Daemon Thread) 或同步預載 EasyOCR 辨識模型，避免於遊戲主迴圈中產生 5~6 秒的卡頓。
+        若全域快取中已存在對應模型，則立即跳過，絕不重複建立背景執行緒。
         """
         if lang_list is None:
             lang_list = ['ch_tra', 'en']
-            
         key = "_".join(lang_list)
-        if not hasattr(self, "_ocr_readers"):
-            self._ocr_readers = {}
-            
-        if key not in self._ocr_readers:
-            import easyocr
-            logging.info(f"⚙️ 正在首次載入 EasyOCR 辨識模型 ({lang_list}) (使用 CPU)...")
-            self._ocr_readers[key] = easyocr.Reader(lang_list, gpu=False)
-        return self._ocr_readers[key]
+
+        # 快速路徑：若已載入過，直接返回
+        if key in _SHARED_OCR_READERS:
+            return None
+
+        def _worker():
+            try:
+                logging.info(f"⚙️ [OCR Preload] 正在背景預熱載入 EasyOCR 辨識模型 ({lang_list})...")
+                self.get_ocr_reader(lang_list)
+                logging.info("✅ [OCR Preload] EasyOCR 辨識模型預熱載入完成！")
+            except Exception as e:
+                logging.warning(f"⚠️ [OCR Preload] 背景預熱載入 EasyOCR 失敗 (後續調用時將重新嘗試): {e}")
+
+        if async_mode:
+            with _SHARED_OCR_LOCK:
+                if key in _SHARED_OCR_READERS:
+                    return None
+                t = threading.Thread(target=_worker, daemon=True, name="EasyOCRPreloadThread")
+                t.start()
+                return t
+        else:
+            _worker()
+            return None
+
+    def get_ocr_reader(self, lang_list=None):
+        """
+        執行緒安全地取得 EasyOCR 讀取器實例，預設載入繁體中文與英文 ['ch_tra', 'en']。
+        若模型尚未載入則現場載入並快取；若載入失敗則拋出例外 (Fail-Fast)。
+        """
+        if lang_list is None:
+            lang_list = ['ch_tra', 'en']
+
+        key = "_".join(lang_list)
+
+        with _SHARED_OCR_LOCK:
+            if key not in _SHARED_OCR_READERS:
+                try:
+                    import easyocr
+                    logging.info(f"⚙️ 正在載入 EasyOCR 辨識模型 ({lang_list}) (使用 CPU)...")
+                    _SHARED_OCR_READERS[key] = easyocr.Reader(lang_list, gpu=False)
+                except Exception as e:
+                    logging.error(f"❌ [OCR] 無法載入 EasyOCR 辨識模型: {e}")
+                    raise RuntimeError(f"EasyOCR 辨識模型載入失敗: {e}") from e
+            return _SHARED_OCR_READERS[key]
 
 
 
@@ -887,6 +938,35 @@ class GameStateMachine:
 
         self.config = new_config
 
+    def enable_runtime_config_refresh(self, mode_key, initial_config):
+        """Keep CLI and interactive selections while TOML defaults hot-reload."""
+        if mode_key not in GAME_CONFIGS:
+            return
+        self.runtime_config_key = mode_key
+        base_config = get_runtime_game_config(mode_key)
+        self.runtime_config_overrides = {
+            key: deepcopy(value)
+            for key, value in initial_config.items()
+            if base_config.get(key) != value
+        }
+
+    def refresh_config_at_safe_point(self):
+        """Apply a complete configuration only before a new loop iteration."""
+        if not self.runtime_config_key or not refresh_runtime_config():
+            return False
+        refreshed_primary = get_runtime_game_config(self.runtime_config_key)
+        refreshed_primary.update(deepcopy(self.runtime_config_overrides))
+        self.primary_config = refreshed_primary
+        if self.config and self.config.get("type") == refreshed_primary.get("type"):
+            runtime_flags = {
+                key: value for key, value in self.config.items()
+                if key.startswith("is_") or key == "backend_mode"
+            }
+            self.config = refreshed_primary.copy()
+            self.config.update(runtime_flags)
+        logging.info("[HotReload] refreshed running primary mode: %s", self.runtime_config_key)
+        return True
+
     def apply_mix_fallback_config(self):
         """
         當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
@@ -929,13 +1009,14 @@ class GameStateMachine:
         target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
         if target_task:
             if target_task.completed_count >= target_task.max_run_limit:
-                logging.warning(f"⚠️ [10次上限統一刪除] 懸賞任務 [{target_task.quest_title}] 已達到最多 {target_task.max_run_limit} 次戰鬥上限，強制將該任務從排程佇列與 JSON 中刪除！")
+                logging.warning(f"⚠️ [上限防呆強制刪除] 懸賞任務 [{target_task.quest_title}] 已達到最多 {target_task.max_run_limit} 次戰鬥上限，強制將該任務從排程佇列與 JSON 中刪除！")
                 self.quest_scheduler.tasks = [t for t in self.quest_scheduler.tasks if t != target_task]
                 if getattr(self, "daily_manager", None):
                     self.daily_manager.remove_accepted_quest(target_task.quest_title)
                 return self.check_and_advance_quest_target()
 
-            quest_cfg = target_task.to_config_dict()
+            base_cfg = getattr(self, "config", None) or getattr(self, "primary_config", None)
+            quest_cfg = target_task.to_config_dict(base_config=base_cfg)
             if hasattr(self, "backend_mode"):
                 quest_cfg["backend_mode"] = self.backend_mode
             self.set_config(quest_cfg)
@@ -959,6 +1040,8 @@ class GameStateMachine:
         start_t = time.time()
         last_click_t = start_t
         while time.time() - start_t < timeout:
+            if hasattr(self, "resume_event") and self.resume_event:
+                self.resume_event.wait()
             time.sleep(check_interval)
             if self.capturer:
                 fresh_img = self.capturer.capture(rect)
@@ -1007,7 +1090,7 @@ class GameStateMachine:
                 if self.quest_scheduler:
                     try:
                         recognized_title = self.quest_scheduler.process_task_complete_banner(
-                            screen_img, cached_pos, ocr_reader=self._ocr_reader
+                            screen_img, cached_pos, ocr_reader=self.get_ocr_reader
                         )
                         if recognized_title:
                             logging.info(f"✅ [Phase 2: OCR_RECOGNIZE] 第 {attempt} 次 Match/辨識成功核銷任務: [{recognized_title}]。")
@@ -1285,8 +1368,10 @@ class GameStateMachine:
             # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
             if self.quest_scheduler:
                 if self.quest_scheduler.is_all_completed():
-                    logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器")
+                    logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器並切換至退守模式")
                     self.quest_scheduler = None
+                    self.apply_mix_fallback_config()
+                    return False
                 else:
                     scheduled_node = self.check_and_advance_quest_target()
                     if scheduled_node:
@@ -1327,7 +1412,6 @@ class GameStateMachine:
         if self.is_in_collect_only_mode():
             return False
         return self.evaluate_next_activity()
-
 
 
 

@@ -4,12 +4,20 @@
 
 ---
 
-## 核心原則：AI Agent 4 大極簡原則 💡
+## 核心原則：AI Agent 5 大極簡原則 💡
 
-1. **「感知」與「決策」分離**：`Detector` 只負責觀察畫面並輸出狀態 (`SceneInfo`)，絕不觸發點擊；`Handler` 只根據狀態做決策，絕不現場比對畫面。
-2. **單一職責與 300 行警戒線**：一檔一職。任何檔案超過 300 行或出現非本檔職責之 `if` 分支時，必須主動提請重構抽離。
+1. **「感知」與「決策」分離 + 分層禁止反向依賴**：`Detector` 只負責觀察畫面並輸出狀態 (`SceneInfo`)，絕不觸發點擊；`Handler` 只根據狀態做決策，絕不現場比對畫面。
+   - **分層依賴方向**：`main` → `state_machine` → `handlers` → `actions/mouse`。依賴只能由上往下流。底層模組（如 `actions/mouse.py`）**嚴禁持有上層物件的直接引用**。若需跨層通知，必須使用 **callback 注入**，由上層在初始化時接線。
+2. **單一職責：檔案 300 行、方法 60 行、巢狀 3 層**：一檔一職。
+   - 任何檔案超過 **300 行**或出現非本檔職責之 `if` 分支時，必須主動提請重構抽離。
+   - 單一方法超過 **60 行**時，必須拆分為具名子步驟。
+   - `if` / `try` / `for` 的巢狀層數不得超過 **3 層**，超過時必須使用 Early Return 或 Extract Method。
 3. **狀態驅動，拒絕補釘**：面對新需求/彈窗，優先建立獨立 State 或子狀態機，絕不在主流程中增修 `if is_special_case` 補釘。
 4. **全局審視優先於局部編寫**：寫代碼前必須先審視既有架構，嚴禁無視模組邊界隨手插入跨層邏輯。
+5. **零容忍三害：Magic Number、Dead Code、DRY 違規**：
+   - **Magic Number/String 禁令**：任何在業務邏輯中出現的裸數字（如 `1920.0`）或裸字串（如 `"Blackfire Crusade"`），必須提取為 `config.py` 常數或類別常數，並附帶語意命名。
+   - **Dead Code 零容忍**：重構後遺留的無呼叫者方法、僅测試呼叫但生產環境無人用的方法、以及 try-except 中 except 與 try 執行完全相同邏輯的冗餘防穮代碼，必須在當次 PR 中主動清除。
+   - **DRY 三行即抄**：當相同或近似邏輯在兩處以上出現且超過 3 行時，必須抄取為共用私有方法或工具函式。複製貼上再微調是被禁止的。
 
 ---
 
@@ -60,12 +68,10 @@
 3. **測試執行與修復疊代流程 (Test Execution Efficiency)**：
    > [!IMPORTANT]
    > **測試執行三大精確規則**：
-   > 1. **僅修改測試檔案 (Test-Only Modification)**：**嚴禁執行全套測試！只精確執行該修改的測試檔案或方法** (例如: `.venv\Scripts\python -m unittest tests.test_xxx`)。
-   > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後才執行全套驗證。
-   > 3. **有修改核心程式碼 (Code Modification)**：修改 `states/`, `utils/`, `config.py` 或 `main.py` 時，**必須執行全套單元測試** (`.venv\Scripts\python -m unittest discover tests`)，確保全域無 Regression。
-   > 4. **開發與除錯階段動態切換規則 (Phase Transition Rule)**：
-   >    - **核心實作階段**：修改核心邏輯完畢後，執行全套測試確認全域零 Regression。
-   >    - **測試微調階段**：全套測試驗證後，若僅剩 `tests/` 底下的舊 Mock/斷言案例需要修復，**即刻判定進入「純測試除錯模式」，嚴禁再次發起全套測試！必須且只能精確執行正在修復的單一測試檔案**。
+   > 1. **日常開發與核心修改 (Daily Development & Behavioral Slicing)**：日常開發、修改核心代碼（`states/`, `utils/`, `config.py`, `main.py`）或微調邏輯時，**優先精準執行該業務領域的單元測試檔案** (例如: `.venv\Scripts\python -m unittest tests.test_behavior_xxx`)（耗時 0.5~5 秒），以取得即時反饋並快速迭代。
+   > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後再推進。
+   > 3. **全套測試執行時機 (Full Test Suite Execution)**：僅在 **Feature/Fix 分支開發收尾、準備 Commit 或準備合併回 `main` 前**，才發起全套單元測試 (`.venv\Scripts\python -m unittest discover tests`) 作為全域最終防護網。
+   > 4. **背景測試定時輪詢間隔 (Background Timer Interval)**：當全套測試於背景執行時，AI 的定時檢查計時器 (`schedule`) **統一設定為 60 秒 (1 分鐘)** (`DurationSeconds="60"`)，減少過於頻繁的進度輪詢與訊息干擾。
 
 
 4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
@@ -96,3 +102,20 @@
   2. **拋棄式探索腳本 (禁止 Track / 主動清理)**：回答臨時疑問或除錯產生的一次性查詢腳本（如 `inspect_*.py`, `query_*.py`, `temp_*.py`），應優先置於 `.gitignore` 的 `scratch/` 目錄，或在任務結束前**主動清理刪除**，嚴禁遺留雜亂檔案於 `meta_data/scripts/`。
 - **自主閉環與做完即回報原則 (End-to-End Delivery & Report)**：
   - AI 協同開發時，面對分析與文檔維護需求，必須主動完成「資料解析 ➔ 文檔精確更新 ➔ 工具腳本分類保留/臨時檔清理 ➔ 狀態核驗」，做到完整無缺漏後才回報給使用者。
+
+### 9. 座標體系一致性與共用工具規範 📐
+- **全鏈路統一 Client 座標系**：所有模組的座標傳遞與計算，統一使用 `GetClientRect` + `ClientToScreen` 的 Client 座標體系。**嚴禁混用 `GetWindowRect`**（包含外框，會導致 8px 偏移偽）。
+- **共用工具不重複實作**：
+  - 視窗控制代碼 (hwnd) 查詢統一使用 [`utils/window.py`](../utils/window.py) 的 `WindowHandle` 類別，禁止各模組自行實作。
+  - 跨模組共用的常數（視窗標題、基準解析度、安全區座標）統一定義於 [`config.py`](../config.py)。
+
+### 10. 提交前自審清單 (Pre-Commit Self-Review) ✅
+> [!IMPORTANT]
+> AI 在提交任何新增或修改的程式碼前，必須對照以下清單自審：
+
+1. ☐ 檔案中是否有裸數字或裸字串？→ 提取為 `config.py` 常數
+2. ☐ 是否有超過 3 行的重複邏輯？→ 抄取為共用方法
+3. ☐ 方法行數是否超過 60 行？巢狀是否超過 3 層？→ 拆分
+4. ☐ 是否有底層模組直接引用上層物件？→ 改為 callback 注入
+5. ☐ 是否有重構後遺留的無人呼叫方法？→ 當次刪除
+6. ☐ 座標計算是否統一使用 Client 座標系？→ 禁用 GetWindowRect

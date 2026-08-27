@@ -1,5 +1,11 @@
 import re
 import logging
+from config import (
+    QUEST_MAX_RUN_LIMIT,
+    QUEST_TARGET_COUNT,
+    QUEST_STAGE_BATCH_SIZE,
+    QUEST_DUNGEON_BATCH_SIZE
+)
 
 class TaskNode:
     """
@@ -8,10 +14,22 @@ class TaskNode:
     POLICY_DETERMINISTIC = "deterministic_count" # 可精準計數任務
     POLICY_BANNER_VERIFY = "banner_verify_only"  # 無法自動累計/僅憑彈窗核銷任務
 
-    BATCH_SIZE = 4       # 每 4 次戰鬥離場退回大廳/告示牌領獎
-    MAX_RUN_LIMIT = 10   # 最多打 10 次上限，避免極端情況無限卡關
+    BATCH_SIZE = QUEST_STAGE_BATCH_SIZE       # 每 4 次戰鬥離場退回大廳/告示牌領獎
+    MAX_RUN_LIMIT = QUEST_MAX_RUN_LIMIT       # 最多戰鬥次數上限 (預設 20 次)，避免極端情況無限卡關
 
-    def __init__(self, quest_title, mode_type, target_count=10, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC, batch_size=4, max_run_limit=10):
+    def __init__(
+        self,
+        quest_title,
+        mode_type,
+        target_count=QUEST_TARGET_COUNT,
+        dungeon_index=None,
+        stage_level=None,
+        sub_stage=None,
+        raw_desc="",
+        counting_policy=POLICY_DETERMINISTIC,
+        batch_size=QUEST_STAGE_BATCH_SIZE,
+        max_run_limit=QUEST_MAX_RUN_LIMIT
+    ):
         self.quest_title = quest_title
         self.mode_type = mode_type          # "dungeon", "stage", "ignored"
         self.target_count = target_count
@@ -26,12 +44,12 @@ class TaskNode:
 
     @property
     def is_completed(self):
-        # 達到上限 10 次自動視為完成防呆
-        return self.completed_count >= self.max_run_limit
+        # 達到目標次數或達到上限次數自動視為完成防呆
+        return (self.completed_count >= self.target_count) or (self.completed_count >= self.max_run_limit)
 
     def is_batch_completed(self):
         """
-        每滿 4 次 (4, 8) 或達到上限 10 次，觸發退出戰鬥返回城鎮/大廳領獎。
+        每滿 batch_size 次 (例如 4, 8) 或達到上限 max_run_limit 次，觸發退出戰鬥返回城鎮/大廳領獎。
         """
         if self.completed_count == 0:
             return False
@@ -54,9 +72,10 @@ class TaskNode:
     def to_config_dict(self, base_config=None):
         """
         將 TaskNode 轉換為 GameStateMachine 專用的 config 字典。
-        若傳入 base_config，自動傳承其中的裝備品質與獻祭偏好 (keep_colors, disassemble_colors, sacrifice_settings)。
+        若傳入 base_config，自動傳承其中的裝備品質與獻祭偏好 (keep_colors, disassemble_colors, sacrifice_settings, backend_mode 等)。
+        並自動透過 normalize_config 規範化各項全域活動開關 (如 enable_stage_farming, enable_dungeon)。
         """
-        from config import PRIMARY_MODES
+        from config import PRIMARY_MODES, normalize_config
         dungeon_entries = [
             "dungeons/Slime_entry.png",
             "dungeons/Ghost_entry.png",
@@ -92,7 +111,9 @@ class TaskNode:
                     cfg["disassemble_colors"] = base_config["disassemble_colors"]
                 if "sacrifice_settings" in base_config:
                     cfg["sacrifice_settings"] = base_config["sacrifice_settings"]
-            return cfg
+                if "backend_mode" in base_config:
+                    cfg["backend_mode"] = base_config["backend_mode"]
+            return normalize_config(cfg)
 
         if self.mode_type == "dungeon" and self.dungeon_index is not None:
             idx = self.dungeon_index
@@ -100,6 +121,7 @@ class TaskNode:
             dname = dungeon_names[idx] if 0 <= idx < len(dungeon_names) else "地下城"
             
             cfg = PRIMARY_MODES["dungeon"].copy()
+            cfg["enable_dungeon"] = True
             cfg["dungeon_index"] = idx
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
@@ -126,6 +148,7 @@ class TaskNode:
                 target_img = "stages/first_stage.png"
 
             cfg = PRIMARY_MODES["stage"].copy()
+            cfg["enable_stage_farming"] = True
             cfg["stage_level"] = lvl
             cfg["sub_stage"] = sub
             cfg["name"] = f"懸賞任務 - {sname} ({sub}) (任務: {self.quest_title})"
@@ -153,6 +176,7 @@ class TaskNode:
 
 import os
 import json
+from utils.config_manager import ConfigLoadError, JsonConfigManager
 
 DEFAULT_RULES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "quest_rules.json")
 
@@ -193,7 +217,7 @@ class QuestMapper:
     """
     def __init__(self, rules_file=None):
         self.rules_file = rules_file or DEFAULT_RULES_FILE
-        self._last_mtime = 0.0
+        self._rules_config = JsonConfigManager(self.rules_file)
         self.deterministic_quests = []
         self.banner_verify_quests = []
         self.ignored_quests = []
@@ -205,16 +229,13 @@ class QuestMapper:
         self.reload_if_modified(force=True)
 
     def reload_if_modified(self, force=False):
-        if not os.path.exists(self.rules_file):
-            raise ValueError(f"懸賞對照規則檔缺失: {self.rules_file}")
-
         try:
-            current_mtime = os.path.getmtime(self.rules_file)
-        except Exception as e:
-            raise ValueError(f"無法讀取懸賞對照規則檔修改時間: {e}")
+            was_reloaded = self._rules_config.reload_if_changed(force=force)
+            data = self._rules_config.snapshot()
+        except ConfigLoadError as error:
+            raise ValueError(str(error)) from error
 
-        if force or current_mtime > self._last_mtime:
-            data = load_rules_from_json(self.rules_file)
+        if force or was_reloaded:
             self.deterministic_quests = data.get("deterministic_quests", [])
             self.banner_verify_quests = data.get("banner_verify_quests", [])
             self.ignored_quests = data.get("ignored_quests", [])
@@ -256,7 +277,6 @@ class QuestMapper:
                 pol = policy_map.get(pol_str, TaskNode.POLICY_DETERMINISTIC)
                 self.stage_rules.append((pat, lvl, sub, pol))
 
-            self._last_mtime = current_mtime
 
     def normalize_quest_title(self, title):
         self.reload_if_modified()
@@ -374,8 +394,8 @@ class QuestMapper:
                     counting_policy=TaskNode.POLICY_BANNER_VERIFY
                 )
 
-        # 目標總次數固定預設為 10 次
-        target_count = 10
+        # 目標總次數預設由 QUEST_TARGET_COUNT (20) 控制
+        target_count = QUEST_TARGET_COUNT
 
         # 判定預設政策 (若在 BANNER_VERIFY_QUESTS 全名清單中)
         default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in self.banner_verify_quests else TaskNode.POLICY_DETERMINISTIC
@@ -394,15 +414,15 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="dungeon",
-                    target_count=10,
-                    batch_size=1,
-                    max_run_limit=10,
+                    target_count=QUEST_TARGET_COUNT,
+                    batch_size=QUEST_DUNGEON_BATCH_SIZE,
+                    max_run_limit=QUEST_MAX_RUN_LIMIT,
                     dungeon_index=dungeon_idx,
                     raw_desc=combined_text,
                     counting_policy=policy
                 )
 
-        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 10 次) (必須包含完整候選標題/專有名詞)
+        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 20 次) (必須包含完整候選標題/專有名詞)
         for rule in self.stage_rules:
             pattern = rule[0]
             stage_lvl = rule[1]
@@ -414,9 +434,9 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="stage",
-                    target_count=10,
-                    batch_size=4,
-                    max_run_limit=10,
+                    target_count=QUEST_TARGET_COUNT,
+                    batch_size=QUEST_STAGE_BATCH_SIZE,
+                    max_run_limit=QUEST_MAX_RUN_LIMIT,
                     stage_level=stage_lvl,
                     sub_stage=sub_stage,
                     raw_desc=combined_text,
@@ -428,5 +448,4 @@ class QuestMapper:
         # 5. 無法精確映射：未定義任務預設為 BANNER_VERIFY_QUESTS 防呆保護
         logging.warning(f"⚠️ 懸賞任務 '{title}' 無法對應到已知規則庫 (未定義任務)，回傳 None 紀錄至 unknown_quests。")
         return None
-
 

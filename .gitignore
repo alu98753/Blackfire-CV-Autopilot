@@ -12,6 +12,7 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+*.log
 
 # Ignore all png files by default
 *.png
@@ -42,6 +43,7 @@ scratch/
 # User runtime data & state persistence
 user_data/
 user_data_test_temp/
+config/local.toml
 /meta_datas.tres
 !meta_data/raw_tres/meta_datas.tres
 

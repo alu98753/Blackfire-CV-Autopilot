@@ -1,7 +1,4 @@
 import logging
-import sys
-import os
-import subprocess
 import time
 import ctypes
 import numpy as np
@@ -12,27 +9,34 @@ import win32ui
 import win32con
 from typing import Optional, Tuple, Dict, Any
 
+from config import WINDOW_TITLE
+from utils.window import WindowHandle
+
 
 class ScreenCapturer:
-    def __init__(self, window_title="Blackfire Crusade", backend_mode=False, monitor_index=1):
+    def __init__(self, window_title=WINDOW_TITLE, backend_mode=False, monitor_index=1, resume_event=None):
+        """
+        :param window_title:  遊戲視窗標題，預設讀取 config.WINDOW_TITLE。
+        :param backend_mode:  True 時使用後台截圖 (PrintWindow/BitBlt)，False 時使用前台 mss 截圖。
+        :param monitor_index: 目標顯示器索引（1-indexed，對應 win32api.EnumDisplayMonitors 回傳順序）。
+                              1 = 系統第一台顯示器（筆電主螢幕），2 = 外接第二台，以此類推。
+        :param resume_event:  全域通行門閥 (threading.Event)，暫停時於截圖前沿原地定格 (Freeze-in-Place)。
+        """
         # 已關閉 DPI Awareness 宣告以符合專案與使用者需求
         self.window_title = window_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
+        self._resume_event = resume_event
         self.sct = mss.MSS()
-        self._hwnd = None
+        self._window = WindowHandle(window_title)
         self.last_monitor = None
         self._backend_printwindow_supported = True
-        self._cached_phys_rect = None
-        self._cached_log_rect = None
 
     def get_hwnd(self):
         """
         取得遊戲視窗控制代碼 (HWnd)，包含防快取失效重查。
         """
-        if not self._hwnd or not win32gui.IsWindow(self._hwnd):
-            self._hwnd = win32gui.FindWindow(None, self.window_title)
-        return self._hwnd
+        return self._window.get()
 
     def get_window_rect(self, quiet: bool = False):
         """
@@ -71,7 +75,7 @@ class ScreenCapturer:
     def ensure_window_on_monitor(self, monitor_index: Optional[int] = None) -> bool:
         """
         將遊戲視窗自動移動並定位到指定的顯示器 (預設 self.monitor_index 筆電螢幕 1)。
-        修復邏輯：若視窗處於最大化狀態，必須先 SW_RESTORE 解除最大化，否則 Windows 禁止 SetWindowPos 跨顯示器移動！
+        修復邏輯：若視窗處於最大化或最小化狀態，必須先 SW_RESTORE 解除，否則 Windows 禁止 SetWindowPos 跨顯示器移動！
         移動後再調用 SW_MAXIMIZE 在目標顯示器上最大化全螢幕。
         """
         target_idx = monitor_index if monitor_index is not None else self.monitor_index
@@ -86,142 +90,117 @@ class ScreenCapturer:
 
             import win32api
             monitors = win32api.EnumDisplayMonitors(None, None)
-            if 0 < target_idx <= len(monitors):
-                hmon, _, _ = monitors[target_idx - 1]
-                info = win32api.GetMonitorInfo(hmon)
-                mon_rect = info["Monitor"]  # (left, top, right, bottom)
-                mon_l, mon_t = mon_rect[0], mon_rect[1]
-                mon_r, mon_b = mon_rect[2], mon_rect[3]
+            # Early Return 1：無效的 monitor_index（T4-D）
+            if not (0 < target_idx <= len(monitors)):
+                return False
 
-                w_left, w_top, w_right, w_bottom = win32gui.GetWindowRect(hwnd)
-                w_center_x = (w_left + w_right) // 2
-                w_center_y = (w_top + w_bottom) // 2
+            mon_rect = self._get_monitor_rect(monitors, target_idx)
+            is_on_target, is_zoomed, is_iconic = self._check_window_state(hwnd, mon_rect, target_idx)
 
-                is_on_target_mon = (mon_l <= w_center_x < mon_r) and (mon_t <= w_center_y < mon_b)
-                is_zoomed = bool(ctypes.windll.user32.IsZoomed(hwnd))
-                is_iconic = bool(ctypes.windll.user32.IsIconic(hwnd))
+            # Early Return 2：已在目標顯示器且已最大化，無需任何操作（T4-A）
+            if is_on_target and is_zoomed:
+                logging.info(f"✅ [ScreenCapturer] 遊戲視窗已在 Monitor {target_idx} 上且已處於最大化狀態。")
+                return True
 
-                logging.info(
-                    f"🔍 [ScreenCapturer Debug] 視窗 HWND: {hwnd}, 當前 Rect: ({w_left}, {w_top}, {w_right}, {w_bottom}), "
-                    f"中心點: ({w_center_x}, {w_center_y}), 已最大化: {is_zoomed} | "
-                    f"目標 Monitor {target_idx} 範圍: ({mon_l}, {mon_t})~({mon_r}, {mon_b}), 已在目標螢幕: {is_on_target_mon}"
-                )
+            logging.info(f"🚚 [ScreenCapturer] 執行跨螢幕傳送至 Monitor {target_idx} ({mon_rect[0]}, {mon_rect[1]})...")
 
-                if not is_on_target_mon or not is_zoomed:
-                    logging.info(f"🚚 [ScreenCapturer] 執行跨螢幕傳送至 Monitor {target_idx} ({mon_l}, {mon_t})...")
+            self._restore_if_needed(hwnd, is_zoomed, is_iconic)    # T4-C
+            self._move_to_monitor_if_needed(hwnd, mon_rect, target_idx)  # T4-B 不進此分支
+            self._maximize_window(hwnd)
+            return self._verify_on_monitor(hwnd, mon_rect, target_idx)
 
-                    # 1. 關鍵步驟：若目前處於最大化或最小化狀態，先 SW_RESTORE 解除
-                    if is_zoomed or is_iconic:
-                        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                        time.sleep(0.1)
-
-                    # 重新取得解小化後的實體視窗中心點
-                    w_left, w_top, w_right, w_bottom = win32gui.GetWindowRect(hwnd)
-                    w_center_x = (w_left + w_right) // 2
-                    w_center_y = (w_top + w_bottom) // 2
-                    is_on_target_mon = (mon_l <= w_center_x < mon_r) and (mon_t <= w_center_y < mon_b)
-
-                    # 2. 唯有當視窗「不在目標顯示器上」時，才發起 SetWindowPos 跨螢幕移動 (避免同一顯示器解小化時產生 10px 偏移抖動)
-                    if not is_on_target_mon:
-                        logging.info(f"🚚 [ScreenCapturer] 視窗不在 Monitor {target_idx}，執行 SetWindowPos 跨螢幕移動...")
-                        win32gui.SetWindowPos(
-                            hwnd,
-                            win32con.HWND_TOP,
-                            mon_l + 10,
-                            mon_t + 10,
-                            0,
-                            0,
-                            win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW
-                        )
-                        time.sleep(0.1)
-
-                    # 3. 搶佔前景焦點並直接在目標顯示器上最大化全螢幕 (0 位移平滑還原)
-                    try:
-                        ctypes.windll.user32.SetForegroundWindow(hwnd)
-                    except Exception:
-                        pass
-                    win32gui.ShowWindow(hwnd, win32con.SW_SHOWMAXIMIZED)
-                    time.sleep(0.15)
-
-                    # 雙重護欄：若仍未處於 IsZoomed 狀態，對 HWND 發送標題列最大化按鈕訊息 (WM_SYSCOMMAND, SC_MAXIMIZE)
-                    if not bool(ctypes.windll.user32.IsZoomed(hwnd)):
-                        logging.info("🔄 [ScreenCapturer] SW_SHOWMAXIMIZED 未即時生效，對視窗發送 SC_MAXIMIZE 標題列訊息強制最大化...")
-                        win32gui.SendMessage(hwnd, win32con.WM_SYSCOMMAND, win32con.SC_MAXIMIZE, 0)
-                        time.sleep(0.2)
-
-                    # 4. 驗證移動結果
-                    new_rect = win32gui.GetWindowRect(hwnd)
-                    new_center_x = (new_rect[0] + new_rect[2]) // 2
-                    new_center_y = (new_rect[1] + new_rect[3]) // 2
-                    new_on_target = (mon_l <= new_center_x < mon_r) and (mon_t <= new_center_y < mon_b)
-                    logging.info(f"🎉 [ScreenCapturer] 視窗傳送結果: 新 Rect: {new_rect}, 新中心: ({new_center_x}, {new_center_y}), 是否成功到達 Monitor {target_idx}: {new_on_target}")
-                    return new_on_target
-                else:
-                    logging.info(f"✅ [ScreenCapturer] 遊戲視窗已在 Monitor {target_idx} 上且已處於最大化狀態。")
-                    return True
         except Exception as e:
             logging.error(f"❌ 自動移動視窗至 Monitor {target_idx} 失敗: {e}", exc_info=True)
         return False
 
-    def get_logical_window_rect(self, phys_rect):
-        """
-        優先使用 Windows 原生 PhysicalToLogicalPointForWindow API 獲取 100% 精準的邏輯座標。
-        若 API 呼叫失敗，則退回使用 DPI Unaware 子進程快取方案。
-        """
-        if phys_rect is None:
-            return None
-            
-        hwnd = self.get_hwnd()
-        if hwnd:
-            try:
-                class POINT(ctypes.Structure):
-                    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
-                
-                pt_tl = POINT(phys_rect["left"], phys_rect["top"])
-                pt_br = POINT(phys_rect["left"] + phys_rect["width"], phys_rect["top"] + phys_rect["height"])
-                
-                res_tl = ctypes.windll.user32.PhysicalToLogicalPointForWindow(hwnd, ctypes.byref(pt_tl))
-                res_br = ctypes.windll.user32.PhysicalToLogicalPointForWindow(hwnd, ctypes.byref(pt_br))
-                
-                if res_tl and res_br:
-                    log_rect = {
-                        "left": pt_tl.x,
-                        "top": pt_tl.y,
-                        "width": pt_br.x - pt_tl.x,
-                        "height": pt_br.y - pt_tl.y
-                    }
-                    return log_rect
-            except Exception as e_api:
-                logging.debug(f"使用 PhysicalToLogicalPointForWindow API 轉換失敗: {e_api}")
+    # ── ensure_window_on_monitor 私有子方法 ────────────────────────────
 
-        # ⚡ 恢復舊版快取機制：若座標無變化，直接傳回快取結果避開 subprocess 開銷
-        if hasattr(self, "_cached_phys_rect") and self._cached_phys_rect == phys_rect:
-            if hasattr(self, "_cached_log_rect") and self._cached_log_rect is not None:
-                return self._cached_log_rect
+    def _get_monitor_rect(self, monitors, target_idx: int) -> Tuple:
+        """解析 EnumDisplayMonitors 回傳，取得目標顯示器的 (left, top, right, bottom)。"""
+        import win32api
+        hmon, _, _ = monitors[target_idx - 1]
+        info = win32api.GetMonitorInfo(hmon)
+        return info["Monitor"]  # (left, top, right, bottom)
 
-        # 🛡️ 補上新版保底容錯：預設等於 phys_rect
-        log_rect = phys_rect
+    def _check_window_state(self, hwnd, mon_rect: Tuple, target_idx: int):
+        """
+        取得視窗目前的位置狀態。
+        :return: (is_on_target_mon: bool, is_zoomed: bool, is_iconic: bool)
+        """
+        mon_l, mon_t, mon_r, mon_b = mon_rect
+        w_left, w_top, w_right, w_bottom = win32gui.GetWindowRect(hwnd)
+        w_center_x = (w_left + w_right) // 2
+        w_center_y = (w_top + w_bottom) // 2
+        is_on_target = (mon_l <= w_center_x < mon_r) and (mon_t <= w_center_y < mon_b)
+        is_zoomed = bool(ctypes.windll.user32.IsZoomed(hwnd))
+        is_iconic = bool(ctypes.windll.user32.IsIconic(hwnd))
+
+        logging.info(
+            f"🔍 [ScreenCapturer Debug] 視窗 HWND: {hwnd}, 當前 Rect: ({w_left}, {w_top}, {w_right}, {w_bottom}), "
+            f"中心點: ({w_center_x}, {w_center_y}), 已最大化: {is_zoomed} | "
+            f"目標 Monitor {target_idx} 範圍: ({mon_l}, {mon_t})~({mon_r}, {mon_b}), 已在目標螢幕: {is_on_target}"
+        )
+        return is_on_target, is_zoomed, is_iconic
+
+    def _restore_if_needed(self, hwnd, is_zoomed: bool, is_iconic: bool) -> None:
+        """若視窗處於最大化或最小化狀態，先 SW_RESTORE 解除，讓 SetWindowPos 可以跨螢幕移動。"""
+        if is_zoomed or is_iconic:
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            time.sleep(0.1)
+
+    def _move_to_monitor_if_needed(self, hwnd, mon_rect: Tuple, target_idx: int) -> None:
+        """
+        重新偵測視窗位置，唯有當視窗「不在目標顯示器上」時，才發起 SetWindowPos 跨螢幕移動。
+        避免同一顯示器解最小化時產生 10px 偏移抖動。
+        """
+        mon_l, mon_t, mon_r, mon_b = mon_rect
+        w_left, w_top, w_right, w_bottom = win32gui.GetWindowRect(hwnd)
+        w_center_x = (w_left + w_right) // 2
+        w_center_y = (w_top + w_bottom) // 2
+        is_still_off = not ((mon_l <= w_center_x < mon_r) and (mon_t <= w_center_y < mon_b))
+
+        if is_still_off:
+            logging.info(f"🚚 [ScreenCapturer] 視窗不在 Monitor {target_idx}，執行 SetWindowPos 跨螢幕移動...")
+            win32gui.SetWindowPos(
+                hwnd,
+                win32con.HWND_TOP,
+                mon_l + 10,
+                mon_t + 10,
+                0,
+                0,
+                win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW
+            )
+            time.sleep(0.1)
+
+    def _maximize_window(self, hwnd) -> None:
+        """搶佔前景焦點並 SW_SHOWMAXIMIZED；雙重護欄：若未即時生效，補發 SC_MAXIMIZE。"""
         try:
-            cmd = [
-                sys.executable,
-                "-c",
-                f"import win32gui; hwnd = win32gui.FindWindow(None, '{self.window_title}'); print(win32gui.GetWindowRect(hwnd)) if hwnd else print('None')"
-            ]
-            out = subprocess.check_output(cmd, timeout=0.8).decode().strip()
-            if out and out != "None":
-                val = eval(out)
-                log_rect = {
-                    "left": val[0],
-                    "top": val[1],
-                    "width": val[2] - val[0],
-                    "height": val[3] - val[1]
-                }
-        except Exception as e:
-            logging.debug(f"獲取邏輯座標失敗: {e}")
-            
-        self._cached_phys_rect = phys_rect
-        self._cached_log_rect = log_rect
-        return log_rect
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
+        win32gui.ShowWindow(hwnd, win32con.SW_SHOWMAXIMIZED)
+        time.sleep(0.15)
+
+        # 雙重護欄：若仍未處於 IsZoomed 狀態，對 HWND 發送標題列最大化按鈕訊息
+        if not bool(ctypes.windll.user32.IsZoomed(hwnd)):
+            logging.info("🔄 [ScreenCapturer] SW_SHOWMAXIMIZED 未即時生效，對視窗發送 SC_MAXIMIZE 強制最大化...")
+            win32gui.SendMessage(hwnd, win32con.WM_SYSCOMMAND, win32con.SC_MAXIMIZE, 0)
+            time.sleep(0.2)
+
+    def _verify_on_monitor(self, hwnd, mon_rect: Tuple, target_idx: int) -> bool:
+        """驗證移動結果，回傳視窗是否成功抵達目標顯示器。"""
+        mon_l, mon_t, mon_r, mon_b = mon_rect
+        new_rect = win32gui.GetWindowRect(hwnd)
+        new_cx = (new_rect[0] + new_rect[2]) // 2
+        new_cy = (new_rect[1] + new_rect[3]) // 2
+        success = (mon_l <= new_cx < mon_r) and (mon_t <= new_cy < mon_b)
+        logging.info(
+            f"🎉 [ScreenCapturer] 視窗傳送結果: 新 Rect: {new_rect}, 新中心: ({new_cx}, {new_cy}), "
+            f"是否成功到達 Monitor {target_idx}: {success}"
+        )
+        return success
+
+
 
     def _capture_backend(self, hwnd):
         """
@@ -281,6 +260,9 @@ class ScreenCapturer:
         擷取螢幕或指定區域，回傳 OpenCV 格式 (BGR) 影像。
         3 層備援截圖瀑布：後台 PrintWindow/BitBlt 優先 ➔ 前台 mss 備用 ➔ PIL ImageGrab 末線防護。
         """
+        if getattr(self, "_resume_event", None) is not None:
+            self._resume_event.wait()
+
         if full_screen:
             rect = None
 

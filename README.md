@@ -72,13 +72,13 @@
 3. **確認遊戲視窗**：
    開啟遊戲（必須保持前台可見，不能最小化），執行視窗偵測腳本：
    ```powershell
-   .\.venv\Scripts\python list_windows.py
+   .\.venv\Scripts\python scripts/list_windows.py
    ```
    確認輸出中包含遊戲視窗標題 `Blackfire Crusade`。
 4. **裁剪自定義範本圖片 (選用)**：
    若因解析度差異需重新裁剪模板，可執行模板裁剪工具：
    ```powershell
-   .\.venv\Scripts\python crop_tool.py
+   .\.venv\Scripts\python scripts/crop_tool.py
    ```
    * 程式倒數 5 秒後擷取視窗，在畫面上拖曳滑鼠框選按鈕，按 `Enter` 鍵確認選取，輸入檔名並儲存到 `templates/` 下的對應文件夾中。
 
@@ -148,17 +148,17 @@
 
 ### ⚡ 3. 戰鬥時鐘倍速與自動化設定器 (50x 極速秒殺)
 
-本專案提供專屬輔助工具 [set_battle_settings.py](meta_data/scripts/set_battle_settings.py)，可自由修改遊戲原生戰鬥主時鐘 (`battle_settings.save` ➔ `time_scale` 1.0x ~ 100.0x)：
+本專案提供專屬輔助工具 [set_battle_settings.py](scripts/set_battle_settings.py)，可自由修改遊戲原生戰鬥主時鐘 (`battle_settings.save` ➔ `time_scale` 1.0x ~ 100.0x)：
 
 ```powershell
 # 設定為 12 倍極速上限 (預設推薦，直接執行即可)
-.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py
+.\.venv\Scripts\python scripts/set_battle_settings.py
 
 # 自由指定任意倍速 (例如 6x 或 12x)
-.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --speed 6
+.\.venv\Scripts\python scripts/set_battle_settings.py --speed 6
 
 # 還原為原廠 2.0x 正常倍速
-.\.venv\Scripts\python meta_data/scripts/set_battle_settings.py --reset
+.\.venv\Scripts\python scripts/set_battle_settings.py --reset
 ```
 
 > [!TIP]

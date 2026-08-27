@@ -471,8 +471,10 @@ class TestBehavioralScenarios(unittest.TestCase):
           1. 應拒絕執行動作（立即回傳 False），且不呼叫 pyautogui.moveTo。
         """
         from actions.mouse import MouseController
-        controller = MouseController(human_like=False)
-        controller.state_machine = self.state_machine
+        controller = MouseController(
+            human_like=False,
+            is_paused_fn=lambda: getattr(self.state_machine, 'is_paused', False)
+        )
         
         # 模擬狀態機處於手動暫停
         self.state_machine.is_paused = True
@@ -493,8 +495,10 @@ class TestBehavioralScenarios(unittest.TestCase):
         [行為場景 9] 狀態機恢復後，滑鼠控制器正常恢復點擊能力。
         """
         from actions.mouse import MouseController
-        controller = MouseController(human_like=False)
-        controller.state_machine = self.state_machine
+        controller = MouseController(
+            human_like=False,
+            is_paused_fn=lambda: getattr(self.state_machine, 'is_paused', False)
+        )
         
         self.state_machine.is_paused = False
         self.state_machine.user_operating = False
@@ -1171,8 +1175,12 @@ class TestBehavioralScenarios(unittest.TestCase):
           2. 呼叫 mouse.scroll() ➔ consecutive_stuck_count 應重置為 0。
         """
         from actions.mouse import MouseController
-        real_mouse = MouseController(human_like=False)
-        real_mouse.state_machine = self.state_machine
+        real_mouse = MouseController(
+            human_like=False,
+            # Callback 接線 (Issue #11)：動作成功後通知 SM 重置卡死計數
+            on_action_success=lambda: setattr(self.state_machine, 'consecutive_stuck_count', 0),
+            is_paused_fn=lambda: getattr(self.state_machine, 'is_paused', False),
+        )
         
         self.state_machine.user_operating = False
 
@@ -1192,6 +1200,7 @@ class TestBehavioralScenarios(unittest.TestCase):
             self.state_machine.consecutive_stuck_count = 10
             real_mouse.scroll(-800, 100, 100)
             self.assertEqual(self.state_machine.consecutive_stuck_count, 0)
+
 
     @patch('os.path.exists')
     def test_backpack_full_detection_threshold_override(self, mock_exists):

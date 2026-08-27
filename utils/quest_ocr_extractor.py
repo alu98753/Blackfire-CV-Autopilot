@@ -164,10 +164,19 @@ class QuestOCRExtractor:
         return extracted_names, comma_str
 
     def _ocr_crop(self, text_roi, crop_top_half=False):
-        if self.ocr_reader is None:
+        reader = self.ocr_reader
+        if callable(reader) and not hasattr(reader, "readtext"):
+            try:
+                reader = reader()
+            except Exception as e:
+                logging.error(f"調用 OCR Reader Factory 失敗: {e}")
+                reader = None
+
+        if reader is None:
             try:
                 import easyocr
-                self.ocr_reader = easyocr.Reader(['ch_tra', 'en'], gpu=False)
+                reader = easyocr.Reader(['ch_tra', 'en'], gpu=False)
+                self.ocr_reader = reader
             except Exception as e:
                 logging.error(f"無法載入 EasyOCR: {e}")
                 return ""
@@ -179,8 +188,7 @@ class QuestOCRExtractor:
             # 放大 2 倍以提升中文字元特徵清晰度
             scaled = cv2.resize(target_img, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
 
-
-            results = self.ocr_reader.readtext(scaled)
+            results = reader.readtext(scaled)
             if results:
                 texts = []
                 for res in results:

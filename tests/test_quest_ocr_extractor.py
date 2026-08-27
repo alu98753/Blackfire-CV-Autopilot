@@ -51,5 +51,22 @@ class TestQuestOCRExtractor(unittest.TestCase):
         self.assertTrue(len(schedule) > 0)
         self.assertEqual(schedule[0].quest_title, "清除野豬")
 
+    def test_extract_with_callable_factory(self):
+        """
+        測試傳入 factory 函式 (例如 state_machine.get_ocr_reader) 能被正確解構並執行。
+        """
+        mock_ocr_reader = MagicMock()
+        mock_ocr_reader.readtext.return_value = [([], "擊敗冰元素", 0.99)]
+        factory_func = lambda: mock_ocr_reader
+
+        extractor = QuestOCRExtractor(matcher=self.matcher, ocr_reader=factory_func)
+        dummy_img = cv2.imread(os.path.join(self.daily_task_dir, "quest_boar.png")) if os.path.exists(os.path.join(self.daily_task_dir, "quest_boar.png")) else None
+        if dummy_img is None:
+            import numpy as np
+            dummy_img = np.zeros((100, 200, 3), dtype=np.uint8)
+
+        res = extractor._ocr_crop(dummy_img)
+        self.assertEqual(res, "擊敗冰元素")
+
 if __name__ == "__main__":
     unittest.main()

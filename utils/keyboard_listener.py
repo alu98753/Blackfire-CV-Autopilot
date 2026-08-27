@@ -33,13 +33,15 @@ class PauseController:
         required_taps: int = 3,
         cadence_timeout_sec: float = 1.5,
         debounce_sec: float = 0.08,
-        start_thread: bool = True
+        start_thread: bool = True,
+        on_toggle=None
     ):
         self.capturer = capturer
         self.trigger_mode = trigger_mode
         self.required_taps = required_taps
         self.cadence_timeout_sec = cadence_timeout_sec
         self.debounce_sec = debounce_sec
+        self._on_toggle = on_toggle
 
         self.key_pressed = False
         self.last_press_time = 0.0
@@ -112,24 +114,32 @@ class PauseController:
 
     def is_console_window_active(self) -> bool:
         """
-        判定當前前景視窗是否為終端機視窗 (Console / Terminal / PowerShell / CMD)。
+        判定當前前景視窗是否為本腳本的終端機視窗 (Console / Windows Terminal)。
+        使用 GetConsoleWindow()、進程 PID 比對及視窗類別名過濾，拒絕模糊字串搜尋。
         """
         try:
             fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
             if not fg_hwnd:
                 return False
 
+            # 1. 直接 HWND 比對 (標準 Console Host 視窗)
             console_hwnd = self.get_console_hwnd()
             if console_hwnd and fg_hwnd == console_hwnd:
                 return True
 
-            length = ctypes.windll.user32.GetWindowTextLengthW(fg_hwnd)
-            if length > 0:
-                buff = ctypes.create_unicode_buffer(length + 1)
-                ctypes.windll.user32.GetWindowTextW(fg_hwnd, buff, length + 1)
-                title = buff.value.lower()
-                if any(k in title for k in ["cmd", "powershell", "terminal", "python", "掛機"]):
-                    return True
+            # 2. 進程 PID 比對 (檢查前景視窗是否為當前 Python 進程所屬)
+            current_pid = os.getpid()
+            fg_pid = ctypes.c_ulong()
+            ctypes.windll.user32.GetWindowThreadProcessId(fg_hwnd, ctypes.byref(fg_pid))
+            if fg_pid.value == current_pid:
+                return True
+
+            # 3. 視窗類別名精準比對 (專用終端機視窗類別，排除一般編輯器與瀏覽器)
+            class_buff = ctypes.create_unicode_buffer(256)
+            ctypes.windll.user32.GetClassNameW(fg_hwnd, class_buff, 256)
+            class_name = class_buff.value
+            if class_name in ("ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS"):
+                return True
 
             return False
         except Exception:
@@ -138,12 +148,14 @@ class PauseController:
     def is_game_window_active(self) -> bool:
         """
         判定當前前景視窗是否為遊戲視窗。
+        優先採用 capturer.hwnd 及其頂層 Root HWND 比對；無 capturer 時僅允許嚴格全名匹配。
         """
         try:
             fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
             if not fg_hwnd:
                 return False
 
+            # 1. 優先精確比對 Capturer 綁定之 HWND
             game_hwnd = self.get_game_hwnd()
             if game_hwnd:
                 if fg_hwnd == game_hwnd:
@@ -151,13 +163,16 @@ class PauseController:
                 fg_root = ctypes.windll.user32.GetAncestor(fg_hwnd, GA_ROOT)
                 if fg_root and fg_root == game_hwnd:
                     return True
+                # 若已有綁定 HWND 且比對不符合，直接拒絕，不進行標題比對
+                return False
 
+            # 2. 僅在無 Capturer 綁定 HWND 時，才進行嚴格全名比對 (精準全稱)
             length = ctypes.windll.user32.GetWindowTextLengthW(fg_hwnd)
             if length > 0:
                 buff = ctypes.create_unicode_buffer(length + 1)
                 ctypes.windll.user32.GetWindowTextW(fg_hwnd, buff, length + 1)
-                title = buff.value.lower()
-                if "blackfire" in title or "crusade" in title:
+                title = buff.value.strip().lower()
+                if title == "blackfire crusade" or title.startswith("blackfire crusade "):
                     return True
 
             return False
@@ -189,7 +204,9 @@ class PauseController:
                                 print(f"\r[*] [Ctrl + Space 觸發] 正在切換暫停/繼續狀態...                    \n", flush=True)
                             except Exception:
                                 pass
-                            return True
+                        if self._on_toggle:
+                            self._on_toggle()
+                        return True
         except Exception:
             pass
 
@@ -209,7 +226,9 @@ class PauseController:
                                 print(f"\r[*] [Ctrl + Space 觸發] 正在切換暫停/繼續狀態...                    \n", flush=True)
                             except Exception:
                                 pass
-                            return True
+                        if self._on_toggle:
+                            self._on_toggle()
+                        return True
                 else:
                     if not (ctrl_down and space_down):
                         self.key_pressed = False
@@ -240,6 +259,8 @@ class PauseController:
                     print(f"\r[*] [空白鍵 3/3 達成] 正在切換暫停/繼續狀態...                    \n", flush=True)
                 except Exception:
                     pass
+                if self._on_toggle:
+                    self._on_toggle()
                 return True
             else:
                 remaining = self.required_taps - self.tap_count

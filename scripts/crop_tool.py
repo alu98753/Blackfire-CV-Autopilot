@@ -13,6 +13,12 @@ import cv2
 import os
 import sys
 import time
+
+# 自動注入專案根目錄至 sys.path，確保在任意工作目錄下均能正確引用專案模組
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from capture.screen import ScreenCapturer
 
 def main():
@@ -31,8 +37,9 @@ def main():
     print(" 🎮 Blackfire Crusade 模板裁剪工具 🎮")
     print("=" * 60)
     
-    # 預期 templates 資料夾存在
-    os.makedirs("templates", exist_ok=True)
+    # 預期 templates 資料夾存在於專案根目錄
+    templates_dir = os.path.join(PROJECT_ROOT, "templates")
+    os.makedirs(templates_dir, exist_ok=True)
     
     # 初始化畫面擷取器
     target_title = "Blackfire Crusade"
@@ -47,7 +54,7 @@ def main():
         
         if rect is None:
             print(f"[!] 找不到 '{target_title}' 視窗！")
-            print("請確認遊戲已啟動，且視窗名稱無誤。您可以執行 list_windows.py 來列出所有視窗標題。")
+            print("請確認遊戲已啟動，且視窗名稱無誤。您可以執行 scripts/list_windows.py 來列出所有視窗標題。")
             sys.exit(1)
             
         print(f"[+] 成功定位視窗: '{rect['title']}'")
@@ -103,7 +110,7 @@ def main():
         elif not filename.endswith(".png"):
             filename += ".png"
             
-        save_path = os.path.join("templates", filename)
+        save_path = os.path.join(templates_dir, filename)
         dir_name = os.path.dirname(save_path)
         if dir_name and not os.path.exists(dir_name):
             os.makedirs(dir_name, exist_ok=True)

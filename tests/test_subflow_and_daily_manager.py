@@ -264,13 +264,13 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         matcher.match = MagicMock()
 
         # 情況 A: c_a = 0.75, c_b = 0.60 (優勢高於 0.02 且高於 0.70) ➔ is_a=True, is_b=False
-        matcher.match.side_effect = lambda img, temp, **kw: ((0, 0), 0.75) if temp == "temp_a" else (((0, 0), 0.60) if temp == "temp_b" else (None, 0.0))
+        matcher.match.side_effect = lambda img, temp, threshold, **kw: ((0, 0), 0.75) if temp == "temp_a" else (((0, 0), 0.60) if temp == "temp_b" else (None, 0.0))
         is_a, is_b, ca, cb = matcher.match_mutually_exclusive_tabs(None, "temp_a", "temp_b", margin=0.02, threshold=0.70)
         self.assertTrue(is_a)
         self.assertFalse(is_b)
 
         # 情況 B: c_a = 0.71, c_b = 0.70 (相差 0.01 低於 margin 0.02) ➔ is_a=False, is_b=False (不穩定保護)
-        matcher.match.side_effect = lambda img, temp, **kw: ((0, 0), 0.71) if temp == "temp_a" else (((0, 0), 0.70) if temp == "temp_b" else (None, 0.0))
+        matcher.match.side_effect = lambda img, temp, threshold, **kw: ((0, 0), 0.71) if temp == "temp_a" else (((0, 0), 0.70) if temp == "temp_b" else (None, 0.0))
         is_a, is_b, ca, cb = matcher.match_mutually_exclusive_tabs(None, "temp_a", "temp_b", margin=0.02, threshold=0.70)
         self.assertFalse(is_a)
         self.assertFalse(is_b)
@@ -794,5 +794,4 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
