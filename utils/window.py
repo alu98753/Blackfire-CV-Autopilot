@@ -67,35 +67,27 @@ def find_all_game_windows(keyword: str = WINDOW_TITLE) -> List[Dict[str, Any]]:
     return windows
 
 
+SANDBOX_WINDOW_TITLE = f"[#] {WINDOW_TITLE} [#]"
+
+
 def select_game_window(target: Optional[str] = None, auto_prompt: bool = True) -> Tuple[Optional[int], str]:
     """
-    依據傳入的 target 參數或提示使用者互動選擇目標遊戲視窗。
+    依據傳入的 target 參數或提示使用者互動選擇目標遊戲實例環境 (本機 vs 沙盒)。
     回傳: (hwnd, title)
     """
     windows = find_all_game_windows()
+    native_win = next((w for w in windows if not w["is_sandbox"]), None)
+    sandbox_win = next((w for w in windows if w["is_sandbox"]), None)
 
-    if not windows:
-        return None, WINDOW_TITLE
-
-    if len(windows) == 1 and not target:
-        w = windows[0]
-        return w["hwnd"], w["title"]
-
-    # 處理 target 參數指定
+    # 1. 處理 CLI 命令列 --target 參數明確指定
     if target:
         target_lower = target.strip().lower()
-        if target_lower in ["sandbox", "sandboxed", "box", "sb"]:
-            for w in windows:
-                if w["is_sandbox"]:
-                    return w["hwnd"], w["title"]
-        elif target_lower in ["native", "host", "main"]:
-            for w in windows:
-                if not w["is_sandbox"]:
-                    return w["hwnd"], w["title"]
-        elif target_lower.isdigit():
-            idx = int(target_lower) - 1
-            if 0 <= idx < len(windows):
-                return windows[idx]["hwnd"], windows[idx]["title"]
+        if target_lower in ["sandbox", "sandboxed", "box", "sb", "2"]:
+            hwnd = sandbox_win["hwnd"] if sandbox_win else None
+            return hwnd, (sandbox_win["title"] if sandbox_win else SANDBOX_WINDOW_TITLE)
+        elif target_lower in ["native", "host", "main", "1"]:
+            hwnd = native_win["hwnd"] if native_win else None
+            return hwnd, (native_win["title"] if native_win else WINDOW_TITLE)
         elif target_lower.startswith("0x"):
             try:
                 target_hwnd = int(target_lower, 16)
@@ -104,39 +96,59 @@ def select_game_window(target: Optional[str] = None, auto_prompt: bool = True) -
                         return w["hwnd"], w["title"]
             except ValueError:
                 pass
+        logging.warning(f"⚠️ 指定的目標 --target '{target}' 未匹配到已知選項，切換至互動選單...")
 
-        logging.warning(f"⚠️ 指定的目標 --target '{target}' 未匹配到任何實例，切換至選單選擇...")
-
-    # 若不需互動 prompt 則預設返回第一筆
+    # 若不需互動 prompt 則預設返回第一筆或本機實例
     if not auto_prompt:
-        return windows[0]["hwnd"], windows[0]["title"]
+        if native_win:
+            return native_win["hwnd"], native_win["title"]
+        elif sandbox_win:
+            return sandbox_win["hwnd"], sandbox_win["title"]
+        return None, WINDOW_TITLE
 
-    # CLI 互動選單
+    # 2. CLI 互動選單 (每次啟動時皆提示，預設為 1: 本機 Steam)
     print("\n" + "=" * 60)
-    print("[*] 偵測到多個 Blackfire Crusade 遊戲實例：")
+    print("[*] 請選擇要掛機的遊戲實例環境：")
     print("-" * 60)
-    for i, w in enumerate(windows, 1):
-        tag = "【沙盒 Steam】" if w["is_sandbox"] else "【本機 Steam】"
-        print(f"  [{i}] {tag} {w['title']}")
-        print(f"      -> PID: {w['pid']} | HWND: {hex(w['hwnd'])} | 解析度: {w['width']}x{w['height']}\n")
+
+    # 選項 1: 本機 Steam
+    if native_win:
+        nat_status = f"已在線 (PID: {native_win['pid']}, 解析度: {native_win['width']}x{native_win['height']})"
+    else:
+        nat_status = "未開啟 (啟動時將自動直連啟動)"
+    print(f"  [1] 【本機 Steam】 (預設)\n      -> 狀態: {nat_status}\n")
+
+    # 選項 2: 沙盒 Steam
+    if sandbox_win:
+        sb_status = f"已在線 (PID: {sandbox_win['pid']}, 解析度: {sandbox_win['width']}x{sandbox_win['height']})"
+    else:
+        sb_status = "未開啟 (啟動時將透過 Sandboxie 自動啟動)"
+    print(f"  [2] 【沙盒 Steam (Sandboxie)】\n      -> 狀態: {sb_status}\n")
     print("-" * 60)
 
     while True:
         try:
-            choice = input(f"請選擇要控制的遊戲視窗 (1-{len(windows)}) [預設 1]: ").strip()
-            if not choice:
-                selected = windows[0]
+            choice = input("請選擇目標實例 [1-2] (直接 Enter 預設為 1: 本機 Steam): ").strip()
+            if not choice or choice == "1":
+                hwnd = native_win["hwnd"] if native_win else None
+                title = native_win["title"] if native_win else WINDOW_TITLE
+                tag = "【本機 Steam】"
                 break
-            if choice.isdigit() and 1 <= int(choice) <= len(windows):
-                selected = windows[int(choice) - 1]
+            elif choice == "2":
+                hwnd = sandbox_win["hwnd"] if sandbox_win else None
+                title = sandbox_win["title"] if sandbox_win else SANDBOX_WINDOW_TITLE
+                tag = "【沙盒 Steam】"
                 break
-            print(f"輸入無效，請輸入 1 至 {len(windows)} 之間的數字。")
+            print("輸入無效，請輸入 1 (本機) 或 2 (沙盒)。")
         except (KeyboardInterrupt, EOFError):
-            print("\n已取消選擇，使用預設第一個視窗。")
-            selected = windows[0]
+            print("\n已取消選擇，使用預設本機 Steam。")
+            hwnd = native_win["hwnd"] if native_win else None
+            title = native_win["title"] if native_win else WINDOW_TITLE
+            tag = "【本機 Steam】"
             break
 
-    print(f"[+] 已選擇目標: [{selected['title']}] (PID: {selected['pid']}, HWND: {hex(selected['hwnd'])})")
+    h_str = f"HWND: {hex(hwnd)}" if hwnd else "將自動啟動"
+    print(f"[+] 已選擇目標實例: {tag} [{title}] ({h_str})")
     print("=" * 60 + "\n")
-    return selected["hwnd"], selected["title"]
+    return hwnd, title
 

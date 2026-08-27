@@ -45,14 +45,14 @@ class TestSelectGameWindow(unittest.TestCase):
 
     @patch("utils.window.find_all_game_windows", return_value=[])
     def test_select_window_none_found(self, _mock_find):
-        hwnd, title = select_game_window()
+        hwnd, title = select_game_window(auto_prompt=False)
         self.assertIsNone(hwnd)
         self.assertEqual(title, "Blackfire Crusade")
 
     @patch("utils.window.find_all_game_windows")
     def test_select_window_single_found(self, mock_find):
         mock_find.return_value = [self.mock_windows[0]]
-        hwnd, title = select_game_window()
+        hwnd, title = select_game_window(auto_prompt=False)
         self.assertEqual(hwnd, 0x1111)
         self.assertEqual(title, "Blackfire Crusade")
 
