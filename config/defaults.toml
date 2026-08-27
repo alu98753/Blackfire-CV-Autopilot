@@ -56,7 +56,8 @@ domain = "golden_empire"
 bread_cost = 3
 domain_max_defeat = 5
 flee_bosses = [
-    "domains/golden_empire/exception/golden_king.png"
+    "domains/golden_empire/exception/golden_king.png",
+    "domains/golden_empire/exception/elf_mythril_hag.png" # 直接加入新的png即可
 ]
 navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
 explore_priorities = ["domains/golden_empire/explore_btn.png"]
