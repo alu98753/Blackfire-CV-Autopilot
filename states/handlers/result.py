@@ -70,6 +70,18 @@ class ResultHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return True
 
+        # 0.1 優先檢查是否已回到領地主場景 (看到 explore_btn 代表戰鬥結算已結束並已回到領地)
+        cur_type = self.machine.config.get("type") if self.machine.config else None
+        if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
+            for d_btn in ["domains/golden_empire/explore_btn.png", "domains/common/exit_to_lobby.png"]:
+                if os.path.exists(os.path.join("templates", d_btn)):
+                    pos_d, conf_d = self.matcher.match(screen_img, d_btn, threshold=0.75, quiet=True)
+                    if pos_d:
+                        logging.info(f"👉 結算辨識：偵測到領地主場景特徵 [{d_btn}] (相似度: {conf_d:.4f})，戰鬥結算已結束並已回到領地，轉移至 DOMAIN_EXPLORE。")
+                        self.reset_state()
+                        self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+                        return True
+
         # =========================================================================
         # 步驟 1：結算初登場沉澱 (INIT_DELAY)
         # =========================================================================
@@ -235,6 +247,13 @@ class ResultHandler(BaseStateHandler):
                 return True
 
             # 3. 只有當 continue 與 confirm 均徹底消失，且終局按鈕 (retry/exit) 已顯現時，才轉移至 FINAL_MATCH
+            cur_type = self.machine.config.get("type") if self.machine.config else None
+            if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
+                logging.info("👉 [結算 Step 2] (領地模式) continue 已點擊完畢且消失，戰鬥結算順暢結束，轉移至 DOMAIN_EXPLORE！")
+                self.reset_state()
+                self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+                return True
+
             final_btn_found = self._check_final_buttons_exist(screen_img, should_exit_battle)
             if final_btn_found:
                 logging.info("👉 [結算 Step 2] 畫面上已無 continue/confirm，且終局按鈕 (retry/exit) 已顯現，確信 continue 階段結束，切換至 FINAL_MATCH！")
