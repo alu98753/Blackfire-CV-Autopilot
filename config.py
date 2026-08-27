@@ -16,6 +16,13 @@ GLOBAL_SETTINGS = {
     "default_backpack_full_max_scroll": 5,
 }
 
+# ==================== 每日懸賞任務執行限制設定 (Daily Quest Limits) ====================
+QUEST_MAX_RUN_LIMIT = 20       # 每日懸賞任務最多防呆戰鬥上限 (預設 20 次，避免極端情況無限卡關)
+QUEST_TARGET_COUNT = 20        # 每日懸賞任務預設目標次數 (預設 20 次)
+QUEST_STAGE_BATCH_SIZE = 4     # 普通關卡懸賞每滿 4 次戰鬥離場退回大廳/告示牌領獎
+QUEST_DUNGEON_BATCH_SIZE = 1   # 地下城懸賞每滿 1 次戰鬥離場進入冷卻領獎
+
+
 DUNGEON_NAMES = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
 DUNGEON_ENTRY_TEMPLATES = [
     "dungeons/Slime_entry.png",

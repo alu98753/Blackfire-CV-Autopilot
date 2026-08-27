@@ -415,6 +415,73 @@ class TestBehaviorPauseResume(unittest.TestCase):
         self.assertEqual(execution_order, ["waiting_start", "waiting_done"])
 
 
+    def test_pause_controller_instant_callback_triggers_state_machine_pause(self):
+        """
+        【即時回調定格驗證】驗證 PauseController 捕獲熱鍵時直接呼叫 on_toggle 回調，
+        使 state_machine 在背景執行緒中立即 pause() 並阻斷 resume_event，
+        進而使主執行緒正在執行的動作瞬間原地定格！
+        """
+        import threading
+        from actions.mouse import MouseController
+
+        mouse = MouseController(human_like=False, resume_event=self.state_machine.resume_event)
+        self.state_machine.resume_event.set()
+        self.assertFalse(self.state_machine.is_paused)
+
+        # 建立附帶 on_toggle 的 PauseController (非執行緒模式以便精確測試單步 poll)
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False, on_toggle=self.state_machine.toggle_pause)
+
+        # 模擬正在背景執行的滑鼠動作
+        execution_order = []
+
+        def worker_loop():
+            execution_order.append("step_1_done")
+            with patch.object(mouse, '_finalize_action', return_value=True):
+                with patch('pyautogui.moveTo'), patch('pyautogui.mouseDown'), patch('pyautogui.mouseUp'):
+                    mouse.click(100, 100) # 此動作應可正常通過
+            execution_order.append("step_2_entering")
+            with patch.object(mouse, '_finalize_action', return_value=True):
+                with patch('pyautogui.moveTo'), patch('pyautogui.mouseDown'), patch('pyautogui.mouseUp'):
+                    mouse.click(200, 200) # 此動作將在暫停後被阻斷定格
+            execution_order.append("step_2_finished")
+
+        # 觸發熱鍵暫停
+        with patch.object(controller, 'is_target_window_active', return_value=True):
+            with patch('ctypes.windll.user32.GetAsyncKeyState', side_effect=lambda vk: 0x8000 if vk in (VK_CONTROL, VK_SPACE) else 0):
+                controller._poll_once(time.time())
+
+        # 斷言：狀態機已被即時回調暫停，門閥已關閉
+        self.assertTrue(self.state_machine.is_paused)
+        self.assertFalse(self.state_machine.resume_event.is_set())
+
+        # 啟動 worker 執行緒
+        t = threading.Thread(target=worker_loop)
+        t.start()
+        time.sleep(0.05)
+
+        # 斷言：worker 在進入第 1 個動作時直接在 _wait_if_paused 定格
+        self.assertEqual(execution_order, ["step_1_done"])
+        self.assertTrue(t.is_alive())
+
+        # 模擬按鍵釋放 (key_pressed 復位)
+        with patch.object(controller, 'is_target_window_active', return_value=True):
+            with patch('ctypes.windll.user32.GetAsyncKeyState', return_value=0):
+                controller._poll_once(time.time() + 0.2)
+
+        # 再次觸發熱鍵恢復
+        with patch.object(controller, 'is_target_window_active', return_value=True):
+            with patch('ctypes.windll.user32.GetAsyncKeyState', side_effect=lambda vk: 0x8000 if vk in (VK_CONTROL, VK_SPACE) else 0):
+                controller._poll_once(time.time() + 1.0)
+
+        # 斷言：狀態機已恢復
+        self.assertFalse(self.state_machine.is_paused)
+        self.assertTrue(self.state_machine.resume_event.is_set())
+
+        t.join(timeout=1.0)
+        self.assertEqual(execution_order, ["step_1_done", "step_2_entering", "step_2_finished"])
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

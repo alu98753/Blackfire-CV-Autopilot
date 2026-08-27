@@ -236,7 +236,7 @@ class QuestScheduler:
             title = t.quest_title
             norm_title = normalize_quest_title(title)
             if norm_ocr == norm_title or title == ocr_text or norm_title == ocr_text or title == norm_ocr:
-                t.completed_count = t.target_count
+                t.completed_count = max(t.target_count, t.max_run_limit)
                 logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題精確相符) 已標記為完全完成！")
                 return t.quest_title
 
@@ -245,7 +245,7 @@ class QuestScheduler:
             title = t.quest_title
             norm_title = normalize_quest_title(title)
             if title in ocr_text or norm_title in norm_ocr or norm_ocr in norm_title:
-                t.completed_count = t.target_count
+                t.completed_count = max(t.target_count, t.max_run_limit)
                 logging.info(f"🎉 [懸賞排程器] 任務 [{t.quest_title}] (標題包含比對相符) 已標記為完全完成！")
                 return t.quest_title
 
@@ -262,7 +262,7 @@ class QuestScheduler:
                 best_match = t
 
         if best_match and best_ratio >= 0.85:
-            best_match.completed_count = best_match.target_count
+            best_match.completed_count = max(best_match.target_count, best_match.max_run_limit)
             logging.info(f"🎉 [懸賞排程器] 任務 [{best_match.quest_title}] (最高模糊相似度 {best_ratio:.2f} >= 0.85) 已標記為完全完成！")
             return best_match.quest_title
 

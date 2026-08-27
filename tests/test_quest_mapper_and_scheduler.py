@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.quest_mapper import QuestMapper, TaskNode
 from utils.quest_scheduler import QuestScheduler
+from config import QUEST_TARGET_COUNT, QUEST_MAX_RUN_LIMIT
 
 if sys.platform.startswith('win'):
     try:
@@ -144,7 +145,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         node1 = self.mapper.parse_quest("清除骷髏", "骷髏在戰場上肆虐...", "擊殺: 骷髏 x 10")
         self.assertEqual(node1.mode_type, "dungeon")
         self.assertEqual(node1.dungeon_index, 3)
-        self.assertEqual(node1.target_count, 10)
+        self.assertEqual(node1.target_count, QUEST_TARGET_COUNT)
         self.assertEqual(node1.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode dungeon --dungeon 4", node1.to_cli_args())
 
@@ -153,7 +154,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node2.mode_type, "stage")
         self.assertEqual(node2.stage_level, 6)
         self.assertEqual(node2.sub_stage, "first")
-        self.assertEqual(node2.target_count, 10)
+        self.assertEqual(node2.target_count, QUEST_TARGET_COUNT)
         self.assertEqual(node2.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode stage --stage 6 --sub first", node2.to_cli_args())
 
@@ -166,15 +167,15 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(node4.mode_type, "stage")
         self.assertEqual(node4.stage_level, 1)
         self.assertEqual(node4.sub_stage, "final")
-        self.assertEqual(node4.target_count, 10)
+        self.assertEqual(node4.target_count, QUEST_TARGET_COUNT)
         self.assertEqual(node4.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode stage --stage 1 --sub final", node4.to_cli_args())
 
-        # 5. 圖片 5: 史萊姆王的毀滅 (不確定 Boss 任務 -> POLICY_BANNER_VERIFY, 固定 10 次)
+        # 5. 圖片 5: 史萊姆王的毀滅 (不確定 Boss 任務 -> POLICY_BANNER_VERIFY, 固定 20 次)
         node5 = self.mapper.parse_quest("史萊姆王的毀滅", "在地下城黏糊糊的石窟最深處...", "擊殺: [史萊姆王] x 1")
         self.assertEqual(node5.mode_type, "dungeon")
         self.assertEqual(node5.dungeon_index, 0)
-        self.assertEqual(node5.target_count, 10)
+        self.assertEqual(node5.target_count, QUEST_TARGET_COUNT)
         self.assertEqual(node5.counting_policy, TaskNode.POLICY_BANNER_VERIFY)
         self.assertIn("--mode dungeon --dungeon 1", node5.to_cli_args())
 
@@ -225,22 +226,22 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         print(f"[動態排程 step 2] 指令: {cmd2} | 說明: {msg2}")
 
         # 模擬打完地下城 4 清除骷髏任務 (DETERMINISTIC_QUESTS 自動加算完成)
-        self.scheduler.record_kill_event(enemy_name="骷髏", dungeon_index=3, kill_count=10)
+        self.scheduler.record_kill_event(enemy_name="骷髏", dungeon_index=3, kill_count=QUEST_TARGET_COUNT)
 
         # 5. 第三次取得啟動指令 ➔ 應傳回關卡 6 第一關 (冰元素)
         cmd3, msg3 = self.scheduler.get_next_action_config()
         self.assertIn("--mode stage --stage 6 --sub first", cmd3)
         print(f"[動態排程 step 3] 指令: {cmd3} | 說明: {msg3}")
 
-        # 模擬擊殺 10 隻冰元素完成任務
-        self.scheduler.record_kill_event(enemy_name="冰元素", stage_level=6, sub_stage="first", kill_count=10)
+        # 模擬擊殺冰元素完成任務
+        self.scheduler.record_kill_event(enemy_name="冰元素", stage_level=6, sub_stage="first", kill_count=QUEST_TARGET_COUNT)
 
         # 6. 第四次取得啟動指令 ➔ 應傳回關卡 1 魔王關 (野豬)
         cmd4, msg4 = self.scheduler.get_next_action_config()
         self.assertIn("--mode stage --stage 1 --sub final", cmd4)
         print(f"[動態排程 step 4] 指令: {cmd4} | 說明: {msg4}")
 
-        self.scheduler.record_kill_event(enemy_name="野豬", stage_level=1, sub_stage="final", kill_count=10)
+        self.scheduler.record_kill_event(enemy_name="野豬", stage_level=1, sub_stage="final", kill_count=QUEST_TARGET_COUNT)
 
         # 所有任務皆完成
         pending_after = self.scheduler.get_pending_tasks()
@@ -355,7 +356,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertTrue(node.is_batch_completed())
         self.assertFalse(node.is_completed)
 
-        node.completed_count = 10
+        node.completed_count = QUEST_MAX_RUN_LIMIT
         self.assertTrue(node.is_batch_completed())
         self.assertTrue(node.is_completed)
 

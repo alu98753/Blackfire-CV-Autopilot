@@ -432,7 +432,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         from utils.quest_scheduler import QuestScheduler
         scheduler = QuestScheduler.from_daily_status(["清除野豬"])
         node = scheduler.tasks[0]
-        node.completed_count = 10  # 10/10 滿
+        node.completed_count = node.target_count  # 達成目標進度完全完結
         sm.attach_quest_scheduler(scheduler)
 
         # 執行排程

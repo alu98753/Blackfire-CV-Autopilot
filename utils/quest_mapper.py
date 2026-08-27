@@ -1,5 +1,11 @@
 import re
 import logging
+from config import (
+    QUEST_MAX_RUN_LIMIT,
+    QUEST_TARGET_COUNT,
+    QUEST_STAGE_BATCH_SIZE,
+    QUEST_DUNGEON_BATCH_SIZE
+)
 
 class TaskNode:
     """
@@ -8,10 +14,22 @@ class TaskNode:
     POLICY_DETERMINISTIC = "deterministic_count" # 可精準計數任務
     POLICY_BANNER_VERIFY = "banner_verify_only"  # 無法自動累計/僅憑彈窗核銷任務
 
-    BATCH_SIZE = 4       # 每 4 次戰鬥離場退回大廳/告示牌領獎
-    MAX_RUN_LIMIT = 10   # 最多打 10 次上限，避免極端情況無限卡關
+    BATCH_SIZE = QUEST_STAGE_BATCH_SIZE       # 每 4 次戰鬥離場退回大廳/告示牌領獎
+    MAX_RUN_LIMIT = QUEST_MAX_RUN_LIMIT       # 最多戰鬥次數上限 (預設 20 次)，避免極端情況無限卡關
 
-    def __init__(self, quest_title, mode_type, target_count=10, dungeon_index=None, stage_level=None, sub_stage=None, raw_desc="", counting_policy=POLICY_DETERMINISTIC, batch_size=4, max_run_limit=10):
+    def __init__(
+        self,
+        quest_title,
+        mode_type,
+        target_count=QUEST_TARGET_COUNT,
+        dungeon_index=None,
+        stage_level=None,
+        sub_stage=None,
+        raw_desc="",
+        counting_policy=POLICY_DETERMINISTIC,
+        batch_size=QUEST_STAGE_BATCH_SIZE,
+        max_run_limit=QUEST_MAX_RUN_LIMIT
+    ):
         self.quest_title = quest_title
         self.mode_type = mode_type          # "dungeon", "stage", "ignored"
         self.target_count = target_count
@@ -26,12 +44,12 @@ class TaskNode:
 
     @property
     def is_completed(self):
-        # 達到上限 10 次自動視為完成防呆
-        return self.completed_count >= self.max_run_limit
+        # 達到目標次數或達到上限次數自動視為完成防呆
+        return (self.completed_count >= self.target_count) or (self.completed_count >= self.max_run_limit)
 
     def is_batch_completed(self):
         """
-        每滿 4 次 (4, 8) 或達到上限 10 次，觸發退出戰鬥返回城鎮/大廳領獎。
+        每滿 batch_size 次 (例如 4, 8) 或達到上限 max_run_limit 次，觸發退出戰鬥返回城鎮/大廳領獎。
         """
         if self.completed_count == 0:
             return False
@@ -379,8 +397,8 @@ class QuestMapper:
                     counting_policy=TaskNode.POLICY_BANNER_VERIFY
                 )
 
-        # 目標總次數固定預設為 10 次
-        target_count = 10
+        # 目標總次數預設由 QUEST_TARGET_COUNT (20) 控制
+        target_count = QUEST_TARGET_COUNT
 
         # 判定預設政策 (若在 BANNER_VERIFY_QUESTS 全名清單中)
         default_policy = TaskNode.POLICY_BANNER_VERIFY if norm_title in self.banner_verify_quests else TaskNode.POLICY_DETERMINISTIC
@@ -399,15 +417,15 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="dungeon",
-                    target_count=10,
-                    batch_size=1,
-                    max_run_limit=10,
+                    target_count=QUEST_TARGET_COUNT,
+                    batch_size=QUEST_DUNGEON_BATCH_SIZE,
+                    max_run_limit=QUEST_MAX_RUN_LIMIT,
                     dungeon_index=dungeon_idx,
                     raw_desc=combined_text,
                     counting_policy=policy
                 )
 
-        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 10 次) (必須包含完整候選標題/專有名詞)
+        # 4. 檢查普通關卡專屬任務 (關卡每 4 次戰鬥離場核銷，最多 20 次) (必須包含完整候選標題/專有名詞)
         for rule in self.stage_rules:
             pattern = rule[0]
             stage_lvl = rule[1]
@@ -419,9 +437,9 @@ class QuestMapper:
                 return TaskNode(
                     quest_title=norm_title,
                     mode_type="stage",
-                    target_count=10,
-                    batch_size=4,
-                    max_run_limit=10,
+                    target_count=QUEST_TARGET_COUNT,
+                    batch_size=QUEST_STAGE_BATCH_SIZE,
+                    max_run_limit=QUEST_MAX_RUN_LIMIT,
                     stage_level=stage_lvl,
                     sub_stage=sub_stage,
                     raw_desc=combined_text,

@@ -601,27 +601,32 @@ def init_state_machine_system(args, config):
 def run_main_loop(state_machine, interval):
     try:
         import pyautogui
-        state_machine.prev_mouse_pos = pyautogui.position()
-        pause_controller = PauseController(capturer=getattr(state_machine, "capturer", None))
+        def on_pause_toggle():
+            if state_machine.is_paused:
+                pause_duration = state_machine.resume()
+                state_machine.prev_mouse_pos = pyautogui.position()
+                print("\n" + "=" * 60)
+                print(f" ▶️ [RESUMED] 腳本已恢復掛機 (已補償內部防卡死計時器: {pause_duration:.1f} 秒)")
+                print(f" 👉 繼續執行狀態: [{state_machine.current_state}]")
+                print("=" * 60 + "\n", flush=True)
+            else:
+                state_machine.pause()
+                print("\n" + "=" * 60)
+                print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
+                print(f" 👉 在終端機或遊戲視窗 按 [Ctrl + Space] 隨時暫停/繼續 即可恢復自動掛機...")
+                print("=" * 60 + "\n", flush=True)
+
+        pause_controller = PauseController(
+            capturer=getattr(state_machine, "capturer", None),
+            on_toggle=on_pause_toggle
+        )
         
         while True:
             start_time = time.time()
             
-            # 1. 優先檢測熱鍵暫停/繼續切換 (支援 Ctrl+Space / Triple-Space 可插拔策略)
-            if pause_controller.check_toggle_triggered():
-                if state_machine.is_paused:
-                    pause_duration = state_machine.resume()
-                    state_machine.prev_mouse_pos = pyautogui.position()
-                    print("\n" + "=" * 60)
-                    print(f" ▶️ [RESUMED] 腳本已恢復掛機 (已補償內部防卡死計時器: {pause_duration:.1f} 秒)")
-                    print(f" 👉 繼續執行狀態: [{state_machine.current_state}]")
-                    print("=" * 60 + "\n")
-                else:
-                    state_machine.pause()
-                    print("\n" + "=" * 60)
-                    print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
-                    print(f" 👉 在終端機或遊戲視窗 {pause_controller.get_trigger_hint()} 即可恢復自動掛機...")
-                    print("=" * 60 + "\n")
+            # 1. 檢測熱鍵事件標記 (若為非執行緒模式之備用輪詢)
+            if pause_controller.check_toggle_triggered() and not pause_controller._thread:
+                on_pause_toggle()
 
             # 2. 若處於手動暫停狀態，進入輕量休眠迴圈，跳過 step()
             if state_machine.is_paused:

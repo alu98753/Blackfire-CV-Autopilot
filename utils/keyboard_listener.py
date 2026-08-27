@@ -33,13 +33,15 @@ class PauseController:
         required_taps: int = 3,
         cadence_timeout_sec: float = 1.5,
         debounce_sec: float = 0.08,
-        start_thread: bool = True
+        start_thread: bool = True,
+        on_toggle=None
     ):
         self.capturer = capturer
         self.trigger_mode = trigger_mode
         self.required_taps = required_taps
         self.cadence_timeout_sec = cadence_timeout_sec
         self.debounce_sec = debounce_sec
+        self._on_toggle = on_toggle
 
         self.key_pressed = False
         self.last_press_time = 0.0
@@ -202,7 +204,9 @@ class PauseController:
                                 print(f"\r[*] [Ctrl + Space 觸發] 正在切換暫停/繼續狀態...                    \n", flush=True)
                             except Exception:
                                 pass
-                            return True
+                        if self._on_toggle:
+                            self._on_toggle()
+                        return True
         except Exception:
             pass
 
@@ -222,7 +226,9 @@ class PauseController:
                                 print(f"\r[*] [Ctrl + Space 觸發] 正在切換暫停/繼續狀態...                    \n", flush=True)
                             except Exception:
                                 pass
-                            return True
+                        if self._on_toggle:
+                            self._on_toggle()
+                        return True
                 else:
                     if not (ctrl_down and space_down):
                         self.key_pressed = False
@@ -253,6 +259,8 @@ class PauseController:
                     print(f"\r[*] [空白鍵 3/3 達成] 正在切換暫停/繼續狀態...                    \n", flush=True)
                 except Exception:
                     pass
+                if self._on_toggle:
+                    self._on_toggle()
                 return True
             else:
                 remaining = self.required_taps - self.tap_count

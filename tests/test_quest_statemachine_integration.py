@@ -8,6 +8,8 @@ from utils.quest_scheduler import QuestScheduler
 from utils.daily_manager import DailyManager, DEFAULT_DAILY_STATUS
 from states.state_machine import GameStateMachine
 
+from config import QUEST_TARGET_COUNT
+
 class TestQuestStateMachineIntegration(unittest.TestCase):
     def setUp(self):
         self.test_dir = os.path.join(os.path.dirname(__file__), "test_data_quest")
@@ -51,13 +53,13 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         """驗證事件廣播同步更新多個相關任務 (Piggybacking)"""
         scheduler = self.daily_mgr.load_quest_scheduler()
         
-        # 模擬擊殺 10 次 (同時滿足史萊姆王的毀滅與確定性關卡擊敗冰元素)
-        scheduler.record_kill_event(enemy_name="冰元素", stage_level=6, sub_stage="first", kill_count=10)
+        # 模擬擊殺次數 (同時滿足史萊姆王的毀滅與確定性關卡擊敗冰元素)
+        scheduler.record_kill_event(enemy_name="冰元素", stage_level=6, sub_stage="first", kill_count=QUEST_TARGET_COUNT)
         
         tasks_map = {t.quest_title: t for t in scheduler.tasks}
         # 史萊姆王的毀滅 屬於 BANNER_VERIFY_QUESTS，record_kill_event 絕不自動加算進度
         self.assertFalse(tasks_map["史萊姆王的毀滅"].is_completed)
-        # 確定性任務自動加算完成 (10/10)
+        # 確定性任務自動加算完成
         self.assertTrue(tasks_map["擊敗冰元素"].is_completed)
 
 
