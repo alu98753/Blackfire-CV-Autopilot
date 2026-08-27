@@ -285,6 +285,14 @@ class NavigationHandler(BaseStateHandler):
                 self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
                 return
             elif is_lobby:
+                # 若畫面上開啟了子視窗/卡片詳情 (如黃金古國 entry 卡片)，優先點擊 quit.png 收合前景
+                if os.path.exists(os.path.join("templates", "common/quit.png")):
+                    pos_q, conf_q = self.matcher.match(screen_img, "common/quit.png", threshold=0.75, quiet=True)
+                    if pos_q:
+                        logging.info(f"💎 領鑽石：偵測到前景開啟之子視窗/卡片 [common/quit.png] ({conf_q:.4f})，優先點擊關閉以露出大廳...")
+                        self.click_and_wait_until_gone("common/quit.png", rect["left"] + pos_q[0], rect["top"] + pos_q[1], rect, threshold=0.75)
+                        return
+
                 if pos_goback:
                     logging.info("💎 領鑽石：在大廳畫面，點擊返回城鎮按鈕 [goback_town.png] 以進行鑽石領取。")
                     self.mouse.click(rect["left"] + pos_goback[0], rect["top"] + pos_goback[1])

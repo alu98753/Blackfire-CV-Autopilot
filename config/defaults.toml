@@ -232,6 +232,7 @@ Scorpion_Shell = true
 Venom_Fang = true
 
 [subflow_configs.jewelry_workshop.goods_settings.blue]
+rune_shard = true
 
 [subflow_configs.jewelry_workshop.goods_settings.purple]
 
