@@ -296,6 +296,8 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
             if template == "domains/golden_empire/exception/elf_mythril_hag.png":
                 return ((500, 300), 0.85)
+            if template == "common/auto.png":
+                return ((1200, 55), 0.95)
             return (None, 0.0)
 
         self.mock_machine.matcher.match.side_effect = fake_match

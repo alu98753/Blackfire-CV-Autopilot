@@ -27,7 +27,12 @@ class BattleHandler(BaseStateHandler):
                         self.machine.transition_to(self.machine.STATE_UNKNOWN)
                         return
 
-        # A. 檢查是否需要啟動自動戰鬥 (common/auto.png)
+        # 1. 優先檢查是否遭遇無法戰勝之強敵 Boss (Flee Boss Check)
+        # 必須在啟動自動戰鬥 (auto.png) 之前先判定，防止在暫停手動打或逃跑前誤開自動戰鬥！
+        if self._check_and_handle_flee_boss(screen_img, rect):
+            return
+
+        # 2. 檢查是否需要啟動自動戰鬥 (common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 0.5):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
             logging.debug(f"🔍 檢查自動戰鬥按鈕... 最大相似度: {conf_auto:.4f} (閥值: 0.7)")
@@ -36,10 +41,6 @@ class BattleHandler(BaseStateHandler):
                 self.mouse.click(rect["left"] + pos_auto[0], rect["top"] + pos_auto[1])
                 self.machine.last_auto_click_time = time.time()
                 time.sleep(0.1)
-
-        # A1. 檢查是否遭遇無法戰勝之強敵 Boss (Flee Boss Check)
-        if self._check_and_handle_flee_boss(screen_img, rect):
-            return
 
         # B. 監控戰鬥結算
         # 為了防範剛進入戰鬥時，由於畫面轉換延遲與殘留按鈕導致誤判上一次戰鬥的結算按鈕，
