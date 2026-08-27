@@ -40,3 +40,11 @@ class TestJsonConfigManager(unittest.TestCase):
             config["nested"]["value"] = 99
 
             self.assertEqual(manager.snapshot()["nested"]["value"], 1)
+
+    def test_toml_manager_loads_declarative_defaults(self):
+        from config import get_defaults_config
+
+        settings = get_defaults_config()
+
+        self.assertEqual(settings["config_version"], 1)
+        self.assertIn("dungeon", settings["primary_modes"])

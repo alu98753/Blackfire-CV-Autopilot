@@ -1,0 +1,297 @@
+config_version = 1
+
+[global]
+default_diamond_cd = 7200.0
+default_bread_cd = 1800.0
+default_bless_mode = "combat"
+default_town_subflow_order = ["blood_altar", "jewelry_workshop"]
+dry_run_bag_clean = false
+default_backpack_full_max_scroll = 5
+
+[quest]
+max_run_limit = 20
+target_count = 20
+stage_batch_size = 4
+dungeon_batch_size = 1
+
+[catalog]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+dungeon_entry_templates = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+
+[ocr]
+
+[ocr.task_banner]
+offset_x = 100
+offset_y = -50
+box_width = 400
+box_height = 60
+
+[ocr.bulletin_board]
+offset_x = 5
+offset_y = -10
+box_width = 360
+box_height = 57
+
+[defaults]
+disassemble_colors = ["gray_or_empty", "green", "blue"]
+keep_colors = ["purple", "orange_yellow", "red"]
+
+[defaults.activities]
+auto_diamond = true
+auto_bread = true
+enable_lord_boss = true
+enable_dungeon = true
+enable_town_daily = true
+enable_quests = false
+enable_stage_farming = false
+
+[primary_modes]
+
+[primary_modes.stage]
+name = "普通關卡"
+type = "stage"
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+navigation_path = ["common/door.png", "exit_battle.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
+lobby_start_btn = "stages/start.png"
+result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+stage_max_defeat = 4
+
+[primary_modes.dungeon]
+name = "地下城"
+type = "dungeon"
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+bless_mode = "combat"
+greedy_dungeon = true
+greedy_allowed_indices = [0, 1, 2, 3, 4]
+auto_resume_dungeon_on_cd = false
+navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+dungeon_fight_btn = "dungeons/dungeon_fight.png"
+dungeon_battle_results = ["common/continue.png", "common/continue_gray.png"]
+explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "common/continue.png", "common/continue_gray.png", "dungeons/gungeon_godown_confirm.png", "common/ok.png", "dungeons/dungeon_fight.png", "common/quit.png", "dungeons/Treasure.png", "dungeons/skill_event.png", "dungeons/dungeon_bless.png", "dungeons/gungeon_godown.png", "dungeons/leave.png"]
+
+[primary_modes.dungeon.cooldown_map]
+0 = 0.0
+1 = 300.0
+2 = 900.0
+3 = 1200.0
+4 = 1800.0
+
+[primary_modes.mix]
+name = "混合模式"
+type = "mix"
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+bless_mode = "combat"
+greedy_dungeon = true
+greedy_allowed_indices = [0, 1, 2, 3, 4]
+auto_resume_dungeon_on_cd = false
+navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
+dungeon_fight_btn = "dungeons/dungeon_fight.png"
+dungeon_battle_results = ["common/continue.png", "common/continue_gray.png"]
+explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "common/continue.png", "common/continue_gray.png", "dungeons/gungeon_godown_confirm.png", "common/ok.png", "dungeons/dungeon_fight.png", "common/quit.png", "dungeons/Treasure.png", "dungeons/skill_event.png", "dungeons/dungeon_bless.png", "dungeons/gungeon_godown.png", "dungeons/leave.png"]
+stage_name = "冰凍峽谷 (first)"
+stage_entry = "stages/level6_ice_cave.png"
+stage_target = "stages/first_stage.png"
+stage_max_defeat = 4
+stage_navigation_path = ["common/door.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
+lobby_start_btn = "stages/start.png"
+result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+
+[primary_modes.mix.cooldown_map]
+0 = 0.0
+1 = 300.0
+2 = 900.0
+3 = 1200.0
+4 = 1800.0
+
+[primary_modes.collect_only]
+name = "定時領取麵包與鑽石"
+type = "collect_only"
+navigation_path = []
+diamond_cd = 300.0
+bread_cd = 300.0
+stamina_retreat_duration = 7
+
+[primary_modes.daily]
+name = "每日懸賞任務"
+type = "mix"
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+bless_mode = "combat"
+greedy_dungeon = true
+greedy_allowed_indices = [0, 1, 2, 3, 4]
+auto_resume_dungeon_on_cd = false
+navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+dungeon_fight_btn = "dungeons/dungeon_fight.png"
+dungeon_battle_results = ["common/continue.png", "common/continue_gray.png"]
+explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "common/continue.png", "common/continue_gray.png", "dungeons/gungeon_godown_confirm.png", "common/ok.png", "dungeons/dungeon_fight.png", "common/quit.png", "dungeons/Treasure.png", "dungeons/skill_event.png", "dungeons/dungeon_bless.png", "dungeons/gungeon_godown.png"]
+lobby_start_btn = "stages/start.png"
+result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+
+[primary_modes.daily.cooldown_map]
+0 = 0.0
+1 = 300.0
+2 = 900.0
+3 = 1200.0
+4 = 1800.0
+
+[subflow_configs]
+
+[subflow_configs.bag_clean]
+enabled = true
+name = "背包整理"
+type = "bag_clean"
+disassemble_colors = ["gray_or_empty", "green", "blue", "purple"]
+navigation_path = []
+lobby_start_btn = "stages/start.png"
+
+[subflow_configs.blood_altar]
+enabled = true
+name = "血之祭壇獻祭"
+type = "blood_altar"
+building_btn = "town_building/Blood_Altar/Blood_Altar.png"
+receive_entry_btn = "town_building/Blood_Altar/receive_entry.png"
+receive_daily_btn = "town_building/Blood_Altar/receive_daily.png"
+sacrifice_btn = "town_building/Blood_Altar/Sacrifice.png"
+alter_btn = "town_building/Blood_Altar/alter.png"
+exit_building_btn = "town_building/exitfromhouse_and_to_town.png"
+navigation_path = []
+lobby_start_btn = "stages/start.png"
+
+[subflow_configs.blood_altar.sacrifice_settings]
+gray = false
+green = false
+blue = false
+purple = false
+
+[subflow_configs.blood_altar.blood_templates]
+gray = "town_building/Blood_Altar/gray_blood.png"
+green = "town_building/Blood_Altar/green_blood.png"
+blue = "town_building/Blood_Altar/blue_blood.png"
+purple = "town_building/Blood_Altar/purple_blood.png"
+
+[subflow_configs.jewelry_workshop]
+enabled = true
+name = "珠寶加工廠出售"
+type = "jewelry_workshop"
+building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
+sell_out_btn = "town_building/sell_out.png"
+sell_btn = "town_building/sell.png"
+sell_max_btn = "town_building/sell_max.png"
+exit_building_btn = "town_building/exitfromhouse_and_to_town.png"
+goods_dir = "town_building/Jewelry_workshop/goods"
+navigation_path = []
+lobby_start_btn = "stages/start.png"
+
+[subflow_configs.jewelry_workshop.goods_settings]
+
+[subflow_configs.jewelry_workshop.goods_settings.gray]
+Sandworm_scales = true
+Spider_silk = true
+Spider_venom_glands = true
+Warcraft_Fang = false
+lizard_skin = true
+scrap = true
+Frog_Skin = true
+Purple_Spore = true
+Slime_Mucus = true
+Bat_wings = true
+Wolf_skin = true
+
+[subflow_configs.jewelry_workshop.goods_settings.green]
+The_cloth_wrapped_around_the_dead = true
+Giant_Beast_Gold_Tooth = false
+Toad_Venom = true
+Dead_Soul_Core = true
+Wild_boar_tusk = true
+Scorpion_Shell = true
+Venom_Fang = true
+
+[subflow_configs.jewelry_workshop.goods_settings.blue]
+
+[subflow_configs.jewelry_workshop.goods_settings.purple]
+
+[subflow_configs.lord_boss]
+enabled = true
+name = "首領領主討伐"
+type = "lord_boss"
+entry_btn = "load/Lord_entry.png"
+entry_after_btn = "load/Lord_entry_after.png"
+start_btn = "stages/start.png"
+result_buttons = ["common/continue.png", "common/continue1.png", "common/continue2.png", "common/continue_gray.png"]
+navigation_path = []
+
+[subflow_configs.lord_boss.bosses]
+
+[subflow_configs.lord_boss.bosses.lord_spider]
+name = "育母蜘蛛麗拉西亞"
+template = "load/lord_spider.png"
+cooldown_seconds = 3600.0
+
+[subflow_configs.lord_boss.bosses.lord_spectre]
+name = "古代惡靈伊瑟倫"
+template = "load/lord_spectre.png"
+cooldown_seconds = 7200.0
+
+[subflow_configs.chest]
+enabled = true
+name = "神秘寶箱"
+type = "chest"
+building_btn = "town_building/mysterious_treasure/mysterious_treasure.png"
+free_btn = "free.png"
+navigation_path = []
+lobby_start_btn = "stages/start.png"
+
+[subflow_configs.hero_draw]
+enabled = true
+name = "抽英雄"
+type = "hero_draw"
+building_btn = "town_building/Tavern/Tavern.png"
+recruitment_btn = "town_building/Tavern/free_recruitment.png"
+navigation_path = []
+lobby_start_btn = "stages/start.png"
+
+[subflow_configs.bulletin_board]
+enabled = true
+name = "懸賞告示牌"
+type = "bulletin_board"
+building_btn = "town_building/bulletin_board/bulletin_board.png"
+reset_btn = "town_building/bulletin_board/reset.png"
+accept_btn = "town_building/bulletin_board/accept_task.png"
+task_after_btn = "town_building/bulletin_board/task_after.png"
+task_already_full_btn = "town_building/bulletin_board/task_already_full.png"
+navigation_path = []
+lobby_start_btn = "stages/start.png"
+
+[base_stage_levels]
+
+[base_stage_levels.1]
+name = "蒼穹平原"
+entry = "stages/level1_sky_plains.png"
+
+[base_stage_levels.2]
+name = "荒蕪岩地"
+entry = "stages/level2_barren_rocks.png"
+
+[base_stage_levels.3]
+name = "古樹森林"
+entry = "stages/level3_ancient_forest.png"
+
+[base_stage_levels.4]
+name = "沙漠廢墟"
+entry = "stages/level4_desert_ruins.png"
+
+[base_stage_levels.5]
+name = "幽暗沼澤"
+entry = "stages/level5_gloomy_swamp.png"
+
+[base_stage_levels.6]
+name = "冰凍峽谷"
+entry = "stages/level6_ice_cave.png"

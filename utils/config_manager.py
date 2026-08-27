@@ -53,13 +53,12 @@ class JsonConfigManager:
             return False
 
         try:
-            with self.path.open("r", encoding="utf-8") as file:
-                loaded = json.load(file)
+            loaded = self._read_file()
             if not isinstance(loaded, dict):
                 raise ConfigLoadError(f"設定檔根節點必須是 JSON object: {self.path}")
             if self._validator is not None:
                 self._validator(loaded)
-        except (OSError, json.JSONDecodeError, ConfigLoadError) as error:
+        except (OSError, ValueError, TypeError) as error:
             return self._handle_error(ConfigLoadError(f"設定檔無法套用 ({error}): {self.path}"))
 
         self._snapshot = deepcopy(loaded)
@@ -71,8 +70,22 @@ class JsonConfigManager:
         stat = self.path.stat()
         return stat.st_mtime_ns, stat.st_size
 
+    def _read_file(self) -> dict[str, Any]:
+        with self.path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+
     def _handle_error(self, error: ConfigLoadError) -> bool:
         self.last_error = error
         if self._snapshot is None and self._default is None:
             raise error
         return False
+
+
+class TomlConfigManager(JsonConfigManager):
+    """The same transactional hot-reload contract for TOML configuration."""
+
+    def _read_file(self) -> dict[str, Any]:
+        import tomllib
+
+        with self.path.open("rb") as file:
+            return tomllib.load(file)

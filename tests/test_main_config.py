@@ -8,6 +8,9 @@ from main import setup_stage_config, setup_dungeon_config, setup_mode_config, ch
 
 class TestMainConfig(unittest.TestCase):
 
+    def test_toml_config_preserves_integer_cooldown_indices(self):
+        self.assertEqual(GAME_CONFIGS["dungeon"]["cooldown_map"][1], 300.0)
+
     @patch('os.path.exists')
     @patch('builtins.input', return_value="")
     def test_setup_stage_config_default(self, mock_input, mock_exists):
