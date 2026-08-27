@@ -935,7 +935,8 @@ class GameStateMachine:
                     self.daily_manager.remove_accepted_quest(target_task.quest_title)
                 return self.check_and_advance_quest_target()
 
-            quest_cfg = target_task.to_config_dict()
+            base_cfg = getattr(self, "config", None) or getattr(self, "primary_config", None)
+            quest_cfg = target_task.to_config_dict(base_config=base_cfg)
             if hasattr(self, "backend_mode"):
                 quest_cfg["backend_mode"] = self.backend_mode
             self.set_config(quest_cfg)
@@ -1285,8 +1286,10 @@ class GameStateMachine:
             # 3. 檢查 Tier 3 懸賞告示牌與動態任務 (bulletin_board)
             if self.quest_scheduler:
                 if self.quest_scheduler.is_all_completed():
-                    logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器")
+                    logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器並切換至退守模式")
                     self.quest_scheduler = None
+                    self.apply_mix_fallback_config()
+                    return False
                 else:
                     scheduled_node = self.check_and_advance_quest_target()
                     if scheduled_node:

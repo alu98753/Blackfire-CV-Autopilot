@@ -559,6 +559,26 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
             scheduler.has_higher_priority_task_ready(current_config=stage5_cfg, dungeon_cooldowns=cd_map, now_ts=1101.0)
         )
 
+    def test_task_node_to_config_dict_stage_and_dungeon_enables_farming(self):
+        """
+        [關卡與地下城懸賞配置轉換測試]
+        驗證 TaskNode 轉換為 config 字典時：
+        - 關卡任務 (stage) 必具備 enable_stage_farming=True
+        - 地下城任務 (dungeon) 必具備 enable_dungeon=True
+        - 所有全域規範化開關皆齊全有效
+        """
+        node_ice = self.mapper.parse_quest("擊敗冰元素")
+        self.assertIsNotNone(node_ice)
+        stage_cfg = node_ice.to_config_dict()
+        self.assertTrue(stage_cfg.get("enable_stage_farming", False), "關卡懸賞任務必須自動啟用 enable_stage_farming")
+        self.assertEqual(stage_cfg.get("type"), "stage")
+
+        node_dungeon = self.mapper.parse_quest("史萊姆王的毀滅")
+        self.assertIsNotNone(node_dungeon)
+        dungeon_cfg = node_dungeon.to_config_dict()
+        self.assertTrue(dungeon_cfg.get("enable_dungeon", False), "地下城懸賞任務必須自動啟用 enable_dungeon")
+        self.assertEqual(dungeon_cfg.get("type"), "dungeon")
+
 
 if __name__ == "__main__":
     unittest.main()

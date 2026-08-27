@@ -54,9 +54,10 @@ class TaskNode:
     def to_config_dict(self, base_config=None):
         """
         將 TaskNode 轉換為 GameStateMachine 專用的 config 字典。
-        若傳入 base_config，自動傳承其中的裝備品質與獻祭偏好 (keep_colors, disassemble_colors, sacrifice_settings)。
+        若傳入 base_config，自動傳承其中的裝備品質與獻祭偏好 (keep_colors, disassemble_colors, sacrifice_settings, backend_mode 等)。
+        並自動透過 normalize_config 規範化各項全域活動開關 (如 enable_stage_farming, enable_dungeon)。
         """
-        from config import PRIMARY_MODES
+        from config import PRIMARY_MODES, normalize_config
         dungeon_entries = [
             "dungeons/Slime_entry.png",
             "dungeons/Ghost_entry.png",
@@ -92,7 +93,9 @@ class TaskNode:
                     cfg["disassemble_colors"] = base_config["disassemble_colors"]
                 if "sacrifice_settings" in base_config:
                     cfg["sacrifice_settings"] = base_config["sacrifice_settings"]
-            return cfg
+                if "backend_mode" in base_config:
+                    cfg["backend_mode"] = base_config["backend_mode"]
+            return normalize_config(cfg)
 
         if self.mode_type == "dungeon" and self.dungeon_index is not None:
             idx = self.dungeon_index
@@ -100,6 +103,7 @@ class TaskNode:
             dname = dungeon_names[idx] if 0 <= idx < len(dungeon_names) else "地下城"
             
             cfg = PRIMARY_MODES["dungeon"].copy()
+            cfg["enable_dungeon"] = True
             cfg["dungeon_index"] = idx
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
@@ -126,6 +130,7 @@ class TaskNode:
                 target_img = "stages/first_stage.png"
 
             cfg = PRIMARY_MODES["stage"].copy()
+            cfg["enable_stage_farming"] = True
             cfg["stage_level"] = lvl
             cfg["sub_stage"] = sub
             cfg["name"] = f"懸賞任務 - {sname} ({sub}) (任務: {self.quest_title})"
