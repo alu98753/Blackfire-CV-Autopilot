@@ -21,6 +21,7 @@ from config import GAME_CONFIGS, PRIMARY_MODES, STAGE_CONFIGS, normalize_config,
 from utils import get_stage_configs, PauseController
 from utils.daily_manager import DailyManager
 from utils.steam_launcher import SteamGameLauncher
+from utils.window import select_game_window
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -313,6 +314,8 @@ def setup_utf8_encoding():
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Blackfire Crusade 副本與地下城自動掛機腳本")
     parser.add_argument("--title", type=str, default="Blackfire Crusade", help="遊戲視窗標題")
+    parser.add_argument("--target", type=str, default=None,
+                        help="指定控制的遊戲實例 (可傳入編號如 1, 2，別名 native, sandbox，或 HWND 如 0x2707a8)")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
     parser.add_argument("--mode", type=str, default="mix", choices=list(PRIMARY_MODES.keys()), 
                         help="主掛機模式：mix (混合模式，預設)、dungeon (地下城)、stage (普通關卡)、golden_empire (黃金古國領地)、collect_only (純領取)")
@@ -513,11 +516,11 @@ def setup_equipment_config(config):
 
     config["disassemble_colors"] = disassemble_choices_map[disassemble_choice]
 
-def init_state_machine_system(args, config):
+def init_state_machine_system(args, config, target_hwnd=None):
     print("=" * 60)
     print(" 🚀 Blackfire Crusade 自動掛機輔助腳本啟動 🚀")
     print("=" * 60)
-    print(f"[*] 目標視窗標題: {args.title}")
+    print(f"[*] 目標視窗標題: {args.title} (HWND: {hex(target_hwnd) if target_hwnd else '自動查找'})")
     print(f"[*] 畫面偵測間隔: {args.interval} 秒")
     print(f"[*] 當前掛機模式: {config['name']} ({args.mode})")
     print("=" * 60)
@@ -566,10 +569,10 @@ def init_state_machine_system(args, config):
     print("=" * 60)
 
     # 初始化模組
-    capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend)
+    capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend, hwnd=target_hwnd)
     matcher = TemplateMatcher(templates_dir="templates", template_scale=1.0, auto_scale=True)
     mouse = MouseController(human_like=True, backend_mode=args.backend, window_title=args.title,
-                            capturer=capturer)
+                            capturer=capturer, hwnd=target_hwnd)
 
     # 初始化狀態機
     state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
@@ -675,18 +678,23 @@ def main():
     setup_utf8_encoding()
     args = parse_arguments()
 
-    # 1. 優先處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
+    # 1. 優先偵測並選擇遊戲視窗實例 (最優先確認目標實例，支援雙開/沙盒自動列舉與目標指定)
+    target_hwnd, target_title = select_game_window(target=args.target, auto_prompt=True)
+    if target_title:
+        args.title = target_title
+
+    # 2. 處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)
     setup_equipment_config(config)
 
-    # 2. 檢查遊戲是否開啟，發起直連啟動並傳送至 1 號筆電螢幕與最大化全螢幕
-    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=args.monitor)
+    # 3. 檢查遊戲是否開啟，發起直連啟動並傳送至 1 號筆電螢幕與最大化全螢幕
+    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=args.monitor, hwnd=target_hwnd)
     if not launcher.ensure_game_ready():
         print("[!] 遊戲啟動準備失敗，終止腳本。")
         sys.exit(1)
 
-    # 3. 初始化主狀態機並立即運行 (無縫接續執行 LoginFlow 登入與 Click Until 流程)
-    state_machine = init_state_machine_system(args, config)
+    # 4. 初始化主狀態機並立即運行 (無縫接續執行 LoginFlow 登入與 Click Until 流程)
+    state_machine = init_state_machine_system(args, config, target_hwnd=target_hwnd)
     run_main_loop(state_machine, args.interval)
 
 if __name__ == "__main__":
