@@ -569,6 +569,10 @@ def init_state_machine_system(args, config):
     capturer._resume_event = state_machine.resume_event
     state_machine.config = config
     state_machine.primary_config = config.copy()
+    state_machine.enable_runtime_config_refresh(
+        args.subflow[0] if getattr(args, "subflow", None) else args.mode,
+        config,
+    )
     daily_manager = DailyManager()
     state_machine.daily_manager = daily_manager
 
@@ -634,6 +638,7 @@ def run_main_loop(state_machine, interval):
                 time.sleep(0.05)
                 continue
 
+            state_machine.refresh_config_at_safe_point()
             state_machine.step()
             
             elapsed = time.time() - start_time

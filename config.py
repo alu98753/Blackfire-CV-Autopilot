@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from pathlib import Path
 
 from utils.config_helper import get_stage_configs
@@ -12,12 +13,36 @@ from utils.config_manager import JsonConfigManager, TomlConfigManager
 WINDOW_TITLE = "Blackfire Crusade"
 CONFIG_DIR = Path(__file__).with_name("config")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
+LOCAL_CONFIG_PATH = CONFIG_DIR / "local.toml"
 _DEFAULTS_MANAGER = TomlConfigManager(DEFAULTS_PATH)
+_LOCAL_MANAGER = None
 
 
 def get_defaults_config() -> dict:
-    """Return a safe snapshot of the declarative defaults configuration."""
-    return _DEFAULTS_MANAGER.snapshot()
+    """Return defaults merged with the optional local runtime override file."""
+    return _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_local_config())
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Merge tables recursively; lists and scalar values replace whole values."""
+    merged = deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
+def _get_local_config() -> dict:
+    """Load config/local.toml transactionally when it exists."""
+    global _LOCAL_MANAGER
+    if not LOCAL_CONFIG_PATH.exists():
+        _LOCAL_MANAGER = None
+        return {}
+    if _LOCAL_MANAGER is None:
+        _LOCAL_MANAGER = TomlConfigManager(LOCAL_CONFIG_PATH, default={})
+    return _LOCAL_MANAGER.snapshot()
 
 
 def _load_legacy_exports() -> dict:
@@ -100,6 +125,54 @@ STAGE_CONFIGS = {
     key: normalize_config(value)
     for key, value in get_stage_configs(BASE_STAGE_LEVELS).items()
 }
+
+
+def _replace_mapping(target: dict, source: dict) -> None:
+    """Update exports in place so existing imports keep seeing new settings."""
+    target.clear()
+    target.update(source)
+
+
+def refresh_runtime_config() -> bool:
+    """Publish TOML changes only when a full valid snapshot is available."""
+    global _SETTINGS, _LOCAL_MANAGER
+    defaults_changed = _DEFAULTS_MANAGER.reload_if_changed()
+    local_changed = False
+    if LOCAL_CONFIG_PATH.exists():
+        if _LOCAL_MANAGER is None:
+            _get_local_config()
+            local_changed = True
+        else:
+            local_changed = _LOCAL_MANAGER.reload_if_changed()
+    elif _LOCAL_MANAGER is not None:
+        _LOCAL_MANAGER = None
+        local_changed = True
+    if not (defaults_changed or local_changed):
+        return False
+
+    settings = get_defaults_config()
+    if settings.get("config_version") != 1:
+        logging.error("[HotReload] ignored unsupported TOML config_version")
+        return False
+    _SETTINGS = settings
+    _replace_mapping(GLOBAL_SETTINGS, settings["global"])
+    _replace_mapping(PRIMARY_MODES, _restore_mode_key_types(settings["primary_modes"]))
+    _replace_mapping(SUBFLOW_CONFIGS, settings["subflow_configs"])
+    _replace_mapping(BASE_STAGE_LEVELS, settings["base_stage_levels"])
+    raw_configs = {**PRIMARY_MODES, **SUBFLOW_CONFIGS}
+    _replace_mapping(GAME_CONFIGS, {key: normalize_config(value) for key, value in raw_configs.items()})
+    _replace_mapping(STAGE_CONFIGS, {
+        key: normalize_config(value)
+        for key, value in get_stage_configs(BASE_STAGE_LEVELS).items()
+    })
+    logging.info("[HotReload] applied config/defaults.toml and config/local.toml")
+    return True
+
+
+def get_runtime_game_config(key: str) -> dict:
+    """Return a copy of the newest complete configuration for one mode."""
+    refresh_runtime_config()
+    return deepcopy(GAME_CONFIGS[key])
 
 
 _EXCEPTION_CONFIG_MANAGER = None

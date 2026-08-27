@@ -3,7 +3,8 @@ import os
 import cv2
 import logging
 import threading
-from config import GAME_CONFIGS, normalize_config
+from copy import deepcopy
+from config import GAME_CONFIGS, get_runtime_game_config, normalize_config, refresh_runtime_config
 from states.handlers import (
     NavigationHandler,
     LobbyHandler,
@@ -104,6 +105,8 @@ class GameStateMachine:
         self.daily_manager = None
         self.config = {}
         self.primary_config = {}
+        self.runtime_config_key = None
+        self.runtime_config_overrides = {}
         self.pending_daily_reset_exit = False
 
 
@@ -935,6 +938,35 @@ class GameStateMachine:
 
         self.config = new_config
 
+    def enable_runtime_config_refresh(self, mode_key, initial_config):
+        """Keep CLI and interactive selections while TOML defaults hot-reload."""
+        if mode_key not in GAME_CONFIGS:
+            return
+        self.runtime_config_key = mode_key
+        base_config = get_runtime_game_config(mode_key)
+        self.runtime_config_overrides = {
+            key: deepcopy(value)
+            for key, value in initial_config.items()
+            if base_config.get(key) != value
+        }
+
+    def refresh_config_at_safe_point(self):
+        """Apply a complete configuration only before a new loop iteration."""
+        if not self.runtime_config_key or not refresh_runtime_config():
+            return False
+        refreshed_primary = get_runtime_game_config(self.runtime_config_key)
+        refreshed_primary.update(deepcopy(self.runtime_config_overrides))
+        self.primary_config = refreshed_primary
+        if self.config and self.config.get("type") == refreshed_primary.get("type"):
+            runtime_flags = {
+                key: value for key, value in self.config.items()
+                if key.startswith("is_") or key == "backend_mode"
+            }
+            self.config = refreshed_primary.copy()
+            self.config.update(runtime_flags)
+        logging.info("[HotReload] refreshed running primary mode: %s", self.runtime_config_key)
+        return True
+
     def apply_mix_fallback_config(self):
         """
         當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
@@ -1380,7 +1412,6 @@ class GameStateMachine:
         if self.is_in_collect_only_mode():
             return False
         return self.evaluate_next_activity()
-
 
 
 
