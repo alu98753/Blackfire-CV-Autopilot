@@ -189,6 +189,108 @@ class TestBehaviorPauseResume(unittest.TestCase):
 
         self.assertFalse(controller.check_toggle_triggered())
 
+    @patch("ctypes.windll.user32.GetForegroundWindow")
+    @patch("ctypes.windll.kernel32.GetConsoleWindow")
+    @patch("ctypes.windll.user32.GetWindowTextW")
+    @patch("ctypes.windll.user32.GetWindowTextLengthW")
+    @patch("ctypes.windll.user32.GetClassNameW")
+    @patch("ctypes.windll.user32.GetWindowThreadProcessId")
+    def test_focus_filter_rejects_vscode_chrome_and_explorer(
+        self, mock_get_pid, mock_get_class, mock_get_len, mock_get_text, mock_get_console, mock_get_fg
+    ):
+        """
+        【防誤觸關鍵測試】驗證包含 'python', 'BlackfireCrusade_tool', 'terminal' 關鍵字的
+        VS Code、Chrome 瀏覽器與檔案總管視窗均被 100% 精準拒絕，絕不觸發暫停快捷鍵。
+        """
+        mock_get_console.return_value = 11111
+        mock_get_fg.return_value = 77777 # 第三方視窗 HWND
+        mock_get_pid.side_effect = lambda hwnd, byref_pid: None # PID 不匹配
+
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False)
+
+        # 案例 1: VS Code 視窗 (標題包含 python 與專案路徑 BlackfireCrusade_tool)
+        def mock_vscode_title(hwnd, buff, length):
+            buff.value = "keyboard_listener.py - BlackfireCrusade_tool - Visual Studio Code"
+            return len(buff.value)
+
+        mock_get_len.return_value = 60
+        mock_get_text.side_effect = mock_vscode_title
+        mock_get_class.side_effect = lambda hwnd, buff, length: setattr(buff, "value", "Chrome_WidgetWin_1")
+
+        self.assertFalse(controller.is_console_window_active())
+        self.assertFalse(controller.is_game_window_active())
+        self.assertFalse(controller.is_target_window_active())
+
+        # 案例 2: Chrome 瀏覽器 (標題包含 Python Tutorial)
+        def mock_chrome_title(hwnd, buff, length):
+            buff.value = "Python 3 Tutorial & Reference - Google Chrome"
+            return len(buff.value)
+
+        mock_get_text.side_effect = mock_chrome_title
+        mock_get_class.side_effect = lambda hwnd, buff, length: setattr(buff, "value", "Chrome_WidgetWin_1")
+
+        self.assertFalse(controller.is_console_window_active())
+        self.assertFalse(controller.is_game_window_active())
+        self.assertFalse(controller.is_target_window_active())
+
+        # 案例 3: 檔案總管 (標題為 BlackfireCrusade_tool)
+        def mock_explorer_title(hwnd, buff, length):
+            buff.value = "BlackfireCrusade_tool"
+            return len(buff.value)
+
+        mock_get_text.side_effect = mock_explorer_title
+        mock_get_class.side_effect = lambda hwnd, buff, length: setattr(buff, "value", "CabinetWClass")
+
+        self.assertFalse(controller.is_console_window_active())
+        self.assertFalse(controller.is_game_window_active())
+        self.assertFalse(controller.is_target_window_active())
+
+    @patch("ctypes.windll.user32.GetForegroundWindow")
+    @patch("ctypes.windll.kernel32.GetConsoleWindow")
+    def test_focus_filter_accepts_console_by_hwnd(self, mock_get_console, mock_get_fg):
+        """
+        測試前景 HWND 與 GetConsoleWindow() 相符時精準判定為目標視窗
+        """
+        mock_get_console.return_value = 12345
+        mock_get_fg.return_value = 12345
+
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False)
+        self.assertTrue(controller.is_console_window_active())
+        self.assertTrue(controller.is_target_window_active())
+
+    @patch("ctypes.windll.user32.GetForegroundWindow")
+    @patch("ctypes.windll.kernel32.GetConsoleWindow")
+    @patch("ctypes.windll.user32.GetWindowThreadProcessId")
+    @patch("os.getpid")
+    def test_focus_filter_accepts_console_by_pid(self, mock_getpid, mock_get_pid, mock_get_console, mock_get_fg):
+        """
+        測試前景視窗進程 PID 與當前 Python 進程 PID 相符時精準判定為目標視窗
+        """
+        mock_get_console.return_value = 99999
+        mock_get_fg.return_value = 88888
+        mock_getpid.return_value = 5555
+
+        def mock_pid_fill(hwnd, byref_pid):
+            byref_pid._obj.value = 5555
+            return 1
+
+        mock_get_pid.side_effect = mock_pid_fill
+
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False)
+        self.assertTrue(controller.is_console_window_active())
+        self.assertTrue(controller.is_target_window_active())
+
+    @patch("ctypes.windll.user32.GetForegroundWindow")
+    def test_focus_filter_accepts_game_by_hwnd(self, mock_get_fg):
+        """
+        測試前景 HWND 與 capturer.hwnd 相符時精準判定為目標視窗
+        """
+        mock_get_fg.return_value = 12345 # 與 self.mock_capturer.hwnd 一致
+
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False)
+        self.assertTrue(controller.is_game_window_active())
+        self.assertTrue(controller.is_target_window_active())
+
     def test_mouse_click_aborts_immediately_when_state_machine_is_paused(self):
         """
         【雙層防護驗證】測試當 state_machine.is_paused == True 時，
