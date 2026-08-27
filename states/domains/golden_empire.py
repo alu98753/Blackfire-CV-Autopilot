@@ -40,15 +40,22 @@ class GoldenEmpireStrategy(BaseDomainStrategy):
                 logging.info(f"🎁 [黃金古國] 偵測到挖寶【打開】按鈕 (信心度: {conf_o:.4f})，發起單次免費開箱流程...")
                 click_x = rect["left"] + pos_open[0]
                 click_y = rect["top"] + pos_open[1]
+                # 1. 精確點擊【打開】按鈕 (open.png) 並閉環等待直到按鈕消失
                 self.handler.click_and_wait_until_gone(
                     self.OPEN_BUTTON, click_x, click_y, rect,
                     timeout=4.0, threshold=0.75, post_delay=0.4
                 )
 
+                # Debug 觀察用：開箱後等待 3 秒讓獎勵畫面定格，方便確認獲得道具
+                logging.info("⏳ [黃金古國 Debug] 開箱完成，等待 3 秒定格觀察獲得之獎勵物品...")
+                time.sleep(3.0)
+
                 # 2. 檢查並點擊確認按鈕（若有獲得獎勵彈窗），閉環等待確認按鈕消失
+                cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else screen_img
+                current_img = cap_img if cap_img is not None else screen_img
                 for c_temp in self.CONFIRM_TEMPLATES:
                     if os.path.exists(os.path.join("templates", c_temp)):
-                        pos_c, conf_c = self.matcher.match(screen_img, c_temp, threshold=0.80)
+                        pos_c, conf_c = self.matcher.match(current_img, c_temp, threshold=0.80)
                         if pos_c:
                             logging.info(f"👉 [黃金古國] 偵測到獎勵確認按鈕 [{c_temp}] (信心度: {conf_c:.4f})，點擊確認領取...")
                             self.handler.click_and_wait_until_gone(
@@ -58,9 +65,11 @@ class GoldenEmpireStrategy(BaseDomainStrategy):
                             break
 
                 # 3. 點擊離開/退出按鈕以返回古國主場景，閉環等待直到退出
+                cap_img_q = self.machine.capturer.capture(rect) if self.machine.capturer else current_img
+                current_img_q = cap_img_q if cap_img_q is not None else current_img
                 for q_temp in self.QUIT_TEMPLATES:
                     if os.path.exists(os.path.join("templates", q_temp)):
-                        pos_q, conf_q = self.matcher.match(screen_img, q_temp, threshold=0.75)
+                        pos_q, conf_q = self.matcher.match(current_img_q, q_temp, threshold=0.75)
                         if pos_q:
                             logging.info(f"👉 [黃金古國] 點擊退出按鈕 [{q_temp}] (信心度: {conf_q:.4f}) 返回主場景...")
                             self.handler.click_and_wait_until_gone(
