@@ -32,13 +32,14 @@ class SteamGameLauncher:
         game_title: str = "Blackfire Crusade",
         backend_mode: bool = False,
         monitor_index: Optional[int] = 1,
-        action_cooldown: float = 1.0
+        action_cooldown: float = 1.0,
+        hwnd: Optional[int] = None,
     ):
         self.game_title = game_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
-        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode, monitor_index=monitor_index)
-        self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode)
+        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode, monitor_index=monitor_index, hwnd=hwnd)
+        self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode, hwnd=hwnd)
         self.matcher = matcher or TemplateMatcher()
         self.action_cooldown = action_cooldown
         self.phase = LauncherPhase.LAUNCHING
@@ -102,7 +103,9 @@ class SteamGameLauncher:
         """
         try:
             import win32gui
-            hwnd = win32gui.FindWindow(None, self.game_title)
+            hwnd = self.capturer.get_hwnd() if hasattr(self, "capturer") and self.capturer else None
+            if not hwnd:
+                hwnd = win32gui.FindWindow(None, self.game_title)
             return hwnd != 0 and bool(win32gui.IsWindow(hwnd))
         except Exception as e:
             logging.debug(f"is_game_open 檢查失敗: {e}")
