@@ -242,15 +242,16 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
     def test_flee_boss_giveup_battle_subflow(self):
         """
-        Given: 戰鬥中遭遇強敵 Boss (golden_king.png)
+        Given: 戰鬥中遭遇強敵 Boss (golden_king.png) 且配置 flee_boss_action = 'flee'
         When: 執行 BattleHandler.handle()
-        Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 不增加戰敗計數 (維持 0) 並切回 DOMAIN_EXPLORE
+        Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 不增加戰敗計數 (維持 0) 並轉移至 NAVIGATING
         """
         from states.handlers.battle import BattleHandler
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
         self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["flee_boss_action"] = "flee"
         self.mock_machine.config["domain_max_defeat"] = 5
         self.mock_machine.defeat_count = 0
         self.mock_machine.last_auto_click_time = 0.0
@@ -276,6 +277,35 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertTrue(self.mock_machine.mouse.click.called)
         self.assertEqual(self.mock_machine.defeat_count, 0)
         self.mock_machine.transition_to.assert_called_with("NAVIGATING")
+
+    def test_flee_boss_pause_action_subflow(self):
+        """
+        Given: 戰鬥中遭遇強敵 Boss (elf_mythril_hag.png) 且配置 flee_boss_action = 'pause'
+        When: 執行 BattleHandler.handle()
+        Then: 呼叫 machine.pause() 暫停腳本運行，不發送任何點擊，交由使用者手動挑戰
+        """
+        from states.handlers.battle import BattleHandler
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/elf_mythril_hag.png"]
+        self.mock_machine.config["flee_boss_action"] = "pause"
+        self.mock_machine.last_auto_click_time = 0.0
+        self.mock_machine.battle_start_time = 100.0
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/golden_empire/exception/elf_mythril_hag.png":
+                return ((500, 300), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            battle_handler.handle(mock_img, self.rect)
+
+        # 斷言觸發 machine.pause()，且未發起放棄戰鬥之滑鼠點擊
+        self.mock_machine.pause.assert_called_once()
+        self.assertFalse(self.mock_machine.mouse.click.called)
 
     # =========================================================================
     # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試

@@ -216,8 +216,18 @@ class BattleHandler(BaseStateHandler):
                     break
 
         if detected_boss:
-            logging.warning(f"🚨 [戰鬥撤退] 偵測到強敵 Boss 特徵 [{detected_boss}] (目前戰力暫無法擊敗)，立即執行放棄戰鬥流程！")
-            return self._run_flee_battle_subflow(rect)
+            action = self.machine.config.get("flee_boss_action", "flee").lower() if self.machine.config else "flee"
+            if action == "pause":
+                logging.warning("=" * 60)
+                logging.warning(f"🚨 [強敵遭遇 - 暫停接管] 偵測到強敵 Boss 特徵 [{detected_boss}]！")
+                logging.warning("👉 已依據配置 (flee_boss_action = 'pause') 自動暫停腳本運行。")
+                logging.warning("👉 請使用者手動接管操作戰鬥。挑戰完成後，按 [Ctrl + Space] 即可恢復自動掛機！")
+                logging.warning("=" * 60)
+                self.machine.pause()
+                return True
+            else:
+                logging.warning(f"🚨 [戰鬥撤退] 偵測到強敵 Boss 特徵 [{detected_boss}] (目前戰力暫無法擊敗)，立即執行放棄戰鬥流程！")
+                return self._run_flee_battle_subflow(rect)
         return False
 
     def _run_flee_battle_subflow(self, rect) -> bool:
