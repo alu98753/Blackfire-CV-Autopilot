@@ -166,7 +166,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
 
     @patch("states.exceptions.subflows.game_relaunch.GameRelaunchSubflow.execute", return_value=True)
     def test_restore_stashed_state_preserves_watchdog_memory_and_second_timeout_relaunch(self, mock_relaunch):
-        """[測試 9] 驗證 restore_stashed_state 恢復暫存時保留連續卡死記憶與時間戳，連續 2 次卡死觸發 GameRelaunchSubflow"""
+        """[測試 9] 驗證 restore_stashed_state 恢復暫存時享有全新寬限期，唯有再次逾時滿 90s 才觸發 GameRelaunchSubflow"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
         original_ts = time.time() - 95.0
         self.machine.last_state_change = original_ts
@@ -182,17 +182,22 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
             # 模擬彈窗處理完成，恢復原狀態
             self.machine.restore_stashed_state()
 
-            # 斷言：恢復後的狀態維持 NAVIGATING，且 Watchdog 的連續卡死次數與原時間戳均被保留！
+            # 斷言 1：恢復後的狀態維持 NAVIGATING，保留卡死次數 1，但 last_state_change 獲賦予全新寬限期
             self.assertEqual(self.machine.current_state, GameStateMachine.STATE_NAVIGATING)
             self.assertEqual(self.watchdog.consecutive_stuck_count, 1)
             self.assertEqual(self.watchdog.last_stuck_state, GameStateMachine.STATE_NAVIGATING)
-            self.assertEqual(self.machine.last_state_change, original_ts)
+            self.assertGreater(self.machine.last_state_change, original_ts)
+            self.assertAlmostEqual(self.machine.last_state_change, time.time(), delta=1.0)
 
-            # 第 2 次逾時：同狀態再度檢查
-            res = self.watchdog.check(dummy_img)
+            # 斷言 2：復原後的第一幀 (未滿 90s)，Watchdog 必須放行 (回傳 False)，絕不誤殺
+            res_immediate = self.watchdog.check(dummy_img)
+            self.assertFalse(res_immediate)
+            mock_relaunch.assert_not_called()
 
-            # 斷言：應回傳 True 且調用 GameRelaunchSubflow 重開遊戲
-            self.assertTrue(res)
+            # 斷言 3：若原狀態「再次卡住超過 90 秒」，才判定連續 2 次逾時並調用 GameRelaunchSubflow
+            self.machine.last_state_change = time.time() - 95.0
+            res_second_timeout = self.watchdog.check(dummy_img)
+            self.assertTrue(res_second_timeout)
             mock_relaunch.assert_called_once()
             self.assertIn("watchdog_consecutive_timeout", mock_relaunch.call_args[1]["reason"])
 

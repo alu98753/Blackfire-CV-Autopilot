@@ -194,12 +194,11 @@ class GameStateMachine:
     def restore_stashed_state(self):
         """
         復原先前暫存之狀態與 context。若無暫存狀態則安全降級至 STATE_NAVIGATING。
-        並保留原卡死發生的 last_state_change 時間戳與 Watchdog 卡死記憶。
+        保留 Watchdog 連續卡死次數記憶，但由 transition_to 賦予全新寬限期 (Grace Period)。
         """
         if self.stashed_state:
             target = self.stashed_state
             logging.info(f"🔄 [StateRestore] 恢復原暫存狀態: {target}")
-            stashed_last_change = self.stashed_context.get("last_state_change") if isinstance(self.stashed_context, dict) else None
             if isinstance(self.stashed_context, dict) and "context" in self.stashed_context:
                 self.context = self.stashed_context["context"]
             self.stashed_state = None
@@ -214,8 +213,6 @@ class GameStateMachine:
                 if saved_stuck_state == target and saved_stuck_count > 0:
                     self.exception_watchdog.consecutive_stuck_count = saved_stuck_count
                     self.exception_watchdog.last_stuck_state = saved_stuck_state
-                if stashed_last_change and stashed_last_change > 0:
-                    self.last_state_change = stashed_last_change
             return True
         else:
             logging.warning("⚠️ [StateRestore] 無可恢復之暫存狀態，安全退避至 NAVIGATING")
