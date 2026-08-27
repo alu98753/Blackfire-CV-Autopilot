@@ -201,6 +201,47 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         # 斷言切換回 DOMAIN_EXPLORE
         self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
 
+    # =========================================================================
+    # 7. 強敵 Boss (黃金君王) 戰鬥放棄測試
+    # =========================================================================
+
+    def test_flee_boss_giveup_battle_subflow(self):
+        """
+        Given: 戰鬥中遭遇強敵 Boss (golden_king.png)
+        When: 執行 BattleHandler.handle()
+        Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 累加戰敗次數並切回 DOMAIN_EXPLORE
+        """
+        from states.handlers.battle import BattleHandler
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["domain_max_defeat"] = 5
+        self.mock_machine.defeat_count = 0
+        self.mock_machine.last_auto_click_time = 0.0
+        self.mock_machine.battle_start_time = 100.0
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/golden_empire/exception/golden_king.png":
+                return ((500, 300), 0.85)
+            if template == "battle/setting.png":
+                return ((1800, 50), 0.90)
+            if template == "battle/giveup_battle.png":
+                return ((960, 600), 0.90)
+            if template in ["common/confirm.png", "common/ok.png"]:
+                return ((960, 700), 0.90)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            battle_handler.handle(mock_img, self.rect)
+
+        # 斷言點擊過設定與放棄按鈕
+        self.assertTrue(self.mock_machine.mouse.click.called)
+        self.assertEqual(self.mock_machine.defeat_count, 1)
+        self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
+
 
 if __name__ == "__main__":
     unittest.main()

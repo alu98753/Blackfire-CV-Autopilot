@@ -59,12 +59,19 @@ graph TD
 
 ### 1. ⚔️ 戰鬥事件 (Battle Subflow)
 * **戰鬥啟動**：辨識到 `common/auto.png` 確保自動戰鬥開啟。
+* **🚨 強敵 Boss 遭遇放棄機制 (Flee Boss Subflow)**：
+  * **背景原因**：部分古國守護 Boss（如不朽者「黃金君王」`golden_king.png`）目前門檻過高無法戰勝，後續亦可隨時在 `config/defaults.toml` 的 `flee_bosses` 擴充其他 Boss。
+  * **放棄動作**：戰鬥中一旦辨識出強敵 Boss 特徵，立即依序執行：
+    1. 點擊 `templates/battle/setting.png`（戰鬥設定）
+    2. 點擊 `templates/battle/giveup_battle.png`（放棄挑戰）
+    3. 點擊 `templates/common/confirm.png` / `ok.png`（確認放棄）
+  * **重試上限**：黃金古國專屬戰敗/放棄上限設定為 **5 次 (`domain_max_defeat: 5`)**。未達 5 次時自動切回 `STATE_DOMAIN_EXPLORE` 繼續探索；滿 5 次則退回大廳重新導航或退避。
 * **結算處理**：
   * 戰鬥勝利後連續點擊 **2 次 Continue 按鈕**（`common/continue.png` / `common/continue_gray.png`）直到按鈕完全消失。
   * 檢查是否觸發背包滿（`backpack_full.png`），若滿則自動切換至裝備分選與清理流程。
   * 結算完畢後自動回到黃金古國主場景，繼續點擊 `explore_btn.png`。
 * **戰敗處置**：
-  * 若不幸戰敗（`defeat.png`），點擊放棄/返回退回大廳（Lobby）。
+  * 若常規戰鬥不幸戰敗（`defeat.png`），點擊放棄/返回退回大廳（Lobby）。
   * 狀態機轉移至 `NAVIGATING`，重新執行進場導航（`Domains_entry` ➔ `entry` ➔ `start_btn`）重新進入古國。
 
 ---

@@ -37,6 +37,9 @@ class BattleHandler(BaseStateHandler):
                 self.machine.last_auto_click_time = time.time()
                 time.sleep(0.1)
 
+        # A1. 檢查是否遭遇無法戰勝之強敵 Boss (Flee Boss Check)
+        if self._check_and_handle_flee_boss(screen_img, rect):
+            return
 
         # B. 監控戰鬥結算
         # 為了防範剛進入戰鬥時，由於畫面轉換延遲與殘留按鈕導致誤判上一次戰鬥的結算按鈕，
@@ -193,6 +196,88 @@ class BattleHandler(BaseStateHandler):
         else:
             self.log_battle_duration()
             time.sleep(0.15)
+
+    def _check_and_handle_flee_boss(self, screen_img, rect) -> bool:
+        """
+        [強敵撤退子流程]
+        檢查當前模式是否配置 flee_bosses（例如黃金君王 golden_king.png）。
+        若偵測到強敵特徵，執行：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 累加戰敗並重置狀態。
+        """
+        flee_bosses = self.machine.config.get("flee_bosses", []) if self.machine.config else []
+        if not flee_bosses:
+            return False
+
+        detected_boss = None
+        for boss_temp in flee_bosses:
+            if os.path.exists(os.path.join("templates", boss_temp)):
+                pos, conf = self.matcher.match(screen_img, boss_temp, threshold=0.75, quiet=True)
+                if pos:
+                    detected_boss = boss_temp
+                    break
+
+        if detected_boss:
+            logging.warning(f"🚨 [戰鬥撤退] 偵測到強敵 Boss 特徵 [{detected_boss}] (目前戰力暫無法擊敗)，立即執行放棄戰鬥流程！")
+            return self._run_flee_battle_subflow(rect)
+        return False
+
+    def _run_flee_battle_subflow(self, rect) -> bool:
+        """
+        執行放棄戰鬥具體步驟：
+        1. 點擊 battle/setting.png
+        2. 點擊 battle/giveup_battle.png
+        3. 點擊 common/confirm.png / common/ok.png
+        """
+        self.notify_ui_progress()
+        
+        # 1. 點擊設定按鈕
+        setting_temp = "battle/setting.png"
+        if os.path.exists(os.path.join("templates", setting_temp)):
+            cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else None
+            if cap_img is not None:
+                pos_s, _ = self.matcher.match(cap_img, setting_temp, threshold=0.75)
+                if pos_s:
+                    self.mouse.click(rect["left"] + pos_s[0], rect["top"] + pos_s[1])
+                    time.sleep(0.3)
+
+        # 2. 點擊放棄戰鬥按鈕
+        giveup_temp = "battle/giveup_battle.png"
+        if os.path.exists(os.path.join("templates", giveup_temp)):
+            cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else None
+            if cap_img is not None:
+                pos_g, _ = self.matcher.match(cap_img, giveup_temp, threshold=0.75)
+                if pos_g:
+                    self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
+                    time.sleep(0.3)
+
+        # 3. 點擊確認彈窗
+        for c_temp in ["common/confirm.png", "common/ok.png"]:
+            if os.path.exists(os.path.join("templates", c_temp)):
+                cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else None
+                if cap_img is not None:
+                    pos_c, _ = self.matcher.match(cap_img, c_temp, threshold=0.80)
+                    if pos_c:
+                        self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                        time.sleep(0.3)
+                        break
+
+        # 4. 戰敗/撤退計數處理
+        self.machine.defeat_count += 1
+        self.non_battle_feature_start_time = None
+        self.machine.battle_start_time = None
+
+        mode_type = self.machine.config.get("type") if self.machine.config else None
+        max_defeat = self.machine.config.get("domain_max_defeat", self.machine.config.get("stage_max_defeat", 5)) if mode_type == "domain" else 2
+
+        logging.warning(f"⚠️ [戰鬥撤退] 已完成放棄戰鬥，累計戰敗/撤退次數: {self.machine.defeat_count}/{max_defeat}")
+        if self.machine.defeat_count >= max_defeat:
+            logging.warning(f"🚨 已達最大戰敗/撤退次數 ({max_defeat})，轉移至 NAVIGATING 重新導航或退避！")
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        else:
+            if mode_type == "domain":
+                self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+            else:
+                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        return True
 
     def log_battle_duration(self):
         now = time.time()

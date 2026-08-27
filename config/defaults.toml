@@ -54,6 +54,10 @@ name = "黃金古國"
 type = "domain"
 domain = "golden_empire"
 bread_cost = 3
+domain_max_defeat = 5
+flee_bosses = [
+    "domains/golden_empire/exception/golden_king.png"
+]
 navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
 explore_priorities = ["domains/golden_empire/explore_btn.png"]
 result_buttons = ["common/continue.png", "common/continue_gray.png"]
