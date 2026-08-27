@@ -19,7 +19,7 @@ class ResultHandler(BaseStateHandler):
     def _check_final_buttons_exist(self, screen_img, should_exit_battle):
         """檢查終局離場或再戰按鈕是否已經出現在畫面上"""
         if should_exit_battle:
-            exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
+            exit_candidates = ["exit_battle.png", "goback_town.png", "domains/common/exit_to_lobby.png", "common/quit.png"]
             for exit_btn in exit_candidates:
                 if os.path.exists(os.path.join("templates", exit_btn)):
                     pos, _ = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
@@ -277,7 +277,7 @@ class ResultHandler(BaseStateHandler):
         if self.subflow_step == "FINAL_MATCH":
             if should_exit_battle:
                 # 情況 B：第 4、8、10 場 ➔ 僅能配對離場按鈕
-                exit_candidates = ["exit_battle.png", "goback_town.png", "common/quit.png"]
+                exit_candidates = ["exit_battle.png", "goback_town.png", "domains/common/exit_to_lobby.png", "common/quit.png"]
                 for exit_btn in exit_candidates:
                     if os.path.exists(os.path.join("templates", exit_btn)):
                         pos_exit, conf_exit = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
