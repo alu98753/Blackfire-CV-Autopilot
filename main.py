@@ -465,10 +465,10 @@ def setup_mode_config(args):
                 stage_level=tier4_lvl,
                 sub_stage_type=tier4_sub
             )
-            config["name"] = f"每日懸賞任務 (Tier 4 退守: {config.get('name', '')} + {config.get('stage_name', '')})"
+            config["name"] = f"每日懸賞任務 (Tier 4 退守: {config.get('stage_name', '')})"
             print(f"[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行【{config.get('stage_name', '')}】。")
         else:
-            config["name"] = f"每日懸賞任務 (Tier 4 退守: {config.get('name', '')} + 城鎮待機)"
+            config["name"] = "每日懸賞任務 (Tier 4 退守: 城鎮待機)"
             print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將回到城鎮待機 (COLLECT_ONLY)，不打小怪。")
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
