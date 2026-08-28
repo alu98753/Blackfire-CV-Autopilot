@@ -138,6 +138,7 @@ class GameStateMachine:
         # 體力不足退避與還原相關屬性
         self.original_config = None
         self.stamina_retreat_start_time = None
+        self.is_dev_subflow_run = False
         self.last_lobby_start_click_time = 0.0
         self.last_result_retry_click_time = 0.0
         # 領取任務獎勵子流程 (Phase 狀態機屬性)
@@ -1237,8 +1238,11 @@ class GameStateMachine:
 
             from config import SUBFLOW_CONFIGS, GAME_CONFIGS
             flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
-            if not flow_cfg.get("enabled", True):
+            if not self.is_dev_subflow_run and not flow_cfg.get("enabled", True):
                 logging.info(f"⏭️ [城鎮流水線] 子流程 [{next_flow}] 設定為停用 (enabled=False) ➔ 自動跳過！剩餘佇列 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
+                dm = getattr(self, "daily_manager", None)
+                if dm and hasattr(dm, "record_subflow_completed"):
+                    dm.record_subflow_completed(next_flow)
                 continue
 
             flow_name = flow_cfg.get("name", next_flow)

@@ -23,8 +23,20 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
             json.dump(sample_status, f, ensure_ascii=False, indent=2)
 
         self.daily_mgr = DailyManager(data_dir=self.test_dir, status_file="test_daily_status.json")
+        
+        # 隔離設定檔：確保測試不受使用者本地 defaults.toml 暫時關閉 subflow 的影響
+        self.mock_subflow_configs = {
+            "chest": {"enabled": True, "name": "寶箱領取"},
+            "hero_draw": {"enabled": True, "name": "英雄召喚"},
+            "blood_altar": {"enabled": True, "name": "血之祭壇獻祭"},
+            "jewelry_workshop": {"enabled": True, "name": "珠寶加工廠出售"},
+            "bulletin_board": {"enabled": True, "name": "懸賞告示牌"},
+        }
+        self.patcher = patch("config.SUBFLOW_CONFIGS", self.mock_subflow_configs)
+        self.patcher.start()
 
     def tearDown(self):
+        self.patcher.stop()
         import shutil
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir, ignore_errors=True)
@@ -47,6 +59,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
         # 斷言 Tier 1 已空
@@ -72,6 +85,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
@@ -93,6 +107,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
         # 手動將 Boss 次數填滿
@@ -124,6 +139,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
@@ -193,6 +209,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
@@ -216,6 +233,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
         # 設蜘蛛今日 5 次全滿
@@ -336,6 +354,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
@@ -352,6 +371,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
@@ -380,6 +400,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
@@ -420,6 +441,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
@@ -454,8 +476,18 @@ class TestTierConfigMatrix(unittest.TestCase):
         with open(self.test_json_path, "w", encoding="utf-8") as f:
             json.dump(sample_status, f, ensure_ascii=False, indent=2)
         self.daily_mgr = DailyManager(data_dir=self.test_dir, status_file="test_daily_status.json")
+        self.mock_subflow_configs = {
+            "chest": {"enabled": True, "name": "寶箱領取"},
+            "hero_draw": {"enabled": True, "name": "英雄召喚"},
+            "blood_altar": {"enabled": True, "name": "血之祭壇獻祭"},
+            "jewelry_workshop": {"enabled": True, "name": "珠寶加工廠出售"},
+            "bulletin_board": {"enabled": True, "name": "懸賞告示牌"},
+        }
+        self.patcher = patch("config.SUBFLOW_CONFIGS", self.mock_subflow_configs)
+        self.patcher.start()
 
     def tearDown(self):
+        self.patcher.stop()
         import shutil
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir, ignore_errors=True)
@@ -474,6 +506,7 @@ class TestTierConfigMatrix(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
         sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
@@ -488,6 +521,7 @@ class TestTierConfigMatrix(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
@@ -510,6 +544,7 @@ class TestTierConfigMatrix(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
@@ -589,6 +624,29 @@ class TestTierConfigMatrix(unittest.TestCase):
 
         # 斷言發起點擊切換頁籤，未被 early return 攔截
         nav_handler.mouse.click.assert_called_once_with(500, 300)
+
+
+    def test_disabled_blood_altar_skips_and_does_not_loop_jewelry_workshop(self):
+        """[防死循環測試] 驗證當 blood_altar 設定 enabled=False 時，get_pending_town_subflows 自動剔除血祭壇，且 jewelry_workshop 完工後自動標記完成，不再重複派發"""
+        self.mock_subflow_configs["blood_altar"]["enabled"] = False
+        
+        # 1. 驗證 pending 清單中不再包含 blood_altar
+        pending = self.daily_mgr.get_pending_town_subflows()
+        self.assertEqual(pending, ["chest", "hero_draw", "jewelry_workshop", "bulletin_board"])
+        
+        # 2. 標記 chest, hero_draw, bulletin_board 完成
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+        
+        # 3. 此時 pending 僅剩 jewelry_workshop (不含 blood_altar)
+        self.assertEqual(self.daily_mgr.get_pending_town_subflows(), ["jewelry_workshop"])
+        
+        # 4. 模擬 jewelry_workshop 完成並調用 record_subflow_completed
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
+        
+        # 5. 斷言 Tier 1 全數清空，杜絕無限循環！
+        self.assertEqual(self.daily_mgr.get_pending_town_subflows(), [])
 
 
 if __name__ == "__main__":
