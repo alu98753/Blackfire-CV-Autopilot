@@ -89,28 +89,30 @@ def check_mode_templates(config):
                 
     return missing
 
-def setup_stage_config(config, prompt_prefix=""):
+def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_type=None):
     stage_configs = get_stage_configs()
-    print(f"\n{prompt_prefix}請選擇要打的關卡大關：")
-    print(" 1) 蒼穹平原 (Level 1)")
-    print(" 2) 荒蕪岩地 (Level 2)")
-    print(" 3) 古樹森林 (Level 3)")
-    print(" 4) 沙漠廢墟 (Level 4)")
-    print(" 5) 幽暗沼澤 (Level 5)")
-    print(" 6) 冰凍峽谷 (Level 6) - 預設")
-    try:
-        choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
-        if not choice:
+    if stage_level is not None and str(stage_level) in stage_configs:
+        choice = str(stage_level)
+    else:
+        print(f"\n{prompt_prefix}請選擇要打的關卡大關：")
+        print(" 1) 蒼穹平原 (Level 1)")
+        print(" 2) 荒蕪岩地 (Level 2)")
+        print(" 3) 古樹森林 (Level 3)")
+        print(" 4) 沙漠廢墟 (Level 4)")
+        print(" 5) 幽暗沼澤 (Level 5)")
+        print(" 6) 冰凍峽谷 (Level 6) - 預設")
+        try:
+            choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
+            if not choice:
+                choice = "6"
+        except KeyboardInterrupt:
+            print("\n[!] 取消啟動。")
+            sys.exit(0)
+        except Exception:
             choice = "6"
-    except KeyboardInterrupt:
-        print("\n[!] 取消啟動。")
-        sys.exit(0)
-    except Exception:
-        choice = "6"
 
     if choice not in stage_configs:
         print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰凍峽谷]...")
-
         choice = "6"
 
     cfg = stage_configs[choice]
@@ -118,9 +120,10 @@ def setup_stage_config(config, prompt_prefix=""):
     
     # 判斷是否有多個子關卡
     sub_stages = cfg["sub_stages"]
-    sub_choice_key = "first" if "first" in sub_stages else "final"  # 預設打第一小關 First Stage
     
-    if len(sub_stages) > 1:
+    if sub_stage_type is not None and sub_stage_type in sub_stages:
+        sub_choice_key = sub_stage_type
+    elif len(sub_stages) > 1:
         print(f"\n{prompt_prefix}請選擇 [{stage_name}] 要打的小關卡類型：")
         opts = []
         if "first" in sub_stages:
@@ -154,6 +157,8 @@ def setup_stage_config(config, prompt_prefix=""):
             print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [第一小關]...")
             matched_key = "first" if "first" in sub_stages else "final"
         sub_choice_key = matched_key
+    else:
+        sub_choice_key = "first" if "first" in sub_stages else "final"
 
     if sub_choice_key not in sub_stages:
         print(f"\n[!] 錯誤：該關卡 [{stage_name}] 未配置小關卡類型 '{sub_choice_key}'，或找不到對應的模板圖片！")
@@ -399,8 +404,21 @@ def setup_mode_config(args):
                 print("[*] 已啟用：定時待機期間，Boss 冷卻結束將自動前往討伐！")
     elif args.mode == "daily":
         print("\n[*] 【每日懸賞任務模式】設定 Tier 4 退守目標 (當懸賞全清且無 Boss 可打時)：")
-        setup_dungeon_config(config, args)
-        if args.enable_stage_farming is None:
+        
+        # 1. 地下城退守配置 (若 TOML/CLI 已經設定好 greedy 則免除互動，否則互動詢問)
+        has_toml_dungeon = ("greedy_allowed_indices" in config or "tier4_dungeon_index" in config) and args.backend
+        if not has_toml_dungeon:
+            setup_dungeon_config(config, args)
+        else:
+            config["greedy_dungeon"] = config.get("greedy_dungeon", True)
+            config["greedy_allowed_indices"] = config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
+            config["bless_mode"] = config.get("bless_mode", "combat")
+            config["auto_resume_dungeon_on_cd"] = config.get("auto_resume_dungeon_on_cd", False)
+
+        # 2. 是否前往普通關卡刷怪
+        if args.enable_stage_farming is not None:
+            config["enable_stage_farming"] = args.enable_stage_farming
+        elif "enable_stage_farming" not in config:
             print("\n當所有懸賞任務與地下城皆完成/冷卻時，是否要前往普通關卡刷怪？")
             print(" 1) 是 (前往普通關卡刷怪) - 預設")
             print(" 2) 否 (回到城鎮待機，零浪費體力)")
@@ -415,8 +433,15 @@ def setup_mode_config(args):
                 stage_farm_choice = "1"
             config["enable_stage_farming"] = (stage_farm_choice == "1")
 
-        if config.get("enable_stage_farming", False):
-            setup_stage_config(config, prompt_prefix="[Tier 4 退守關卡] ")
+        if config.get("enable_stage_farming", True):
+            tier4_lvl = config.get("tier4_stage_level")
+            tier4_sub = config.get("tier4_sub_stage")
+            setup_stage_config(
+                config,
+                prompt_prefix="[Tier 4 退守關卡] ",
+                stage_level=tier4_lvl,
+                sub_stage_type=tier4_sub
+            )
             config["name"] = f"每日懸賞任務 (Tier 4 退守: {config.get('name', '')} + {config.get('stage_name', '')})"
             print(f"[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行【{config.get('stage_name', '')}】。")
         else:

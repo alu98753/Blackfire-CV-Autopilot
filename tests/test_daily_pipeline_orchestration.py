@@ -648,6 +648,35 @@ class TestTierConfigMatrix(unittest.TestCase):
         # 5. 斷言 Tier 1 全數清空，杜絕無限循環！
         self.assertEqual(self.daily_mgr.get_pending_town_subflows(), [])
 
+    def test_setup_stage_config_with_toml_parameters(self):
+        """[TOML 配置測試] 驗證 setup_stage_config 傳入 stage_level 與 sub_stage_type 時，直接套用設定且不觸發 input() 阻塞"""
+        from main import setup_stage_config
+        config = {}
+        setup_stage_config(config, stage_level=6, sub_stage_type="final")
+        self.assertEqual(config["stage_name"], "冰凍峽谷 (final)")
+        self.assertEqual(config["stage_entry"], "stages/level6_ice_cave.png")
+        self.assertEqual(config["stage_target"], "stages/level6_final.png")
+        self.assertIn("stages/level6_final.png", config["stage_navigation_path"])
+
+    def test_setup_mode_config_daily_reads_tier4_toml(self):
+        """[TOML 配置測試] 驗證 setup_mode_config 在 daily 模式下可無縫讀取 TOML 中的 tier4 退守大關與小關配置"""
+        import argparse
+        from main import setup_mode_config
+        args = argparse.Namespace(
+            mode="daily",
+            subflow=None,
+            backend=True,
+            blessmode="combat",
+            enable_lord_boss=None,
+            enable_dungeon=None,
+            enable_stage_farming=None,
+            enable_town_daily=None
+        )
+        cfg = setup_mode_config(args)
+        self.assertEqual(cfg["stage_name"], "冰凍峽谷 (final)")
+        self.assertEqual(cfg["stage_entry"], "stages/level6_ice_cave.png")
+        self.assertEqual(cfg["stage_target"], "stages/level6_final.png")
+
 
 if __name__ == "__main__":
     unittest.main()

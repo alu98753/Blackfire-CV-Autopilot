@@ -152,6 +152,10 @@ dungeon_battle_results = ["common/continue.png", "common/continue_gray.png"]
 explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "common/continue.png", "common/continue_gray.png", "dungeons/gungeon_godown_confirm.png", "common/ok.png", "dungeons/dungeon_fight.png", "common/quit.png", "dungeons/Treasure.png", "dungeons/skill_event.png", "dungeons/dungeon_bless.png", "dungeons/gungeon_godown.png"]
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+enable_stage_farming = true
+tier4_stage_level = 6  # 大關數字 1~6 (6 代表 冰凍峽谷)
+tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (魔王關)
+
 
 [primary_modes.daily.cooldown_map]
 0 = 0.0
