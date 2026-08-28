@@ -7,6 +7,7 @@ default_bless_mode = "combat"
 default_town_subflow_order = ["blood_altar", "jewelry_workshop"]
 dry_run_bag_clean = false
 default_backpack_full_max_scroll = 5
+monitor_index = 1
 
 [quest]
 max_run_limit = 20

@@ -17,7 +17,7 @@ from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
 from states.state_machine import GameStateMachine
-from config import GAME_CONFIGS, PRIMARY_MODES, STAGE_CONFIGS, normalize_config, SUBFLOW_CONFIGS
+from config import GAME_CONFIGS, PRIMARY_MODES, STAGE_CONFIGS, normalize_config, SUBFLOW_CONFIGS, get_monitor_index
 from utils import get_stage_configs, PauseController
 from utils.daily_manager import DailyManager
 from utils.steam_launcher import SteamGameLauncher
@@ -355,7 +355,8 @@ def parse_arguments():
     parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
                         help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
-    parser.add_argument("--monitor", "--screen", type=int, default=1, help="指定全螢幕擷取/開遊戲的顯示器編號 (預設: 1 為筆電螢幕，2 為外接螢幕)")
+    parser.add_argument("--monitor", "--screen", type=int, default=None,
+                        help="指定全螢幕擷取/開遊戲的顯示器編號 (預設: 依據 Profile TOML [global.monitor_index] 設定)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
                         help="地下城祝福模式：combat (戰鬥) 或 life (生命) 或 exp (經驗)")
     # 模組化活動開關參數 (使用 BooleanOptionalAction 自動支援 --xxx 與 --no-xxx)
@@ -585,7 +586,9 @@ def init_state_machine_system(args, config, target_hwnd=None):
     print("=" * 60)
     print(" 🚀 Blackfire Crusade 自動掛機輔助腳本啟動 🚀")
     print("=" * 60)
+    active_monitor = args.monitor if args.monitor is not None else get_monitor_index()
     print(f"[*] 目標視窗標題: {args.title} (HWND: {hex(target_hwnd) if target_hwnd else '自動查找'})")
+    print(f"[*] 目標顯示器編號: Monitor {active_monitor} (由 {'CLI 參數' if args.monitor is not None else 'Profile TOML'} 指定)")
     print(f"[*] 畫面偵測間隔: {args.interval} 秒")
     print(f"[*] 當前掛機模式: {config['name']} ({args.mode})")
     print("=" * 60)
@@ -634,7 +637,7 @@ def init_state_machine_system(args, config, target_hwnd=None):
     print("=" * 60)
 
     # 初始化模組
-    capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend, hwnd=target_hwnd)
+    capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend, hwnd=target_hwnd, monitor_index=active_monitor)
     matcher = TemplateMatcher(templates_dir="templates", template_scale=1.0, auto_scale=True)
     mouse = MouseController(human_like=True, backend_mode=args.backend, window_title=args.title,
                             capturer=capturer, hwnd=target_hwnd)
@@ -762,8 +765,9 @@ def main():
     config = setup_mode_config(args)
     setup_equipment_config(config)
 
-    # 3. 檢查遊戲是否開啟，發起直連啟動並傳送至 1 號筆電螢幕與最大化全螢幕
-    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=args.monitor, hwnd=target_hwnd)
+    # 3. 檢查遊戲是否開啟，發起直連啟動並傳送至指定螢幕與最大化全螢幕
+    active_monitor = args.monitor if args.monitor is not None else get_monitor_index()
+    launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=active_monitor, hwnd=target_hwnd)
     if not launcher.ensure_game_ready():
         print("[!] 遊戲啟動準備失敗，終止腳本。")
         sys.exit(1)

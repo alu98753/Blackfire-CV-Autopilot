@@ -124,6 +124,11 @@ def get_template_threshold(template_name: str, default: float | None = None) -> 
     return float(DEFAULT_THRESHOLD)
 
 
+def get_monitor_index() -> int:
+    """Return configured target monitor index (1-indexed) from global settings."""
+    return int(GLOBAL_SETTINGS.get("monitor_index", 1))
+
+
 def normalize_config(config):
     """Populate the mode-independent equipment and activity defaults."""
     if not isinstance(config, dict):
