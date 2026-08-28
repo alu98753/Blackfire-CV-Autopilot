@@ -245,5 +245,39 @@ class TestHeroDrawSubflow(unittest.TestCase):
         if os.path.exists(dm.file_path):
             os.remove(dm.file_path)
 
+    def test_handler_closes_quit_popup_in_confirm_and_exiting_phases(self):
+        """測試：當酒館彈窗出現 common/quit.png 時，Handler 能正確發起關閉並完成退出"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "common/quit.png":
+                return ((450, 450), 0.88)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            # 1. 測試 WAITING_CONFIRM 階段遇到 quit.png
+            self.handler.step_phase = "WAITING_CONFIRM"
+            self.handler.last_action_time = 0.0
+            res1 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res1)
+            self.mock_machine.click_and_wait_until_gone.assert_called_with(
+                "common/quit.png", 450, 450, rect,
+                timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+            )
+
+            # 2. 測試 ALL_DONE_EXITING 階段殘留 quit.png
+            self.handler.step_phase = "ALL_DONE_EXITING"
+            self.handler.last_action_time = 0.0
+            res2 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res2)
+            self.mock_machine.click_and_wait_until_gone.assert_called_with(
+                "common/quit.png", 450, 450, rect,
+                timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
