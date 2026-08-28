@@ -3,6 +3,13 @@ import time
 import logging
 import re
 from states.handlers.base import BaseStateHandler
+from config import (
+    DEFAULT_THRESHOLD,
+    SUB_STAGE_THRESHOLD,
+    EXIT_BATTLE_THRESHOLD,
+    ENTRY_THRESHOLD,
+    get_template_threshold
+)
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardListNavigator
@@ -648,7 +655,8 @@ class NavigationHandler(BaseStateHandler):
             if "final" in btn or "first" in btn or "middle" in btn or "six" in btn:
                 target_final_btn = btn
                 if os.path.exists(os.path.join("templates", btn)):
-                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=0.90)
+                    thresh_btn = get_template_threshold(btn, default=SUB_STAGE_THRESHOLD)
+                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=thresh_btn)
                     if pos_f:
                         pos_final = pos_f
                         # 成功找到目標小關/魔王關，重置其缺失計時器
@@ -759,16 +767,16 @@ class NavigationHandler(BaseStateHandler):
                 continue
 
             if is_sub_stage_target:
-                thresh = 0.90
+                thresh = get_template_threshold(btn, default=SUB_STAGE_THRESHOLD)
                 b_thresh = 0.0
             elif btn == "exit_battle.png":
-                thresh = 0.88  # 提高門檻，防範城鎮背景產生 0.8088 的虛假誤匹配
+                thresh = get_template_threshold(btn, default=EXIT_BATTLE_THRESHOLD)  # 0.88 防範城鎮背景產生虛假誤匹配
                 b_thresh = 0.70
             elif "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
-                thresh = 0.60
+                thresh = get_template_threshold(btn, default=ENTRY_THRESHOLD)
                 b_thresh = 0.70
             else:
-                thresh = 0.80
+                thresh = get_template_threshold(btn, default=DEFAULT_THRESHOLD)
                 b_thresh = 0.70
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
             if pos:
@@ -777,6 +785,8 @@ class NavigationHandler(BaseStateHandler):
                     # 為了讓魔王關卡載入與 scan 完全，引入 1.5 秒的缺失計時器
                     if target_final_btn:
                         missing_time = getattr(self.machine, f"missing_time_{target_final_btn}", 0.0)
+                        if not isinstance(missing_time, (int, float)):
+                            missing_time = 0.0
                         if missing_time == 0.0:
                             self.machine.__setattr__(f"missing_time_{target_final_btn}", time.time())
                             logging.info(f"⌛ 尋路中：偵測到關卡背景，但魔王關 [{target_final_btn}] 尚未出現，等待載入與穩定中...")
@@ -829,6 +839,8 @@ class NavigationHandler(BaseStateHandler):
                 if pos_label and not pos_final:
                     if target_final_btn:
                         missing_time = getattr(self.machine, f"missing_time_{target_final_btn}", 0.0)
+                        if not isinstance(missing_time, (int, float)):
+                            missing_time = 0.0
                         if missing_time == 0.0:
                             self.machine.__setattr__(f"missing_time_{target_final_btn}", time.time())
                             logging.info(f"⌛ 尋路中：判定已在細節畫面但未見魔王關 [{target_final_btn}]，等待載入與穩定中...")

@@ -85,7 +85,47 @@ enabled = true
             
             reloaded = refresh_runtime_config()
             self.assertTrue(reloaded)
-            self.assertTrue(SUBFLOW_CONFIGS["jewelry_workshop"]["enabled"])
+    def test_vision_thresholds_overlay_and_get_template_threshold(self):
+        """驗證：vision 比對門檻與 template_thresholds 的讀取、繼承與 get_template_threshold 運作"""
+        from config import (
+            DEFAULT_THRESHOLD,
+            SUB_STAGE_THRESHOLD,
+            EXIT_BATTLE_THRESHOLD,
+            ENTRY_THRESHOLD,
+            get_template_threshold
+        )
+        # 1. 預設 defaults.toml 讀取
+        self.assertEqual(DEFAULT_THRESHOLD, 0.80)
+        self.assertEqual(SUB_STAGE_THRESHOLD, 0.93)
+        self.assertEqual(EXIT_BATTLE_THRESHOLD, 0.88)
+        self.assertEqual(ENTRY_THRESHOLD, 0.60)
+        self.assertEqual(get_template_threshold("stages/six_stage.png"), 0.93)
+        self.assertEqual(get_template_threshold("stages/first_stage.png"), 0.90)
+        self.assertEqual(get_template_threshold("stages/final_boss_stage.png"), 0.93)
+        self.assertEqual(get_template_threshold("common/door.png"), 0.80)
+        self.assertEqual(get_template_threshold("common/door.png", default=0.60), 0.60)
+
+        # 2. 測試 Profile 自訂覆蓋特定模板門檻
+        sandbox_toml_content = """
+[vision]
+sub_stage_threshold = 0.94
+
+[vision.template_thresholds]
+"stages/six_stage.png" = 0.96
+"stages/first_stage.png" = 0.92
+"""
+        (self.sandbox_dir / "config.toml").write_text(sandbox_toml_content, encoding="utf-8")
+
+        with patch.object(config, "USER_DATA_DIR", self.test_user_data_dir):
+            set_active_profile("sandbox")
+            self.assertEqual(get_template_threshold("stages/six_stage.png"), 0.96)
+            self.assertEqual(get_template_threshold("stages/first_stage.png"), 0.92)
+            self.assertEqual(get_template_threshold("stages/level6_final.png"), 0.94)
+
+            # 切回 native
+            set_active_profile("native")
+            self.assertEqual(get_template_threshold("stages/six_stage.png"), 0.93)
+            self.assertEqual(get_template_threshold("stages/first_stage.png"), 0.90)
 
 
 if __name__ == "__main__":

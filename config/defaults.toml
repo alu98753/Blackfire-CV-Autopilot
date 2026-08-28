@@ -33,6 +33,16 @@ offset_y = -10
 box_width = 360
 box_height = 57
 
+[vision]
+default_threshold = 0.80
+sub_stage_threshold = 0.93
+exit_battle_threshold = 0.88
+entry_threshold = 0.60
+
+[vision.template_thresholds]
+"stages/six_stage.png" = 0.93
+"stages/first_stage.png" = 0.90
+
 [defaults]
 disassemble_colors = ["gray_or_empty", "green", "blue"]
 keep_colors = ["purple", "orange_yellow", "red"]

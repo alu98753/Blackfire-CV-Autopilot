@@ -104,6 +104,25 @@ DEFAULT_DISASSEMBLE_COLORS = _SETTINGS["defaults"]["disassemble_colors"]
 DEFAULT_KEEP_COLORS = _SETTINGS["defaults"]["keep_colors"]
 DEFAULT_ACTIVITIES = _SETTINGS["defaults"]["activities"]
 
+VISION_SETTINGS = _SETTINGS.get("vision", {})
+DEFAULT_THRESHOLD = VISION_SETTINGS.get("default_threshold", 0.80)
+SUB_STAGE_THRESHOLD = VISION_SETTINGS.get("sub_stage_threshold", 0.93)
+EXIT_BATTLE_THRESHOLD = VISION_SETTINGS.get("exit_battle_threshold", 0.88)
+ENTRY_THRESHOLD = VISION_SETTINGS.get("entry_threshold", 0.60)
+TEMPLATE_THRESHOLDS = dict(VISION_SETTINGS.get("template_thresholds", {}))
+
+
+def get_template_threshold(template_name: str, default: float | None = None) -> float:
+    """Return specific template threshold from TOML if defined, else default or SUB_STAGE_THRESHOLD for sub-stages."""
+    if template_name in TEMPLATE_THRESHOLDS:
+        return float(TEMPLATE_THRESHOLDS[template_name])
+    if default is not None:
+        return float(default)
+    is_sub_stage = any(k in template_name for k in ["final", "first", "middle", "six"])
+    if is_sub_stage:
+        return float(SUB_STAGE_THRESHOLD)
+    return float(DEFAULT_THRESHOLD)
+
 
 def normalize_config(config):
     """Populate the mode-independent equipment and activity defaults."""
@@ -153,12 +172,21 @@ def _replace_mapping(target: dict, source: dict) -> None:
 
 def _reapply_all_settings(settings: dict) -> None:
     """Update all global config exports in place with the latest settings dictionary."""
-    global _SETTINGS
+    global _SETTINGS, VISION_SETTINGS, DEFAULT_THRESHOLD, SUB_STAGE_THRESHOLD, EXIT_BATTLE_THRESHOLD, ENTRY_THRESHOLD, TEMPLATE_THRESHOLDS
     _SETTINGS = settings
     _replace_mapping(GLOBAL_SETTINGS, settings["global"])
     _replace_mapping(PRIMARY_MODES, _restore_mode_key_types(settings["primary_modes"]))
     _replace_mapping(SUBFLOW_CONFIGS, settings["subflow_configs"])
     _replace_mapping(BASE_STAGE_LEVELS, settings["base_stage_levels"])
+    
+    # Vision settings
+    VISION_SETTINGS = settings.get("vision", {})
+    DEFAULT_THRESHOLD = VISION_SETTINGS.get("default_threshold", 0.80)
+    SUB_STAGE_THRESHOLD = VISION_SETTINGS.get("sub_stage_threshold", 0.93)
+    EXIT_BATTLE_THRESHOLD = VISION_SETTINGS.get("exit_battle_threshold", 0.88)
+    ENTRY_THRESHOLD = VISION_SETTINGS.get("entry_threshold", 0.60)
+    _replace_mapping(TEMPLATE_THRESHOLDS, VISION_SETTINGS.get("template_thresholds", {}))
+
     raw_configs = {**PRIMARY_MODES, **SUBFLOW_CONFIGS}
     _replace_mapping(GAME_CONFIGS, {key: normalize_config(value) for key, value in raw_configs.items()})
     _replace_mapping(STAGE_CONFIGS, {

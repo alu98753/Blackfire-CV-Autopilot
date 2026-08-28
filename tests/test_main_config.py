@@ -97,7 +97,7 @@ class TestMainConfig(unittest.TestCase):
         mock_args = MagicMock()
         mock_args.subflow = None
         mock_args.mode = "daily"
-        mock_args.backend = True
+        mock_args.backend = False
         mock_args.blessmode = None
         mock_args.enable_lord_boss = None
         mock_args.enable_dungeon = None
@@ -120,7 +120,7 @@ class TestMainConfig(unittest.TestCase):
         mock_args = MagicMock()
         mock_args.subflow = None
         mock_args.mode = "daily"
-        mock_args.backend = True
+        mock_args.backend = False
         mock_args.blessmode = None
         mock_args.enable_lord_boss = None
         mock_args.enable_dungeon = None
@@ -141,7 +141,7 @@ class TestMainConfig(unittest.TestCase):
         mock_args = MagicMock()
         mock_args.subflow = None
         mock_args.mode = "daily"
-        mock_args.backend = True
+        mock_args.backend = False
         mock_args.blessmode = None
         mock_args.enable_lord_boss = None
         mock_args.enable_dungeon = None

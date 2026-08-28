@@ -441,7 +441,7 @@ def setup_mode_config(args):
         # 2. 是否前往普通關卡刷怪
         if args.enable_stage_farming is not None:
             config["enable_stage_farming"] = args.enable_stage_farming
-        elif "enable_stage_farming" not in config:
+        elif not args.backend:
             print("\n當所有懸賞任務與地下城皆完成/冷卻時，是否要前往普通關卡刷怪？")
             print(" 1) 是 (前往普通關卡刷怪) - 預設")
             print(" 2) 否 (回到城鎮待機，零浪費體力)")
@@ -457,8 +457,8 @@ def setup_mode_config(args):
             config["enable_stage_farming"] = (stage_farm_choice == "1")
 
         if config.get("enable_stage_farming", True):
-            tier4_lvl = config.get("tier4_stage_level")
-            tier4_sub = config.get("tier4_sub_stage")
+            tier4_lvl = config.get("tier4_stage_level") if args.backend else None
+            tier4_sub = config.get("tier4_sub_stage") if args.backend else None
             setup_stage_config(
                 config,
                 prompt_prefix="[Tier 4 退守關卡] ",
