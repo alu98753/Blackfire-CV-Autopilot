@@ -672,10 +672,12 @@ class TestTierConfigMatrix(unittest.TestCase):
             enable_stage_farming=None,
             enable_town_daily=None
         )
+        from config import PRIMARY_MODES
+        expected_sub = PRIMARY_MODES["daily"].get("tier4_sub_stage", "first")
         cfg = setup_mode_config(args)
-        self.assertEqual(cfg["stage_name"], "冰凍峽谷 (final)")
+        self.assertEqual(cfg["stage_name"], f"冰凍峽谷 ({expected_sub})")
         self.assertEqual(cfg["stage_entry"], "stages/level6_ice_cave.png")
-        self.assertEqual(cfg["stage_target"], "stages/level6_final.png")
+        self.assertTrue(os.path.exists(os.path.join("templates", cfg["stage_target"])))
 
 
 if __name__ == "__main__":

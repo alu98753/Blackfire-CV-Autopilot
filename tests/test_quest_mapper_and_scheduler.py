@@ -51,6 +51,14 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(normalize_quest_title("害山詛咒"), "雪山詛咒")
         node_snow = self.mapper.parse_quest("害山詛咒")
         self.assertEqual(node_snow.mode_type, "ignored")
+        # 驗證前導/尾隨雜訊與數字序號 (如 0終結寒冰獸王 ➔ 終結寒冰獸王)
+        self.assertEqual(normalize_quest_title("0終結寒冰獸王"), "終結寒冰獸王")
+        self.assertEqual(normalize_quest_title("0 終結寒冰獸王"), "終結寒冰獸王")
+        self.assertEqual(normalize_quest_title("1. 清除骷髏"), "清除骷髏")
+        self.assertEqual(normalize_quest_title("[0] 清除蜘蛛 0/10"), "清除蜘蛛")
+        node_frost = self.mapper.parse_quest("0終結寒冰獸王")
+        self.assertEqual(node_frost.mode_type, "dungeon")
+        self.assertEqual(node_frost.dungeon_index, 4)
 
     def test_missing_quest_rules_json_raises_value_error(self):
         """

@@ -335,7 +335,26 @@ def parse_arguments():
     parser.add_argument("--dungeon", dest="enable_dungeon", action=argparse.BooleanOptionalAction, default=None, help="啟用/停用地下城探索 (dungeon)")
     parser.add_argument("--stage", dest="enable_stage_farming", action=argparse.BooleanOptionalAction, default=None, help="啟用/停用普通關卡打怪 (stage farming)")
     parser.add_argument("--town", dest="enable_town_daily", action=argparse.BooleanOptionalAction, default=None, help="啟用/停用每日城鎮速領 (chest, hero, altar, jewelry)")
+    parser.add_argument("--profile", type=str, default=None,
+                        help="指定帳號配置名稱 (例如 native, sandbox, acc2)，將自動綁定狀態檔 user_data/daily_status_{profile}.json")
     return parser.parse_args()
+
+def resolve_status_filename(args, target_title: str = "") -> str:
+    """
+    依據 CLI 參數 (--profile, --target) 或視窗標題解析對應的 daily_status 檔案名稱。
+    - 若傳入 --profile ➔ daily_status_{profile}.json
+    - 若 --target 為 sandbox 或視窗標題包含 [#] ➔ daily_status_sandbox.json
+    - 其餘預設 ➔ daily_status_native.json
+    """
+    if getattr(args, "profile", None):
+        profile_name = args.profile.strip().lower()
+        return f"daily_status_{profile_name}.json"
+    
+    target_str = str(getattr(args, "target", "") or "").strip().lower()
+    if target_str in ["sandbox", "sandboxed", "box", "sb", "2"] or "[#]" in target_title:
+        return "daily_status_sandbox.json"
+    
+    return "daily_status_native.json"
 
 def setup_mode_config(args):
     # 若指定了 --subflow，為純城鎮子流程測試，完全不跳出地下城與關卡選單提示！
@@ -620,7 +639,9 @@ def init_state_machine_system(args, config, target_hwnd=None):
         args.subflow[0] if getattr(args, "subflow", None) else args.mode,
         config,
     )
-    daily_manager = DailyManager()
+    status_file = resolve_status_filename(args, getattr(args, "title", ""))
+    daily_manager = DailyManager(status_file=status_file)
+    logging.info(f"📂 [DailyManager] 成功綁定角色狀態檔: user_data/{status_file}")
     state_machine.daily_manager = daily_manager
 
     # 若使用 --subflow 發起 Dev 階段獨立測試

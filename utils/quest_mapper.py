@@ -283,7 +283,11 @@ class QuestMapper:
         if not title:
             return ""
 
-        cleaned = title
+        # 0️⃣ 第零重：清理前導/尾隨雜訊（數字序號如 "0", "1.", "[0]", 進度條, 下底線, 括號, 標點）
+        cleaned = re.sub(r'^[0-9\s._\-、\(\)\[\]【】/]+', '', str(title))
+        cleaned = re.sub(r'[0-9\s._\-、\(\)\[\]【】/]+$', '', cleaned)
+
+        # 1️⃣ 第一重：錯別字替換清洗
         for typo, correct in self.ocr_typo_map.items():
             cleaned = cleaned.replace(typo, correct)
 

@@ -41,7 +41,7 @@ class DailyManager:
     每日任務與 Boss 持久化狀態管理器。
     支援每日 08:05 自動重置、各 Boss 獨立 5 次上限與 2 小時 CD 計算。
     """
-    def __init__(self, data_dir="user_data", status_file="daily_status.json", reset_hour=8, reset_minute=5):
+    def __init__(self, data_dir="user_data", status_file="daily_status_native.json", reset_hour=8, reset_minute=5):
         if os.path.isabs(status_file):
             self.file_path = status_file
             self.data_dir = os.path.dirname(status_file)
