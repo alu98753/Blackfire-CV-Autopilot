@@ -35,7 +35,15 @@ class ExploreHandler(BaseStateHandler):
                 return
 
         # 3. 依優先級處理探險事件
-        for btn_name in self.machine.config["explore_priorities"]:
+        explore_priorities = (self.machine.config or {}).get("explore_priorities")
+        if not isinstance(explore_priorities, list):
+            logging.error(
+                "[ExploreHandler] missing explore_priorities after EXPLORING transition; returning to UNKNOWN for recovery."
+            )
+            self.machine.transition_to(self.machine.STATE_UNKNOWN)
+            return
+
+        for btn_name in explore_priorities:
             # 檢查模板檔案是否存在
             if not os.path.exists(os.path.join("templates", btn_name)):
                 continue
@@ -279,6 +287,18 @@ class ExploreHandler(BaseStateHandler):
                 continue
 
             if phase == "PHASE_SELECT_CARD":
+                # 0. 優先檢查是否已領取 (若存在 already_get 標籤則直接完成並退出)
+                for already_tpl in ["dungeons/already_get.png", "already_get.png"]:
+                    if os.path.exists(os.path.join(self.matcher.templates_dir, already_tpl)):
+                        pos_already, conf_already = self.matcher.match(screen_img, already_tpl, threshold=0.75, quiet=True)
+                        if pos_already:
+                            logging.info(f"✨ [子流程-選卡] 偵測到祝福已領取標籤 [{already_tpl}] ({conf_already:.4f})，判定該層祝福早已領過，切換至 PHASE_EXIT 關閉視窗。")
+                            bless_success = True
+                            phase = "PHASE_EXIT"
+                            break
+                if phase == "PHASE_EXIT":
+                    continue
+
                 # 1. 嘗試尋找偏好祝福卡片與 choice_bless.png
                 pos_tpl = None
                 if os.path.exists(tpl_path):

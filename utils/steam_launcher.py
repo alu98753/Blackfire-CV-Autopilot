@@ -8,6 +8,8 @@ from typing import Optional, Tuple
 from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
 from actions.mouse import MouseController
+from utils.sandbox_manager import SandboxManager
+from config import STEAM_APP_ID
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -20,7 +22,7 @@ class LauncherPhase(Enum):
 
 class SteamGameLauncher:
     """
-    從 Windows 原生協定 (steam://rungameid/1765770) 自動發起直連啟動並管理遊戲視窗的 Phase 狀態機類別。
+    從 Windows 原生協定或 Sandboxie 沙盒環境自動發起直連啟動並管理遊戲視窗的 Phase 狀態機類別。
     畫面載入 login/login.png 後，自動將視窗傳送至指定 Monitor (預設 1 號筆電螢幕) 並最大化全螢幕。
     """
 
@@ -32,16 +34,20 @@ class SteamGameLauncher:
         game_title: str = "Blackfire Crusade",
         backend_mode: bool = False,
         monitor_index: Optional[int] = 1,
-        action_cooldown: float = 1.0
+        action_cooldown: float = 1.0,
+        hwnd: Optional[int] = None,
+        sandbox_manager: Optional[SandboxManager] = None,
     ):
         self.game_title = game_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
-        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode, monitor_index=monitor_index)
-        self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode)
+        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode, monitor_index=monitor_index, hwnd=hwnd)
+        self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode, hwnd=hwnd)
         self.matcher = matcher or TemplateMatcher()
         self.action_cooldown = action_cooldown
         self.phase = LauncherPhase.LAUNCHING
+        self.sandbox_manager = sandbox_manager or SandboxManager()
+        self.is_sandbox = self.sandbox_manager.is_sandbox_title(self.game_title)
 
     def transition_to(self, next_phase: LauncherPhase, reason: str = ""):
         logging.info(f"🔄 [SteamGameLauncher] 狀態轉移: {self.phase.name} ➔ {next_phase.name} ({reason})")
@@ -102,7 +108,9 @@ class SteamGameLauncher:
         """
         try:
             import win32gui
-            hwnd = win32gui.FindWindow(None, self.game_title)
+            hwnd = self.capturer.get_hwnd() if hasattr(self, "capturer") and self.capturer else None
+            if not hwnd:
+                hwnd = win32gui.FindWindow(None, self.game_title)
             return hwnd != 0 and bool(win32gui.IsWindow(hwnd))
         except Exception as e:
             logging.debug(f"is_game_open 檢查失敗: {e}")
@@ -118,12 +126,16 @@ class SteamGameLauncher:
 
         while time.time() - start_time < timeout:
             retry_count += 1
-            logging.info(f"🚀 [SteamGameLauncher] (第 {retry_count} 次) 呼叫 Windows 原生 steam://rungameid/1765770 發起啟動...")
-            try:
-                import subprocess
-                subprocess.Popen(["cmd", "/c", "start", "steam://rungameid/1765770"], shell=True)
-            except Exception as e:
-                logging.warning(f"發起 steam:// 協定失敗: {e}")
+            if self.is_sandbox:
+                logging.info(f"🚀 [SteamGameLauncher] (第 {retry_count} 次) 透過 SandboxManager 於沙盒內發起 Steam 啟動...")
+                self.sandbox_manager.launch_steam_game(STEAM_APP_ID)
+            else:
+                logging.info(f"🚀 [SteamGameLauncher] (第 {retry_count} 次) 呼叫 Windows 原生 steam://rungameid/{STEAM_APP_ID} 發起啟動...")
+                try:
+                    import subprocess
+                    subprocess.Popen(["cmd", "/c", "start", f"steam://rungameid/{STEAM_APP_ID}"], shell=True)
+                except Exception as e:
+                    logging.warning(f"發起 steam:// 協定失敗: {e}")
 
             # 每輪輪詢 30 秒檢測遊戲視窗 HWND 是否建立
             max_ticks = max(1, int(30.0 / poll_interval)) if poll_interval > 0 else 30

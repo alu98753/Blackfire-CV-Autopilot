@@ -163,13 +163,13 @@ class HeroDrawHandler(BaseStateHandler):
                         self.not_found_count = 0
                         return True
 
-            # 5.2 檢查與點擊 OK / 確認按鈕 (支援多個連續彈窗，點擊後保持 WAITING_CONFIRM 直到所有彈窗被點完)
-            confirm_list = ["common/ok.png", "common/confirm.png"]
+            # 5.2 檢查與點擊 OK / 確認按鈕 / 關閉按鈕 (支援多個連續彈窗，點擊後保持 WAITING_CONFIRM 直到所有彈窗被點完)
+            confirm_list = ["common/ok.png", "common/confirm.png", "common/quit.png"]
             for confirm_template in confirm_list:
                 if os.path.exists(os.path.join("templates", confirm_template)):
                     pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.75)
                     if pos_c:
-                        logging.info(f"🍺 [抽英雄] 發現 OK / 確認按鈕 [{confirm_template}] [{conf_c:.4f}]，發起確信點擊與消失輪詢...")
+                        logging.info(f"🍺 [抽英雄] 發現確認/關閉按鈕 [{confirm_template}] [{conf_c:.4f}]，發起確信點擊與消失輪詢...")
                         self.machine.click_and_wait_until_gone(
                             confirm_template, left + pos_c[0], top + pos_c[1], rect,
                             timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
@@ -178,21 +178,33 @@ class HeroDrawHandler(BaseStateHandler):
                         self.not_found_count = 0
                         return True
 
-            # 5.3 無彈窗門禁：連續 3 幀確信畫面上無任何分解或 OK/確認按鈕後，才切換至 ALL_DONE_EXITING
+            # 5.3 無彈窗門禁：連續 3 幀確信畫面上無任何分解或 OK/確認/關閉按鈕後，才切換至 ALL_DONE_EXITING
             self.not_found_count += 1
             if self.not_found_count < 3:
-                logging.info(f"🍺 [抽英雄] 等待 OK / 分解按鈕彈出中... (第 {self.not_found_count}/3 幀嘗試)")
+                logging.info(f"🍺 [抽英雄] 等待 OK / 分解 / 關閉按鈕彈出中... (第 {self.not_found_count}/3 幀嘗試)")
                 self.last_action_time = now
                 return True
 
-            logging.info("🍺 [抽英雄] 連續 3 幀未偵測到 OK 或分解按鈕，確信所有彈窗已完全清理，準備退出酒館...")
+            logging.info("🍺 [抽英雄] 連續 3 幀未偵測到 OK、分解或 Quit 按鈕，確信所有彈窗已完全清理，準備退出酒館...")
             self.step_phase = "ALL_DONE_EXITING"
             self.not_found_count = 0
             self.last_action_time = now
             return True
 
-        # 6. ALL_DONE_EXITING 階段：點擊房屋退出按鈕 (僅配對 town_building/exitfromhouse_and_to_town.png)
+        # 6. ALL_DONE_EXITING 階段：點擊房屋退出按鈕 (若殘留 quit 彈窗則先關閉)
         elif self.step_phase == "ALL_DONE_EXITING":
+            # 6.1 若畫面上仍殘留關閉按鈕 (如卡片/提示彈窗)，先關閉彈窗
+            if os.path.exists(os.path.join("templates", "common/quit.png")):
+                pos_q, conf_q = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
+                if pos_q:
+                    logging.info(f"🍺 [抽英雄] 退出前發現殘留彈窗關閉按鈕 [common/quit.png] [{conf_q:.4f}]，點擊關閉...")
+                    self.machine.click_and_wait_until_gone(
+                        "common/quit.png", left + pos_q[0], top + pos_q[1], rect,
+                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                    )
+                    self.last_action_time = now
+                    return True
+
             exit_template = "town_building/exitfromhouse_and_to_town.png"
             exit_clicked = False
             if os.path.exists(os.path.join("templates", exit_template)):

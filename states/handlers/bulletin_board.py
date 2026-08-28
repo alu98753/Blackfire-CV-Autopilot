@@ -336,11 +336,10 @@ class BulletinBoardHandler(BaseStateHandler):
 
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
         if pos_door:
-            top_left_crop = screen_img[0:h_img // 2, 0:w_img // 2] if isinstance(screen_img, np.ndarray) else screen_img
-            pos_bb, conf_bb = self.matcher.match(top_left_crop, building_btn, threshold=0.75)
+            pos_bb, conf_bb = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
             
             if pos_bb:
-                logging.info(f"📋 [懸賞告示牌] 於左上 1/4 區域精確發現告示牌建築 [{building_btn}] (信心度: {conf_bb:.4f})，點擊進入...")
+                logging.info(f"📋 [懸賞告示牌] 於城鎮發現告示牌建築 [{building_btn}] (信心度: {conf_bb:.4f})，點擊進入...")
                 self.mouse.click(left + pos_bb[0], top + pos_bb[1])
                 self.step_phase = "WAIT_BOARD_OPEN"
                 self.last_action_time = now

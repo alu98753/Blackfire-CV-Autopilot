@@ -26,6 +26,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.need_bread_collection = False
         self.mock_machine.enable_bread = False
         self.mock_machine.stamina_retreat_start_time = None
+        self.mock_machine.daily_manager = None
         self.mock_machine.is_daily_pipeline_active.return_value = False
         self.mock_machine.has_available_dungeon.return_value = False
         self.mock_machine.dungeon_cooldowns = {}
@@ -237,20 +238,21 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
 
     # =========================================================================
-    # 7. 強敵 Boss (黃金君王) 戰鬥放棄測試
+    # 7. 領域強敵 Nemesis (黃金君王) 戰鬥處置與放棄測試
     # =========================================================================
 
-    def test_flee_boss_giveup_battle_subflow(self):
+    def test_nemesis_giveup_battle_subflow(self):
         """
-        Given: 戰鬥中遭遇強敵 Boss (golden_king.png)
+        Given: 戰鬥中遭遇領域強敵 Nemesis (golden_king.png) 且配置 nemesis_action = 'flee'
         When: 執行 BattleHandler.handle()
-        Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 不增加戰敗計數 (維持 0) 並切回 DOMAIN_EXPLORE
+        Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 不增加戰敗計數 (維持 0) 並轉移至 NAVIGATING
         """
         from states.handlers.battle import BattleHandler
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["nemesis_templates"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["nemesis_action"] = "flee"
         self.mock_machine.config["domain_max_defeat"] = 5
         self.mock_machine.defeat_count = 0
         self.mock_machine.last_auto_click_time = 0.0
@@ -276,6 +278,63 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertTrue(self.mock_machine.mouse.click.called)
         self.assertEqual(self.mock_machine.defeat_count, 0)
         self.mock_machine.transition_to.assert_called_with("NAVIGATING")
+
+    def test_nemesis_pause_action_subflow(self):
+        """
+        Given: 戰鬥中遭遇領域強敵 Nemesis (elf_mythril_hag.png) 且配置 nemesis_action = 'pause'
+        When: 執行 BattleHandler.handle()
+        Then: 呼叫 machine.pause() 暫停腳本運行，不發送任何點擊，交由使用者手動挑戰
+        """
+        from states.handlers.battle import BattleHandler
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config["nemesis_templates"] = ["domains/golden_empire/exception/elf_mythril_hag.png"]
+        self.mock_machine.config["nemesis_action"] = "pause"
+        self.mock_machine.last_auto_click_time = 0.0
+        self.mock_machine.battle_start_time = 100.0
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/golden_empire/exception/elf_mythril_hag.png":
+                return ((500, 300), 0.85)
+            if template == "common/auto.png":
+                return ((1200, 55), 0.95)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            battle_handler.handle(mock_img, self.rect)
+
+        # 斷言觸發 machine.pause()，且未發起放棄戰鬥之滑鼠點擊
+        self.mock_machine.pause.assert_called_once()
+        self.assertFalse(self.mock_machine.mouse.click.called)
+
+    def test_nemesis_backward_compatibility_with_flee_bosses(self):
+        """
+        [向下相容測試] 驗證使用舊鍵值 flee_bosses 與 flee_boss_action 時，BattleHandler 依然能正確辨識強敵並暫停
+        """
+        from states.handlers.battle import BattleHandler
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config.pop("nemesis_templates", None)
+        self.mock_machine.config.pop("nemesis_action", None)
+        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["flee_boss_action"] = "pause"
+        self.mock_machine.battle_start_time = 100.0
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/golden_empire/exception/golden_king.png":
+                return ((500, 300), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            battle_handler.handle(mock_img, self.rect)
+
+        self.mock_machine.pause.assert_called_once()
 
     # =========================================================================
     # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試
@@ -369,6 +428,66 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertTrue(triggered)
         self.mock_machine.mouse.click.assert_called()
         self.mock_machine.transition_to.assert_called_with("COLLECT_ONLY")
+
+    # =========================================================================
+    # 11. 黃金古國日常領主 Boss (Lord Boss) 插隊挑戰與自動回歸測試
+    # =========================================================================
+
+    def test_golden_empire_preempts_to_lord_boss_when_cooldown_expires(self):
+        """
+        Given: 處於黃金古國探索 (STATE_DOMAIN_EXPLORE) 且啟用 enable_lord_boss = True，DailyManager 偵測到領主 Boss 冷卻結束可挑戰
+        When: 執行 DomainExploreHandler.handle()
+        Then: 主動偵測並點擊 exit_to_lobby.png 退出古國，轉移至 STATE_NAVIGATING 前往城鎮挑戰領主 Boss
+        """
+        mock_img = MagicMock()
+        mock_dm = MagicMock()
+        mock_dm.has_available_lord_boss.return_value = True
+        self.mock_machine.daily_manager = mock_dm
+        self.mock_machine.config["enable_lord_boss"] = True
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/common/exit_to_lobby.png":
+                return ((1800, 100), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True), \
+             patch.object(self.handler, "click_and_wait_until_gone") as mock_click:
+            self.handler.handle(mock_img, self.rect)
+
+        mock_click.assert_called_once()
+        self.assertEqual(mock_click.call_args[0][0], "domains/common/exit_to_lobby.png")
+        self.mock_machine.transition_to.assert_called_with("NAVIGATING")
+
+    def test_golden_empire_restored_after_lord_boss_finishes(self):
+        """
+        Given: 初始掛機主模式為黃金古國 (golden_empire)，中途插隊執行領主 Boss 討伐 (lord_boss)
+        When: 領主 Boss 討伐結束，城鎮流水線隊列清空並執行 pop_and_next_town_subflow()
+        Then: 狀態機自動恢復 primary_config (黃金古國)，並轉移至 STATE_NAVIGATING 以重新循徑進入古國繼續掛機
+        """
+        from states.state_machine import GameStateMachine
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        golden_config = {
+            "name": "黃金古國",
+            "type": "domain",
+            "domain": "golden_empire",
+            "enable_lord_boss": True,
+            "navigation_path": ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
+        }
+        sm.config = golden_config.copy()
+        sm.primary_config = golden_config.copy()
+        sm.town_subflow_queue = ["lord_boss"]
+
+        # 模擬進入 Lord Boss 子流程
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
+        # 模擬 Lord Boss 結束，隊列清空並結尾
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["name"], "黃金古國")
+        self.assertEqual(sm.config["type"], "domain")
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
 
 
 if __name__ == "__main__":

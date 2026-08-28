@@ -41,6 +41,12 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.repeat_sell_count = 0
         self.pre_tidy_done = False
 
+    def _record_completion(self):
+        """記錄 DailyManager 珠寶加工廠今日已完成"""
+        dm = getattr(self.machine, "daily_manager", None)
+        if dm and hasattr(dm, "record_subflow_completed"):
+            dm.record_subflow_completed("jewelry_workshop")
+
     def _get_enabled_goods(self, goods_dir, goods_settings):
         """
         掃描 goods_dir (含顏色子資料夾 gray/, green/, blue/, purple/ 或直接平鋪檔案)，
@@ -111,6 +117,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 logging.warning(f"💎 [珠寶加工廠] 防護攔截 - 處於 [{self.step_phase}] 階段但畫面上已看見城鎮大門 [common/door.png] ({conf_door_chk:.4f})，結束出售流程。")
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
+                self._record_completion()
                 self.last_action_time = now
                 self.machine.pop_and_next_town_subflow()
                 return
@@ -304,6 +311,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 logging.info("✅ [珠寶加工廠] 偵測到目前已處於城鎮大門畫面，視為已退回城鎮，完成出售流程！")
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
+                self._record_completion()
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
 
@@ -326,6 +334,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
+                self._record_completion()
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
 

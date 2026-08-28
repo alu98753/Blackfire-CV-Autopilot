@@ -59,9 +59,9 @@ graph TD
 
 ### 1. ⚔️ 戰鬥事件 (Battle Subflow)
 * **戰鬥啟動**：辨識到 `common/auto.png` 確保自動戰鬥開啟。
-* **🚨 強敵 Boss 遭遇放棄機制 (Flee Boss Subflow)**：
-  * **背景原因**：部分古國守護 Boss（如不朽者「黃金君王」`golden_king.png`）目前門檻過高無法戰勝，後續亦可隨時在 `config/defaults.toml` 的 `flee_bosses` 擴充其他 Boss。
-  * **放棄動作**：戰鬥中一旦辨識出強敵 Boss 特徵，立即依序執行：
+* **🚨 領域強敵遭遇與處置機制 (Nemesis Handling Subflow)**：
+  * **背景原因**：部分古國守護強敵（如不朽者「黃金君王」`golden_king.png`）目前門檻過高無法戰勝，後續亦可隨時在 `config/defaults.toml` 的 `nemesis_templates` 擴充其他強敵，並透過 `nemesis_action` 設定暫停手動打 (`pause`) 或放棄逃跑 (`flee`)。
+  * **放棄動作**：戰鬥中一旦辨識出領域強敵特徵且配置為 `flee`，立即依序執行：
     1. 點擊 `templates/battle/setting.png`（戰鬥設定）
     2. 點擊 `templates/battle/giveup_battle.png`（放棄挑戰）
     3. 點擊 `templates/common/confirm.png` / `ok.png`（確認放棄）
@@ -112,9 +112,10 @@ graph TD
 | `templates/common/confirm.png` | 通用確認按鈕 (挖寶獎勵確認) | ✅ 現有共用資源 |
 | `templates/common/quit.png` | 通用退出按鈕 (挖寶結束退出) | ✅ 現有共用資源 |
 | `templates/backpack_full.png` | 背包滿全域攔截特徵 | ✅ 現有共用資源 |
-| `templates/domains/golden_empire/exception/golden_king.png` | 古國 Boss「黃金君王」遭遇特徵 | ✅ 已就緒 |
+| `templates/domains/golden_empire/exception/golden_king.png` | 古國強敵「黃金君王」遭遇特徵 | ✅ 已就緒 |
 | `templates/domains/golden_empire/exception/elf_mythril_hag.png` | 古國強敵「精靈秘銀妖婆」遭遇特徵 | ✅ 已就緒 |
 | `templates/domains/golden_empire/exception/undead_altalim.png` | 古國強敵「不死者阿爾塔林」遭遇特徵 | ✅ 已就緒 |
 | `templates/domains/golden_empire/exception/human_golden_tulakh.png` | 古國強敵「黃金圖拉赫」遭遇特徵 | ✅ 已就緒 |
+| `templates/domains/golden_empire/exception/golden_wall_guard_tulan.png` | 古國強敵「金壁守衛圖拉安」遭遇特徵 | ✅ 已就緒 |
 | `templates/battle/setting.png` | 戰鬥中設定按鈕 (放棄選單) | ✅ 已就緒 |
 | `templates/battle/giveup_battle.png` | 戰鬥中放棄挑戰按鈕 | ✅ 已就緒 |

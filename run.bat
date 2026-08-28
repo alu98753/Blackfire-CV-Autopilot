@@ -37,6 +37,7 @@ echo  9. 查看遊戲理智公約:             顯示防制衝動消費心態指
 echo ------------------------------------------------------------
 echo 參數說明：
 echo  --mode [名稱]      : 設定運行主模式 (daily / mix / dungeon / stage / golden_empire)
+echo  --target [目標]    : 雙開指定視窗 (1 / 2 / native / sandbox)
 echo  --subflow [子任務]  : 發起獨立子流程測試 (chest / blood_altar / lord_boss)
 echo  --backend          : 啟用後台點擊與截圖 (推薦)
 echo  --interval [秒]    : 偵測時間間隔 (預設: 0.5)

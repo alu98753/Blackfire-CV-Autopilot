@@ -4,6 +4,7 @@ import os
 import time
 from unittest.mock import MagicMock, patch
 from states.handlers.navigation import NavigationHandler
+from states.handlers.collect_only import CollectOnlyHandler
 from config import GAME_CONFIGS
 
 class TestBehaviorDungeonCards(unittest.TestCase):
@@ -45,6 +46,25 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.handler.mouse = self.mock_mouse
         self.handler.matcher = self.mock_matcher
         self.rect = {"left": 100, "top": 50, "width": 1000, "height": 800}
+
+    def test_collect_only_resumes_saved_dungeon_config_when_cooldown_expires(self):
+        """A cooldown fallback must retain enough context to re-enter dungeon mode."""
+        dungeon_config = GAME_CONFIGS["dungeon"].copy()
+        dungeon_config["auto_resume_dungeon_on_cd"] = True
+        self.mock_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.mock_machine.dungeon_cooldown_return_config = dungeon_config
+        self.mock_machine.need_diamond_collection = False
+        self.mock_machine.need_bread_collection = False
+        self.mock_machine.enable_bread = False
+        self.mock_machine.has_available_dungeon.return_value = True
+        self.mock_machine.STATE_UNKNOWN = "UNKNOWN"
+
+        handler = CollectOnlyHandler(self.mock_machine)
+        handler.handle(None, self.rect)
+
+        self.assertEqual(self.mock_machine.config, dungeon_config)
+        self.assertIsNone(self.mock_machine.dungeon_cooldown_return_config)
+        self.mock_machine.transition_to.assert_called_once_with("UNKNOWN")
 
     # =========================================================================
     # 2.1 地下城卡片定位與對齊行為測試

@@ -81,9 +81,10 @@ class TaskNode:
             "dungeons/Ghost_entry.png",
             "dungeons/Forest_entry.png",
             "dungeons/Ruins_entry.png",
+            "dungeons/dark_prison.png",
             "dungeons/Ice_entry.png"
         ]
-        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 
         stage_entries = {
             1: "stages/level1_sky_plains.png",
@@ -105,6 +106,14 @@ class TaskNode:
 
         def _apply_base_preferences(cfg):
             if base_config:
+                # A quest-specific route must not re-enable activities disabled by
+                # the daily profile (especially lord boss) while it is active.
+                for activity_key in (
+                    "enable_town_daily", "enable_lord_boss", "enable_quests",
+                    "enable_dungeon", "enable_stage_farming",
+                ):
+                    if activity_key in base_config:
+                        cfg[activity_key] = base_config[activity_key]
                 if "keep_colors" in base_config:
                     cfg["keep_colors"] = base_config["keep_colors"]
                 if "disassemble_colors" in base_config:
@@ -283,7 +292,11 @@ class QuestMapper:
         if not title:
             return ""
 
-        cleaned = title
+        # 0️⃣ 第零重：清理前導/尾隨雜訊（數字序號如 "0", "1.", "[0]", 進度條, 下底線, 括號, 標點）
+        cleaned = re.sub(r'^[0-9\s._\-、\(\)\[\]【】/]+', '', str(title))
+        cleaned = re.sub(r'[0-9\s._\-、\(\)\[\]【】/]+$', '', cleaned)
+
+        # 1️⃣ 第一重：錯別字替換清洗
         for typo, correct in self.ocr_typo_map.items():
             cleaned = cleaned.replace(typo, correct)
 
@@ -448,4 +461,3 @@ class QuestMapper:
         # 5. 無法精確映射：未定義任務預設為 BANNER_VERIFY_QUESTS 防呆保護
         logging.warning(f"⚠️ 懸賞任務 '{title}' 無法對應到已知規則庫 (未定義任務)，回傳 None 紀錄至 unknown_quests。")
         return None
-

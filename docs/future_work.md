@@ -1,12 +1,13 @@
-
 # 待辦事項與未來優化規劃 (Future Work & Edge Cases)
 
 
-1. 整理config
+## 雙開與多實例掛機
+- **[已經解決] Sandboxie-Plus Steam 雙開掛機與多實例目標選擇**：
+  - 詳情參見指南 [docs/sandboxie_dual_instance_guide.md](sandboxie_dual_instance_guide.md) 與 PARS 故事 [docs/storys/sandboxie_dual_instance_pars_story.md](storys/sandboxie_dual_instance_pars_story.md)。
+  - 支援自動掃描本機/沙盒視窗（`[#] Blackfire Crusade [#]`）、互動選單以及 `--target` 快速參數。
+
 2. 補充 黃金古國模式
-
-
-我覺得問題在於 我程式預設有兩個螢幕 但是有時我會移除遠端的大螢幕(benq的) 而只用筆電螢幕 此時他重開的時候 點擊的位置會錯誤 這是根本上的問題
+  我希望他如果暫停時 用DC or line 傳訊息給我
 
 ----
 

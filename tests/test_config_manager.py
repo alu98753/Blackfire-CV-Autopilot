@@ -54,7 +54,7 @@ class TestJsonConfigManager(unittest.TestCase):
         import config
 
         original_path = config.LOCAL_CONFIG_PATH
-        original_manager = config._LOCAL_MANAGER
+        original_manager = config._PROFILE_MANAGER
         original_settings = deepcopy(config._SETTINGS)
         original_exports = {
             "global": deepcopy(config.GLOBAL_SETTINGS),
@@ -64,6 +64,7 @@ class TestJsonConfigManager(unittest.TestCase):
             "game": deepcopy(config.GAME_CONFIGS),
             "stage": deepcopy(config.STAGE_CONFIGS),
         }
+        original_profile = config.get_active_profile()
         try:
             with tempfile.TemporaryDirectory() as directory:
                 local_path = Path(directory) / "local.toml"
@@ -72,7 +73,8 @@ class TestJsonConfigManager(unittest.TestCase):
                     encoding="utf-8",
                 )
                 config.LOCAL_CONFIG_PATH = local_path
-                config._LOCAL_MANAGER = None
+                config._ACTIVE_PROFILE = "non_existent_profile_for_test"
+                config._PROFILE_MANAGER = None
 
                 self.assertTrue(config.refresh_runtime_config())
                 self.assertEqual(config.get_runtime_game_config("dungeon")["bless_mode"], "exp")
@@ -81,8 +83,9 @@ class TestJsonConfigManager(unittest.TestCase):
                 self.assertTrue(config.refresh_runtime_config())
                 self.assertEqual(config.get_runtime_game_config("dungeon")["bless_mode"], "combat")
         finally:
+            config._ACTIVE_PROFILE = original_profile
             config.LOCAL_CONFIG_PATH = original_path
-            config._LOCAL_MANAGER = original_manager
+            config._PROFILE_MANAGER = original_manager
             config._SETTINGS = original_settings
             config._replace_mapping(config.GLOBAL_SETTINGS, original_exports["global"])
             config._replace_mapping(config.PRIMARY_MODES, original_exports["primary"])
@@ -90,3 +93,22 @@ class TestJsonConfigManager(unittest.TestCase):
             config._replace_mapping(config.BASE_STAGE_LEVELS, original_exports["base"])
             config._replace_mapping(config.GAME_CONFIGS, original_exports["game"])
             config._replace_mapping(config.STAGE_CONFIGS, original_exports["stage"])
+
+    def test_global_monitor_index_and_profile_override(self):
+        import config
+        from config import get_defaults_config, get_monitor_index, set_active_profile
+
+        # 1. 預設 profile (native) 的 monitor_index 為 1
+        set_active_profile("native")
+        self.assertEqual(get_monitor_index(), 1)
+        self.assertEqual(get_defaults_config()["global"]["monitor_index"], 1)
+
+        # 2. 切換至 sandbox profile，應讀取到 user_data/sandbox/config.toml 中的 monitor_index = 2
+        set_active_profile("sandbox")
+        self.assertEqual(get_monitor_index(), 2)
+        self.assertEqual(get_defaults_config()["global"]["monitor_index"], 2)
+
+        # 3. 還原至 native
+        set_active_profile("native")
+        self.assertEqual(get_monitor_index(), 1)
+

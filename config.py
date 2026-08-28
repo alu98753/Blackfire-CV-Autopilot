@@ -7,20 +7,34 @@ from copy import deepcopy
 from pathlib import Path
 
 from utils.config_helper import get_stage_configs
-from utils.config_manager import JsonConfigManager, TomlConfigManager
+from utils.config_manager import JsonConfigManager, TomlConfigManager, dump_toml_dict
 
 
 WINDOW_TITLE = "Blackfire Crusade"
+STEAM_APP_ID = "1765770"
 CONFIG_DIR = Path(__file__).with_name("config")
+USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
 LOCAL_CONFIG_PATH = CONFIG_DIR / "local.toml"
 _DEFAULTS_MANAGER = TomlConfigManager(DEFAULTS_PATH)
-_LOCAL_MANAGER = None
+_ACTIVE_PROFILE: str = "native"
+_PROFILE_MANAGER = None
+
+
+def get_active_profile() -> str:
+    """Return currently active profile name (e.g. 'native', 'sandbox')."""
+    return _ACTIVE_PROFILE
+
+
+def get_profile_config_path(profile: str | None = None) -> Path:
+    """Return the profile-specific config override path (user_data/<profile>/config.toml)."""
+    p = (profile or _ACTIVE_PROFILE).strip().lower()
+    return USER_DATA_DIR / p / "config.toml"
 
 
 def get_defaults_config() -> dict:
-    """Return defaults merged with the optional local runtime override file."""
-    return _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_local_config())
+    """Return defaults merged with the optional profile/local runtime override file."""
+    return _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_override_config())
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -34,15 +48,17 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
-def _get_local_config() -> dict:
-    """Load config/local.toml transactionally when it exists."""
-    global _LOCAL_MANAGER
-    if not LOCAL_CONFIG_PATH.exists():
-        _LOCAL_MANAGER = None
+def _get_override_config() -> dict:
+    """Load user_data/<profile>/config.toml (or fallback config/local.toml) transactionally when it exists."""
+    global _PROFILE_MANAGER
+    profile_path = get_profile_config_path()
+    target_path = profile_path if profile_path.exists() else LOCAL_CONFIG_PATH
+    if not target_path.exists():
+        _PROFILE_MANAGER = None
         return {}
-    if _LOCAL_MANAGER is None:
-        _LOCAL_MANAGER = TomlConfigManager(LOCAL_CONFIG_PATH, default={})
-    return _LOCAL_MANAGER.snapshot()
+    if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
+        _PROFILE_MANAGER = TomlConfigManager(target_path, default={})
+    return _PROFILE_MANAGER.snapshot()
 
 
 def _load_legacy_exports() -> dict:
@@ -87,6 +103,30 @@ BASE_STAGE_LEVELS = _SETTINGS["base_stage_levels"]
 DEFAULT_DISASSEMBLE_COLORS = _SETTINGS["defaults"]["disassemble_colors"]
 DEFAULT_KEEP_COLORS = _SETTINGS["defaults"]["keep_colors"]
 DEFAULT_ACTIVITIES = _SETTINGS["defaults"]["activities"]
+
+VISION_SETTINGS = _SETTINGS.get("vision", {})
+DEFAULT_THRESHOLD = VISION_SETTINGS.get("default_threshold", 0.80)
+SUB_STAGE_THRESHOLD = VISION_SETTINGS.get("sub_stage_threshold", 0.93)
+EXIT_BATTLE_THRESHOLD = VISION_SETTINGS.get("exit_battle_threshold", 0.88)
+ENTRY_THRESHOLD = VISION_SETTINGS.get("entry_threshold", 0.60)
+TEMPLATE_THRESHOLDS = dict(VISION_SETTINGS.get("template_thresholds", {}))
+
+
+def get_template_threshold(template_name: str, default: float | None = None) -> float:
+    """Return specific template threshold from TOML if defined, else default or SUB_STAGE_THRESHOLD for sub-stages."""
+    if template_name in TEMPLATE_THRESHOLDS:
+        return float(TEMPLATE_THRESHOLDS[template_name])
+    if default is not None:
+        return float(default)
+    is_sub_stage = any(k in template_name for k in ["final", "first", "middle", "six"])
+    if is_sub_stage:
+        return float(SUB_STAGE_THRESHOLD)
+    return float(DEFAULT_THRESHOLD)
+
+
+def get_monitor_index() -> int:
+    """Return configured target monitor index (1-indexed) from global settings."""
+    return int(GLOBAL_SETTINGS.get("monitor_index", 1))
 
 
 def normalize_config(config):
@@ -135,39 +175,112 @@ def _replace_mapping(target: dict, source: dict) -> None:
     target.update(source)
 
 
-def refresh_runtime_config() -> bool:
-    """Publish TOML changes only when a full valid snapshot is available."""
-    global _SETTINGS, _LOCAL_MANAGER
-    defaults_changed = _DEFAULTS_MANAGER.reload_if_changed()
-    local_changed = False
-    if LOCAL_CONFIG_PATH.exists():
-        if _LOCAL_MANAGER is None:
-            _get_local_config()
-            local_changed = True
-        else:
-            local_changed = _LOCAL_MANAGER.reload_if_changed()
-    elif _LOCAL_MANAGER is not None:
-        _LOCAL_MANAGER = None
-        local_changed = True
-    if not (defaults_changed or local_changed):
-        return False
-
-    settings = get_defaults_config()
-    if settings.get("config_version") != 1:
-        logging.error("[HotReload] ignored unsupported TOML config_version")
-        return False
+def _reapply_all_settings(settings: dict) -> None:
+    """Update all global config exports in place with the latest settings dictionary."""
+    global _SETTINGS, DEFAULT_DISASSEMBLE_COLORS, DEFAULT_KEEP_COLORS, DEFAULT_ACTIVITIES
+    global VISION_SETTINGS, DEFAULT_THRESHOLD, SUB_STAGE_THRESHOLD, EXIT_BATTLE_THRESHOLD, ENTRY_THRESHOLD, TEMPLATE_THRESHOLDS
     _SETTINGS = settings
     _replace_mapping(GLOBAL_SETTINGS, settings["global"])
     _replace_mapping(PRIMARY_MODES, _restore_mode_key_types(settings["primary_modes"]))
     _replace_mapping(SUBFLOW_CONFIGS, settings["subflow_configs"])
     _replace_mapping(BASE_STAGE_LEVELS, settings["base_stage_levels"])
+    DEFAULT_DISASSEMBLE_COLORS = settings["defaults"]["disassemble_colors"]
+    DEFAULT_KEEP_COLORS = settings["defaults"]["keep_colors"]
+    DEFAULT_ACTIVITIES = settings["defaults"]["activities"]
+    
+    # Vision settings
+    VISION_SETTINGS = settings.get("vision", {})
+    DEFAULT_THRESHOLD = VISION_SETTINGS.get("default_threshold", 0.80)
+    SUB_STAGE_THRESHOLD = VISION_SETTINGS.get("sub_stage_threshold", 0.93)
+    EXIT_BATTLE_THRESHOLD = VISION_SETTINGS.get("exit_battle_threshold", 0.88)
+    ENTRY_THRESHOLD = VISION_SETTINGS.get("entry_threshold", 0.60)
+    _replace_mapping(TEMPLATE_THRESHOLDS, VISION_SETTINGS.get("template_thresholds", {}))
+
     raw_configs = {**PRIMARY_MODES, **SUBFLOW_CONFIGS}
     _replace_mapping(GAME_CONFIGS, {key: normalize_config(value) for key, value in raw_configs.items()})
     _replace_mapping(STAGE_CONFIGS, {
         key: normalize_config(value)
         for key, value in get_stage_configs(BASE_STAGE_LEVELS).items()
     })
-    logging.info("[HotReload] applied config/defaults.toml and config/local.toml")
+
+
+def set_active_profile(profile: str) -> None:
+    """
+    切換當前生效的角色 Profile (如 'native', 'sandbox', 'acc2')。
+    自動重新計算 defaults.toml 與 user_data/<profile>/config.toml 的階層覆蓋，並即時更新全域設定導出。
+    """
+    global _ACTIVE_PROFILE, _PROFILE_MANAGER
+    _ACTIVE_PROFILE = profile.strip().lower()
+    _PROFILE_MANAGER = None
+    settings = get_defaults_config()
+    if settings.get("config_version") == 1:
+        _reapply_all_settings(settings)
+        profile_path = get_profile_config_path(_ACTIVE_PROFILE)
+        if profile_path.exists():
+            logging.info(f"⚙️ [ProfileConfig] 成功套用角色專屬覆蓋配置: user_data/{_ACTIVE_PROFILE}/config.toml")
+
+
+def update_profile_config(profile: str | None = None, updates: dict | None = None) -> Path:
+    """
+    將使用者在終端機選單中修改的設定，增量合併並寫入 user_data/<profile>/config.toml。
+    更新後立即重新整理配置快照並完成熱加載。
+    """
+    p = (profile or _ACTIVE_PROFILE).strip().lower()
+    target_path = get_profile_config_path(p)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    current_data: dict = {}
+    if target_path.exists():
+        try:
+            import tomllib
+            with target_path.open("rb") as f:
+                current_data = tomllib.load(f)
+        except Exception as e:
+            logging.warning(f"讀取既有 Profile config 失敗 ({e})，將重新構建。")
+            current_data = {}
+
+    if updates:
+        merged = _deep_merge(current_data, updates)
+    else:
+        merged = current_data
+
+    toml_str = dump_toml_dict(merged)
+    target_path.write_text(toml_str, encoding="utf-8")
+
+    refresh_runtime_config()
+    logging.info(f"💾 [ConfigSync] 已成功同步設定至 user_data/{p}/config.toml")
+    return target_path
+
+
+def refresh_runtime_config() -> bool:
+    """Publish TOML changes only when a full valid snapshot is available."""
+    global _SETTINGS, _PROFILE_MANAGER
+    defaults_changed = _DEFAULTS_MANAGER.reload_if_changed()
+    override_changed = False
+    
+    profile_path = get_profile_config_path()
+    target_path = profile_path if profile_path.exists() else LOCAL_CONFIG_PATH
+    
+    if target_path.exists():
+        if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
+            _get_override_config()
+            override_changed = True
+        else:
+            override_changed = _PROFILE_MANAGER.reload_if_changed()
+    elif _PROFILE_MANAGER is not None:
+        _PROFILE_MANAGER = None
+        override_changed = True
+        
+    if not (defaults_changed or override_changed):
+        return False
+
+    settings = get_defaults_config()
+    if settings.get("config_version") != 1:
+        logging.error("[HotReload] ignored unsupported TOML config_version")
+        return False
+    _reapply_all_settings(settings)
+    target_desc = f"user_data/{_ACTIVE_PROFILE}/config.toml" if target_path == profile_path else "config/local.toml"
+    logging.info(f"[HotReload] applied config/defaults.toml and {target_desc}")
     return True
 
 

@@ -22,7 +22,7 @@ SAFE_AREA_CLIENT_POS = (15, 15)
 
 class MouseController:
     def __init__(self, human_like=False, backend_mode=False, window_title=WINDOW_TITLE,
-                 on_action_success=None, is_paused_fn=None, capturer=None, resume_event=None):
+                 on_action_success=None, is_paused_fn=None, capturer=None, resume_event=None, hwnd=None):
         self.human_like = human_like
         self.backend_mode = backend_mode
         self.window_title = window_title
@@ -37,7 +37,7 @@ class MouseController:
         self._resume_event = resume_event
         # 截圖器參考 (可選)：供 _draw_debug_click 擷取畫面
         self._capturer = capturer
-        self._window = WindowHandle(window_title)
+        self._window = WindowHandle(window_title=window_title, hwnd=hwnd)
 
     def _finalize_action(self, target_pos=None, cooldown: float = 0.0, move_safe: bool = True) -> bool:
         """

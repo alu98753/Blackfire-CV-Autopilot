@@ -2,7 +2,15 @@ import os
 import time
 import logging
 import re
+from copy import deepcopy
 from states.handlers.base import BaseStateHandler
+from config import (
+    DEFAULT_THRESHOLD,
+    SUB_STAGE_THRESHOLD,
+    EXIT_BATTLE_THRESHOLD,
+    ENTRY_THRESHOLD,
+    get_template_threshold
+)
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardListNavigator
@@ -31,6 +39,30 @@ class NavigationHandler(BaseStateHandler):
         將 OCR 識別出的時間字串解析為總秒數 (委充自 utils.time_parser 共用模組)。
         """
         return parse_time_to_seconds(time_str)
+
+    def _enter_collect_only_after_dungeon_cooldown(self, screen_img, rect, reason):
+        """Return to town and enter the collection idle loop for dungeon-only runs."""
+        from config import GAME_CONFIGS
+
+        logging.warning("[Dungeon cooldown fallback] %s; returning to town and entering collect_only.", reason)
+        pos_back, conf_back = self.matcher.match(
+            screen_img, "goback_town.png", threshold=0.75, quiet=True
+        )
+        if pos_back:
+            logging.info("[Dungeon cooldown fallback] Clicking goback_town.png (%.4f).", conf_back)
+            self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+            time.sleep(0.5)
+        else:
+            logging.warning("[Dungeon cooldown fallback] goback_town.png not found; collect_only will return on its next step.")
+
+        current_config = self.machine.config or {}
+        if current_config.get("auto_resume_dungeon_on_cd", False):
+            self.machine.dungeon_cooldown_return_config = deepcopy(current_config)
+        else:
+            self.machine.dungeon_cooldown_return_config = None
+
+        self.machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
 
 
     def _switch_to_stage_or_back(self, screen_img, rect, reason):
@@ -510,6 +542,11 @@ class NavigationHandler(BaseStateHandler):
                             if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                 self._switch_to_stage_or_back(screen_img, rect, f"指定副本 [{dungeon_names[target_idx]}] 處於冷卻中")
                                 return
+                            if self.machine.config.get("type") == "dungeon":
+                                self._enter_collect_only_after_dungeon_cooldown(
+                                    screen_img, rect, f"target dungeon [{dungeon_names[target_idx]}] is on cooldown"
+                                )
+                                return
                             if cooldown_until == float('inf'):
                                 logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於永久不可打狀態，原地等待中...")
                             else:
@@ -526,6 +563,11 @@ class NavigationHandler(BaseStateHandler):
                                 if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                     self._switch_to_stage_or_back(screen_img, rect, f"畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中")
                                     return
+                                if self.machine.config.get("type") == "dungeon":
+                                    self._enter_collect_only_after_dungeon_cooldown(
+                                        screen_img, rect, f"target dungeon [{dungeon_names[target_idx]}] was detected on cooldown"
+                                    )
+                                    return
                                 time.sleep(1.0)
                                 return
                             
@@ -535,6 +577,11 @@ class NavigationHandler(BaseStateHandler):
                         from config import GAME_CONFIGS
                         self.machine.config = GAME_CONFIGS["collect_only"].copy()
                         self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                        return
+                    if self.machine.config.get("type") == "dungeon":
+                        self._enter_collect_only_after_dungeon_cooldown(
+                            screen_img, rect, "all eligible dungeons are on cooldown"
+                        )
                         return
                     if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                         self._switch_to_stage_or_back(screen_img, rect, "地下城頁面偵測到所有地下城均在冷卻中")
@@ -565,7 +612,9 @@ class NavigationHandler(BaseStateHandler):
 
 
 
-        if self.machine.config.get("type") == "mix" or (self.machine.config.get("enable_dungeon", False) and self.machine.config.get("enable_stage_farming", False)):
+        # Global activity switches are inherited by quest-specific stage/dungeon
+        # routes. They must not turn a single-route quest into a mix route.
+        if self.machine.config.get("type") == "mix" and self.machine.has_dungeon_status_context():
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()
@@ -648,7 +697,8 @@ class NavigationHandler(BaseStateHandler):
             if "final" in btn or "first" in btn or "middle" in btn or "six" in btn:
                 target_final_btn = btn
                 if os.path.exists(os.path.join("templates", btn)):
-                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=0.90)
+                    thresh_btn = get_template_threshold(btn, default=SUB_STAGE_THRESHOLD)
+                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=thresh_btn)
                     if pos_f:
                         pos_final = pos_f
                         # 成功找到目標小關/魔王關，重置其缺失計時器
@@ -759,16 +809,16 @@ class NavigationHandler(BaseStateHandler):
                 continue
 
             if is_sub_stage_target:
-                thresh = 0.90
+                thresh = get_template_threshold(btn, default=SUB_STAGE_THRESHOLD)
                 b_thresh = 0.0
             elif btn == "exit_battle.png":
-                thresh = 0.88  # 提高門檻，防範城鎮背景產生 0.8088 的虛假誤匹配
+                thresh = get_template_threshold(btn, default=EXIT_BATTLE_THRESHOLD)  # 0.88 防範城鎮背景產生虛假誤匹配
                 b_thresh = 0.70
             elif "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
-                thresh = 0.60
+                thresh = get_template_threshold(btn, default=ENTRY_THRESHOLD)
                 b_thresh = 0.70
             else:
-                thresh = 0.80
+                thresh = get_template_threshold(btn, default=DEFAULT_THRESHOLD)
                 b_thresh = 0.70
             pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
             if pos:
@@ -777,6 +827,8 @@ class NavigationHandler(BaseStateHandler):
                     # 為了讓魔王關卡載入與 scan 完全，引入 1.5 秒的缺失計時器
                     if target_final_btn:
                         missing_time = getattr(self.machine, f"missing_time_{target_final_btn}", 0.0)
+                        if not isinstance(missing_time, (int, float)):
+                            missing_time = 0.0
                         if missing_time == 0.0:
                             self.machine.__setattr__(f"missing_time_{target_final_btn}", time.time())
                             logging.info(f"⌛ 尋路中：偵測到關卡背景，但魔王關 [{target_final_btn}] 尚未出現，等待載入與穩定中...")
@@ -829,6 +881,8 @@ class NavigationHandler(BaseStateHandler):
                 if pos_label and not pos_final:
                     if target_final_btn:
                         missing_time = getattr(self.machine, f"missing_time_{target_final_btn}", 0.0)
+                        if not isinstance(missing_time, (int, float)):
+                            missing_time = 0.0
                         if missing_time == 0.0:
                             self.machine.__setattr__(f"missing_time_{target_final_btn}", time.time())
                             logging.info(f"⌛ 尋路中：判定已在細節畫面但未見魔王關 [{target_final_btn}]，等待載入與穩定中...")

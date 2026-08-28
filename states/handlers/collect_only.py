@@ -13,6 +13,26 @@ class CollectOnlyHandler(BaseStateHandler):
         - 如果目前無領取任務，在大廳則自動返回城鎮，在城鎮則維持原地待機。
         """
         # 0.0 檢查 08:05 跨日重置離場標示 (若在定時領取待機中，直接結束退避並觸發全新一日城鎮任務流水線)
+        cooldown_return_config = getattr(self.machine, "dungeon_cooldown_return_config", None)
+        if cooldown_return_config is not None and not self.machine.need_diamond_collection:
+            dungeon_ready = False
+            try:
+                dungeon_ready = self.machine.has_available_dungeon(
+                    target_config=cooldown_return_config
+                )
+            except Exception as exc:
+                logging.warning("[Dungeon cooldown resume] availability check failed: %s", exc)
+
+            if dungeon_ready:
+                if self.machine.enable_bread and self.machine.need_bread_collection:
+                    logging.info("[Dungeon cooldown resume] bread collection is pending; resumption deferred.")
+                else:
+                    logging.warning("[Dungeon cooldown resume] cooldown complete; returning to dungeon mode.")
+                    self.machine.config = cooldown_return_config
+                    self.machine.dungeon_cooldown_return_config = None
+                    self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                    return
+
         if getattr(self.machine, "pending_daily_reset_exit", False):
             logging.info("🌅 [定時領取待機] 偵測到 08:05 跨日重置標誌！結束體力退避，啟動新一日城鎮任務流水線...")
             self.machine.pending_daily_reset_exit = False
@@ -153,7 +173,9 @@ class CollectOnlyHandler(BaseStateHandler):
                 return
 
         # 3.5.3 檢查地下城探索 (enable_dungeon)
-        if self.machine.config.get("enable_dungeon", False):
+        pending_quests = getattr(self.machine, "quest_scheduler", None)
+        has_pending_quests = bool(pending_quests and pending_quests.get_pending_tasks())
+        if self.machine.config.get("enable_dungeon", False) and not has_pending_quests:
             dungeon_ready = False
             try:
                 dungeon_ready = self.machine.has_available_dungeon()
@@ -165,7 +187,7 @@ class CollectOnlyHandler(BaseStateHandler):
                 return
 
         # 3.5.4 檢查每日懸賞任務 (enable_quests)
-        if self.machine.config.get("enable_quests", False) and getattr(self.machine, "quest_scheduler", None):
+        if getattr(self.machine, "quest_scheduler", None):
             scheduled_node = self.machine.check_and_advance_quest_target()
             if scheduled_node:
                 logging.info("📋 [定時待機喚醒] 偵測到懸賞任務目標就緒 ➔ 喚醒切換至懸賞目標！")
@@ -224,7 +246,7 @@ class CollectOnlyHandler(BaseStateHandler):
                         extra_status.append(f"👑 Boss: {format_time(min_boss_rem)}")
                     else:
                         extra_status.append("👑 Boss: 今日已滿")
-            if self.machine.config.get("enable_dungeon", False):
+            if self.machine.config.get("enable_dungeon", False) and self.machine.has_dungeon_status_context():
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()
                 if avail_names:
                     extra_status.append(f"🏰 地下城: 就緒 ({', '.join(avail_names)})")

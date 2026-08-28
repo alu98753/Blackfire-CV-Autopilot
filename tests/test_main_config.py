@@ -3,10 +3,27 @@ from unittest.mock import patch, MagicMock
 import os
 import sys
 
-from config import GAME_CONFIGS
+import tempfile
+import shutil
+from pathlib import Path
+
+import config
+from config import GAME_CONFIGS, set_active_profile
 from main import setup_stage_config, setup_dungeon_config, setup_mode_config, check_mode_templates
 
 class TestMainConfig(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+        self.patcher = patch.object(config, "USER_DATA_DIR", self.test_dir)
+        self.patcher.start()
+        set_active_profile("native")
+
+    def tearDown(self):
+        self.patcher.stop()
+        if self.test_dir.exists():
+            shutil.rmtree(self.test_dir, ignore_errors=True)
+        set_active_profile("native")
 
     def test_toml_config_preserves_integer_cooldown_indices(self):
         self.assertEqual(GAME_CONFIGS["dungeon"]["cooldown_map"][1], 300.0)
@@ -38,7 +55,7 @@ class TestMainConfig(unittest.TestCase):
         self.assertIn("stages/level1_final.png", config["navigation_path"])
 
     @patch('os.path.exists')
-    @patch('builtins.input', side_effect=["6", "135", "1"])
+    @patch('builtins.input', side_effect=["7", "135", "1"])
     def test_setup_dungeon_config_greedy_custom(self, mock_input, mock_exists):
         """測試 setup_dungeon_config 自訂貪婪挑選 [1, 3, 5] 關卡與戰鬥祝福"""
         mock_exists.return_value = True
@@ -90,14 +107,14 @@ class TestMainConfig(unittest.TestCase):
         self.assertEqual(cfg_daily["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
     @patch('os.path.exists')
-    @patch('builtins.input', side_effect=["5", "1", "1", "1", "6", "1"])
+    @patch('builtins.input', side_effect=["6", "1", "1", "1", "6", "1"])
     def test_setup_mode_config_daily_default(self, mock_input, mock_exists):
-        """測試 setup_mode_config 在 daily 模式下啟用 stage farming (地下城 5 冰雪洞窟 + 允許打怪 + 冰凍峽谷 6-1 關卡)"""
+        """測試 setup_mode_config 在 daily 模式下啟用 stage farming (地下城 6 冰雪洞窟 + 允許打怪 + 冰凍峽谷 6-1 關卡)"""
         mock_exists.return_value = True
         mock_args = MagicMock()
         mock_args.subflow = None
         mock_args.mode = "daily"
-        mock_args.backend = True
+        mock_args.backend = False
         mock_args.blessmode = None
         mock_args.enable_lord_boss = None
         mock_args.enable_dungeon = None
@@ -120,7 +137,7 @@ class TestMainConfig(unittest.TestCase):
         mock_args = MagicMock()
         mock_args.subflow = None
         mock_args.mode = "daily"
-        mock_args.backend = True
+        mock_args.backend = False
         mock_args.blessmode = None
         mock_args.enable_lord_boss = None
         mock_args.enable_dungeon = None
@@ -141,7 +158,7 @@ class TestMainConfig(unittest.TestCase):
         mock_args = MagicMock()
         mock_args.subflow = None
         mock_args.mode = "daily"
-        mock_args.backend = True
+        mock_args.backend = False
         mock_args.blessmode = None
         mock_args.enable_lord_boss = None
         mock_args.enable_dungeon = None

@@ -267,6 +267,7 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():

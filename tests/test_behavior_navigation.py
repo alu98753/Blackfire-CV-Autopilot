@@ -440,6 +440,64 @@ class TestBehaviorNavigation(unittest.TestCase):
         args, _ = self.handler.click_and_wait_until_gone.call_args
         self.assertEqual(args[0], "common/quit.png")
 
+    # =========================================================================
+    # 1.10 小關卡比對閾值精確度行為測試 (防範關卡I 0.9082 誤判為關卡VI)
+    # =========================================================================
+
+    @patch("os.path.exists")
+    def test_1_10_sub_stage_threshold_filters_false_positive_and_clicks_real_target(self, mock_exists):
+        """
+        [1.10 Behavior Test]
+        Given: 導航目標為 stages/six_stage.png (門檻 0.93)
+        When: 畫面上關卡I產生 0.9082 的干擾相似度 (低於 0.93 門檻) ➔ 拒絕誤判點擊
+        Then: 當真實第六關 (0.95 相似度) 出現時 ➔ 精確發起點擊
+        """
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        self.mock_machine.config = {
+            "name": "懸賞任務 - 冰凍峽谷 (six)",
+            "type": "stage",
+            "stage_level": 6,
+            "sub_stage": "six",
+            "navigation_path": [
+                "common/door.png",
+                "common/select_stage.png",
+                "stages/level6_ice_cave.png",
+                "stages/stage_label.png",
+                "stages/six_stage.png"
+            ]
+        }
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+
+        # 1. 模擬關卡I干擾項 (信心度 0.9082，在 0.93 門檻下判定為未命中)
+        def match_interference(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/stage_label.png":
+                return ((610, 370), 0.9331)
+            if template == "stages/six_stage.png":
+                if 0.9082 >= threshold:
+                    return ((600, 422), 0.9082)
+                return (None, 0.0)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = match_interference
+        self.handler.handle(mock_img, self.rect)
+        # 斷言：0.9082 被門檻 0.93 成功攔截，沒有誤點 (600, 422)
+        self.mock_machine.mouse.click.assert_not_called()
+
+        # 2. 模擬真實第六關 (信心度 0.9512，達標 0.93)
+        def match_real(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/six_stage.png":
+                if 0.9512 >= threshold:
+                    return ((600, 780), 0.9512)
+                return (None, 0.0)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = match_real
+        self.handler.handle(mock_img, self.rect)
+        # 斷言：精確點擊真實第六關座標 (600, 780)
+        self.mock_machine.mouse.click.assert_called_once_with(600, 780)
+
 
 if __name__ == "__main__":
     unittest.main()

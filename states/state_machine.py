@@ -138,6 +138,11 @@ class GameStateMachine:
         # 體力不足退避與還原相關屬性
         self.original_config = None
         self.stamina_retreat_start_time = None
+        # Dungeon-only cooldown fallback keeps its own return target.  This is
+        # deliberately separate from stamina retreat, whose timer has a
+        # different lifecycle.
+        self.dungeon_cooldown_return_config = None
+        self.is_dev_subflow_run = False
         self.last_lobby_start_click_time = 0.0
         self.last_result_retry_click_time = 0.0
         # 領取任務獎勵子流程 (Phase 狀態機屬性)
@@ -393,6 +398,8 @@ class GameStateMachine:
 
     def transition_to(self, new_state):
         if self.current_state != new_state:
+            if new_state == self.STATE_DUNGEON_EXPLORING:
+                self.ensure_explore_config()
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
             self.last_state = self.current_state
             self.current_state = new_state
@@ -411,6 +418,35 @@ class GameStateMachine:
                 handler.reset_state()
 
             self._on_state_transition_sync_context(new_state)
+
+    def ensure_explore_config(self):
+        """Restore a route config that can safely run ``ExploreHandler``.
+
+        Visual state detection and bag-cleanup recovery can enter EXPLORING
+        while a temporary town/subflow config is active.  Those configs do not
+        define ``explore_priorities``.
+        """
+        active_config = self.config or {}
+        if "explore_priorities" in active_config:
+            return True
+
+        candidates = (
+            getattr(self, "dungeon_cooldown_return_config", None),
+            getattr(self, "original_config", None),
+            getattr(self, "primary_config", None),
+        )
+        for candidate in candidates:
+            if candidate and "explore_priorities" in candidate:
+                logging.warning(
+                    "[Explore config recovery] restoring dungeon route config before entering EXPLORING."
+                )
+                self.set_config(candidate.copy())
+                return True
+
+        logging.error(
+            "[Explore config recovery] no config with explore_priorities is available; using ExploreHandler safe fallback."
+        )
+        return False
 
     def notify_ui_progress(self):
         """
@@ -449,9 +485,20 @@ class GameStateMachine:
         from config import GAME_CONFIGS
         key = self.TOWN_SUBFLOW_CONFIG_MAP.get(new_state)
         if key and key in GAME_CONFIGS:
+            saved_keep = self.config.get("keep_colors") if self.config else None
+            saved_dis = self.config.get("disassemble_colors") if self.config else None
+            saved_sac = self.config.get("sacrifice_settings") if self.config else None
+
             if self.config is None:
                 self.config = {}
             self.config.update(GAME_CONFIGS[key])
+
+            if saved_keep is not None:
+                self.config["keep_colors"] = saved_keep
+            if saved_dis is not None:
+                self.config["disassemble_colors"] = saved_dis
+            if saved_sac is not None:
+                self.config["sacrifice_settings"] = saved_sac
 
         # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
         if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
@@ -472,7 +519,7 @@ class GameStateMachine:
                 self.pending_town_subflows = False
                 logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
                 self.trigger_town_subflow_chain()
-            elif self.is_daily_pipeline_active():
+            elif self.is_daily_pipeline_active() or (getattr(self, "daily_manager", None) and self.config and self.config.get("enable_lord_boss", True) and self.daily_manager.has_available_lord_boss()):
                 self.evaluate_and_schedule_daily_pipeline()
 
 
@@ -797,14 +844,13 @@ class GameStateMachine:
         if time.time() < all_cd_until:
             return False
 
-        allowed_indices = cfg.get("greedy_allowed_indices")
-        if allowed_indices is None:
-            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
-
         now = time.time()
         is_greedy = cfg.get("greedy_dungeon", False)
         
         if is_greedy:
+            allowed_indices = cfg.get("greedy_allowed_indices")
+            if allowed_indices is None:
+                raise ValueError("配置錯誤：貪婪地下城模式未設定 'greedy_allowed_indices'。")
             for idx in allowed_indices:
                 if now >= self.dungeon_cooldowns.get(idx, 0.0):
                     return True
@@ -841,16 +887,15 @@ class GameStateMachine:
         if dungeon_names is None:
             raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
 
-        allowed_indices = self.config.get("greedy_allowed_indices")
-        if allowed_indices is None:
-            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單。")
-
         from utils.time_parser import format_seconds_to_readable
         now = time.time()
 
         is_greedy = self.config.get("greedy_dungeon", False)
         if is_greedy:
-            target_indices = allowed_indices
+            report_indices = self.config.get("greedy_allowed_indices")
+            if report_indices is None:
+                raise ValueError("配置錯誤：貪婪地下城模式未設定 'greedy_allowed_indices'。")
+            target_indices = report_indices
         else:
             entry_templates = self.config.get("dungeon_entries")
             if entry_templates is None:
@@ -864,12 +909,17 @@ class GameStateMachine:
                 if temp_name in nav_path:
                     target_idx = idx
                     break
-            target_indices = [target_idx] if target_idx is not None else []
+            if target_idx is None:
+                target_idx = self.config.get("dungeon_index")
+            if target_idx is None:
+                raise ValueError("配置錯誤：指定地下城模式找不到 'dungeon_index' 或對應入口路徑。")
+            report_indices = [target_idx]
+            target_indices = report_indices
 
         cd_details = []
         available_names = []
 
-        for idx in allowed_indices:
+        for idx in report_indices:
             if idx >= len(dungeon_names):
                 raise ValueError(f"配置錯誤：greedy_allowed_indices 中的索引 {idx} 超出 dungeon_names 長度 ({len(dungeon_names)})。")
             name = dungeon_names[idx]
@@ -889,6 +939,18 @@ class GameStateMachine:
                     cd_details.append(f"[{name}]: 就緒 (未啟用)")
 
         return ", ".join(cd_details), available_names
+
+    def has_dungeon_status_context(self):
+        """Return whether the active route contains enough data to report dungeon cooldowns."""
+        cfg = self.config or {}
+        if not cfg.get("dungeon_names") or not cfg.get("dungeon_entries"):
+            return False
+        if cfg.get("greedy_dungeon", False):
+            return bool(cfg.get("greedy_allowed_indices"))
+        if cfg.get("dungeon_index") is not None:
+            return True
+        nav_path = cfg.get("navigation_path", [])
+        return any(entry in nav_path for entry in cfg["dungeon_entries"])
 
     def check_collection_trigger(self, screen_img):
         """
@@ -932,11 +994,11 @@ class GameStateMachine:
         """
         if new_config:
             if getattr(self, "config", None):
-                if "keep_colors" in self.config and "keep_colors" not in new_config:
+                if "keep_colors" in self.config:
                     new_config["keep_colors"] = self.config["keep_colors"]
-                if "disassemble_colors" in self.config and "disassemble_colors" not in new_config:
+                if "disassemble_colors" in self.config:
                     new_config["disassemble_colors"] = self.config["disassemble_colors"]
-                if "sacrifice_settings" in self.config and "sacrifice_settings" not in new_config:
+                if "sacrifice_settings" in self.config:
                     new_config["sacrifice_settings"] = self.config["sacrifice_settings"]
 
         self.config = new_config
@@ -1237,8 +1299,11 @@ class GameStateMachine:
 
             from config import SUBFLOW_CONFIGS, GAME_CONFIGS
             flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
-            if not flow_cfg.get("enabled", True):
+            if not self.is_dev_subflow_run and not flow_cfg.get("enabled", True):
                 logging.info(f"⏭️ [城鎮流水線] 子流程 [{next_flow}] 設定為停用 (enabled=False) ➔ 自動跳過！剩餘佇列 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
+                dm = getattr(self, "daily_manager", None)
+                if dm and hasattr(dm, "record_subflow_completed"):
+                    dm.record_subflow_completed(next_flow)
                 continue
 
             flow_name = flow_cfg.get("name", next_flow)
@@ -1298,6 +1363,10 @@ class GameStateMachine:
 
         # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
         if self.is_daily_pipeline_active():
+            # A town-only queue can finish while accepted_quests still exist.
+            # Rebuild only when no scheduler is attached; retain in-memory progress.
+            if self.quest_scheduler is None and getattr(self, "daily_manager", None):
+                self.attach_quest_scheduler(self.daily_manager.load_quest_scheduler())
             self.evaluate_and_schedule_daily_pipeline()
 
     def is_in_collect_only_mode(self):
@@ -1323,6 +1392,25 @@ class GameStateMachine:
             return False
         mode_type = self.config.get("type") if getattr(self, "config", None) else None
         return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
+
+    def has_ready_daily_quest_preemption(self):
+        """Return whether a ready Daily quest must preempt Tier 4 farming.
+
+        This is deliberately a query only: ResultHandler owns the result-screen
+        exit decision, while the next NAVIGATING transition owns scheduling and
+        applying the selected quest configuration.
+        """
+        if not self.is_daily_pipeline_active():
+            return False
+        if not self.config.get("is_tier4_fallback", False):
+            return False
+        if not self.quest_scheduler or self.quest_scheduler.is_all_completed():
+            return False
+
+        ready_task, _ = self.quest_scheduler.get_next_action_node(
+            dungeon_cooldowns=self.dungeon_cooldowns
+        )
+        return ready_task is not None
 
 
     def evaluate_next_activity(self):
@@ -1379,6 +1467,13 @@ class GameStateMachine:
                     scheduled_node = self.check_and_advance_quest_target()
                     if scheduled_node:
                         return True
+                    # Keep the scheduler attached while temporarily farming Tier 4.
+                    # ResultHandler will preempt Tier 4 at the next safe result
+                    # screen as soon as any Daily quest becomes runnable.
+                    if self.quest_scheduler.get_pending_tasks():
+                        logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
+                        self.apply_mix_fallback_config()
+                        return False
 
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
             if cfg.get("enable_dungeon", False):
@@ -1415,5 +1510,3 @@ class GameStateMachine:
         if self.is_in_collect_only_mode():
             return False
         return self.evaluate_next_activity()
-
-

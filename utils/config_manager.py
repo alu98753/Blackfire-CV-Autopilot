@@ -89,3 +89,58 @@ class TomlConfigManager(JsonConfigManager):
 
         with self.path.open("rb") as file:
             return tomllib.load(file)
+
+
+def format_toml_value(val: Any) -> str:
+    """Format scalar or list value into TOML syntax string."""
+    if isinstance(val, bool):
+        return "true" if val else "false"
+    elif isinstance(val, (int, float)):
+        return str(val)
+    elif isinstance(val, str):
+        escaped = val.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    elif isinstance(val, list):
+        items = [format_toml_value(x) for x in val]
+        return f"[{', '.join(items)}]"
+    return str(val)
+
+
+def dump_toml_dict(data: dict[str, Any]) -> str:
+    """Serialize nested dictionary into clean, standard TOML string."""
+    lines: list[str] = []
+
+    # 1. Top-level scalar/list properties
+    for k, v in data.items():
+        if not isinstance(v, dict):
+            lines.append(f"{k} = {format_toml_value(v)}")
+
+    if lines:
+        lines.append("")
+
+    # 2. Nested sections
+    def dump_section(prefix: list[str], section_dict: dict[str, Any]):
+        section_scalars: list[tuple[str, Any]] = []
+        nested_subsections: list[tuple[str, dict[str, Any]]] = []
+        for k, v in section_dict.items():
+            if isinstance(v, dict):
+                nested_subsections.append((k, v))
+            else:
+                section_scalars.append((k, v))
+
+        if section_scalars or not nested_subsections:
+            header = ".".join(prefix)
+            lines.append(f"[{header}]")
+            for k, v in section_scalars:
+                lines.append(f"{k} = {format_toml_value(v)}")
+            lines.append("")
+
+        for sub_k, sub_v in nested_subsections:
+            dump_section(prefix + [sub_k], sub_v)
+
+    for section_name, section_val in data.items():
+        if isinstance(section_val, dict):
+            dump_section([section_name], section_val)
+
+    return "\n".join(lines).strip() + "\n"
+

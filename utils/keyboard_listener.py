@@ -1,4 +1,5 @@
 import ctypes
+from ctypes import wintypes
 import os
 import time
 import threading
@@ -103,13 +104,25 @@ class PauseController:
     def get_game_hwnd(self):
         """
         取得遊戲視窗控制代碼 (HWND) 或其頂層根視窗。
+        支援自 capturer.get_hwnd() 或 capturer.hwnd 取得。
         """
-        if self.capturer and getattr(self.capturer, "hwnd", None):
-            try:
-                root_hwnd = ctypes.windll.user32.GetAncestor(self.capturer.hwnd, GA_ROOT)
-                return root_hwnd if root_hwnd else self.capturer.hwnd
-            except Exception:
-                return self.capturer.hwnd
+        if self.capturer:
+            hwnd = None
+            if hasattr(self.capturer, "get_hwnd") and callable(self.capturer.get_hwnd):
+                res = self.capturer.get_hwnd()
+                if isinstance(res, int) and res:
+                    hwnd = res
+            if not hwnd:
+                res = getattr(self.capturer, "hwnd", None)
+                if isinstance(res, int) and res:
+                    hwnd = res
+
+            if hwnd and isinstance(hwnd, int):
+                try:
+                    root_hwnd = ctypes.windll.user32.GetAncestor(hwnd, GA_ROOT)
+                    return root_hwnd if root_hwnd else hwnd
+                except Exception:
+                    return hwnd
         return None
 
     def is_console_window_active(self) -> bool:
@@ -147,8 +160,8 @@ class PauseController:
 
     def is_game_window_active(self) -> bool:
         """
-        判定當前前景視窗是否為遊戲視窗。
-        優先採用 capturer.hwnd 及其頂層 Root HWND 比對；無 capturer 時僅允許嚴格全名匹配。
+        判定當前前景視窗是否為目標遊戲視窗。
+        優先採用 capturer 綁定之 HWND 及其頂層 Root HWND 比對；無 capturer 時僅允許嚴格全名匹配。
         """
         try:
             fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
@@ -179,11 +192,53 @@ class PauseController:
         except Exception:
             return False
 
+    def is_game_window_hovered(self) -> bool:
+        """
+        判定當前滑鼠游標是否懸停在目標遊戲視窗範圍內 (免點擊焦點即支援快捷操作)。
+        結合 GetCursorPos、WindowFromPoint 以及 get_window_rect 座標邊界檢測。
+        """
+        try:
+            game_hwnd = self.get_game_hwnd()
+            if not game_hwnd:
+                return False
+
+            # 1. 取得滑鼠游標全域座標
+            pt = wintypes.POINT()
+            if not ctypes.windll.user32.GetCursorPos(ctypes.byref(pt)):
+                return False
+
+            # 2. 透過 WindowFromPoint 檢查游標下之視窗
+            hwnd_under_cursor = ctypes.windll.user32.WindowFromPoint(pt)
+            if hwnd_under_cursor:
+                if hwnd_under_cursor == game_hwnd:
+                    return True
+                root_hwnd = ctypes.windll.user32.GetAncestor(hwnd_under_cursor, GA_ROOT)
+                if root_hwnd and root_hwnd == game_hwnd:
+                    return True
+
+            # 3. 輔助矩形判定：透過 capturer 邊界比對
+            if hasattr(self.capturer, "get_window_rect") and callable(self.capturer.get_window_rect):
+                try:
+                    rect = self.capturer.get_window_rect(quiet=True)
+                    if rect and isinstance(rect, (tuple, list)) and len(rect) == 4:
+                        left, top, right, bottom = rect
+                        if isinstance(left, (int, float)) and left <= pt.x <= right and top <= pt.y <= bottom:
+                            return True
+                except Exception:
+                    pass
+
+            return False
+        except Exception:
+            return False
+
     def is_target_window_active(self) -> bool:
         """
-        判定當前前景視窗是否為目標視窗 (終端機 或 遊戲視窗)。
+        判定當前是否應該響應熱鍵切換：
+        1. 當前實例的遊戲視窗處於焦點 (Foreground Focus)
+        2. 滑鼠游標懸停在當前實例的遊戲視窗上方 (Cursor Hover - 免點擊)
+        3. 當前實例所屬之終端機視窗處於焦點 (Console Focus)
         """
-        return self.is_console_window_active() or self.is_game_window_active()
+        return self.is_game_window_active() or self.is_game_window_hovered() or self.is_console_window_active()
 
     # =========================================================================
     # 策略 1：Ctrl + Space 組合鍵監聽策略 (預設推薦)
