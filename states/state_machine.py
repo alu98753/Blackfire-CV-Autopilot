@@ -398,6 +398,8 @@ class GameStateMachine:
 
     def transition_to(self, new_state):
         if self.current_state != new_state:
+            if new_state == self.STATE_DUNGEON_EXPLORING:
+                self.ensure_explore_config()
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
             self.last_state = self.current_state
             self.current_state = new_state
@@ -416,6 +418,35 @@ class GameStateMachine:
                 handler.reset_state()
 
             self._on_state_transition_sync_context(new_state)
+
+    def ensure_explore_config(self):
+        """Restore a route config that can safely run ``ExploreHandler``.
+
+        Visual state detection and bag-cleanup recovery can enter EXPLORING
+        while a temporary town/subflow config is active.  Those configs do not
+        define ``explore_priorities``.
+        """
+        active_config = self.config or {}
+        if "explore_priorities" in active_config:
+            return True
+
+        candidates = (
+            getattr(self, "dungeon_cooldown_return_config", None),
+            getattr(self, "original_config", None),
+            getattr(self, "primary_config", None),
+        )
+        for candidate in candidates:
+            if candidate and "explore_priorities" in candidate:
+                logging.warning(
+                    "[Explore config recovery] restoring dungeon route config before entering EXPLORING."
+                )
+                self.set_config(candidate.copy())
+                return True
+
+        logging.error(
+            "[Explore config recovery] no config with explore_priorities is available; using ExploreHandler safe fallback."
+        )
+        return False
 
     def notify_ui_progress(self):
         """

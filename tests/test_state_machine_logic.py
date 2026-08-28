@@ -40,6 +40,17 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.need_diamond_collection = False
         self.state_machine.last_diamond_collection_time = time.time()
 
+    def test_exploring_transition_restores_primary_dungeon_config(self):
+        """Dungeon visual recovery must not run ExploreHandler with bag_clean config."""
+        self.state_machine.config = GAME_CONFIGS["bag_clean"].copy()
+        self.state_machine.primary_config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
+
+        self.state_machine.transition_to(self.state_machine.STATE_DUNGEON_EXPLORING)
+
+        self.assertEqual(self.state_machine.config["type"], "dungeon")
+        self.assertIn("explore_priorities", self.state_machine.config)
+
     @patch('os.path.exists')
     def test_stage_mode_bread_collection_flow(self, mock_exists):
         """
@@ -2519,5 +2530,4 @@ class TestTaskCompletePhaseStateMachine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 

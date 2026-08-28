@@ -348,7 +348,12 @@ class BagCleaningHandler(BaseStateHandler):
         if is_dungeon_context:
             logging.info("🏰 [地下城背包清理] 已清理完畢，暫緩城鎮流水線，標記 pending_town_subflows，恢復地下城探索打完本趟副本...")
             self.machine.pending_town_subflows = True
-            target_state = self.machine.previous_state if getattr(self.machine, "previous_state", None) else self.machine.STATE_DUNGEON_EXPLORING
+            previous_state = getattr(self.machine, "last_state", None)
+            target_state = (
+                previous_state
+                if previous_state == self.machine.STATE_DUNGEON_EXPLORING
+                else self.machine.STATE_DUNGEON_EXPLORING
+            )
             self.machine.transition_to(target_state)
         else:
             logging.info("🏛️ [城鎮/關卡背包清理] 背包清理完成，立即觸發城鎮任務流水線佇列...")

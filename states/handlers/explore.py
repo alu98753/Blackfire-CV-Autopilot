@@ -35,7 +35,15 @@ class ExploreHandler(BaseStateHandler):
                 return
 
         # 3. 依優先級處理探險事件
-        for btn_name in self.machine.config["explore_priorities"]:
+        explore_priorities = (self.machine.config or {}).get("explore_priorities")
+        if not isinstance(explore_priorities, list):
+            logging.error(
+                "[ExploreHandler] missing explore_priorities after EXPLORING transition; returning to UNKNOWN for recovery."
+            )
+            self.machine.transition_to(self.machine.STATE_UNKNOWN)
+            return
+
+        for btn_name in explore_priorities:
             # 檢查模板檔案是否存在
             if not os.path.exists(os.path.join("templates", btn_name)):
                 continue
