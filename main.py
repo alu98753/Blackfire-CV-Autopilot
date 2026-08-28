@@ -336,25 +336,29 @@ def parse_arguments():
     parser.add_argument("--stage", dest="enable_stage_farming", action=argparse.BooleanOptionalAction, default=None, help="啟用/停用普通關卡打怪 (stage farming)")
     parser.add_argument("--town", dest="enable_town_daily", action=argparse.BooleanOptionalAction, default=None, help="啟用/停用每日城鎮速領 (chest, hero, altar, jewelry)")
     parser.add_argument("--profile", type=str, default=None,
-                        help="指定帳號配置名稱 (例如 native, sandbox, acc2)，將自動綁定狀態檔 user_data/daily_status_{profile}.json")
+                        help="指定帳號配置名稱 (例如 native, sandbox, acc2)，將自動綁定 user_data/<profile>/ (包含專屬 config.toml 與 daily_status.json)")
     return parser.parse_args()
 
-def resolve_status_filename(args, target_title: str = "") -> str:
+def resolve_profile_name(args, target_title: str = "") -> str:
     """
-    依據 CLI 參數 (--profile, --target) 或視窗標題解析對應的 daily_status 檔案名稱。
-    - 若傳入 --profile ➔ daily_status_{profile}.json
-    - 若 --target 為 sandbox 或視窗標題包含 [#] ➔ daily_status_sandbox.json
-    - 其餘預設 ➔ daily_status_native.json
+    依據 CLI 參數 (--profile, --target) 或視窗標題解析對應的 Profile 名稱 ('native', 'sandbox' 或自訂名稱)。
+    - 若傳入 --profile ➔ <profile>
+    - 若 --target 為 sandbox 或視窗標題包含 [#] ➔ sandbox
+    - 其餘預設 ➔ native
     """
     if getattr(args, "profile", None):
-        profile_name = args.profile.strip().lower()
-        return f"daily_status_{profile_name}.json"
+        return args.profile.strip().lower()
     
     target_str = str(getattr(args, "target", "") or "").strip().lower()
     if target_str in ["sandbox", "sandboxed", "box", "sb", "2"] or "[#]" in target_title:
-        return "daily_status_sandbox.json"
+        return "sandbox"
     
-    return "daily_status_native.json"
+    return "native"
+
+# 相容別名
+def resolve_status_filename(args, target_title: str = "") -> str:
+    profile = resolve_profile_name(args, target_title)
+    return f"{profile}/daily_status.json"
 
 def setup_mode_config(args):
     # 若指定了 --subflow，為純城鎮子流程測試，完全不跳出地下城與關卡選單提示！
@@ -639,9 +643,9 @@ def init_state_machine_system(args, config, target_hwnd=None):
         args.subflow[0] if getattr(args, "subflow", None) else args.mode,
         config,
     )
-    status_file = resolve_status_filename(args, getattr(args, "title", ""))
-    daily_manager = DailyManager(status_file=status_file)
-    logging.info(f"📂 [DailyManager] 成功綁定角色狀態檔: user_data/{status_file}")
+    profile_name = resolve_profile_name(args, getattr(args, "title", ""))
+    daily_manager = DailyManager(profile=profile_name)
+    logging.info(f"📂 [DailyManager] 成功綁定角色狀態檔: user_data/{profile_name}/daily_status.json")
     state_machine.daily_manager = daily_manager
 
     # 若使用 --subflow 發起 Dev 階段獨立測試
@@ -731,6 +735,11 @@ def main():
     target_hwnd, target_title = select_game_window(target=args.target, auto_prompt=True)
     if target_title:
         args.title = target_title
+
+    # 套用 Profile 專屬配置覆蓋 (如 user_data/sandbox/config.toml)
+    profile_name = resolve_profile_name(args, target_title)
+    from config import set_active_profile
+    set_active_profile(profile_name)
 
     # 2. 處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)

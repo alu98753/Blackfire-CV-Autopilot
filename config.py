@@ -13,15 +13,28 @@ from utils.config_manager import JsonConfigManager, TomlConfigManager
 WINDOW_TITLE = "Blackfire Crusade"
 STEAM_APP_ID = "1765770"
 CONFIG_DIR = Path(__file__).with_name("config")
+USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
 LOCAL_CONFIG_PATH = CONFIG_DIR / "local.toml"
 _DEFAULTS_MANAGER = TomlConfigManager(DEFAULTS_PATH)
-_LOCAL_MANAGER = None
+_ACTIVE_PROFILE: str = "native"
+_PROFILE_MANAGER = None
+
+
+def get_active_profile() -> str:
+    """Return currently active profile name (e.g. 'native', 'sandbox')."""
+    return _ACTIVE_PROFILE
+
+
+def get_profile_config_path(profile: str | None = None) -> Path:
+    """Return the profile-specific config override path (user_data/<profile>/config.toml)."""
+    p = (profile or _ACTIVE_PROFILE).strip().lower()
+    return USER_DATA_DIR / p / "config.toml"
 
 
 def get_defaults_config() -> dict:
-    """Return defaults merged with the optional local runtime override file."""
-    return _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_local_config())
+    """Return defaults merged with the optional profile/local runtime override file."""
+    return _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_override_config())
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -35,15 +48,17 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
-def _get_local_config() -> dict:
-    """Load config/local.toml transactionally when it exists."""
-    global _LOCAL_MANAGER
-    if not LOCAL_CONFIG_PATH.exists():
-        _LOCAL_MANAGER = None
+def _get_override_config() -> dict:
+    """Load user_data/<profile>/config.toml (or fallback config/local.toml) transactionally when it exists."""
+    global _PROFILE_MANAGER
+    profile_path = get_profile_config_path()
+    target_path = profile_path if profile_path.exists() else LOCAL_CONFIG_PATH
+    if not target_path.exists():
+        _PROFILE_MANAGER = None
         return {}
-    if _LOCAL_MANAGER is None:
-        _LOCAL_MANAGER = TomlConfigManager(LOCAL_CONFIG_PATH, default={})
-    return _LOCAL_MANAGER.snapshot()
+    if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
+        _PROFILE_MANAGER = TomlConfigManager(target_path, default={})
+    return _PROFILE_MANAGER.snapshot()
 
 
 def _load_legacy_exports() -> dict:
@@ -136,27 +151,9 @@ def _replace_mapping(target: dict, source: dict) -> None:
     target.update(source)
 
 
-def refresh_runtime_config() -> bool:
-    """Publish TOML changes only when a full valid snapshot is available."""
-    global _SETTINGS, _LOCAL_MANAGER
-    defaults_changed = _DEFAULTS_MANAGER.reload_if_changed()
-    local_changed = False
-    if LOCAL_CONFIG_PATH.exists():
-        if _LOCAL_MANAGER is None:
-            _get_local_config()
-            local_changed = True
-        else:
-            local_changed = _LOCAL_MANAGER.reload_if_changed()
-    elif _LOCAL_MANAGER is not None:
-        _LOCAL_MANAGER = None
-        local_changed = True
-    if not (defaults_changed or local_changed):
-        return False
-
-    settings = get_defaults_config()
-    if settings.get("config_version") != 1:
-        logging.error("[HotReload] ignored unsupported TOML config_version")
-        return False
+def _reapply_all_settings(settings: dict) -> None:
+    """Update all global config exports in place with the latest settings dictionary."""
+    global _SETTINGS
     _SETTINGS = settings
     _replace_mapping(GLOBAL_SETTINGS, settings["global"])
     _replace_mapping(PRIMARY_MODES, _restore_mode_key_types(settings["primary_modes"]))
@@ -168,7 +165,53 @@ def refresh_runtime_config() -> bool:
         key: normalize_config(value)
         for key, value in get_stage_configs(BASE_STAGE_LEVELS).items()
     })
-    logging.info("[HotReload] applied config/defaults.toml and config/local.toml")
+
+
+def set_active_profile(profile: str) -> None:
+    """
+    切換當前生效的角色 Profile (如 'native', 'sandbox', 'acc2')。
+    自動重新計算 defaults.toml 與 user_data/<profile>/config.toml 的階層覆蓋，並即時更新全域設定導出。
+    """
+    global _ACTIVE_PROFILE, _PROFILE_MANAGER
+    _ACTIVE_PROFILE = profile.strip().lower()
+    _PROFILE_MANAGER = None
+    settings = get_defaults_config()
+    if settings.get("config_version") == 1:
+        _reapply_all_settings(settings)
+        profile_path = get_profile_config_path(_ACTIVE_PROFILE)
+        if profile_path.exists():
+            logging.info(f"⚙️ [ProfileConfig] 成功套用角色專屬覆蓋配置: user_data/{_ACTIVE_PROFILE}/config.toml")
+
+
+def refresh_runtime_config() -> bool:
+    """Publish TOML changes only when a full valid snapshot is available."""
+    global _SETTINGS, _PROFILE_MANAGER
+    defaults_changed = _DEFAULTS_MANAGER.reload_if_changed()
+    override_changed = False
+    
+    profile_path = get_profile_config_path()
+    target_path = profile_path if profile_path.exists() else LOCAL_CONFIG_PATH
+    
+    if target_path.exists():
+        if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
+            _get_override_config()
+            override_changed = True
+        else:
+            override_changed = _PROFILE_MANAGER.reload_if_changed()
+    elif _PROFILE_MANAGER is not None:
+        _PROFILE_MANAGER = None
+        override_changed = True
+        
+    if not (defaults_changed or override_changed):
+        return False
+
+    settings = get_defaults_config()
+    if settings.get("config_version") != 1:
+        logging.error("[HotReload] ignored unsupported TOML config_version")
+        return False
+    _reapply_all_settings(settings)
+    target_desc = f"user_data/{_ACTIVE_PROFILE}/config.toml" if target_path == profile_path else "config/local.toml"
+    logging.info(f"[HotReload] applied config/defaults.toml and {target_desc}")
     return True
 
 
