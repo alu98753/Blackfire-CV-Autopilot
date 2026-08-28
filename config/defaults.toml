@@ -66,8 +66,8 @@ type = "domain"
 domain = "golden_empire"
 bread_cost = 3
 domain_max_defeat = 5
-flee_boss_action = "pause" # "flee" (自動放棄戰鬥退出) 或 "pause" (自動暫停交給使用者手動打)
-flee_bosses = [
+nemesis_action = "pause" # "flee" (自動放棄戰鬥退出) 或 "pause" (自動暫停交給使用者手動打)
+nemesis_templates = [
     "domains/golden_empire/exception/golden_king.png",
     "domains/golden_empire/exception/elf_mythril_hag.png",
     "domains/golden_empire/exception/undead_altalim.png",

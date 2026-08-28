@@ -27,9 +27,9 @@ class BattleHandler(BaseStateHandler):
                         self.machine.transition_to(self.machine.STATE_UNKNOWN)
                         return
 
-        # 1. 優先檢查是否遭遇無法戰勝之強敵 Boss (Flee Boss Check)
+        # 1. 優先檢查是否遭遇無法戰勝之領域強敵 (Nemesis Encounter Check)
         # 必須在啟動自動戰鬥 (auto.png) 之前先判定，防止在暫停手動打或逃跑前誤開自動戰鬥！
-        if self._check_and_handle_flee_boss(screen_img, rect):
+        if self._check_and_handle_nemesis_encounter(screen_img, rect):
             return
 
         # 2. 檢查是否需要啟動自動戰鬥 (common/auto.png)
@@ -198,42 +198,43 @@ class BattleHandler(BaseStateHandler):
             self.log_battle_duration()
             time.sleep(0.15)
 
-    def _check_and_handle_flee_boss(self, screen_img, rect) -> bool:
+    def _check_and_handle_nemesis_encounter(self, screen_img, rect) -> bool:
         """
-        [強敵撤退子流程]
-        檢查當前模式是否配置 flee_bosses（例如黃金君王 golden_king.png）。
-        若偵測到強敵特徵，執行：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 累加戰敗並重置狀態。
+        [領域強敵處置子流程 (Nemesis Handling Subflow)]
+        檢查當前模式是否配置 nemesis_templates（例如黃金君王 golden_king.png，相容舊配置 flee_bosses）。
+        若偵測到強敵特徵，依據 nemesis_action（相容舊配置 flee_boss_action）執行暫停手動打或放棄戰鬥重進。
         """
-        flee_bosses = self.machine.config.get("flee_bosses", []) if self.machine.config else []
-        if not flee_bosses:
+        cfg = self.machine.config or {}
+        nemesis_templates = cfg.get("nemesis_templates") or cfg.get("flee_bosses", [])
+        if not nemesis_templates:
             return False
 
-        detected_boss = None
-        for boss_temp in flee_bosses:
-            if os.path.exists(os.path.join("templates", boss_temp)):
-                pos, conf = self.matcher.match(screen_img, boss_temp, threshold=0.75, quiet=True)
+        detected_nemesis = None
+        for n_temp in nemesis_templates:
+            if os.path.exists(os.path.join("templates", n_temp)):
+                pos, conf = self.matcher.match(screen_img, n_temp, threshold=0.75, quiet=True)
                 if pos:
-                    detected_boss = boss_temp
+                    detected_nemesis = n_temp
                     break
 
-        if detected_boss:
-            action = self.machine.config.get("flee_boss_action", "flee").lower() if self.machine.config else "flee"
+        if detected_nemesis:
+            action = (cfg.get("nemesis_action") or cfg.get("flee_boss_action") or "flee").lower()
             if action == "pause":
                 logging.warning("=" * 60)
-                logging.warning(f"🚨 [強敵遭遇 - 暫停接管] 偵測到強敵 Boss 特徵 [{detected_boss}]！")
-                logging.warning("👉 已依據配置 (flee_boss_action = 'pause') 自動暫停腳本運行。")
+                logging.warning(f"🚨 [領域強敵遭遇 - 暫停接管] 偵測到領域強敵特徵 [{detected_nemesis}]！")
+                logging.warning("👉 已依據配置 (nemesis_action = 'pause') 自動暫停腳本運行。")
                 logging.warning("👉 請使用者手動接管操作戰鬥。挑戰完成後，按 [Ctrl + Space] 即可恢復自動掛機！")
                 logging.warning("=" * 60)
                 self.machine.pause()
                 return True
             else:
-                logging.warning(f"🚨 [戰鬥撤退] 偵測到強敵 Boss 特徵 [{detected_boss}] (目前戰力暫無法擊敗)，立即執行放棄戰鬥流程！")
-                return self._run_flee_battle_subflow(rect)
+                logging.warning(f"🚨 [領域強敵撤退] 偵測到領域強敵特徵 [{detected_nemesis}] (目前戰力暫無法擊敗)，立即執行放棄戰鬥流程！")
+                return self._run_nemesis_flee_subflow(rect)
         return False
 
-    def _run_flee_battle_subflow(self, rect) -> bool:
+    def _run_nemesis_flee_subflow(self, rect) -> bool:
         """
-        執行放棄戰鬥具體步驟：
+        執行領域強敵放棄戰鬥具體步驟：
         1. 點擊 battle/setting.png
         2. 點擊 battle/giveup_battle.png
         3. 點擊 common/confirm.png / common/ok.png
@@ -276,7 +277,7 @@ class BattleHandler(BaseStateHandler):
         self.non_battle_feature_start_time = None
         self.machine.battle_start_time = None
 
-        logging.info("👉 [戰鬥撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 NAVIGATING 重新進場探索。")
+        logging.info("👉 [領域強敵撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 NAVIGATING 重新進場探索。")
         self.machine.transition_to(self.machine.STATE_NAVIGATING)
         return True
 

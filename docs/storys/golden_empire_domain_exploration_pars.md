@@ -19,8 +19,8 @@
 
 1. **策略模式架構解耦 ([states/domains/base_domain.py](../states/domains/base_domain.py), [states/domains/golden_empire.py](../states/domains/golden_empire.py))**：
    - 建立 `BaseDomainStrategy` 抽象基礎類別與 `DomainExploreHandler`，將領地特定邏輯（挖寶、專屬按鈕）抽離為策略模組，維持狀態機單一職責與可擴充性。
-2. **強敵主動避戰與單場戰敗獨立計數 ([states/handlers/battle.py](../states/handlers/battle.py), [states/handlers/result.py](../states/handlers/result.py))**：
-   - 實作 `flee_bosses` 避戰子流程：偵測到設定檔指定的 Boss（`golden_king`、`elf_mythril_hag`、`undead_altalim`、`human_golden_tulakh`）時，點擊設定 ➔ 放棄挑戰 ➔ 安全退出，且保持 `defeat_count = 0`，退回後自動重新導航進場。
+2. **領域強敵處置與單場戰敗獨立計數 ([states/handlers/battle.py](../states/handlers/battle.py), [states/handlers/result.py](../states/handlers/result.py))**：
+   - 實作 `nemesis_templates` 處置子流程：偵測到設定檔指定的領域強敵（`golden_king`、`elf_mythril_hag`、`undead_altalim`、`human_golden_tulakh`）時，依據 `nemesis_action` 執行暫停手動接管或點擊設定 ➔ 放棄挑戰 ➔ 安全退出，且保持 `defeat_count = 0`，退回後自動重新導航進場。
    - 每次進入戰鬥時獨立計算 `defeat_count`，支援 `domain_max_defeat: 5` 次重試上限。
 3. **通用子視窗回退與背包滿退場閉環 ([states/handlers/navigation.py](../states/handlers/navigation.py), [states/handlers/domain_explore.py](../states/handlers/domain_explore.py))**：
    - 當 `need_diamond_collection` 或需要回城時，若畫面開著子卡片視窗（`common/quit.png`），優先關閉子視窗露出大廳底層，再點擊 `goback_town.png`，防止遮罩阻擋。

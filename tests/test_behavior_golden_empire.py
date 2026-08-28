@@ -237,12 +237,12 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
 
     # =========================================================================
-    # 7. 強敵 Boss (黃金君王) 戰鬥放棄測試
+    # 7. 領域強敵 Nemesis (黃金君王) 戰鬥處置與放棄測試
     # =========================================================================
 
-    def test_flee_boss_giveup_battle_subflow(self):
+    def test_nemesis_giveup_battle_subflow(self):
         """
-        Given: 戰鬥中遭遇強敵 Boss (golden_king.png) 且配置 flee_boss_action = 'flee'
+        Given: 戰鬥中遭遇領域強敵 Nemesis (golden_king.png) 且配置 nemesis_action = 'flee'
         When: 執行 BattleHandler.handle()
         Then: 觸發放棄流程：點擊 setting ➔ 點擊 giveup_battle ➔ 點擊 confirm ➔ 不增加戰敗計數 (維持 0) 並轉移至 NAVIGATING
         """
@@ -250,8 +250,8 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/golden_king.png"]
-        self.mock_machine.config["flee_boss_action"] = "flee"
+        self.mock_machine.config["nemesis_templates"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["nemesis_action"] = "flee"
         self.mock_machine.config["domain_max_defeat"] = 5
         self.mock_machine.defeat_count = 0
         self.mock_machine.last_auto_click_time = 0.0
@@ -278,9 +278,9 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertEqual(self.mock_machine.defeat_count, 0)
         self.mock_machine.transition_to.assert_called_with("NAVIGATING")
 
-    def test_flee_boss_pause_action_subflow(self):
+    def test_nemesis_pause_action_subflow(self):
         """
-        Given: 戰鬥中遭遇強敵 Boss (elf_mythril_hag.png) 且配置 flee_boss_action = 'pause'
+        Given: 戰鬥中遭遇領域強敵 Nemesis (elf_mythril_hag.png) 且配置 nemesis_action = 'pause'
         When: 執行 BattleHandler.handle()
         Then: 呼叫 machine.pause() 暫停腳本運行，不發送任何點擊，交由使用者手動挑戰
         """
@@ -288,8 +288,8 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/elf_mythril_hag.png"]
-        self.mock_machine.config["flee_boss_action"] = "pause"
+        self.mock_machine.config["nemesis_templates"] = ["domains/golden_empire/exception/elf_mythril_hag.png"]
+        self.mock_machine.config["nemesis_action"] = "pause"
         self.mock_machine.last_auto_click_time = 0.0
         self.mock_machine.battle_start_time = 100.0
 
@@ -308,6 +308,32 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         # 斷言觸發 machine.pause()，且未發起放棄戰鬥之滑鼠點擊
         self.mock_machine.pause.assert_called_once()
         self.assertFalse(self.mock_machine.mouse.click.called)
+
+    def test_nemesis_backward_compatibility_with_flee_bosses(self):
+        """
+        [向下相容測試] 驗證使用舊鍵值 flee_bosses 與 flee_boss_action 時，BattleHandler 依然能正確辨識強敵並暫停
+        """
+        from states.handlers.battle import BattleHandler
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config.pop("nemesis_templates", None)
+        self.mock_machine.config.pop("nemesis_action", None)
+        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["flee_boss_action"] = "pause"
+        self.mock_machine.battle_start_time = 100.0
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/golden_empire/exception/golden_king.png":
+                return ((500, 300), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            battle_handler.handle(mock_img, self.rect)
+
+        self.mock_machine.pause.assert_called_once()
 
     # =========================================================================
     # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試
