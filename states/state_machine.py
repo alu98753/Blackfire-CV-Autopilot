@@ -484,7 +484,7 @@ class GameStateMachine:
                 self.pending_town_subflows = False
                 logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
                 self.trigger_town_subflow_chain()
-            elif self.is_daily_pipeline_active():
+            elif self.is_daily_pipeline_active() or (getattr(self, "daily_manager", None) and self.config and self.config.get("enable_lord_boss", True) and self.daily_manager.has_available_lord_boss()):
                 self.evaluate_and_schedule_daily_pipeline()
 
 

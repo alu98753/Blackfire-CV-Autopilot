@@ -47,6 +47,10 @@ class DomainExploreHandler(BaseStateHandler):
         if self.strategy.handle_custom_events(screen_img, rect):
             return
 
+        # 4.1 檢查是否有日常領主 Boss (Lord Boss) 冷卻解鎖需插隊挑戰
+        if self._check_lord_boss_preemption(screen_img, rect):
+            return
+
         # 5. 主場景點擊探索按鈕
         if self.strategy.handle_explore_click(screen_img, rect):
             time.sleep(0.1)
@@ -111,3 +115,21 @@ class DomainExploreHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
             return True
         return False
+
+    def _check_lord_boss_preemption(self, screen_img, rect) -> bool:
+        """檢查是否有日常領主 Boss (Lord Boss) 冷卻解鎖，若有則主動退場回城討伐"""
+        dm = getattr(self.machine, "daily_manager", None)
+        cfg = self.machine.config or {}
+        if cfg.get("enable_lord_boss", True) and dm and hasattr(dm, "has_available_lord_boss") and dm.has_available_lord_boss():
+            logging.info("⚔️ [領地探索 ➔ 領主插隊] 偵測到日常領主 Boss 冷卻結束可挑戰；退出領地前往城鎮討伐！")
+            exit_candidates = ["domains/common/exit_to_lobby.png", "goback_town.png", "common/quit.png"]
+            for exit_btn in exit_candidates:
+                if os.path.exists(os.path.join("templates", exit_btn)):
+                    pos_exit, _ = self.matcher.match(screen_img, exit_btn, threshold=0.75, quiet=True)
+                    if pos_exit:
+                        self.click_and_wait_until_gone(exit_btn, rect["left"] + pos_exit[0], rect["top"] + pos_exit[1], rect)
+                        break
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return True
+        return False
+

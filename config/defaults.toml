@@ -67,6 +67,7 @@ domain = "golden_empire"
 bread_cost = 3
 domain_max_defeat = 5
 nemesis_action = "pause" # "flee" (自動放棄戰鬥退出) 或 "pause" (自動暫停交給使用者手動打)
+enable_lord_boss = true # 是否在掛古國時若領主 Boss 冷卻結束自動插隊挑戰
 nemesis_templates = [
     "domains/golden_empire/exception/golden_king.png",
     "domains/golden_empire/exception/elf_mythril_hag.png",

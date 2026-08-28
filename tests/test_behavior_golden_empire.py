@@ -26,6 +26,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.need_bread_collection = False
         self.mock_machine.enable_bread = False
         self.mock_machine.stamina_retreat_start_time = None
+        self.mock_machine.daily_manager = None
         self.mock_machine.is_daily_pipeline_active.return_value = False
         self.mock_machine.has_available_dungeon.return_value = False
         self.mock_machine.dungeon_cooldowns = {}
@@ -427,6 +428,66 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertTrue(triggered)
         self.mock_machine.mouse.click.assert_called()
         self.mock_machine.transition_to.assert_called_with("COLLECT_ONLY")
+
+    # =========================================================================
+    # 11. 黃金古國日常領主 Boss (Lord Boss) 插隊挑戰與自動回歸測試
+    # =========================================================================
+
+    def test_golden_empire_preempts_to_lord_boss_when_cooldown_expires(self):
+        """
+        Given: 處於黃金古國探索 (STATE_DOMAIN_EXPLORE) 且啟用 enable_lord_boss = True，DailyManager 偵測到領主 Boss 冷卻結束可挑戰
+        When: 執行 DomainExploreHandler.handle()
+        Then: 主動偵測並點擊 exit_to_lobby.png 退出古國，轉移至 STATE_NAVIGATING 前往城鎮挑戰領主 Boss
+        """
+        mock_img = MagicMock()
+        mock_dm = MagicMock()
+        mock_dm.has_available_lord_boss.return_value = True
+        self.mock_machine.daily_manager = mock_dm
+        self.mock_machine.config["enable_lord_boss"] = True
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "domains/common/exit_to_lobby.png":
+                return ((1800, 100), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True), \
+             patch.object(self.handler, "click_and_wait_until_gone") as mock_click:
+            self.handler.handle(mock_img, self.rect)
+
+        mock_click.assert_called_once()
+        self.assertEqual(mock_click.call_args[0][0], "domains/common/exit_to_lobby.png")
+        self.mock_machine.transition_to.assert_called_with("NAVIGATING")
+
+    def test_golden_empire_restored_after_lord_boss_finishes(self):
+        """
+        Given: 初始掛機主模式為黃金古國 (golden_empire)，中途插隊執行領主 Boss 討伐 (lord_boss)
+        When: 領主 Boss 討伐結束，城鎮流水線隊列清空並執行 pop_and_next_town_subflow()
+        Then: 狀態機自動恢復 primary_config (黃金古國)，並轉移至 STATE_NAVIGATING 以重新循徑進入古國繼續掛機
+        """
+        from states.state_machine import GameStateMachine
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        golden_config = {
+            "name": "黃金古國",
+            "type": "domain",
+            "domain": "golden_empire",
+            "enable_lord_boss": True,
+            "navigation_path": ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
+        }
+        sm.config = golden_config.copy()
+        sm.primary_config = golden_config.copy()
+        sm.town_subflow_queue = ["lord_boss"]
+
+        # 模擬進入 Lord Boss 子流程
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
+        # 模擬 Lord Boss 結束，隊列清空並結尾
+        sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.config["name"], "黃金古國")
+        self.assertEqual(sm.config["type"], "domain")
+        self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
 
 
 if __name__ == "__main__":
