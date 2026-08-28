@@ -172,12 +172,16 @@ def _replace_mapping(target: dict, source: dict) -> None:
 
 def _reapply_all_settings(settings: dict) -> None:
     """Update all global config exports in place with the latest settings dictionary."""
-    global _SETTINGS, VISION_SETTINGS, DEFAULT_THRESHOLD, SUB_STAGE_THRESHOLD, EXIT_BATTLE_THRESHOLD, ENTRY_THRESHOLD, TEMPLATE_THRESHOLDS
+    global _SETTINGS, DEFAULT_DISASSEMBLE_COLORS, DEFAULT_KEEP_COLORS, DEFAULT_ACTIVITIES
+    global VISION_SETTINGS, DEFAULT_THRESHOLD, SUB_STAGE_THRESHOLD, EXIT_BATTLE_THRESHOLD, ENTRY_THRESHOLD, TEMPLATE_THRESHOLDS
     _SETTINGS = settings
     _replace_mapping(GLOBAL_SETTINGS, settings["global"])
     _replace_mapping(PRIMARY_MODES, _restore_mode_key_types(settings["primary_modes"]))
     _replace_mapping(SUBFLOW_CONFIGS, settings["subflow_configs"])
     _replace_mapping(BASE_STAGE_LEVELS, settings["base_stage_levels"])
+    DEFAULT_DISASSEMBLE_COLORS = settings["defaults"]["disassemble_colors"]
+    DEFAULT_KEEP_COLORS = settings["defaults"]["keep_colors"]
+    DEFAULT_ACTIVITIES = settings["defaults"]["activities"]
     
     # Vision settings
     VISION_SETTINGS = settings.get("vision", {})
