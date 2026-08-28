@@ -81,9 +81,10 @@ class TaskNode:
             "dungeons/Ghost_entry.png",
             "dungeons/Forest_entry.png",
             "dungeons/Ruins_entry.png",
+            "dungeons/dark_prison.png",
             "dungeons/Ice_entry.png"
         ]
-        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
+        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 
         stage_entries = {
             1: "stages/level1_sky_plains.png",

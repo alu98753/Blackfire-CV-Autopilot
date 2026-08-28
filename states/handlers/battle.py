@@ -8,10 +8,14 @@ class BattleHandler(BaseStateHandler):
         super().__init__(machine)
         self.non_battle_feature_start_time = None
         self.last_nemesis_log_time = 0.0
+        self.nemesis_check_count = 0
+        self.nemesis_check_done = False
 
     def reset_state(self):
         self.non_battle_feature_start_time = None
         self.last_nemesis_log_time = 0.0
+        self.nemesis_check_count = 0
+        self.nemesis_check_done = False
 
     def handle(self, screen_img, rect):
         """
@@ -203,12 +207,18 @@ class BattleHandler(BaseStateHandler):
         """
         [領域強敵處置子流程 (Nemesis Handling Subflow)]
         檢查當前模式是否配置 nemesis_templates（例如黃金君王 golden_king.png，相容舊配置 flee_bosses）。
-        遍歷所有強敵範本，計算並輸出即時比對信心度，依據 nemesis_action（相容舊配置 flee_boss_action）執行暫停手動打或放棄戰鬥重進。
+        僅在戰鬥開場進行前 3 次核驗（約 1~2 秒），確認非強敵後即鎖定為常規戰鬥，避免整場持續比對消耗 CPU 與洗 log。
         """
+        if getattr(self, "nemesis_check_done", False):
+            return False
+
         cfg = self.machine.config or {}
         nemesis_templates = cfg.get("nemesis_templates") or cfg.get("flee_bosses", [])
         if not nemesis_templates:
+            self.nemesis_check_done = True
             return False
+
+        self.nemesis_check_count = getattr(self, "nemesis_check_count", 0) + 1
 
         detected_nemesis = None
         detected_conf = 0.0
@@ -228,7 +238,7 @@ class BattleHandler(BaseStateHandler):
         last_log = getattr(self, "last_nemesis_log_time", 0.0)
         if detected_nemesis or (now - last_log >= 2.0):
             self.last_nemesis_log_time = now
-            logging.info(f"🔍 [領域強敵比對] 畫面相似度 (門檻 0.75) ➔ {', '.join(scores_summary)}")
+            logging.info(f"🔍 [領域強敵比對 第 {self.nemesis_check_count}/3 次] 畫面相似度 (門檻 0.75) ➔ {', '.join(scores_summary)}")
 
         if detected_nemesis:
             action = (cfg.get("nemesis_action") or cfg.get("flee_boss_action") or "flee").lower()
@@ -243,6 +253,12 @@ class BattleHandler(BaseStateHandler):
             else:
                 logging.warning(f"🚨 [領域強敵撤退] 偵測到領域強敵特徵 [{detected_nemesis}] (相似度: {detected_conf:.4f} >= 0.75)，立即執行放棄戰鬥流程！")
                 return self._run_nemesis_flee_subflow(rect)
+
+        # 若已連續檢查 3 次（開場核驗期）皆未達門檻，鎖定為常規戰鬥
+        if self.nemesis_check_count >= 3:
+            self.nemesis_check_done = True
+            logging.info("🛡️ [領域強敵比對] 開場核驗完成（未偵測到強敵），鎖定常規戰鬥流程。")
+
         return False
 
     def _run_nemesis_flee_subflow(self, rect) -> bool:

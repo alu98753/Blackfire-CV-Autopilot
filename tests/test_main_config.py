@@ -55,7 +55,7 @@ class TestMainConfig(unittest.TestCase):
         self.assertIn("stages/level1_final.png", config["navigation_path"])
 
     @patch('os.path.exists')
-    @patch('builtins.input', side_effect=["6", "135", "1"])
+    @patch('builtins.input', side_effect=["7", "135", "1"])
     def test_setup_dungeon_config_greedy_custom(self, mock_input, mock_exists):
         """測試 setup_dungeon_config 自訂貪婪挑選 [1, 3, 5] 關卡與戰鬥祝福"""
         mock_exists.return_value = True
@@ -107,9 +107,9 @@ class TestMainConfig(unittest.TestCase):
         self.assertEqual(cfg_daily["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
     @patch('os.path.exists')
-    @patch('builtins.input', side_effect=["5", "1", "1", "1", "6", "1"])
+    @patch('builtins.input', side_effect=["6", "1", "1", "1", "6", "1"])
     def test_setup_mode_config_daily_default(self, mock_input, mock_exists):
-        """測試 setup_mode_config 在 daily 模式下啟用 stage farming (地下城 5 冰雪洞窟 + 允許打怪 + 冰凍峽谷 6-1 關卡)"""
+        """測試 setup_mode_config 在 daily 模式下啟用 stage farming (地下城 6 冰雪洞窟 + 允許打怪 + 冰凍峽谷 6-1 關卡)"""
         mock_exists.return_value = True
         mock_args = MagicMock()
         mock_args.subflow = None

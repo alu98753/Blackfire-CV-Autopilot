@@ -16,8 +16,8 @@ stage_batch_size = 4
 dungeon_batch_size = 1
 
 [catalog]
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
-dungeon_entry_templates = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+dungeon_entry_templates = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 
 [ocr]
@@ -82,8 +82,8 @@ result_buttons = ["common/continue.png", "common/continue_gray.png"]
 [primary_modes.stage]
 name = "普通關卡"
 type = "stage"
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 navigation_path = ["common/door.png", "exit_battle.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
 lobby_start_btn = "stages/start.png"
@@ -93,12 +93,12 @@ stage_max_defeat = 4
 [primary_modes.dungeon]
 name = "地下城"
 type = "dungeon"
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [0, 1, 2, 3, 4]
+greedy_allowed_indices = [0, 1, 2, 3, 4, 5]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -110,17 +110,18 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 1 = 300.0
 2 = 900.0
 3 = 1200.0
-4 = 1800.0
+4 = 1500.0
+5 = 1800.0
 
 [primary_modes.mix]
 name = "混合模式"
 type = "mix"
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [0, 1, 2, 3, 4]
+greedy_allowed_indices = [0, 1, 2, 3, 4, 5]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -139,7 +140,8 @@ result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gr
 1 = 300.0
 2 = 900.0
 3 = 1200.0
-4 = 1800.0
+4 = 1500.0
+5 = 1800.0
 
 [primary_modes.collect_only]
 name = "定時領取麵包與鑽石"
@@ -152,12 +154,12 @@ stamina_retreat_duration = 7
 [primary_modes.daily]
 name = "每日懸賞任務"
 type = "mix"
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/Ice_entry.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [0, 1, 2, 3, 4]
+greedy_allowed_indices = [0, 1, 2, 3, 4, 5]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -175,7 +177,8 @@ tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (�
 1 = 300.0
 2 = 900.0
 3 = 1200.0
-4 = 1800.0
+4 = 1500.0
+5 = 1800.0
 
 [subflow_configs]
 

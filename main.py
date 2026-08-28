@@ -229,9 +229,9 @@ def setup_dungeon_config(config, args):
             "bless_mode", "auto_resume_dungeon_on_cd",
         )
     }
-    configured_index = config.get("tier4_dungeon_index", 4)
-    default_dungeon_choice = "6" if config.get("greedy_dungeon", False) else str(configured_index + 1)
-    if default_dungeon_choice not in {"1", "2", "3", "4", "5", "6"}:
+    configured_index = config.get("tier4_dungeon_index", 5)
+    default_dungeon_choice = "7" if config.get("greedy_dungeon", False) else str(configured_index + 1)
+    if default_dungeon_choice not in {"1", "2", "3", "4", "5", "6", "7"}:
         default_dungeon_choice = "5"
 
     print("請選擇要探索的地下城：")
@@ -239,20 +239,22 @@ def setup_dungeon_config(config, args):
     print(f" 2) 幽影地穴 (Ghost_entry)")
     print(f" 3) 森林迷宮 (Forest_entry)")
     print(f" 4) 神秘遺跡 (Ruins_entry)")
-    print(f" 5) 冰雪洞窟 (Ice_entry) {'- 當前預設' if default_dungeon_choice == '5' else ''}")
-    print(f" 6) 自動貪婪挑選 (Greedy Select) {'- 當前預設' if default_dungeon_choice == '6' else ''}")
-    choice = prompt_choice(f"請輸入地下城數字 [1-6] (直接 Enter 鍵保持為 {default_dungeon_choice}): ", default_dungeon_choice)
+    print(f" 5) 幽暗監獄 (dark_prison) {'- 當前預設' if default_dungeon_choice == '5' else ''}")
+    print(f" 6) 冰雪洞窟 (Ice_entry) {'- 當前預設' if default_dungeon_choice == '6' else ''}")
+    print(f" 7) 自動貪婪挑選 (Greedy Select) {'- 當前預設' if default_dungeon_choice == '7' else ''}")
+    choice = prompt_choice(f"請輸入地下城數字 [1-7] (直接 Enter 鍵保持為 {default_dungeon_choice}): ", default_dungeon_choice)
 
     dungeon_map = {
         "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
         "2": ("dungeons/Ghost_entry.png", "幽影地穴", False),
         "3": ("dungeons/Forest_entry.png", "森林迷宮", False),
         "4": ("dungeons/Ruins_entry.png", "神秘遺跡", False),
-        "5": ("dungeons/Ice_entry.png", "冰雪洞窟", False),
-        "6": (None, "自動貪婪挑選", True)
+        "5": ("dungeons/dark_prison.png", "幽暗監獄", False),
+        "6": ("dungeons/Ice_entry.png", "冰雪洞窟", False),
+        "7": (None, "自動貪婪挑選", True)
     }
     if choice not in dungeon_map:
-        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [冰雪洞窟]...")
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [幽暗監獄]...")
         choice = "5"
 
     entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
@@ -269,22 +271,23 @@ def setup_dungeon_config(config, args):
         print(" 2) 幽影地穴 (Ghost)")
         print(" 3) 森林迷宮 (Forest)")
         print(" 4) 神秘遺跡 (Ruins)")
-        print(" 5) 冰雪洞窟 (Ice)")
-        configured_allowed = config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
-        default_allowed = "".join(str(index + 1) for index in configured_allowed if index in range(5))
+        print(" 5) 幽暗監獄 (Prison)")
+        print(" 6) 冰雪洞窟 (Ice)")
+        configured_allowed = config.get("greedy_allowed_indices", [0, 1, 2, 3, 4, 5])
+        default_allowed = "".join(str(index + 1) for index in configured_allowed if index in range(6))
         if not default_allowed:
-            default_allowed = "12345"
+            default_allowed = "123456"
         allowed_input = prompt_choice(
-            f"👉 請輸入 [1-5] (直接 Enter 保留 {default_allowed}): ", default_allowed
+            f"👉 請輸入 [1-6] (直接 Enter 保留 {default_allowed}): ", default_allowed
         )
         allowed_indices = []
         for char in allowed_input:
-            if char in "12345":
+            if char in "123456":
                 idx = int(char) - 1
                 if idx not in allowed_indices:
                     allowed_indices.append(idx)
         if not allowed_indices:
-            allowed_indices = [0, 1, 2, 3, 4]
+            allowed_indices = [0, 1, 2, 3, 4, 5]
             
         config["greedy_allowed_indices"] = allowed_indices
         allowed_names = [dungeon_map[str(idx+1)][1] for idx in allowed_indices]
