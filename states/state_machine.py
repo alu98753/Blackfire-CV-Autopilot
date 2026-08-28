@@ -450,9 +450,20 @@ class GameStateMachine:
         from config import GAME_CONFIGS
         key = self.TOWN_SUBFLOW_CONFIG_MAP.get(new_state)
         if key and key in GAME_CONFIGS:
+            saved_keep = self.config.get("keep_colors") if self.config else None
+            saved_dis = self.config.get("disassemble_colors") if self.config else None
+            saved_sac = self.config.get("sacrifice_settings") if self.config else None
+
             if self.config is None:
                 self.config = {}
             self.config.update(GAME_CONFIGS[key])
+
+            if saved_keep is not None:
+                self.config["keep_colors"] = saved_keep
+            if saved_dis is not None:
+                self.config["disassemble_colors"] = saved_dis
+            if saved_sac is not None:
+                self.config["sacrifice_settings"] = saved_sac
 
         # 轉移至新狀態時，重置目標 Handler 的內部狀態 (避免累積舊 step_phase 髒資料)
         if new_state in self.handlers and hasattr(self.handlers[new_state], "reset_state"):
@@ -948,11 +959,11 @@ class GameStateMachine:
         """
         if new_config:
             if getattr(self, "config", None):
-                if "keep_colors" in self.config and "keep_colors" not in new_config:
+                if "keep_colors" in self.config:
                     new_config["keep_colors"] = self.config["keep_colors"]
-                if "disassemble_colors" in self.config and "disassemble_colors" not in new_config:
+                if "disassemble_colors" in self.config:
                     new_config["disassemble_colors"] = self.config["disassemble_colors"]
-                if "sacrifice_settings" in self.config and "sacrifice_settings" not in new_config:
+                if "sacrifice_settings" in self.config:
                     new_config["sacrifice_settings"] = self.config["sacrifice_settings"]
 
         self.config = new_config

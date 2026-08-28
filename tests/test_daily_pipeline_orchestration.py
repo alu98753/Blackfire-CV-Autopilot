@@ -726,9 +726,43 @@ class TestTierConfigMatrix(unittest.TestCase):
         self.assertEqual(cfg["stage_entry"], "stages/level6_ice_cave.png")
         self.assertTrue(os.path.exists(os.path.join("templates", cfg["stage_target"])))
 
+    def test_tier4_preemption_on_lord_boss_cooldown_expiry(self):
+        """[Tier 4 結算插隊測試] 驗證即便 subflows.lord_boss.completed_today 為 True，只要 Boss 冷卻過期 (has_available_lord_boss 為 True)，ResultHandler 必須判定離場並點擊 exit_battle 而非 retry"""
+        from states.handlers.result import ResultHandler
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = MagicMock()
+        # 模擬早上首輪跑完後 completed_today 被標記為 True，但冷卻過期後 has_available_lord_boss 變為 True
+        sm.daily_manager.is_subflow_completed.return_value = True
+        sm.daily_manager.has_available_lord_boss.return_value = True
+        sm.set_config({"name": "Tier 4 退守", "type": "mix", "is_tier4_fallback": True, "enable_lord_boss": True})
+        sm.has_available_dungeon = MagicMock(return_value=False)
+        sm.quest_scheduler = None
+
+        handler = ResultHandler(sm)
+        handler.subflow_step = "FINAL_MATCH"
+        sm.transition_to = MagicMock()
+
+        def match_exit_or_retry(_screen, template, **_kwargs):
+            if template == "exit_battle.png":
+                return (500, 500), 0.95
+            if template == "stages/retry.png":
+                return (700, 500), 0.95
+            return None, 0.0
+
+        sm.matcher.match.side_effect = match_exit_or_retry
+        fake_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        with patch("os.path.exists", return_value=True), \
+             patch.object(handler, "click_and_wait_until_gone") as mock_click:
+            handler.handle(fake_screen, rect)
+
+            # 驗證 ResultHandler 點擊 exit_battle 退出戰鬥，而非 retry
+            mock_click.assert_called_once()
+            self.assertEqual(mock_click.call_args[0][0], "exit_battle.png")
+            sm.transition_to.assert_called_once_with(sm.STATE_NAVIGATING)
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
