@@ -89,73 +89,93 @@ def check_mode_templates(config):
                 
     return missing
 
+def prompt_choice(prompt_text: str, default_val: str) -> str:
+    """Prompt user for input in terminal; return default_val when user presses Enter or on empty/interrupt."""
+    try:
+        val = input(prompt_text).strip()
+        return val if val else default_val
+    except (EOFError, KeyboardInterrupt):
+        return default_val
+    except Exception:
+        return default_val
+
+
+def persist_mode_updates(config, updates: dict) -> None:
+    """Write CLI changes back to the TOML table that supplied this mode."""
+    from config import get_active_profile, update_profile_config
+
+    mode_key = config.get("_config_mode_key", config.get("type", "mix"))
+    update_profile_config(get_active_profile(), {"primary_modes": {mode_key: updates}})
+
 def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_type=None):
     stage_configs = get_stage_configs()
+    
+    # 1. 取得當前 TOML 的預設大關設定 (預設為 6: 冰凍峽谷)
+    default_lvl = str(stage_level) if (stage_level is not None and str(stage_level) in stage_configs) else str(config.get("tier4_stage_level", "6"))
+    if default_lvl not in stage_configs:
+        default_lvl = "6"
+
+    # 若由 CLI 明確指定 (--stage)，直接套用免詢問
     if stage_level is not None and str(stage_level) in stage_configs:
         choice = str(stage_level)
     else:
-        print(f"\n{prompt_prefix}請選擇要打的關卡大關：")
-        print(" 1) 蒼穹平原 (Level 1)")
-        print(" 2) 荒蕪岩地 (Level 2)")
-        print(" 3) 古樹森林 (Level 3)")
-        print(" 4) 沙漠廢墟 (Level 4)")
-        print(" 5) 幽暗沼澤 (Level 5)")
-        print(" 6) 冰凍峽谷 (Level 6) - 預設")
-        try:
-            choice = input("請輸入關卡數字 [1-6] (直接 Enter 鍵預設為 6): ").strip()
-            if not choice:
-                choice = "6"
-        except KeyboardInterrupt:
-            print("\n[!] 取消啟動。")
-            sys.exit(0)
-        except Exception:
-            choice = "6"
+        default_name = stage_configs[default_lvl]["name"]
+        print(f"\n{prompt_prefix}請選擇要打的關卡大關 (當前 Profile TOML 設定: Level {default_lvl} {default_name})：")
+        for lvl_k in sorted(stage_configs.keys(), key=lambda x: int(x)):
+            name = stage_configs[lvl_k]["name"]
+            mark = " - 當前預設" if lvl_k == default_lvl else ""
+            print(f" {lvl_k}) {name} (Level {lvl_k}){mark}")
+        choice = prompt_choice(f"請輸入關卡數字 [1-6] (直接 Enter 鍵保持為 {default_lvl}): ", default_lvl)
 
     if choice not in stage_configs:
-        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰凍峽谷]...")
-        choice = "6"
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的 [{stage_configs[default_lvl]['name']}]...")
+        choice = default_lvl
+
+    # 檢查是否異動大關
+    changed_level = (int(choice) != config.get("tier4_stage_level"))
+    config["tier4_stage_level"] = int(choice)
 
     cfg = stage_configs[choice]
     stage_name = cfg["name"]
-    
-    # 判斷是否有多個子關卡
     sub_stages = cfg["sub_stages"]
-    
+
+    # 2. 小關選擇
+    default_sub = sub_stage_type if (sub_stage_type and sub_stage_type in sub_stages) else config.get("tier4_sub_stage", "first")
+    if default_sub not in sub_stages:
+        default_sub = "first" if "first" in sub_stages else "final"
+
     if sub_stage_type is not None and sub_stage_type in sub_stages:
         sub_choice_key = sub_stage_type
     elif len(sub_stages) > 1:
-        print(f"\n{prompt_prefix}請選擇 [{stage_name}] 要打的小關卡類型：")
+        print(f"\n{prompt_prefix}請選擇 [{stage_name}] 要打的小關卡類型 (當前 Profile TOML 設定: {default_sub})：")
         opts = []
+        default_opt_num = "1"
         if "first" in sub_stages:
-            print(" 1) 第一小關 (First Stage) - 預設")
-            opts.append(("1", "first"))
+            opts.append(("1", "first", "第一小關 (First Stage)"))
+            if default_sub == "first": default_opt_num = "1"
         if "middle" in sub_stages:
-            print(" 2) 中間小關 (Middle Stage)")
-            opts.append(("2", "middle"))
+            opts.append(("2", "middle", "中間小關 (Middle Stage)"))
+            if default_sub == "middle": default_opt_num = "2"
         if "six" in sub_stages:
-            print(" 3) 第六小關 (Six Stage)")
-            opts.append(("3", "six"))
-        print(" 4) 魔王關 (Boss / Final)")
-        opts.append(("4", "final"))
-        
-        try:
-            sub_choice = input("請輸入數字 (直接 Enter 鍵預設為 1): ").strip()
-            if not sub_choice:
-                sub_choice = "1"
-        except KeyboardInterrupt:
-            print("\n[!] 取消啟動。")
-            sys.exit(0)
-        except Exception:
-            sub_choice = "1"
-            
+            opts.append(("3", "six", "第六小關 (Six Stage)"))
+            if default_sub == "six": default_opt_num = "3"
+        opts.append(("4", "final", "魔王關 (Boss / Final)"))
+        if default_sub == "final": default_opt_num = "4"
+
+        for opt_num, opt_key, opt_label in opts:
+            mark = " - 當前預設" if opt_key == default_sub else ""
+            print(f" {opt_num}) {opt_label}{mark}")
+
+        sub_choice = prompt_choice(f"請輸入數字 (直接 Enter 鍵保持為 {default_opt_num}: {default_sub}): ", default_opt_num)
+
         matched_key = None
-        for opt_num, opt_key in opts:
-            if sub_choice == opt_num:
+        for opt_num, opt_key, _ in opts:
+            if sub_choice == opt_num or sub_choice.lower() == opt_key.lower():
                 matched_key = opt_key
                 break
         if matched_key is None:
-            print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [第一小關]...")
-            matched_key = "first" if "first" in sub_stages else "final"
+            print(f"[!] 無效選擇 '{sub_choice}'，已自動使用預設的 [{default_sub}]...")
+            matched_key = default_sub
         sub_choice_key = matched_key
     else:
         sub_choice_key = "first" if "first" in sub_stages else "final"
@@ -163,7 +183,17 @@ def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_typ
     if sub_choice_key not in sub_stages:
         print(f"\n[!] 錯誤：該關卡 [{stage_name}] 未配置小關卡類型 '{sub_choice_key}'，或找不到對應的模板圖片！")
         sys.exit(1)
-        
+
+    changed_sub = (sub_choice_key != config.get("tier4_sub_stage"))
+    config["tier4_sub_stage"] = sub_choice_key
+
+    # 若有異動，同步寫回當前 Profile 的 config.toml
+    if changed_level or changed_sub:
+        persist_mode_updates(config, {
+            "tier4_stage_level": int(choice),
+            "tier4_sub_stage": sub_choice_key,
+        })
+
     fight_entrance = sub_stages[sub_choice_key]
     if not os.path.exists(os.path.join("templates", fight_entrance)):
         print(f"\n[!] 錯誤：找不到該關卡的模板圖片 'templates/{fight_entrance}'，請先使用 crop_tool 進行裁剪！")
@@ -192,22 +222,26 @@ def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_typ
         ]
 
 def setup_dungeon_config(config, args):
+    original_settings = {
+        key: config.get(key)
+        for key in (
+            "greedy_dungeon", "tier4_dungeon_index", "greedy_allowed_indices",
+            "bless_mode", "auto_resume_dungeon_on_cd",
+        )
+    }
+    configured_index = config.get("tier4_dungeon_index", 4)
+    default_dungeon_choice = "6" if config.get("greedy_dungeon", False) else str(configured_index + 1)
+    if default_dungeon_choice not in {"1", "2", "3", "4", "5", "6"}:
+        default_dungeon_choice = "5"
+
     print("請選擇要探索的地下城：")
-    print(" 1) 黏糊糊的石窟 (Slime_entry)")
-    print(" 2) 幽影地穴 (Ghost_entry)")
-    print(" 3) 森林迷宮 (Forest_entry)")
-    print(" 4) 神秘遺跡 (Ruins_entry)")
-    print(" 5) 冰雪洞窟 (Ice_entry) - 預設")
-    print(" 6) 自動貪婪挑選 (Greedy Select)")
-    try:
-        choice = input("請輸入地下城數字 [1-6] (直接 Enter 鍵預設為 5): ").strip()
-        if not choice:
-            choice = "5"
-    except KeyboardInterrupt:
-        print("\n[!] 取消啟動。")
-        sys.exit(0)
-    except Exception:
-        choice = "5"
+    print(f" 1) 黏糊糊的石窟 (Slime_entry)")
+    print(f" 2) 幽影地穴 (Ghost_entry)")
+    print(f" 3) 森林迷宮 (Forest_entry)")
+    print(f" 4) 神秘遺跡 (Ruins_entry)")
+    print(f" 5) 冰雪洞窟 (Ice_entry) {'- 當前預設' if default_dungeon_choice == '5' else ''}")
+    print(f" 6) 自動貪婪挑選 (Greedy Select) {'- 當前預設' if default_dungeon_choice == '6' else ''}")
+    choice = prompt_choice(f"請輸入地下城數字 [1-6] (直接 Enter 鍵保持為 {default_dungeon_choice}): ", default_dungeon_choice)
 
     dungeon_map = {
         "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
@@ -224,6 +258,8 @@ def setup_dungeon_config(config, args):
     entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
     config["name"] = f"地下城 - {dungeon_name}"
     config["greedy_dungeon"] = is_greedy
+    if not is_greedy:
+        config["tier4_dungeon_index"] = int(choice) - 1
     if is_greedy:
         config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
         
@@ -234,23 +270,20 @@ def setup_dungeon_config(config, args):
         print(" 3) 森林迷宮 (Forest)")
         print(" 4) 神秘遺跡 (Ruins)")
         print(" 5) 冰雪洞窟 (Ice)")
-        try:
-            allowed_input = input("👉 請輸入 [1-5] (直接 Enter 預設全部打): ").strip()
-            if not allowed_input:
-                allowed_indices = [0, 1, 2, 3, 4]
-            else:
-                allowed_indices = []
-                for char in allowed_input:
-                    if char in "12345":
-                        idx = int(char) - 1
-                        if idx not in allowed_indices:
-                            allowed_indices.append(idx)
-                if not allowed_indices:
-                    allowed_indices = [0, 1, 2, 3, 4]
-        except KeyboardInterrupt:
-            print("\n[!] 取消啟動。")
-            sys.exit(0)
-        except Exception:
+        configured_allowed = config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
+        default_allowed = "".join(str(index + 1) for index in configured_allowed if index in range(5))
+        if not default_allowed:
+            default_allowed = "12345"
+        allowed_input = prompt_choice(
+            f"👉 請輸入 [1-5] (直接 Enter 保留 {default_allowed}): ", default_allowed
+        )
+        allowed_indices = []
+        for char in allowed_input:
+            if char in "12345":
+                idx = int(char) - 1
+                if idx not in allowed_indices:
+                    allowed_indices.append(idx)
+        if not allowed_indices:
             allowed_indices = [0, 1, 2, 3, 4]
             
         config["greedy_allowed_indices"] = allowed_indices
@@ -262,47 +295,42 @@ def setup_dungeon_config(config, args):
     # 選擇地下城祝福模式
     bless_mode = args.blessmode
     if not bless_mode:
-        print("\n請選擇地下城祝福模式：")
-        print(" 1) 戰鬥/傷害祝福 (Combat) - 預設")
-        print(" 2) 生命祝福 (Life)")
-        print(" 3) 經驗祝福 (Exp)")
-        try:
-            bless_choice = input("請輸入數字 [1-3] (直接 Enter 鍵預設為 1): ").strip()
-            if not bless_choice:
-                bless_choice = "1"
-        except KeyboardInterrupt:
-            print("\n[!] 取消啟動。")
-            sys.exit(0)
-        except Exception:
-            bless_choice = "1"
+        current_bless = config.get("bless_mode", "combat")
+        default_bless_num = {"combat": "1", "life": "2", "exp": "3"}.get(current_bless, "1")
+        print(f"\n請選擇地下城祝福模式 (當前 Profile TOML 設定: {current_bless})：")
+        print(f" 1) 戰鬥/傷害祝福 (Combat) {'- 當前預設' if current_bless == 'combat' else ''}")
+        print(f" 2) 生命祝福 (Life) {'- 當前預設' if current_bless == 'life' else ''}")
+        print(f" 3) 經驗祝福 (Exp) {'- 當前預設' if current_bless == 'exp' else ''}")
+        bless_choice = prompt_choice(f"請輸入數字 [1-3] (直接 Enter 鍵保持為 {default_bless_num}: {current_bless}): ", default_bless_num)
 
         bless_map = {
             "1": "combat",
             "2": "life",
             "3": "exp"
         }
-        if bless_choice not in bless_map:
-            print(f"[!] 無效選擇 '{bless_choice}'，已自動使用預設的 [1: 戰鬥/傷害祝福]...")
-            config["bless_mode"] = "combat"
-        else:
-            config["bless_mode"] = bless_map[bless_choice]
+        new_bless = bless_map.get(bless_choice, current_bless)
+        config["bless_mode"] = new_bless
         print(f"[*] 戰鬥祝福模式已設定為: {config['bless_mode']}")
 
     # 選擇體力退避期間是否自動返回地下城
-    print("\n當體力耗盡轉入定時領取 (collect_only) 時，若地下城冷卻結束，是否自動返回去刷地下城？")
-    print(" 1) 是 (地下城與定時領取來回切換) - 預設")
-    print(" 2) 否 (維持定時領取直到滿時間)")
-    try:
-        auto_resume_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
-        if not auto_resume_choice:
-            auto_resume_choice = "1"
-    except KeyboardInterrupt:
-        print("\n[!] 取消啟動。")
-        sys.exit(0)
-    except Exception:
-        auto_resume_choice = "1"
+    current_resume = config.get("auto_resume_dungeon_on_cd", False)
+    default_resume_num = "1" if current_resume else "2"
+    print(f"\n當體力耗盡轉入定時領取 (collect_only) 時，若地下城冷卻結束，是否自動返回去刷地下城 (當前 Profile TOML 設定: {'是' if current_resume else '否'})？")
+    print(f" 1) 是 (地下城與定時領取來回切換) {'- 當前預設' if current_resume else ''}")
+    print(f" 2) 否 (維持定時領取直到滿時間) {'- 當前預設' if not current_resume else ''}")
+    auto_resume_choice = prompt_choice(f"請輸入數字 [1-2] (直接 Enter 鍵保持為 {default_resume_num}): ", default_resume_num)
 
-    config["auto_resume_dungeon_on_cd"] = (auto_resume_choice == "1")
+    new_resume = (auto_resume_choice == "1")
+    config["auto_resume_dungeon_on_cd"] = new_resume
+
+    changed_settings = {
+        key: config[key]
+        for key, old_value in original_settings.items()
+        if config.get(key) != old_value
+    }
+    if changed_settings:
+        persist_mode_updates(config, changed_settings)
+
     if config["auto_resume_dungeon_on_cd"]:
         print("[*] 已啟用：體力退避期間若地下城冷卻結束，將自動切回刷地下城。")
     else:
@@ -371,6 +399,8 @@ def setup_mode_config(args):
 
     target_key = args.mode
     config = GAME_CONFIGS[target_key].copy()
+    # `daily` uses type="mix" at runtime, so retain its TOML table identity.
+    config["_config_mode_key"] = target_key
     config["backend_mode"] = args.backend
 
     # 覆蓋 CLI 明確傳入之活動開關
@@ -389,19 +419,18 @@ def setup_mode_config(args):
     elif args.mode in ["dungeon", "mix"]:
         setup_dungeon_config(config, args)
         if args.enable_stage_farming is None:
+            current_farm = config.get("enable_stage_farming", False)
+            default_farm_num = "1" if current_farm else "2"
             print("\n當地下城冷卻時，是否要前往普通關卡刷怪？")
-            print(" 1) 是 (前往普通關卡刷怪) - 預設")
-            print(" 2) 否 (回到城鎮待機，零浪費體力)")
-            try:
-                stage_farm_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
-                if not stage_farm_choice:
-                    stage_farm_choice = "1"
-            except KeyboardInterrupt:
-                print("\n[!] 取消啟動。")
-                sys.exit(0)
-            except Exception:
-                stage_farm_choice = "1"
-            config["enable_stage_farming"] = (stage_farm_choice == "1")
+            print(f" 1) 是 (前往普通關卡刷怪){' - 目前 TOML 預設' if current_farm else ''}")
+            print(f" 2) 否 (回到城鎮待機，零浪費體力){' - 目前 TOML 預設' if not current_farm else ''}")
+            stage_farm_choice = prompt_choice(
+                f"請輸入數字 [1-2] (直接 Enter 保留 {default_farm_num}): ", default_farm_num
+            )
+            new_farm = (stage_farm_choice == "1")
+            if new_farm != current_farm:
+                persist_mode_updates(config, {"enable_stage_farming": new_farm})
+            config["enable_stage_farming"] = new_farm
         
         if config.get("enable_stage_farming", False):
             setup_stage_config(config, prompt_prefix="[當地下城冷卻時] ")
@@ -410,61 +439,53 @@ def setup_mode_config(args):
             print("[*] 已設定：當地下城冷卻時回到城鎮待機 (COLLECT_ONLY)，不打小怪。")
     elif args.mode == "collect_only":
         if args.enable_lord_boss is None:
+            current_boss = config.get("enable_lord_boss", False)
+            default_boss_num = "1" if current_boss else "2"
             print("\n在待機領取期間，若 Boss (首領討伐) 冷卻結束，是否要自動去打 Boss？")
-            print(" 1) 是 (打 Boss + 定時領取) - 推薦")
-            print(" 2) 否 (純定時領取待機)")
-            try:
-                boss_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
-                if not boss_choice:
-                    boss_choice = "1"
-            except KeyboardInterrupt:
-                print("\n[!] 取消啟動。")
-                sys.exit(0)
-            except Exception:
-                boss_choice = "1"
-            config["enable_lord_boss"] = (boss_choice == "1")
+            print(f" 1) 是 (打 Boss + 定時領取){' - 目前 TOML 預設' if current_boss else ''}")
+            print(f" 2) 否 (純定時領取待機){' - 目前 TOML 預設' if not current_boss else ''}")
+            boss_choice = prompt_choice(
+                f"請輸入數字 [1-2] (直接 Enter 保留 {default_boss_num}): ", default_boss_num
+            )
+            new_boss = (boss_choice == "1")
+            if new_boss != current_boss:
+                persist_mode_updates(config, {"enable_lord_boss": new_boss})
+            config["enable_lord_boss"] = new_boss
             if config["enable_lord_boss"]:
                 print("[*] 已啟用：定時待機期間，Boss 冷卻結束將自動前往討伐！")
     elif args.mode == "daily":
         print("\n[*] 【每日懸賞任務模式】設定 Tier 4 退守目標 (當懸賞全清且無 Boss 可打時)：")
         
-        # 1. 地下城退守配置 (若 TOML/CLI 已經設定好 greedy 則免除互動，否則互動詢問)
-        has_toml_dungeon = ("greedy_allowed_indices" in config or "tier4_dungeon_index" in config) and args.backend
-        if not has_toml_dungeon:
-            setup_dungeon_config(config, args)
-        else:
-            config["greedy_dungeon"] = config.get("greedy_dungeon", True)
-            config["greedy_allowed_indices"] = config.get("greedy_allowed_indices", [0, 1, 2, 3, 4])
-            config["bless_mode"] = config.get("bless_mode", "combat")
-            config["auto_resume_dungeon_on_cd"] = config.get("auto_resume_dungeon_on_cd", False)
+        # Backend controls game input only; it must never suppress configuration choices.
+        setup_dungeon_config(config, args)
 
         # 2. 是否前往普通關卡刷怪
+        current_farm = config.get("enable_stage_farming", True)
+        default_farm_num = "1" if current_farm else "2"
         if args.enable_stage_farming is not None:
             config["enable_stage_farming"] = args.enable_stage_farming
-        elif not args.backend:
-            print("\n當所有懸賞任務與地下城皆完成/冷卻時，是否要前往普通關卡刷怪？")
-            print(" 1) 是 (前往普通關卡刷怪) - 預設")
-            print(" 2) 否 (回到城鎮待機，零浪費體力)")
+        else:
+            print(f"\n當所有懸賞任務與地下城皆完成/冷卻時，是否要前往普通關卡刷怪 (當前 Profile TOML 設定: {'是' if current_farm else '否'})？")
+            print(f" 1) 是 (前往普通關卡刷怪) {'- 當前預設' if current_farm else ''}")
+            print(f" 2) 否 (回到城鎮待機，零浪費體力) {'- 當前預設' if not current_farm else ''}")
             try:
-                stage_farm_choice = input("請輸入數字 [1-2] (直接 Enter 鍵預設為 1): ").strip()
+                stage_farm_choice = input(f"請輸入數字 [1-2] (直接 Enter 鍵保持為 {default_farm_num}): ").strip()
                 if not stage_farm_choice:
-                    stage_farm_choice = "1"
+                    stage_farm_choice = default_farm_num
             except KeyboardInterrupt:
                 print("\n[!] 取消啟動。")
                 sys.exit(0)
             except Exception:
-                stage_farm_choice = "1"
-            config["enable_stage_farming"] = (stage_farm_choice == "1")
+                stage_farm_choice = default_farm_num
+            new_farm = (stage_farm_choice == "1")
+            if new_farm != config.get("enable_stage_farming"):
+                config["enable_stage_farming"] = new_farm
+                persist_mode_updates(config, {"enable_stage_farming": new_farm})
+            else:
+                config["enable_stage_farming"] = new_farm
 
         if config.get("enable_stage_farming", True):
-            tier4_lvl = config.get("tier4_stage_level") if args.backend else None
-            tier4_sub = config.get("tier4_sub_stage") if args.backend else None
-            setup_stage_config(
-                config,
-                prompt_prefix="[Tier 4 退守關卡] ",
-                stage_level=tier4_lvl,
-                sub_stage_type=tier4_sub
-            )
+            setup_stage_config(config, prompt_prefix="[Tier 4 退守關卡] ")
             config["name"] = f"每日懸賞任務 (Tier 4 退守: {config.get('stage_name', '')})"
             print(f"[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行【{config.get('stage_name', '')}】。")
         else:

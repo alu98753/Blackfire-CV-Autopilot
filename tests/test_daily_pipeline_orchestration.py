@@ -658,7 +658,8 @@ class TestTierConfigMatrix(unittest.TestCase):
         self.assertEqual(config["stage_target"], "stages/level6_final.png")
         self.assertIn("stages/level6_final.png", config["stage_navigation_path"])
 
-    def test_setup_mode_config_daily_reads_tier4_toml(self):
+    @patch('builtins.input', return_value="")
+    def test_setup_mode_config_daily_reads_tier4_toml(self, mock_input):
         """[TOML 配置測試] 驗證 setup_mode_config 在 daily 模式下可無縫讀取 TOML 中的 tier4 退守大關與小關配置"""
         import argparse
         from main import setup_mode_config
@@ -670,7 +671,9 @@ class TestTierConfigMatrix(unittest.TestCase):
             enable_lord_boss=None,
             enable_dungeon=None,
             enable_stage_farming=None,
-            enable_town_daily=None
+            enable_town_daily=None,
+            stage=None,
+            sub=None
         )
         from config import PRIMARY_MODES
         expected_sub = PRIMARY_MODES["daily"].get("tier4_sub_stage", "first")

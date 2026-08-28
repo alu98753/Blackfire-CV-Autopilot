@@ -54,7 +54,7 @@ class TestJsonConfigManager(unittest.TestCase):
         import config
 
         original_path = config.LOCAL_CONFIG_PATH
-        original_manager = config._LOCAL_MANAGER
+        original_manager = config._PROFILE_MANAGER
         original_settings = deepcopy(config._SETTINGS)
         original_exports = {
             "global": deepcopy(config.GLOBAL_SETTINGS),
@@ -72,7 +72,7 @@ class TestJsonConfigManager(unittest.TestCase):
                     encoding="utf-8",
                 )
                 config.LOCAL_CONFIG_PATH = local_path
-                config._LOCAL_MANAGER = None
+                config._PROFILE_MANAGER = None
 
                 self.assertTrue(config.refresh_runtime_config())
                 self.assertEqual(config.get_runtime_game_config("dungeon")["bless_mode"], "exp")
@@ -82,7 +82,7 @@ class TestJsonConfigManager(unittest.TestCase):
                 self.assertEqual(config.get_runtime_game_config("dungeon")["bless_mode"], "combat")
         finally:
             config.LOCAL_CONFIG_PATH = original_path
-            config._LOCAL_MANAGER = original_manager
+            config._PROFILE_MANAGER = original_manager
             config._SETTINGS = original_settings
             config._replace_mapping(config.GLOBAL_SETTINGS, original_exports["global"])
             config._replace_mapping(config.PRIMARY_MODES, original_exports["primary"])

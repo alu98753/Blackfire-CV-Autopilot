@@ -3,10 +3,27 @@ from unittest.mock import patch, MagicMock
 import os
 import sys
 
-from config import GAME_CONFIGS
+import tempfile
+import shutil
+from pathlib import Path
+
+import config
+from config import GAME_CONFIGS, set_active_profile
 from main import setup_stage_config, setup_dungeon_config, setup_mode_config, check_mode_templates
 
 class TestMainConfig(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+        self.patcher = patch.object(config, "USER_DATA_DIR", self.test_dir)
+        self.patcher.start()
+        set_active_profile("native")
+
+    def tearDown(self):
+        self.patcher.stop()
+        if self.test_dir.exists():
+            shutil.rmtree(self.test_dir, ignore_errors=True)
+        set_active_profile("native")
 
     def test_toml_config_preserves_integer_cooldown_indices(self):
         self.assertEqual(GAME_CONFIGS["dungeon"]["cooldown_map"][1], 300.0)

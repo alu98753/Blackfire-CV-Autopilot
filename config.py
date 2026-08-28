@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from utils.config_helper import get_stage_configs
-from utils.config_manager import JsonConfigManager, TomlConfigManager
+from utils.config_manager import JsonConfigManager, TomlConfigManager, dump_toml_dict
 
 
 WINDOW_TITLE = "Blackfire Crusade"
@@ -209,6 +209,38 @@ def set_active_profile(profile: str) -> None:
         profile_path = get_profile_config_path(_ACTIVE_PROFILE)
         if profile_path.exists():
             logging.info(f"⚙️ [ProfileConfig] 成功套用角色專屬覆蓋配置: user_data/{_ACTIVE_PROFILE}/config.toml")
+
+
+def update_profile_config(profile: str | None = None, updates: dict | None = None) -> Path:
+    """
+    將使用者在終端機選單中修改的設定，增量合併並寫入 user_data/<profile>/config.toml。
+    更新後立即重新整理配置快照並完成熱加載。
+    """
+    p = (profile or _ACTIVE_PROFILE).strip().lower()
+    target_path = get_profile_config_path(p)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    current_data: dict = {}
+    if target_path.exists():
+        try:
+            import tomllib
+            with target_path.open("rb") as f:
+                current_data = tomllib.load(f)
+        except Exception as e:
+            logging.warning(f"讀取既有 Profile config 失敗 ({e})，將重新構建。")
+            current_data = {}
+
+    if updates:
+        merged = _deep_merge(current_data, updates)
+    else:
+        merged = current_data
+
+    toml_str = dump_toml_dict(merged)
+    target_path.write_text(toml_str, encoding="utf-8")
+
+    refresh_runtime_config()
+    logging.info(f"💾 [ConfigSync] 已成功同步設定至 user_data/{p}/config.toml")
+    return target_path
 
 
 def refresh_runtime_config() -> bool:

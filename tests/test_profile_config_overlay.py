@@ -127,6 +127,42 @@ sub_stage_threshold = 0.94
             self.assertEqual(get_template_threshold("stages/six_stage.png"), 0.93)
             self.assertEqual(get_template_threshold("stages/first_stage.png"), 0.90)
 
+    def test_update_profile_config_writes_and_reloads(self):
+        """驗證：update_profile_config 寫入 user_data/<profile>/config.toml 並即時熱重載生效"""
+        from config import update_profile_config
+        # 初始狀態：先將 sandbox 的珠寶店設為關閉
+        (self.sandbox_dir / "config.toml").write_text("""
+[subflow_configs.jewelry_workshop]
+enabled = false
+""", encoding="utf-8")
+
+        with patch.object(config, "USER_DATA_DIR", self.test_user_data_dir):
+            set_active_profile("sandbox")
+            self.assertFalse(SUBFLOW_CONFIGS["jewelry_workshop"]["enabled"])
+
+            # 呼叫 update_profile_config 啟用珠寶店並設定 Tier 4 退守為 Level 4
+            update_profile_config("sandbox", {
+                "subflow_configs": {
+                    "jewelry_workshop": {"enabled": True}
+                },
+                "primary_modes": {
+                    "daily": {
+                        "tier4_stage_level": 4,
+                        "tier4_sub_stage": "final"
+                    }
+                }
+            })
+
+            # 驗證即時熱重載生效
+            self.assertTrue(SUBFLOW_CONFIGS["jewelry_workshop"]["enabled"])
+            self.assertEqual(PRIMARY_MODES["daily"]["tier4_stage_level"], 4)
+            self.assertEqual(PRIMARY_MODES["daily"]["tier4_sub_stage"], "final")
+
+            # 驗證實體檔案存在且內容正確
+            saved_content = (self.sandbox_dir / "config.toml").read_text(encoding="utf-8")
+            self.assertIn("tier4_stage_level = 4", saved_content)
+            self.assertIn('tier4_sub_stage = "final"', saved_content)
+
 
 if __name__ == "__main__":
     unittest.main()
