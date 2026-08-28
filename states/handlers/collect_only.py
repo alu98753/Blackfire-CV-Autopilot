@@ -13,6 +13,26 @@ class CollectOnlyHandler(BaseStateHandler):
         - 如果目前無領取任務，在大廳則自動返回城鎮，在城鎮則維持原地待機。
         """
         # 0.0 檢查 08:05 跨日重置離場標示 (若在定時領取待機中，直接結束退避並觸發全新一日城鎮任務流水線)
+        cooldown_return_config = getattr(self.machine, "dungeon_cooldown_return_config", None)
+        if cooldown_return_config is not None and not self.machine.need_diamond_collection:
+            dungeon_ready = False
+            try:
+                dungeon_ready = self.machine.has_available_dungeon(
+                    target_config=cooldown_return_config
+                )
+            except Exception as exc:
+                logging.warning("[Dungeon cooldown resume] availability check failed: %s", exc)
+
+            if dungeon_ready:
+                if self.machine.enable_bread and self.machine.need_bread_collection:
+                    logging.info("[Dungeon cooldown resume] bread collection is pending; resumption deferred.")
+                else:
+                    logging.warning("[Dungeon cooldown resume] cooldown complete; returning to dungeon mode.")
+                    self.machine.config = cooldown_return_config
+                    self.machine.dungeon_cooldown_return_config = None
+                    self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                    return
+
         if getattr(self.machine, "pending_daily_reset_exit", False):
             logging.info("🌅 [定時領取待機] 偵測到 08:05 跨日重置標誌！結束體力退避，啟動新一日城鎮任務流水線...")
             self.machine.pending_daily_reset_exit = False

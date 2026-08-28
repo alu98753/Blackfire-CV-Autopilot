@@ -138,6 +138,10 @@ class GameStateMachine:
         # 體力不足退避與還原相關屬性
         self.original_config = None
         self.stamina_retreat_start_time = None
+        # Dungeon-only cooldown fallback keeps its own return target.  This is
+        # deliberately separate from stamina retreat, whose timer has a
+        # different lifecycle.
+        self.dungeon_cooldown_return_config = None
         self.is_dev_subflow_run = False
         self.last_lobby_start_click_time = 0.0
         self.last_result_retry_click_time = 0.0

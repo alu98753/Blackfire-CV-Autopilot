@@ -1079,8 +1079,13 @@ class TestStateMachineLogic(unittest.TestCase):
         # 驗證：因為記憶體冷卻，不應呼叫滑動或點擊卡片
         self.mock_mouse.click.assert_not_called()
         self.mock_mouse.drag.assert_not_called()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
         
         # 2. 測試記憶體無冷卻，但畫面上有冷卻木牌（首次偵測到冷卻）
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.config["greedy_dungeon"] = False
+        self.state_machine.config["navigation_path"] = ["dungeons/Slime_entry.png"]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         self.state_machine.dungeon_cooldowns = {}
         self.mock_mouse.click.reset_mock()
         
@@ -2514,6 +2519,5 @@ class TestTaskCompletePhaseStateMachine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
 

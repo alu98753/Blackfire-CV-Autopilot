@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import re
+from copy import deepcopy
 from states.handlers.base import BaseStateHandler
 from config import (
     DEFAULT_THRESHOLD,
@@ -38,6 +39,30 @@ class NavigationHandler(BaseStateHandler):
         將 OCR 識別出的時間字串解析為總秒數 (委充自 utils.time_parser 共用模組)。
         """
         return parse_time_to_seconds(time_str)
+
+    def _enter_collect_only_after_dungeon_cooldown(self, screen_img, rect, reason):
+        """Return to town and enter the collection idle loop for dungeon-only runs."""
+        from config import GAME_CONFIGS
+
+        logging.warning("[Dungeon cooldown fallback] %s; returning to town and entering collect_only.", reason)
+        pos_back, conf_back = self.matcher.match(
+            screen_img, "goback_town.png", threshold=0.75, quiet=True
+        )
+        if pos_back:
+            logging.info("[Dungeon cooldown fallback] Clicking goback_town.png (%.4f).", conf_back)
+            self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+            time.sleep(0.5)
+        else:
+            logging.warning("[Dungeon cooldown fallback] goback_town.png not found; collect_only will return on its next step.")
+
+        current_config = self.machine.config or {}
+        if current_config.get("auto_resume_dungeon_on_cd", False):
+            self.machine.dungeon_cooldown_return_config = deepcopy(current_config)
+        else:
+            self.machine.dungeon_cooldown_return_config = None
+
+        self.machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
 
 
     def _switch_to_stage_or_back(self, screen_img, rect, reason):
@@ -517,6 +542,11 @@ class NavigationHandler(BaseStateHandler):
                             if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                 self._switch_to_stage_or_back(screen_img, rect, f"指定副本 [{dungeon_names[target_idx]}] 處於冷卻中")
                                 return
+                            if self.machine.config.get("type") == "dungeon":
+                                self._enter_collect_only_after_dungeon_cooldown(
+                                    screen_img, rect, f"target dungeon [{dungeon_names[target_idx]}] is on cooldown"
+                                )
+                                return
                             if cooldown_until == float('inf'):
                                 logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於永久不可打狀態，原地等待中...")
                             else:
@@ -533,6 +563,11 @@ class NavigationHandler(BaseStateHandler):
                                 if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                                     self._switch_to_stage_or_back(screen_img, rect, f"畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中")
                                     return
+                                if self.machine.config.get("type") == "dungeon":
+                                    self._enter_collect_only_after_dungeon_cooldown(
+                                        screen_img, rect, f"target dungeon [{dungeon_names[target_idx]}] was detected on cooldown"
+                                    )
+                                    return
                                 time.sleep(1.0)
                                 return
                             
@@ -542,6 +577,11 @@ class NavigationHandler(BaseStateHandler):
                         from config import GAME_CONFIGS
                         self.machine.config = GAME_CONFIGS["collect_only"].copy()
                         self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                        return
+                    if self.machine.config.get("type") == "dungeon":
+                        self._enter_collect_only_after_dungeon_cooldown(
+                            screen_img, rect, "all eligible dungeons are on cooldown"
+                        )
                         return
                     if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
                         self._switch_to_stage_or_back(screen_img, rect, "地下城頁面偵測到所有地下城均在冷卻中")
