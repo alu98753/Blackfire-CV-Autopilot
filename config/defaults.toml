@@ -71,7 +71,8 @@ nemesis_templates = [
     "domains/golden_empire/exception/golden_king.png",
     "domains/golden_empire/exception/elf_mythril_hag.png",
     "domains/golden_empire/exception/undead_altalim.png",
-    "domains/golden_empire/exception/human_golden_tulakh.png"
+    "domains/golden_empire/exception/human_golden_tulakh.png",
+    "domains/golden_empire/exception/golden_wall_guard_tulan.png"
 ]
 navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
 explore_priorities = ["domains/golden_empire/explore_btn.png"]

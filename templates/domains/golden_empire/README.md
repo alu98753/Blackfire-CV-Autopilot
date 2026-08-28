@@ -112,9 +112,10 @@ graph TD
 | `templates/common/confirm.png` | 通用確認按鈕 (挖寶獎勵確認) | ✅ 現有共用資源 |
 | `templates/common/quit.png` | 通用退出按鈕 (挖寶結束退出) | ✅ 現有共用資源 |
 | `templates/backpack_full.png` | 背包滿全域攔截特徵 | ✅ 現有共用資源 |
-| `templates/domains/golden_empire/exception/golden_king.png` | 古國 Boss「黃金君王」遭遇特徵 | ✅ 已就緒 |
+| `templates/domains/golden_empire/exception/golden_king.png` | 古國強敵「黃金君王」遭遇特徵 | ✅ 已就緒 |
 | `templates/domains/golden_empire/exception/elf_mythril_hag.png` | 古國強敵「精靈秘銀妖婆」遭遇特徵 | ✅ 已就緒 |
 | `templates/domains/golden_empire/exception/undead_altalim.png` | 古國強敵「不死者阿爾塔林」遭遇特徵 | ✅ 已就緒 |
 | `templates/domains/golden_empire/exception/human_golden_tulakh.png` | 古國強敵「黃金圖拉赫」遭遇特徵 | ✅ 已就緒 |
+| `templates/domains/golden_empire/exception/golden_wall_guard_tulan.png` | 古國強敵「金壁守衛圖拉安」遭遇特徵 | ✅ 已就緒 |
 | `templates/battle/setting.png` | 戰鬥中設定按鈕 (放棄選單) | ✅ 已就緒 |
 | `templates/battle/giveup_battle.png` | 戰鬥中放棄挑戰按鈕 | ✅ 已就緒 |

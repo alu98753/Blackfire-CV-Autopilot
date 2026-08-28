@@ -7,6 +7,11 @@ class BattleHandler(BaseStateHandler):
     def __init__(self, machine):
         super().__init__(machine)
         self.non_battle_feature_start_time = None
+        self.last_nemesis_log_time = 0.0
+
+    def reset_state(self):
+        self.non_battle_feature_start_time = None
+        self.last_nemesis_log_time = 0.0
 
     def handle(self, screen_img, rect):
         """
@@ -73,12 +78,8 @@ class BattleHandler(BaseStateHandler):
             
             # 2.2 檢查當前配置的結算繼續按鈕 (門檻固定為 0.80，防止大廳背景相似度如 0.7694 產生誤判與防卡死死鎖)
             if not has_battle_feature:
-                if self.machine.config.get("type") == "mix":
-                    res_buttons = list(dict.fromkeys(self.machine.config.get("result_buttons", []) + self.machine.config.get("dungeon_battle_results", [])))
-                elif self.machine.config.get("type") == "stage":
-                    res_buttons = self.machine.config.get("result_buttons", [])
-                else:
-                    res_buttons = self.machine.config.get("dungeon_battle_results", [])
+                cfg = self.machine.config or {}
+                res_buttons = list(dict.fromkeys(cfg.get("result_buttons", []) + cfg.get("dungeon_battle_results", [])))
                 for btn in res_buttons:
                     if os.path.exists(os.path.join("templates", btn)):
                         pos, _ = self.matcher.match(screen_img, btn, threshold=0.80, quiet=True)
@@ -202,7 +203,7 @@ class BattleHandler(BaseStateHandler):
         """
         [領域強敵處置子流程 (Nemesis Handling Subflow)]
         檢查當前模式是否配置 nemesis_templates（例如黃金君王 golden_king.png，相容舊配置 flee_bosses）。
-        若偵測到強敵特徵，依據 nemesis_action（相容舊配置 flee_boss_action）執行暫停手動打或放棄戰鬥重進。
+        遍歷所有強敵範本，計算並輸出即時比對信心度，依據 nemesis_action（相容舊配置 flee_boss_action）執行暫停手動打或放棄戰鬥重進。
         """
         cfg = self.machine.config or {}
         nemesis_templates = cfg.get("nemesis_templates") or cfg.get("flee_bosses", [])
@@ -210,25 +211,37 @@ class BattleHandler(BaseStateHandler):
             return False
 
         detected_nemesis = None
+        detected_conf = 0.0
+        scores_summary = []
+        now = time.time()
+
         for n_temp in nemesis_templates:
             if os.path.exists(os.path.join("templates", n_temp)):
+                n_name = os.path.splitext(os.path.basename(n_temp))[0]
                 pos, conf = self.matcher.match(screen_img, n_temp, threshold=0.75, quiet=True)
-                if pos:
+                scores_summary.append(f"{n_name}: {conf:.4f}")
+                if pos and detected_nemesis is None:
                     detected_nemesis = n_temp
-                    break
+                    detected_conf = conf
+
+        # 印出所有強敵的即時比對信心度 (每 2 秒或命中強敵時輸出)
+        last_log = getattr(self, "last_nemesis_log_time", 0.0)
+        if detected_nemesis or (now - last_log >= 2.0):
+            self.last_nemesis_log_time = now
+            logging.info(f"🔍 [領域強敵比對] 畫面相似度 (門檻 0.75) ➔ {', '.join(scores_summary)}")
 
         if detected_nemesis:
             action = (cfg.get("nemesis_action") or cfg.get("flee_boss_action") or "flee").lower()
             if action == "pause":
                 logging.warning("=" * 60)
-                logging.warning(f"🚨 [領域強敵遭遇 - 暫停接管] 偵測到領域強敵特徵 [{detected_nemesis}]！")
+                logging.warning(f"🚨 [領域強敵遭遇 - 暫停接管] 偵測到領域強敵特徵 [{detected_nemesis}] (相似度: {detected_conf:.4f} >= 0.75)！")
                 logging.warning("👉 已依據配置 (nemesis_action = 'pause') 自動暫停腳本運行。")
                 logging.warning("👉 請使用者手動接管操作戰鬥。挑戰完成後，按 [Ctrl + Space] 即可恢復自動掛機！")
                 logging.warning("=" * 60)
                 self.machine.pause()
                 return True
             else:
-                logging.warning(f"🚨 [領域強敵撤退] 偵測到領域強敵特徵 [{detected_nemesis}] (目前戰力暫無法擊敗)，立即執行放棄戰鬥流程！")
+                logging.warning(f"🚨 [領域強敵撤退] 偵測到領域強敵特徵 [{detected_nemesis}] (相似度: {detected_conf:.4f} >= 0.75)，立即執行放棄戰鬥流程！")
                 return self._run_nemesis_flee_subflow(rect)
         return False
 
