@@ -226,7 +226,7 @@ class CollectOnlyHandler(BaseStateHandler):
                         extra_status.append(f"👑 Boss: {format_time(min_boss_rem)}")
                     else:
                         extra_status.append("👑 Boss: 今日已滿")
-            if self.machine.config.get("enable_dungeon", False):
+            if self.machine.config.get("enable_dungeon", False) and self.machine.has_dungeon_status_context():
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()
                 if avail_names:
                     extra_status.append(f"🏰 地下城: 就緒 ({', '.join(avail_names)})")

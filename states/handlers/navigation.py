@@ -572,7 +572,9 @@ class NavigationHandler(BaseStateHandler):
 
 
 
-        if self.machine.config.get("type") == "mix" or (self.machine.config.get("enable_dungeon", False) and self.machine.config.get("enable_stage_farming", False)):
+        # Global activity switches are inherited by quest-specific stage/dungeon
+        # routes. They must not turn a single-route quest into a mix route.
+        if self.machine.config.get("type") == "mix" and self.machine.has_dungeon_status_context():
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()

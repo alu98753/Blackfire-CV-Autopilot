@@ -798,14 +798,13 @@ class GameStateMachine:
         if time.time() < all_cd_until:
             return False
 
-        allowed_indices = cfg.get("greedy_allowed_indices")
-        if allowed_indices is None:
-            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
-
         now = time.time()
         is_greedy = cfg.get("greedy_dungeon", False)
         
         if is_greedy:
+            allowed_indices = cfg.get("greedy_allowed_indices")
+            if allowed_indices is None:
+                raise ValueError("配置錯誤：貪婪地下城模式未設定 'greedy_allowed_indices'。")
             for idx in allowed_indices:
                 if now >= self.dungeon_cooldowns.get(idx, 0.0):
                     return True
@@ -842,16 +841,15 @@ class GameStateMachine:
         if dungeon_names is None:
             raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
 
-        allowed_indices = self.config.get("greedy_allowed_indices")
-        if allowed_indices is None:
-            raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單。")
-
         from utils.time_parser import format_seconds_to_readable
         now = time.time()
 
         is_greedy = self.config.get("greedy_dungeon", False)
         if is_greedy:
-            target_indices = allowed_indices
+            report_indices = self.config.get("greedy_allowed_indices")
+            if report_indices is None:
+                raise ValueError("配置錯誤：貪婪地下城模式未設定 'greedy_allowed_indices'。")
+            target_indices = report_indices
         else:
             entry_templates = self.config.get("dungeon_entries")
             if entry_templates is None:
@@ -865,12 +863,17 @@ class GameStateMachine:
                 if temp_name in nav_path:
                     target_idx = idx
                     break
-            target_indices = [target_idx] if target_idx is not None else []
+            if target_idx is None:
+                target_idx = self.config.get("dungeon_index")
+            if target_idx is None:
+                raise ValueError("配置錯誤：指定地下城模式找不到 'dungeon_index' 或對應入口路徑。")
+            report_indices = [target_idx]
+            target_indices = report_indices
 
         cd_details = []
         available_names = []
 
-        for idx in allowed_indices:
+        for idx in report_indices:
             if idx >= len(dungeon_names):
                 raise ValueError(f"配置錯誤：greedy_allowed_indices 中的索引 {idx} 超出 dungeon_names 長度 ({len(dungeon_names)})。")
             name = dungeon_names[idx]
@@ -890,6 +893,18 @@ class GameStateMachine:
                     cd_details.append(f"[{name}]: 就緒 (未啟用)")
 
         return ", ".join(cd_details), available_names
+
+    def has_dungeon_status_context(self):
+        """Return whether the active route contains enough data to report dungeon cooldowns."""
+        cfg = self.config or {}
+        if not cfg.get("dungeon_names") or not cfg.get("dungeon_entries"):
+            return False
+        if cfg.get("greedy_dungeon", False):
+            return bool(cfg.get("greedy_allowed_indices"))
+        if cfg.get("dungeon_index") is not None:
+            return True
+        nav_path = cfg.get("navigation_path", [])
+        return any(entry in nav_path for entry in cfg["dungeon_entries"])
 
     def check_collection_trigger(self, screen_img):
         """
