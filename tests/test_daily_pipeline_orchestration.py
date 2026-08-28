@@ -436,6 +436,50 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertEqual(sm.config["type"], "dungeon")
         self.assertEqual(sm.config["dungeon_index"], 2)
 
+    def test_ready_daily_quest_preempts_tier4_at_result_screen(self):
+        """Tier 4 結算時，任何已就緒的 Daily 任務都必須離場，不能按再戰。"""
+        from states.handlers.result import ResultHandler
+
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.daily_manager = MagicMock()
+        sm.daily_manager.is_subflow_completed.return_value = True
+        sm.daily_manager.has_available_lord_boss.return_value = False
+        sm.set_config({"name": "Tier 4 退守", "type": "mix", "is_tier4_fallback": True})
+        sm.has_available_dungeon = MagicMock(return_value=False)
+
+        scheduler = MagicMock()
+        scheduler.is_all_completed.return_value = False
+        scheduler.is_current_task_batch_completed.return_value = False
+        scheduler.has_higher_priority_task_ready.return_value = False
+        scheduler.get_next_action_node.return_value = (MagicMock(), "Daily 任務已就緒")
+        sm.quest_scheduler = scheduler
+
+        self.assertTrue(sm.has_ready_daily_quest_preemption())
+
+        handler = ResultHandler(sm)
+        handler.subflow_step = "FINAL_MATCH"
+        sm.transition_to = MagicMock()
+
+        def match_exit_only(_screen, template, **_kwargs):
+            if template == "exit_battle.png":
+                return (500, 500), 0.95
+            if template == "stages/retry.png":
+                return (700, 500), 0.95
+            return None, 0.0
+
+        sm.matcher.match.side_effect = match_exit_only
+        fake_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        with patch("os.path.exists", return_value=True), \
+             patch.object(handler, "click_and_wait_until_gone") as mock_click, \
+             patch("time.sleep", return_value=None):
+            self.assertTrue(handler._handle_impl(fake_screen, rect))
+
+        mock_click.assert_called_once_with("exit_battle.png", 500, 500, rect)
+        self.assertFalse(any(call.args[0] == "stages/retry.png" for call in mock_click.call_args_list))
+        sm.transition_to.assert_called_once_with(sm.STATE_NAVIGATING)
+
     def test_tier3_all_completed_clears_scheduler_and_permanently_enters_tier4(self):
         """[Tier 3 全完結解構測試] 驗證當所有 Tier 3 任務進度達成 (10/10) 時，會解除排程器並永久轉入 Tier 4"""
         self.daily_mgr.record_subflow_completed("chest")

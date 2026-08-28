@@ -153,7 +153,9 @@ class CollectOnlyHandler(BaseStateHandler):
                 return
 
         # 3.5.3 檢查地下城探索 (enable_dungeon)
-        if self.machine.config.get("enable_dungeon", False):
+        pending_quests = getattr(self.machine, "quest_scheduler", None)
+        has_pending_quests = bool(pending_quests and pending_quests.get_pending_tasks())
+        if self.machine.config.get("enable_dungeon", False) and not has_pending_quests:
             dungeon_ready = False
             try:
                 dungeon_ready = self.machine.has_available_dungeon()
@@ -165,7 +167,7 @@ class CollectOnlyHandler(BaseStateHandler):
                 return
 
         # 3.5.4 檢查每日懸賞任務 (enable_quests)
-        if self.machine.config.get("enable_quests", False) and getattr(self.machine, "quest_scheduler", None):
+        if getattr(self.machine, "quest_scheduler", None):
             scheduled_node = self.machine.check_and_advance_quest_target()
             if scheduled_node:
                 logging.info("📋 [定時待機喚醒] 偵測到懸賞任務目標就緒 ➔ 喚醒切換至懸賞目標！")

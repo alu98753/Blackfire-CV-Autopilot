@@ -184,6 +184,11 @@ class ResultHandler(BaseStateHandler):
             )
 
         is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
+        daily_quest_ready_to_preempt_tier4 = (
+            is_in_tier4 and self.machine.has_ready_daily_quest_preemption()
+        )
+        if daily_quest_ready_to_preempt_tier4:
+            logging.info("📋 [Tier 4 插隊] 偵測到 Daily 懸賞任務冷卻結束；本場結算後離場並切回懸賞任務。")
 
         should_exit_battle = (
             getattr(self.machine, "pending_daily_reset_exit", False) or
@@ -193,6 +198,7 @@ class ResultHandler(BaseStateHandler):
             (self.machine.enable_bread and self.machine.need_bread_collection) or
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
             (is_daily and boss_available) or
+            daily_quest_ready_to_preempt_tier4 or
             (is_daily and quest_batch_completed and not is_in_tier4) or
             (is_daily and has_higher_priority_task and not is_in_tier4)
         )

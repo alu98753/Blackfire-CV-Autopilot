@@ -1302,6 +1302,10 @@ class GameStateMachine:
 
         # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
         if self.is_daily_pipeline_active():
+            # A town-only queue can finish while accepted_quests still exist.
+            # Rebuild only when no scheduler is attached; retain in-memory progress.
+            if self.quest_scheduler is None and getattr(self, "daily_manager", None):
+                self.attach_quest_scheduler(self.daily_manager.load_quest_scheduler())
             self.evaluate_and_schedule_daily_pipeline()
 
     def is_in_collect_only_mode(self):
@@ -1327,6 +1331,25 @@ class GameStateMachine:
             return False
         mode_type = self.config.get("type") if getattr(self, "config", None) else None
         return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
+
+    def has_ready_daily_quest_preemption(self):
+        """Return whether a ready Daily quest must preempt Tier 4 farming.
+
+        This is deliberately a query only: ResultHandler owns the result-screen
+        exit decision, while the next NAVIGATING transition owns scheduling and
+        applying the selected quest configuration.
+        """
+        if not self.is_daily_pipeline_active():
+            return False
+        if not self.config.get("is_tier4_fallback", False):
+            return False
+        if not self.quest_scheduler or self.quest_scheduler.is_all_completed():
+            return False
+
+        ready_task, _ = self.quest_scheduler.get_next_action_node(
+            dungeon_cooldowns=self.dungeon_cooldowns
+        )
+        return ready_task is not None
 
 
     def evaluate_next_activity(self):
@@ -1383,6 +1406,13 @@ class GameStateMachine:
                     scheduled_node = self.check_and_advance_quest_target()
                     if scheduled_node:
                         return True
+                    # Keep the scheduler attached while temporarily farming Tier 4.
+                    # ResultHandler will preempt Tier 4 at the next safe result
+                    # screen as soon as any Daily quest becomes runnable.
+                    if self.quest_scheduler.get_pending_tasks():
+                        logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
+                        self.apply_mix_fallback_config()
+                        return False
 
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
             if cfg.get("enable_dungeon", False):
@@ -1419,5 +1449,3 @@ class GameStateMachine:
         if self.is_in_collect_only_mode():
             return False
         return self.evaluate_next_activity()
-
-

@@ -105,6 +105,14 @@ class TaskNode:
 
         def _apply_base_preferences(cfg):
             if base_config:
+                # A quest-specific route must not re-enable activities disabled by
+                # the daily profile (especially lord boss) while it is active.
+                for activity_key in (
+                    "enable_town_daily", "enable_lord_boss", "enable_quests",
+                    "enable_dungeon", "enable_stage_farming",
+                ):
+                    if activity_key in base_config:
+                        cfg[activity_key] = base_config[activity_key]
                 if "keep_colors" in base_config:
                     cfg["keep_colors"] = base_config["keep_colors"]
                 if "disassemble_colors" in base_config:
@@ -452,4 +460,3 @@ class QuestMapper:
         # 5. 無法精確映射：未定義任務預設為 BANNER_VERIFY_QUESTS 防呆保護
         logging.warning(f"⚠️ 懸賞任務 '{title}' 無法對應到已知規則庫 (未定義任務)，回傳 None 紀錄至 unknown_quests。")
         return None
-
