@@ -9,7 +9,10 @@ from pathlib import Path
 
 import config
 from config import GAME_CONFIGS, set_active_profile
-from main import setup_stage_config, setup_dungeon_config, setup_mode_config, check_mode_templates
+from cli.dungeon_setup import setup_dungeon_config
+from cli.mode_setup import setup_mode_config
+from cli.stage_setup import setup_stage_config
+from runtime.bootstrap import check_mode_templates
 
 class TestMainConfig(unittest.TestCase):
 
@@ -92,7 +95,7 @@ class TestMainConfig(unittest.TestCase):
 
     def test_setup_equipment_config_and_normalize_config(self):
         """測試 normalize_config 能夠在任何模式下補充完整的 disassemble_colors 與 keep_colors"""
-        from main import setup_equipment_config
+        from cli.mode_setup import setup_equipment_config
         from config import normalize_config, GAME_CONFIGS
         
         cfg_collect = GAME_CONFIGS["collect_only"].copy()

@@ -5,7 +5,7 @@ import shutil
 import unittest
 import argparse
 
-from main import resolve_profile_name, resolve_status_filename
+from cli.profiles import resolve_profile_name, resolve_status_filename
 from utils.daily_manager import DailyManager
 
 

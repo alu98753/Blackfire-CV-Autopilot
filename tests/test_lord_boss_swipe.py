@@ -30,7 +30,10 @@ class TestLordBossSwipeLogic(unittest.TestCase):
         # 標記 Lord_entry_after 頁籤已開啟
         self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
 
-        self.mock_daily.get_available_lord_bosses.return_value = ["lila_spider", "ancient_spirit"]
+        # Boss selection is a GameStateMachine policy: handlers must not read
+        # DailyManager availability directly, otherwise profile selection is
+        # bypassed.
+        self.mock_machine.get_available_selected_lord_bosses.return_value = ["lila_spider", "ancient_spirit"]
 
         self.mock_machine.config = GAME_CONFIGS.get("lord_boss", {}).copy()
         self.mock_machine.config["bosses"] = {

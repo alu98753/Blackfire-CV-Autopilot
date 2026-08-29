@@ -322,6 +322,13 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
     def test_pop_and_next_town_subflow_state_transition_not_leaked(self):
         """[Subflow State Transition] 驗證城鎮佇列結束時，current_state 會切換至 NAVIGATING，不會殘留 JEWELRY_WORKSHOP"""
+        for flow in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            self.daily_mgr.record_subflow_completed(flow)
+        bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
+        for b in bosses.values():
+            b["today_count"] = 5
+            b["completed_today"] = True
+        self.daily_mgr.status["subflows"]["lord_boss"]["completed_today"] = True
         sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
         sm.daily_manager = self.daily_mgr
         sm.town_subflow_queue = []
@@ -694,7 +701,7 @@ class TestTierConfigMatrix(unittest.TestCase):
 
     def test_setup_stage_config_with_toml_parameters(self):
         """[TOML 配置測試] 驗證 setup_stage_config 傳入 stage_level 與 sub_stage_type 時，直接套用設定且不觸發 input() 阻塞"""
-        from main import setup_stage_config
+        from cli.stage_setup import setup_stage_config
         config = {}
         setup_stage_config(config, stage_level=6, sub_stage_type="final")
         self.assertEqual(config["stage_name"], "冰凍峽谷 (final)")
@@ -706,7 +713,7 @@ class TestTierConfigMatrix(unittest.TestCase):
     def test_setup_mode_config_daily_reads_tier4_toml(self, mock_input):
         """[TOML 配置測試] 驗證 setup_mode_config 在 daily 模式下可無縫讀取 TOML 中的 tier4 退守大關與小關配置"""
         import argparse
-        from main import setup_mode_config
+        from cli.mode_setup import setup_mode_config
         args = argparse.Namespace(
             mode="daily",
             subflow=None,
@@ -735,7 +742,8 @@ class TestTierConfigMatrix(unittest.TestCase):
         # 模擬早上首輪跑完後 completed_today 被標記為 True，但冷卻過期後 has_available_lord_boss 變為 True
         sm.daily_manager.is_subflow_completed.return_value = True
         sm.daily_manager.has_available_lord_boss.return_value = True
-        sm.set_config({"name": "Tier 4 退守", "type": "mix", "is_tier4_fallback": True, "enable_lord_boss": True})
+        sm.daily_manager.get_available_lord_bosses.return_value = ["lord_spider"]
+        sm.set_config({"name": "Tier 4 退守", "type": "mix", "is_tier4_fallback": True, "lord_boss_targets": ["lord_spider"]})
         sm.has_available_dungeon = MagicMock(return_value=False)
         sm.quest_scheduler = None
 
