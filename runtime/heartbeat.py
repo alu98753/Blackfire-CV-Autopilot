@@ -14,7 +14,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HEARTBEAT_PATH = PROJECT_ROOT / "scratch" / "runtime" / "heartbeat.json"
 HEARTBEAT_INTERVAL_SECONDS = 10.0
-_last_write_times: dict[Path, float] = {}
+_last_write_monotonics: dict[Path, float] = {}
 _heartbeat_lock = threading.Lock()
 
 
@@ -30,19 +30,20 @@ def touch_heartbeat(machine: Any = None, path: Path | None = None, force: bool =
         machine_path = None
     path = path or machine_path or DEFAULT_HEARTBEAT_PATH
     path = Path(path)
-    now = time.time()
 
     with _heartbeat_lock:
-        if not force and now - _last_write_times.get(path, 0.0) < HEARTBEAT_INTERVAL_SECONDS:
+        now_mono = time.monotonic()
+        if not force and now_mono - _last_write_monotonics.get(path, 0.0) < HEARTBEAT_INTERVAL_SECONDS:
             return
 
+        now_wall = time.time()
         state = getattr(machine, "current_state", None)
         run_count = getattr(machine, "run_count", None)
         target = getattr(machine, "restart_target", None)
         profile = getattr(machine, "restart_profile", None)
         is_paused = bool(getattr(machine, "is_paused", False))
         payload = {
-            "timestamp": now,
+            "timestamp": now_wall,
             "pid": os.getpid(),
             "state": state if isinstance(state, (str, int, float, bool)) else None,
             "is_paused": is_paused,
@@ -55,7 +56,7 @@ def touch_heartbeat(machine: Any = None, path: Path | None = None, force: bool =
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
             os.replace(temporary, path)
-            _last_write_times[path] = now
+            _last_write_monotonics[path] = now_mono
         except (OSError, TypeError):
             # The bot must remain functional even if the diagnostic drive is unavailable.
             try:

@@ -82,10 +82,10 @@ class TestLongRunResilience(unittest.TestCase):
     def test_heartbeat_write_is_rate_limited(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "heartbeat.json"
-            heartbeat._last_write_times.clear()
+            heartbeat._last_write_monotonics.clear()
             first = MagicMock(current_state="BATTLE", run_count=1)
             second = MagicMock(current_state="LOBBY", run_count=2)
-            with patch("runtime.heartbeat.time.time", side_effect=[100.0, 105.0, 111.0]):
+            with patch("runtime.heartbeat.time.monotonic", side_effect=[100.0, 105.0, 111.0]):
                 touch_heartbeat(first, path=path)
                 touch_heartbeat(second, path=path)
                 payload = json.loads(path.read_text(encoding="utf-8"))
@@ -140,7 +140,7 @@ class TestLongRunResilience(unittest.TestCase):
     def test_heartbeat_records_paused_flag_and_supports_forced_touch(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "heartbeat.json"
-            heartbeat._last_write_times.clear()
+            heartbeat._last_write_monotonics.clear()
             machine = MagicMock(current_state="COLLECT_ONLY", run_count=5, is_paused=True)
             touch_heartbeat(machine, path=path)
 
@@ -158,7 +158,7 @@ class TestLongRunResilience(unittest.TestCase):
         import concurrent.futures
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "heartbeat.json"
-            heartbeat._last_write_times.clear()
+            heartbeat._last_write_monotonics.clear()
             machine = MagicMock(current_state="BATTLE", run_count=1, is_paused=False)
 
             def worker(i):
