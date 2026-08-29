@@ -14,7 +14,7 @@ from config import GAME_CONFIGS, PRIMARY_MODES, SUBFLOW_CONFIGS
 from utils.daily_manager import DailyManager
 from states.handlers.base import BaseStateHandler
 from states.handlers.result import ResultHandler
-from main import parse_arguments
+from cli.arguments import parse_arguments
 
 if sys.platform.startswith('win'):
     try:
@@ -795,4 +795,3 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

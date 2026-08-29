@@ -701,7 +701,7 @@ class TestTierConfigMatrix(unittest.TestCase):
 
     def test_setup_stage_config_with_toml_parameters(self):
         """[TOML 配置測試] 驗證 setup_stage_config 傳入 stage_level 與 sub_stage_type 時，直接套用設定且不觸發 input() 阻塞"""
-        from main import setup_stage_config
+        from cli.stage_setup import setup_stage_config
         config = {}
         setup_stage_config(config, stage_level=6, sub_stage_type="final")
         self.assertEqual(config["stage_name"], "冰凍峽谷 (final)")
@@ -713,7 +713,7 @@ class TestTierConfigMatrix(unittest.TestCase):
     def test_setup_mode_config_daily_reads_tier4_toml(self, mock_input):
         """[TOML 配置測試] 驗證 setup_mode_config 在 daily 模式下可無縫讀取 TOML 中的 tier4 退守大關與小關配置"""
         import argparse
-        from main import setup_mode_config
+        from cli.mode_setup import setup_mode_config
         args = argparse.Namespace(
             mode="daily",
             subflow=None,
