@@ -1095,6 +1095,12 @@ class GameStateMachine:
     @staticmethod
     def _apply_tier4_dungeon_selection(config):
         """Build template paths from the declarative Tier 4 TOML options for dungeons."""
+        # Stage configs intentionally retain dungeon template metadata for shared
+        # schema compatibility.  That metadata must never turn a stage route
+        # into a dungeon route during startup or hot reload.
+        if config.get("type") not in {"dungeon", "mix"}:
+            return False
+
         dungeon_entries = config.get("dungeon_entries")
         dungeon_names = config.get("dungeon_names")
         if not dungeon_entries or not dungeon_names:

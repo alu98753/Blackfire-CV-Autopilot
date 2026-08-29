@@ -172,3 +172,45 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
         self.assertEqual(machine.config["tier4_dungeon_index"], 1)
         self.assertIn("dungeons/Ghost_entry.png", machine.config["navigation_path"])
 
+    @patch("states.state_machine.get_stage_configs")
+    @patch("states.state_machine.get_runtime_game_config")
+    @patch("states.state_machine.refresh_runtime_config", return_value=True)
+    def test_stage_mode_does_not_get_polluted_by_dungeon_selection(
+        self, _reload, get_mode, get_stage_configs
+    ):
+        stage_configs = {
+            "6": {
+                "name": "Level 6",
+                "entry": "stages/level6.png",
+                "sub_stages": {"first": "stages/first_stage.png"},
+            },
+        }
+        stage_config = {
+            "type": "stage",
+            "enable_stage_farming": True,
+            "tier4_stage_level": 6,
+            "tier4_sub_stage": "first",
+            "dungeon_entries": ["dungeons/Ice_entry.png"],
+            "dungeon_names": ["Ice"],
+            "greedy_dungeon": False,
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png"],
+        }
+        get_stage_configs.return_value = stage_configs
+        get_mode.return_value = stage_config.copy()
+        machine = self._machine()
+        machine.config = stage_config.copy()
+        machine.primary_config = stage_config.copy()
+
+        machine.enable_runtime_config_refresh("stage", machine.config)
+
+        expected_path = [
+            "common/door.png", "exit_battle.png", "common/select_stage.png",
+            "stages/level6.png", "stages/stage_label.png", "stages/first_stage.png",
+        ]
+        self.assertEqual(machine.config["navigation_path"], expected_path)
+        self.assertEqual(machine.primary_config["navigation_path"], expected_path)
+        self.assertNotIn("dungeons/dungeon.png", machine.config["navigation_path"])
+
+        self.assertTrue(machine.refresh_config_at_safe_point())
+        self.assertEqual(machine.config["navigation_path"], expected_path)
+        self.assertNotIn("dungeons/dungeon.png", machine.config["navigation_path"])
