@@ -8,19 +8,19 @@
 ## Action (行動)
 
 1. **狀態暫存與回復機制 (State Stashing & Restoration)**：
-   - 於 [GameStateMachine](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py#L160) 增設 `STATE_POPUP_RECOVERY` 狀態，並實作 `stash_current_state()` 與 `restore_stashed_state()`。
+   - 於 [GameStateMachine](../../states/state_machine.py#L160) 增設 `STATE_POPUP_RECOVERY` 狀態，並實作 `stash_current_state()` 與 `restore_stashed_state()`。
    - 觸發例外時自動備份原 `current_state` 及 phase context，待視窗徹底關閉後無痕還原原本流程。
 
 2. **可擴充 Subflow 容器架構 (Exception Subflow Container)**：
    - 定義抽象介面 `BaseExceptionSubflow`，包含 `can_handle()` 與 `execute()` 兩大標準契約。
    - 實作通用關閉/取消 Subflow (`GenericCancelSubflow` 對應 `cancel.png`, `common/close.png` 等) 與 `RaidBoxSubflow`（對應 `Raid_Box.png`）。
-   - 於 [UnexpectedPopupRecoveryHandler](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/popup_recovery.py) 實現多 Subflow 迭代排程器，支援多層疊加彈窗之連續解鎖排除。
+   - 於 [UnexpectedPopupRecoveryHandler](../../states/exceptions/handler.py) 實現多 Subflow 迭代排程器，支援多層疊加彈窗之連續解鎖排除。
 
 3. **明暗度遮罩與對比分析 (Modal Dimming Overlay Detection)**：
    - 實作 `analyze_dimming_overlay(screen_img)`，透過邊框與中央區域亮度方差，科學判斷遊戲畫面是否處於 Modal 遮罩狀態。
 
 4. **單元測試與防呆保護**：
-   - 撰寫 [test_behavior_popup_recovery.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_behavior_popup_recovery.py) 驗證狀態暫存、Subflow 容器調度及最大重試 Fallback 機制。
+   - 撰寫 [test_behavior_popup_recovery.py](../../tests/test_behavior_popup_recovery.py) 驗證狀態暫存、Subflow 容器調度及最大重試 Fallback 機制。
 
 ---
 

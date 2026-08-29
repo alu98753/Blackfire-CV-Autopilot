@@ -51,7 +51,7 @@
 - **Scale 自適應**：以 `scale_x = w / base_w` 縮放範本；卡片發射前需先核驗無冷卻木牌。
 
 ### 5. 懸賞任務對應規範 📋
-- 集中於 [utils/quest_mapper.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_mapper.py#L84) 的 `QuestMapper`；報告維護於 [quest_mapping_rules_report.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/daily_task/quest_mapping_rules_report.md)。
+- 集中於 [utils/quest_mapper.py](../utils/quest_mapper.py#L84) 的 `QuestMapper`；報告維護於 [quest_mapping_rules_report.md](../docs/features/daily_task/quest_mapping_rules_report.md)。
 - 優先級：`確定性` > `僅彈窗`；`地下城` > `關卡`；`關卡層數`大者優先。未知任務自動下記 `user_data/daily_status.json`。
 
 ### 6. 測試架構設計與執行規範 (Google Software Engineering Standard) 🧪

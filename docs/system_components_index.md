@@ -35,11 +35,11 @@
   * `Treasure`: [dungeons/Treasure.png](../templates/dungeons/Treasure.png) - 寶箱特徵圖示 ➔ 對應 **`STATE_DUNGEON_EXPLORING`**
 * **操作按鈕 (Buttons)**:
   * `dungeon_fight`: [dungeons/dungeon_fight.png](../templates/dungeons/dungeon_fight.png) - 地下城備戰按鈕 ➔ 點擊切換進入 **`STATE_BATTLE`** ([BattleHandler](../states/handlers/battle.py))
-  * `leave`: [dungeons/leave.png](../templates/leave.png) - 離開地下城按鈕 ➔ 對應 **`STATE_DUNGEON_EXPLORING`** (點擊離開退回城鎮)
+  * `leave`: [dungeons/leave.png](../templates/dungeons/leave.png) - 離開地下城按鈕 ➔ 對應 **`STATE_DUNGEON_EXPLORING`** (點擊離開退回城鎮)
 
 ### 🚩 `LOBBY_PANEL`: 關卡準備大廳 (Lobby Stage/Dungeon Panel) `[⏳ 待檢查]`
 * **頁籤與導航 (Tabs & Nav)**:
-  * `stage_tab`: [dungeons/stage.png](../templates/dungeons/stage.png) & [dungeons/stage_after.png](../templates/dungeons/stage_after.png) - 一般關卡頁籤 ➔ 對應 **`STATE_NAVIGATING`** ([NavigationHandler](../states/handlers/navigation.py)) / **`STATE_LOBBY`** ([LobbyHandler](../states/handlers/lobby.py))
+  * `stage_tab`: [common/select_stage.png](../templates/common/select_stage.png) & [common/select_stage_after.png](../templates/common/select_stage_after.png) - 一般關卡頁籤 ➔ 對應 **`STATE_NAVIGATING`** ([NavigationHandler](../states/handlers/navigation.py)) / **`STATE_LOBBY`** ([LobbyHandler](../states/handlers/lobby.py))
   * `dungeon_tab`: [dungeons/dungeon.png](../templates/dungeons/dungeon.png) & [dungeons/dungeon_after.png](../templates/dungeons/dungeon_after.png) - 地下城頁籤 ➔ 對應 **`STATE_NAVIGATING`** / **`STATE_LOBBY`**
   * `Lord_entry.png`: [load/Lord_entry.png](../templates/load/Lord_entry.png) & [load/Lord_entry_after.png](../templates/load/Lord_entry_after.png) - 首領大廳頁籤 ➔ 對應 **`STATE_LORD_BOSS`** ([LordBossHandler](../states/handlers/lord_boss.py))
   * `goback_town`: [goback_town.png](../templates/goback_town.png) - 返回城鎮按鈕 ➔ 對應 **`STATE_NAVIGATING`** / **`STATE_LOBBY`**
@@ -162,7 +162,7 @@
   * `TASK_BANNER_OCR_OFFSET` / `BULLETIN_BOARD_OCR_OFFSET`: 懸賞任務對話框與告示牌清單之 OCR 裁切框偏移量 (`offset_x`, `offset_y`, `box_width`, `box_height`)。
   * `DEFAULT_DISASSEMBLE_COLORS` / `DEFAULT_KEEP_COLORS`: 背包預設拆解與保留品階名單。
 
-#### 2. [user_data/daily_status.json](../user_data/daily_status.json) (掌管類別: [DailyManager](../utils/daily_manager.py))
+#### 2. [user_data/daily_status.json](../user_data/native/daily_status.json) (掌管類別: [DailyManager](../utils/daily_manager.py))
 * **檔案用途**：每日懸賞任務完成度、首領冷卻與城鎮建築子流程今日執行狀態之持久化記憶檔案。
 * **主要變數與 Key 結構**：
   * `date`: 跨日 Date Tag (格式如 `"2026-07-29"`)，每日 08:05 後觸發自動清空重置。

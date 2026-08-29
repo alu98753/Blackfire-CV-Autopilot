@@ -1,4 +1,4 @@
-在 [meta_datas.tres](..\..\raw_tres\meta_datas.tres) 檔案中，「鑄塊 / 金屬錠」的英文統一叫做 **`ingot`**（分類排序標籤為 `sort_id: "processing_ingot"`）。
+在 [meta_datas.tres](../../../raw_tres/meta_datas.tres) 檔案中，「鑄塊 / 金屬錠」的英文統一叫做 **`ingot`**（分類排序標籤為 `sort_id: "processing_ingot"`）。
 
 ---
 

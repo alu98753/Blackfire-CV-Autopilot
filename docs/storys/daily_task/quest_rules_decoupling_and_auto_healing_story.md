@@ -10,7 +10,7 @@
 ### 2. Action (行動)
 
 1. **資料解耦與 Git 版控**：
-   - 將對照資料庫自 `utils/quest_mapper.py` 抽離，建立受 Git 版控追蹤的 [config/quest_rules.json](file:///e:/Side_Project/BlackfireCrusade_tool/config/quest_rules.json)。
+   - 將對照資料庫自 `utils/quest_mapper.py` 抽離，建立受 Git 版控追蹤的 [config/quest_rules.json](../../../config/quest_rules.json)。
    - 在 JSON 內建 `_doc` 說明區塊，詳列地下城 `0~4`、關卡 Level `1~6` 與子關卡對照表。
 
 2. **零停機動態熱重載 (Hot Reload) & ValueError 防呆**：
@@ -18,7 +18,7 @@
    - 若 `config/quest_rules.json` 缺失或 JSON 解析無效，直接拋出 `ValueError` 顯式警示。
 
 3. **跨日自癒與多階梯自動排序**：
-   - 於 [DailyManager.check_and_reset_daily()](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py#L214) 與 [update_bulletin_board_quests()](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py#L387) 觸發 `reevaluate_unknown_quests()`。
+   - 於 [DailyManager.check_and_reset_daily()](../../../utils/daily_manager.py#L214) 與 [update_bulletin_board_quests()](../../../utils/daily_manager.py#L387) 觸發 `reevaluate_unknown_quests()`。
    - 晉升任務與當日任務融合後，統一傳送至 `mapper.sort_quests()` 依 `[確定性 > 彈窗核銷 ➔ 地下城/關卡 ➔ index/level 大者優先]` 多階梯規則全域排序。
 
 ---

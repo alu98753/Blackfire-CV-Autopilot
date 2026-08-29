@@ -15,23 +15,23 @@
 
 ---
 
-## 🛠️ 二、一鍵切換與恢復工具 ([set_battle_speed.py](../tools/set_battle_speed.py))
+## 🛠️ 二、一鍵切換與恢復工具 ([set_battle_settings.py](../../scripts/set_battle_settings.py))
 
 專案已內建全自動設定腳本，自動處理解除唯讀 ➔ 寫入數值 ➔ 加上唯讀鎖：
 
 ### 1. 切換為 50 倍速 (極速刷圖模式，戰鬥 1~2 秒結束)
 ```powershell
-.\.venv\Scripts\python tools/set_battle_speed.py --speed 50.0
+.\.venv\Scripts\python scripts/set_battle_settings.py --speed 50.0
 ```
 
 ### 2. 切換為 10 倍速 (平穩高速模式)
 ```powershell
-.\.venv\Scripts\python tools/set_battle_speed.py --speed 10.0
+.\.venv\Scripts\python scripts/set_battle_settings.py --speed 10.0
 ```
 
-### 3. 恢復為原廠預設倍速 (2.0x 倍速 / 1.45) 🔄
+### 3. 一鍵還原原廠預設倍速 (恢復正常 2.0x / 1.45)
 ```powershell
-.\.venv\Scripts\python tools/set_battle_speed.py --reset
+.\.venv\Scripts\python scripts/set_battle_settings.py --reset
 ```
 
 ---

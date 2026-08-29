@@ -14,7 +14,7 @@
 
 ## 2. ⚡ Action (行動)
 
-### A. 彈窗消失閉環與多堆重複出售演算法 ([jewelry_workshop.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/jewelry_workshop.py))
+### A. 彈窗消失閉環與多堆重複出售演算法 ([jewelry_workshop.py](../../../states/handlers/jewelry_workshop.py))
 1. **彈窗消失閉環 (`click_and_wait_until_gone`)**：
    將原本盲目點擊的 `common/ok.png` 與 `common/confirm.png` 重構為專案標準 API `self.click_and_wait_until_gone(...)`，確保彈窗與關閉動畫從畫面上 100% 消失。
 2. **雙層彈窗防呆連鎖清理**：
@@ -24,7 +24,7 @@
    - 若商品**仍存在**且 `repeat_sell_count < 5` 上限 ➔ 累計 `repeat_sell_count += 1` 並保留 `current_goods_idx` 不進位，發射下一輪出售。
    - 若商品**已售罄**或達到 5 堆上限 ➔ 重置 `repeat_sell_count = 0`，推進 `current_goods_idx += 1` 切換至下一商品。
 
-### B. 商品白名單與設定檔對接 ([config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py#L255))
+### B. 商品白名單與設定檔對接 ([config.py](../../../config.py#L255))
 在 `jewelry_workshop` 配置中的 `goods_settings["gray"]` 白名單補充三項新素材：
 ```python
 "gray": {
@@ -35,7 +35,7 @@
 }
 ```
 
-### C. 單元測試補充 ([test_behavioral_scenarios.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_behavioral_scenarios.py#L2680))
+### C. 單元測試補充 ([test_behavioral_scenarios.py](../../../tests/test_behavioral_scenarios.py#L2680))
 新增 `test_jewelry_workshop_multiple_sales_same_item` 單元測試，模擬畫面中連續出現 2 堆同名商品時 Handler 的狀態流轉與進位行為。
 
 ---
@@ -60,5 +60,5 @@
 
 ## 5. 🚀 Influence (影響與後續)
 
-- **白名單擴充標準規範化**：在 [Jewelry_workshop.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/town_building/Jewelry_workshop.md) 中明確標註了「新裁切範本必須遵循的登錄 [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py#L255) 白名單」作業流程。
+- **白名單擴充標準規範化**：在 [Jewelry_workshop.md](../../features/town_building/Jewelry_workshop.md) 中明確標註了「新裁切範本必須遵循的登錄 [config.py](../../../config.py#L255) 白名單」作業流程。
 - **跨建築經驗復用**：此「彈窗消失閉環 + 乾淨二次比對」模式可直接複用到血之祭壇 (`BloodAltarHandler`) 等其他城鎮建築出售與獻祭子流程中。

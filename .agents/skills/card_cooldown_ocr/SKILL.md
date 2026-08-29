@@ -36,4 +36,4 @@ description: 通用卡片冷卻木牌比對與 OCR 時間辨識模組開發與�
 ---
 
 ## 📌 程式碼標準參考 (Reference Implementation)
-參見 [lord_boss.py: Line 225](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/lord_boss.py#L225) 的 `_check_card_cooldown_ocr` 函式實作。
+參見 [lord_boss.py: Line 225](../../../states/handlers/lord_boss.py#L225) 的 `_check_card_cooldown_ocr` 函式實作。

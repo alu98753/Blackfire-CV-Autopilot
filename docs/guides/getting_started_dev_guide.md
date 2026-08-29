@@ -662,5 +662,5 @@ main.py                # 主迴圈
 2. **統一擴充 `states/exceptions/subflows/`**：
    所有意外彈窗必須繼承 `BaseExceptionSubflow` 建立獨立 Subflow，並在 `config/exception_features.json` 與 `UnexpectedPopupRecoveryHandler` 註冊。
 3. **架構說明與 4-Step 開發指引**：
-   詳細開發規範與 Mermaid 圖表請參閱：[docs/exception_subsystem_architecture.md](docs/exception_subsystem_architecture.md)。
+   詳細開發規範與 Mermaid 圖表請參閱：[docs/exception_subsystem_architecture.md](../architecture/exception_subsystem_architecture.md)。
 

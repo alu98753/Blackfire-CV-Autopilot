@@ -27,6 +27,6 @@ This change closes an important scheduler-state-machine seam. The bug was not th
 It also keeps `COLLECT_ONLY` lightweight and predictable, which matters because it is one of the states most vulnerable to silent loops and watchdog-driven recovery.
 
 ## Influence
-- Behavior fixed in [CollectOnlyHandler](../states/handlers/collect_only.py)
-- Regression coverage added in [test_behavior_daily_preemption.py](../tests/test_behavior_daily_preemption.py)
-- Related orchestration continues to rely on [GameStateMachine](../states/state_machine.py)
+- Behavior fixed in [CollectOnlyHandler](../../states/handlers/collect_only.py)
+- Regression coverage added in [test_behavior_daily_preemption.py](../../tests/test_behavior_daily_preemption.py)
+- Related orchestration continues to rely on [GameStateMachine](../../states/state_machine.py)

@@ -17,18 +17,18 @@
 
 ## 🚀 Action (行動)
 
-1. **策略模式架構解耦 ([states/domains/base_domain.py](../states/domains/base_domain.py), [states/domains/golden_empire.py](../states/domains/golden_empire.py))**：
+1. **策略模式架構解耦 ([states/domains/base_domain.py](../../states/domains/base_domain.py), [states/domains/golden_empire.py](../../states/domains/golden_empire.py))**：
    - 建立 `BaseDomainStrategy` 抽象基礎類別與 `DomainExploreHandler`，將領地特定邏輯（挖寶、專屬按鈕）抽離為策略模組，維持狀態機單一職責與可擴充性。
-2. **領域強敵處置與單場戰敗獨立計數 ([states/handlers/battle.py](../states/handlers/battle.py), [states/handlers/result.py](../states/handlers/result.py))**：
+2. **領域強敵處置與單場戰敗獨立計數 ([states/handlers/battle.py](../../states/handlers/battle.py), [states/handlers/result.py](../../states/handlers/result.py))**：
    - 實作 `nemesis_templates` 處置子流程：偵測到設定檔指定的領域強敵（`golden_king`、`elf_mythril_hag`、`undead_altalim`、`human_golden_tulakh`）時，依據 `nemesis_action` 執行暫停手動接管或點擊設定 ➔ 放棄挑戰 ➔ 安全退出，且保持 `defeat_count = 0`，退回後自動重新導航進場。
    - 每次進入戰鬥時獨立計算 `defeat_count`，支援 `domain_max_defeat: 5` 次重試上限。
-3. **通用子視窗回退與背包滿退場閉環 ([states/handlers/navigation.py](../states/handlers/navigation.py), [states/handlers/domain_explore.py](../states/handlers/domain_explore.py))**：
+3. **通用子視窗回退與背包滿退場閉環 ([states/handlers/navigation.py](../../states/handlers/navigation.py), [states/handlers/domain_explore.py](../../states/handlers/domain_explore.py))**：
    - 當 `need_diamond_collection` 或需要回城時，若畫面開著子卡片視窗（`common/quit.png`），優先關閉子視窗露出大廳底層，再點擊 `goback_town.png`，防止遮罩阻擋。
    - 領地內背包滿且無彈窗時，主動點擊 `domains/common/exit_to_lobby.png` ➔ 導航回城觸發 `STATE_BAG_CLEANING` ➔ 清理完畢後自動重新進場。
-4. **多樣式食物不足彈窗支援 ([states/stamina_flow.py](../states/stamina_flow.py))**：
+4. **多樣式食物不足彈窗支援 ([states/stamina_flow.py](../../states/stamina_flow.py))**：
    - 擴充 `handle_insufficient_stamina` 支援雙樣式彈窗（普通地下城 `no_bread.png` + `cancel.png`；黃金古國 `no_bread2.png` + `confirm.png`）。
    - 感知 `no_bread2.png` 語意後點擊確認關閉，並順暢銜接 `exit_to_lobby.png` ➔ `goback_town.png` ➔ `STATE_COLLECT_ONLY` 退避。
-5. **啟動器與配置整合 ([main.py](../main.py), [run.bat](../run.bat), [config/defaults.toml](../config/defaults.toml))**：
+5. **啟動器與配置整合 ([main.py](../../main.py), [run.bat](../../run.bat), [config/defaults.toml](../../config/defaults.toml))**：
    - 在 `run.bat` 新增選項 `7) 領地模式：黃金古國`；支援 `--mode domain --domain golden_empire` 命令列啟動。
    - 支援 `auto_bread` 與 `auto_diamond` 開關配置。
 
@@ -41,7 +41,7 @@
   - `tests/test_behavior_golden_empire.py`（11 項領地行為測試）
   - `tests/test_behavior_navigation.py`（新增子視窗回退行為測試）
 * **文檔與範本同步**：
-  - 建立 [`templates/domains/golden_empire/README.md`](../templates/domains/golden_empire/README.md) 完整記載 15 項特徵圖規格。
+  - 建立 [`templates/domains/golden_empire/README.md`](../../README.md) 完整記載 15 項特徵圖規格。
   - 同步更新專案 [`README.md`](../README.md)。
 
 ---

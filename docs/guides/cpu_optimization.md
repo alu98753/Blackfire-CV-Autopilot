@@ -7,11 +7,11 @@
 ## 🛑 當前架構的三大 CPU 效能瓶頸
 
 ### 1. 後台截圖中 PrintWindow 與 BitBlt 的無謂重複嘗試 (I/O & GDI 資源消耗)
-* **問題點**：在 [capture/screen.py](file:///e:/Side_Project/BlackfireCrusade_tool/capture/screen.py#L116-L176) 的 `_capture_backend` 中，每次擷取都會先呼叫 `PrintWindow`。如果該遊戲視窗的顯示引擎（如 DirectX/OpenGL 加速）導致 `PrintWindow` 傳回全黑或失敗，程式會拋出異常並進入 `except`，隨後**再次建立一組 GDI 物件並執行傳統的 `BitBlt` 複製**。
+* **問題點**：在 [capture/screen.py](../../capture/screen.py#L116-L176) 的 `_capture_backend` 中，每次擷取都會先呼叫 `PrintWindow`。如果該遊戲視窗的顯示引擎（如 DirectX/OpenGL 加速）導致 `PrintWindow` 傳回全黑或失敗，程式會拋出異常並進入 `except`，隨後**再次建立一組 GDI 物件並執行傳統的 `BitBlt` 複製**。
 * **後果**：這導致每次截圖都要經歷一次異常捕獲、兩次 GDI 物件的頻繁創建與銷毀。
 
 ### 2. 氾濫的全螢幕模板匹配 (Full-Screen Template Matching)
-* **問題點**：在 [vision/matcher.py](file:///e:/Side_Project/BlackfireCrusade_tool/vision/matcher.py#L78) 中，所有的 `match` 調用均是在整張遊戲畫面（通常是 1920x1080）中滑動尋找模板。在 [state_machine.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py#L180-L244) 的主迴圈中，每一幀都會同時比對：
+* **問題點**：在 [vision/matcher.py](../../vision/matcher.py#L78) 中，所有的 `match` 調用均是在整張遊戲畫面（通常是 1920x1080）中滑動尋找模板。在 [state_machine.py](../../states/state_machine.py#L180-L244) 的主迴圈中，每一幀都會同時比對：
   * 卡死清除（confirm, ok, continue, quit - 共 4 次）
   * 背包已滿、任務完成（共 2 次）
   * 重新登入、體力檢測（共 2 次）

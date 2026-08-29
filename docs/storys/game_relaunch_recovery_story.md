@@ -8,22 +8,22 @@
 ## Action (行動)
 
 1. **獨立 `GameRelaunchSubflow` 重啟自癒模組**：
-   - 建立 [GameRelaunchSubflow](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/subflows/game_relaunch.py)，封裝進程終止與 Steam 重新啟動邏輯。
+   - 建立 [GameRelaunchSubflow](../../states/exceptions/subflows/game_relaunch.py)，封裝進程終止與 Steam 重新啟動邏輯。
    - **PID 安全護欄**：讀取 `os.getpid()`，若 HWND 取得之 PID 為腳本 PID 則 100% 豁免防誤殺。嚴禁使用 `WINDOWTITLE` 萬用字元，防範誤殺含有工作目錄路徑之 PowerShell 視窗。
    - 使用 `taskkill /f /im BlackfireCrusade.exe` 精確終止 Unity 遊戲進程，並輪詢 `FindWindow` 確保進程徹底銷毀。
 
 2. **`ScreenCapturer` 最小化自動還原與 0 位移強效全螢幕**：
-   - 於 [ScreenCapturer](file:///e:/Side_Project/BlackfireCrusade_tool/capture/screen.py) 的 `get_window_rect()` 加入 `IsIconic(hwnd)` 檢查，自動呼叫 `ensure_window_on_monitor()`。
+   - 於 [ScreenCapturer](../../capture/screen.py) 的 `get_window_rect()` 加入 `IsIconic(hwnd)` 檢查，自動呼叫 `ensure_window_on_monitor()`。
    - **0 位移平滑全螢幕**：`SW_RESTORE` 解除最小化後重新取得 `GetWindowRect`，若視窗已在目標顯示器上，跳過 `SetWindowPos` 以消除 10px 偏移抖動。
    - 結合 `SetForegroundWindow` 奪取焦點與 `WM_SYSCOMMAND (SC_MAXIMIZE)` 標題列訊息雙保險，解決 1280x720 視窗大小無法填滿全螢幕問題。
 
 3. **`ExceptionWatchdog` 智慧動態逾時與視窗遺失自動重開**：
-   - 於 [ExceptionWatchdog](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py) 加入連續卡死計數器 `consecutive_stuck_count`（連續 2 次逾時自動發起重啟）。
+   - 於 [ExceptionWatchdog](../../states/exceptions/watchdog.py) 加入連續卡死計數器 `consecutive_stuck_count`（連續 2 次逾時自動發起重啟）。
    - 針對 `COLLECT_ONLY` 實作 `max(diamond_cd, bread_cd) + 60s` 智慧動態 CD 逾時與 HWND 遺失檢查。
-   - 於 [GameStateMachine.step()](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py) 加入 `window_lost_count`。連刷 5 次 (~2.5s) 找不到遊戲視窗（手動關閉或崩潰）時，自動發起 `GameRelaunchSubflow` 重開。
+   - 於 [GameStateMachine.step()](../../states/state_machine.py) 加入 `window_lost_count`。連刷 5 次 (~2.5s) 找不到遊戲視窗（手動關閉或崩潰）時，自動發起 `GameRelaunchSubflow` 重開。
 
 4. **單元測試驗證與誤觸門檻優化**：
-   - 建立 [test_game_relaunch_recovery.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_game_relaunch_recovery.py) 包含 6 大針對性單元測試。
+   - 建立 [test_dungeon_relaunch_recovery.py](../../tests/test_dungeon_relaunch_recovery.py) 包含針對性單元測試。
    - 將 `navigation.py` 與 `state_machine.py` 中 `common/confirm.png` 的尋路/全域防護門檻提高至 `0.90`，徹底消除 False Positive。
 
 ---

@@ -33,7 +33,7 @@
    * **貴重保留流程**：點擊打開背包 ➔ 點擊大量分解 ➔ 點擊全選 ➔ **使用自適應環狀遮罩色彩分類法，自動掃描網格並反選保留藍、紫、橘黃、紅等稀有貴重裝備** ➔ 點擊分解 ➔ 確認彈窗 ➔ 點擊整理 ➔ 點擊退出關閉背包。
 9. **貴重裝備色彩分類特徵工程 (Rare Gear Color Classification)**：
    * 內置獨立的色彩判定特徵工程（環帶採樣遮罩避開中心打勾與邊緣發光），並為紫、藍、橘黃、紅等各品質顏色設置了專屬的飽和度 $S$ 與亮度 $V$ 閾值。
-   * 詳細算法與防禦大石棒等灰色裝備的過濾參數請參閱專屬文件：[bag_color_classification.md (色彩特徵說明文件)](docs/bag_color_classification.md)。
+   * 詳細算法與防禦大石棒等灰色裝備的過濾參數請參閱專屬文件：[bag_color_classification.md (色彩特徵說明文件)](docs/features/bag_color_classification.md)。
 10. **通用戰敗重新開始 (Defeat Retry)**：
     * 當自動戰鬥失敗並跳轉到戰敗結算畫面（`defeat.png`）時，程式會自動識別，並以「雙保險」機制點選重新開始：
       * 優先搜尋匹配 `defeat_retry.png` 或 `stages/retry.png` 按鈕進行精準點擊；
@@ -43,14 +43,14 @@
     * 地下城模式下支援「黏糊糊的石窟 / 幽影地穴 / 森林迷宮 / 神秘遺跡」單獨指定點選，或「自動貪婪挑選」模式（優先進入最高級可探索地圖）。
 13. **血之祭壇獻祭與城鎮建築連動 (`Blood Altar`)**：
     * 支援獨立 CLI 模式 (`--mode blood_altar`) 選擇品質獻祭（灰/綠/藍獻祭，紫色保留等），亦支援長途掛機中背包滿清理後自動一路退回城鎮進入祭壇獻祭，獻祭完畢自動轉移至動態導航續行掛機。
-    * 詳細架構與防誤觸機制請參閱專屬文件：[Blood_Altar.md (血之祭壇說明文件)](docs/town_building/Blood_Altar.md)。
+    * 詳細架構與防誤觸機制請參閱專屬文件：[Blood_Altar.md (血之祭壇說明文件)](docs/features/town_building/Blood_Altar.md)。
 14. **城鎮任務流水線佇列 (`Town Subflow Pipeline`)**：
     * 提供無解耦、可高度擴充的城鎮子流程鏈式動態佇列。當背包清理分解完成後，腳本將自動依序在城鎮中執行「血之祭壇獻祭 ➔ 珠寶加工廠出售 ➔ 未來新建築」，任務清空後自動恢復 `mix` / `stage` / `dungeon` 掛機。
-    * 詳細架構請參閱專屬文件：[pipeline.md (城鎮任務流水線說明文件)](docs/town_building/pipeline.md)。
+    * 詳細架構請參閱專屬文件：[pipeline.md (城鎮任務流水線說明文件)](docs/features/town_building/pipeline.md)。
 15. **例外處理與防卡死子系統 (`states/exceptions/`)**：
     * **集中化例外處置**：所有意外彈窗（如 `Raid_Box.png` 掃蕩、`Wheel_of_Fortune.png` 幸運輪盤、卡死逾時等）均集中於 `states/exceptions/` 獨立模組處置，嚴禁在業務主迴圈寫硬編碼補釘。
     * **雙層優先級機制**：優先級 1 專屬 Subflows (`RaidBoxSubflow`, `WheelOfFortuneSubflow`) 進行 ROI 點對點關閉；優先級 2 通用防卡死 (`GenericAntiStuckSubflow`) 在無專屬圖案時進行全域按鈕備援兜底。
-    * **詳細架構與 Subflow 開發指引**：請參閱專屬文件：[exception_subsystem_architecture.md (例外處理子系統說明文件)](docs/exception_subsystem_architecture.md)。
+    * **詳細架構與 Subflow 開發指引**：請參閱專屬文件：[exception_subsystem_architecture.md (例外處理子系統說明文件)](docs/architecture/exception_subsystem_architecture.md)。
 
 ---
 
@@ -198,9 +198,9 @@
 * **全域 Rules**：位於 [.agents/AGENTS.md](.agents/AGENTS.md)，定義全域代碼風格與驗證要求。
 
 ### 2. 核心架構文檔 (Docs)
-* **決策流程圖**：[dungeon_flow.md (地下城探索與體力領取邏輯)](docs/dungeon_flow.md)
-* **城鎮流水線架構**：[pipeline.md (城鎮子流程佇列說明)](docs/town_building/pipeline.md)
-* **每日懸賞排程器**：[daily8.md (懸賞任務多階梯優先級)](docs/storys/daily_task/daily8.md)
+* **決策流程圖**：[dungeon_flow.md (地下城探索與體力領取邏輯)](docs/features/dungeon_flow.md)
+* **城鎮流水線架構**：[pipeline.md (城鎮子流程佇列說明)](docs/features/town_building/pipeline.md)
+* **每日懸賞排程器**：[daily8.md (懸賞任務多階梯優先級)](docs/features/daily_task/daily8.md)
 
 ### 3. 自動化單元測試 (Unit Tests)
 在進行任何代碼重構或新 Feature 開發後，請務必執行全套單元測試以確保邏輯綠燈通過：
@@ -217,7 +217,7 @@
 
 ## 📋 開發中與待辦功能 (TODOs)
 
-請參考：[future_work.md](docs/future_work.md)
+請參考：[future_work.md](docs/todos/future_work.md)
 
 ---
 

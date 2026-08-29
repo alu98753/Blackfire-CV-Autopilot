@@ -91,7 +91,7 @@
 ---
 
 ## H. Windows CLI 啟動器與 `.bat` 換行編碼規範 (Windows CLI Batch Launcher Spec)
-* **核心檔案**：[run.bat](file:///e:/Side_Project/BlackfireCrusade_tool/run.bat)
+* **核心檔案**：[run.bat](../../../../run.bat)
 * **規範**：
   - ⚠️ **CRLF 換行符鐵律**：Windows `.bat` 批次檔**必須**採用 CRLF (`\r\n`) 換行與無 BOM 的 UTF-8 編碼。絕不可存為 LF (`\n`)，否則 CMD 讀取時會把整檔黏成單行，導致語法解析出大批無效指令。
   - ✅ **`chcp 65001` 重載**：檔案頭必須包含自適應拉起 `chcp 65001` 與 `cmd /c` utf8 重載機制，確保控制台繁中顯示無亂碼。

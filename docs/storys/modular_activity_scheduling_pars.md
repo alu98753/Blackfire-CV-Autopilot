@@ -19,7 +19,7 @@
 
 ## 🛠️ 二、Action (行動與核心架構實作)
 
-### 1. 全域配置規範化與活動開關矩陣 ([config.py](../config.py))
+### 1. 全域配置規範化與活動開關矩陣 ([config.py](../../config.py))
 在中央配置中定義 `DEFAULT_ACTIVITIES`，並透過 `normalize_config` 注入所有模式配置：
 ```python
 DEFAULT_ACTIVITIES = {
@@ -33,20 +33,20 @@ DEFAULT_ACTIVITIES = {
 }
 ```
 
-### 2. 全域活動調度器 ([GameStateMachine](../states/state_machine.py))
+### 2. 全域活動調度器 ([GameStateMachine](../../states/state_machine.py))
 實作 `evaluate_next_activity()`，統一掌管活動優先級轉移：
 $$\text{城鎮日常 (Tier 1)} \rightarrow \text{首領 Boss (Tier 2)} \rightarrow \text{地下城 (Tier 3)} \rightarrow \text{普通關卡打怪 (若啟用)} \rightarrow \mathbf{COLLECT\_ONLY\ 待機 (Tier 0)}$$
 
-### 3. 主動式待機巡邏與喚醒機制 ([CollectOnlyHandler](../states/handlers/collect_only.py))
+### 3. 主動式待機巡邏與喚醒機制 ([CollectOnlyHandler](../../states/handlers/collect_only.py))
 在待機期間除了定時領體/鑽外，加入週期性活動冷卻監聽：
 - 若 `enable_lord_boss` 且 `has_available_lord_boss()` $\rightarrow$ 自動喚醒並發起 Boss 討伐。
 - 若 `enable_dungeon` 且 `has_available_dungeon()` $\rightarrow$ 自動喚醒並轉移至 `STATE_NAVIGATING` 前往地下城。
 - 若 `enable_town_daily` 且有待完成城鎮任務 $\rightarrow$ 自動喚醒並發起城鎮佇列。
 
-### 4. 導航與大廳處理器退避適配 ([NavigationHandler](../states/handlers/navigation.py), [LobbyHandler](../states/handlers/lobby.py))
+### 4. 導航與大廳處理器退避適配 ([NavigationHandler](../../states/handlers/navigation.py), [LobbyHandler](../../states/handlers/lobby.py))
 - 當地下城全冷卻時，若 `enable_stage_farming == False`，點擊 `goback_town.png` 返回城鎮並轉入 `STATE_COLLECT_ONLY` 待機，不再強制切換關卡頁籤。
 
-### 5. CLI 與互動選單介面 ([main.py](../main.py))
+### 5. CLI 與互動選單介面 ([main.py](../../main.py))
 - 新增 `--boss` / `--no-boss`、`--dungeon` / `--no-dungeon`、`--stage` / `--no-stage` 等模組化參數，並提供直觀的啟動問答推薦。
 
 ---
@@ -54,7 +54,7 @@ $$\text{城鎮日常 (Tier 1)} \rightarrow \text{首領 Boss (Tier 2)} \rightarr
 ## 📊 三、Result (成效與驗證)
 
 1. **全新行為測試集全綠通過**：
-   * 建立獨立測試檔 [test_behavior_modular_activities.py](../tests/test_behavior_modular_activities.py)，5 大真實場景 100% 通過：
+   * 建立獨立測試檔 [test_behavior_modular_activities.py](../../tests/test_behavior_modular_activities.py)，5 大真實場景 100% 通過：
      * `test_scenario_1_pure_collect_only_no_periodic_triggers` (純領取養老)
      * `test_scenario_2_boss_and_collect_only_lifecycle` (Boss + 待機喚醒)
      * `test_scenario_3_dungeon_and_boss_cooldown_to_collect_only_and_wake_up` (地下城 + Boss + 待機喚醒)

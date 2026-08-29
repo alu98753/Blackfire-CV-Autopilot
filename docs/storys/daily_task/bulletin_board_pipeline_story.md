@@ -32,7 +32,7 @@
 
 * **告示牌辨識率**：告示牌黃色/灰色卡片判斷正確率達到 **100%**。
 * **彈窗清理時間**：完成獎勵彈窗可以在 **2.0 秒內** 完成平滑點擊與銷毀，無任何 Timeout 告警。
-* **單元測試驗證**：[test_bulletin_board_subflow.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_bulletin_board_subflow.py) 與 [test_quest_statemachine_integration.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_quest_statemachine_integration.py) 全量通過。
+* **單元測試驗證**：[test_bulletin_board_subflow.py](../../../tests/test_bulletin_board_subflow.py) 與 [test_quest_statemachine_integration.py](../../../tests/test_quest_statemachine_integration.py) 全量通過。
 
 ---
 

@@ -304,7 +304,7 @@ for cid in orc_chars:
     print(f'{cid}: droppable = {drops}')
 "`
 
-根據遊戲底層資料檔 [meta_datas.tres](file:///e:/Side_Project/BlackfireCrusade_tool/meta_data/raw_tres/meta_datas.tres) 的鐵匠鋪合成配方 (`blacksmith.craft_dic`)、地圖掉落 (`level_groups`) 與怪物數據庫 (`characters`)，為您詳細拆解弓箭手的裝備演進路線與材料規劃：
+根據遊戲底層資料檔 [meta_datas.tres](../../raw_tres/meta_datas.tres) 的鐵匠鋪合成配方 (`blacksmith.craft_dic`)、地圖掉落 (`level_groups`) 與怪物數據庫 (`characters`)，為您詳細拆解弓箭手的裝備演進路線與材料規劃：
 
 ---
 

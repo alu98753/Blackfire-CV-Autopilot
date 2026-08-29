@@ -10,11 +10,11 @@
 ## 🛠️ Action (行動)
 
 1. **Watchdog `COLLECT_ONLY` 待機豁免護欄**：
-   - 於 [watchdog.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py#L30-L32) 的 `check()` 入口加入 `STATE_COLLECT_ONLY` 時間逾時豁免，避免於定時領取/體力退避待機時發起每 30 秒的錯誤救援與彈窗點擊。
+   - 於 [watchdog.py](../../states/exceptions/watchdog.py#L30-L32) 的 `check()` 入口加入 `STATE_COLLECT_ONLY` 時間逾時豁免，避免於定時領取/體力退避待機時發起每 30 秒的錯誤救援與彈窗點擊。
 2. **每日流水線與 Resume 排程優化**：
-   - 於 [state_machine.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py#L1086-L1120) 中，當處於 `collect_only` 模式時禁止調度 `accepted_quests`；當體力冷卻結束 Resume 時，優先執行用戶指定的 Tier 4 退守目標。
+   - 於 [state_machine.py](../../states/state_machine.py#L1086-L1120) 中，當處於 `collect_only` 模式時禁止調度 `accepted_quests`；當體力冷卻結束 Resume 時，優先執行用戶指定的 Tier 4 退守目標。
 3. **規則修正與任務白名單**：
-   - 將無法挑戰的 `雪山詛咒` 移至 [quest_rules.json](file:///e:/Side_Project/BlackfireCrusade_tool/config/quest_rules.json) 的 `ignored_quests` 清單中。
+   - 將無法挑戰的 `雪山詛咒` 移至 [quest_rules.json](../../config/quest_rules.json) 的 `ignored_quests` 清單中。
 4. **P0 級 5 大自動化單元測試防線建置**：
    - `test_watchdog_collect_only_exemption.py`：驗證待機豁免與領取/Resume 監視復歸。
    - `test_deadlock_risk_prevention.py`：驗證 Boss 滿次數/體力不足/懸賞上限/城鎮速領存檔同步與避鎖。

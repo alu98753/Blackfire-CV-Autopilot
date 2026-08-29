@@ -28,7 +28,7 @@
 
 * **重複英雄分解**：成功 100% 辨識重複英雄並自動點擊分解，領取對應資源。
 * **血之祭壇穩定度**：徹底消除 5 秒 Timeout 與頁籤誤判問題，執行速度提升 40%。
-* **測試通過率**：[test_hero_draw_subflow.py](file:///e:/Side_Project/BlackfireCrusade_tool/tests/test_hero_draw_subflow.py) 與血之祭壇單元測試全部綠燈通過。
+* **測試通過率**：[test_hero_draw_subflow.py](../../../tests/test_hero_draw_subflow.py) 與血之祭壇單元測試全部綠燈通過。
 
 ---
 

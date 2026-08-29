@@ -22,17 +22,17 @@
 
 * **🔄 State (狀態流轉 - 業務情境與轉移)**：
   - **概念**：玩家遊玩時的所有動態操作情境與轉換（賣東西、尋路導航、戰鬥、地下城探索）。
-  - **實作**：由 [GameStateMachine](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py) 掌管控制流，負責處理情境之間的跳轉（如從 `NAVIGATING` 切換至 `DUNGEON_EXPLORING` 或 `BACKPACK_FULL_SORTING`）。
+  - **實作**：由 [GameStateMachine](../../states/state_machine.py) 掌管控制流，負責處理情境之間的跳轉（如從 `NAVIGATING` 切換至 `DUNGEON_EXPLORING` 或 `BACKPACK_FULL_SORTING`）。
 
 * **💾 Data (靈魂與記憶 - 動態數據與狀態更新)**：
   - **概念**：如果 Entity 是靜態實體，Data 就是賦予 Entity 生命與靈魂的動態資料。它記錄各個實體的詳細資訊，並隨 State 的轉移進行動態更新，讓 Entity「活起來」。
   - **實作**：
-    - [daily_status.json](file:///e:/Side_Project/BlackfireCrusade_tool/user_data/daily_status.json) 與 [daily_manager.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py)：持久化記憶完成狀態與跨日 08:05 Date Tag 清零。
-    - [config.py](file:///e:/Side_Project/BlackfireCrusade_tool/config.py) 中的 `goods_settings`：作為背包銷毀的單一權威來源 (SSOT)，隨使用者設定動態授權。
+    - [daily_status.json](../../user_data/native/daily_status.json) 與 [daily_manager.py](../../utils/daily_manager.py)：持久化記憶完成狀態與跨日 08:05 Date Tag 清零。
+    - [config.py](../../config.py) 中的 `goods_settings`：作為背包銷毀的單一權威來源 (SSOT)，隨使用者設定動態授權。
 
 * **🛡️ Exception (閉環自癒 - 防卡死與意外救援)**：
   - **概念**：專門處理 State 在運轉過程中可能產生的意外卡死、廣告/懸賞彈窗遮擋或遊戲崩潰。
-  - **實作**：由 [watchdog.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/watchdog.py)（90s/30s 門檻）、[handler.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/handler.py) (`UnexpectedPopupRecoveryHandler`) 與 [game_relaunch.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/exceptions/subflows/game_relaunch.py) 組成。當 State 卡死時，由 Exception 接管救援並復原回到原本的 State 與 Data，達成 100% 不中斷的防禦閉環。
+  - **實作**：由 [watchdog.py](../../states/exceptions/watchdog.py)（90s/30s 門檻）、[handler.py](../../states/exceptions/handler.py) (`UnexpectedPopupRecoveryHandler`) 與 [game_relaunch.py](../../states/exceptions/subflows/game_relaunch.py) 組成。當 State 卡死時，由 Exception 接管救援並復原回到原本的 State 與 Data，達成 100% 不中斷的防禦閉環。
 
 ---
 

@@ -22,7 +22,7 @@
 - `STEP_X` 與 `STEP_Y` (橫向與縱向格子間距)
 
 ### 🧰 步驟二：開發圖形化「手動校準工具」
-為了讓使用者能直觀且自主地微調參數，我們在 [tools/calibrate_grid.py](../../tools/calibrate_grid.py) 撰寫了校準工具：
+為了讓使用者能直觀且自主地微調參數，我們在 [tools/calibrate_grid.py](../../../tools/calibrate_grid.py) 撰寫了校準工具：
 * 它讀取當前遊戲截圖，匹配標題中心，並利用校準參數繪製網格框（紅色）與點擊中心（黃點）。
 * 輸出預覽圖至 `scratch/grid_calibration_result.png`，實現「修改參數 ➔ 執行腳本 ➔ 查看圖像」的超快迭代。
 
@@ -33,8 +33,8 @@
 - **右側滾動參考中心**：同步精算更新為 `dx = 302`, `dy = 384`
 
 ### 💻 步驟四：代碼套用與測試重構
-1. **套用至邏輯**：將此套尺寸變數套用到主邏輯類 [backpack_full_sorting.py](../../states/handlers/backpack_full_sorting.py) 中。
-2. **重構測試套件**：更新了單元測試 [test_state_machine_logic.py](../../tests/test_state_machine_logic.py) 與行為測試 [test_behavioral_scenarios.py](../../tests/test_behavioral_scenarios.py) 的模擬畫像生成座標與點擊斷言，確保不因網格位置變更而破壞測試覆蓋。
+1. **套用至邏輯**：將此套尺寸變數套用到主邏輯類 [backpack_full_sorting.py](../../../states/handlers/backpack_full_sorting.py) 中。
+2. **重構測試套件**：更新了單元測試 [test_state_machine_logic.py](../../../tests/test_state_machine_logic.py) 與行為測試 [test_behavioral_scenarios.py](../../../tests/test_behavioral_scenarios.py) 的模擬畫像生成座標與點擊斷言，確保不因網格位置變更而破壞測試覆蓋。
 
 ---
 
@@ -44,9 +44,9 @@
 * **動作路徑保存**：分選的每一步動作皆會保存審計截圖至專屬資料夾，清晰地展現出完整的「掃描 ➔ 點擊銷毀 ➔ 領取貴重物 ➔ 安全關閉」的決策軌跡。
 
 ### 🖼️ 實行動作鏈素材：
-- [feature_destroyandget_1.png](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/backpack_grid_calibration/feature_destroyandget_1.png) (對比圖)
-- [feature_destroyandget_2.png](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/backpack_grid_calibration/feature_destroyandget_2.png) (定位與檢測)
-- [feature_destroyandget_3.png](file:///e:/Side_Project/BlackfireCrusade_tool/docs/storys/backpack_grid_calibration/feature_destroyandget_3.png) (銷毀與確認操作)
+- [feature_destroyandget_1.png](feature_destroyandget_1.png) (對比圖)
+- [feature_destroyandget_2.png](feature_destroyandget_2.png) (定位與檢測)
+- [feature_destroyandget_3.png](feature_destroyandget_3.png) (銷毀與確認操作)
 
 ---
 
@@ -57,5 +57,5 @@
 ---
 
 ## 5. Influence (影響)
-* **模組化範式建立**：此「標題中心錨定 ➔ 獨立寬高 X/Y 網格切片掃描 ➔ 圖形化調參預覽」的設計模式已被寫入 [SKILL.md](../../.agents/skills/state_machine_development/SKILL.md) 規範中。
+* **模組化範式建立**：此「標題中心錨定 ➔ 獨立寬高 X/Y 網格切片掃描 ➔ 圖形化調參預覽」的設計模式已被寫入 [SKILL.md](../../../.agents/skills/state_machine_development/SKILL.md) 規範中。
 * **技術推廣**：後續若需要開發「商店自動選購」、「符文裝備一鍵穿戴」等任何涉及宮格網格（Grid-based）的掃描與操作邏輯，此套「校準工具 + 獨立寬高網格邏輯」皆可直接套用並快速複製成功經驗。

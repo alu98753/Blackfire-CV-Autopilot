@@ -21,9 +21,9 @@ description: 當一個 Feature/Fix 分支開發結束、準備收尾或準備合
 
 ### 步驟 2：技術文檔與故事同步 (Docs & PARS Story Sync)
 分支開發過程中若有涉及配置、規則、架構或新增功能的改動，必須審查並更新 `docs/` 下的技術文檔：
-1. **懸賞對照規則**：若改動 `QuestMapper`，必須同步更新 [docs/daily_task/quest_mapping_rules_report.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/daily_task/quest_mapping_rules_report.md)。
-2. **體力退避與狀態機**：若改動退避或 `has_available_dungeon` 邏輯，更新 [docs/stamina_retreat_feature.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/stamina_retreat_feature.md)。
-3. **背包與品質**：若改動裝備銷毀與分解品質，更新 [docs/bag_color_classification.md](file:///e:/Side_Project/BlackfireCrusade_tool/docs/bag_color_classification.md)。
+1. **懸賞對照規則**：若改動 `QuestMapper`，必須同步更新 [docs/daily_task/quest_mapping_rules_report.md](../../../docs/features/daily_task/quest_mapping_rules_report.md)。
+2. **體力退避與狀態機**：若改動退避或 `has_available_dungeon` 邏輯，更新 [docs/stamina_retreat_feature.md](../../../docs/features/stamina_retreat_feature.md)。
+3. **背包與品質**：若改動裝備銷毀與分解品質，更新 [docs/bag_color_classification.md](../../../docs/features/bag_color_classification.md)。
 4. **撰寫 PARS 框架開發故事**：依據 `AGENTS.md` 第 3 條規範，於 `docs/storys/` 建立包含以下 5 項要素的 PARS Markdown 文檔：
    - **Purpose (目的)**: 描述需求或痛點。
    - **Action (行動)**: 具體改進措施與細節。
