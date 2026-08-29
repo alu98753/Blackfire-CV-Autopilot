@@ -5,6 +5,7 @@ import logging
 import threading
 from copy import deepcopy
 from config import GAME_CONFIGS, get_runtime_game_config, normalize_config, refresh_runtime_config
+from utils import get_stage_configs
 from utils.debug_artifacts import write_debug_image
 from states.handlers import (
     NavigationHandler,
@@ -1022,6 +1023,53 @@ class GameStateMachine:
 
         self.config = new_config
 
+    _DERIVED_STAGE_CONFIG_KEYS = frozenset({
+        "stage_name", "stage_entry", "stage_target", "stage_navigation_path",
+    })
+
+    @staticmethod
+    def _apply_tier4_stage_selection(config):
+        """Build template paths from the declarative Tier 4 TOML options."""
+        if not config.get("enable_stage_farming", False):
+            return False
+
+        stage_configs = get_stage_configs()
+        level = str(config.get("tier4_stage_level", "6"))
+        stage = stage_configs.get(level)
+        sub_stage = config.get("tier4_sub_stage", "first")
+        if not stage or sub_stage not in stage["sub_stages"]:
+            logging.warning(
+                "[HotReload] ignored invalid Tier 4 stage selection: level=%s, sub_stage=%s",
+                level,
+                sub_stage,
+            )
+            return False
+
+        target = stage["sub_stages"][sub_stage]
+        entry = stage["entry"]
+        config.update({
+            "stage_name": f"{stage['name']} ({sub_stage})",
+            "stage_entry": entry,
+            "stage_target": target,
+            "stage_navigation_path": [
+                "common/door.png",
+                "common/select_stage.png",
+                entry,
+                "stages/stage_label.png",
+                target,
+            ],
+        })
+        if config.get("type") == "stage":
+            config["navigation_path"] = [
+                "common/door.png",
+                "exit_battle.png",
+                "common/select_stage.png",
+                entry,
+                "stages/stage_label.png",
+                target,
+            ]
+        return True
+
     def enable_runtime_config_refresh(self, mode_key, initial_config):
         """Keep CLI and interactive selections while TOML defaults hot-reload."""
         if mode_key not in GAME_CONFIGS:
@@ -1031,7 +1079,13 @@ class GameStateMachine:
         self.runtime_config_overrides = {
             key: deepcopy(value)
             for key, value in initial_config.items()
-            if base_config.get(key) != value
+            if (
+                key not in self._DERIVED_STAGE_CONFIG_KEYS
+                # Only pure stage mode derives its whole navigation path here.
+                # Mix/daily modes keep their separately selected dungeon path.
+                and not (key == "navigation_path" and initial_config.get("type") == "stage")
+                and base_config.get(key) != value
+            )
         }
 
     def refresh_config_at_safe_point(self):
@@ -1040,6 +1094,7 @@ class GameStateMachine:
             return False
         refreshed_primary = get_runtime_game_config(self.runtime_config_key)
         refreshed_primary.update(deepcopy(self.runtime_config_overrides))
+        self._apply_tier4_stage_selection(refreshed_primary)
         self.primary_config = refreshed_primary
         if self.config and self.config.get("type") == refreshed_primary.get("type"):
             runtime_flags = {

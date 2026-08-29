@@ -51,3 +51,34 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
         self.assertFalse(machine.refresh_config_at_safe_point())
         self.assertEqual(machine.config["bless_mode"], "life")
 
+    @patch("states.state_machine.get_stage_configs")
+    @patch("states.state_machine.get_runtime_game_config")
+    @patch("states.state_machine.refresh_runtime_config", return_value=True)
+    def test_rebuilds_stage_target_from_reloaded_tier4_selection(
+        self, _reload, get_mode, get_stage_configs
+    ):
+        stage_configs = {
+            "6": {
+                "name": "Level 6",
+                "entry": "stages/level6.png",
+                "sub_stages": {
+                    "six": "stages/six_stage.png",
+                    "final": "stages/level6_final.png",
+                },
+            },
+        }
+        initial = {
+            "type": "mix", "enable_stage_farming": True,
+            "tier4_stage_level": 6, "tier4_sub_stage": "final",
+        }
+        changed = {**initial, "tier4_sub_stage": "six"}
+        get_mode.side_effect = [initial, changed]
+        get_stage_configs.return_value = stage_configs
+        machine = self._machine()
+        machine.config = {**initial, "stage_target": "stages/level6_final.png"}
+        machine.primary_config = machine.config.copy()
+        machine.enable_runtime_config_refresh("daily", machine.config)
+
+        self.assertTrue(machine.refresh_config_at_safe_point())
+        self.assertEqual(machine.config["stage_target"], "stages/six_stage.png")
+        self.assertIn("stages/six_stage.png", machine.config["stage_navigation_path"])
