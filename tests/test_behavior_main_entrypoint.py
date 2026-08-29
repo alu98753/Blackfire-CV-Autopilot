@@ -45,9 +45,9 @@ class TestMainEntrypointBehavior(unittest.TestCase):
             "sandbox", {"primary_modes": {"daily": {"tier4_sub_stage": "six"}}}
         )
 
-    @patch("main.persist_mode_updates")
-    @patch("main.get_stage_configs")
-    @patch("main.os.path.exists", return_value=True)
+    @patch("cli.stage_setup.persist_mode_updates")
+    @patch("cli.stage_setup.get_stage_configs")
+    @patch("cli.stage_setup.os.path.exists", return_value=True)
     @patch("builtins.input")
     def test_explicit_stage_cli_selection_skips_terminal_prompts_and_persists_changed_selection(
         self, terminal_input, _exists, get_stage_configs, persist
@@ -67,6 +67,56 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertIn("stages/six_stage.png", config["navigation_path"])
         persist.assert_called_once_with(
             config, {"tier4_stage_level": 6, "tier4_sub_stage": "six"}
+        )
+
+    @patch("cli.dungeon_setup.persist_mode_updates")
+    @patch("builtins.input", side_effect=["7", "113", "1"])
+    def test_greedy_dungeon_deduplicates_targets_and_persists_only_changed_policy(
+        self, _input, persist
+    ):
+        config = {
+            "greedy_dungeon": False, "tier4_dungeon_index": 4,
+            "greedy_allowed_indices": [0, 1], "bless_mode": "combat",
+            "auto_resume_dungeon_on_cd": False,
+        }
+        args = make_args(blessmode="combat")
+
+        main.setup_dungeon_config(config, args)
+
+        self.assertTrue(config["greedy_dungeon"])
+        self.assertEqual(config["greedy_allowed_indices"], [0, 2])
+        self.assertTrue(config["auto_resume_dungeon_on_cd"])
+        persist.assert_called_once_with(
+            config,
+            {
+                "greedy_dungeon": True,
+                "greedy_allowed_indices": [0, 2],
+                "auto_resume_dungeon_on_cd": True,
+            },
+        )
+
+    @patch("cli.dungeon_setup.persist_mode_updates")
+    @patch("builtins.input", side_effect=["2", "3", "2"])
+    def test_dungeon_prompt_updates_blessing_and_cooldown_return_policy(self, _input, persist):
+        config = {
+            "greedy_dungeon": False, "tier4_dungeon_index": 0,
+            "greedy_allowed_indices": [0, 1], "bless_mode": "combat",
+            "auto_resume_dungeon_on_cd": True,
+        }
+        args = make_args(blessmode=None)
+
+        main.setup_dungeon_config(config, args)
+
+        self.assertEqual(config["tier4_dungeon_index"], 1)
+        self.assertEqual(config["bless_mode"], "exp")
+        self.assertFalse(config["auto_resume_dungeon_on_cd"])
+        persist.assert_called_once_with(
+            config,
+            {
+                "tier4_dungeon_index": 1,
+                "bless_mode": "exp",
+                "auto_resume_dungeon_on_cd": False,
+            },
         )
 
     def test_argument_parser_keeps_optional_activity_flags_unset_without_cli_input(self):
