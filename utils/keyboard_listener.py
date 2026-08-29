@@ -37,7 +37,10 @@ class PauseController:
         cadence_timeout_sec: float = 1.5,
         debounce_sec: float = 0.08,
         start_thread: bool = True,
-        on_toggle=None
+        on_toggle=None,
+        is_paused_fn=None,
+        heartbeat_callback=None,
+        heartbeat_interval_sec: float = 5.0,
     ):
         self.capturer = capturer
         self.trigger_mode = trigger_mode
@@ -45,6 +48,9 @@ class PauseController:
         self.cadence_timeout_sec = cadence_timeout_sec
         self.debounce_sec = debounce_sec
         self._on_toggle = on_toggle
+        self._is_paused_fn = is_paused_fn
+        self._heartbeat_callback = heartbeat_callback
+        self._heartbeat_interval_sec = heartbeat_interval_sec
 
         self.key_pressed = False
         self.last_press_time = 0.0
@@ -409,10 +415,26 @@ class PauseController:
     def _background_loop(self):
         """
         獨立背景守護執行緒主迴圈，每 10ms 依當前策略採樣一次按鍵。
+        同時承載背景心跳回呼：嚴格僅於「手動暫停 (is_paused=True)」期間代替主執行緒維持心跳，
+        非暫停期間絕不代發，以確保主執行緒若真卡死時 Supervisor 仍能如實偵測並自動重啟。
         """
+        last_heartbeat_time = 0.0
         while self._running:
             try:
-                self._poll_once()
+                now = time.time()
+                self._poll_once(now)
+                # 只有處於手動暫停狀態時，才由背景執行緒代為維持心跳
+                is_currently_paused = bool(self._is_paused_fn and self._is_paused_fn())
+                if (
+                    self._heartbeat_callback
+                    and is_currently_paused
+                    and (now - last_heartbeat_time >= self._heartbeat_interval_sec)
+                ):
+                    last_heartbeat_time = now
+                    try:
+                        self._heartbeat_callback()
+                    except Exception:
+                        pass
             except Exception as e:
                 logging.debug(f"[PauseController] 背景監聽異常: {e}")
             time.sleep(0.01)

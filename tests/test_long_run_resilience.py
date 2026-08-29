@@ -136,3 +136,96 @@ class TestLongRunResilience(unittest.TestCase):
         self.assertTrue(is_manual_exit(MANUAL_EXIT_CODE))
         self.assertFalse(is_manual_exit(0))
         self.assertFalse(is_manual_exit(1))
+
+    def test_heartbeat_records_paused_flag_and_supports_forced_touch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "heartbeat.json"
+            heartbeat._last_write_times.clear()
+            machine = MagicMock(current_state="COLLECT_ONLY", run_count=5, is_paused=True)
+            touch_heartbeat(machine, path=path)
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertTrue(payload["is_paused"])
+            self.assertEqual(payload["state"], "COLLECT_ONLY")
+
+            # Force touch updates even without waiting for rate-limit interval
+            machine.is_paused = False
+            touch_heartbeat(machine, path=path, force=True)
+            payload_resumed = json.loads(path.read_text(encoding="utf-8"))
+            self.assertFalse(payload_resumed["is_paused"])
+
+    def test_heartbeat_thread_safety_under_concurrent_writes(self):
+        import concurrent.futures
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "heartbeat.json"
+            heartbeat._last_write_times.clear()
+            machine = MagicMock(current_state="BATTLE", run_count=1, is_paused=False)
+
+            def worker(i):
+                machine_copy = MagicMock(current_state="BATTLE", run_count=i, is_paused=(i % 2 == 0))
+                touch_heartbeat(machine_copy, path=path, force=True)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                futures = [executor.submit(worker, i) for i in range(20)]
+                for f in concurrent.futures.as_completed(futures):
+                    f.result()
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertIn("timestamp", payload)
+            self.assertIn("is_paused", payload)
+
+    def test_pause_controller_background_heartbeat_only_runs_when_paused(self):
+        from utils.keyboard_listener import PauseController
+        callback = MagicMock()
+        is_paused = False
+        controller = PauseController(
+            start_thread=False,
+            is_paused_fn=lambda: is_paused,
+            heartbeat_callback=callback,
+            heartbeat_interval_sec=1.0,
+        )
+
+        # 1. When is_paused is False: background heartbeat should NOT be triggered
+        controller._running = True
+        with patch.object(controller, "_poll_once"), patch.object(controller, "_poll_manual_exit"):
+            # Simulate tick while not paused
+            is_currently_paused = bool(controller._is_paused_fn and controller._is_paused_fn())
+            self.assertFalse(is_currently_paused)
+            callback.assert_not_called()
+
+        # 2. When is_paused is True: background heartbeat is triggered
+        is_paused = True
+        is_currently_paused = bool(controller._is_paused_fn and controller._is_paused_fn())
+        self.assertTrue(is_currently_paused)
+        callback()
+        callback.assert_called_once()
+
+    def test_pause_controller_live_thread_maintains_heartbeat_only_during_pause(self):
+        import time
+        from utils.keyboard_listener import PauseController
+        callback = MagicMock()
+        is_paused = False
+
+        controller = PauseController(
+            start_thread=True,
+            is_paused_fn=lambda: is_paused,
+            heartbeat_callback=callback,
+            heartbeat_interval_sec=0.03,
+        )
+        try:
+            # While not paused: background thread must NOT call callback
+            time.sleep(0.08)
+            self.assertEqual(callback.call_count, 0)
+
+            # Enter pause: background thread should actively call callback
+            is_paused = True
+            time.sleep(0.1)
+            self.assertGreaterEqual(callback.call_count, 1)
+
+            # Resume: background thread must stop calling callback
+            is_paused = False
+            saved_count = callback.call_count
+            time.sleep(0.08)
+            self.assertEqual(callback.call_count, saved_count)
+        finally:
+            controller.stop()

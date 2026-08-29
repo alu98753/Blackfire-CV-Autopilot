@@ -15,6 +15,7 @@ def run_main_loop(state_machine, interval):
         def on_pause_toggle():
             if state_machine.is_paused:
                 pause_duration = state_machine.resume()
+                touch_heartbeat(state_machine, force=True)
                 state_machine.prev_mouse_pos = pyautogui.position()
                 print("\n" + "=" * 60)
                 print(f" ▶️ [RESUMED] 腳本已恢復掛機 (已補償內部防卡死計時器: {pause_duration:.1f} 秒)")
@@ -22,6 +23,7 @@ def run_main_loop(state_machine, interval):
                 print("=" * 60 + "\n", flush=True)
             else:
                 state_machine.pause()
+                touch_heartbeat(state_machine, force=True)
                 print("\n" + "=" * 60)
                 print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
                 print(f" 👉 在終端機或遊戲視窗 按 [Ctrl + Space] 隨時暫停/繼續 即可恢復自動掛機...")
@@ -29,7 +31,9 @@ def run_main_loop(state_machine, interval):
 
         pause_controller = PauseController(
             capturer=getattr(state_machine, "capturer", None),
-            on_toggle=on_pause_toggle
+            on_toggle=on_pause_toggle,
+            is_paused_fn=lambda: getattr(state_machine, "is_paused", False),
+            heartbeat_callback=lambda: touch_heartbeat(state_machine),
         )
         
         while True:
