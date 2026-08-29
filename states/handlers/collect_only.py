@@ -48,6 +48,10 @@ class CollectOnlyHandler(BaseStateHandler):
             retreat_hours = self.machine.config.get("stamina_retreat_duration", 4.0)
             retreat_seconds = float(retreat_hours) * 3600.0
             elapsed = time.time() - self.machine.stamina_retreat_start_time
+            just_entered_collect_only = (
+                getattr(self.machine, "current_state", None) == self.machine.STATE_COLLECT_ONLY
+                and (time.time() - getattr(self.machine, "last_state_change", 0.0)) < 0.5
+            )
             
             # 每隔一段時間輸出退避剩餘時間
             now = time.time()
@@ -80,16 +84,14 @@ class CollectOnlyHandler(BaseStateHandler):
 
             # 檢查是否啟用【體力退避期間地下城冷卻結束自動復歸】
             auto_resume = self.machine.original_config.get("auto_resume_dungeon_on_cd", False)
-            if auto_resume and not self.machine.need_diamond_collection:
-                saved_cfg = self.machine.config
-                self.machine.config = self.machine.original_config
+            if auto_resume and not just_entered_collect_only and not self.machine.need_diamond_collection:
                 dungeon_ready = False
                 try:
-                    dungeon_ready = self.machine.has_available_dungeon()
+                    dungeon_ready = self.machine.has_available_dungeon(
+                        target_config=self.machine.original_config
+                    )
                 except Exception:
                     dungeon_ready = False
-                finally:
-                    self.machine.config = saved_cfg
 
                 if dungeon_ready:
                     # 若又有體力領取任務，先領一次體力/麵包
@@ -186,12 +188,13 @@ class CollectOnlyHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return
 
-        # 3.5.4 檢查每日懸賞任務 (enable_quests)
-        if getattr(self.machine, "quest_scheduler", None):
-            scheduled_node = self.machine.check_and_advance_quest_target()
-            if scheduled_node:
-                logging.info("📋 [定時待機喚醒] 偵測到懸賞任務目標就緒 ➔ 喚醒切換至懸賞目標！")
-                return
+        # 3.5.4 每日懸賞任務解凍時，只喚醒至 NAVIGATING。
+        # 任務 config 的套用統一由 NAVIGATING 的 pending-preemption 消費點處理，
+        # 避免仍停在 COLLECT_ONLY 時反覆 set_config() 而沒有真正開始導航。
+        if self.machine.poll_daily_quest_preemption():
+            logging.info("📋 [定時待機喚醒] 偵測到懸賞任務目標就緒，切換至導航安全點。")
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return
 
         # 4. 如果不需要任何領取與活動，執行待機/返回邏輯
         now = time.time()

@@ -191,7 +191,7 @@ navigation_path = []
 lobby_start_btn = "stages/start.png"
 
 [subflow_configs.blood_altar]
-enabled = false # 設為 false 即會完全略過血祭壇！ true
+enabled = true
 name = "血之祭壇獻祭"
 type = "blood_altar"
 building_btn = "town_building/Blood_Altar/Blood_Altar.png"

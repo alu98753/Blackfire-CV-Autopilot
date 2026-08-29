@@ -89,6 +89,25 @@ class TestDailyQuestPreemptionBehavior(unittest.TestCase):
         machine.check_and_advance_quest_target.assert_called_once_with()
         self.assertFalse(machine.pending_daily_quest_preemption)
 
+    def test_collect_only_wakes_ready_quest_through_navigation_once(self):
+        """A ready daily quest must leave idle mode via the shared navigation boundary."""
+        machine = self._tier4_machine()
+        task = self.mapper.parse_quest("史萊姆王的毀滅")
+        scheduler = QuestScheduler()
+        scheduler.add_task(task)
+        machine.attach_quest_scheduler(scheduler)
+        machine.current_state = machine.STATE_COLLECT_ONLY
+        machine.matcher.match.return_value = (None, 0.0)
+        screen_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        machine.handlers[machine.STATE_COLLECT_ONLY].handle(screen_img, rect)
+
+        self.assertEqual(machine.current_state, machine.STATE_NAVIGATING)
+        self.assertFalse(machine.pending_daily_quest_preemption)
+        self.assertFalse(machine.config.get("is_tier4_fallback", False))
+        self.assertTrue(machine.config["enable_dungeon"])
+
 
 if __name__ == "__main__":
     unittest.main()
