@@ -1032,15 +1032,18 @@ class GameStateMachine:
         logging.info("[HotReload] refreshed running primary mode: %s", self.runtime_config_key)
         return True
 
-    def apply_mix_fallback_config(self):
-        """
-        當懸賞任務全數完成時，自動載入並切換至退守 mix 模式 (地下城: 冰雪洞窟, 關卡: 第六關第一小關)。
+    def apply_tier4_fallback_config(self):
+        """Restore the user's configured Tier 4 fallback baseline.
+
+        ``primary_config`` is the complete configuration chosen at startup.
+        Daily quests may temporarily enable their required activity; this
+        restores the baseline and marks it as Tier 4 for safe preemption.
         """
         if getattr(self, "primary_config", None):
             fallback_cfg = self.primary_config.copy()
             fallback_cfg["is_tier4_fallback"] = True
             self.set_config(fallback_cfg)
-            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至退守混合模式: {self.config.get('name', 'mix')} (關卡: {self.config.get('stage_name', 'default')})")
+            logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
         else:
             from config import PRIMARY_MODES
             mix_config = PRIMARY_MODES["mix"].copy()
@@ -1052,7 +1055,7 @@ class GameStateMachine:
 
             self.set_config(mix_config)
             self.primary_config = mix_config.copy()
-            logging.info(f"🔄 [GameStateMachine] 已自動將配置切換至預設退守混合模式: {mix_config['name']} (地下城: 冰雪洞窟, 關卡: 第六關第一小關)")
+            logging.info(f"🔄 [GameStateMachine] 未找到使用者基準配置，已切換至預設 Tier 4 退守配置: {mix_config['name']}")
 
 
 
@@ -1080,7 +1083,9 @@ class GameStateMachine:
                     self.daily_manager.remove_accepted_quest(target_task.quest_title)
                 return self.check_and_advance_quest_target()
 
-            base_cfg = getattr(self, "config", None) or getattr(self, "primary_config", None)
+            # Each quest starts from the startup baseline, never from the
+            # preceding quest's temporary activity switches.
+            base_cfg = getattr(self, "primary_config", None) or getattr(self, "config", None)
             quest_cfg = target_task.to_config_dict(base_config=base_cfg)
             if hasattr(self, "backend_mode"):
                 quest_cfg["backend_mode"] = self.backend_mode
@@ -1434,7 +1439,7 @@ class GameStateMachine:
             if getattr(self, "stamina_retreat_start_time", None) is not None:
                 if cfg.get("enable_dungeon", True):
                     logging.info("🔄 [Activity Scheduler] 處於體力退避冷卻復歸期間 ➔ 嘗試執行退守地下城！")
-                    self.apply_mix_fallback_config()
+                    self.apply_tier4_fallback_config()
                     return True
                 else:
                     return False
@@ -1461,7 +1466,7 @@ class GameStateMachine:
                 if self.quest_scheduler.is_all_completed():
                     logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器並切換至退守模式")
                     self.quest_scheduler = None
-                    self.apply_mix_fallback_config()
+                    self.apply_tier4_fallback_config()
                     return False
                 else:
                     scheduled_node = self.check_and_advance_quest_target()
@@ -1472,7 +1477,7 @@ class GameStateMachine:
                     # screen as soon as any Daily quest becomes runnable.
                     if self.quest_scheduler.get_pending_tasks():
                         logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
-                        self.apply_mix_fallback_config()
+                        self.apply_tier4_fallback_config()
                         return False
 
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
@@ -1489,7 +1494,7 @@ class GameStateMachine:
             is_stage_farming = cfg.get("enable_stage_farming", default_stage_farm)
 
             if is_stage_farming:
-                self.apply_mix_fallback_config()
+                self.apply_tier4_fallback_config()
                 return False
 
             # 6. 兜底待機：所有啟用活動均在冷卻中，且未開啟普通關卡打怪 ➔ 切換至 COLLECT_ONLY 待機！

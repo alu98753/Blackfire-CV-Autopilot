@@ -21,7 +21,7 @@
 2. **懸賞任務高優先度搶佔與當前任務批次鎖定**：
    * 在 [utils/quest_scheduler.py](file:///e:/Side_Project/BlackfireCrusade_tool/utils/quest_scheduler.py) 新增 `find_task_node_by_config()` 與 `has_higher_priority_task_ready()`。
    * 傳入 `current_config` 至 `is_current_task_batch_completed()`，100% 精確鎖定「當前正在打的任務」計算 4/8/10 滿批次離場條件。
-   * 在 [state_machine.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py) 的 `apply_mix_fallback_config()` 標記 `is_tier4_fallback = True`，確保當處於 Tier 4 退守模式且 Tier 3 懸賞冷卻結束時，在 [ResultHandler.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/result.py) 能立即觸發離場搶佔。
+   * 在 [state_machine.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py) 的 `apply_tier4_fallback_config()` 標記 `is_tier4_fallback = True`，確保當處於 Tier 4 退守模式且 Tier 3 懸賞冷卻結束時，在 [ResultHandler.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/result.py) 能立即觸發離場搶佔。
 3. **血之祭壇 5-Phase 解耦與 3 幀彈窗確信**：
    * 將 [blood_altar.py](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/blood_altar.py) 重構為單向狀態機 Pipeline (`INIT` ➔ `ENTERED_BUILDING` ➔ `RECEIVE_TAB_OPEN` ➔ `HANDLING_RECEIVE_POPUPS` ➔ `SACRIFICE_MENU_OPEN`)。
    * 引入連續 3 幀無彈窗確信機制，徹底杜絕領水與獻祭彈窗殘留死鎖。

@@ -477,6 +477,43 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(sm.config["keep_colors"], ["purple", "orange_yellow", "red"])
         self.assertEqual(sm.config["disassemble_colors"], ["gray_or_empty", "green", "blue"])
 
+    def test_quest_config_uses_primary_baseline_not_previous_quest_switches(self):
+        """Only the selected quest activity may override the user baseline."""
+        from unittest.mock import MagicMock
+        from states.state_machine import GameStateMachine
+
+        primary_cfg = {
+            "name": "Daily baseline",
+            "type": "mix",
+            "enable_stage_farming": False,
+            "enable_dungeon": False,
+            "enable_lord_boss": False,
+        }
+        stage_node = self.mapper.parse_quest("擊敗冰元素")
+        dungeon_node = self.mapper.parse_quest("史萊姆王的毀滅")
+        self.assertIsNotNone(stage_node)
+        self.assertIsNotNone(dungeon_node)
+
+        dungeon_machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        dungeon_machine.primary_config = primary_cfg.copy()
+        dungeon_machine.config = stage_node.to_config_dict(base_config=primary_cfg)
+        dungeon_scheduler = QuestScheduler()
+        dungeon_scheduler.add_task(dungeon_node)
+        dungeon_machine.attach_quest_scheduler(dungeon_scheduler)
+        dungeon_machine.check_and_advance_quest_target()
+        self.assertTrue(dungeon_machine.config["enable_dungeon"])
+        self.assertFalse(dungeon_machine.config["enable_stage_farming"])
+
+        stage_machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        stage_machine.primary_config = primary_cfg.copy()
+        stage_machine.config = dungeon_node.to_config_dict(base_config=primary_cfg)
+        stage_scheduler = QuestScheduler()
+        stage_scheduler.add_task(stage_node)
+        stage_machine.attach_quest_scheduler(stage_scheduler)
+        stage_machine.check_and_advance_quest_target()
+        self.assertTrue(stage_machine.config["enable_stage_farming"])
+        self.assertFalse(stage_machine.config["enable_dungeon"])
+
     def test_update_bulletin_board_quests_filters_unknown_and_ignored(self):
         """
         [未知/忽略任務隔離測試] 驗證當告示牌掃描到未知任務 (完全未知任務_XYZ) 與忽略任務 (獵金之蟲) 時，
@@ -615,7 +652,6 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
 
 

@@ -126,7 +126,7 @@ class TestDeadlockRiskPrevention(unittest.TestCase):
             b["completed_today"] = True
 
         scheduled = self.state_machine.evaluate_and_schedule_daily_pipeline()
-        self.assertFalse(scheduled) # apply_mix_fallback_config returns False
+        self.assertFalse(scheduled) # apply_tier4_fallback_config returns False
         self.assertIsNone(self.state_machine.quest_scheduler)
         self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
 

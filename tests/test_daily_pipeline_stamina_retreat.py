@@ -71,7 +71,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         # 2. 懸賞全清後，再次觸發調度 ➔ 斷言退守 Tier 4 Mix 指定配置
         node1.completed_count = node1.target_count
         scheduled_fallback = self.state_machine.evaluate_and_schedule_daily_pipeline()
-        self.assertFalse(scheduled_fallback) # apply_mix_fallback_config returns False
+        self.assertFalse(scheduled_fallback) # apply_tier4_fallback_config returns False
         self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
 
     def test_dungeon_resume_executes_designated_tier4_fallback_dungeon_during_retreat(self):
