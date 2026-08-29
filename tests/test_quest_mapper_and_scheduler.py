@@ -487,7 +487,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
             "type": "mix",
             "enable_stage_farming": False,
             "enable_dungeon": False,
-            "enable_lord_boss": False,
+            "lord_boss_targets": [],
         }
         stage_node = self.mapper.parse_quest("擊敗冰元素")
         dungeon_node = self.mapper.parse_quest("史萊姆王的毀滅")
@@ -667,13 +667,13 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         base_cfg_no_farm = {
             "enable_stage_farming": False,
             "enable_dungeon": False,
-            "enable_lord_boss": False,
+            "lord_boss_targets": ["lord_spider"],
             "keep_colors": ["purple", "orange"],
             "backend_mode": True,
         }
         stage_cfg_with_base = node_ice.to_config_dict(base_config=base_cfg_no_farm)
         self.assertTrue(stage_cfg_with_base.get("enable_stage_farming", False), "stage 任務節點不得被 base_config 覆蓋為 False")
-        self.assertFalse(stage_cfg_with_base.get("enable_lord_boss", True), "非 stage 相關的全域開關應正常繼承")
+        self.assertEqual(stage_cfg_with_base.get("lord_boss_targets"), ["lord_spider"], "Boss 選擇清單應由 base_config 繼承")
         self.assertEqual(stage_cfg_with_base.get("keep_colors"), ["purple", "orange"], "使用者偏好設定應正常繼承")
         self.assertTrue(stage_cfg_with_base.get("backend_mode"), "backend_mode 應正常繼承")
 
@@ -691,4 +691,3 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
