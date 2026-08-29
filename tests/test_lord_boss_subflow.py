@@ -250,7 +250,12 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         """測試 (步驟3死角專用)：當上一幀已選取 target_boss，第2幀在步驟 3 觸發 start.png 且 2.5 秒未進場時，自動點擊 quit 離場並更新 DailyManager"""
         mock_exists.return_value = True
 
+        from config import SUBFLOW_CONFIGS
+        for flow in SUBFLOW_CONFIGS:
+            self.daily_manager.record_subflow_completed(flow)
+
         stage_cfg = GAME_CONFIGS["stage"].copy()
+        stage_cfg["enable_lord_boss"] = False
         self.state_machine.primary_config = stage_cfg
         self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
         self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS

@@ -8,7 +8,7 @@ from utils.quest_scheduler import QuestScheduler
 from utils.daily_manager import DailyManager, DEFAULT_DAILY_STATUS
 from states.state_machine import GameStateMachine
 
-from config import QUEST_TARGET_COUNT
+from config import QUEST_TARGET_COUNT, PRIMARY_MODES
 
 class TestQuestStateMachineIntegration(unittest.TestCase):
     def setUp(self):
@@ -231,19 +231,26 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         # 2. 地下城規則對照
         # 完成任何地下城 -> ignored (不執行)
         self.assertEqual(mapper.parse_quest("完成任何地下城").mode_type, "ignored")
-        # 冰雪洞窟的暴君 -> dungeon 4
-        self.assertEqual(mapper.parse_quest("冰雪洞窟的暴君").dungeon_index, 4)
+        
+        entries = PRIMARY_MODES["dungeon"]["dungeon_entries"]
+        slime_idx = entries.index("dungeons/Slime_entry.png")
+        forest_idx = entries.index("dungeons/Forest_entry.png")
+        ruins_idx = entries.index("dungeons/Ruins_entry.png")
+        ice_idx = entries.index("dungeons/Ice_entry.png")
 
-        # 史萊姆王 -> dungeon 0
-        self.assertEqual(mapper.parse_quest("史萊姆王的毀滅").dungeon_index, 0)
-        # 史萊姆 -> dungeon 0
-        self.assertEqual(mapper.parse_quest("清除史萊姆").dungeon_index, 0)
-        # 破除森林的枷鎖 -> dungeon 2
-        self.assertEqual(mapper.parse_quest("破除森林的枷鎖").dungeon_index, 2)
-        # 樹人 -> dungeon 2
-        self.assertEqual(mapper.parse_quest("清除樹人").dungeon_index, 2)
-        # 骷髏 -> dungeon 3 (神秘遺跡)
-        self.assertEqual(mapper.parse_quest("清除骷髏").dungeon_index, 3)
+        # 冰雪洞窟的暴君 -> 冰雪洞窟
+        self.assertEqual(mapper.parse_quest("冰雪洞窟的暴君").dungeon_index, ice_idx)
+
+        # 史萊姆王 -> 史萊姆
+        self.assertEqual(mapper.parse_quest("史萊姆王的毀滅").dungeon_index, slime_idx)
+        # 史萊姆 -> 史萊姆
+        self.assertEqual(mapper.parse_quest("清除史萊姆").dungeon_index, slime_idx)
+        # 破除森林的枷鎖 -> 森林迷宮
+        self.assertEqual(mapper.parse_quest("破除森林的枷鎖").dungeon_index, forest_idx)
+        # 樹人 -> 森林迷宮
+        self.assertEqual(mapper.parse_quest("清除樹人").dungeon_index, forest_idx)
+        # 骷髏 -> 神秘遺跡
+        self.assertEqual(mapper.parse_quest("清除骷髏").dungeon_index, ruins_idx)
 
         # 3. 不要做 / 顯式跳過項目 -> 回傳 mode_type == "ignored"，不上報 unknown_quests
         node_ignored1 = mapper.parse_quest("敵人剿滅")

@@ -1507,12 +1507,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         img = np.zeros((800, 1000, 3), dtype=np.uint8)
         self.mock_capturer.capture.return_value = img
         
-        # mock cv2.matchTemplate 使得前 4 次 (Slime, Ghost, Forest, Ruins) 均返回 0.0,
-        # 第 5 次 (locked_entry) 返回 0.95 (匹配成功)
+        # mock cv2.matchTemplate 使得前 N 次 (dungeon_entries) 均返回 0.0,
+        # 第 N+1 次 (locked_entry) 返回 0.95 (匹配成功)
+        entry_count = len(self.state_machine.config.get("dungeon_entries", []))
         call_count = 0
         def mock_matchTemplate(img_arg, templ, method):
             nonlocal call_count
-            val = 0.95 if call_count == 5 else 0.0
+            val = 0.95 if call_count == entry_count else 0.0
             call_count += 1
             return np.array([[val]], dtype=np.float32)
             
@@ -1556,7 +1557,9 @@ class TestBehavioralScenarios(unittest.TestCase):
         """
         # 初始化配置為地下城模式
         self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
-        self.state_machine.current_dungeon_index = 4  # 冰雪洞窟
+        target_idx = self.state_machine.config["dungeon_entries"].index("dungeons/Ice_entry.png")
+        expected_cd = self.state_machine.config.get("cooldown_map", {}).get(target_idx, 900.0)
+        self.state_machine.current_dungeon_index = target_idx  # 冰雪洞窟
         self.state_machine.dungeon_defeat_count = 0
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
@@ -1600,10 +1603,10 @@ class TestBehavioralScenarios(unittest.TestCase):
         # 第二次戰敗：這次因為 count=1 >= 1，會點選放棄與確認退出
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
-        # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了 30 分鐘 (1800 秒) 的冷卻
+        # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了對應的冷卻
         self.assertEqual(self.state_machine.dungeon_defeat_count, 0)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
-        self.assertGreater(self.state_machine.dungeon_cooldowns[4], time.time() + 1790.0)
+        self.assertGreater(self.state_machine.dungeon_cooldowns[target_idx], time.time() + expected_cd - 10.0)
 
     @patch('os.path.exists')
     def test_stage_defeat_loop_protection(self, mock_exists):
@@ -1731,12 +1734,13 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # --- 階段 3：進入地下城選關介面，看到 Ice_entry.png 選擇並點擊入場 ---
         is_dungeon_page_active[0] = True
+        ice_idx = config["dungeon_entries"].index("dungeons/Ice_entry.png")
         self.mock_matcher.match.side_effect = lambda img, name, **kw: (
             ((1400, 300), 0.9) if name == "dungeons/Ice_entry.png" else (None, 0.0)
         )
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
-        self.assertEqual(self.state_machine.current_dungeon_index, 4)
+        self.assertEqual(self.state_machine.current_dungeon_index, ice_idx)
         self.mock_mouse.click.assert_called_with(1650, 550)
         
         # --- 階段 4：彈出 dungeons/dungeon_fight.png，點擊探險進入戰鬥 ---
@@ -1754,7 +1758,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         
         # --- 階段 5：戰鬥結束且冰雪洞窟進入冷卻 (300 秒) ➔ 退回大廳尋路 ---
         now = time.time()
-        self.state_machine.dungeon_cooldowns[4] = now + 300.0
+        self.state_machine.dungeon_cooldowns[ice_idx] = now + 300.0
         self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
         
         # 斷言：目前冰雪洞窟冷卻中，has_available_dungeon 必須為 False！
@@ -1768,7 +1772,7 @@ class TestBehavioralScenarios(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(530, 750)
         
         # --- 階段 7：快進時間 (過 301 秒)，冰雪洞窟冷卻到期！ ---
-        self.state_machine.dungeon_cooldowns[4] = time.time() - 1.0  # 冷卻結束
+        self.state_machine.dungeon_cooldowns[ice_idx] = time.time() - 1.0  # 冷卻結束
         
         # 斷言：冰雪洞窟冷卻結束，has_available_dungeon 必須變回 True！
         self.assertTrue(self.state_machine.has_available_dungeon())

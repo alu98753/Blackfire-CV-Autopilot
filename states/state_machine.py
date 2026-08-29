@@ -854,7 +854,7 @@ class GameStateMachine:
         is_greedy = cfg.get("greedy_dungeon", False)
 
         explicit_target_idx = cfg.get("dungeon_index")
-        if explicit_target_idx is None:
+        if explicit_target_idx is None and not is_greedy:
             entry_templates = cfg.get("dungeon_entries") or []
             nav_path = cfg.get("navigation_path") or []
             for idx, temp_name in enumerate(entry_templates):
@@ -862,7 +862,7 @@ class GameStateMachine:
                     explicit_target_idx = idx
                     break
 
-        if target_config is not None and explicit_target_idx is not None:
+        if target_config is not None and explicit_target_idx is not None and not is_greedy:
             return now >= self.dungeon_cooldowns.get(explicit_target_idx, 0.0)
         
         if is_greedy:

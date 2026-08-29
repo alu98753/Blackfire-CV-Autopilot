@@ -930,7 +930,8 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.config["greedy_dungeon"] = True
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.dungeon_cooldowns = {1: float("inf"), 3: float("inf"), 4: float("inf")}
+        num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
+        self.state_machine.dungeon_cooldowns = {i: float("inf") for i in range(num_dungeons) if i not in (0, 2)}
         
         import numpy as np
         self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -1456,11 +1457,12 @@ class TestStateMachineLogic(unittest.TestCase):
         # 模擬 cv2.imread 返回 dummy 影像
         mock_imread.return_value = np.zeros((10, 10, 3), dtype=np.uint8)
         
-        # 模擬 cv2.minMaxLoc：第 5 次比對（locked_entry）回傳高信心度，其餘回傳低信心度
+        # 模擬 cv2.minMaxLoc：最後一次比對（locked_entry）回傳高信心度，其餘回傳低信心度
+        locked_entry_call_idx = len(self.state_machine.config.get("dungeon_entries", [])) + 1
         minMaxLoc_calls = [0]
         def mock_minMaxLoc_impl(res):
             minMaxLoc_calls[0] += 1
-            if minMaxLoc_calls[0] == 6:
+            if minMaxLoc_calls[0] == locked_entry_call_idx:
                 return (0.0, 0.95, (0, 0), (0, 0))
             return (0.0, 0.1, (0, 0), (0, 0))
         mock_minMaxLoc.side_effect = mock_minMaxLoc_impl
@@ -1812,7 +1814,10 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.need_bread_collection = False
         
         # 模擬地下城冷卻已結束 (dungeon 0 可刷)
-        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        num_dungeons = len(orig_config.get("dungeon_entries", []))
+        self.state_machine.dungeon_cooldowns = {i: 9999.0 for i in range(num_dungeons)}
+        self.state_machine.dungeon_cooldowns[0] = 0.0
+        self.state_machine.last_state_change = time.time() - 1.0
         self.mock_matcher.match.return_value = (None, 0.0)
         
         self.state_machine.step()
@@ -1847,7 +1852,10 @@ class TestStateMachineLogic(unittest.TestCase):
         self.state_machine.need_bread_collection = False
         
         # 階段 1：地下城 0 冷卻結束 (0.0) ➔ step() 觸發復歸切回地下城
-        self.state_machine.dungeon_cooldowns = {0: 0.0, 1: 9999.0, 2: 9999.0, 3: 9999.0, 4: 9999.0}
+        num_dungeons = len(orig_config.get("dungeon_entries", []))
+        self.state_machine.dungeon_cooldowns = {i: 9999.0 for i in range(num_dungeons)}
+        self.state_machine.dungeon_cooldowns[0] = 0.0
+        self.state_machine.last_state_change = time.time() - 1.0
         self.mock_matcher.match.return_value = (None, 0.0)
         
         self.state_machine.step()
@@ -1858,7 +1866,7 @@ class TestStateMachineLogic(unittest.TestCase):
         # 階段 2：切回地下城後進到 NAVIGATING 狀態，但地下城 0 又全數進入冷卻 (t0 + 1800)
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         now = time.time()
-        self.state_machine.dungeon_cooldowns = {0: now + 300, 1: now + 300, 2: now + 300, 3: now + 300, 4: now + 300}
+        self.state_machine.dungeon_cooldowns = {i: now + 300 for i in range(num_dungeons)}
         self.mock_matcher.match.return_value = (None, 0.0)
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         
@@ -2109,7 +2117,8 @@ class TestStateMachineLogic(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(100, 100)
 
         # 情況 2: 所有地下城皆在冷卻中，在大廳匹配到 common/select_stage.png
-        self.state_machine.dungeon_cooldowns = {0: time.time() + 1800, 1: time.time() + 1800, 2: time.time() + 1800, 3: time.time() + 1800, 4: time.time() + 1800}
+        num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
+        self.state_machine.dungeon_cooldowns = {i: time.time() + 1800 for i in range(num_dungeons)}
         def mock_match_2(img, name, threshold=0.7, **kwargs):
             if name == "common/select_stage.png":
                 return (200, 200), 0.85
@@ -2136,7 +2145,8 @@ class TestStateMachineLogic(unittest.TestCase):
             "stages/level1_final.png"
         ]
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.dungeon_cooldowns = {0: time.time() + 1800, 1: time.time() + 1800, 2: time.time() + 1800, 3: time.time() + 1800, 4: time.time() + 1800}
+        num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
+        self.state_machine.dungeon_cooldowns = {i: time.time() + 1800 for i in range(num_dungeons)}
         mock_exists.return_value = True
 
         # 模擬在活動大廳匹配到 common/select_stage.png
