@@ -4,8 +4,8 @@
 使用說明：
 1. 您可以在下方【微調參數區】修改數值 (如 QUIT_DX, QUIT_DY)。
 2. 在終端機執行：
-   .\.venv\Scripts\python tools\calibrate_bag_cleaning_grid.py
-3. 打開 e:\Side_Project\BlackfireCrusade_tool\scratch\bag_cleaning_calibration_result.png
+   .\.venv\Scripts\python scripts\calibrate_bag_cleaning_grid.py
+3. 打開 scratch/bag_cleaning_calibration_result.png
    觀察紅/黃/紫框與黃色打勾區是否完美對齊您的 134 x 139.5 裝備格子。
 4. 滿意後，將此組參數同步更新至 states/handlers/bag_cleaning.py 即可！
 """
@@ -30,8 +30,8 @@ STEP_Y = CELL_H
 ROWS = 3
 COLS = 6
 
-# 4. 指定用於校準的輸入截圖檔名 (專案根目錄或 templates/debag.png)
-INPUT_IMAGE = r"tools/debag.png"
+# 4. 指定用於校準的輸入截圖檔名 (預設為 debag.png 或自訂截圖)
+INPUT_IMAGE = r"debag.png"
 # ==================================================
 
 import os

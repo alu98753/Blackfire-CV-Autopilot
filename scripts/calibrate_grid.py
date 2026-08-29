@@ -4,8 +4,8 @@
 使用說明：
 1. 您可以直接修改下方【微調參數區】的數值。
 2. 在終端機執行：
-   .\.venv\Scripts\python tools\calibrate_grid.py
-3. 打開 e:\\Side_Project\\BlackfireCrusade_tool\\scratch\\grid_calibration_result.png
+   .\.venv\Scripts\python scripts\calibrate_grid.py
+3. 打開 scratch/grid_calibration_result.png
    觀察綠框（左側）、藍框（右側）以及紅點是否完美對齊您的格子。
 4. 反覆調整數值直到滿意，再把這組數字填回 logic 代碼即可！
 """

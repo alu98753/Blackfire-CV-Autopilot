@@ -159,7 +159,7 @@ def main():
         success = mouse.click(center_x, center_y, offset_range=(0, 0))
         logging.info(f"✨ 點擊發送結果: {'成功 🟢' if success else '失敗 🔴'}")
     else:
-        logging.info(f"💡 提示：若要測試點擊，請加上 `--click` 參數 (例如: python tools/test_single_click.py -t {args.template} --click)")
+        logging.info(f"💡 提示：若要測試點擊，請加上 `--click` 參數 (例如: python scripts/test_single_click.py -t {args.template} --click)")
 
 if __name__ == "__main__":
     main()

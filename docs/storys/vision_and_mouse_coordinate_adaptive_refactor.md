@@ -6,7 +6,7 @@
   - 滑鼠控制：`actions/mouse.py` ([MouseController](../../actions/mouse.py))
   - 視覺匹配：`vision/matcher.py` ([TemplateMatcher](../../vision/matcher.py))
   - 主程式排程：`main.py` ([main.py](../../main.py))
-  - 診斷工具：`tools/test_single_click.py` ([test_single_click.py](../../tools/test_single_click.py))
+  - 診斷工具：`scripts/test_single_click.py` ([test_single_click.py](../../scripts/test_single_click.py))
 
 ---
 
@@ -73,7 +73,7 @@ graph LR
 
 ### 2.3 建立即時單圖測試與全場景診斷套件
 
-新增獨立工具腳本 `tools/test_single_click.py`，具備：
+新增獨立工具腳本 `scripts/test_single_click.py`，具備：
 - **3 秒安全倒數**：便於開發者切換視窗與觀察。
 - **多尺度梯度掃描**：對指定模板自動測試 `[0.8, 0.85, 0.9, 1.0, 1.1, 1.25]` 各 Scale 下的相似度。
 - **真實點擊驗證 (`--click`)**：支援前台/後台模式直接對比對目標發射點擊。

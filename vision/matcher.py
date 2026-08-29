@@ -96,13 +96,13 @@ class TemplateMatcher:
             if not passed:
                 best_raw = max(evaluated, key=lambda c: c[2])
                 try:
-                    from tools.analyze_template_brightness import save_diagnostic_images
+                    from scripts.analyze_template_brightness import save_diagnostic_images
                     save_diagnostic_images(
                         screen_gray, template_gray, (best_raw[0], best_raw[1]),
                         temp_w, temp_h, best_raw[2], best_raw[3], template_name
                     )
                 except Exception as e:
-                    logging.error(f"無法調用 tools/save_diagnostic_images: {e}")
+                    logging.error(f"無法調用 scripts/save_diagnostic_images: {e}")
                 logging.warning(
                     f"⚠️ 模板 '{template_name}' 匹配到 {len(candidates)} 個候選點，"
                     f"但所有點的亮度比例均低於門檻 {brightness_threshold:.2f}，判定為背景暗區按鈕，予以過濾！"

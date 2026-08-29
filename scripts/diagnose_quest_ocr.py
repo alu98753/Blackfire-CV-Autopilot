@@ -27,20 +27,16 @@ def diagnose_quest_ocr():
     
     # 1. 加入 Daily_task 樣品圖片
     sample_dir = os.path.join("templates", "town_building", "bulletin_board", "Daily_task")
-    sample_files.extend(glob.glob(os.path.join(sample_dir, "*.png")))
+    if os.path.exists(sample_dir):
+        sample_files.extend(glob.glob(os.path.join(sample_dir, "*.png")))
     
-    # 2. 加入使用者指定的 TASK_AFTER_TEST.png
-    task_after_test_path = os.path.join("tools", "TASK_AFTER_TEST.png")
-    if os.path.exists(task_after_test_path):
-        sample_files.append(task_after_test_path)
-    else:
-        # 也嘗試在 templates 找
-        tpl_test_path = os.path.join("templates", "TASK_AFTER_TEST.png")
-        if os.path.exists(tpl_test_path):
-            sample_files.append(tpl_test_path)
+    # 2. 也嘗試在 templates 找自訂樣品
+    tpl_test_path = os.path.join("templates", "TASK_AFTER_TEST.png")
+    if os.path.exists(tpl_test_path):
+        sample_files.append(tpl_test_path)
 
     if not sample_files:
-        print("[!] 找不到樣品圖片: Daily_task 或 TASK_AFTER_TEST.png")
+        print("[!] 找不到樣品圖片: Daily_task 樣品目錄")
         return
 
     print("============================================================")

@@ -22,7 +22,7 @@
 - `STEP_X` 與 `STEP_Y` (橫向與縱向格子間距)
 
 ### 🧰 步驟二：開發圖形化「手動校準工具」
-為了讓使用者能直觀且自主地微調參數，我們在 [tools/calibrate_grid.py](../../../tools/calibrate_grid.py) 撰寫了校準工具：
+為了讓使用者能直觀且自主地微調參數，我們在 [scripts/calibrate_grid.py](../../../scripts/calibrate_grid.py) 撰寫了校準工具：
 * 它讀取當前遊戲截圖，匹配標題中心，並利用校準參數繪製網格框（紅色）與點擊中心（黃點）。
 * 輸出預覽圖至 `scratch/grid_calibration_result.png`，實現「修改參數 ➔ 執行腳本 ➔ 查看圖像」的超快迭代。
 
