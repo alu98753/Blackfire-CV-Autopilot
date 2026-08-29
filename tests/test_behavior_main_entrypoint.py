@@ -9,7 +9,8 @@ from cli.dungeon_setup import setup_dungeon_config
 from cli.profile_updates import persist_mode_updates
 from cli.prompts import prompt_choice
 from cli.stage_setup import setup_stage_config
-from runtime.loop import _manual_exit_hotkey_pressed, run_main_loop
+from runtime.loop import run_main_loop
+from utils.keyboard_listener import PauseController
 
 
 def make_args(**overrides):
@@ -29,13 +30,13 @@ def make_args(**overrides):
 
 class TestMainEntrypointBehavior(unittest.TestCase):
     def test_manual_exit_hotkey_requires_target_focus_and_all_three_keys(self):
-        pause_controller = MagicMock()
-        pause_controller.is_target_window_active.return_value = True
-        with patch("runtime.loop.ctypes.windll.user32.GetAsyncKeyState", return_value=0x8000):
-            self.assertTrue(_manual_exit_hotkey_pressed(pause_controller))
+        pause_controller = PauseController(start_thread=False)
+        pause_controller.is_target_window_active = MagicMock(return_value=True)
+        with patch("utils.keyboard_listener.ctypes.windll.user32.GetAsyncKeyState", return_value=0x8000):
+            pause_controller._poll_once()
 
-        pause_controller.is_target_window_active.return_value = False
-        self.assertFalse(_manual_exit_hotkey_pressed(pause_controller))
+        self.assertTrue(pause_controller.check_manual_exit_triggered())
+        self.assertFalse(pause_controller.check_manual_exit_triggered())
 
     def test_prompt_choice_returns_default_for_empty_input_or_terminal_interrupt(self):
         with patch("builtins.input", return_value="   "):

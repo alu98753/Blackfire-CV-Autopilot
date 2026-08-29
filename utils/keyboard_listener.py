@@ -6,7 +6,9 @@ import threading
 import logging
 
 VK_CONTROL = 0x11
+VK_SHIFT = 0x10
 VK_SPACE = 0x20
+VK_Q = 0x51
 GA_ROOT = 2
 
 TRIGGER_MODE_CTRL_SPACE = "ctrl_space"
@@ -49,6 +51,8 @@ class PauseController:
         self.last_tap_time = 0.0
         self.tap_count = 0
         self.toggle_event_pending = False
+        self.manual_exit_event_pending = False
+        self.manual_exit_key_pressed = False
         self._lock = threading.Lock()
         self._running = True
 
@@ -375,6 +379,33 @@ class PauseController:
                 return True
             return False
 
+    def check_manual_exit_triggered(self) -> bool:
+        """Consume the high-frequency Ctrl+Shift+Q exit event."""
+        with self._lock:
+            if self.manual_exit_event_pending:
+                self.manual_exit_event_pending = False
+                return True
+            return False
+
+    def _poll_manual_exit(self) -> None:
+        """Detect a deliberate exit without relying on the slow bot loop."""
+        try:
+            if not self.is_target_window_active():
+                self.manual_exit_key_pressed = False
+                return
+            user32 = ctypes.windll.user32
+            pressed = all(
+                bool(user32.GetAsyncKeyState(key) & 0x8000)
+                for key in (VK_CONTROL, VK_SHIFT, VK_Q)
+            )
+            if pressed and not self.manual_exit_key_pressed:
+                with self._lock:
+                    self.manual_exit_event_pending = True
+                print("\n[Manual Exit] Ctrl+Shift+Q received.", flush=True)
+            self.manual_exit_key_pressed = pressed
+        except Exception:
+            self.manual_exit_key_pressed = False
+
     def _background_loop(self):
         """
         獨立背景守護執行緒主迴圈，每 10ms 依當前策略採樣一次按鍵。
@@ -392,6 +423,8 @@ class PauseController:
         """
         if now is None:
             now = time.time()
+
+        self._poll_manual_exit()
 
         strategy_func = self._strategies.get(self.trigger_mode, self._poll_ctrl_space)
         return strategy_func(now)

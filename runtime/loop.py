@@ -3,30 +3,10 @@
 import sys
 import time
 import logging
-import ctypes
 
 from utils import PauseController
 from runtime.heartbeat import touch_heartbeat
 from runtime.supervisor import MANUAL_EXIT_CODE
-
-
-VK_CONTROL = 0x11
-VK_SHIFT = 0x10
-VK_Q = 0x51
-
-
-def _manual_exit_hotkey_pressed(pause_controller) -> bool:
-    """Ctrl+Shift+Q is a deliberate stop, unlike Ctrl+C recovery."""
-    try:
-        if not pause_controller.is_target_window_active():
-            return False
-        user32 = ctypes.windll.user32
-        return all(
-            bool(user32.GetAsyncKeyState(key) & 0x8000)
-            for key in (VK_CONTROL, VK_SHIFT, VK_Q)
-        )
-    except Exception:
-        return False
 
 def run_main_loop(state_machine, interval):
     pause_controller = None
@@ -55,7 +35,7 @@ def run_main_loop(state_machine, interval):
         while True:
             start_time = time.time()
 
-            if _manual_exit_hotkey_pressed(pause_controller):
+            if pause_controller.check_manual_exit_triggered() is True:
                 print("\n[Manual Exit] Ctrl+Shift+Q received; supervisor will return to the restart menu.")
                 raise SystemExit(MANUAL_EXIT_CODE)
             
