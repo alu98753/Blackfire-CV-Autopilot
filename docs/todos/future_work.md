@@ -22,8 +22,9 @@
 
 ### 4. 🏛️ 全域架構審查與 AGENTS.md 規範對齊 (Technical Debt & Rule Auditing)
 - **需求背景**：依據 `AGENTS.md` 的 5 大極簡原則與工程規範，全面排查既有代碼中的架構隱患，避免長期積累技術債。
+- **熱重載架構與分界規範**：詳細分層設計請參閱 [runtime_config_hot_reload_architecture.md](../architecture/runtime_config_hot_reload_architecture.md)。
 
-法 60 行、巢狀 3 層、感知與決策分離」** 原則，排查出以下亟待重構的核心檔案：
+依據 **「檔案 300 行、方法 60 行、巢狀 3 層、感知與決策分離」** 原則，排查出以下亟待重構的核心檔案與對應職責：
 
 | 檔案路徑 | 當前行數 | 規範限制 | 違反原則與架構隱患 |
 | :--- | :---: | :---: | :--- |
