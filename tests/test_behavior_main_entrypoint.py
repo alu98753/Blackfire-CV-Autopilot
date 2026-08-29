@@ -23,6 +23,52 @@ def make_args(**overrides):
 
 
 class TestMainEntrypointBehavior(unittest.TestCase):
+    def test_prompt_choice_returns_default_for_empty_input_or_terminal_interrupt(self):
+        with patch("builtins.input", return_value="   "):
+            self.assertEqual(main.prompt_choice("choice: ", "default"), "default")
+        with patch("builtins.input", side_effect=EOFError):
+            self.assertEqual(main.prompt_choice("choice: ", "default"), "default")
+        with patch("builtins.input", return_value="six"):
+            self.assertEqual(main.prompt_choice("choice: ", "default"), "six")
+
+    @patch("config.update_profile_config")
+    @patch("config.get_active_profile", return_value="sandbox")
+    def test_mode_selection_persists_only_changed_values_to_active_profile_mode(
+        self, get_active_profile, update_profile_config
+    ):
+        main.persist_mode_updates(
+            {"_config_mode_key": "daily", "type": "mix"}, {"tier4_sub_stage": "six"}
+        )
+
+        get_active_profile.assert_called_once_with()
+        update_profile_config.assert_called_once_with(
+            "sandbox", {"primary_modes": {"daily": {"tier4_sub_stage": "six"}}}
+        )
+
+    @patch("main.persist_mode_updates")
+    @patch("main.get_stage_configs")
+    @patch("main.os.path.exists", return_value=True)
+    @patch("builtins.input")
+    def test_explicit_stage_cli_selection_skips_terminal_prompts_and_persists_changed_selection(
+        self, terminal_input, _exists, get_stage_configs, persist
+    ):
+        get_stage_configs.return_value = {
+            "6": {
+                "name": "Level 6", "entry": "stages/level6.png",
+                "sub_stages": {"six": "stages/six_stage.png", "final": "stages/final.png"},
+            }
+        }
+        config = {"type": "stage", "tier4_stage_level": 6, "tier4_sub_stage": "final"}
+
+        main.setup_stage_config(config, stage_level=6, sub_stage_type="six")
+
+        terminal_input.assert_not_called()
+        self.assertEqual(config["stage_target"], "stages/six_stage.png")
+        self.assertIn("stages/six_stage.png", config["navigation_path"])
+        persist.assert_called_once_with(
+            config, {"tier4_stage_level": 6, "tier4_sub_stage": "six"}
+        )
+
     def test_argument_parser_keeps_optional_activity_flags_unset_without_cli_input(self):
         with patch("sys.argv", ["main.py", "--mode", "daily", "--profile", "sandbox"]):
             args = main.parse_arguments()

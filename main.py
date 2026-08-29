@@ -89,24 +89,6 @@ def check_mode_templates(config):
                 
     return missing
 
-def prompt_choice(prompt_text: str, default_val: str) -> str:
-    """Prompt user for input in terminal; return default_val when user presses Enter or on empty/interrupt."""
-    try:
-        val = input(prompt_text).strip()
-        return val if val else default_val
-    except (EOFError, KeyboardInterrupt):
-        return default_val
-    except Exception:
-        return default_val
-
-
-def persist_mode_updates(config, updates: dict) -> None:
-    """Write CLI changes back to the TOML table that supplied this mode."""
-    from config import get_active_profile, update_profile_config
-
-    mode_key = config.get("_config_mode_key", config.get("type", "mix"))
-    update_profile_config(get_active_profile(), {"primary_modes": {mode_key: updates}})
-
 def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_type=None):
     stage_configs = get_stage_configs()
     
@@ -708,6 +690,8 @@ def run_main_loop(state_machine, interval):
 
 from cli.arguments import parse_arguments
 from cli.profiles import resolve_profile_name, resolve_status_filename
+from cli.profile_updates import persist_mode_updates
+from cli.prompts import prompt_choice
 
 
 def main():
