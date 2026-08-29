@@ -209,18 +209,18 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertEqual(exited.exception.code, 1)
         init_system.assert_not_called()
 
-    @patch("main.time.sleep")
+    @patch("runtime.bootstrap.time.sleep")
     @patch("builtins.print")
-    @patch("main.PauseController")
-    @patch("main.DailyManager")
-    @patch("main.GameStateMachine")
-    @patch("main.MouseController")
-    @patch("main.TemplateMatcher")
-    @patch("main.ScreenCapturer")
-    @patch("main.check_mode_templates", return_value=[])
-    @patch("main.os.path.exists", return_value=True)
-    @patch("main.normalize_config", side_effect=lambda config: config)
-    @patch("main.get_monitor_index", return_value=3)
+    @patch("runtime.loop.PauseController")
+    @patch("runtime.bootstrap.DailyManager")
+    @patch("runtime.bootstrap.GameStateMachine")
+    @patch("runtime.bootstrap.MouseController")
+    @patch("runtime.bootstrap.TemplateMatcher")
+    @patch("runtime.bootstrap.ScreenCapturer")
+    @patch("runtime.bootstrap.check_mode_templates", return_value=[])
+    @patch("runtime.bootstrap.os.path.exists", return_value=True)
+    @patch("runtime.bootstrap.normalize_config", side_effect=lambda config: config)
+    @patch("runtime.bootstrap.get_monitor_index", return_value=3)
     def test_initializer_wires_profile_runtime_refresh_and_daily_pipeline(
         self, _monitor, _normalize, _exists, _templates, capturer_class, matcher_class, mouse_class,
         machine_class, daily_manager_class, _pause_controller, _print, _sleep,
@@ -244,9 +244,9 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertIs(machine.daily_manager, manager)
         self.assertTrue(machine.enable_bread)
 
-    @patch("main.ScreenCapturer")
-    @patch("main.check_mode_templates", return_value=["stages/missing.png"])
-    @patch("main.os.makedirs")
+    @patch("runtime.bootstrap.ScreenCapturer")
+    @patch("runtime.bootstrap.check_mode_templates", return_value=["stages/missing.png"])
+    @patch("runtime.bootstrap.os.makedirs")
     @patch("builtins.print")
     def test_initializer_fails_before_constructing_game_dependencies_when_required_template_is_missing(
         self, _print, _mkdir, _templates, capturer_class
@@ -262,7 +262,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
 
     @patch("main.time.sleep")
     @patch("builtins.print")
-    @patch("main.PauseController")
+    @patch("runtime.loop.PauseController")
     def test_runtime_loop_refreshes_config_before_each_state_machine_step(
         self, pause_controller_class, _print, sleep
     ):
