@@ -109,5 +109,53 @@ class TestDailyQuestPreemptionBehavior(unittest.TestCase):
         self.assertTrue(machine.config["enable_dungeon"])
 
 
+    def test_advancing_when_all_quests_completed_restores_tier4_fallback(self):
+        """Completing all daily quests must immediately restore Tier 4 fallback config."""
+        machine = self._tier4_machine()
+        task = self.mapper.parse_quest("清除蜥蜴")
+        scheduler = QuestScheduler()
+        scheduler.add_task(task)
+        machine.attach_quest_scheduler(scheduler)
+
+        # 模擬已切換到該任務的專屬關卡配置 (例如沙漠廢墟 middle)
+        quest_cfg = task.to_config_dict(base_config=self.primary_config)
+        machine.set_config(quest_cfg)
+        self.assertFalse(machine.config.get("is_tier4_fallback", False))
+        self.assertIn("沙漠廢墟", machine.config.get("name", ""))
+
+        # 標記任務完成
+        task.completed_count = task.target_count
+        self.assertTrue(scheduler.is_all_completed())
+
+        # 推進任務目標
+        res = machine.check_and_advance_quest_target()
+        self.assertIsNone(res)
+        self.assertIsNone(machine.quest_scheduler)
+        self.assertTrue(machine.config.get("is_tier4_fallback", False))
+        self.assertEqual(machine.config.get("name"), self.primary_config["name"])
+
+    def test_advancing_when_all_tasks_cooling_switches_to_tier4_fallback(self):
+        """When all remaining quests are on cooldown, machine must fall back to Tier 4."""
+        machine = self._tier4_machine()
+        dungeon_task = self.mapper.parse_quest("史萊姆王的毀滅")
+        scheduler = QuestScheduler()
+        scheduler.add_task(dungeon_task)
+        machine.attach_quest_scheduler(scheduler)
+
+        # 模擬已套用地下城任務配置
+        quest_cfg = dungeon_task.to_config_dict(base_config=self.primary_config)
+        machine.set_config(quest_cfg)
+        self.assertFalse(machine.config.get("is_tier4_fallback", False))
+
+        # 設定該地下城正在冷卻中
+        machine.dungeon_cooldowns[dungeon_task.dungeon_index] = 9999999999.0
+
+        # 推進任務目標
+        res = machine.check_and_advance_quest_target()
+        self.assertIsNone(res)
+        self.assertTrue(machine.config.get("is_tier4_fallback", False))
+        self.assertEqual(machine.config.get("name"), self.primary_config["name"])
+
+
 if __name__ == "__main__":
     unittest.main()

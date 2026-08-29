@@ -1097,8 +1097,9 @@ class GameStateMachine:
             return None
 
         if self.quest_scheduler.is_all_completed():
-            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器。")
+            logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器並切換至退守模式。")
             self.quest_scheduler = None
+            self.apply_tier4_fallback_config()
             return None
 
         target_task, msg = self.quest_scheduler.get_next_action_node(
@@ -1123,6 +1124,9 @@ class GameStateMachine:
             logging.info(f"🔄 [GameStateMachine 動態調度] {msg} ➔ 即時自動切換至目標配置: {quest_cfg.get('name')}")
             return target_task
 
+        # 當前尚有未完成任務但均在冷卻中：確保切換至 Tier 4 退守配置，等待冷卻就緒
+        if not self.config.get("is_tier4_fallback", False):
+            self.apply_tier4_fallback_config()
         return None
 
 
