@@ -106,22 +106,30 @@ class TaskNode:
 
         def _apply_base_preferences(cfg):
             if base_config:
-                # A quest-specific route must not re-enable activities disabled by
-                # the daily profile (especially lord boss) while it is active.
-                for activity_key in (
-                    "enable_town_daily", "enable_lord_boss", "enable_quests",
-                    "enable_dungeon", "enable_stage_farming",
-                ):
+                # 繼承全域偏好 (裝備顏色、血水獻祭、後台模式等)
+                for key in ("keep_colors", "disassemble_colors", "sacrifice_settings", "backend_mode"):
+                    if key in base_config:
+                        cfg[key] = base_config[key]
+
+                # 繼承通用活動開關
+                for activity_key in ("enable_town_daily", "enable_lord_boss", "enable_quests"):
                     if activity_key in base_config:
                         cfg[activity_key] = base_config[activity_key]
-                if "keep_colors" in base_config:
-                    cfg["keep_colors"] = base_config["keep_colors"]
-                if "disassemble_colors" in base_config:
-                    cfg["disassemble_colors"] = base_config["disassemble_colors"]
-                if "sacrifice_settings" in base_config:
-                    cfg["sacrifice_settings"] = base_config["sacrifice_settings"]
-                if "backend_mode" in base_config:
-                    cfg["backend_mode"] = base_config["backend_mode"]
+
+                # 若非 stage 任務才繼承 base_config 的 enable_stage_farming
+                if self.mode_type != "stage" and "enable_stage_farming" in base_config:
+                    cfg["enable_stage_farming"] = base_config["enable_stage_farming"]
+
+                # 若非 dungeon 任務才繼承 base_config 的 enable_dungeon
+                if self.mode_type != "dungeon" and "enable_dungeon" in base_config:
+                    cfg["enable_dungeon"] = base_config["enable_dungeon"]
+
+            # 確保當前任務所屬模式的核心開關絕對為 True
+            if self.mode_type == "stage":
+                cfg["enable_stage_farming"] = True
+            elif self.mode_type == "dungeon":
+                cfg["enable_dungeon"] = True
+
             return normalize_config(cfg)
 
         if self.mode_type == "dungeon" and self.dungeon_index is not None:

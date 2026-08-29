@@ -587,11 +587,30 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertTrue(stage_cfg.get("enable_stage_farming", False), "關卡懸賞任務必須自動啟用 enable_stage_farming")
         self.assertEqual(stage_cfg.get("type"), "stage")
 
+        # 驗證即使 base_config 明確關閉 enable_stage_farming，stage 任務節點依然保持 True
+        base_cfg_no_farm = {
+            "enable_stage_farming": False,
+            "enable_dungeon": False,
+            "enable_lord_boss": False,
+            "keep_colors": ["purple", "orange"],
+            "backend_mode": True,
+        }
+        stage_cfg_with_base = node_ice.to_config_dict(base_config=base_cfg_no_farm)
+        self.assertTrue(stage_cfg_with_base.get("enable_stage_farming", False), "stage 任務節點不得被 base_config 覆蓋為 False")
+        self.assertFalse(stage_cfg_with_base.get("enable_lord_boss", True), "非 stage 相關的全域開關應正常繼承")
+        self.assertEqual(stage_cfg_with_base.get("keep_colors"), ["purple", "orange"], "使用者偏好設定應正常繼承")
+        self.assertTrue(stage_cfg_with_base.get("backend_mode"), "backend_mode 應正常繼承")
+
         node_dungeon = self.mapper.parse_quest("史萊姆王的毀滅")
         self.assertIsNotNone(node_dungeon)
         dungeon_cfg = node_dungeon.to_config_dict()
         self.assertTrue(dungeon_cfg.get("enable_dungeon", False), "地下城懸賞任務必須自動啟用 enable_dungeon")
         self.assertEqual(dungeon_cfg.get("type"), "dungeon")
+
+        # 驗證即使 base_config 明確關閉 enable_dungeon，dungeon 任務節點依然保持 True
+        dungeon_cfg_with_base = node_dungeon.to_config_dict(base_config=base_cfg_no_farm)
+        self.assertTrue(dungeon_cfg_with_base.get("enable_dungeon", False), "dungeon 任務節點不得被 base_config 覆蓋為 False")
+        self.assertFalse(dungeon_cfg_with_base.get("enable_stage_farming", True), "dungeon 任務應繼承 base_config 的 enable_stage_farming=False")
 
 
 if __name__ == "__main__":
