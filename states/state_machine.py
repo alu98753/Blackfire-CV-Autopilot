@@ -1264,6 +1264,7 @@ class GameStateMachine:
 
         start_t = time.time()
         last_click_t = start_t
+        disappeared = False
         while time.time() - start_t < timeout:
             if hasattr(self, "resume_event") and self.resume_event:
                 self.resume_event.wait()
@@ -1274,6 +1275,7 @@ class GameStateMachine:
                     pos, conf = self.matcher.match(fresh_img, template_name, threshold=threshold, brightness_threshold=brightness_threshold, quiet=True)
                     if pos is None:
                         logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {time.time() - start_t:.2f} 秒。")
+                        disappeared = True
                         break
                     else:
                         logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
@@ -1282,7 +1284,11 @@ class GameStateMachine:
                             self.mouse.click(click_x, click_y)
                             last_click_t = time.time()
 
+        if not disappeared:
+            logging.warning(f"⚠️ [配對確認逾時] 模板 [{template_name}] 在 {timeout} 秒內未能確認消失。")
+
         time.sleep(post_delay)
+        return disappeared
 
     def _run_task_complete_subflow(self, rect):
         """
