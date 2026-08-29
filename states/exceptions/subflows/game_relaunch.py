@@ -67,7 +67,9 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
             game_title=game_title,
             backend_mode=getattr(machine, 'backend_mode', False),
         )
-        launcher.ensure_game_ready()
+        if not launcher.ensure_game_ready():
+            logging.error('[GameRelaunchSubflow] Game launch failed; preserving failure state for external supervisor recovery.')
+            raise RuntimeError("Game relaunch failed; terminating bot for supervisor recovery.")
 
         machine.stashed_state = None
         machine.stashed_context = {}

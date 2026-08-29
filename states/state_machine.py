@@ -73,6 +73,8 @@ class GameStateMachine:
         self.last_state_change = time.time()
         self.battle_start_time = None
         self.run_count = 0
+        self.capture_failure_count = 0
+        self.capture_failure_limit = 5
         
         # 紀錄上次點選自動戰鬥的時間，用以判斷 CD
         self.last_auto_click_time = 0
@@ -582,11 +584,27 @@ class GameStateMachine:
             
         screen_img = self.capturer.capture(rect)
         if screen_img is None:
+            self.capture_failure_count += 1
+            logging.warning(
+                "[CaptureRecovery] Screenshot unavailable (%d/%d).",
+                self.capture_failure_count,
+                self.capture_failure_limit,
+            )
+            if self.capture_failure_count >= self.capture_failure_limit:
+                self.capture_failure_count = 0
+                logging.error("[CaptureRecovery] Screenshot failure threshold reached; relaunching game.")
+                from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
+                GameRelaunchSubflow().execute(self, reason="capture_failure_threshold_exceeded")
+                return
             logging.warning("⚠️ 無法擷取畫面")
             time.sleep(0.2)
             return
 
         # 0. 全域 Watchdog 雙重觸發器 (30s 非戰鬥 / 90s 戰鬥 / 30s 衝突掃描)
+        if self.capture_failure_count:
+            logging.info("[CaptureRecovery] Screenshot capture recovered after %d failures.", self.capture_failure_count)
+            self.capture_failure_count = 0
+
         if self.exception_watchdog.check(screen_img):
             return
 

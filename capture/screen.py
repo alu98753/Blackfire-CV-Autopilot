@@ -33,6 +33,38 @@ class ScreenCapturer:
         self.last_monitor = None
         self._backend_printwindow_supported = True
 
+    def close(self):
+        """Release the persistent MSS handle during a controlled shutdown."""
+        sct, self.sct = self.sct, None
+        if sct is not None:
+            try:
+                sct.close()
+            except Exception as exc:
+                logging.debug("[ScreenCapturer] Failed to close MSS handle: %s", exc)
+
+    def _release_backend_resources(self, save_bitmap, save_dc, mfc_dc, hwnd, hwnd_dc):
+        """Best-effort cleanup for every Win32 capture path, including errors."""
+        if save_bitmap is not None:
+            try:
+                win32gui.DeleteObject(save_bitmap.GetHandle())
+            except Exception:
+                pass
+        if save_dc is not None:
+            try:
+                save_dc.DeleteDC()
+            except Exception:
+                pass
+        if mfc_dc is not None:
+            try:
+                mfc_dc.DeleteDC()
+            except Exception:
+                pass
+        if hwnd_dc is not None:
+            try:
+                win32gui.ReleaseDC(hwnd, hwnd_dc)
+            except Exception:
+                pass
+
     def get_hwnd(self):
         """
         取得遊戲視窗控制代碼 (HWnd)，包含防快取失效重查。
@@ -208,6 +240,10 @@ class ScreenCapturer:
         後台視窗複製：優先使用 PrintWindow (flag=3) 以相容 GPU 硬體加速，
         若 PrintWindow 失敗則降階為 BitBlt 複製。若繪製結果為全黑空影像，自動回傳 None 以降階前台截圖。
         """
+        hwndDC = None
+        mfcDC = None
+        saveDC = None
+        saveBitMap = None
         try:
             client_rect = win32gui.GetClientRect(hwnd)
             width = client_rect[2]
@@ -240,11 +276,6 @@ class ScreenCapturer:
             img = np.frombuffer(bmpstr, dtype=np.uint8)
             img = img.reshape((bmpinfo['bmHeight'], bmpinfo['bmWidth'], 4))
             
-            win32gui.DeleteObject(saveBitMap.GetHandle())
-            saveDC.DeleteDC()
-            mfcDC.DeleteDC()
-            win32gui.ReleaseDC(hwnd, hwndDC)
-            
             img_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             
             # 🛡️ 關鍵防護：若後台擷取出的圖片全為 0 (全黑無效影像)，回傳 None 以自動降階 mss 前台截圖
@@ -255,6 +286,8 @@ class ScreenCapturer:
         except Exception as e:
             logging.debug(f"後台截圖發生錯誤: {e}")
             return None
+        finally:
+            self._release_backend_resources(saveBitMap, saveDC, mfcDC, hwnd, hwndDC)
 
     def capture(self, rect=None, full_screen: bool = False):
         """
@@ -278,7 +311,11 @@ class ScreenCapturer:
         # 2. 前台 / MSS 螢幕區域截圖 (第二防線)
         if rect is None and not full_screen:
             rect = self.get_window_rect()
-            
+
+        if self.sct is None:
+            logging.error("[ScreenCapturer] Capture requested after MSS handle was closed.")
+            return None
+
         try:
             if rect is None or full_screen:
                 logging.info("將擷取主螢幕畫面作為備用方案...")

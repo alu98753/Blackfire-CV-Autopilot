@@ -9,7 +9,7 @@ from cli.dungeon_setup import setup_dungeon_config
 from cli.profile_updates import persist_mode_updates
 from cli.prompts import prompt_choice
 from cli.stage_setup import setup_stage_config
-from runtime.loop import run_main_loop
+from runtime.loop import _manual_exit_hotkey_pressed, run_main_loop
 
 
 def make_args(**overrides):
@@ -28,6 +28,15 @@ def make_args(**overrides):
 
 
 class TestMainEntrypointBehavior(unittest.TestCase):
+    def test_manual_exit_hotkey_requires_target_focus_and_all_three_keys(self):
+        pause_controller = MagicMock()
+        pause_controller.is_target_window_active.return_value = True
+        with patch("runtime.loop.ctypes.windll.user32.GetAsyncKeyState", return_value=0x8000):
+            self.assertTrue(_manual_exit_hotkey_pressed(pause_controller))
+
+        pause_controller.is_target_window_active.return_value = False
+        self.assertFalse(_manual_exit_hotkey_pressed(pause_controller))
+
     def test_prompt_choice_returns_default_for_empty_input_or_terminal_interrupt(self):
         with patch("builtins.input", return_value="   "):
             self.assertEqual(prompt_choice("choice: ", "default"), "default")
@@ -141,6 +150,13 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertFalse(args.enable_dungeon)
         self.assertTrue(args.enable_lord_boss)
         self.assertIsNone(args.enable_stage_farming)
+
+    def test_argument_parser_accepts_non_interactive_supervisor_restart(self):
+        with patch("sys.argv", ["main.py", "--target", "sandbox", "--profile", "sandbox", "--resume"]):
+            args = main.parse_arguments()
+
+        self.assertTrue(args.resume)
+        self.assertEqual(args.target, "sandbox")
 
     def test_profile_selection_prefers_explicit_profile_then_target_then_window_title(self):
         self.assertEqual(main.resolve_profile_name(make_args(profile="ACC2"), "[#] Game"), "acc2")

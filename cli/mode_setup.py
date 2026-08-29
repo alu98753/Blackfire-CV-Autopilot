@@ -33,6 +33,27 @@ def setup_mode_config(args):
     if args.enable_town_daily is not None:
         config["enable_town_daily"] = args.enable_town_daily
 
+    # A restarted process must never wait for stdin.  The profile already holds
+    # the user's last choices; rebuild only the derived navigation paths.
+    if getattr(args, "resume", False) is True:
+        if args.mode == "stage":
+            setup_stage_config(config, interactive=False)
+            config["enable_stage_farming"] = True
+        elif args.mode in ["dungeon", "mix"]:
+            setup_dungeon_config(config, args, interactive=False)
+            if config.get("enable_stage_farming", False):
+                setup_stage_config(config, interactive=False)
+        elif args.mode == "daily":
+            setup_dungeon_config(config, args, interactive=False)
+            if config.get("enable_stage_farming", True):
+                setup_stage_config(config, interactive=False)
+                config["name"] = f"Daily Tier 4 ({config.get('stage_name', '')})"
+            else:
+                config["name"] = "Daily Tier 4 (stage disabled)"
+            config["lobby_start_btn"] = "stages/start.png"
+            config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+        return config
+
     if args.mode == "stage":
         setup_stage_config(config)
         config["enable_stage_farming"] = True
@@ -200,4 +221,3 @@ def setup_equipment_config(config):
     if updates:
         from config import get_active_profile, update_profile_config
         update_profile_config(get_active_profile(), {"defaults": updates})
-
