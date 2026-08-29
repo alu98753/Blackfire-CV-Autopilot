@@ -168,9 +168,7 @@ class ResultHandler(BaseStateHandler):
         boss_available = False
         if is_daily and getattr(self.machine, "daily_manager", None):
             dm = self.machine.daily_manager
-            cfg = getattr(self.machine, "config", {}) or {}
-            if cfg.get("enable_lord_boss", True) and hasattr(dm, "has_available_lord_boss"):
-                boss_available = dm.has_available_lord_boss()
+            boss_available = self.machine.has_available_selected_lord_boss()
 
         is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
         quest_batch_completed = False

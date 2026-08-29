@@ -119,8 +119,7 @@ class DomainExploreHandler(BaseStateHandler):
     def _check_lord_boss_preemption(self, screen_img, rect) -> bool:
         """檢查是否有日常領主 Boss (Lord Boss) 冷卻解鎖，若有則主動退場回城討伐"""
         dm = getattr(self.machine, "daily_manager", None)
-        cfg = self.machine.config or {}
-        if cfg.get("enable_lord_boss", True) and dm and hasattr(dm, "has_available_lord_boss") and dm.has_available_lord_boss():
+        if dm and self.machine.has_available_selected_lord_boss():
             logging.info("⚔️ [領地探索 ➔ 領主插隊] 偵測到日常領主 Boss 冷卻結束可挑戰；退出領地前往城鎮討伐！")
             exit_candidates = ["domains/common/exit_to_lobby.png", "goback_town.png", "common/quit.png"]
             for exit_btn in exit_candidates:
@@ -132,4 +131,3 @@ class DomainExploreHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return True
         return False
-

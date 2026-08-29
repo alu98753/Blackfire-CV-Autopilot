@@ -124,6 +124,17 @@ auto_diamond = false
             self.assertFalse(machine.need_bread_collection)
             self.assertFalse(machine.need_diamond_collection)
 
+    def test_sandbox_boss_targets_apply_to_stage_mode(self):
+        config_path = self.sandbox_dir / "config.toml"
+        config_path.write_text("""
+[defaults.activities]
+lord_boss_targets = ["lord_spider"]
+""", encoding="utf-8")
+
+        with patch.object(config, "USER_DATA_DIR", self.test_user_data_dir):
+            set_active_profile("sandbox")
+            self.assertEqual(GAME_CONFIGS["stage"]["lord_boss_targets"], ["lord_spider"])
+
     def test_vision_thresholds_overlay_and_get_template_threshold(self):
         """驗證：vision 比對門檻與 template_thresholds 的讀取、繼承與 get_template_threshold 運作"""
         from config import (

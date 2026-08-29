@@ -51,7 +51,7 @@ keep_colors = ["purple", "orange_yellow", "red"]
 [defaults.activities]
 auto_diamond = true
 auto_bread = true # true, false
-enable_lord_boss = true
+lord_boss_targets = ["lord_spider", "lord_spectre"] # 指定 Boss 清單（例如 ["lord_spider"] 僅打蜘蛛，或 [] 完全跳過 Boss
 enable_dungeon = true
 enable_town_daily = true
 enable_quests = false
@@ -258,7 +258,6 @@ rune_shard = true
 [subflow_configs.jewelry_workshop.goods_settings.purple]
 
 [subflow_configs.lord_boss]
-enabled = true
 name = "首領領主討伐"
 type = "lord_boss"
 entry_btn = "load/Lord_entry.png"

@@ -526,7 +526,7 @@ class GameStateMachine:
                 self.pending_town_subflows = False
                 logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
                 self.trigger_town_subflow_chain()
-            elif self.is_daily_pipeline_active() or (getattr(self, "daily_manager", None) and self.config and self.config.get("enable_lord_boss", True) and self.daily_manager.has_available_lord_boss()):
+            elif self.is_daily_pipeline_active() or self.has_available_selected_lord_boss():
                 self.evaluate_and_schedule_daily_pipeline()
 
 
@@ -1094,6 +1094,21 @@ class GameStateMachine:
         if not config.get("auto_diamond", True):
             self.need_diamond_collection = False
 
+    def get_available_selected_lord_bosses(self, now_ts=None):
+        """Return Bosses selected by the active Profile and ready today."""
+        manager = getattr(self, "daily_manager", None)
+        active_config = self.config or {}
+        selected = set(active_config.get(
+            "lord_boss_targets",
+            (self.primary_config or {}).get("lord_boss_targets", []),
+        ))
+        if not manager or not selected:
+            return []
+        return [key for key in manager.get_available_lord_bosses(now_ts) if key in selected]
+
+    def has_available_selected_lord_boss(self, now_ts=None):
+        return bool(self.get_available_selected_lord_bosses(now_ts))
+
     def refresh_config_at_safe_point(self):
         """Apply a complete configuration only before a new loop iteration."""
         if not self.runtime_config_key or not refresh_runtime_config():
@@ -1593,9 +1608,9 @@ class GameStateMachine:
                     return True
 
             # 2. 檢查 Tier 2 首領 Boss 討伐 (lord_boss)
-            if cfg.get("enable_lord_boss", True) and dm:
-                if dm.has_available_lord_boss():
-                    avail_bosses = dm.get_available_lord_bosses()
+            if dm:
+                avail_bosses = self.get_available_selected_lord_bosses()
+                if avail_bosses:
                     logging.info(f"⚔️ [Activity Scheduler] 觸發 Tier 2 領主 Boss 討伐 (可用 Boss: {avail_bosses}) ➔ 優先插隊討伐！")
                     self.start_subflow_queue(["lord_boss"])
                     return True

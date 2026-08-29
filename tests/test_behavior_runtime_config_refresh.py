@@ -71,6 +71,21 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
 
         self.assertFalse(machine.need_diamond_collection)
 
+    def test_lord_boss_targets_only_return_selected_ready_bosses(self):
+        machine = self._machine()
+        machine.config = {"lord_boss_targets": ["lord_spider"]}
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_available_lord_bosses.return_value = [
+            "lord_spectre", "lord_spider"
+        ]
+
+        self.assertEqual(machine.get_available_selected_lord_bosses(), ["lord_spider"])
+        self.assertTrue(machine.has_available_selected_lord_boss())
+
+        machine.config["lord_boss_targets"] = []
+        self.assertEqual(machine.get_available_selected_lord_bosses(), [])
+        self.assertFalse(machine.has_available_selected_lord_boss())
+
     @patch("states.state_machine.refresh_runtime_config", return_value=False)
     def test_does_not_change_running_config_without_a_valid_new_snapshot(self, _reload):
         machine = self._machine()

@@ -166,10 +166,10 @@ class CollectOnlyHandler(BaseStateHandler):
                 self.machine.start_subflow_queue(pending_town)
                 return
 
-        # 3.5.2 檢查首領領主討伐 (enable_lord_boss)
-        if self.machine.config.get("enable_lord_boss", False) and dm:
-            if dm.has_available_lord_boss():
-                avail_bosses = dm.get_available_lord_bosses()
+        # 3.5.2 檢查目前 Profile 選取且可討伐的首領
+        if dm:
+            avail_bosses = self.machine.get_available_selected_lord_bosses()
+            if avail_bosses:
                 logging.info(f"👑 [定時待機喚醒] 偵測到首領 Boss 冷卻結束 (可用: {avail_bosses}) ➔ 喚醒轉入 LORD_BOSS！")
                 self.machine.start_subflow_queue(["lord_boss"])
                 return
@@ -234,8 +234,8 @@ class CollectOnlyHandler(BaseStateHandler):
             brd_str = format_time(brd_rem) if self.machine.enable_bread else "已停用"
             
             extra_status = []
-            if self.machine.config.get("enable_lord_boss", False) and dm:
-                if dm.has_available_lord_boss():
+            if dm:
+                if self.machine.has_available_selected_lord_boss():
                     extra_status.append("👑 Boss: 就緒")
                 else:
                     min_boss_rem = float('inf')

@@ -48,7 +48,7 @@ class LobbyHandler(BaseStateHandler):
         )
         if is_lord_boss_mode:
             dm = getattr(self.machine, "daily_manager", None)
-            if dm and dm.has_available_lord_boss():
+            if dm and self.machine.has_available_selected_lord_boss():
                 logging.info("👑 大廳：偵測到首領討伐模式且尚有可用 Boss，切換至 LORD_BOSS 繼續討伐...")
                 self.machine.transition_to(self.machine.STATE_LORD_BOSS)
                 return

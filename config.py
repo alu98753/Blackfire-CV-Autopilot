@@ -148,8 +148,8 @@ def normalize_config(config):
             cfg[activity_key] = mode_type in ["stage", "mix", "daily"]
         elif activity_key == "enable_dungeon":
             cfg[activity_key] = False if mode_type in ["stage", "collect_only", "domain"] else default_value
-        elif activity_key == "enable_lord_boss":
-            cfg[activity_key] = False if mode_type in ["collect_only", "domain"] else default_value
+        elif activity_key == "lord_boss_targets":
+            cfg[activity_key] = list(default_value)
         elif activity_key == "enable_town_daily":
             cfg[activity_key] = False if mode_type == "collect_only" else default_value
         elif activity_key == "enable_quests":
