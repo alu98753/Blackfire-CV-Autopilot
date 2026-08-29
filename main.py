@@ -371,27 +371,6 @@ def parse_arguments():
                         help="指定帳號配置名稱 (例如 native, sandbox, acc2)，將自動綁定 user_data/<profile>/ (包含專屬 config.toml 與 daily_status.json)")
     return parser.parse_args()
 
-def resolve_profile_name(args, target_title: str = "") -> str:
-    """
-    依據 CLI 參數 (--profile, --target) 或視窗標題解析對應的 Profile 名稱 ('native', 'sandbox' 或自訂名稱)。
-    - 若傳入 --profile ➔ <profile>
-    - 若 --target 為 sandbox 或視窗標題包含 [#] ➔ sandbox
-    - 其餘預設 ➔ native
-    """
-    if getattr(args, "profile", None):
-        return args.profile.strip().lower()
-    
-    target_str = str(getattr(args, "target", "") or "").strip().lower()
-    if target_str in ["sandbox", "sandboxed", "box", "sb", "2"] or "[#]" in target_title:
-        return "sandbox"
-    
-    return "native"
-
-# 相容別名
-def resolve_status_filename(args, target_title: str = "") -> str:
-    profile = resolve_profile_name(args, target_title)
-    return f"{profile}/daily_status.json"
-
 def setup_mode_config(args):
     # 若指定了 --subflow，為純城鎮子流程測試，完全不跳出地下城與關卡選單提示！
     if args.subflow:
@@ -750,6 +729,9 @@ def run_main_loop(state_machine, interval):
         print(f"    - 總共啟動戰鬥場次: {state_machine.run_count} 次")
         print("=" * 60)
         sys.exit(0)
+
+from cli.profiles import resolve_profile_name, resolve_status_filename
+
 
 def main():
     setup_utf8_encoding()
