@@ -93,6 +93,11 @@ class TestCollectionStateMachine(StateMachineLogicTestCase):
         )
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(500, 500)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
+
+        # The click is acknowledged only once the start button disappears on a later frame.
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (None, 0.0)
+        self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         
         # 5. 看到戰鬥自動按鈕 ➔ 正式轉入 BATTLE
