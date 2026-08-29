@@ -28,6 +28,10 @@
 > **禁止自行合併**：AI 絕對禁止自行執行分支合併 (`git merge`)，必須等待使用者明確指示。
 
 - **Commit 格式**：Angular Standard (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
+- **精確 Commit 檔案範疇禁令 (Scope-Isolated Commit Only)**：
+  - 🚫 **嚴禁全域打包**：絕對禁止使用 `git add .`、`git add -A` 或 `git commit -a` 進行盲目打包。
+  - ✅ **白名單精確 Stage**：每次 Commit 僅能明確指定本次任務或修復所涉及的具體檔案路徑（例如 `git add path/to/target.py`）。
+  - **嚴禁污染工作區**：非本次任務修改的檔案、使用者未完成的工作區代碼、未列入任務的臨時檔案，一律嚴禁加入暫存區或 Commit。
 - **強制 `--no-ff`**：合併至 `main` 必須使用 `git merge --no-ff` 並附帶包含異動統計、模組細節與測試結果的結構化 Merge Log。
 - **跨平台 Shell 貼上語法規範**：
   - 為防止 Terminal 貼上多行指令時因換行符號（`\n`）導致指令截斷或報錯，提供 Merge 指令時必須**感應用戶 OS/Shell**。
