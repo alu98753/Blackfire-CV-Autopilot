@@ -256,6 +256,7 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
 
         stage_cfg = GAME_CONFIGS["stage"].copy()
         stage_cfg["enable_lord_boss"] = False
+        stage_cfg["lord_boss_targets"] = ["lord_spider"]
         self.state_machine.primary_config = stage_cfg
         self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
         self.state_machine.current_state = self.state_machine.STATE_LORD_BOSS

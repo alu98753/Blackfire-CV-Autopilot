@@ -1,0 +1,3 @@
+display_name: Project Test Rules
+short_description: Run this project's standard unittest suite.
+default_prompt: Use the repository-standard unittest discovery command and report any environment blockers precisely.

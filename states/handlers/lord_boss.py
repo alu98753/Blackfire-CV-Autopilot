@@ -73,7 +73,7 @@ class LordBossHandler(BaseStateHandler):
     def handle(self, screen_img, rect):
         now = time.time()
         dm = getattr(self.machine, "daily_manager", None)
-        avail_bosses = dm.get_available_lord_bosses() if dm else []
+        avail_bosses = self.machine.get_available_selected_lord_bosses() if dm else []
 
         # 若當前沒有可討伐的 Boss，結束首領討伐子流程，動態計算最快解鎖秒數並彈出下一個城鎮任務
         if not avail_bosses:

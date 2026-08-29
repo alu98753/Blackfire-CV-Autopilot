@@ -279,10 +279,6 @@ class DailyManager:
             if b_info["today_count"] >= b_info["max_daily_count"]:
                 b_info["completed_today"] = True
             
-            # 檢查是否所有 Boss 都已打完
-            all_bosses_done = all(b["completed_today"] for b in bosses.values())
-            self.status["subflows"]["lord_boss"]["completed_today"] = all_bosses_done
-            
             self.save_status()
             logging.info(f"⚔️ [DailyManager] 記錄 Boss [{b_info['name']}] 戰鬥完成 (今日進度: {b_info['today_count']}/{b_info['max_daily_count']})")
 
@@ -300,9 +296,6 @@ class DailyManager:
             b_info["today_count"] = b_info.get("max_daily_count", 5)
             b_info["completed_today"] = True
             b_info["last_fight_timestamp"] = now_ts
-
-            all_bosses_done = all(b.get("completed_today", False) for b in bosses.values())
-            self.status.get("subflows", {}).get("lord_boss", {})["completed_today"] = all_bosses_done
 
             self.save_status()
             logging.info(f"🛡️ [DailyManager] 已手動將 Boss [{b_info.get('name', boss_key)}] 強制標記為今日已打滿 (completed_today: True)。")
@@ -360,7 +353,6 @@ class DailyManager:
 
         min_remain = self.get_next_lord_boss_available_seconds(now_ts=now_ts)
         if min_remain is None:
-            self.status.get("subflows", {}).get("lord_boss", {})["completed_today"] = True
             self.save_status()
             logging.info("🎉 [DailyManager] 今日所有 Boss 均已打滿 5 次！標記 lord_boss 今日完全完成。")
             return
@@ -500,7 +492,12 @@ class DailyManager:
             now_ts = time.time()
         subflows = self.status.setdefault("subflows", {})
         sf = subflows.setdefault(subflow_key, {"completed_today": False, "last_executed_at": ""})
-        sf["completed_today"] = True
+        if subflow_key != "lord_boss":
+            sf["completed_today"] = True
+        else:
+            # Boss completion is derived from per-Boss counts; a cooldown must
+            # never be persisted as a misleading "completed today" flag.
+            sf.pop("completed_today", None)
         sf["last_executed_at"] = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
         
         if isinstance(extra_data, dict):
@@ -609,6 +606,5 @@ class DailyManager:
             return True
 
         return False
-
 
 

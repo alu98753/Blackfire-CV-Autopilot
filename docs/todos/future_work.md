@@ -22,6 +22,17 @@
 
 ### 4. 🏛️ 全域架構審查與 AGENTS.md 規範對齊 (Technical Debt & Rule Auditing)
 - **需求背景**：依據 `AGENTS.md` 的 5 大極簡原則與工程規範，全面排查既有代碼中的架構隱患，避免長期積累技術債。
+- **熱重載架構與分界規範**：詳細分層設計請參閱 [runtime_config_hot_reload_architecture.md](../architecture/runtime_config_hot_reload_architecture.md)。
+
+依據 **「檔案 300 行、方法 60 行、巢狀 3 層、感知與決策分離」** 原則，排查出以下亟待重構的核心檔案與對應職責：
+
+| 檔案路徑 | 當前行數 | 規範限制 | 違反原則與架構隱患 |
+| :--- | :---: | :---: | :--- |
+| [`states/state_machine.py`](file:///e:/Side_Project/BlackfireCrusade_tool/states/state_machine.py) | **1,593 行** | 300 行 | **嚴重超標**。狀態機身兼「狀態流轉」、「OCR 管理」、「全域例外處理」與「黃金古國/每日子流程協調」，職責過度混雜。 |
+| [`states/handlers/navigation.py`](file:///e:/Side_Project/BlackfireCrusade_tool/states/handlers/navigation.py) | **907 行** | 300 行 | **嚴重超標**。雖抽離出 `SceneDetector`，但內部包含大量關卡滾動、島嶼點擊、頁籤切換等複雜巢狀分枝。 |
+| [`main.py`](file:///e:/Side_Project/BlackfireCrusade_tool/main.py) | **783 行** | 300 行 | **超標**。主入口包含了 CLI 互動選單、Profile TOML 回寫、引數解析與多實例綁定，應抽離出 `cli_menu.py`。 |
+| [`utils/daily_manager.py`](file:///e:/Side_Project/BlackfireCrusade_tool/utils/daily_manager.py) | **614 行** | 300 行 | **超標**。同時管理 Date Tag 重置、Boss CD、懸賞進度與未知任務正名，應拆分為獨立 Manager。 |
+| 舊巨型測試包 (`test_behavioral_scenarios.py`, `test_state_machine_logic.py`) | **2,831 行 / 2,543 行** | 輕量化切分 | 違反 `AGENTS.md` 第 6 條「按業務領域輕量化拆分測試包 (Domain Slicing)」原則，存在舊的大型單體測試包。 |
 
 ### 5. ⚡ 沙盒環境 (Sandboxie-Plus) 運行延遲分析 (Sandbox Performance Analysis)
 - **需求背景**：觀察到在 Sandboxie 沙盒實例中運行的腳本，反應速度與幀率相較原生主機實例有微幅延遲與變慢現象。

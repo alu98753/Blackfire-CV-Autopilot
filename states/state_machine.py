@@ -5,6 +5,7 @@ import logging
 import threading
 from copy import deepcopy
 from config import GAME_CONFIGS, get_runtime_game_config, normalize_config, refresh_runtime_config
+from utils import get_stage_configs
 from utils.debug_artifacts import write_debug_image
 from states.handlers import (
     NavigationHandler,
@@ -80,6 +81,7 @@ class GameStateMachine:
         
         # 領體力相關屬性 (由外部 main.py 初始化與設定)
         self.enable_bread = False
+        self.bread_collection_available = False
         self.need_bread_collection = False  # 啟動時預設不設定領取，需大門觸發
         self.last_bread_collection_time = 0.0
         self.bread_collected_this_run = False
@@ -524,7 +526,7 @@ class GameStateMachine:
                 self.pending_town_subflows = False
                 logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
                 self.trigger_town_subflow_chain()
-            elif self.is_daily_pipeline_active() or (getattr(self, "daily_manager", None) and self.config and self.config.get("enable_lord_boss", True) and self.daily_manager.has_available_lord_boss()):
+            elif self.is_daily_pipeline_active() or self.has_available_selected_lord_boss():
                 self.evaluate_and_schedule_daily_pipeline()
 
 
@@ -975,6 +977,8 @@ class GameStateMachine:
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。
         """
+        config = self.config or {}
+
         # 以下模式不參與自動領取
         if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar", "jewelry_workshop"]:
             return
@@ -984,7 +988,7 @@ class GameStateMachine:
         # 1. 檢查鑽石 CD
         default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
         diamond_cd = self.config.get("diamond_cd", default_diamond_cd) if self.config else default_diamond_cd
-        if time.time() - self.last_diamond_collection_time > diamond_cd:
+        if config.get("auto_diamond", True) and time.time() - self.last_diamond_collection_time > diamond_cd:
             if not self.need_diamond_collection:
                 logging.info(f"⏰ 距離上次領鑽石已滿 {int(diamond_cd // 60)} 分鐘，觸發自動領鑽石。")
                 self.need_diamond_collection = True
@@ -1022,17 +1026,88 @@ class GameStateMachine:
 
         self.config = new_config
 
+    _DERIVED_STAGE_CONFIG_KEYS = frozenset({
+        "stage_name", "stage_entry", "stage_target", "stage_navigation_path",
+    })
+
+    @staticmethod
+    def _apply_tier4_stage_selection(config):
+        """Build template paths from the declarative Tier 4 TOML options."""
+        if not config.get("enable_stage_farming", False):
+            return False
+
+        stage_configs = get_stage_configs()
+        level = str(config.get("tier4_stage_level", "6"))
+        stage = stage_configs.get(level)
+        sub_stage = config.get("tier4_sub_stage", "first")
+        if not stage or sub_stage not in stage["sub_stages"]:
+            logging.warning(
+                "[HotReload] ignored invalid Tier 4 stage selection: level=%s, sub_stage=%s",
+                level,
+                sub_stage,
+            )
+            return False
+
+        target = stage["sub_stages"][sub_stage]
+        entry = stage["entry"]
+        config.update({
+            "stage_name": f"{stage['name']} ({sub_stage})",
+            "stage_entry": entry,
+            "stage_target": target,
+            "stage_navigation_path": [
+                "common/door.png",
+                "common/select_stage.png",
+                entry,
+                "stages/stage_label.png",
+                target,
+            ],
+        })
+        if config.get("type") == "stage":
+            config["navigation_path"] = [
+                "common/door.png",
+                "exit_battle.png",
+                "common/select_stage.png",
+                entry,
+                "stages/stage_label.png",
+                target,
+            ]
+        return True
+
     def enable_runtime_config_refresh(self, mode_key, initial_config):
-        """Keep CLI and interactive selections while TOML defaults hot-reload."""
+        """Track the active Profile mode as the runtime configuration source."""
         if mode_key not in GAME_CONFIGS:
             return
         self.runtime_config_key = mode_key
-        base_config = get_runtime_game_config(mode_key)
-        self.runtime_config_overrides = {
-            key: deepcopy(value)
-            for key, value in initial_config.items()
-            if base_config.get(key) != value
-        }
+        # Profile TOML is authoritative after startup.  Interactive choices are
+        # persisted before this method runs, so retaining a diff here would make
+        # later edits to that same Profile appear to hot-reload without effect.
+        self.runtime_config_overrides = {}
+
+    def _sync_runtime_collection_policies(self, config):
+        """Apply profile collection switches without bypassing template capability checks."""
+        if not config.get("auto_bread", True):
+            self.enable_bread = False
+            self.need_bread_collection = False
+        elif self.bread_collection_available:
+            self.enable_bread = True
+
+        if not config.get("auto_diamond", True):
+            self.need_diamond_collection = False
+
+    def get_available_selected_lord_bosses(self, now_ts=None):
+        """Return Bosses selected by the active Profile and ready today."""
+        manager = getattr(self, "daily_manager", None)
+        active_config = self.config or {}
+        selected = set(active_config.get(
+            "lord_boss_targets",
+            (self.primary_config or {}).get("lord_boss_targets", []),
+        ))
+        if not manager or not selected:
+            return []
+        return [key for key in manager.get_available_lord_bosses(now_ts) if key in selected]
+
+    def has_available_selected_lord_boss(self, now_ts=None):
+        return bool(self.get_available_selected_lord_bosses(now_ts))
 
     def refresh_config_at_safe_point(self):
         """Apply a complete configuration only before a new loop iteration."""
@@ -1040,7 +1115,9 @@ class GameStateMachine:
             return False
         refreshed_primary = get_runtime_game_config(self.runtime_config_key)
         refreshed_primary.update(deepcopy(self.runtime_config_overrides))
+        self._apply_tier4_stage_selection(refreshed_primary)
         self.primary_config = refreshed_primary
+        self._sync_runtime_collection_policies(refreshed_primary)
         if self.config and self.config.get("type") == refreshed_primary.get("type"):
             runtime_flags = {
                 key: value for key, value in self.config.items()
@@ -1531,9 +1608,9 @@ class GameStateMachine:
                     return True
 
             # 2. 檢查 Tier 2 首領 Boss 討伐 (lord_boss)
-            if cfg.get("enable_lord_boss", True) and dm:
-                if dm.has_available_lord_boss():
-                    avail_bosses = dm.get_available_lord_bosses()
+            if dm:
+                avail_bosses = self.get_available_selected_lord_bosses()
+                if avail_bosses:
                     logging.info(f"⚔️ [Activity Scheduler] 觸發 Tier 2 領主 Boss 討伐 (可用 Boss: {avail_bosses}) ➔ 優先插隊討伐！")
                     self.start_subflow_queue(["lord_boss"])
                     return True

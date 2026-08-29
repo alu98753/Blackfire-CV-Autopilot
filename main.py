@@ -685,6 +685,7 @@ def init_state_machine_system(args, config, target_hwnd=None):
 
 
 
+    state_machine.bread_collection_available = enable_bread
     if config["type"] in ["bag_clean", "blood_altar"] or not config.get("auto_bread", True):
         state_machine.enable_bread = False
         state_machine.need_bread_collection = False
