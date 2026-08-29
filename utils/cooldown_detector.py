@@ -2,6 +2,7 @@ import os
 import cv2
 import logging
 from utils.time_parser import parse_time_to_seconds
+from utils.debug_artifacts import write_debug_image
 
 def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200.0, threshold=0.70, scale=1.0):
     """
@@ -74,7 +75,7 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
             debug_match_img = crop_img.copy()
             cv2.circle(debug_match_img, (cd_cx, cd_cy), 4, (0, 0, 255), -1)  # 紅點: 木牌中心
             cv2.rectangle(debug_match_img, (tx1, ty1), (tx2, ty2), (0, 255, 0), 2)  # 綠框: OCR 裁剪框
-            cv2.imwrite("debug_cooldown_match.png", debug_match_img)
+            write_debug_image("debug_cooldown_match.png", debug_match_img)
             logging.info(f"📸 [DEBUG] 已將木牌中心與 OCR 裁剪框標記寫入 debug_cooldown_match.png (中心: {cd_cx}, {cd_cy})")
         except Exception as draw_err:
             logging.warning(f"⚠️ [DEBUG] 標記圖片寫入失敗: {draw_err}")
@@ -86,7 +87,7 @@ def detect_cooldown_sign_and_time(crop_img, ocr_reader, max_allowed_seconds=7200
             resized_text = cv2.resize(padded, (0, 0), fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
 
             try:
-                cv2.imwrite("debug_cooldown_ocr.png", resized_text)
+                write_debug_image("debug_cooldown_ocr.png", resized_text)
                 logging.info(f"📸 [DEBUG] 已將送交 EasyOCR 之放大影像寫入 debug_cooldown_ocr.png (範圍 Y:[{ty1}:{ty2}], X:[{tx1}:{tx2}])")
             except Exception as draw_err:
                 logging.warning(f"⚠️ [DEBUG] OCR 圖片寫入失敗: {draw_err}")

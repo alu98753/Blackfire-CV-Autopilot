@@ -17,6 +17,7 @@ from vision.matcher import TemplateMatcher
 from utils.quest_ocr_extractor import QuestOCRExtractor
 from utils.quest_scheduler import QuestScheduler
 from utils.quest_mapper import TaskNode
+from utils.debug_artifacts import write_debug_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -103,7 +104,7 @@ def test_task_complete_ocr():
             cv2.circle(debug_img, pos_task, 8, (0, 0, 255), -1)
 
         save_name = f"debug_ocr_{os.path.basename(file_path)}"
-        cv2.imwrite(save_name, debug_img)
+        write_debug_image(save_name, debug_img)
         cv2.imwrite(f"crop_roi_{os.path.basename(file_path)}", crop_roi)
 
         print(f"  📌 標題精確裁切 ROI: X=[{x1}:{x2}], Y=[{y1}:{y2}] (尺寸: {crop_roi.shape[1]}x{crop_roi.shape[0]})")

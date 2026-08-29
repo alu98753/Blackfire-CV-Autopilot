@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from vision.matcher import TemplateMatcher
 from utils.quest_ocr_extractor import QuestOCRExtractor
+from utils.debug_artifacts import write_debug_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -168,7 +169,7 @@ def diagnose_quest_ocr():
 
         # 儲存診斷圖片
         out_filename = f"debug_quest_ocr_{os.path.splitext(base_name)[0]}.png"
-        cv2.imwrite(out_filename, debug_img)
+        write_debug_image(out_filename, debug_img)
         print(f"[+] 方案一對比視覺化圖檔已儲存至: {out_filename}\n")
 
 if __name__ == "__main__":

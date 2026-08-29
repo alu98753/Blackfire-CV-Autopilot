@@ -3,6 +3,7 @@ import numpy as np
 import logging
 import os
 from typing import Tuple, Optional, Dict, Any, List
+from utils.debug_artifacts import write_debug_image
 
 
 class DebugVisualizer:
@@ -71,9 +72,9 @@ class DebugVisualizer:
             cv2.putText(canvas, f"[Click] {click_label}", (cx + 20, cy + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, RED_COLOR, 1, cv2.LINE_AA)
 
         try:
-            cv2.imwrite(filename, canvas)
+            saved = write_debug_image(filename, canvas)
             logging.info(f"🎯 [DebugVisualizer] 已成功將紅色空心診斷標記 (ROI/BBox/Click) 寫入 {filename}")
-            return True
+            return saved
         except Exception as e:
             logging.debug(f"無法寫入 {filename}: {e}")
             return False

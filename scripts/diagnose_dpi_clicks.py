@@ -20,8 +20,13 @@ import win32gui
 import win32api
 import win32con
 import os
+import sys
 import time
 import mss
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils.debug_artifacts import write_debug_image
 
 TITLE = "Blackfire Crusade"
 
@@ -146,7 +151,7 @@ def diagnose_dpi():
     marked = img.copy()
     cv2.circle(marked, (phys_rel_win_x, phys_rel_win_y), 15, (0, 0, 255), 2)
     cv2.drawMarker(marked, (phys_rel_win_x, phys_rel_win_y), (0, 0, 255), markerType=cv2.MARKER_CROSS, markerSize=30, thickness=2)
-    cv2.imwrite("debug_dpi_visual.png", marked)
+    write_debug_image("debug_dpi_visual.png", marked)
     print("[+] 標記截圖已儲存為 debug_dpi_visual.png，請檢查紅十字標記是否精準對齊目標中心。")
 
     # 4. 點擊測試方案

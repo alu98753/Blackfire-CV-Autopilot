@@ -5,6 +5,7 @@ import logging
 import threading
 from copy import deepcopy
 from config import GAME_CONFIGS, get_runtime_game_config, normalize_config, refresh_runtime_config
+from utils.debug_artifacts import write_debug_image
 from states.handlers import (
     NavigationHandler,
     LobbyHandler,
@@ -670,7 +671,7 @@ class GameStateMachine:
         if now - getattr(self, "last_detect_save_time", 0.0) > 1.0:
             self.last_detect_save_time = now
             if isinstance(screen_img, np.ndarray):
-                cv2.imwrite("debug_detect.png", screen_img)
+                write_debug_image("debug_detect.png", screen_img)
                 logging.info("📸 [除錯] 已儲存當前全域辨識畫面至專案根目錄下的 debug_detect.png")
 
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")

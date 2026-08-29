@@ -4,6 +4,7 @@ import logging
 import cv2
 import numpy as np
 from states.handlers.base import BaseStateHandler
+from utils.debug_artifacts import write_debug_image
 
 class BackpackFullSortingHandler(BaseStateHandler):
     def __init__(self, machine):
@@ -91,7 +92,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # 存檔
         filename = f"debug_feature_destroyandget_{self.screenshot_counter}.png"
-        cv2.imwrite(filename, debug_img)
+        write_debug_image(filename, debug_img)
         logging.info(f"📸 [背包分選] 已存檔診斷截圖 {filename}。")
         self.screenshot_counter += 1
 

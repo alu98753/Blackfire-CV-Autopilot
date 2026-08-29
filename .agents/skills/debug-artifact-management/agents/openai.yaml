@@ -1,0 +1,4 @@
+interface:
+  display_name: "Debug Artifact Management"
+  short_description: "Centralize project debug image output."
+  default_prompt: "Use $debug-artifact-management to add or refactor debug image output safely."

@@ -4,6 +4,7 @@ import logging
 import cv2
 import numpy as np
 from states.handlers.base import BaseStateHandler
+from utils.debug_artifacts import write_debug_image
 
 
 class BagCleaningHandler(BaseStateHandler):
@@ -478,7 +479,7 @@ class BagCleaningHandler(BaseStateHandler):
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         filename = f"debug_bag_4_grid_scan_{timestamp}.png"
         try:
-            cv2.imwrite(filename, debug_img)
+            write_debug_image(filename, debug_img)
             logging.info(f"📸 [網格 Debug 可視化圖] 已寫入: {filename}")
         except Exception as e:
             logging.warning(f"⚠️ [網格 Debug 可視化圖] 寫入失敗 ({filename}): {e}")

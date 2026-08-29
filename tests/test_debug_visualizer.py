@@ -6,6 +6,7 @@ import cv2
 
 from states.debug import DebugVisualizer
 from actions.mouse import MouseController
+from utils.debug_artifacts import debug_image_path
 
 
 
@@ -15,13 +16,14 @@ class TestDebugVisualizer(unittest.TestCase):
     """
 
     def setUp(self):
-        self.test_filename = "test_debug_click_tmp.png"
-        if os.path.exists(self.test_filename):
-            os.remove(self.test_filename)
+        self.test_filename = "debug_test_click_tmp.png"
+        self.test_path = debug_image_path(self.test_filename)
+        if self.test_path.exists():
+            self.test_path.unlink()
 
     def tearDown(self):
-        if os.path.exists(self.test_filename):
-            os.remove(self.test_filename)
+        if self.test_path.exists():
+            self.test_path.unlink()
 
     def test_invalid_screen_image_handling(self):
         """[測試 1] 邊界防呆：傳入 None 或無效圖片，回傳 False 且不崩潰"""
@@ -38,10 +40,10 @@ class TestDebugVisualizer(unittest.TestCase):
             filename=self.test_filename
         )
         self.assertTrue(res)
-        self.assertTrue(os.path.exists(self.test_filename))
+        self.assertTrue(self.test_path.exists())
 
         # 讀回產生的圖片，斷言紅色 Channel 有非零像素 (畫了紅圈)
-        saved_img = cv2.imread(self.test_filename)
+        saved_img = cv2.imread(str(self.test_path))
         self.assertIsNotNone(saved_img)
         self.assertGreater(np.sum(saved_img[:, :, 2]), 0)  # BGR 的 R Channel > 0
 
@@ -57,9 +59,9 @@ class TestDebugVisualizer(unittest.TestCase):
             filename=self.test_filename
         )
         self.assertTrue(res)
-        self.assertTrue(os.path.exists(self.test_filename))
+        self.assertTrue(self.test_path.exists())
 
-        saved_img = cv2.imread(self.test_filename)
+        saved_img = cv2.imread(str(self.test_path))
         self.assertIsNotNone(saved_img)
         # 斷言紅色 Channel (RED_COLOR (0,0,255) 標記) 有成功繪製像素
         self.assertGreater(np.sum(saved_img[:, :, 2]), 0)  # R Channel > 0
