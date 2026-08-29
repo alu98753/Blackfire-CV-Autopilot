@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from capture.screen import ScreenCapturer
 from actions.mouse import MouseController
+from utils.debug_artifacts import write_debug_image
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
 
@@ -151,7 +152,7 @@ def main():
     cv2.putText(debug_img, f"Score: {best_val:.2f} (Scale {best_scale:.2f})", (best_loc[0], max(20, best_loc[1] - 10)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-    cv2.imwrite("debug_single_match.png", debug_img)
+    write_debug_image("debug_single_match.png", debug_img)
     logging.info(f"📸 已將診斷可視化圖存檔至: debug_single_match.png")
 
     if args.click:

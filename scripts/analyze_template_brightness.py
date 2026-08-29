@@ -4,6 +4,10 @@ import os
 import argparse
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils.debug_artifacts import DEBUG_ARTIFACT_DIR
+
 def save_diagnostic_images(screen_img, template_img, top_left, temp_w, temp_h, max_val, brightness_ratio, template_name, output_dir="."):
     """
     畫紅框標記並保存全螢幕與切片診斷圖片，方便調試。
@@ -26,7 +30,7 @@ def save_diagnostic_images(screen_img, template_img, top_left, temp_w, temp_h, m
     # cv2.imwrite(crop_out, crop)
     return full_out, crop_out
 
-def analyze_brightness(screen_path, template_path, output_dir="."):
+def analyze_brightness(screen_path, template_path, output_dir=DEBUG_ARTIFACT_DIR):
     """
     分析給定截圖中與模板匹配區域的灰階平均亮度，計算相似度與亮度比例。
     """
@@ -97,7 +101,7 @@ def analyze_brightness(screen_path, template_path, output_dir="."):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Blackfire Crusade 圖像匹配亮度分析診斷工具")
-    parser.add_argument("-s", "--screen", type=str, default="debug_click.png",
+    parser.add_argument("-s", "--screen", type=str, default=str(DEBUG_ARTIFACT_DIR / "debug_click.png"),
                         help="輸入的遊戲截圖檔案路徑 (預設為當前根目錄的 debug_click.png)")
     parser.add_argument("-t", "--template", type=str, default="templates/common/continue.png",
                         help="待分析的模板圖片路徑 (預設為 templates/common/continue.png)")

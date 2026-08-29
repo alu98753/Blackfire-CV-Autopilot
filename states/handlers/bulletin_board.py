@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 from states.handlers.base import BaseStateHandler
 from utils.quest_ocr_extractor import QuestOCRExtractor
+from utils.debug_artifacts import write_debug_image
 
 class BulletinBoardHandler(BaseStateHandler):
     """
@@ -230,7 +231,7 @@ class BulletinBoardHandler(BaseStateHandler):
                     # 💾 自動保存當前無任務視窗的除錯截圖
                     if isinstance(screen_img, np.ndarray):
                         try:
-                            cv2.imwrite("debug_bulletin_board_fail.png", screen_img)
+                            write_debug_image("debug_bulletin_board_fail.png", screen_img)
                             logging.warning("📸 [懸賞告示牌 診斷] 未搜尋到可用任務，已將當前畫面截圖儲存至 debug_bulletin_board_fail.png")
                         except Exception as ex:
                             logging.warning(f"⚠️ [懸賞告示牌 診斷] 儲存 debug_bulletin_board_fail.png 失敗: {ex}")

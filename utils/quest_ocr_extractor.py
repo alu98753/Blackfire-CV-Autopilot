@@ -2,6 +2,7 @@ import os
 import cv2
 import logging
 from utils.quest_mapper import QuestMapper
+from utils.debug_artifacts import write_debug_image
 
 class QuestOCRExtractor:
     """
@@ -61,7 +62,7 @@ class QuestOCRExtractor:
         import numpy as np
         if isinstance(screen_img, np.ndarray):
             try:
-                cv2.imwrite("debug_bulletin_board_roi.png", text_roi)
+                write_debug_image("debug_bulletin_board_roi.png", text_roi)
                 debug_full = screen_img.copy()
                 # 🟥 紅框: task.png 錨點圖示
                 cv2.rectangle(debug_full, (x0, y0), (x0 + icon_w, y0 + icon_h), (0, 0, 255), 2)
@@ -70,7 +71,7 @@ class QuestOCRExtractor:
                 if title_name:
                     cv2.putText(debug_full, f"Quest: {title_name}", (crop_x, max(20, crop_y - 10)),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.imwrite("debug_bulletin_board_ocr.png", debug_full)
+                write_debug_image("debug_bulletin_board_ocr.png", debug_full)
                 logging.info(f"📸 [懸賞告示牌] 已將可視化偵錯圖寫入 debug_bulletin_board_ocr.png (紅框:錨點, 綠框:OCR區, 辨識標題: '{title_name}')")
             except Exception as ex:
                 logging.warning(f"⚠️ [懸賞告示牌] 寫入 debug_bulletin_board_ocr.png 發生異常: {ex}")

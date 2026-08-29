@@ -14,6 +14,7 @@ if sys.platform.startswith('win'):
 from vision.matcher import TemplateMatcher
 from utils.quest_ocr_extractor import QuestOCRExtractor
 from config import BULLETIN_BOARD_OCR_OFFSET
+from utils.debug_artifacts import write_debug_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -88,7 +89,7 @@ def diagnose_bulletin_board():
             print(f"  📌 任務列 #{idx} (X={crop_x}, Y={crop_y}, W={crop_w}, H={crop_h}) ➔ OCR 辨識結果: '{title}'")
 
         save_path = f"debug_bulletin_{base_name}"
-        cv2.imwrite(save_path, debug_img)
+        write_debug_image(save_path, debug_img)
         print(f"  📸 可視化 Debug 方框圖已寫入: {save_path}")
 
     print("\n" + "=" * 60)
