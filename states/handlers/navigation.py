@@ -230,6 +230,32 @@ class NavigationHandler(BaseStateHandler):
             self.scene_detector = SceneDetector(self.matcher)
 
         scene = self.scene_detector.detect(screen_img, machine=self.machine)
+        frame_matches = {}
+
+        def match_current_frame(template_name, **match_options):
+            """Reuse an exact template query only while handling this screenshot."""
+            normalized_options = {
+                "threshold": 0.8,
+                "brightness_threshold": 0.0,
+                "quiet": False,
+                **match_options,
+            }
+            cache_key = (template_name, tuple(sorted(normalized_options.items())))
+            if cache_key not in frame_matches:
+                frame_matches[cache_key] = self.matcher.match(screen_img, template_name, **normalized_options)
+            return frame_matches[cache_key]
+
+        lobby_btn = self.machine.config.get("lobby_start_btn")
+        cached_start = scene.matched_elements.get(lobby_btn) if lobby_btn else None
+        if cached_start:
+            _, conf_start = cached_start
+            logging.info(
+                "Navigation detected lobby Start button [%s] (confidence %.4f); entering LOBBY before further navigation.",
+                lobby_btn,
+                conf_start,
+            )
+            self.machine.transition_to(self.machine.STATE_LOBBY)
+            return
 
         # 0. 全域最高優先防護：檢查畫面上是否有任務完成彈窗 (task_complete.png) 阻擋
         if scene.scene_type == SceneType.POPUP_TASK_COMPLETE:
@@ -685,7 +711,11 @@ class NavigationHandler(BaseStateHandler):
         # 0. 優先判定：如果已經可以直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳，直接移轉狀態！
         lobby_btn = self.machine.config.get("lobby_start_btn")
         if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
-            pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
+            cached_start = scene.matched_elements.get(lobby_btn)
+            if cached_start:
+                pos_start, conf_start = cached_start
+            else:
+                pos_start, conf_start = match_current_frame(lobby_btn, threshold=0.8)
             if pos_start:
                 logging.info(f"🧭 尋路成功！偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達準備大廳，狀態轉移至 LOBBY。")
                 self.machine.transition_to(self.machine.STATE_LOBBY)
@@ -697,7 +727,7 @@ class NavigationHandler(BaseStateHandler):
         in_detail_screen = False
         pos_label = None
         if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
-            pos_label, _ = self.matcher.match(screen_img, "stages/stage_label.png", threshold=0.70)
+            pos_label, _ = match_current_frame("stages/stage_label.png", threshold=0.70)
         
         # 尋找路徑中是否有魔王關 / 小關卡目標 (包含 final, first, middle, six) 出現在畫面上
         pos_final = None
@@ -707,7 +737,7 @@ class NavigationHandler(BaseStateHandler):
                 target_final_btn = btn
                 if os.path.exists(os.path.join("templates", btn)):
                     thresh_btn = get_template_threshold(btn, default=SUB_STAGE_THRESHOLD)
-                    pos_f, _ = self.matcher.match(screen_img, btn, threshold=thresh_btn)
+                    pos_f, _ = match_current_frame(btn, threshold=thresh_btn)
                     if pos_f:
                         pos_final = pos_f
                         # 成功找到目標小關/魔王關，重置其缺失計時器
@@ -829,7 +859,7 @@ class NavigationHandler(BaseStateHandler):
             else:
                 thresh = get_template_threshold(btn, default=DEFAULT_THRESHOLD)
                 b_thresh = 0.70
-            pos, conf = self.matcher.match(screen_img, btn, threshold=thresh, brightness_threshold=b_thresh)
+            pos, conf = match_current_frame(btn, threshold=thresh, brightness_threshold=b_thresh)
             if pos:
                 if btn == "stages/stage_label.png":
                     # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
