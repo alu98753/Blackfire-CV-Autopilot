@@ -126,3 +126,49 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
         self.assertTrue(machine.refresh_config_at_safe_point())
         self.assertEqual(machine.config["stage_target"], "stages/six_stage.png")
         self.assertIn("stages/six_stage.png", machine.config["stage_navigation_path"])
+
+    @patch("states.state_machine.get_runtime_game_config")
+    @patch("states.state_machine.refresh_runtime_config", return_value=True)
+    def test_rebuilds_dungeon_target_from_reloaded_tier4_selection(
+        self, _reload, get_mode
+    ):
+        dungeon_entries = [
+            "dungeons/Slime_entry.png",
+            "dungeons/Ghost_entry.png",
+            "dungeons/Forest_entry.png",
+            "dungeons/Ruins_entry.png",
+            "dungeons/dark_prison.png",
+            "dungeons/Ice_entry.png"
+        ]
+        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+        initial = {
+            "type": "mix",
+            "dungeon_entries": dungeon_entries,
+            "dungeon_names": dungeon_names,
+            "greedy_dungeon": False,
+            "tier4_dungeon_index": 3,
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        }
+        changed = {
+            "type": "mix",
+            "dungeon_entries": dungeon_entries,
+            "dungeon_names": dungeon_names,
+            "greedy_dungeon": False,
+            "tier4_dungeon_index": 1,
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
+        }
+        get_mode.return_value = changed
+        machine = self._machine()
+        machine.config = initial.copy()
+        machine.primary_config = initial.copy()
+        machine.enable_runtime_config_refresh("daily", machine.config)
+
+        # 初始啟動時應已正確更新為第 4 關 (Ruins)
+        self.assertEqual(machine.config["tier4_dungeon_index"], 3)
+        self.assertIn("dungeons/Ruins_entry.png", machine.config["navigation_path"])
+
+        # 安全點熱重載後應更新為第 2 關 (Ghost)
+        self.assertTrue(machine.refresh_config_at_safe_point())
+        self.assertEqual(machine.config["tier4_dungeon_index"], 1)
+        self.assertIn("dungeons/Ghost_entry.png", machine.config["navigation_path"])
+

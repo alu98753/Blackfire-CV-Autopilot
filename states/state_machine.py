@@ -35,6 +35,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 _SHARED_OCR_READERS = {}
 _SHARED_OCR_LOCK = threading.Lock()
+DEFAULT_LORD_BOSS_TARGETS = ("lord_spider", "lord_spectre")
 
 class GameStateMachine:
     # 定義遊戲狀態
@@ -1073,6 +1074,40 @@ class GameStateMachine:
             ]
         return True
 
+    @staticmethod
+    def _apply_tier4_dungeon_selection(config):
+        """Build template paths from the declarative Tier 4 TOML options for dungeons."""
+        dungeon_entries = config.get("dungeon_entries")
+        dungeon_names = config.get("dungeon_names")
+        if not dungeon_entries or not dungeon_names:
+            return False
+
+        is_greedy = config.get("greedy_dungeon", False)
+        if is_greedy:
+            config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+            return True
+
+        raw_idx = config.get("tier4_dungeon_index", config.get("dungeon_index", 5))
+        try:
+            target_idx = int(raw_idx)
+        except (ValueError, TypeError):
+            target_idx = 5
+
+        if 0 <= target_idx < len(dungeon_entries):
+            entry_img = dungeon_entries[target_idx]
+            config["dungeon_index"] = target_idx
+            config["tier4_dungeon_index"] = target_idx
+            config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
+            if config.get("type") == "dungeon":
+                config["name"] = f"地下城 - {dungeon_names[target_idx]}"
+            return True
+        else:
+            logging.warning(
+                "[HotReload] ignored invalid Tier 4 dungeon selection: index=%s",
+                raw_idx,
+            )
+            return False
+
     def enable_runtime_config_refresh(self, mode_key, initial_config):
         """Track the active Profile mode as the runtime configuration source."""
         if mode_key not in GAME_CONFIGS:
@@ -1082,6 +1117,12 @@ class GameStateMachine:
         # persisted before this method runs, so retaining a diff here would make
         # later edits to that same Profile appear to hot-reload without effect.
         self.runtime_config_overrides = {}
+        if getattr(self, "primary_config", None):
+            self._apply_tier4_stage_selection(self.primary_config)
+            self._apply_tier4_dungeon_selection(self.primary_config)
+        if getattr(self, "config", None):
+            self._apply_tier4_stage_selection(self.config)
+            self._apply_tier4_dungeon_selection(self.config)
 
     def _sync_runtime_collection_policies(self, config):
         """Apply profile collection switches without bypassing template capability checks."""
@@ -1098,10 +1139,11 @@ class GameStateMachine:
         """Return Bosses selected by the active Profile and ready today."""
         manager = getattr(self, "daily_manager", None)
         active_config = self.config or {}
-        selected = set(active_config.get(
+        raw_targets = active_config.get(
             "lord_boss_targets",
-            (self.primary_config or {}).get("lord_boss_targets", []),
-        ))
+            (self.primary_config or {}).get("lord_boss_targets", DEFAULT_LORD_BOSS_TARGETS),
+        )
+        selected = set(raw_targets) if raw_targets is not None else set()
         if not manager or not selected:
             return []
         return [key for key in manager.get_available_lord_bosses(now_ts) if key in selected]
@@ -1116,6 +1158,7 @@ class GameStateMachine:
         refreshed_primary = get_runtime_game_config(self.runtime_config_key)
         refreshed_primary.update(deepcopy(self.runtime_config_overrides))
         self._apply_tier4_stage_selection(refreshed_primary)
+        self._apply_tier4_dungeon_selection(refreshed_primary)
         self.primary_config = refreshed_primary
         self._sync_runtime_collection_policies(refreshed_primary)
         if self.config and self.config.get("type") == refreshed_primary.get("type"):

@@ -112,7 +112,7 @@ class TaskNode:
                         cfg[key] = base_config[key]
 
                 # 繼承通用活動開關
-                for activity_key in ("enable_town_daily", "lord_boss_targets", "enable_quests"):
+                for activity_key in ("enable_town_daily", "enable_lord_boss", "lord_boss_targets", "enable_quests"):
                     if activity_key in base_config:
                         cfg[activity_key] = base_config[activity_key]
 

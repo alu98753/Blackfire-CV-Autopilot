@@ -534,6 +534,15 @@ class NavigationHandler(BaseStateHandler):
                         if temp_name in nav_path:
                             target_idx = idx
                             break
+                    if target_idx is None:
+                        raw_idx = self.machine.config.get("tier4_dungeon_index", self.machine.config.get("dungeon_index"))
+                        if raw_idx is not None:
+                            try:
+                                parsed_idx = int(raw_idx)
+                                if 0 <= parsed_idx < len(entry_templates):
+                                    target_idx = parsed_idx
+                            except (ValueError, TypeError):
+                                pass
                             
                     if target_idx is not None:
                         # 1. 優先檢查記憶體冷卻
