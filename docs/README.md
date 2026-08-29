@@ -68,5 +68,4 @@
 集中收納待辦事項、測試暫存計畫與除錯草稿：
 * [future_work.md](todos/future_work.md)：待辦事項、長掛機注意事項與未來規劃。
 * [test_dev_temp.md](todos/test_dev_temp.md)：輕量化行為測試防護網建構矩陣。
-* [exception_watchdog_todo.md](todos/exception_watchdog_todo.md)：看門狗卡死分析與救援優化筆記。
 * [resource_record.md](todos/resource_record.md)：資源消耗與抽卡草稿紀錄。

@@ -1,106 +1,99 @@
-# 待辦事項與未來優化規劃 (Future Work & Edge Cases)
+# 待辦事項與未來優化規劃 (Future Work & Project TODOs) 📋
 
+本文件彙整《黑火遠征》專案的所有**待辦事項 (Active TODOs)**、**暫時擱置需求 (Shelved)** 與**已解決/已驗證項目 (Completed & Verified)**，作為長期維護與疊代之單一清單。
 
-## 雙開與多實例掛機
-- **[已經解決] Sandboxie-Plus Steam 雙開掛機與多實例目標選擇**：
-  - 詳情參見指南 [docs/sandboxie_dual_instance_guide.md](../guides/sandboxie_dual_instance_guide.md) 與 PARS 故事 [docs/storys/sandboxie_dual_instance_pars_story.md](../storys/sandboxie_dual_instance_pars_story.md)。
-  - 支援自動掃描本機/沙盒視窗（`[#] Blackfire Crusade [#]`）、互動選單以及 `--target` 快速參數。
+---
 
-2. 補充 黃金古國模式
-  我希望他如果暫停時 用DC or line 傳訊息給我
+## 📌 一、 進行中與待開發項目 (Active TODOs)
 
-----
+### 1. 🔔 異常暫停與中斷即時通知 (Discord / LINE Webhook Notification)
+- **需求背景**：當腳本在長掛機或黃金古國領地探索中進入手動暫停（Manual Pause）、觸發 Watchdog 卡死救援、或體力耗盡轉入退避模式時，能夠第一時間通報使用者。
+- **規劃方向**：
+  - 在 `config.py` 或 TOML 設定中增加 Webhook URL 配置。
+  - 於 `GameStateMachine` 觸發暫停、異常重開與模式切換時，非同步發送訊息至 Discord 頻道或 LINE Notify。
 
-- **[已擱置] 稀有戰利品自動背包鎖定**：於戰鬥結束畫面同時偵測到「獲得戰利品」與「繼續」時，先前往背包進行特定裝備的鎖定防護（此功能目前已由貴重裝備色彩分類保留機制完整覆蓋，暫予擱置）。
+### 2. 📦 分析如何變現
+- **需求背景**：評估未來是否封裝為獨立 `.exe`、GUI 介面或 Web 儀表板，降低無 Python 環境用戶的使用門檻。
+- **規劃方向**：
+  - 現階段專注於掛機穩定性與核心邏輯完善；後續評估 PyInstaller / Nuitka 打包或 Electron / Tauri 介面封裝。
 
-- **[已擱置] 為了讓稀有戰利品不被誤分解(即使現在可以判斷顏色了)
-```
-我希望在戰鬥結束畫面(也就是continue處) 判斷到"獲得戰利品"這五個字  跟continue同時存在(可能在不同位置 圖片供你參考)時 去紀錄有哪些要鎖定 如果有 就接著去背包鎖定(如果已經鎖定(只有解鎖的字樣沒有鎖定的字樣) 就退出 (不要再繼續按了)) 如果沒有就再戰鬥 retry
+### 3. 🎨 終端 Config 設定呈現方式優化 (CLI / UI Presentation Overhaul)
+- **需求背景**：目前 config.toml（一列一列），排版冗長且直觀度不足。
 
-這個在一般關卡 跟地下城 探索但背包滿了 或是 bag_clean 時候 是都要 觸發的 通用的邏  先思考你需要什麼圖片資源 與計畫
-```
+### 4. 🏛️ 全域架構審查與 AGENTS.md 規範對齊 (Technical Debt & Rule Auditing)
+- **需求背景**：依據 `AGENTS.md` 的 5 大極簡原則與工程規範，全面排查既有代碼中的架構隱患，避免長期積累技術債。
 
-## 高優先度
-怎麼變現? 我想說可能可以做成exe or app?但這是non functional的事情 或許目前功能夠了?
+### 5. ⚡ 沙盒環境 (Sandboxie-Plus) 運行延遲分析 (Sandbox Performance Analysis)
+- **需求背景**：觀察到在 Sandboxie 沙盒實例中運行的腳本，反應速度與幀率相較原生主機實例有微幅延遲與變慢現象。
+- **規劃方向**：
+  - 分析 Win32 API 跨沙盒發送訊息 (`PostMessage` / `SendMessage`) 之 IPC 轉發開銷與焦點延遲。
+  - 評估 `ScreenCapturer`（`mss` / `BitBlt`）在沙盒隔離視窗下的截圖幀率與延遲。
+  - 測試多實例 CPU 競爭與進程優先級（Priority Boost）對沙盒實例的提速效果。
 
-## 低優先度
+### 6. 🧠 記憶體洩漏與長期掛機效能衰減分析 (Memory Leak & Resource Health)
+- **需求背景**：排查 24/7 長時間掛機時，是否有記憶體持續累積（Memory Leak）、GDI 物件未釋放或造成電腦逐漸變慢的問題。
+- **規劃方向**：
+  - 使用 `tracemalloc` / `memory_profiler` 監控長途運轉時 OpenCV `cv2.Mat` 影像矩陣、EasyOCR 辨識快取與 Win32 HWND / DC 控制代碼之生命週期。
+  - 檢查主迴圈常駐物件與例外重試閉環是否有未被 GC 回收的暫存物件，確保連續數天掛機時資源保持恆定（Zero Leak）。
 
-- **[已擱置] iPad 遠端操控 PC 腳本**：
-```
-如何用windows 電腦操控ipad 上面的遊戲 做一樣的事情
-```
-低優先 目前沒遇過
+---
 
-- **[已擱置]** 點錯東西時候的城鎮重來機制
+## ⏸️ 二、 暫時擱置與備用項目 (Shelved / Postponed)
 
-- **[已擱置] 地下城防呆容錯機制**：當手動按錯或誤入非目標地下城地圖時，偵測並點擊退出按鈕安全返回大廳重開，避免因地圖模板不符而卡死。
+> 💡 **說明**：以下項目經架構評估或已被現有更完善之機制覆蓋，暫時予以擱置，保留記錄以備未來參考。
 
-- **[已擱置] 在不同模式的時候都會遇到一個問題 就是挑選地下城的時候 按錯了 假設我要刷的是第二個 但卻按到第三個的地圖 會導致 因為我們要刷第二個 那匹配的圖就會都是第二個 因此如果按到第三個 那就會卡死 , 我在想該怎麼辦
-   可能寫個發現的方式 發現時 可以按下quit, 再重開 或許用其他方式
+### 1. 🔒 戰鬥結算稀有戰利品自動背包鎖定
+- **原始構想**：在戰鬥結束結算畫面（`continue` 處）同時偵測到「獲得戰利品」時，前往背包進行特定裝備的鎖定防護。
+- **擱置原因**：此功能目前已由**「背包 18 格 HSV 色彩分類與貴重品階反選保留機制」**完整覆蓋（藍/紫/橘/紅自動保留，灰/綠自動分解/銷毀），無需再額外進入背包點擊鎖定。
 
-## 已經解決(觀察中)
+### 2. 📱 iPad 遠端操控 PC 腳本
+- **原始構想**：使用 Windows PC 遠端控制 iPad 上的遊戲進行自動化。
+- **擱置原因**：專案專注於 Steam PC 視窗端高解析度、高幀率與後台非搶占式掛機，目前無行動裝置跨端需求。
 
+### 3. 🔄 城鎮點錯重來與容錯退回機制
+- **原始構想**：手動或意外點錯建築時的全局重來。
+- **擱置原因**：各城鎮 Handler 與子流程目前均已建立獨立的退場按鈕與 `exitfromhouse_and_to_town.png` 安全退回城鎮路徑。
 
-- **[已經解決]** 現在在點鑽石的流程中 quit的點擊並不穩定 有時有點到 有時沒有 我要確認 為何會這樣, 並且假設沒成功quit 那狀態不應該從DIAMOND_COLLECTION -> NAVIGATING 要直到quit成功 為止。
-  - **原因**：後台模擬點擊需要先發送懸停（Hover）訊號才穩定；且狀態機先前發送點擊後未檢驗視窗是否真的關閉就逕行跳轉。
-  - **解法**：在 `actions/mouse.py` 後台 click 加點 `WM_MOUSEMOVE` 穩定焦點；並且令 Handler 持續確認 `common/quit.png` 自畫面上消失，才真正重置變數並回歸 NAVIGATING。
+### 4. 🛡️ 地下城誤入非目標地圖防呆容錯
+- **原始構想**：手動按錯或誤入非目標地下城地圖時，偵測並點擊退出按鈕安全返回大廳重開。
+- **擱置原因**：目前的 `mix` 混合模式、自適應卡片定位與貪婪選關已能全自動接管選關流程，無人工誤點問題。
 
-- **[已經解決]** 我現在可以選 stage 我要打第幾關，但是她可能會點錯導致卡死，具體而言我選第四關他可能點到第二關。
-  - **原因**：當 `brightness_threshold` 啟用時，舊的 `TemplateMatcher.match` 邏輯在篩選出符合亮度比例的候選點後，以「亮度比例（`ratio`）」進行最優點選擇，而不是「模板相似度（`confidence`）」。這導致程式忽略了信心度高（`0.9363`）的正確第 4 關，卻選中亮度比例相近但信心度極低（`0.6063`，實為第 2 關周邊背景）的雜訊，套用向上偏移 160 像素後點選了第 2 關。
-  - **解法**：修改 `vision/matcher.py`，改為先用 `brightness_threshold` 進行亮度合格過濾，隨後從合格候選點中，以**「相似度/信心度（`c[2]`）」**挑選出最優點。同時，新增 `tests/test_vision_matcher.py` 進行單元測試防禦。
-  - **精簡日誌**：
-    ```log
-    2026-07-10 21:24:21,192 [INFO] 成功匹配模板 'stages/level4_desert_ruins.png'！相似度: 0.9363，相對亮度比: 1.01，座標: (1157, 552)
-    2026-07-10 21:24:21,805 [INFO] 成功匹配模板 'stages/level4_desert_ruins.png'！相似度: 0.6063，相對亮度比: 1.01，座標: (328, 552)
-    2026-07-10 21:24:21,806 [INFO] 🧭 尋路中：在畫面中找到關卡小島按鈕 [stages/level4_desert_ruins.png] (信心度: 0.6063)，套用向上偏移 160 像素點擊島嶼本體。
-    ```
+---
 
-- **[已經解決]** 全域「任務完成」彈窗（`task_complete.png`）領取按鈕按不到但能辨識到。
-  - **原因**：全域任務領取按鈕的 `+281` 像素相對偏移量是以標準 1080p 解析度硬編碼設計的。若遊戲視窗高度縮小（例如為 1280x720 或者是因為 DPI 縮放變更），該硬編碼偏移量會超出按鈕物理邊界，導致點擊無效。
-  - **解法**：在 `states/state_machine.py` 及關卡選擇島嶼點擊（`states/handlers/navigation.py` 的 `-160` 像素偏移）中，改採依當前視窗高度與 `1080p` 比例進行動態縮放適配（`scale_y = rect_height / 1080.0`），使點擊不論何種解析度均能精確點中。
+## ✅ 三、 已解決與完成項目 (Completed & Verified)
 
-- **[已經解決]** 地下城全在冷卻中時無關卡可刷導致原地無限等待與卡死。
-  - **原因**：舊版地下城模式當所有副本進入冷卻時，會在地下城選關介面重複滑動並原地死守。
-  - **解法**：實作 `mix` 混合模式與動態瀑布流退守機制；當所有地下城均進入冷卻時，自動切換至 Stage 普通關卡刷關，並於地下城 CD 結束時即時切換回地下城。
+### 1. 🛡️ 看門狗與例外自癒子系統 (Exception Watchdog & Game Relaunch)
+*(詳細架構分析與除錯筆記請參閱 [exception_subsystem_architecture.md](../architecture/exception_subsystem_architecture.md))*
+- [已完成並驗證] **5 次重試失敗直接重開自癒**：在 [UnexpectedPopupRecoveryHandler](../../states/exceptions/handler.py) 中，當 5 次嘗試仍無法消除畫面障礙時，直接喚起 `GameRelaunchSubflow` 殺進程並重啟遊戲。
+- [已完成並驗證] **狀態轉移防抖與時間戳保護**：在 [GameStateMachine.transition_to](../../states/state_machine.py) 增加 `if self.current_state != new_state` 狀態防抖，防止相同狀態重複刷新 `last_state_change` 導致 Watchdog 失效。
+- [已完成並驗證] **長任務真實進度回報 (`notify_ui_progress`)**：背包清理、長途出售與翻頁時定時回報有效 UI 進度，徹底消除假陽性卡死。
+- [已完成並驗證] **COLLECT_ONLY 待機動態 CD 逾時與視窗崩潰檢查**：支援動態 CD 逾時保護與 HWND 遺失自動重啟。
+- [已完成並驗證] **導航狀態 Watchdog 90 秒寬鬆門檻**：將 `STATE_NAVIGATING` 放寬至 90 秒，排除選關卡卡片與翻頁導航誤判。
+- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)**：支援輪盤 (`WheelOfFortuneSubflow`)、掃蕩盒 (`RaidBoxSubflow`) 與全域關閉 (`GenericAntiStuckSubflow`) 雙層救援。
 
-- **[已經解決]** 體力耗盡時彈出 `no_bread.png` 導致腳本停擺卡死。
-  - **原因**：體力用盡跳出彈窗後缺少自動退避與模式切換。
-  - **解法**：實作全域體力不足攔截 `handle_insufficient_stamina`，自動點擊取消關閉彈窗，退回城鎮備份配置並切換至 `collect_only` 掛機 4.0 小時，冷卻結束後自動恢復原模式。
+### 2. 🎮 多實例與長掛機支援 (Multi-Instance & Long-Running AFK)
+- [已完成並驗證] **Sandboxie-Plus Steam 雙開掛機與多實例目標選擇**：支援自動掃描本機/沙盒視窗（`[#] Blackfire Crusade [#]`）、互動選單以及 `--target` 快速參數。(參見指南 [sandboxie_dual_instance_guide.md](../guides/sandboxie_dual_instance_guide.md) 與 PARS 故事 [sandboxie_dual_instance_pars_story.md](../storys/sandboxie_dual_instance_pars_story.md))。
+- [已完成並驗證] **5 天長掛機 3 大架構支柱**：
+  1. **狀態持久化 ([DailyManager](../../utils/daily_manager.py))**：所有完成子流程與 08:05 重置週期自動記錄於 [daily_status.json](../../user_data/native/daily_status.json)，斷線重啟無縫接續進度。
+  2. **全局看門狗與自癒修復 ([Watchdog](../../states/exceptions/watchdog.py) & [UnexpectedPopupRecoveryHandler](../../states/exceptions/handler.py))**：逾時自動清除遮擋或重啟。
+  3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止狀態過早推進。
+- [已完成並驗證] **長時間運轉資源與記憶體無洩漏** (1,000 次循環僅微增 1.09MB)。
+- [已完成並驗證] **CPU 低功耗睡眠控管** (參見指南 [cpu_optimization.md](../guides/cpu_optimization.md))。
+- [已完成並驗證] **Mode-Agnostic 地下城斷線與遊戲重開自癒** (全模式辨識 `dungeons/leave.png` 起點恢復探索)。
 
-- **[已經解決]** 程式碼內硬編碼預設清單（`dungeon_names`, `greedy_allowed_indices`, `entry_templates`）導致邊界隱患。
-  - **原因**：Handler 與狀態機中分散著 fallback 硬編碼預設值。
-  - **解法**：貫徹 Single Source of Truth 與 Fail-Fast 原則，所有參數一律由 `config` 驅動，配置缺失時立即拋出 `ValueError` 防禦性中斷。
+### 3. 🎯 視覺比對與座標適配 (Vision & Adaptive Coordinates)
+- [已完成並驗證] **關卡選關優先按相似度而非亮度比例過濾**：解決選第 4 關誤點第 2 關周邊背景的 Bug。
+- [已完成並驗證] **全域「任務完成」彈窗動態 Scale 適配**：領取按鈕依視窗高度比例動態縮放，解決非 1080p 解析度下點擊無效問題。
+- [已完成並驗證] **領鑽石退出按鈕 Hover 焦點與消失確認**：後台點擊增加 `WM_MOUSEMOVE` 穩定焦點，持續比對 `quit.png` 消失後才轉移狀態。
+- [已完成並驗證] **按鈕點擊消失驗證閉環 (`click_and_wait_until_gone`)**：防止過早推進狀態。
 
-  
-
-### 🌴 出國五天長掛機注意事項與維護指南
-
-#### 💡 1. 五天長掛機 3 大架構支柱
-1. **狀態持久化 ([DailyManager](../../utils/daily_manager.py))**：所有完成子流程與 08:05 重置週期自動記錄於 [daily_status.json](../../user_data/native/daily_status.json)，確保斷線重啟能無縫接續進度。
-2. **全局看門狗與自癒修復 ([Watchdog](../../states/exceptions/watchdog.py) & [UnexpectedPopupRecoveryHandler](../../states/exceptions/handler.py))**：超過 N 分鐘未推進時自動觸發全圖意外彈窗清理 (參見 [exception_subsystem_architecture.md](../architecture/exception_subsystem_architecture.md))。
-3. **點擊消失驗證閉環 (`click_and_wait_until_gone`)**：關鍵按鈕點擊後持續輪詢確認消失，防止點擊未生效導致狀態過早推進。
-
-#### 🎯 2. 優化優先級矩陣 (Priority Hierarchy)
-- **P0 級 (最高優先 / 系統卡死與阻斷)**：畫面動畫過渡未完成即切換 #### 📋 3. 5 天長掛機已完成項目索引 (Ref Only)
-- [已完成] **背包滿自動連動血之祭壇** [REF: [Blood_Altar.md](../features/town_building/Blood_Altar.md)]
-- [已完成] **灰色/指定品質商品白名單出售** [REF: [Jewelry_workshop.md](../features/town_building/Jewelry_workshop.md)]
-- [已完成] **每日討伐首領領主 (每次討伐需 5 點體力/麵包)** [REF: [daily8.md](../features/daily_task/daily8.md)]
-- [已完成] **每日任務與免費抽獎** [REF: [daily8.md](../features/daily_task/daily8.md)]
-- [已完成] **CPU 低功耗睡眠控管** [REF: [cpu_optimization.md](../guides/cpu_optimization.md)]
-- [已驗證] **長時間運轉資源與記憶體無洩漏** (1,000 次循環僅增 1.09MB)
-- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](../../tests/test_watchdog_collect_only_exemption.py)]
-- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](../../tests/test_deadlock_risk_prevention.py)]
-- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](../../tests/test_phase_transition_stability.py)]
-- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](../../tests/test_click_and_wait_until_gone_closed_loop.py)]
-- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](../../tests/test_unexpected_popup_docking.py)]
-- [已完成並驗證] **Mode-Agnostic 地下城斷線與遊戲重開自癒** (全模式辨識 `dungeons/leave.png` 起點恢復探索) [REF: [test_dungeon_relaunch_recovery.py](../../tests/test_dungeon_relaunch_recovery.py)]
-- [已完成並驗證] **DailyManager 跨日 08:05 自動標籤比對與強制清零** (比對持久化 Date Tag 解決跨日未重置) [REF: [daily_manager.py](../../utils/daily_manager.py)]
-- [已完成並驗證] **Watchdog 1st Timeout 降級恢復與戰鬥進度刷新** (第一次逾時無彈窗恢復原狀態，並於戰鬥中刷新 UI 進度) [REF: [test_popup_recovery_retry_behavior.py](../../tests/test_popup_recovery_retry_behavior.py)]
-- [已完成並驗證] **背包已滿 goods_settings 單一權威來源與 2 格 (279px) 精準像素 Drag 位移** (銷毀授權與 goods_settings 100% 同步，全 False 安全兜底；按 2 格步進精準像素對齊) [REF: [test_backpack_full_dynamic_destroyable.py](../../tests/test_backpack_full_dynamic_destroyable.py)]
-- [已完成並驗證] **導航狀態 Watchdog 90 秒寬鬆門檻** (將 `STATE_NAVIGATING` 放寬至 90 秒，排除選關卡卡片與翻頁導航誤判) [REF: [watchdog.py](../../states/exceptions/watchdog.py)]
-- [已完成並驗證] **測試套件遊戲啟動與殺進程生命週期隔離** (統一集中至 `test_game_process_lifecycle.py` 並標註 `@unittest.skip`，防範自動測試誤觸發) [REF: [test_game_process_lifecycle.py](../../tests/test_game_process_lifecycle.py)]次循環僅增 1.09MB)
-- [已修復並驗證] **Watchdog COLLECT_ONLY 待機豁免與救援** [REF: [test_watchdog_collect_only_exemption.py](../../tests/test_watchdog_collect_only_exemption.py)]
-- [已完成並驗證] **狀態與 JSON 同步死鎖防禦** [REF: [test_deadlock_risk_prevention.py](../../tests/test_deadlock_risk_prevention.py)]
-- [已完成並驗證] **過早切換狀態防護 (UI 穩定性比對)** [REF: [test_phase_transition_stability.py](../../tests/test_phase_transition_stability.py)]
-- [已完成並驗證] **按鈕點擊消失驗證閉環 (click_and_wait_until_gone)** [REF: [test_click_and_wait_until_gone_closed_loop.py](../../tests/test_click_and_wait_until_gone_closed_loop.py)]
-- [已完成並驗證] **全螢幕意外彈窗對接 (Watchdog & Popup Recovery)** [REF: [test_unexpected_popup_docking.py](../../tests/test_unexpected_popup_docking.py)]
+### 4. ⚔️ 掛機模式與流水線調度 (Pipelines & Modes)
+- [已完成並驗證] **地下城全冷卻瀑布流混合模式 (`mix`)**：副本全在冷卻中時自動切換至 Stage 刷關，CD 結束即時切回地下城。
+- [已完成並驗證] **體力耗盡全域自動退避 (`collect_only`)**：彈出 `no_bread.png` 時自動關閉彈窗，退回城鎮切換至待機模式 4.0 小時，結束後自動恢復原模式。
+- [已完成並驗證] **單一權威來源 (SSOT) 與 Fail-Fast 配置**：所有模式配置由 `config.py` 驅動，參數缺失時立即拋出防禦性例外中斷。
+- [已完成並驗證] **每日任務 08:05 四階梯流水線 (`DailyMasterPipeline`)**：
+  - Tier 1: 城鎮速領 (寶箱 `chest` ➔ 抽卡 `hero_draw` ➔ 祭壇 `blood_altar` ➔ 珠寶 `jewelry_workshop`)。
+  - Tier 2: 領主 Boss 討伐 (`lord_boss` 蜘蛛/惡靈計時器搶佔)。
+  - Tier 3: 懸賞告示牌與動態任務 (`bulletin_board`)。
+  - Tier 4: 動態退守刷關。
+- [已完成並驗證] **背包已滿 18 格標題中心錨定與 2 格 (279px) 精準像素 Drag 位移銷毀**。
