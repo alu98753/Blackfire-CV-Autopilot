@@ -15,7 +15,7 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
     def test_applies_changed_mode_at_loop_boundary(self, _reload, get_mode):
         initial_base = {"type": "dungeon", "bless_mode": "combat", "cooldown_map": {1: 300.0}}
         changed_base = {"type": "dungeon", "bless_mode": "exp", "cooldown_map": {1: 42.0}}
-        get_mode.side_effect = [initial_base, changed_base]
+        get_mode.return_value = changed_base
         machine = self._machine()
         machine.config = initial_base.copy()
         machine.primary_config = initial_base.copy()
@@ -27,11 +27,11 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
 
     @patch("states.state_machine.get_runtime_game_config")
     @patch("states.state_machine.refresh_runtime_config", return_value=True)
-    def test_preserves_interactive_selection_while_other_values_refresh(self, _reload, get_mode):
+    def test_profile_snapshot_replaces_startup_override(self, _reload, get_mode):
         initial_base = {"type": "dungeon", "bless_mode": "combat", "cooldown_map": {1: 300.0}}
         selected_config = {"type": "dungeon", "bless_mode": "life", "cooldown_map": {1: 300.0}}
         changed_base = {"type": "dungeon", "bless_mode": "exp", "cooldown_map": {1: 42.0}}
-        get_mode.side_effect = [initial_base, changed_base]
+        get_mode.return_value = changed_base
         machine = self._machine()
         machine.config = selected_config.copy()
         machine.primary_config = selected_config.copy()
@@ -39,8 +39,37 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
 
         machine.refresh_config_at_safe_point()
 
-        self.assertEqual(machine.config["bless_mode"], "life")
+        self.assertEqual(machine.config["bless_mode"], "exp")
         self.assertEqual(machine.config["cooldown_map"][1], 42.0)
+
+    @patch("states.state_machine.get_runtime_game_config")
+    @patch("states.state_machine.refresh_runtime_config", return_value=True)
+    def test_profile_reload_updates_collection_policies(self, _reload, get_mode):
+        initial = {"type": "mix", "auto_bread": True, "auto_diamond": True}
+        changed = {"type": "mix", "auto_bread": False, "auto_diamond": False}
+        get_mode.return_value = changed
+        machine = self._machine()
+        machine.config = initial.copy()
+        machine.primary_config = initial.copy()
+        machine.bread_collection_available = True
+        machine.enable_bread = True
+        machine.need_bread_collection = True
+        machine.need_diamond_collection = True
+        machine.enable_runtime_config_refresh("daily", initial)
+
+        self.assertTrue(machine.refresh_config_at_safe_point())
+        self.assertFalse(machine.enable_bread)
+        self.assertFalse(machine.need_bread_collection)
+        self.assertFalse(machine.need_diamond_collection)
+
+    def test_disabled_profile_diamond_policy_does_not_retrigger_collection(self):
+        machine = self._machine()
+        machine.config = {"type": "mix", "auto_diamond": False}
+        machine.last_diamond_collection_time = 0.0
+
+        machine.check_collection_trigger(None)
+
+        self.assertFalse(machine.need_diamond_collection)
 
     @patch("states.state_machine.refresh_runtime_config", return_value=False)
     def test_does_not_change_running_config_without_a_valid_new_snapshot(self, _reload):
@@ -72,7 +101,7 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
             "tier4_stage_level": 6, "tier4_sub_stage": "final",
         }
         changed = {**initial, "tier4_sub_stage": "six"}
-        get_mode.side_effect = [initial, changed]
+        get_mode.return_value = changed
         get_stage_configs.return_value = stage_configs
         machine = self._machine()
         machine.config = {**initial, "stage_target": "stages/level6_final.png"}

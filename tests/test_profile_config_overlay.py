@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import config
 from config import (
@@ -12,6 +12,7 @@ from config import (
     set_active_profile,
     get_active_profile,
     refresh_runtime_config,
+    get_runtime_game_config,
     GAME_CONFIGS,
     PRIMARY_MODES,
     SUBFLOW_CONFIGS
@@ -85,6 +86,44 @@ enabled = true
             
             reloaded = refresh_runtime_config()
             self.assertTrue(reloaded)
+
+    def test_sandbox_profile_reload_syncs_running_daily_mode(self):
+        """A running daily machine must consume changed sandbox Profile values."""
+        from states.state_machine import GameStateMachine
+
+        config_path = self.sandbox_dir / "config.toml"
+        config_path.write_text("""
+[primary_modes.daily]
+bless_mode = "combat"
+auto_bread = true
+auto_diamond = true
+""", encoding="utf-8")
+
+        with patch.object(config, "USER_DATA_DIR", self.test_user_data_dir):
+            set_active_profile("sandbox")
+            initial = get_runtime_game_config("daily")
+            machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+            machine.config = initial.copy()
+            machine.primary_config = initial.copy()
+            machine.bread_collection_available = True
+            machine.enable_bread = True
+            machine.need_bread_collection = True
+            machine.need_diamond_collection = True
+            machine.enable_runtime_config_refresh("daily", initial)
+
+            config_path.write_text("""
+[primary_modes.daily]
+bless_mode = "life"
+auto_bread = false
+auto_diamond = false
+""", encoding="utf-8")
+
+            self.assertTrue(machine.refresh_config_at_safe_point())
+            self.assertEqual(machine.config["bless_mode"], "life")
+            self.assertFalse(machine.enable_bread)
+            self.assertFalse(machine.need_bread_collection)
+            self.assertFalse(machine.need_diamond_collection)
+
     def test_vision_thresholds_overlay_and_get_template_threshold(self):
         """驗證：vision 比對門檻與 template_thresholds 的讀取、繼承與 get_template_threshold 運作"""
         from config import (

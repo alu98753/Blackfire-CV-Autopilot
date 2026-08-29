@@ -81,6 +81,7 @@ class GameStateMachine:
         
         # 領體力相關屬性 (由外部 main.py 初始化與設定)
         self.enable_bread = False
+        self.bread_collection_available = False
         self.need_bread_collection = False  # 啟動時預設不設定領取，需大門觸發
         self.last_bread_collection_time = 0.0
         self.bread_collected_this_run = False
@@ -976,6 +977,8 @@ class GameStateMachine:
         """
         依據冷卻時間觸發鑽石與麵包的領取（全域時間檢測，不限於大門畫面）。
         """
+        config = self.config or {}
+
         # 以下模式不參與自動領取
         if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar", "jewelry_workshop"]:
             return
@@ -985,7 +988,7 @@ class GameStateMachine:
         # 1. 檢查鑽石 CD
         default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
         diamond_cd = self.config.get("diamond_cd", default_diamond_cd) if self.config else default_diamond_cd
-        if time.time() - self.last_diamond_collection_time > diamond_cd:
+        if config.get("auto_diamond", True) and time.time() - self.last_diamond_collection_time > diamond_cd:
             if not self.need_diamond_collection:
                 logging.info(f"⏰ 距離上次領鑽石已滿 {int(diamond_cd // 60)} 分鐘，觸發自動領鑽石。")
                 self.need_diamond_collection = True
@@ -1071,22 +1074,25 @@ class GameStateMachine:
         return True
 
     def enable_runtime_config_refresh(self, mode_key, initial_config):
-        """Keep CLI and interactive selections while TOML defaults hot-reload."""
+        """Track the active Profile mode as the runtime configuration source."""
         if mode_key not in GAME_CONFIGS:
             return
         self.runtime_config_key = mode_key
-        base_config = get_runtime_game_config(mode_key)
-        self.runtime_config_overrides = {
-            key: deepcopy(value)
-            for key, value in initial_config.items()
-            if (
-                key not in self._DERIVED_STAGE_CONFIG_KEYS
-                # Only pure stage mode derives its whole navigation path here.
-                # Mix/daily modes keep their separately selected dungeon path.
-                and not (key == "navigation_path" and initial_config.get("type") == "stage")
-                and base_config.get(key) != value
-            )
-        }
+        # Profile TOML is authoritative after startup.  Interactive choices are
+        # persisted before this method runs, so retaining a diff here would make
+        # later edits to that same Profile appear to hot-reload without effect.
+        self.runtime_config_overrides = {}
+
+    def _sync_runtime_collection_policies(self, config):
+        """Apply profile collection switches without bypassing template capability checks."""
+        if not config.get("auto_bread", True):
+            self.enable_bread = False
+            self.need_bread_collection = False
+        elif self.bread_collection_available:
+            self.enable_bread = True
+
+        if not config.get("auto_diamond", True):
+            self.need_diamond_collection = False
 
     def refresh_config_at_safe_point(self):
         """Apply a complete configuration only before a new loop iteration."""
@@ -1096,6 +1102,7 @@ class GameStateMachine:
         refreshed_primary.update(deepcopy(self.runtime_config_overrides))
         self._apply_tier4_stage_selection(refreshed_primary)
         self.primary_config = refreshed_primary
+        self._sync_runtime_collection_policies(refreshed_primary)
         if self.config and self.config.get("type") == refreshed_primary.get("type"):
             runtime_flags = {
                 key: value for key, value in self.config.items()
