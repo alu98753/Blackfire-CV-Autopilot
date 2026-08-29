@@ -122,6 +122,26 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.mock_mouse.click.reset_mock()
         handler.handle()
         self.mock_mouse.click.assert_called_once_with(400, 400)
+        self.assertEqual(handler.accept_sub_phase, "WAIT_TASK_ACCEPT_DISMISS")
+
+        # The task-accepted banner is an absolute gate: while visible, do not
+        # scan task.png or leave the waiting sub-phase.
+        handler.last_action_time = 0.0
+        def fake_match_banner_present(img, name, **kw):
+            if name == "town_building/bulletin_board/task_accept.png":
+                return ((400, 200), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match_banner_present
+        self.mock_matcher.match_all.reset_mock()
+        handler.handle()
+        self.assertEqual(handler.accept_sub_phase, "WAIT_TASK_ACCEPT_DISMISS")
+        self.mock_matcher.match_all.assert_not_called()
+
+        # Once the banner disappears, the following tick can scan normally.
+        handler.last_action_time = 0.0
+        self.mock_matcher.match.side_effect = lambda img, name, **kw: (None, 0.0)
+        handler.handle()
         self.assertEqual(handler.accept_sub_phase, "FIND_TOP_TASK")
 
         # Step 7: 已無 task.png ➔ 轉移至 EXIT_BOARD

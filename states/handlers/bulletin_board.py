@@ -31,7 +31,7 @@ class BulletinBoardHandler(BaseStateHandler):
     def __init__(self, machine):
         super().__init__(machine)
         self.step_phase = "INIT"  # INIT, WAIT_BOARD_OPEN, CHECK_RESET, PROCESS_ACCEPT_QUESTS, EXIT_BOARD, ALL_DONE_EXITING
-        self.accept_sub_phase = "FIND_TOP_TASK"  # FIND_TOP_TASK, CLICK_ACCEPT_BTN, CLICK_CONFIRM_POPUP
+        self.accept_sub_phase = "FIND_TOP_TASK"  # FIND_TOP_TASK, CLICK_CONFIRM_POPUP, WAIT_TASK_ACCEPT_DISMISS
         self.last_action_time = 0.0
         self.last_reset_click_time = 0.0
         self.accepted_quest_titles = []
@@ -106,6 +106,7 @@ class BulletinBoardHandler(BaseStateHandler):
         reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
         quit_btn = cfg.get("quit_btn", "common/quit.png")
         accept_btn = cfg.get("accept_btn", "town_building/bulletin_board/accept_task.png")
+        task_accept_banner = cfg.get("task_accept_banner", "town_building/bulletin_board/task_accept.png")
         task_tpl = cfg.get("task_btn", "town_building/bulletin_board/task.png")
 
         # =========================================================================
@@ -140,6 +141,26 @@ class BulletinBoardHandler(BaseStateHandler):
         if self.step_phase == "PROCESS_ACCEPT_QUESTS":
             full_btn = cfg.get("task_already_full_btn", "town_building/bulletin_board/task_already_full.png")
 
+            # The "task accepted" banner darkens and covers the task list. It is
+            # an absolute gate: task.png must not be evaluated while it is visible.
+            if self.accept_sub_phase == "WAIT_TASK_ACCEPT_DISMISS":
+                pos_task_accept, _ = self.matcher.match(
+                    screen_img, task_accept_banner, threshold=0.75, quiet=True
+                )
+                if pos_task_accept:
+                    logging.info(
+                        "[BulletinBoard] Task-accepted banner is still visible; waiting before scanning tasks."
+                    )
+                    self.last_action_time = now
+                    return
+
+                logging.info(
+                    "[BulletinBoard] Task-accepted banner has disappeared; resuming task scan."
+                )
+                self.accept_sub_phase = "FIND_TOP_TASK"
+                self.last_action_time = now
+                return
+
             # 優先檢查是否彈出「任務已滿 (task_already_full.png)」無法接取提示彈窗
             pos_full, conf_full = self.matcher.match(screen_img, full_btn, threshold=0.75)
             if pos_full:
@@ -166,7 +187,7 @@ class BulletinBoardHandler(BaseStateHandler):
                 btn_name = "common/confirm.png" if pos_confirm else "common/ok.png"
                 logging.info(f"📋 [懸賞告示牌] 發現接取成功確認彈窗 [{btn_name}]，點擊確認...")
                 self.mouse.click(left + pos_pop[0], top + pos_pop[1])
-                self.accept_sub_phase = "FIND_TOP_TASK"
+                self.accept_sub_phase = "WAIT_TASK_ACCEPT_DISMISS"
                 self.last_action_time = now
                 return
 
