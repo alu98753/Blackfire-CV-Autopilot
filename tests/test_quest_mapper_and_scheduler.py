@@ -514,6 +514,45 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertTrue(stage_machine.config["enable_stage_farming"])
         self.assertFalse(stage_machine.config["enable_dungeon"])
 
+    def test_cooldown_queries_are_silent_until_a_real_scheduling_decision(self):
+        """Polling readiness must not look like repeated scheduling in logs."""
+        from unittest.mock import patch
+
+        dungeon_node = self.mapper.parse_quest("史萊姆王的毀滅")
+        scheduler = QuestScheduler()
+        scheduler.add_task(dungeon_node)
+        cooldowns = {dungeon_node.dungeon_index: 9_999_999_999.0}
+
+        with patch("utils.quest_scheduler.logging.info") as info:
+            task, _ = scheduler.get_next_action_node(dungeon_cooldowns=cooldowns)
+            self.assertIsNone(task)
+            info.assert_not_called()
+
+        with patch("utils.quest_scheduler.logging.info") as info:
+            scheduler.get_next_action_node(
+                dungeon_cooldowns=cooldowns,
+                log_cooldowns=True,
+            )
+            info.assert_called_once()
+
+    def test_tier4_fallback_does_not_reapply_an_identical_baseline(self):
+        """Repeated scheduler polls must not keep replacing the active config."""
+        from unittest.mock import MagicMock, patch
+        from states.state_machine import GameStateMachine
+
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        machine.primary_config = {
+            "name": "User Tier 4 baseline",
+            "type": "mix",
+            "enable_stage_farming": False,
+            "enable_dungeon": False,
+        }
+        machine.apply_tier4_fallback_config()
+
+        with patch.object(machine, "set_config") as set_config:
+            self.assertFalse(machine.apply_tier4_fallback_config())
+            set_config.assert_not_called()
+
     def test_update_bulletin_board_quests_filters_unknown_and_ignored(self):
         """
         [未知/忽略任務隔離測試] 驗證當告示牌掃描到未知任務 (完全未知任務_XYZ) 與忽略任務 (獵金之蟲) 時，
@@ -652,6 +691,4 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
 

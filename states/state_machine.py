@@ -110,6 +110,8 @@ class GameStateMachine:
         self.runtime_config_key = None
         self.runtime_config_overrides = {}
         self.pending_daily_reset_exit = False
+        self.next_daily_quest_ready_at = None
+        self.pending_daily_quest_preemption = False
 
 
 
@@ -515,6 +517,8 @@ class GameStateMachine:
             self.need_bag_cleaning = True
             self.handlers[new_state].screenshot_counter = 1
         elif new_state == self.STATE_NAVIGATING:
+            if self.consume_daily_quest_preemption_for_navigation():
+                return
             if getattr(self, "pending_town_subflows", False):
                 self.pending_town_subflows = False
                 logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
@@ -544,6 +548,8 @@ class GameStateMachine:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
             time.sleep(1)
             return
+
+        self.poll_daily_quest_preemption()
 
         pass
 
@@ -1041,8 +1047,16 @@ class GameStateMachine:
         """
         if getattr(self, "primary_config", None):
             fallback_cfg = self.primary_config.copy()
+            if (
+                self.config.get("is_tier4_fallback", False)
+                and all(self.config.get(key) == value for key, value in fallback_cfg.items())
+            ):
+                logging.debug("[GameStateMachine] Tier 4 fallback configuration is already active.")
+                self.arm_daily_quest_preemption()
+                return False
             fallback_cfg["is_tier4_fallback"] = True
             self.set_config(fallback_cfg)
+            self.arm_daily_quest_preemption()
             logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
         else:
             from config import PRIMARY_MODES
@@ -1055,6 +1069,7 @@ class GameStateMachine:
 
             self.set_config(mix_config)
             self.primary_config = mix_config.copy()
+            self.arm_daily_quest_preemption()
             logging.info(f"🔄 [GameStateMachine] 未找到使用者基準配置，已切換至預設 Tier 4 退守配置: {mix_config['name']}")
 
 
@@ -1074,7 +1089,10 @@ class GameStateMachine:
             self.quest_scheduler = None
             return None
 
-        target_task, msg = self.quest_scheduler.get_next_action_node(dungeon_cooldowns=self.dungeon_cooldowns)
+        target_task, msg = self.quest_scheduler.get_next_action_node(
+            dungeon_cooldowns=self.dungeon_cooldowns,
+            log_cooldowns=True,
+        )
         if target_task:
             if target_task.completed_count >= target_task.max_run_limit:
                 logging.warning(f"⚠️ [上限防呆強制刪除] 懸賞任務 [{target_task.quest_title}] 已達到最多 {target_task.max_run_limit} 次戰鬥上限，強制將該任務從排程佇列與 JSON 中刪除！")
@@ -1405,17 +1423,58 @@ class GameStateMachine:
         exit decision, while the next NAVIGATING transition owns scheduling and
         applying the selected quest configuration.
         """
-        if not self.is_daily_pipeline_active():
-            return False
-        if not self.config.get("is_tier4_fallback", False):
-            return False
-        if not self.quest_scheduler or self.quest_scheduler.is_all_completed():
+        return self.poll_daily_quest_preemption()
+
+    def arm_daily_quest_preemption(self, now_ts=None):
+        """Record when Tier 3 work can next preempt Tier 4, without switching."""
+        if not self.config.get("is_tier4_fallback", False) or not self.quest_scheduler:
             return False
 
         ready_task, _ = self.quest_scheduler.get_next_action_node(
-            dungeon_cooldowns=self.dungeon_cooldowns
+            dungeon_cooldowns=self.dungeon_cooldowns,
+            now_ts=now_ts,
         )
-        return ready_task is not None
+        if ready_task is not None:
+            self.pending_daily_quest_preemption = True
+            self.next_daily_quest_ready_at = None
+            return True
+
+        self.pending_daily_quest_preemption = False
+        self.next_daily_quest_ready_at = self.quest_scheduler.get_next_ready_at(
+            dungeon_cooldowns=self.dungeon_cooldowns,
+            now_ts=now_ts,
+        )
+        return False
+
+    def poll_daily_quest_preemption(self, now_ts=None):
+        """Latch a ready Tier 3 task; never mutate configuration mid-activity."""
+        if not self.config.get("is_tier4_fallback", False) or not self.quest_scheduler:
+            return False
+        if self.pending_daily_quest_preemption:
+            return True
+
+        now_ts = time.time() if now_ts is None else now_ts
+        deadline = self.next_daily_quest_ready_at
+        if deadline is not None and now_ts < deadline:
+            return False
+        return self.arm_daily_quest_preemption(now_ts=now_ts)
+
+    def consume_daily_quest_preemption_for_navigation(self):
+        """At the NAVIGATING boundary, select and apply the ready quest once."""
+        if not self.pending_daily_quest_preemption:
+            return False
+
+        self.pending_daily_quest_preemption = False
+        self.next_daily_quest_ready_at = None
+        scheduled_task = self.check_and_advance_quest_target()
+        if scheduled_task:
+            logging.info("📋 [Tier 4 插隊] 已在導航安全點切換至就緒的懸賞任務。")
+            return True
+
+        # The visual cooldown state can change after the deadline was armed;
+        # retain Tier 4 and calculate the next wake-up instead of thrashing.
+        self.arm_daily_quest_preemption()
+        return False
 
 
     def evaluate_next_activity(self):

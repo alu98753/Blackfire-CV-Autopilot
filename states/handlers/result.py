@@ -172,6 +172,7 @@ class ResultHandler(BaseStateHandler):
             if cfg.get("enable_lord_boss", True) and hasattr(dm, "has_available_lord_boss"):
                 boss_available = dm.has_available_lord_boss()
 
+        is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
         quest_batch_completed = False
         has_higher_priority_task = False
         if is_daily and getattr(self.machine, "quest_scheduler", None):
@@ -179,12 +180,12 @@ class ResultHandler(BaseStateHandler):
                 dungeon_cooldowns=self.machine.dungeon_cooldowns,
                 current_config=self.machine.config
             )
-            has_higher_priority_task = self.machine.quest_scheduler.has_higher_priority_task_ready(
-                current_config=self.machine.config,
-                dungeon_cooldowns=self.machine.dungeon_cooldowns
-            )
+            if not is_in_tier4:
+                has_higher_priority_task = self.machine.quest_scheduler.has_higher_priority_task_ready(
+                    current_config=self.machine.config,
+                    dungeon_cooldowns=self.machine.dungeon_cooldowns
+                )
 
-        is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
         daily_quest_ready_to_preempt_tier4 = (
             is_in_tier4 and self.machine.has_ready_daily_quest_preemption()
         )

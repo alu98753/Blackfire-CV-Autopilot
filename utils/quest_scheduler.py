@@ -88,9 +88,33 @@ class QuestScheduler:
         except ValueError:
             return False
 
+    def get_next_ready_at(self, dungeon_cooldowns=None, now_ts=None):
+        """Return the earliest timestamp at which a pending quest can run.
+
+        This is a pure clock query: it does not log, mutate tasks, or select a
+        configuration.  A ready stage/generic task, or a dungeon whose cooldown
+        has elapsed, returns ``now_ts`` immediately.
+        """
+        import time
+
+        if now_ts is None:
+            now_ts = time.time()
+
+        earliest = None
+        for task in self.get_pending_tasks():
+            if task.mode_type != "dungeon":
+                return now_ts
+
+            cooldown_until = (dungeon_cooldowns or {}).get(task.dungeon_index, 0.0)
+            if now_ts >= cooldown_until:
+                return now_ts
+            if cooldown_until != float("inf"):
+                earliest = cooldown_until if earliest is None else min(earliest, cooldown_until)
+        return earliest
 
 
-    def get_next_action_config(self, dungeon_cooldowns=None, now_ts=None):
+
+    def get_next_action_config(self, dungeon_cooldowns=None, now_ts=None, log_cooldowns=False):
         """
         綜合目前所有未完成任務，產出最優的單個 CLI 啟動指令與模式配置。
         優先度：確定性 ➔ 僅憑彈窗核銷；地下城專屬任務 (未在冷卻中) ➔ 特定普通關卡任務 ➔ 通用首領任務 ➔ 混合模式。
@@ -115,7 +139,8 @@ class QuestScheduler:
                     if now_ts < cd_until:
                         rem_sec = int(cd_until - now_ts)
                         rem_str = format_seconds_to_readable(rem_sec) if rem_sec != float('inf') else "∞"
-                        logging.info(f"⏳ [懸賞排程器] 任務 [{target_task.quest_title}] (地下城 #{idx + 1}) 正在冷卻中 (剩餘 {rem_str})，順延尋找下一個可執行任務...")
+                        if log_cooldowns:
+                            logging.info(f"⏳ [懸賞排程器] 任務 [{target_task.quest_title}] (地下城 #{idx + 1}) 正在冷卻中 (剩餘 {rem_str})，順延尋找下一個可執行任務...")
                         continue
 
                 cli_cmd = target_task.to_cli_args()
@@ -129,7 +154,7 @@ class QuestScheduler:
 
         return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
 
-    def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None):
+    def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None, log_cooldowns=False):
         """
         傳回目前最優的單個未完成 TaskNode 實例 (嚴格遵循 sort_quests 多階梯排序)。
         """
@@ -151,7 +176,8 @@ class QuestScheduler:
                     if now_ts < cd_until:
                         rem_sec = int(cd_until - now_ts)
                         rem_str = format_seconds_to_readable(rem_sec) if rem_sec != float('inf') else "∞"
-                        logging.info(f"⏳ [懸賞排程器] 任務 [{target_task.quest_title}] (地下城 #{idx + 1}) 正在冷卻中 (剩餘 {rem_str})，順延尋找下一個可執行任務...")
+                        if log_cooldowns:
+                            logging.info(f"⏳ [懸賞排程器] 任務 [{target_task.quest_title}] (地下城 #{idx + 1}) 正在冷卻中 (剩餘 {rem_str})，順延尋找下一個可執行任務...")
                         continue
 
                 msg = f"⚔️ 執行地下城懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
@@ -382,6 +408,4 @@ class QuestScheduler:
                 updated_any = True
 
         return updated_any
-
-
 
