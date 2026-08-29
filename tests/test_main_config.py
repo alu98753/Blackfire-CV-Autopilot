@@ -9,7 +9,10 @@ from pathlib import Path
 
 import config
 from config import GAME_CONFIGS, set_active_profile
-from main import setup_stage_config, setup_dungeon_config, setup_mode_config, check_mode_templates
+from cli.dungeon_setup import setup_dungeon_config
+from cli.mode_setup import setup_mode_config
+from cli.stage_setup import setup_stage_config
+from runtime.bootstrap import check_mode_templates
 
 class TestMainConfig(unittest.TestCase):
 

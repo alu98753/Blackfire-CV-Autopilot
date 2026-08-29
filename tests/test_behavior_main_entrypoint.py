@@ -5,6 +5,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import main
+from cli.dungeon_setup import setup_dungeon_config
+from cli.profile_updates import persist_mode_updates
+from cli.prompts import prompt_choice
+from cli.stage_setup import setup_stage_config
+from runtime.loop import run_main_loop
 
 
 def make_args(**overrides):
@@ -25,18 +30,18 @@ def make_args(**overrides):
 class TestMainEntrypointBehavior(unittest.TestCase):
     def test_prompt_choice_returns_default_for_empty_input_or_terminal_interrupt(self):
         with patch("builtins.input", return_value="   "):
-            self.assertEqual(main.prompt_choice("choice: ", "default"), "default")
+            self.assertEqual(prompt_choice("choice: ", "default"), "default")
         with patch("builtins.input", side_effect=EOFError):
-            self.assertEqual(main.prompt_choice("choice: ", "default"), "default")
+            self.assertEqual(prompt_choice("choice: ", "default"), "default")
         with patch("builtins.input", return_value="six"):
-            self.assertEqual(main.prompt_choice("choice: ", "default"), "six")
+            self.assertEqual(prompt_choice("choice: ", "default"), "six")
 
     @patch("config.update_profile_config")
     @patch("config.get_active_profile", return_value="sandbox")
     def test_mode_selection_persists_only_changed_values_to_active_profile_mode(
         self, get_active_profile, update_profile_config
     ):
-        main.persist_mode_updates(
+        persist_mode_updates(
             {"_config_mode_key": "daily", "type": "mix"}, {"tier4_sub_stage": "six"}
         )
 
@@ -60,7 +65,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         }
         config = {"type": "stage", "tier4_stage_level": 6, "tier4_sub_stage": "final"}
 
-        main.setup_stage_config(config, stage_level=6, sub_stage_type="six")
+        setup_stage_config(config, stage_level=6, sub_stage_type="six")
 
         terminal_input.assert_not_called()
         self.assertEqual(config["stage_target"], "stages/six_stage.png")
@@ -81,7 +86,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         }
         args = make_args(blessmode="combat")
 
-        main.setup_dungeon_config(config, args)
+        setup_dungeon_config(config, args)
 
         self.assertTrue(config["greedy_dungeon"])
         self.assertEqual(config["greedy_allowed_indices"], [0, 2])
@@ -105,7 +110,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         }
         args = make_args(blessmode=None)
 
-        main.setup_dungeon_config(config, args)
+        setup_dungeon_config(config, args)
 
         self.assertEqual(config["tier4_dungeon_index"], 1)
         self.assertEqual(config["bless_mode"], "exp")
@@ -260,7 +265,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertEqual(exited.exception.code, 1)
         capturer_class.assert_not_called()
 
-    @patch("main.time.sleep")
+    @patch("runtime.loop.time.sleep")
     @patch("builtins.print")
     @patch("runtime.loop.PauseController")
     def test_runtime_loop_refreshes_config_before_each_state_machine_step(
@@ -272,7 +277,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         pause_controller_class.return_value.check_toggle_triggered.return_value = False
 
         with self.assertRaises(SystemExit):
-            main.run_main_loop(state_machine, interval=0.5)
+            run_main_loop(state_machine, interval=0.5)
 
         self.assertEqual(
             [state_machine.refresh_config_at_safe_point.call_args, state_machine.step.call_args],
