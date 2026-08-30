@@ -99,6 +99,25 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         mock_relaunch_execute.assert_called_once()
         self.assertEqual(mock_relaunch_execute.call_args[1]["reason"], "collect_only_cooldown_timeout_exceeded")
 
+    @patch("states.exceptions.subflows.game_relaunch.GameRelaunchSubflow.execute", return_value=True)
+    def test_collect_only_uses_global_cooldown_defaults_when_profile_omits_them(self, mock_relaunch_execute):
+        """Daily-like profiles inherit global collection CDs instead of a 300-second watchdog fallback."""
+        dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
+        self.machine.current_state = GameStateMachine.STATE_COLLECT_ONLY
+        self.capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        self.machine.config = {"type": "mix"}  # Mirrors a daily profile with no explicit collection CDs.
+
+        # The default diamond cooldown is 7200 seconds, so a six-minute wait is normal.
+        self.machine.last_state_change = time.time() - 365.0
+        self.assertFalse(self.watchdog.check(dummy_img))
+        mock_relaunch_execute.assert_not_called()
+
+        # A genuinely excessive wait still retains the recovery guardrail.
+        self.machine.last_state_change = time.time() - 7265.0
+        self.assertTrue(self.watchdog.check(dummy_img))
+        mock_relaunch_execute.assert_called_once()
+        self.assertEqual(mock_relaunch_execute.call_args[1]["reason"], "collect_only_cooldown_timeout_exceeded")
+
     def test_timeout_30s_with_matched_specific_subflow_template(self):
         """[測試 3] 雙重條件：滿 90 秒 + 掃描命中 Wheel_of_Fortune.png 專屬 Subflow 圖案"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
