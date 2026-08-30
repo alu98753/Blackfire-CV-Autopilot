@@ -207,6 +207,8 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         )
         init_system.assert_called_once_with(args, config, target_hwnd=0x123)
         run_loop.assert_called_once_with(machine, 0.5)
+        self.assertIsInstance(machine.incident_session_id, str)
+        self.assertTrue(machine.incident_session_id)
         self.assertEqual(
             [setup_utf8.call_args, select_window.call_args, set_active_profile.call_args, setup_mode.call_args],
             [call(), call(target=None, auto_prompt=True), call("sandbox"), call(args)],

@@ -18,6 +18,7 @@ from cli.mode_setup import setup_equipment_config, setup_mode_config
 from cli.profiles import resolve_profile_name
 from runtime.bootstrap import init_state_machine_system
 from runtime.heartbeat import heartbeat_path_for_profile, touch_heartbeat
+from runtime.incident_journal import clear_child_termination, new_session_id, normalize_profile
 from runtime.loop import run_main_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -41,9 +42,10 @@ def main():
         args.title = target_title
 
     # 套用 Profile 專屬配置覆蓋 (如 user_data/sandbox/config.toml)
-    profile_name = resolve_profile_name(args, target_title)
+    profile_name = normalize_profile(resolve_profile_name(args, target_title))
     from config import set_active_profile
     set_active_profile(profile_name)
+    clear_child_termination(profile_name)
 
     # 2. 處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)
@@ -61,6 +63,7 @@ def main():
     state_machine = init_state_machine_system(args, config, target_hwnd=target_hwnd)
     state_machine.restart_target = args.target or ("sandbox" if "[#]" in args.title else "native")
     state_machine.restart_profile = profile_name
+    state_machine.incident_session_id = getattr(args, "incident_session_id", None) or new_session_id()
     state_machine.heartbeat_path = heartbeat_path_for_profile(profile_name)
     touch_heartbeat(state_machine)
     run_main_loop(state_machine, args.interval)
