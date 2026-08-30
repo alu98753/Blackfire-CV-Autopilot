@@ -721,7 +721,7 @@ class TestTierConfigMatrix(unittest.TestCase):
             blessmode="combat",
             enable_lord_boss=None,
             enable_dungeon=None,
-            enable_stage_farming=None,
+            enable_stage_farming=True,
             enable_town_daily=None,
             stage=None,
             sub=None
