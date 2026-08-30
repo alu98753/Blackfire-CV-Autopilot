@@ -171,6 +171,34 @@ class TestBulletinBoardSubflow(unittest.TestCase):
             "bulletin_board", extra_data={"accepted_quests": ["清除野豬"]}
         )
 
+    def test_confirmed_accept_banner_dismissal_refreshes_watchdog_progress(self):
+        """A completed acceptance, not the preceding clicks, grants the 90s watchdog lease."""
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+        self.state_machine.last_state_change = time.time() - 91.0
+        original_notify = self.state_machine.notify_ui_progress
+        self.state_machine.notify_ui_progress = MagicMock(wraps=original_notify)
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.step_phase = "PROCESS_ACCEPT_QUESTS"
+        handler.accept_sub_phase = "WAIT_TASK_ACCEPT_DISMISS"
+        handler.last_action_time = 0.0
+        screen = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        # A still-visible banner is only waiting, so it must not reset the watchdog.
+        self.mock_matcher.match.return_value = ((400, 200), 0.90)
+        handler.handle(screen, rect)
+        self.state_machine.notify_ui_progress.assert_not_called()
+
+        # Its disappearance confirms the game finished accepting one task.
+        handler.last_action_time = 0.0
+        self.mock_matcher.match.return_value = (None, 0.0)
+        handler.handle(screen, rect)
+
+        self.state_machine.notify_ui_progress.assert_called_once()
+        self.assertEqual(handler.accept_sub_phase, "FIND_TOP_TASK")
+        self.assertFalse(self.state_machine.exception_watchdog.check(MagicMock()))
+
     @patch('os.path.exists')
     def test_bulletin_board_skip_reset_when_no_reset_btn(self, mock_exists):
         """

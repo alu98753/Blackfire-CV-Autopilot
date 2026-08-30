@@ -158,6 +158,8 @@ class BulletinBoardHandler(BaseStateHandler):
                 logging.info(
                     "[BulletinBoard] Task-accepted banner has disappeared; resuming task scan."
                 )
+                # Confirmed post-accept UI transition: count it as real progress.
+                self.notify_ui_progress()
                 self.accept_sub_phase = "FIND_TOP_TASK"
                 self.last_action_time = now
                 return
@@ -242,6 +244,8 @@ class BulletinBoardHandler(BaseStateHandler):
                         logging.info(f"📋 [無任務理由] 匹配到的 {len(raw_anchors)} 個候選點全數被 task_after.png 比對過濾！")
 
                     logging.info(f"📋 [懸賞告示牌] 畫面上所有任務均已接取 (task_after.png)！共成功接取 {len(self.accepted_quest_titles)} 項任務: {self.accepted_quest_titles}")
+                    # Every candidate now verifies as accepted; the batch advanced.
+                    self.notify_ui_progress()
                     self.step_phase = "EXIT_BOARD"
                     self.last_action_time = now
                     return
@@ -319,6 +323,7 @@ class BulletinBoardHandler(BaseStateHandler):
             if self.last_reset_click_time > 0.0:
                 if now - self.last_reset_click_time >= 3.0:
                     logging.info("📋 [懸賞告示牌] 確定重置按鈕已消失且已滿 3 秒，切換至 PROCESS_ACCEPT_QUESTS 開始領取任務...")
+                    self.notify_ui_progress()
                     self.step_phase = "PROCESS_ACCEPT_QUESTS"
                     self.accept_sub_phase = "FIND_TOP_TASK"
                     self.last_action_time = now
@@ -342,6 +347,7 @@ class BulletinBoardHandler(BaseStateHandler):
         if self.step_phase == "WAIT_BOARD_OPEN":
             if pos_quit:
                 logging.info(f"📋 [懸賞告示牌] 偵測到 [{quit_btn}]，確認已成功進入告示牌介面！進行重置判斷...")
+                self.notify_ui_progress()
                 self.step_phase = "CHECK_RESET"
                 self.last_action_time = now
                 return
