@@ -3,6 +3,7 @@ import time
 import logging
 import subprocess
 from states.exceptions.subflows.base import BaseExceptionSubflow
+from runtime.incident_journal import record_recovery
 from utils.steam_launcher import SteamGameLauncher
 from utils.sandbox_manager import SandboxManager
 from config import WINDOW_TITLE
@@ -27,6 +28,13 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         is_sandbox = getattr(machine, 'is_sandbox', None)
         if is_sandbox is None:
             is_sandbox = SandboxManager.is_sandbox_title(game_title)
+
+        incident_details = {
+            "trigger_reason_code": reason,
+            "game_title": game_title,
+            "is_sandbox": is_sandbox,
+        }
+        record_recovery(machine, "game_relaunch_started", incident_details)
 
         current_script_pid = os.getpid()
         logging.info(f'💥 [GameRelaunchSubflow] 發起目標實例終止 (標題: {game_title}, 沙盒: {is_sandbox}, 腳本 PID: {current_script_pid})...')
@@ -69,7 +77,13 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         )
         if not launcher.ensure_game_ready():
             logging.error('[GameRelaunchSubflow] Game launch failed; preserving failure state for external supervisor recovery.')
-            raise RuntimeError("Game relaunch failed; terminating bot for supervisor recovery.")
+            error = RuntimeError("Game relaunch failed; terminating bot for supervisor recovery.")
+            record_recovery(
+                machine,
+                "game_relaunch_failed",
+                incident_details | {"exception_type": type(error).__name__, "exception_message": str(error)},
+            )
+            raise error
 
         machine.stashed_state = None
         machine.stashed_context = {}
@@ -82,4 +96,5 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
 
         logging.info('🔄 [GameRelaunchSubflow] 重啟完成！轉移狀態至 STATE_UNKNOWN 交由全域掃描與 LoginFlow 接管...')
         machine.transition_to(machine.STATE_UNKNOWN)
+        record_recovery(machine, "game_relaunch_succeeded", incident_details)
         return True

@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any
 from config import GLOBAL_SETTINGS, get_exception_features_config, get_subflow_feature_mapping
 from states.exceptions.subflows import safe_match
+from runtime.incident_journal import record_recovery
 
 
 class ExceptionWatchdog:
@@ -109,6 +110,15 @@ class ExceptionWatchdog:
 
         # 🚨 硬條件 B：若同一個狀態連續 2 次逾時 (代表第 1 次輕量救援無效) -> 觸發 GameRelaunchSubflow
         if self.consecutive_stuck_count >= 2:
+            record_recovery(
+                self.machine,
+                "watchdog_timeout_detected",
+                {
+                    "state_duration_seconds": state_duration,
+                    "timeout_seconds": stuck_timeout,
+                    "consecutive_count": self.consecutive_stuck_count,
+                },
+            )
             logging.error(
                 f"❌ [Watchdog] 狀態 [{self.machine.current_state}] 連續 {self.consecutive_stuck_count} 次逾時卡死！輕量救援無效，發起 GameRelaunchSubflow 重啟..."
             )
@@ -126,6 +136,7 @@ class ExceptionWatchdog:
         mapping = get_subflow_feature_mapping()
 
         matched_subflow_name = None
+        matched_confidence = None
         for subflow_name, info in mapping.items():
             if isinstance(info, dict) and "trigger_template" in info:
                 tpl = info["trigger_template"]
@@ -136,10 +147,21 @@ class ExceptionWatchdog:
                             f"🎯 [Watchdog] 逾時掃描：於狀態 [{self.machine.current_state}] 命中專屬 Subflow [{subflow_name}] 圖案 [{tpl}] (相似度: {conf:.4f})"
                         )
                         matched_subflow_name = subflow_name
+                        matched_confidence = conf
                         break
 
         # 中央發起暫存與 Subflow 指派
         self.machine.stash_current_state(reason=f"watchdog_timeout_{self.machine.current_state}")
+        record_recovery(
+            self.machine,
+            "popup_recovery_requested",
+            {
+                "matched_subflow": matched_subflow_name,
+                "match_confidence": matched_confidence,
+                "state_duration_seconds": state_duration,
+                "timeout_seconds": stuck_timeout,
+            },
+        )
         if popup_handler and hasattr(popup_handler, "subflows_map"):
             if matched_subflow_name:
                 popup_handler.active_subflow = popup_handler.subflows_map.get(matched_subflow_name)
