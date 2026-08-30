@@ -12,6 +12,15 @@ from pathlib import Path
 from typing import Sequence
 
 from runtime.heartbeat import DEFAULT_HEARTBEAT_PATH
+from runtime.incident_journal import (
+    CRASH,
+    HEARTBEAT_TIMEOUT,
+    SCHEDULED_MAINTENANCE,
+    explicit_profile_from_command,
+    new_session_id,
+    read_child_termination,
+    write_incident,
+)
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -44,6 +53,31 @@ def read_heartbeat(path: Path) -> dict[str, object]:
         return {}
 
 
+def heartbeat_incident_context(heartbeat: dict[str, object], child_pid: int | None, heartbeat_current: bool, session_id: str) -> dict[str, object]:
+    """Use heartbeat context only when it belongs to this exact child launch."""
+    if not heartbeat_current or heartbeat.get("pid") != child_pid or heartbeat.get("session_id") != session_id:
+        return {"session_id": session_id, "state": None, "run_count": 0}
+    return {
+        "session_id": session_id,
+        "state": heartbeat.get("state") if isinstance(heartbeat.get("state"), str) else None,
+        "run_count": heartbeat.get("run_count") if isinstance(heartbeat.get("run_count"), (int, float)) else 0,
+    }
+
+
+def prepare_child_command(command: Sequence[str], session_id: str) -> list[str]:
+    prepared: list[str] = []
+    skip_next = False
+    for token in command:
+        if skip_next:
+            skip_next = False
+            continue
+        if token == "--incident-session-id":
+            skip_next = True
+            continue
+        prepared.append(token)
+    return [*prepared, "--incident-session-id", session_id]
+
+
 def prepare_resume_command(command: Sequence[str], heartbeat: dict[str, object]) -> list[str]:
     """Preserve first-run CLI options and restore the selected instance on restart."""
     resumed = list(command)
@@ -60,6 +94,19 @@ def prepare_resume_command(command: Sequence[str], heartbeat: dict[str, object])
 def is_manual_exit(exit_code: int | None) -> bool:
     """Only the dedicated in-app hotkey may stop the supervisor cleanly."""
     return exit_code == MANUAL_EXIT_CODE
+
+
+def fallback_child_exit_reason(
+    exit_code: int | None,
+    handoff: dict[str, object] | None,
+    *,
+    scheduled_restart: bool,
+    termination_reason: str | None,
+) -> str | None:
+    """Classify an exit that the child did not already explain via its handoff."""
+    if scheduled_restart or termination_reason is not None or handoff is not None:
+        return None
+    return "unexpected_clean_exit" if exit_code == 0 else "child_exit_without_handoff"
 
 
 def daily_restart_state_path(heartbeat_path: Path) -> Path:
@@ -126,18 +173,25 @@ def supervise(
     if not command:
         raise ValueError("A bot command is required after '--'.")
 
+    profile = explicit_profile_from_command(command)
+    if profile is None:
+        raise ValueError("A supervised bot command must include an explicit '--profile <name>'.")
+
     restart_count = 0
     launch_command = list(command)
     maintenance_state_path = daily_restart_state_path(heartbeat_path)
     supervisor_started_at = datetime.now()
     while True:
         started_at = time.time()
+        session_id = new_session_id()
+        child_command = prepare_child_command(launch_command, session_id)
+        termination_reason: str | None = None
         try:
             heartbeat_path.unlink(missing_ok=True)
         except OSError:
             pass
-        logging.info("[Supervisor] Starting bot process: %s", " ".join(launch_command))
-        child = subprocess.Popen(launch_command)
+        logging.info("[Supervisor] Starting bot process: %s", " ".join(child_command))
+        child = subprocess.Popen(child_command)
         scheduled_restart = False
         try:
             while child.poll() is None:
@@ -152,6 +206,16 @@ def supervise(
                         # produce a second maintenance restart on the same calendar day.
                         if record_scheduled_restart(maintenance_state_path, local_now):
                             scheduled_restart = True
+                            termination_reason = "daily_scheduled_restart"
+                            last_heartbeat = read_heartbeat(heartbeat_path)
+                            write_incident(
+                                profile,
+                                SCHEDULED_MAINTENANCE,
+                                termination_reason,
+                                pid=getattr(child, "pid", None),
+                                **heartbeat_incident_context(last_heartbeat, getattr(child, "pid", None), heartbeat_is_current(heartbeat_path, started_at), session_id),
+                                details={"scheduled_hour": daily_restart_hour, "last_scheduled_restart_date": local_now.date().isoformat()},
+                            )
                             logging.warning(
                                 "[Supervisor] Daily maintenance restart scheduled at %s; restarting bot with saved settings.",
                                 local_now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -169,6 +233,20 @@ def supervise(
                 # Restarted launches include --resume and use the normal liveness limit.
                 allowed_age = max(timeout_seconds, 600.0) if restart_count == 0 and "--resume" not in launch_command else timeout_seconds
                 if age > allowed_age:
+                    termination_reason = "heartbeat_stale"
+                    last_heartbeat = read_heartbeat(heartbeat_path)
+                    write_incident(
+                        profile,
+                        HEARTBEAT_TIMEOUT,
+                        termination_reason,
+                        pid=getattr(child, "pid", None),
+                        **heartbeat_incident_context(last_heartbeat, getattr(child, "pid", None), current_heartbeat, session_id),
+                        details={
+                            "heartbeat_age_seconds": age,
+                            "timeout_seconds": allowed_age,
+                            "last_heartbeat": last_heartbeat.get("timestamp"),
+                        },
+                    )
                     logging.error("[Supervisor] Heartbeat stale for %.1fs; terminating bot for recovery.", age)
                     _stop_child(child)
                     break
@@ -177,12 +255,54 @@ def supervise(
             # Ctrl+C is treated as child recovery, not supervisor shutdown.
             # The user can use Ctrl+Shift+Q inside the bot for a deliberate exit.
             logging.warning("[Supervisor] Ctrl+C received; restarting bot with saved settings.")
+            termination_reason = "interrupt_recovery_requested"
+            last_heartbeat = read_heartbeat(heartbeat_path)
+            write_incident(
+                profile,
+                SCHEDULED_MAINTENANCE,
+                termination_reason,
+                pid=getattr(child, "pid", None),
+                **heartbeat_incident_context(last_heartbeat, getattr(child, "pid", None), heartbeat_is_current(heartbeat_path, started_at), session_id),
+                details={"restart_number": restart_count + 1},
+            )
             _stop_child(child)
 
         exit_code = child.poll()
         if is_manual_exit(exit_code):
+            last_heartbeat = read_heartbeat(heartbeat_path)
+            write_incident(
+                profile,
+                SCHEDULED_MAINTENANCE,
+                "manual_exit_hotkey",
+                pid=getattr(child, "pid", None),
+                **heartbeat_incident_context(last_heartbeat, getattr(child, "pid", None), heartbeat_is_current(heartbeat_path, started_at), session_id),
+                details={"exit_code": exit_code},
+            )
             logging.info("[Supervisor] Manual exit hotkey received; stopping supervisor.")
             return 0
+        child_pid = getattr(child, "pid", None)
+        expected_pid = child_pid if isinstance(child_pid, int) else None
+        handoff = read_child_termination(profile, expected_pid)
+        fallback_reason = fallback_child_exit_reason(
+            exit_code,
+            handoff,
+            scheduled_restart=scheduled_restart,
+            termination_reason=termination_reason,
+        )
+        if fallback_reason is not None:
+            last_heartbeat = read_heartbeat(heartbeat_path)
+            write_incident(
+                profile,
+                CRASH,
+                fallback_reason,
+                pid=expected_pid,
+                **heartbeat_incident_context(last_heartbeat, expected_pid, heartbeat_is_current(heartbeat_path, started_at), session_id),
+                details={
+                    "exit_code": exit_code,
+                    "started_at": started_at,
+                    "last_heartbeat": last_heartbeat.get("timestamp"),
+                },
+            )
         launch_command = prepare_resume_command(launch_command, read_heartbeat(heartbeat_path))
         restart_count = 0 if scheduled_restart else restart_count + 1
         delay = min(60.0, 2.0 ** min(restart_count, 5))
