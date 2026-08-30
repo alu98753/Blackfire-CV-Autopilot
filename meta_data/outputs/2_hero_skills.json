@@ -732,7 +732,7 @@
   "hero_archer_5": {
     "hero_id": "hero_archer_5",
     "class_zh": "遊俠 (弓箭手)",
-    "rarity_zh": "傳說 (橘)",
+    "rarity_zh": "傳說 (黃)",
     "skills": [
       {
         "skill_id": "lightshot",
@@ -1039,7 +1039,7 @@
   "hero_archer_6": {
     "hero_id": "hero_archer_6",
     "class_zh": "遊俠 (弓箭手)",
-    "rarity_zh": "神話 (紅)",
+    "rarity_zh": "神話 (橙)",
     "skills": [
       {
         "skill_id": "lightshot",
@@ -1402,7 +1402,7 @@
   "hero_archer_7": {
     "hero_id": "hero_archer_7",
     "class_zh": "遊俠 (弓箭手)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "lightshot",
@@ -1817,7 +1817,7 @@
   "hero_archer_drugor": {
     "hero_id": "hero_archer_drugor",
     "class_zh": "遊俠 (弓箭手)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "bloodfang_mark",
@@ -2265,7 +2265,7 @@
   "hero_archer_olaf": {
     "hero_id": "hero_archer_olaf",
     "class_zh": "遊俠 (弓箭手)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "guided_twinshot",
@@ -3520,7 +3520,7 @@
   "hero_knight_5": {
     "hero_id": "hero_knight_5",
     "class_zh": "騎士 (聖騎士)",
-    "rarity_zh": "傳說 (橘)",
+    "rarity_zh": "傳說 (黃)",
     "skills": [
       {
         "skill_id": "guardian_blow",
@@ -3899,7 +3899,7 @@
   "hero_knight_askar": {
     "hero_id": "hero_knight_askar",
     "class_zh": "騎士 (聖騎士)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "judgment_spear",
@@ -4490,7 +4490,7 @@
   "hero_knight_bragos": {
     "hero_id": "hero_knight_bragos",
     "class_zh": "騎士 (聖騎士)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "oathlance_brace",
@@ -4923,7 +4923,7 @@
   "hero_knight_glig": {
     "hero_id": "hero_knight_glig",
     "class_zh": "騎士 (聖騎士)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "scrap_toss",
@@ -5511,7 +5511,7 @@
   "hero_knight_yolda": {
     "hero_id": "hero_knight_yolda",
     "class_zh": "騎士 (聖騎士)",
-    "rarity_zh": "神話 (紅)",
+    "rarity_zh": "神話 (橙)",
     "skills": [
       {
         "skill_id": "guardian_blow",
@@ -6661,7 +6661,7 @@
   "hero_mage_5": {
     "hero_id": "hero_mage_5",
     "class_zh": "法師 (元素使)",
-    "rarity_zh": "傳說 (橘)",
+    "rarity_zh": "傳說 (黃)",
     "skills": [
       {
         "skill_id": "frostbolt",
@@ -6994,7 +6994,7 @@
   "hero_mage_6": {
     "hero_id": "hero_mage_6",
     "class_zh": "法師 (元素使)",
-    "rarity_zh": "神話 (紅)",
+    "rarity_zh": "神話 (橙)",
     "skills": [
       {
         "skill_id": "soulfire_maw",
@@ -7395,7 +7395,7 @@
   "hero_mage_7": {
     "hero_id": "hero_mage_7",
     "class_zh": "法師 (元素使)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "root_snare",
@@ -7903,7 +7903,7 @@
   "hero_mage_ecasia": {
     "hero_id": "hero_mage_ecasia",
     "class_zh": "法師 (元素使)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "frostscar_spike",
@@ -8351,7 +8351,7 @@
   "hero_mage_nobiz": {
     "hero_id": "hero_mage_nobiz",
     "class_zh": "法師 (元素使)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "chaotic_sparkshot",
@@ -9609,7 +9609,7 @@
   "hero_priest_5": {
     "hero_id": "hero_priest_5",
     "class_zh": "牧師 (神官)",
-    "rarity_zh": "傳說 (橘)",
+    "rarity_zh": "傳說 (黃)",
     "skills": [
       {
         "skill_id": "divine_verdict",
@@ -9941,7 +9941,7 @@
   "hero_priest_6": {
     "hero_id": "hero_priest_6",
     "class_zh": "牧師 (神官)",
-    "rarity_zh": "神話 (紅)",
+    "rarity_zh": "神話 (橙)",
     "skills": [
       {
         "skill_id": "curse_agony",
@@ -10347,7 +10347,7 @@
   "hero_priest_7": {
     "hero_id": "hero_priest_7",
     "class_zh": "牧師 (神官)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "shellcurse",
@@ -10841,7 +10841,7 @@
   "hero_priest_aldrian": {
     "hero_id": "hero_priest_aldrian",
     "class_zh": "牧師 (神官)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "benediction_fountain",
@@ -11361,7 +11361,7 @@
   "hero_priest_bathory": {
     "hero_id": "hero_priest_bathory",
     "class_zh": "牧師 (神官)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "shadow_stitching",
@@ -12432,7 +12432,7 @@
   "hero_rogue_5": {
     "hero_id": "hero_rogue_5",
     "class_zh": "刺客 (盜賊)",
-    "rarity_zh": "傳說 (橘)",
+    "rarity_zh": "傳說 (黃)",
     "skills": [
       {
         "skill_id": "toxic_strike",
@@ -12784,7 +12784,7 @@
   "hero_rogue_6": {
     "hero_id": "hero_rogue_6",
     "class_zh": "刺客 (盜賊)",
-    "rarity_zh": "神話 (紅)",
+    "rarity_zh": "神話 (橙)",
     "skills": [
       {
         "skill_id": "marking_dagger",
@@ -13170,7 +13170,7 @@
   "hero_rogue_7": {
     "hero_id": "hero_rogue_7",
     "class_zh": "刺客 (盜賊)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "oath_blade",
@@ -13653,7 +13653,7 @@
   "hero_rogue_sien": {
     "hero_id": "hero_rogue_sien",
     "class_zh": "刺客 (盜賊)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "darkfeather_flurry",
@@ -14060,7 +14060,7 @@
   "hero_rogue_vilzaan": {
     "hero_id": "hero_rogue_vilzaan",
     "class_zh": "刺客 (盜賊)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "shadow_embrace",
@@ -15244,7 +15244,7 @@
   "hero_warrior_5": {
     "hero_id": "hero_warrior_5",
     "class_zh": "戰士 (狂戰士)",
-    "rarity_zh": "傳說 (橘)",
+    "rarity_zh": "傳說 (黃)",
     "skills": [
       {
         "skill_id": "bloody_blow",
@@ -15566,7 +15566,7 @@
   "hero_warrior_6": {
     "hero_id": "hero_warrior_6",
     "class_zh": "戰士 (狂戰士)",
-    "rarity_zh": "神話 (紅)",
+    "rarity_zh": "神話 (橙)",
     "skills": [
       {
         "skill_id": "defensive_strike",
@@ -15986,7 +15986,7 @@
   "hero_warrior_7": {
     "hero_id": "hero_warrior_7",
     "class_zh": "戰士 (狂戰士)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "withered_wood_strike",
@@ -16447,7 +16447,7 @@
   "hero_warrior_hildrena": {
     "hero_id": "hero_warrior_hildrena",
     "class_zh": "戰士 (狂戰士)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "shieldbound_cleave",
@@ -16909,7 +16909,7 @@
   "hero_warrior_kraghul": {
     "hero_id": "hero_warrior_kraghul",
     "class_zh": "戰士 (狂戰士)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "blood_oath_cleave",
@@ -17684,7 +17684,7 @@
   "pet_hound_boneclaw": {
     "hero_id": "pet_hound_boneclaw",
     "class_zh": "戰寵 (靈獸)",
-    "rarity_zh": "傳說 (橘)",
+    "rarity_zh": "傳說 (黃)",
     "skills": [
       {
         "skill_id": "cursed_fang",
@@ -18035,7 +18035,7 @@
   "pet_savage_grizzly": {
     "hero_id": "pet_savage_grizzly",
     "class_zh": "戰寵 (靈獸)",
-    "rarity_zh": "神話 (紅)",
+    "rarity_zh": "神話 (橙)",
     "skills": [
       {
         "skill_id": "primal_outburst",
@@ -18420,7 +18420,7 @@
   "pet_slateshard_bruiser": {
     "hero_id": "pet_slateshard_bruiser",
     "class_zh": "戰寵 (靈獸)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "froststeel_grasp",
@@ -19142,7 +19142,7 @@
   "pet_voidsilver_sentinel": {
     "hero_id": "pet_voidsilver_sentinel",
     "class_zh": "戰寵 (靈獸)",
-    "rarity_zh": "超越/不朽 VII階 (彩紅)",
+    "rarity_zh": "遠古/超越 VII階 (紅)",
     "skills": [
       {
         "skill_id": "shield_slam",
