@@ -18,10 +18,14 @@ from runtime.supervisor import (
     daily_restart_state_path,
     heartbeat_age_seconds,
     heartbeat_is_current,
+    heartbeat_incident_context,
+    fallback_child_exit_reason,
     is_manual_exit,
     prepare_resume_command,
+    prepare_child_command,
     read_last_scheduled_restart_date,
     record_scheduled_restart,
+    supervise,
 )
 from states.state_machine import GameStateMachine
 
@@ -114,11 +118,29 @@ class TestLongRunResilience(unittest.TestCase):
             machine = MagicMock(current_state="BATTLE", run_count=12)
             machine.restart_target = "sandbox"
             machine.restart_profile = "sandbox"
+            machine.incident_session_id = "session-sandbox"
             touch_heartbeat(machine, path=path)
             payload = json.loads(path.read_text(encoding="utf-8"))
 
         self.assertEqual(payload["target"], "sandbox")
         self.assertEqual(payload["profile"], "sandbox")
+        self.assertEqual(payload["session_id"], "session-sandbox")
+
+    def test_supervisor_heartbeat_context_keeps_child_session_identity(self):
+        context = heartbeat_incident_context(
+            {"pid": 123, "session_id": "session-1", "state": "BATTLE", "run_count": 7},
+            123,
+            True,
+            "session-1",
+        )
+        self.assertEqual(context, {"session_id": "session-1", "state": "BATTLE", "run_count": 7})
+        stale = heartbeat_incident_context({"pid": 99, "session_id": "old", "state": "OLD", "run_count": 8}, 123, False, "session-1")
+        self.assertEqual(stale, {"session_id": "session-1", "state": None, "run_count": 0})
+
+    def test_supervisor_assigns_a_fresh_session_id_to_each_child_command(self):
+        command = prepare_child_command(["python", "main.py", "--profile", "native", "--incident-session-id", "old"], "new")
+        self.assertEqual(command.count("--incident-session-id"), 1)
+        self.assertEqual(command[-2:], ["--incident-session-id", "new"])
 
     def test_supervisor_ignores_heartbeat_left_by_previous_process(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -148,6 +170,35 @@ class TestLongRunResilience(unittest.TestCase):
         self.assertTrue(is_manual_exit(MANUAL_EXIT_CODE))
         self.assertFalse(is_manual_exit(0))
         self.assertFalse(is_manual_exit(1))
+
+    def test_supervisor_labels_unexplained_child_exit_without_overriding_known_recovery(self):
+        self.assertEqual(
+            fallback_child_exit_reason(1, None, scheduled_restart=False, termination_reason=None),
+            "child_exit_without_handoff",
+        )
+        self.assertEqual(
+            fallback_child_exit_reason(0, None, scheduled_restart=False, termination_reason=None),
+            "unexpected_clean_exit",
+        )
+        self.assertIsNone(
+            fallback_child_exit_reason(1, {"pid": 1}, scheduled_restart=False, termination_reason=None)
+        )
+        self.assertIsNone(
+            fallback_child_exit_reason(1, None, scheduled_restart=False, termination_reason="heartbeat_stale")
+        )
+
+    def test_supervisor_requires_an_explicit_profile_before_spawning_child(self):
+        with self.assertRaisesRegex(ValueError, "explicit '--profile"):
+            supervise(["python", "main.py", "--target", "sandbox"], Path("heartbeat.json"))
+        with self.assertRaisesRegex(ValueError, "explicit '--profile"):
+            supervise(["python", "main.py", "--profile", "   ", "--target", "sandbox"], Path("heartbeat.json"))
+        with self.assertRaisesRegex(ValueError, "explicit '--profile"):
+            supervise(
+                ["python", "main.py", "--profile", "native", "--profile", "sandbox"],
+                Path("heartbeat.json"),
+            )
+        with self.assertRaisesRegex(ValueError, "explicit '--profile"):
+            supervise(["python", "main.py", "--profile", "--target", "sandbox"], Path("heartbeat.json"))
 
     def test_daily_restart_is_due_once_per_calendar_day_after_eight(self):
         before_eight = datetime(2026, 8, 30, 7, 59, 59)

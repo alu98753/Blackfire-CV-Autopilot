@@ -6,6 +6,7 @@ import logging
 
 from utils import PauseController
 from runtime.heartbeat import touch_heartbeat
+from runtime.incident_journal import record_unhandled_exception
 from runtime.supervisor import MANUAL_EXIT_CODE
 
 def run_main_loop(state_machine, interval):
@@ -68,8 +69,9 @@ def run_main_loop(state_machine, interval):
         print(f"    - 總共啟動戰鬥場次: {state_machine.run_count} 次")
         print("=" * 60)
         sys.exit(0)
-    except Exception:
+    except Exception as exc:
         logging.exception("[Runtime] Unhandled bot exception; exiting for supervisor recovery.")
+        record_unhandled_exception(state_machine, exc)
         raise
     finally:
         if pause_controller is not None:

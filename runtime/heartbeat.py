@@ -41,6 +41,7 @@ def touch_heartbeat(machine: Any = None, path: Path | None = None, force: bool =
         run_count = getattr(machine, "run_count", None)
         target = getattr(machine, "restart_target", None)
         profile = getattr(machine, "restart_profile", None)
+        session_id = getattr(machine, "incident_session_id", None)
         is_paused = bool(getattr(machine, "is_paused", False))
         payload = {
             "timestamp": now_wall,
@@ -50,6 +51,7 @@ def touch_heartbeat(machine: Any = None, path: Path | None = None, force: bool =
             "run_count": run_count if isinstance(run_count, (str, int, float, bool)) else None,
             "target": target if isinstance(target, str) else None,
             "profile": profile if isinstance(profile, str) else None,
+            "session_id": session_id if isinstance(session_id, str) else None,
         }
         temporary = path.with_name(f"{path.stem}_{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmp")
         try:
@@ -64,4 +66,3 @@ def touch_heartbeat(machine: Any = None, path: Path | None = None, force: bool =
             except OSError:
                 pass
             return
-

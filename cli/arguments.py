@@ -34,4 +34,5 @@ def parse_arguments():
         "--resume", action="store_true",
         help="Supervisor restart: reuse the selected profile and skip startup prompts.",
     )
+    parser.add_argument("--incident-session-id", type=str, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()
