@@ -44,8 +44,9 @@ scratch/
 user_data/
 user_data_test_temp/
 config/local.toml
-/meta_datas.tres
-!meta_data/raw_tres/meta_datas.tres
+
+# Application-exported resource files are local-only.
+*.tres
 
 tools/x64dbg
 tools/gdre
