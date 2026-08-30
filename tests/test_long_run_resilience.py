@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,7 +11,18 @@ import numpy as np
 from capture.screen import ScreenCapturer
 from runtime import heartbeat
 from runtime.heartbeat import heartbeat_path_for_profile, touch_heartbeat
-from runtime.supervisor import MANUAL_EXIT_CODE, heartbeat_age_seconds, heartbeat_is_current, is_manual_exit, prepare_resume_command
+from runtime.supervisor import (
+    MANUAL_EXIT_CODE,
+    daily_restart_is_eligible,
+    daily_restart_is_due,
+    daily_restart_state_path,
+    heartbeat_age_seconds,
+    heartbeat_is_current,
+    is_manual_exit,
+    prepare_resume_command,
+    read_last_scheduled_restart_date,
+    record_scheduled_restart,
+)
 from states.state_machine import GameStateMachine
 
 
@@ -136,6 +148,29 @@ class TestLongRunResilience(unittest.TestCase):
         self.assertTrue(is_manual_exit(MANUAL_EXIT_CODE))
         self.assertFalse(is_manual_exit(0))
         self.assertFalse(is_manual_exit(1))
+
+    def test_daily_restart_is_due_once_per_calendar_day_after_eight(self):
+        before_eight = datetime(2026, 8, 30, 7, 59, 59)
+        at_eight = datetime(2026, 8, 30, 8, 0, 0)
+        self.assertFalse(daily_restart_is_due(before_eight, None, 8))
+        self.assertTrue(daily_restart_is_due(at_eight, None, 8))
+        self.assertFalse(daily_restart_is_due(at_eight, "2026-08-30", 8))
+
+    def test_daily_restart_does_not_recycle_a_supervisor_started_after_schedule(self):
+        started_after_schedule = datetime(2026, 8, 30, 9, 0, 0)
+        next_day_at_schedule = datetime(2026, 8, 31, 8, 0, 0)
+        self.assertFalse(daily_restart_is_eligible(started_after_schedule, started_after_schedule, 8))
+        self.assertTrue(daily_restart_is_eligible(started_after_schedule, next_day_at_schedule, 8))
+
+    def test_daily_restart_record_is_profile_isolated_and_persistent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            heartbeat_path = Path(directory) / "heartbeat_sandbox.json"
+            state_path = daily_restart_state_path(heartbeat_path)
+            self.assertEqual(state_path.name, "heartbeat_sandbox_supervisor_state.json")
+
+            self.assertTrue(record_scheduled_restart(state_path, datetime(2026, 8, 30, 8, 0, 0)))
+
+            self.assertEqual(read_last_scheduled_restart_date(state_path), "2026-08-30")
 
     def test_heartbeat_records_paused_flag_and_supports_forced_touch(self):
         with tempfile.TemporaryDirectory() as directory:
