@@ -103,6 +103,14 @@ class TestIncidentJournal(unittest.TestCase):
         self.assertNotIn("json-secret", serialized)
         self.assertNotIn("key-secret", serialized)
 
+    def test_recovery_is_not_written_before_machine_identity_is_initialized(self):
+        machine = MagicMock()
+        machine.restart_profile = None
+        machine.incident_session_id = None
+
+        self.assertIsNone(incident_journal.record_recovery(machine, "watchdog_timeout_detected"))
+        self.assertFalse((self.data_dir / "native" / "runtime").exists())
+
     def test_summary_groups_four_categories_and_limits_reason_details(self):
         for reason_code in ("unhandled_python_exception", "unhandled_python_exception", "unexpected_clean_exit"):
             incident_journal.write_incident("native", incident_journal.CRASH, reason_code)

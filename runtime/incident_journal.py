@@ -197,6 +197,10 @@ def record_unhandled_exception(machine: Any, exc: BaseException) -> dict[str, ob
 
 def record_recovery(machine: Any, reason_code: str, details: Mapping[str, Any] | None = None) -> dict[str, object] | None:
     profile = getattr(machine, "restart_profile", None)
+    session_id = getattr(machine, "incident_session_id", None)
+    if not isinstance(profile, str) or not isinstance(session_id, str) or not session_id:
+        logging.debug("[IncidentJournal] Skipping recovery record before runtime identity is initialized.")
+        return None
     return write_incident(profile, IN_GAME_RECOVERY, reason_code, **_machine_context(machine), details=details)
 
 
