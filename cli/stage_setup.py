@@ -8,7 +8,11 @@ from cli.prompts import prompt_choice
 from utils import get_stage_configs
 
 
-def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_type=None):
+def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_type=None, interactive=True):
+    """Build stage navigation; non-interactive restarts select persisted defaults."""
+    prompt_choice = globals()["prompt_choice"]
+    if not interactive:
+        prompt_choice = lambda _prompt, default: default
     stage_configs = get_stage_configs()
     default_lvl = str(stage_level) if (stage_level is not None and str(stage_level) in stage_configs) else str(config.get("tier4_stage_level", "6"))
     if default_lvl not in stage_configs:

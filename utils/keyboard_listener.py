@@ -6,7 +6,9 @@ import threading
 import logging
 
 VK_CONTROL = 0x11
+VK_SHIFT = 0x10
 VK_SPACE = 0x20
+VK_Q = 0x51
 GA_ROOT = 2
 
 TRIGGER_MODE_CTRL_SPACE = "ctrl_space"
@@ -35,7 +37,10 @@ class PauseController:
         cadence_timeout_sec: float = 1.5,
         debounce_sec: float = 0.08,
         start_thread: bool = True,
-        on_toggle=None
+        on_toggle=None,
+        is_paused_fn=None,
+        heartbeat_callback=None,
+        heartbeat_interval_sec: float = 5.0,
     ):
         self.capturer = capturer
         self.trigger_mode = trigger_mode
@@ -43,12 +48,17 @@ class PauseController:
         self.cadence_timeout_sec = cadence_timeout_sec
         self.debounce_sec = debounce_sec
         self._on_toggle = on_toggle
+        self._is_paused_fn = is_paused_fn
+        self._heartbeat_callback = heartbeat_callback
+        self._heartbeat_interval_sec = heartbeat_interval_sec
 
         self.key_pressed = False
         self.last_press_time = 0.0
         self.last_tap_time = 0.0
         self.tap_count = 0
         self.toggle_event_pending = False
+        self.manual_exit_event_pending = False
+        self.manual_exit_key_pressed = False
         self._lock = threading.Lock()
         self._running = True
 
@@ -375,13 +385,56 @@ class PauseController:
                 return True
             return False
 
+    def check_manual_exit_triggered(self) -> bool:
+        """Consume the high-frequency Ctrl+Shift+Q exit event."""
+        with self._lock:
+            if self.manual_exit_event_pending:
+                self.manual_exit_event_pending = False
+                return True
+            return False
+
+    def _poll_manual_exit(self) -> None:
+        """Detect a deliberate exit without relying on the slow bot loop."""
+        try:
+            if not self.is_target_window_active():
+                self.manual_exit_key_pressed = False
+                return
+            user32 = ctypes.windll.user32
+            pressed = all(
+                bool(user32.GetAsyncKeyState(key) & 0x8000)
+                for key in (VK_CONTROL, VK_SHIFT, VK_Q)
+            )
+            if pressed and not self.manual_exit_key_pressed:
+                with self._lock:
+                    self.manual_exit_event_pending = True
+                print("\n[Manual Exit] Ctrl+Shift+Q received.", flush=True)
+            self.manual_exit_key_pressed = pressed
+        except Exception:
+            self.manual_exit_key_pressed = False
+
     def _background_loop(self):
         """
         獨立背景守護執行緒主迴圈，每 10ms 依當前策略採樣一次按鍵。
+        同時承載背景心跳回呼：嚴格僅於「手動暫停 (is_paused=True)」期間代替主執行緒維持心跳，
+        非暫停期間絕不代發，以確保主執行緒若真卡死時 Supervisor 仍能如實偵測並自動重啟。
         """
+        last_heartbeat_time = 0.0
         while self._running:
             try:
-                self._poll_once()
+                now = time.time()
+                self._poll_once(now)
+                # 只有處於手動暫停狀態時，才由背景執行緒代為維持心跳
+                is_currently_paused = bool(self._is_paused_fn and self._is_paused_fn())
+                if (
+                    self._heartbeat_callback
+                    and is_currently_paused
+                    and (now - last_heartbeat_time >= self._heartbeat_interval_sec)
+                ):
+                    last_heartbeat_time = now
+                    try:
+                        self._heartbeat_callback()
+                    except Exception:
+                        pass
             except Exception as e:
                 logging.debug(f"[PauseController] 背景監聽異常: {e}")
             time.sleep(0.01)
@@ -392,6 +445,8 @@ class PauseController:
         """
         if now is None:
             now = time.time()
+
+        self._poll_manual_exit()
 
         strategy_func = self._strategies.get(self.trigger_mode, self._poll_ctrl_space)
         return strategy_func(now)

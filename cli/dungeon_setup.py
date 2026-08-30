@@ -3,7 +3,11 @@
 from cli.profile_updates import persist_mode_updates
 from cli.prompts import prompt_choice
 
-def setup_dungeon_config(config, args):
+def setup_dungeon_config(config, args, interactive=True):
+    """Build runtime paths; supervisor restarts reuse persisted policy values."""
+    prompt_choice = globals()["prompt_choice"]
+    if not interactive:
+        prompt_choice = lambda _prompt, default: default
     original_settings = {
         key: config.get(key)
         for key in (
@@ -79,7 +83,9 @@ def setup_dungeon_config(config, args):
 
     # 選擇地下城祝福模式
     bless_mode = args.blessmode
-    if not bless_mode:
+    if bless_mode:
+        config["bless_mode"] = bless_mode
+    else:
         current_bless = config.get("bless_mode", "combat")
         default_bless_num = {"combat": "1", "life": "2", "exp": "3"}.get(current_bless, "1")
         print(f"\n請選擇地下城祝福模式 (當前 Profile TOML 設定: {current_bless})：")

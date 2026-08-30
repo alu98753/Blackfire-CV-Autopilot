@@ -6,6 +6,7 @@ exit /b
 
 :UTF8_START
 set "PATH=%SystemRoot%\system32;%SystemRoot%;%SystemRoot%\System32\Wbem;%PATH%"
+cd /d "%~dp0"
 
 title Blackfire Crusade 自動掛機輔助 (CLI 啟動器)
 
@@ -138,10 +139,26 @@ goto RUN_SCRIPT
 
 :RUN_SCRIPT
 echo.
+echo Select target instance for this supervised run:
+echo   1. Native Steam - default
+echo   2. Sandbox Steam
+set "target_choice="
+set /p target_choice="Target [1-2]: "
+if "%target_choice%"=="2" goto TARGET_SANDBOX
+set "custom_args=%custom_args% --target native --profile native"
+set "supervisor_heartbeat=%~dp0scratch\runtime\heartbeat_native.json"
+goto TARGET_READY
+
+:TARGET_SANDBOX
+set "custom_args=%custom_args% --target sandbox --profile sandbox"
+set "supervisor_heartbeat=%~dp0scratch\runtime\heartbeat_sandbox.json"
+
+:TARGET_READY
+echo.
 echo [*] 正在啟動腳本，參數: %custom_args%
-echo [*] 快捷鍵提示：在終端機或遊戲視窗按 [Ctrl + Space] 隨時暫停/繼續；按 [Ctrl + C] 終止腳本。
+echo [*] Hotkeys: Ctrl+Space pause/resume; Ctrl+C restarts; Ctrl+Shift+Q stops and returns to this menu.
 echo ------------------------------------------------------------
-"%~dp0.venv\Scripts\python.exe" "%~dp0main.py" %custom_args%
+"%~dp0.venv\Scripts\python.exe" -m runtime.supervisor --heartbeat "%supervisor_heartbeat%" -- "%~dp0.venv\Scripts\python.exe" "%~dp0main.py" %custom_args%
 echo ------------------------------------------------------------
 echo [!] 執行結束。
 echo.

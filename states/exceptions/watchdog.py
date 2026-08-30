@@ -2,7 +2,7 @@ import os
 import time
 import logging
 from typing import Dict, Any
-from config import get_exception_features_config, get_subflow_feature_mapping
+from config import GLOBAL_SETTINGS, get_exception_features_config, get_subflow_feature_mapping
 from states.exceptions.subflows import safe_match
 
 
@@ -54,10 +54,18 @@ class ExceptionWatchdog:
                     GameRelaunchSubflow().execute(self.machine, reason="collect_only_window_lost")
                     return True
 
-            # (B) 動態 CD 最大逾時時間檢查 (max(diamond_cd, bread_cd) + 60 秒緩衝)
+            # (B) 動態 CD 最大逾時時間檢查 (max(diamond_cd, bread_cd) + 60 秒緩衝)。
+            # Keep these fallbacks aligned with CollectOnlyHandler / GameStateMachine:
+            # daily profiles do not necessarily override the collection cooldowns.
             cfg_dict = getattr(self.machine, "config", {}) or {}
-            diamond_cd = float(cfg_dict.get("diamond_cd", 300.0))
-            bread_cd = float(cfg_dict.get("bread_cd", 300.0))
+            default_diamond_cd = GLOBAL_SETTINGS.get("default_diamond_cd", 7200.0)
+            default_bread_cd = (
+                7200.0
+                if cfg_dict.get("type") == "collect_only"
+                else GLOBAL_SETTINGS.get("default_bread_cd", 1800.0)
+            )
+            diamond_cd = float(cfg_dict.get("diamond_cd", default_diamond_cd))
+            bread_cd = float(cfg_dict.get("bread_cd", default_bread_cd))
             collect_timeout = max(diamond_cd, bread_cd) + 60.0
 
             if state_duration > collect_timeout:

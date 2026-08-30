@@ -69,10 +69,10 @@ graph TD
 | **5星 紅色** | **血之祭壇戒指 III** (`ring_blood_altar_3`) | **`hp x5` (5條極限生命加成！)** | 🩸 **血之祭壇商店直接 36,000 血液兌換** | 🛡️ **戰士/騎士 5星極限血牛坦戒** |
 | **5星 紅色** | **凜冬之戒** (`ring_endwinter`) | `luck`, `ice_con x2`, `ice_res x2` | 領域【寒誓堡壘】寶箱產出 | 冰霜特化 |
 | **5星 紅色** | **瑪利亞娜之戒** (`ring_mariana`) | `luck`, `fire_con x2`, `fire_res x2` | 主線任務【荒野快遞】獎勵 | 火焰特化 |
-| **6星 彩虹** | **羅蘭魔像戒指** (`ring_golem_roland`) | **`damage x4`, `crit x2` + 殘火餘燼鎖血被動** | 鐵匠鋪合成：`ring_glory_arena_3` + 英雄餘燼x16 + 6階精華 | 🏹 **弓箭手/物理主C 終極全能神戒** |
-| **6星 彩虹** | **阿茲里姆之戒** (`ring_demon_azrim`) | **`damage x4`, `crit x2` (純極致爆發)** | 鐵匠鋪合成：鍛血碎片x32 + 惡魔血契x32 + 6階精華 | 🏹 **極致純暴擊傷害輸出戒指** |
-| **6星 彩虹** | **深淵巨獸之戒** (`ring_abyssbeast`) | **`hp x4`, `physical_res`, `magic_res` (四血雙抗)** | 鐵匠鋪合成：`ring_blood_altar_3` + 深淵材料 + 6階精華 | 🛡️ **戰士/坦克 終極不朽神戒** |
-| **6星 彩虹** | **榮耀競技場戒指 IV** (`ring_glory_arena_4`) | **固定基礎 `damage: +26`** | 鐵匠鋪合成：`ring_glory_arena_3` x4 + 6階精華 | 穩定直傷增幅 |
+| **6星 紅色** | **羅蘭魔像戒指** (`ring_golem_roland`) | **`damage x4`, `crit x2` + 殘火餘燼鎖血被動** | 鐵匠鋪合成：`ring_glory_arena_3` + 英雄餘燼x16 + 6階精華 | 🏹 **弓箭手/物理主C 終極全能神戒** |
+| **6星 紅色** | **阿茲里姆之戒** (`ring_demon_azrim`) | **`damage x4`, `crit x2` (純極致爆發)** | 鐵匠鋪合成：鍛血碎片x32 + 惡魔血契x32 + 6階精華 | 🏹 **極致純暴擊傷害輸出戒指** |
+| **6星 紅色** | **深淵巨獸之戒** (`ring_abyssbeast`) | **`hp x4`, `physical_res`, `magic_res` (四血雙抗)** | 鐵匠鋪合成：`ring_blood_altar_3` + 深淵材料 + 6階精華 | 🛡️ **戰士/坦克 終極不朽神戒** |
+| **6星 紅色** | **榮耀競技場戒指 IV** (`ring_glory_arena_4`) | **固定基礎 `damage: +26`** | 鐵匠鋪合成：`ring_glory_arena_3` x4 + 6階精華 | 穩定直傷增幅 |
 
 > ⚠️ **注釋說明**：底層代碼雖存在 `ring_glory_arena_1` (3星) 與 `ring_glory_arena_2` (4星) 的數據結構，但**遊戲商店未上架 1 星兌換**，而是直接以 18,000 榮耀點兌換 5星 `ring_glory_arena_3`。因此在 3~4 星階段，物理主 C 應以 **`ring_darkfrog_relic` (青蛙戒指)** 為絕對主力！
 

@@ -112,4 +112,16 @@ class SceneInfo:
    ```
 
 ### Manual Verification
+
+## Frame-local match reuse
+
+`SceneInfo` applies only to the screenshot supplied to one handler tick. A detected
+`lobby_start_btn` is a definitive lobby marker: after `goback_town.png` or
+`common/bread.png` identifies the lobby, the detector records the Start result and
+returns without checking tab or stage-island fallback templates.
+
+`NavigationHandler` also caches identical template queries only within its current
+`handle(screen_img, rect)` invocation. The cache is a local variable, is not retained
+on the handler, and therefore cannot survive a click, drag, state transition, or the
+next captured screenshot.
 - 審查 `navigation.py` 代碼結構與行數，確認無重複的比對邏輯並大幅降低複雜度。

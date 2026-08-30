@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from states.handlers.navigation import NavigationHandler
+from utils.scene_detector import SceneInfo, SceneType
 
 class TestBehaviorNavigation(unittest.TestCase):
     """
@@ -114,6 +115,65 @@ class TestBehaviorNavigation(unittest.TestCase):
 
         # 驗證點擊 common/door.png 進入大廳
         self.mock_machine.mouse.click.assert_called_once_with(300, 400)
+
+    def test_detail_page_reuses_matches_before_clicking_final_stage(self):
+        """Navigation must use one frame's detail matches once before clicking its final stage."""
+        mock_img = MagicMock()
+        self.mock_machine.config = {
+            "name": "stage farming",
+            "type": "stage",
+            "navigation_path": ["stages/stage_label.png", "stages/level4_final.png"],
+            "lobby_start_btn": "stages/start.png",
+        }
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.mock_machine.matcher
+        self.handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.LOBBY_STAGE,
+            is_lobby=True,
+            active_tabs=["stage"],
+        )
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/stage_label.png":
+                return ((700, 450), 0.95)
+            if template == "stages/level4_final.png":
+                return ((805, 700), 0.99)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        self.mock_machine.mouse.click.assert_called_once_with(805, 700)
+        matched_templates = [call.args[1] for call in self.mock_machine.matcher.match.call_args_list]
+        self.assertEqual(matched_templates.count("stages/stage_label.png"), 1)
+        self.assertEqual(matched_templates.count("stages/level4_final.png"), 1)
+
+    def test_detected_lobby_start_preempts_mix_tab_switching(self):
+        """A confirmed Start button must enter LOBBY before mix-mode navigation acts."""
+        mock_img = MagicMock()
+        self.mock_machine.config = {
+            "name": "mixed farming",
+            "type": "mix",
+            "lobby_start_btn": "stages/start.png",
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png"],
+        }
+        self.mock_machine.has_available_dungeon.return_value = True
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.mock_machine.matcher
+        self.handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.LOBBY_OTHER,
+            is_lobby=True,
+            matched_elements={"stages/start.png": ((1097, 684), 1.0)},
+        )
+
+        self.handler.handle(mock_img, self.rect)
+
+        self.mock_machine.transition_to.assert_called_once_with("LOBBY")
+        matched_templates = [call.args[1] for call in self.mock_machine.matcher.match.call_args_list]
+        self.assertNotIn("dungeons/dungeon.png", matched_templates)
+        self.mock_machine.mouse.click.assert_not_called()
 
     # =========================================================================
     # 1.2 大廳頁籤互斥與切換行為測試

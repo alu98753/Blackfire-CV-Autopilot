@@ -17,6 +17,7 @@ from cli.arguments import parse_arguments
 from cli.mode_setup import setup_equipment_config, setup_mode_config
 from cli.profiles import resolve_profile_name
 from runtime.bootstrap import init_state_machine_system
+from runtime.heartbeat import heartbeat_path_for_profile, touch_heartbeat
 from runtime.loop import run_main_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -34,7 +35,8 @@ def main():
     args = parse_arguments()
 
     # 1. 優先偵測並選擇遊戲視窗實例 (最優先確認目標實例，支援雙開/沙盒自動列舉與目標指定)
-    target_hwnd, target_title = select_game_window(target=args.target, auto_prompt=True)
+    is_resume = getattr(args, "resume", False) is True
+    target_hwnd, target_title = select_game_window(target=args.target, auto_prompt=not is_resume)
     if target_title:
         args.title = target_title
 
@@ -45,7 +47,8 @@ def main():
 
     # 2. 處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)
-    setup_equipment_config(config)
+    if not is_resume:
+        setup_equipment_config(config)
 
     # 3. 檢查遊戲是否開啟，發起直連啟動並傳送至指定螢幕與最大化全螢幕
     active_monitor = args.monitor if args.monitor is not None else get_monitor_index()
@@ -56,6 +59,10 @@ def main():
 
     # 4. 初始化主狀態機並立即運行 (無縫接續執行 LoginFlow 登入與 Click Until 流程)
     state_machine = init_state_machine_system(args, config, target_hwnd=target_hwnd)
+    state_machine.restart_target = args.target or ("sandbox" if "[#]" in args.title else "native")
+    state_machine.restart_profile = profile_name
+    state_machine.heartbeat_path = heartbeat_path_for_profile(profile_name)
+    touch_heartbeat(state_machine)
     run_main_loop(state_machine, args.interval)
 
 if __name__ == "__main__":

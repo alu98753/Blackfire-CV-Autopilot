@@ -17,7 +17,7 @@
 - **規劃方向**：
   - 現階段專注於掛機穩定性與核心邏輯完善；後續評估 PyInstaller / Nuitka 打包或 Electron / Tauri 介面封裝。
 
-### 3. 🎨 終端 Config 設定呈現方式優化 (CLI / UI Presentation Overhaul)
+### 3. 🎨 終端 Config 設定呈現方式優化 (UI Presentation Overhaul)
 - **需求背景**：目前 config.toml（一列一列），排版冗長且直觀度不足。
 
 ### 4. 🏛️ 全域架構審查與 AGENTS.md 規範對齊 (Technical Debt & Rule Auditing)

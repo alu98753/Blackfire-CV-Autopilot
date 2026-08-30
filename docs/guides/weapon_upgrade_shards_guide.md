@@ -16,7 +16,7 @@
 
 ## 二、 武器升級石頭 (Weapon Shard) 全途徑盤點 🗺️
 
-在元數據中，武器升級石頭分為 `weapon_shard_0` 至 `weapon_shard_6`（白 ➔ 綠 ➔ 藍 ➔ 紫 ➔ 金 ➔ 紅 ➔ 彩），每 4 顆低階可合成 1 顆高階（4:1 比例）：
+在元數據中，武器升級石頭分為 `weapon_shard_0` 至 `weapon_shard_6`（白 ➔ 綠 ➔ 藍 ➔ 紫 ➔ 黃/金 ➔ 橙 ➔ 紅），每 4 顆低階可合成 1 顆高階（4:1 比例）：
 
 ### 1. 鍛造低階武器/盾牌再分解（主動量產方案）
 - **機制**：武器或盾牌被分解時，會產出對應品質的武器碎片/強化石。
@@ -44,9 +44,9 @@
 - **機制**：轉盤獎池中各檔次均包含高階武器碎片：
   - `other_items` (綠/藍)：`weapon_shard_2`
   - `epic_items` (紫)：`weapon_shard_3`
-  - `legendary_items` (金)：`weapon_shard_4`
-  - `mythic_items` (紅)：`weapon_shard_5`
-  - `ancient_items` (彩)：`weapon_shard_6`
+  - `legendary_items` (黃/金)：`weapon_shard_4`
+  - `mythic_items` (橙)：`weapon_shard_5`
+  - `ancient_items` (紅)：`weapon_shard_6`
 - **操作建議**：日常獲取的命運金幣集中投在轉盤上。
 
 ### 5. 野外首領與稀有哥布林 (Goblin Barney)
