@@ -70,6 +70,29 @@ class TestBehaviorLobbyStateMachine(unittest.TestCase):
         self.assertEqual(self.state_machine.current_state, GameStateMachine.STATE_LOADING)
         self.state_machine.notify_ui_progress.assert_called_once()
 
+    def test_due_bread_collection_does_not_preempt_committed_start(self):
+        self.matcher.match.return_value = (None, 0.0)
+        self.handler.start_first_click_time = time.time() - 0.2
+        self.handler.last_start_click_time = time.time() - 0.2
+        self.state_machine.enable_bread = True
+        self.state_machine.need_bread_collection = True
+
+        self.handler.handle(self.dummy_img, self.rect)
+
+        self.assertEqual(self.state_machine.current_state, GameStateMachine.STATE_LOADING)
+        self.assertTrue(self.state_machine.need_bread_collection)
+        self.state_machine.notify_ui_progress.assert_called_once()
+
+    def test_due_bread_collection_can_preempt_before_start_is_committed(self):
+        self._match_start_button_only()
+        self.state_machine.enable_bread = True
+        self.state_machine.need_bread_collection = True
+
+        self.handler.handle(self.dummy_img, self.rect)
+
+        self.assertEqual(self.state_machine.current_state, GameStateMachine.STATE_NAVIGATING)
+        self.mouse.click.assert_not_called()
+
     def test_total_timeout_resets_tracking_without_another_click(self):
         self._match_start_button_only()
         self.handler.start_first_click_time = time.time() - 5.1
