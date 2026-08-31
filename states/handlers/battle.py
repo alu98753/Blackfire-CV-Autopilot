@@ -24,6 +24,25 @@ class BattleHandler(BaseStateHandler):
         # 0. 由於背包已滿 (backpack_full.png) 已由狀態機進行全域攔截跳轉，此處無需 local 處理
 
         # 0.1 手動介入恢復專屬檢測：若剛從使用者手動操作 3 秒暫停中恢復，優先檢測是否已回到大廳 (門檻 0.90)
+        # A relaunch can leave the state machine at BATTLE while the game is
+        # already on a dungeon transition/result screen. Check these anchors
+        # before auto.png so its false match cannot keep the watchdog alive.
+        for feature in self.machine.DUNGEON_SCENE_FEATURES:
+            if not os.path.exists(os.path.join("templates", feature)):
+                continue
+            pos, conf = self.matcher.match(screen_img, feature, threshold=0.8, quiet=True)
+            if pos:
+                logging.info(
+                    "[Battle recovery] Dungeon anchor [%s] (confidence: %.4f); recovering to EXPLORING.",
+                    feature,
+                    conf,
+                )
+                self.machine.is_in_dungeon = True
+                self.non_battle_feature_start_time = None
+                self.machine.battle_start_time = None
+                self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
+                return
+
         if getattr(self.machine, "just_resumed_from_user", False):
             self.machine.just_resumed_from_user = False  # 單次評估，無論是否命中均立刻重置
             for lobby_btn in ["common/door.png", "goback_town.png", "common/select_stage.png"]:
@@ -320,4 +339,3 @@ class BattleHandler(BaseStateHandler):
                 logging.info(f"⚔️ 戰鬥進行中... 已持續 {int(duration)} 秒")
             else:
                 logging.info(f"⚔️ 戰鬥進行中...")
-

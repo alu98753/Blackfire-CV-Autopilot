@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from states.state_machine import GameStateMachine
 from states.login_flow import _wait_for_town
 from states.handlers.explore import ExploreHandler
+from states.handlers.battle import BattleHandler
 
 
 class TestDungeonRelaunchRecovery(unittest.TestCase):
@@ -61,6 +62,43 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
 
             self.assertTrue(self.machine.is_in_dungeon)
             self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+
+    @patch("os.path.exists")
+    def test_2a_dungeon_anchor_beats_false_auto_match_during_global_detection(self, mock_exists):
+        """Dungeon completion/downstairs anchors must win over a false auto.png match."""
+        mock_exists.return_value = True
+        self.machine.config = {"name": "relaunch", "type": "stage", "explore_priorities": []}
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8: (
+            ((100, 100), 0.95)
+            if tpl in {"dungeons/dungeons_complete.png", "common/auto.png"}
+            else (None, 0.0)
+        )
+
+        self.machine.detect_current_state(self.fake_img, self.rect)
+
+        self.assertTrue(self.machine.is_in_dungeon)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+        matched_templates = [call.args[1] for call in self.mock_matcher.match.call_args_list]
+        self.assertNotIn("common/auto.png", matched_templates)
+
+    @patch("os.path.exists")
+    def test_2b_battle_handler_recovers_dungeon_anchor_before_auto(self, mock_exists):
+        """A stale BATTLE state after relaunch returns to EXPLORING before auto.png is handled."""
+        mock_exists.return_value = True
+        self.machine.current_state = self.machine.STATE_BATTLE
+        self.machine.battle_start_time = 123.0
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, quiet=True: (
+            ((100, 100), 0.95)
+            if tpl in {"dungeons/gungeon_godown.png", "common/auto.png"}
+            else (None, 0.0)
+        )
+
+        BattleHandler(self.machine).handle(self.fake_img, self.rect)
+
+        self.assertTrue(self.machine.is_in_dungeon)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+        self.assertIsNone(self.machine.battle_start_time)
+        self.mock_mouse.click.assert_not_called()
 
     @patch("os.path.exists")
     def test_3_explore_handler_handles_leave_anchor(self, mock_exists):
