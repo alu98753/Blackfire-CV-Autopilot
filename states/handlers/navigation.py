@@ -637,19 +637,6 @@ class NavigationHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_LOBBY)
             return
 
-        # 0. 優先判定：如果已經可以直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳，直接移轉狀態！
-        lobby_btn = self.machine.config.get("lobby_start_btn")
-        if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
-            cached_start = scene.matched_elements.get(lobby_btn)
-            if cached_start:
-                pos_start, conf_start = cached_start
-            else:
-                pos_start, conf_start = match_current_frame(lobby_btn, threshold=0.8)
-            if pos_start:
-                logging.info(f"🧭 尋路成功！偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達準備大廳，狀態轉移至 LOBBY。")
-                self.machine.transition_to(self.machine.STATE_LOBBY)
-                return
-
         # （已於 handle 前段完成頁籤開啟狀態統一對比與判定）
 
         # 判斷是否已經在關卡內部細節畫面 (提前判定以避免小島在抽屜下方時水平滑動邏輯誤觸)
@@ -834,16 +821,6 @@ class NavigationHandler(BaseStateHandler):
                     break
 
         if not clicked_any:
-            # 如果能直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳
-            lobby_btn = self.machine.config.get("lobby_start_btn")
-            if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
-                pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-                if pos_start:
-                    logging.info(f"🧭 尋路完成：偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達大廳。")
-                    self.machine.defeat_count = 0
-                    self.machine.transition_to(self.machine.STATE_LOBBY)
-                    return
-
             # 備用邏輯：若在普通關卡模式下，已進入關卡細節畫面但未看見魔王關 (final.png)，則向下滾動尋找魔王關
             if self.machine.config.get("type") == "stage":
                 if pos_label and not pos_final:

@@ -126,6 +126,16 @@ class NavigationIntentPolicy:
         return ActiveIntent(IntentId.PRIMARY_NAVIGATION, snapshot.primary_payload)
 
     def resolve(self, scene: SceneSnapshot, intent: ActiveIntent) -> ActionDecision:
+        from states.navigation_table import NavigationTable
+
+        edge = NavigationTable().next_edge(scene, intent.intent_id)
+        if edge is not None:
+            return ActionDecision.click(
+                edge.reason,
+                edge.action,
+                edge.postcondition,
+                edge.required_element,
+            )
         if intent.intent_id == IntentId.COLLECT_DIAMOND:
             return self._resolve_diamond(scene)
         if intent.intent_id == IntentId.COLLECT_BREAD:
@@ -140,32 +150,11 @@ class NavigationIntentPolicy:
                 ActionId.HANDLE_DIAMOND,
                 PostconditionId.DIAMOND_HANDLER_PROGRESS,
             )
-        if scene.scene == SceneId.TOWN and scene.has(ElementId.DIAMOND_ENTRY):
-            return ActionDecision.click(
-                ReasonCode.DIAMOND_ENTRY_READY,
-                ActionId.OPEN_DIAMOND,
-                PostconditionId.DIAMOND_WINDOW,
-                ElementId.DIAMOND_ENTRY,
-            )
         if scene.scene == SceneId.TOWN:
             return ActionDecision.delegate(
                 ReasonCode.DIAMOND_ENTRY_READY,
                 ActionId.HANDLE_DIAMOND,
                 PostconditionId.DIAMOND_HANDLER_PROGRESS,
-            )
-        if scene.scene == SceneId.LOBBY and scene.has(ElementId.CLOSE_OVERLAY):
-            return ActionDecision.click(
-                ReasonCode.DIAMOND_CLOSE_OVERLAY,
-                ActionId.DISMISS_OVERLAY,
-                PostconditionId.OVERLAY_CLOSED,
-                ElementId.CLOSE_OVERLAY,
-            )
-        if scene.scene == SceneId.LOBBY and scene.has(ElementId.GOBACK_TOWN):
-            return ActionDecision.click(
-                ReasonCode.DIAMOND_RETURN_TO_TOWN,
-                ActionId.RETURN_TOWN,
-                PostconditionId.TOWN,
-                ElementId.GOBACK_TOWN,
             )
         return ActionDecision.wait()
 
@@ -177,31 +166,10 @@ class NavigationIntentPolicy:
                 ActionId.HANDLE_BREAD,
                 PostconditionId.BREAD_HANDLER_PROGRESS,
             )
-        if scene.scene == SceneId.LOBBY and scene.has(ElementId.BREAD_ENTRY):
-            return ActionDecision.click(
-                ReasonCode.BREAD_ENTRY_READY,
-                ActionId.OPEN_BREAD,
-                PostconditionId.BREAD_WINDOW,
-                ElementId.BREAD_ENTRY,
-            )
-        if scene.scene == SceneId.TOWN and scene.has(ElementId.DOOR):
-            return ActionDecision.click(
-                ReasonCode.BREAD_ENTER_LOBBY,
-                ActionId.ENTER_LOBBY,
-                PostconditionId.LOBBY,
-                ElementId.DOOR,
-            )
         return ActionDecision.wait()
 
     @staticmethod
     def _resolve_primary(scene: SceneSnapshot) -> ActionDecision:
-        if scene.scene == SceneId.LOBBY and scene.has(ElementId.START):
-            return ActionDecision.click(
-                ReasonCode.PRIMARY_START_READY,
-                ActionId.START_PRIMARY,
-                PostconditionId.LOADING_OR_BATTLE,
-                ElementId.START,
-            )
         return ActionDecision.delegate(
             ReasonCode.PRIMARY_ROUTE_DELEGATED,
             ActionId.CONTINUE_PRIMARY,
