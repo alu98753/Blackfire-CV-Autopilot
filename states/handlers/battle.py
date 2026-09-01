@@ -1,6 +1,7 @@
 import time
 import os
 import logging
+from config import get_battle_max_duration_seconds
 from states.handlers.base import BaseStateHandler
 
 class BattleHandler(BaseStateHandler):
@@ -58,6 +59,19 @@ class BattleHandler(BaseStateHandler):
         # 1. 優先檢查是否遭遇無法戰勝之領域強敵 (Nemesis Encounter Check)
         # 必須在啟動自動戰鬥 (auto.png) 之前先判定，防止在暫停手動打或逃跑前誤開自動戰鬥！
         if self._check_and_handle_nemesis_encounter(screen_img, rect):
+            return
+
+        battle_max_duration = get_battle_max_duration_seconds()
+        battle_duration = time.time() - self.machine.battle_start_time if self.machine.battle_start_time else 0.0
+        if battle_duration >= battle_max_duration:
+            logging.error(
+                "[Battle timeout] Battle has lasted %.1fs (hard limit %.1fs); relaunching game for recovery.",
+                battle_duration,
+                battle_max_duration,
+            )
+            from states.exceptions.subflows import GameRelaunchSubflow
+
+            GameRelaunchSubflow().execute(self.machine, reason="battle_max_duration_exceeded")
             return
 
         # 2. 檢查是否需要啟動自動戰鬥 (common/auto.png)
