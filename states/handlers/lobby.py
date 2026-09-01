@@ -10,6 +10,7 @@ from states.navigation_routing import (
 from states.navigation_intent import ActionId, IntentId, PostconditionId
 from states.navigation_progress import NavigationProgress
 from utils.scene_detector import SceneDetector
+from utils.scene_snapshot import DetectionProfileId
 
 
 class LobbyHandler(BaseStateHandler):
@@ -63,7 +64,11 @@ class LobbyHandler(BaseStateHandler):
         if self._handle_preconditions(screen_img, rect):
             return
 
-        scene = self.scene_detector.detect(screen_img, machine=self.machine)
+        scene = self.scene_detector.detect(
+            screen_img,
+            machine=self.machine,
+            profile=DetectionProfileId.LOBBY,
+        )
         routing = resolve_navigation_context(self.machine, scene)
         executor = NavigationDecisionExecutor(self)
         if executor.execute(

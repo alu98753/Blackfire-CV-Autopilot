@@ -45,6 +45,8 @@ class DetectionProfileId(str, Enum):
     UNKNOWN = "unknown"
     TOWN = "town"
     LOBBY = "lobby"
+    STAGE_SELECT = "stage_select"
+    DUNGEON_SELECT = "dungeon_select"
     LOADING = "loading"
     BATTLE = "battle"
     RESULT = "result"
