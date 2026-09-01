@@ -119,6 +119,15 @@ class SceneDetector:
         if pos_goback or pos_bread_btn:
             scene_info.is_lobby = True
 
+        if scene_info.is_lobby and os.path.exists(os.path.join("templates", "common/quit.png")):
+            pos_quit, conf_quit = self._safe_match(
+                screen_img,
+                "common/quit.png",
+                threshold=0.75,
+            )
+            if pos_quit:
+                scene_info.matched_elements["common/quit.png"] = (pos_quit, conf_quit)
+
         if scene_info.is_town:
             scene_info.scene_type = SceneType.TOWN
             return scene_info

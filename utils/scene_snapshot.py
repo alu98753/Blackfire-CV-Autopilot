@@ -28,6 +28,7 @@ class ElementId(str, Enum):
     GOBACK_TOWN = "goback_town"
     BREAD_ENTRY = "bread_entry"
     START = "start"
+    CLOSE_OVERLAY = "close_overlay"
 
 
 class OverlayId(str, Enum):
@@ -92,6 +93,7 @@ _ELEMENT_TEMPLATE_MAP = {
     "diamond.png": ElementId.DIAMOND_ENTRY,
     "goback_town.png": ElementId.GOBACK_TOWN,
     "common/bread.png": ElementId.BREAD_ENTRY,
+    "common/quit.png": ElementId.CLOSE_OVERLAY,
 }
 
 

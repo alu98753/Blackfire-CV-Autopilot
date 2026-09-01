@@ -3,6 +3,11 @@ import os
 import time
 
 from states.handlers.base import BaseStateHandler
+from states.navigation_routing import (
+    NavigationDecisionExecutor,
+    resolve_navigation_context,
+)
+from utils.scene_detector import SceneDetector
 
 
 class LobbyHandler(BaseStateHandler):
@@ -12,6 +17,7 @@ class LobbyHandler(BaseStateHandler):
         self.last_start_click_time = None
         self.start_retry_interval = 1.0
         self.start_max_timeout = 5.0
+        self.scene_detector = SceneDetector(self.matcher)
 
     def reset_state(self):
         self.start_first_click_time = None
@@ -55,6 +61,16 @@ class LobbyHandler(BaseStateHandler):
         if self._handle_preconditions(screen_img, rect):
             return
 
+        scene = self.scene_detector.detect(screen_img, machine=self.machine)
+        routing = resolve_navigation_context(self.machine, scene)
+        executor = NavigationDecisionExecutor(self)
+        if executor.execute(
+            routing,
+            screen_img,
+            rect,
+            start_callback=lambda: self._handle_start_button(screen_img, rect),
+        ):
+            return
         self._handle_start_button(screen_img, rect)
 
     def _handle_preconditions(self, screen_img, rect):
@@ -89,15 +105,6 @@ class LobbyHandler(BaseStateHandler):
             self.reset_state()
             self.machine.pop_and_next_town_subflow()
             return True
-
-        if not getattr(self.machine, "dev_subflows", None):
-            if self.machine.need_diamond_collection or (
-                self.machine.enable_bread and self.machine.need_bread_collection
-            ):
-                logging.info("Lobby: collection is pending; entering NAVIGATING.")
-                self.reset_state()
-                self.machine.transition_to(self.machine.STATE_NAVIGATING)
-                return True
 
         stage_farming_enabled = self.machine.config.get("enable_stage_farming", False)
         if not stage_farming_enabled and not getattr(self.machine, "is_in_dungeon", False):

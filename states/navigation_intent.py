@@ -27,6 +27,7 @@ class ActionId(str, Enum):
     HANDLE_BREAD = "handle_bread"
     START_PRIMARY = "start_primary"
     CONTINUE_PRIMARY = "continue_primary"
+    DISMISS_OVERLAY = "dismiss_overlay"
 
 
 class PostconditionId(str, Enum):
@@ -38,6 +39,7 @@ class PostconditionId(str, Enum):
     BREAD_HANDLER_PROGRESS = "bread_handler_progress"
     LOADING_OR_BATTLE = "loading_or_battle"
     PRIMARY_ROUTE_PROGRESS = "primary_route_progress"
+    OVERLAY_CLOSED = "overlay_closed"
 
 
 class ReasonCode(str, Enum):
@@ -50,6 +52,7 @@ class ReasonCode(str, Enum):
     PRIMARY_START_READY = "primary_start_ready"
     PRIMARY_ROUTE_DELEGATED = "primary_route_delegated"
     SCENE_EVIDENCE_INSUFFICIENT = "scene_evidence_insufficient"
+    DIAMOND_CLOSE_OVERLAY = "diamond_close_overlay"
 
 
 @dataclass(frozen=True)
@@ -143,6 +146,19 @@ class NavigationIntentPolicy:
                 ActionId.OPEN_DIAMOND,
                 PostconditionId.DIAMOND_WINDOW,
                 ElementId.DIAMOND_ENTRY,
+            )
+        if scene.scene == SceneId.TOWN:
+            return ActionDecision.delegate(
+                ReasonCode.DIAMOND_ENTRY_READY,
+                ActionId.HANDLE_DIAMOND,
+                PostconditionId.DIAMOND_HANDLER_PROGRESS,
+            )
+        if scene.scene == SceneId.LOBBY and scene.has(ElementId.CLOSE_OVERLAY):
+            return ActionDecision.click(
+                ReasonCode.DIAMOND_CLOSE_OVERLAY,
+                ActionId.DISMISS_OVERLAY,
+                PostconditionId.OVERLAY_CLOSED,
+                ElementId.CLOSE_OVERLAY,
             )
         if scene.scene == SceneId.LOBBY and scene.has(ElementId.GOBACK_TOWN):
             return ActionDecision.click(

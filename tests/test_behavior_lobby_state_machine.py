@@ -83,15 +83,34 @@ class TestBehaviorLobbyStateMachine(unittest.TestCase):
         self.assertTrue(self.state_machine.need_bread_collection)
         self.state_machine.notify_ui_progress.assert_called_once()
 
-    def test_due_bread_collection_can_preempt_before_start_is_committed(self):
+    def test_due_bread_collection_waits_before_start_when_entry_unconfirmed(self):
         self._match_start_button_only()
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
 
         self.handler.handle(self.dummy_img, self.rect)
 
-        self.assertEqual(self.state_machine.current_state, GameStateMachine.STATE_NAVIGATING)
+        self.assertEqual(self.state_machine.current_state, GameStateMachine.STATE_LOBBY)
+        self.assertTrue(self.state_machine.need_bread_collection)
         self.mouse.click.assert_not_called()
+
+    def test_due_bread_collection_opens_bread_when_entry_is_confirmed(self):
+        self.state_machine.enable_bread = True
+        self.state_machine.need_bread_collection = True
+        self.matcher.match.side_effect = lambda image, template, **kwargs: (
+            ((200, 300), 0.95)
+            if template in {"common/bread.png", "goback_town.png", "stages/start.png"}
+            else (None, 0.0)
+        )
+
+        self.handler.handle(self.dummy_img, self.rect)
+
+        self.assertEqual(
+            self.state_machine.current_state,
+            GameStateMachine.STATE_BREAD_COLLECTION,
+        )
+        self.assertTrue(self.state_machine.need_bread_collection)
+        self.mouse.click.assert_called_once_with(300, 400)
 
     def test_total_timeout_resets_tracking_without_another_click(self):
         self._match_start_button_only()
