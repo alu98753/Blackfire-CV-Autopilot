@@ -12,6 +12,7 @@ from states.state_machine import GameStateMachine
 from states.exceptions.handler import UnexpectedPopupRecoveryHandler
 from states.exceptions.watchdog import ExceptionWatchdog
 from states.handlers.battle import BattleHandler
+from states.exceptions.subflows import GameRelaunchSubflow
 
 
 class TestPopupRecoveryRetryBehavior(unittest.TestCase):
@@ -70,6 +71,29 @@ class TestPopupRecoveryRetryBehavior(unittest.TestCase):
         with patch.object(self.machine, "notify_ui_progress") as mock_notify:
             handler.handle(self.fake_img, self.rect)
             mock_notify.assert_called()
+
+    @patch.object(GameRelaunchSubflow, "execute", return_value=True)
+    @patch("os.path.exists", return_value=True)
+    @patch("states.handlers.battle.get_battle_max_duration_seconds", return_value=60.0)
+    def test_battle_hard_timeout_relaunches_even_when_auto_is_visible(
+        self, _mock_duration, _mock_exists, mock_relaunch
+    ):
+        """A frozen UI that still matches auto.png must not reset the hard battle cap."""
+        handler = BattleHandler(self.machine)
+        self.machine.current_state = self.machine.STATE_BATTLE
+        self.machine.battle_start_time = time.time() - 61.0
+        self.mock_matcher.match.side_effect = (
+            lambda _img, template, **_kwargs: ((100, 100), 0.95)
+            if template == "common/auto.png"
+            else (None, 0.0)
+        )
+
+        handler.handle(self.fake_img, self.rect)
+
+        mock_relaunch.assert_called_once_with(
+            self.machine, reason="battle_max_duration_exceeded"
+        )
+        self.mock_mouse.click.assert_not_called()
 
 
 if __name__ == "__main__":

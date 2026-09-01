@@ -129,6 +129,11 @@ def get_monitor_index() -> int:
     return int(GLOBAL_SETTINGS.get("monitor_index", 1))
 
 
+def get_battle_max_duration_seconds() -> float:
+    """Return the TOML-configured hard cap for one continuous battle."""
+    return float(GLOBAL_SETTINGS.get("battle_max_duration_sec", 900.0))
+
+
 def normalize_config(config):
     """Populate the mode-independent equipment and activity defaults."""
     if not isinstance(config, dict):

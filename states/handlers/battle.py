@@ -1,6 +1,7 @@
 import time
 import os
 import logging
+from config import get_battle_max_duration_seconds
 from states.handlers.base import BaseStateHandler
 
 class BattleHandler(BaseStateHandler):
@@ -24,6 +25,25 @@ class BattleHandler(BaseStateHandler):
         # 0. 由於背包已滿 (backpack_full.png) 已由狀態機進行全域攔截跳轉，此處無需 local 處理
 
         # 0.1 手動介入恢復專屬檢測：若剛從使用者手動操作 3 秒暫停中恢復，優先檢測是否已回到大廳 (門檻 0.90)
+        # A relaunch can leave the state machine at BATTLE while the game is
+        # already on a dungeon transition/result screen. Check these anchors
+        # before auto.png so its false match cannot keep the watchdog alive.
+        for feature in self.machine.DUNGEON_SCENE_FEATURES:
+            if not os.path.exists(os.path.join("templates", feature)):
+                continue
+            pos, conf = self.matcher.match(screen_img, feature, threshold=0.8, quiet=True)
+            if pos:
+                logging.info(
+                    "[Battle recovery] Dungeon anchor [%s] (confidence: %.4f); recovering to EXPLORING.",
+                    feature,
+                    conf,
+                )
+                self.machine.is_in_dungeon = True
+                self.non_battle_feature_start_time = None
+                self.machine.battle_start_time = None
+                self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
+                return
+
         if getattr(self.machine, "just_resumed_from_user", False):
             self.machine.just_resumed_from_user = False  # 單次評估，無論是否命中均立刻重置
             for lobby_btn in ["common/door.png", "goback_town.png", "common/select_stage.png"]:
@@ -39,6 +59,19 @@ class BattleHandler(BaseStateHandler):
         # 1. 優先檢查是否遭遇無法戰勝之領域強敵 (Nemesis Encounter Check)
         # 必須在啟動自動戰鬥 (auto.png) 之前先判定，防止在暫停手動打或逃跑前誤開自動戰鬥！
         if self._check_and_handle_nemesis_encounter(screen_img, rect):
+            return
+
+        battle_max_duration = get_battle_max_duration_seconds()
+        battle_duration = time.time() - self.machine.battle_start_time if self.machine.battle_start_time else 0.0
+        if battle_duration >= battle_max_duration:
+            logging.error(
+                "[Battle timeout] Battle has lasted %.1fs (hard limit %.1fs); relaunching game for recovery.",
+                battle_duration,
+                battle_max_duration,
+            )
+            from states.exceptions.subflows import GameRelaunchSubflow
+
+            GameRelaunchSubflow().execute(self.machine, reason="battle_max_duration_exceeded")
             return
 
         # 2. 檢查是否需要啟動自動戰鬥 (common/auto.png)
@@ -320,4 +353,3 @@ class BattleHandler(BaseStateHandler):
                 logging.info(f"⚔️ 戰鬥進行中... 已持續 {int(duration)} 秒")
             else:
                 logging.info(f"⚔️ 戰鬥進行中...")
-

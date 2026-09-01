@@ -3,6 +3,7 @@ config_version = 1
 [global]
 default_diamond_cd = 7200.0
 default_bread_cd = 1800.0
+battle_max_duration_sec = 900.0 # Hard BATTLE cap; timeout relaunches the game for recovery.
 default_bless_mode = "combat"
 default_town_subflow_order = ["blood_altar", "jewelry_workshop"]
 dry_run_bag_clean = false

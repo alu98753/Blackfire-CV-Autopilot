@@ -42,6 +42,16 @@ class LobbyHandler(BaseStateHandler):
                 time.sleep(0.5)
                 return
 
+        # Clicking Start commits an asynchronous UI action.  While that action
+        # is still waiting for visual confirmation, newly latched scheduler
+        # work (for example the periodic bread collection) must not preempt it.
+        # Keep polling the committed action until it succeeds or times out;
+        # pending work remains latched and will be handled at the next safe
+        # navigation/result boundary.
+        if self.start_first_click_time is not None:
+            self._handle_start_button(screen_img, rect)
+            return
+
         if self._handle_preconditions(screen_img, rect):
             return
 

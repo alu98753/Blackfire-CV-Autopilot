@@ -60,6 +60,16 @@ class GameStateMachine:
     STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
     STATE_DOMAIN_EXPLORE = "DOMAIN_EXPLORE"
 
+    DUNGEON_SCENE_FEATURES = (
+        "dungeons/leave.png",
+        "dungeons/dungeons_complete.png",
+        "dungeons/gungeon_godown.png",
+        "dungeons/gungeon_godown_confirm.png",
+        "dungeons/Treasure.png",
+        "dungeons/dungeon_bless.png",
+        "dungeons/dungeon_fight.png",
+    )
+
 
 
     
@@ -765,6 +775,21 @@ class GameStateMachine:
                         return
 
         # 1. 檢查是否在戰鬥中 (看到 common/auto.png 或 battle/ 特徵圖案)
+        # Dungeon transition/result anchors must take precedence over battle
+        # features: some of those screens can falsely match auto.png.
+        for btn_name in self.DUNGEON_SCENE_FEATURES:
+            if os.path.exists(os.path.join("templates", btn_name)):
+                pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
+                if pos:
+                    logging.info(
+                        "[State detection] Dungeon anchor [%s] (confidence: %.4f); entering EXPLORING before battle detection.",
+                        btn_name,
+                        conf,
+                    )
+                    self.is_in_dungeon = True
+                    self.transition_to(self.STATE_DUNGEON_EXPLORING)
+                    return
+
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
             if os.path.exists(os.path.join("templates", feat)):
                 pos, _ = self.matcher.match(screen_img, feat, threshold=0.7)
