@@ -56,6 +56,11 @@
 
 ### 6. 測試架構設計與執行規範 (Google Software Engineering Standard) 🧪
 
+0. **純文件變更免測試 (Docs-Only Test Exemption)**：
+   - 當本次異動**只有 Markdown／文件規格**（例如 `docs/**/*.md`、`.agents/AGENTS.md`），且完全沒有修改 Python 程式、TOML／JSON 設定、templates、測試 fixture、腳本或其他 runtime 資產時，**不需要執行單元測試或全套測試**。
+   - 交付前仍必須用 `git status --short`／`git diff --name-only` 核對變更範圍，並在回報中明確註明：`未執行測試（純文件變更）`。
+   - 只要異動包含任何可能改變 runtime／build／test 行為的非文件檔案，就不適用此例外，必須依下列精準測試與收尾規則執行。
+
 1. **測試行為而非實作 (Test Public Behaviors, Not Private Implementation)**：
    - **Google 軟體工程最佳實務**：測試案例必須專注於驗證系統的**外部可觀察行為**與狀態轉移契約（Given 特性畫面/狀態 ➔ When 觸發處理 ➔ Then 斷言發射點擊或轉移狀態）。
    - **拒絕與實作細節耦合**：嚴禁測試內部私有 Helper 或依賴中間變數。當進行內部架構重構（如抽離 `SceneDetector`）時，行為測試應在不改動測試程式碼的前提下維持 100% 綠燈，真正作為防護網。
