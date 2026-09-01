@@ -69,9 +69,7 @@ class BattleHandler(BaseStateHandler):
                 battle_duration,
                 battle_max_duration,
             )
-            from states.exceptions.subflows import GameRelaunchSubflow
-
-            GameRelaunchSubflow().execute(self.machine, reason="battle_max_duration_exceeded")
+            self.machine.request_relaunch("battle_max_duration_exceeded")
             return
 
         # 2. 檢查是否需要啟動自動戰鬥 (common/auto.png)

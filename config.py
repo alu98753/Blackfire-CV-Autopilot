@@ -143,6 +143,9 @@ def get_navigation_progress_settings() -> dict:
         "collection_backoff_seconds": float(
             settings["collection_backoff_seconds"]
         ),
+        "collection_recovery_failure_limit": int(
+            settings["collection_recovery_failure_limit"]
+        ),
     }
 
 

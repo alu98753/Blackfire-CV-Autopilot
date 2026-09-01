@@ -20,6 +20,7 @@ class TestBehaviorNavigationProgress(unittest.TestCase):
                 action_timeout_seconds=5.0,
                 action_max_attempts=2,
                 collection_backoff_seconds=60.0,
+                collection_recovery_failure_limit=2,
             )
         )
 
@@ -96,12 +97,23 @@ class TestBehaviorNavigationProgress(unittest.TestCase):
             CollectionOutcome.COOLDOWN,
         )
 
+    def test_repeated_defer_requests_recovery_once(self):
+        self.progress.defer(IntentId.COLLECT_BREAD, 10.0)
+        self.assertIsNone(self.progress.take_recovery_intent())
+        self.progress.defer(IntentId.COLLECT_BREAD, 80.0)
+
+        self.assertEqual(
+            self.progress.take_recovery_intent(), IntentId.COLLECT_BREAD
+        )
+        self.assertIsNone(self.progress.take_recovery_intent())
+
     def test_runtime_settings_are_loaded_from_toml(self):
         settings = get_navigation_progress_settings()
 
         self.assertGreater(settings["action_timeout_seconds"], 0)
         self.assertGreater(settings["action_max_attempts"], 0)
         self.assertGreater(settings["collection_backoff_seconds"], 0)
+        self.assertGreater(settings["collection_recovery_failure_limit"], 0)
 
     def test_tier4_fallback_does_not_destroy_pending_collection_intents(self):
         machine = GameStateMachine(

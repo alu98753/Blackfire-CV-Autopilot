@@ -27,6 +27,7 @@ class NavigationProgressSettings:
     action_timeout_seconds: float
     action_max_attempts: int
     collection_backoff_seconds: float
+    collection_recovery_failure_limit: int
 
     @classmethod
     def from_mapping(cls, values):
@@ -34,6 +35,9 @@ class NavigationProgressSettings:
             action_timeout_seconds=float(values["action_timeout_seconds"]),
             action_max_attempts=int(values["action_max_attempts"]),
             collection_backoff_seconds=float(values["collection_backoff_seconds"]),
+            collection_recovery_failure_limit=int(
+                values["collection_recovery_failure_limit"]
+            ),
         )
 
 
@@ -61,6 +65,8 @@ class NavigationProgress:
         self._failure_counts = {}
         self._deferred_until = {}
         self._outcomes = {}
+        self._defer_counts = {}
+        self._recovery_requested = set()
 
     @property
     def deferred_until(self):
@@ -112,6 +118,8 @@ class NavigationProgress:
             self.in_flight = None
         self._failure_counts.pop(intent_id, None)
         self._deferred_until.pop(intent_id, None)
+        self._defer_counts.pop(intent_id, None)
+        self._recovery_requested.discard(intent_id)
         self._outcomes[intent_id] = outcome
 
     def clear(self, intent_id: IntentId | None = None):
@@ -127,7 +135,18 @@ class NavigationProgress:
         self._deferred_until[intent_id] = (
             now + self.settings.collection_backoff_seconds
         )
+        self._defer_counts[intent_id] = self._defer_counts.get(intent_id, 0) + 1
         self._outcomes[intent_id] = CollectionOutcome.DEFERRED
+
+    def take_recovery_intent(self):
+        for intent_id, count in self._defer_counts.items():
+            if (
+                count >= self.settings.collection_recovery_failure_limit
+                and intent_id not in self._recovery_requested
+            ):
+                self._recovery_requested.add(intent_id)
+                return intent_id
+        return None
 
     def is_deferred(self, intent_id: IntentId, now: float) -> bool:
         retry_at = self._deferred_until.get(intent_id)

@@ -1,8 +1,8 @@
 # Greenfield-lite Navigation Intent Routing Spec（v1）
 
-> 狀態：v1 行為與遷移規格，尚未實作  
-> 上位標準：[Greenfield-lite Architecture v1](project_arch_greenfield_lite_v1.md)  
-> 範圍：Diamond、Bread、Primary Navigation、Start commitment、未知 Quest fallback，以及 `NAVIGATING`／`LOBBY` 的相容遷移。  
+> 狀態：v1 共用路由核心 M1–M6 已實作；legacy Handler 感知遷移持續進行
+> 上位標準：[Greenfield-lite Architecture v1](project_arch_greenfield_lite_v1.md)
+> 範圍：Diamond、Bread、Primary Navigation、Start commitment、未知 Quest fallback，以及 `NAVIGATING`／`LOBBY` 的相容遷移。
 > 固定限制：任務順序由使用者寫死；不做戰鬥策略；timeout／retry／backoff 只由 TOML defaults 設定，不提供 CLI 覆寫。
 
 ## 1. 文件責任
@@ -271,6 +271,15 @@ Collection Handler 只擁有視窗內 phase 與 outcome，不擁有跨場景任�
 5. **Progress／Defer／Recovery**：加入 TOML defaults、retry_at、no-progress 與 recovery escalation。
 
 每個 slice 必須保持未遷移 Handler 可運作，且已遷移路徑只有一個 owner。
+
+### 11.1 本次實作結果（2026-09-02）
+
+- legacy collection flags 已由 adapter 正規化為 `IntentSnapshot`，固定優先序為 Diamond、Bread、Primary。
+- `NavigationHandler` 與 `LobbyHandler` 已使用同一套 routing policy；重複的 Start fallback 已移除。
+- 固定路徑由小型 `NavigationTable` 宣告，缺少 evidence 時只會 WAIT 或交給尚未遷移的 primary handler。
+- collection pending 只在 success／cooldown 清除；辨識失敗會 defer，保留 pending，達 TOML recovery 上限才經 `ProcessPort` relaunch。
+- unknown Quest／Tier 4 fallback 已有回歸測試鎖定，不得修改 Diamond／Bread pending。
+- Lobby 已接 scoped detector profile；collection 內部 phase matcher 與大型 primary navigation handler 留待後續切片遷移。
 
 ## 12. 完成條件
 

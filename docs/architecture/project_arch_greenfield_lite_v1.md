@@ -1,9 +1,9 @@
 # Greenfield-lite Architecture v1：低負載 24/7 導航 Agent
 
-> 狀態：第一版實作規格，尚未實作  
-> 完整理想版本：[Greenfield Architecture](project_arch_greenfield.md)  
-> 關係：本文件是完整版本的可交付子集，不取代、不刪除完整版本；未納入 v1 的設計只是延後。  
-> 範圍：導航、行動確認、最低必要復原，以及支撐低 CPU 長時間運作的感知排程。  
+> 狀態：v1 核心骨架 M1–M6 已實作；全場景感知遷移與 metrics 仍依第 9 節追蹤
+> 完整理想版本：[Greenfield Architecture](project_arch_greenfield.md)
+> 關係：本文件是完整版本的可交付子集，不取代、不刪除完整版本；未納入 v1 的設計只是延後。
+> 範圍：導航、行動確認、最低必要復原，以及支撐低 CPU 長時間運作的感知排程。
 > 固定限制：任務順序由使用者寫死；不做戰鬥策略。
 
 ## 1. v1 結論
@@ -251,6 +251,19 @@ OpenCV matcher 留在 perception adapter；不為每個 helper 建 interface。T
 5. **Progress Recovery**：接入 no-progress、capture failure、battle hard timeout、fixed backoff 與 relaunch。
 
 每個切片都必須讓未遷移 Handler 繼續運作；同一路徑不得有兩個決策 owner。
+
+### 7.1 M1–M6 落地狀態（2026-09-02）
+
+| Milestone | 狀態 | 落地範圍 |
+| --- | --- | --- |
+| M1 契約 | 完成 | `SceneSnapshot`、Intent、Decision 與語意 ID |
+| M2 共用路由 | 完成 | `NAVIGATING`／`LOBBY` 共用 intent precedence 與 Start commitment |
+| M3 Progress | 完成 | `InFlightAction`、collection outcome、TOML timeout／backoff、unknown Quest 邊界 |
+| M4 Scoped Perception | 部分完成 | `DetectorRegistry`、單幀 match cache、Lobby profile；其他 profile 保留相容偵測 |
+| M5 Navigation Table | 完成 | Diamond、Bread、Start 固定 edge；未引入 graph framework 或 DSL |
+| M6 Ports／Recovery | 完成 | Capture／Input／Clock／Process ports、collection escalation、既有 relaunch adapter |
+
+本批次「M1–M6 完成」表示核心骨架與相容接線已可運作，不等同第 9 節所有遷移條件皆完成。後續仍需逐一遷移 Stage、Dungeon、Loading、Battle、Result profiles，加入 detector metrics，並讓已遷移 Handler 完全只消費 snapshot。
 
 ## 8. 測試與驗收
 

@@ -168,10 +168,11 @@ class SceneDetector:
         lobby_start_btn = "stages/start.png"
         if machine and getattr(machine, "config", None):
             lobby_start_btn = machine.config.get("lobby_start_btn", lobby_start_btn)
-        if scene_info.is_lobby and os.path.exists(os.path.join("templates", lobby_start_btn)):
+        if os.path.exists(os.path.join("templates", lobby_start_btn)):
             pos_start, conf_start = self._safe_match(screen_img, lobby_start_btn, threshold=0.8)
             if pos_start:
                 scene_info.scene_type = SceneType.LOBBY_OTHER
+                scene_info.is_lobby = True
                 scene_info.matched_elements[lobby_start_btn] = (pos_start, conf_start)
                 return scene_info
 

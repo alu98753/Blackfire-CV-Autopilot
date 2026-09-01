@@ -35,6 +35,7 @@ from states.handlers import (
 )
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 from states.navigation_progress import NavigationProgress, NavigationProgressSettings
+from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 
 
 
@@ -80,10 +81,23 @@ class GameStateMachine:
 
 
     
-    def __init__(self, capturer, matcher, mouse, preload_ocr: bool = True):
+    def __init__(
+        self,
+        capturer,
+        matcher,
+        mouse,
+        preload_ocr: bool = True,
+        *,
+        clock=None,
+        process_port=None,
+    ):
         self.capturer = capturer
+        self.capture_port = capturer
         self.matcher = matcher
         self.mouse = mouse
+        self.input_port = mouse
+        self.clock = clock or SystemClock()
+        self.process_port = process_port or GameRelaunchProcessAdapter()
         
         self.current_state = self.STATE_UNKNOWN
         self.last_state = None
@@ -449,6 +463,10 @@ class GameStateMachine:
 
             self._on_state_transition_sync_context(new_state)
 
+    def request_relaunch(self, reason: str) -> bool:
+        """Escalate recovery through the configured process boundary."""
+        return self.process_port.relaunch(self, reason)
+
     def ensure_explore_config(self):
         """Restore a route config that can safely run ``ExploreHandler``.
 
@@ -593,9 +611,7 @@ class GameStateMachine:
             if self.window_lost_count >= 5:
                 logging.warning("🚨 連續 5 次偵測不到遊戲視窗 (遊戲已被手動關閉或崩潰)，發起 GameRelaunchSubflow 自動重開流程！")
                 self.window_lost_count = 0
-                from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
-                relaunch_subflow = GameRelaunchSubflow()
-                relaunch_subflow.execute(self, reason="game_window_closed_by_user")
+                self.request_relaunch("game_window_closed_by_user")
                 return
 
             time.sleep(0.5)
@@ -615,8 +631,7 @@ class GameStateMachine:
             if self.capture_failure_count >= self.capture_failure_limit:
                 self.capture_failure_count = 0
                 logging.error("[CaptureRecovery] Screenshot failure threshold reached; relaunching game.")
-                from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
-                GameRelaunchSubflow().execute(self, reason="capture_failure_threshold_exceeded")
+                self.request_relaunch("capture_failure_threshold_exceeded")
                 return
             logging.warning("⚠️ 無法擷取畫面")
             time.sleep(0.2)

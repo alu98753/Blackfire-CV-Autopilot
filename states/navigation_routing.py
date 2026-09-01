@@ -48,7 +48,7 @@ def build_intent_snapshot(machine) -> IntentSnapshot:
 
 def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
     start_template = (machine.config or {}).get("lobby_start_btn", "stages/start.png")
-    now = time.monotonic()
+    now = _monotonic_now(machine)
     scene = snapshot_from_scene_info(
         scene_info,
         frame_id=_next_frame_id(machine),
@@ -62,6 +62,20 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
     progress_status = (
         progress.observe(scene, now) if progress is not None else ProgressStatus.IDLE
     )
+    recovery_intent = (
+        progress.take_recovery_intent()
+        if progress_status == ProgressStatus.DEFERRED
+        else None
+    )
+    if recovery_intent is not None:
+        machine.request_relaunch(
+            f"collection_recovery_limit_{recovery_intent.value}"
+        )
+        active_intent = ActiveIntent(recovery_intent)
+        machine.active_navigation_intent = active_intent
+        return NavigationRoutingContext(
+            scene, intent_snapshot, active_intent, ActionDecision.wait()
+        )
     if progress_status == ProgressStatus.WAITING:
         active_intent = ActiveIntent(progress.in_flight.intent_id)
         decision = ActionDecision.wait()
@@ -87,6 +101,11 @@ def _select_available_intent(policy, snapshot, progress, now):
     ):
         return ActiveIntent(IntentId.COLLECT_BREAD)
     return ActiveIntent(IntentId.PRIMARY_NAVIGATION, snapshot.primary_payload)
+
+
+def _monotonic_now(machine):
+    clock = getattr(machine, "__dict__", {}).get("clock")
+    return clock.monotonic() if clock is not None else time.monotonic()
 
 
 class NavigationDecisionExecutor:
@@ -181,5 +200,5 @@ class NavigationDecisionExecutor:
             decision.action,
             decision.expected,
             context.scene.frame_id,
-            time.monotonic(),
+            _monotonic_now(self.machine),
         )
