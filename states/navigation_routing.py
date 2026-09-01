@@ -11,7 +11,9 @@ from states.navigation_intent import (
     DecisionKind,
     IntentSnapshot,
     NavigationIntentPolicy,
+    IntentId,
 )
+from states.navigation_progress import NavigationProgress, ProgressStatus
 from utils.scene_snapshot import SceneSnapshot, snapshot_from_scene_info
 
 
@@ -46,18 +48,45 @@ def build_intent_snapshot(machine) -> IntentSnapshot:
 
 def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
     start_template = (machine.config or {}).get("lobby_start_btn", "stages/start.png")
+    now = time.monotonic()
     scene = snapshot_from_scene_info(
         scene_info,
         frame_id=_next_frame_id(machine),
-        captured_at=time.monotonic(),
+        captured_at=now,
         start_template=start_template,
     )
     intent_snapshot = build_intent_snapshot(machine)
     policy = NavigationIntentPolicy()
-    active_intent = policy.select_intent(intent_snapshot)
+    candidate = getattr(machine, "navigation_progress", None)
+    progress = candidate if isinstance(candidate, NavigationProgress) else None
+    progress_status = (
+        progress.observe(scene, now) if progress is not None else ProgressStatus.IDLE
+    )
+    if progress_status == ProgressStatus.WAITING:
+        active_intent = ActiveIntent(progress.in_flight.intent_id)
+        decision = ActionDecision.wait()
+        machine.active_navigation_intent = active_intent
+        return NavigationRoutingContext(
+            scene, intent_snapshot, active_intent, decision
+        )
+
+    active_intent = _select_available_intent(policy, intent_snapshot, progress, now)
     machine.active_navigation_intent = active_intent
     decision = policy.resolve(scene, active_intent)
     return NavigationRoutingContext(scene, intent_snapshot, active_intent, decision)
+
+
+def _select_available_intent(policy, snapshot, progress, now):
+    selected = policy.select_intent(snapshot)
+    if progress is None or not progress.is_deferred(selected.intent_id, now):
+        return selected
+    if (
+        selected.intent_id == IntentId.COLLECT_DIAMOND
+        and snapshot.bread_pending
+        and not progress.is_deferred(IntentId.COLLECT_BREAD, now)
+    ):
+        return ActiveIntent(IntentId.COLLECT_BREAD)
+    return ActiveIntent(IntentId.PRIMARY_NAVIGATION, snapshot.primary_payload)
 
 
 class NavigationDecisionExecutor:
@@ -87,12 +116,14 @@ class NavigationDecisionExecutor:
                 self.machine.transition_to(self.machine.STATE_LOBBY)
             return True
         if decision.action in {ActionId.OPEN_DIAMOND, ActionId.HANDLE_DIAMOND}:
+            self._begin_action(context)
             return self._delegate_collection(
                 self.machine.STATE_DIAMOND_COLLECTION,
                 screen_img,
                 rect,
             )
         if decision.action in {ActionId.OPEN_BREAD, ActionId.HANDLE_BREAD}:
+            self._begin_action(context)
             return self._delegate_collection(
                 self.machine.STATE_BREAD_COLLECTION,
                 screen_img,
@@ -116,6 +147,7 @@ class NavigationDecisionExecutor:
             rect["left"] + match.client_x,
             rect["top"] + match.client_y,
         )
+        self._begin_action(context)
         return True
 
     def _dismiss_overlay(self, context, rect) -> bool:
@@ -130,4 +162,24 @@ class NavigationDecisionExecutor:
             rect,
             threshold=0.75,
         )
+        self._begin_action(context)
         return True
+
+    def _begin_action(self, context):
+        decision = context.decision
+        candidate = getattr(self.machine, "navigation_progress", None)
+        progress = candidate if isinstance(candidate, NavigationProgress) else None
+        if (
+            progress is None
+            or decision.kind != DecisionKind.CLICK
+            or decision.action is None
+            or decision.expected is None
+        ):
+            return
+        progress.begin(
+            context.active_intent.intent_id,
+            decision.action,
+            decision.expected,
+            context.scene.frame_id,
+            time.monotonic(),
+        )

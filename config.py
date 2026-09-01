@@ -134,6 +134,18 @@ def get_battle_max_duration_seconds() -> float:
     return float(GLOBAL_SETTINGS.get("battle_max_duration_sec", 900.0))
 
 
+def get_navigation_progress_settings() -> dict:
+    """Return required TOML-only action timeout and collection backoff settings."""
+    settings = get_defaults_config()["navigation"]
+    return {
+        "action_timeout_seconds": float(settings["action_timeout_seconds"]),
+        "action_max_attempts": int(settings["action_max_attempts"]),
+        "collection_backoff_seconds": float(
+            settings["collection_backoff_seconds"]
+        ),
+    }
+
+
 def normalize_config(config):
     """Populate the mode-independent equipment and activity defaults."""
     if not isinstance(config, dict):

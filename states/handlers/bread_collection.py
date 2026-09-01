@@ -2,6 +2,8 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
+from states.navigation_intent import IntentId
+from states.navigation_progress import CollectionOutcome
 from utils.scene_detector import SceneDetector, SceneType
 
 
@@ -100,6 +102,14 @@ class BreadCollectionHandler(BaseStateHandler):
                 else:
                     # 退出按鈕已經不在畫面上，說明視窗成功關閉！
                     logging.info("🍞 領體力：退出按鈕已消失，確認視窗已關閉。領取體力流程結束。")
+                    outcome = (
+                        CollectionOutcome.COOLDOWN
+                        if getattr(self.machine, "bread_cooldown_detected", False)
+                        else CollectionOutcome.SUCCESS
+                    )
+                    self.machine.navigation_progress.complete(
+                        IntentId.COLLECT_BREAD, outcome
+                    )
                     self.machine.need_bread_collection = False
                     self.machine.bread_collected_this_run = False
                     self.machine.bread_cooldown_detected = False
@@ -153,6 +163,15 @@ class BreadCollectionHandler(BaseStateHandler):
                 self.machine.bread_window_opened = False
                 self.machine.bread_window_missing_count = 0
                 self.machine.bread_click_attempted = False
+                self.machine.navigation_progress.defer(
+                    IntentId.COLLECT_BREAD, time.monotonic()
+                )
+                next_state = (
+                    self.machine.STATE_COLLECT_ONLY
+                    if self.machine.is_in_collect_only_mode()
+                    else self.machine.STATE_NAVIGATING
+                )
+                self.machine.transition_to(next_state)
             return
         else:
             # B. 情況三：尚未開啟體力彈窗，尋找並點選大廳中的入口按鈕打開它

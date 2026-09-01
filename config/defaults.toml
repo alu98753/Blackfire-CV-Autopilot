@@ -10,6 +10,11 @@ dry_run_bag_clean = false
 default_backpack_full_max_scroll = 5
 monitor_index = 1
 
+[navigation]
+action_timeout_seconds = 5.0
+action_max_attempts = 3
+collection_backoff_seconds = 60.0
+
 [quest]
 max_run_limit = 20
 target_count = 20

@@ -4,7 +4,13 @@ import cv2
 import logging
 import threading
 from copy import deepcopy
-from config import GAME_CONFIGS, get_runtime_game_config, normalize_config, refresh_runtime_config
+from config import (
+    GAME_CONFIGS,
+    get_navigation_progress_settings,
+    get_runtime_game_config,
+    normalize_config,
+    refresh_runtime_config,
+)
 from utils import get_stage_configs
 from utils.debug_artifacts import write_debug_image
 from states.handlers import (
@@ -28,6 +34,7 @@ from states.handlers import (
     DomainExploreHandler
 )
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
+from states.navigation_progress import NavigationProgress, NavigationProgressSettings
 
 
 
@@ -128,6 +135,11 @@ class GameStateMachine:
         self.pending_daily_reset_exit = False
         self.next_daily_quest_ready_at = None
         self.pending_daily_quest_preemption = False
+        self.navigation_progress = NavigationProgress(
+            NavigationProgressSettings.from_mapping(
+                get_navigation_progress_settings()
+            )
+        )
 
 
 

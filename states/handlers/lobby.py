@@ -7,6 +7,8 @@ from states.navigation_routing import (
     NavigationDecisionExecutor,
     resolve_navigation_context,
 )
+from states.navigation_intent import ActionId, IntentId, PostconditionId
+from states.navigation_progress import NavigationProgress
 from utils.scene_detector import SceneDetector
 
 
@@ -128,6 +130,9 @@ class LobbyHandler(BaseStateHandler):
         if not pos:
             if self.start_first_click_time is not None:
                 logging.info("Lobby start button disappeared; entering LOADING.")
+                progress = getattr(self.machine, "navigation_progress", None)
+                if isinstance(progress, NavigationProgress):
+                    progress.clear(IntentId.PRIMARY_NAVIGATION)
                 self.reset_state()
                 self.notify_ui_progress()
                 self.machine.last_lobby_start_click_time = now
@@ -150,6 +155,15 @@ class LobbyHandler(BaseStateHandler):
             self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
             self.start_first_click_time = now
             self.last_start_click_time = now
+            progress = getattr(self.machine, "navigation_progress", None)
+            if isinstance(progress, NavigationProgress):
+                progress.begin(
+                    IntentId.PRIMARY_NAVIGATION,
+                    ActionId.START_PRIMARY,
+                    PostconditionId.LOADING_OR_BATTLE,
+                    getattr(self.machine, "_navigation_frame_id", 0),
+                    now,
+                )
             return
 
         total_elapsed = now - self.start_first_click_time
@@ -158,6 +172,9 @@ class LobbyHandler(BaseStateHandler):
                 "Lobby start button remained visible for %.1fs; resetting click tracking.",
                 total_elapsed,
             )
+            progress = getattr(self.machine, "navigation_progress", None)
+            if isinstance(progress, NavigationProgress):
+                progress.clear(IntentId.PRIMARY_NAVIGATION)
             self.reset_state()
             return
 
