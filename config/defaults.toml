@@ -9,6 +9,7 @@ default_town_subflow_order = ["blood_altar", "jewelry_workshop"]
 dry_run_bag_clean = false
 default_backpack_full_max_scroll = 5
 monitor_index = 1
+battle_max_defeat = 20 # 所有模式通用的連續戰敗重試上限；達到此次數後放棄當前關卡
 
 [navigation]
 action_timeout_seconds = 5.0
@@ -72,9 +73,10 @@ name = "黃金古國"
 type = "domain"
 domain = "golden_empire"
 bread_cost = 3
-domain_max_defeat = 5
 nemesis_action = "pause" # "flee" (自動放棄戰鬥退出) 或 "pause" (自動暫停交給使用者手動打)
 enable_lord_boss = true # 是否在掛古國時若領主 Boss 冷卻結束自動插隊挑戰
+# nemesis_templates 為 list 型態，可在 user_data/<profile>/config.toml 中定義同名 key 整份覆蓋
+# 當角色變強後可縮減此清單，例如只保留 golden_king.png
 nemesis_templates = [
     "domains/golden_empire/exception/golden_king.png",
     "domains/golden_empire/exception/elf_mythril_hag.png",
@@ -95,7 +97,7 @@ stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_G
 navigation_path = ["common/door.png", "exit_battle.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
-stage_max_defeat = 4
+
 
 [primary_modes.dungeon]
 name = "地下城"
@@ -137,7 +139,6 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 stage_name = "冰凍峽谷 (first)"
 stage_entry = "stages/level6_ice_cave.png"
 stage_target = "stages/first_stage.png"
-stage_max_defeat = 4
 stage_navigation_path = ["common/door.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]

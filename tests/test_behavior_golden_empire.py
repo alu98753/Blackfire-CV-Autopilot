@@ -340,9 +340,9 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
     # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試
     # =========================================================================
 
-    def test_regular_battle_defeat_retry_uses_domain_max_defeat(self):
+    def test_regular_battle_defeat_retry_uses_battle_max_defeat(self):
         """
-        Given: 領地模式常規戰鬥戰敗 (defeat.png)，當前 defeat_count = 3 (< domain_max_defeat - 1 = 4)
+        Given: 領地模式常規戰鬥戰敗 (defeat.png)，當前 defeat_count = 3 (< battle_max_defeat - 1 = 4)
         When: 執行 ResultHandler.handle()
         Then: 點擊重新開始按鈕，defeat_count 累加為 4，進入 STATE_LOADING 繼續重試
         """
@@ -352,7 +352,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         self.mock_machine.config["type"] = "domain"
         self.mock_machine.config["domain"] = "golden_empire"
-        self.mock_machine.config["domain_max_defeat"] = 5
+        self.mock_machine.config["battle_max_defeat"] = 5
         self.mock_machine.is_in_dungeon = False
         self.mock_machine.defeat_count = 3
 

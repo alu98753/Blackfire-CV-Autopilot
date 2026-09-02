@@ -84,6 +84,7 @@ def _restore_mode_key_types(modes: dict) -> dict:
 
 # Existing imports remain valid while configuration data now lives in TOML.
 GLOBAL_SETTINGS = _SETTINGS["global"]
+BATTLE_MAX_DEFEAT = GLOBAL_SETTINGS.get("battle_max_defeat", 20)
 QUEST_MAX_RUN_LIMIT = _SETTINGS["quest"]["max_run_limit"]
 QUEST_TARGET_COUNT = _SETTINGS["quest"]["target_count"]
 QUEST_STAGE_BATCH_SIZE = _SETTINGS["quest"]["stage_batch_size"]

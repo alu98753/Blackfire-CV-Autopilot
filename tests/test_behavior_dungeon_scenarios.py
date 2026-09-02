@@ -238,16 +238,17 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
             
         self.mock_matcher.match.side_effect = mock_match
              
-        # 第一次戰敗
+        # 第一次戰敗 (設定為第 19 次戰敗: count=18)
+        self.state_machine.dungeon_defeat_count = 18
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
-        self.assertEqual(self.state_machine.dungeon_defeat_count, 1)
+        self.assertEqual(self.state_machine.dungeon_defeat_count, 19)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         
-        # 回歸到結算狀態準備第二次
+        # 回歸到結算狀態準備第 20 次戰敗 (達到 20 次上限)
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
-        # 第二次戰敗：這次因為 count=1 >= 1，會點選放棄與確認退出
+        # 第 20 次戰敗：這次因為 count=19 >= 20-1，會點選放棄與確認退出
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了對應的冷卻
