@@ -82,12 +82,13 @@ class SceneSnapshot:
 
 _SCENE_TYPE_MAP = {
     "TOWN": SceneId.TOWN,
-    "LOBBY_STAGE": SceneId.LOBBY,
-    "LOBBY_DUNGEON": SceneId.LOBBY,
+    "LOBBY_STAGE": SceneId.STAGE_SELECT,
+    "LOBBY_DUNGEON": SceneId.DUNGEON_SELECT,
     "LOBBY_OTHER": SceneId.LOBBY,
     "WINDOW_DIAMOND": SceneId.DIAMOND_WINDOW,
     "WINDOW_BREAD": SceneId.BREAD_WINDOW,
     "IN_DUNGEON": SceneId.DUNGEON_EXPLORING,
+    "DUNGEON_PREPARE": SceneId.DUNGEON_LOBBY,
 }
 
 _ELEMENT_TEMPLATE_MAP = {
@@ -137,11 +138,9 @@ def snapshot_from_scene_info(
     if scene_type_name == "POPUP_TASK_COMPLETE":
         overlays.add(OverlayId.TASK_COMPLETE)
 
-    profile = DetectionProfileId.UNKNOWN
-    if scene_id == SceneId.TOWN:
-        profile = DetectionProfileId.TOWN
-    elif scene_id == SceneId.LOBBY:
-        profile = DetectionProfileId.LOBBY
+    from utils.scene_catalog import SceneCatalog
+
+    profile = SceneCatalog.profile_for(scene_id)
 
     return SceneSnapshot(
         frame_id=frame_id,

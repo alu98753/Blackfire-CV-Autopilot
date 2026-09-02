@@ -84,6 +84,9 @@ class GameStateMachine:
         "dungeons/gungeon_godown.png",
         "dungeons/gungeon_godown_confirm.png",
     )
+    DUNGEON_RECOVERY_MODE_TYPES = frozenset(
+        {"dungeon", "mix", "stage", "daily"}
+    )
 
 
 
@@ -487,6 +490,9 @@ class GameStateMachine:
     def dungeon_detection_features(self):
         """Return dungeon anchors allowed by the current committed context."""
         if getattr(self, "current_lord_boss_key", None) is not None:
+            return ()
+        config_type = (self.config or {}).get("type")
+        if config_type not in self.DUNGEON_RECOVERY_MODE_TYPES:
             return ()
         if self.has_dungeon_context():
             return self.DUNGEON_SCENE_FEATURES

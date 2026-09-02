@@ -1,8 +1,11 @@
 import unittest
+import time
 from unittest.mock import MagicMock, patch
 from states.handlers.domain_explore import DomainExploreHandler
+from states.handlers.battle import BattleHandler
 from states.domains.golden_empire import GoldenEmpireStrategy
 from states.handlers.navigation import NavigationHandler
+from states.state_machine import GameStateMachine
 
 class TestBehaviorGoldenEmpire(unittest.TestCase):
     """
@@ -54,6 +57,42 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
     # =========================================================================
     # 1. 進場導航與進入領地行為測試
     # =========================================================================
+
+    @patch("os.path.exists", return_value=True)
+    def test_domain_battle_ignores_false_dungeon_recovery_anchor(
+        self,
+        _mock_exists,
+    ):
+        """Domain battle result owns the frame even if a dungeon anchor matches."""
+        machine = GameStateMachine(
+            capturer=MagicMock(),
+            matcher=MagicMock(),
+            mouse=MagicMock(),
+            preload_ocr=False,
+        )
+        machine.config = self.mock_machine.config.copy()
+        machine.current_state = machine.STATE_BATTLE
+        machine.battle_start_time = time.time() - 10.0
+
+        def fake_match(_image, template, **_kwargs):
+            if template == "dungeons/gungeon_godown_confirm.png":
+                return (766, 524), 0.8094
+            if template == "common/continue.png":
+                return (765, 525), 0.9499
+            return None, 0.0
+
+        machine.matcher.match.side_effect = fake_match
+
+        BattleHandler(machine).handle(MagicMock(), self.rect)
+
+        self.assertEqual(machine.current_state, machine.STATE_RESULT)
+        matched_templates = [
+            call.args[1] for call in machine.matcher.match.call_args_list
+        ]
+        self.assertNotIn(
+            "dungeons/gungeon_godown_confirm.png",
+            matched_templates,
+        )
 
     def test_navigation_into_golden_empire_scene(self):
         """
