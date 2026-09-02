@@ -27,8 +27,8 @@
 - **入場憑證 (門票)**：古老金幣 (`ancient_coin` x1)
 - **前置解鎖任務**：完成主線第 6 關【冰凍峽谷 (`frozen_gorge`)】後，在血之祭壇接取 `blood_altar_golden_empire` 任務。
 - **專屬兌換商店 (`exchange_dic`)**：
-  - 黃金帝國寶箱 (`chest_golden_empire`): 128 代幣
-  - 黃金重盾設計圖 (`design_shield_gold`): 256 代幣
+  - 黃金重盾設計圖 (`design_shield_gold`): **256 代幣【絕對優先兌換】**（艾麗娜質變神盾，保底提升 200+ 戰力，強烈建議存滿 256 直購！）
+  - 黃金帝國寶箱 (`chest_golden_empire`): **128 代幣【次選，CP值偏低】**（實測開箱回饋：常開出 1 件 5 階其餘全為金幣碎片，落空感大，切勿在拿到盾牌前賭寶箱）
   - 黃金長矛設計圖 (`design_spear_gold`): 256 代幣
   - 鍍金封印卷軸 / 耀光作戰魔藥
 - **區域四大 BOSS**：
