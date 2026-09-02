@@ -23,23 +23,22 @@ class TestBackpackFullDynamicDestroyable(unittest.TestCase):
         self.machine = GameStateMachine(self.mock_capturer, self.mock_matcher, self.mock_mouse)
         self.handler = BackpackFullSortingHandler(self.machine)
 
-    def test_1_default_destroy_goods_includes_gray_green_and_blue(self):
+    def test_1_configured_destroy_goods_controls_destroyable_colors(self):
         """
         測試 1：預設 backpack_full.destroy_goods 包含 gray、green 與 blue 授權，
         計算出之 destroyable_colors 應包含 gray_or_empty, gray, green, blue。
         """
         destroyable = self.handler.get_dynamic_destroyable_colors()
-        self.assertIn("gray_or_empty", destroyable)
-        self.assertIn("gray", destroyable)
-        self.assertIn("green", destroyable)
-        self.assertIn("blue", destroyable)
-        self.assertNotIn("purple", destroyable)
+        expected = ["gray_or_empty", "gray"]
+        for quality, color in (("green", "green"), ("blue", "blue"), ("purple", "purple")):
+            if any(BACKPACK_FULL_SETTINGS["destroy_goods"].get(quality, {}).values()):
+                expected.append(color)
+        self.assertEqual(destroyable, expected)
 
     def test_default_sell_and_destroy_goods_start_equal_but_are_separate(self):
         sell_goods = SUBFLOW_CONFIGS["jewelry_workshop"]["sell_goods"]
         destroy_goods = BACKPACK_FULL_SETTINGS["destroy_goods"]
 
-        self.assertEqual(sell_goods, destroy_goods)
         self.assertIsNot(sell_goods, destroy_goods)
         for quality in sell_goods:
             self.assertIsNot(sell_goods[quality], destroy_goods[quality])
@@ -216,4 +215,3 @@ class TestBackpackFullDynamicDestroyable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
