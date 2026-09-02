@@ -55,6 +55,9 @@ class TestExploreSubflow(unittest.TestCase):
             elif name == "common/quit.png" and match_call_count == 2:
                 match_call_count += 1
                 return (300, 100), 0.95
+            elif name == "dungeons/gungeon_godown.png" and match_call_count == 3:
+                match_call_count += 1
+                return (400, 500), 0.95
             return None, 0.0
             
         self.mock_matcher.match.side_effect = side_effect
@@ -63,13 +66,43 @@ class TestExploreSubflow(unittest.TestCase):
         
         # 以 patch 縮短 subflow 的 sleep 時間以加快測試速度
         with patch('states.handlers.explore.time.sleep') as mock_sleep:
-            self.handler._run_treasure_subflow(rect)
+            result = self.handler._run_treasure_subflow(rect)
             
         # 驗證是否點擊了這三個按鈕，且座標加了 rect["left"] / rect["top"]
         self.assertEqual(self.mock_mouse.click.call_count, 3)
+        self.assertTrue(result)
         self.mock_mouse.click.assert_any_call(110, 220)  # 10 + 100, 20 + 200
         self.mock_mouse.click.assert_any_call(160, 270)  # 10 + 150, 20 + 250
         self.mock_mouse.click.assert_any_call(310, 120)  # 10 + 300, 20 + 100
+
+    def test_run_treasure_subflow_waits_through_transient_misses(self):
+        """Loading frames without buttons must not end the treasure subflow."""
+        self.mock_capturer.capture.return_value = MagicMock()
+        open_checks = 0
+
+        def side_effect(_img, name, threshold):
+            nonlocal open_checks
+            if name == "dungeons/Get_tresure.png":
+                open_checks += 1
+                if open_checks == 3:
+                    return (100, 200), 0.9999
+            if name == "dungeons/Get_tresure_comfirm.png":
+                return (150, 250), 0.8230
+            if name == "common/quit.png":
+                return (300, 100), 0.95
+            if name == "dungeons/dungeons_complete.png":
+                return (400, 500), 0.95
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = side_effect
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        with patch("states.handlers.explore.time.sleep"):
+            result = self.handler._run_treasure_subflow(rect)
+
+        self.assertTrue(result)
+        self.assertEqual(self.mock_mouse.click.call_count, 3)
+        self.assertEqual(open_checks, 3)
 
     @patch('states.handlers.explore.os.path.exists')
     def test_run_bless_subflow_success(self, mock_exists):

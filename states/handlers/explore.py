@@ -103,9 +103,13 @@ class ExploreHandler(BaseStateHandler):
                         self._reset_floor_memory_transition()
                     logging.info(f"👉 偵測到寶箱地圖格 [{btn_name}]，信心度: {conf:.4f}，進行點擊並啟動「開啟寶箱」子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.machine.chest_opened_this_floor = True
                     time.sleep(0.5)  # 等待寶箱開啟動畫開始
-                    self._run_treasure_subflow(rect)
+                    self.machine.chest_opened_this_floor = self._run_treasure_subflow(rect)
+                    if not self.machine.chest_opened_this_floor:
+                        logging.warning(
+                            "[Treasure subflow] Completion was not verified; "
+                            "keeping the floor treasure eligible for retry."
+                        )
                     
                 elif btn_name == "dungeons/skill_event.png":
                     if self.machine.dungeon_floor_transitioning:
@@ -194,14 +198,14 @@ class ExploreHandler(BaseStateHandler):
 
         logging.info("⌛ 地下城探索中，正在等待下一層載入或新的隨機事件按鈕出現...")
 
-    def _run_treasure_subflow(self, rect):
+    def _run_treasure_subflow(self, rect) -> bool:
         logging.info("📦 [子流程] 開始執行「開啟寶箱」子流程...")
         start_time = time.time()
         timeout = 10.0  # 最多執行 10 秒
         
         treasure_clicked = False
         confirm_clicked = False
-        last_click_time = 0.0
+        last_click_time = start_time
         
         while time.time() - start_time < timeout:
             screen_img = self.machine.capturer.capture(rect)
@@ -233,14 +237,14 @@ class ExploreHandler(BaseStateHandler):
                     logging.info(f"📦 [子流程] 未看到寶物確認但直接偵測到退出按鈕 'common/quit.png'，相似度: {conf_quit:.4f}，進行點擊並退出。")
                     self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
                     time.sleep(0.3)
-                    return
+                    return self._wait_for_treasure_terminal(rect, timeout)
             else:
                 pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
                 if pos:
                     logging.info(f"📦 [子流程] 偵測到退出按鈕 'common/quit.png'，相似度: {conf:.4f}，進行點擊並結束寶箱子流程。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     time.sleep(0.3)
-                    return
+                    return self._wait_for_treasure_terminal(rect, timeout)
                     
             if time.time() - last_click_time > 2.0:
                 has_any = False
@@ -252,11 +256,44 @@ class ExploreHandler(BaseStateHandler):
                             break
                 if not has_any:
                     logging.info("📦 [子流程] 畫面已無寶箱關聯按鈕且無新動作，提前結束子流程。")
-                    return
-                    
+                    time.sleep(0.3)
+                    continue
+
             time.sleep(0.3)
             
         logging.warning("📦 [子流程] 開啟寶箱子流程超時結束。")
+
+        return False
+
+    def _wait_for_treasure_terminal(self, rect, timeout) -> bool:
+        terminal_anchors = (
+            "dungeons/gungeon_godown.png",
+            "dungeons/dungeons_complete.png",
+        )
+        terminal_wait_start = time.time()
+        while time.time() - terminal_wait_start < timeout:
+            screen_img = self.machine.capturer.capture(rect)
+            if screen_img is None:
+                time.sleep(0.2)
+                continue
+
+            for anchor in terminal_anchors:
+                pos, conf = self.matcher.match(screen_img, anchor, threshold=0.80)
+                if pos:
+                    logging.info(
+                        "[Treasure subflow] Completion verified by [%s] "
+                        "(confidence: %.4f).",
+                        anchor,
+                        conf,
+                    )
+                    return True
+            time.sleep(0.3)
+
+        logging.warning(
+            "[Treasure subflow] Close was clicked, but no floor completion "
+            "anchor appeared before timeout."
+        )
+        return False
 
     def _run_bless_subflow(self, rect) -> bool:
         """
