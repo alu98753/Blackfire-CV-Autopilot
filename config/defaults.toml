@@ -236,9 +236,10 @@ goods_dir = "town_building/Jewelry_workshop/goods"
 navigation_path = []
 lobby_start_btn = "stages/start.png"
 
-[subflow_configs.jewelry_workshop.goods_settings]
+# 珠寶店出售 SSOT；各 user_data/<profile>/config.toml 可獨立覆寫。
+[subflow_configs.jewelry_workshop.sell_goods]
 
-[subflow_configs.jewelry_workshop.goods_settings.gray]
+[subflow_configs.jewelry_workshop.sell_goods.gray]
 Sandworm_scales = true
 Spider_silk = true
 Spider_venom_glands = true
@@ -251,7 +252,7 @@ Slime_Mucus = true
 Bat_wings = true
 Wolf_skin = true
 
-[subflow_configs.jewelry_workshop.goods_settings.green]
+[subflow_configs.jewelry_workshop.sell_goods.green]
 The_cloth_wrapped_around_the_dead = true
 Giant_Beast_Gold_Tooth = true
 Toad_Venom = true
@@ -260,10 +261,43 @@ Wild_boar_tusk = true
 Scorpion_Shell = true
 Venom_Fang = true
 
-[subflow_configs.jewelry_workshop.goods_settings.blue]
+[subflow_configs.jewelry_workshop.sell_goods.blue]
 rune_shard = true
 
-[subflow_configs.jewelry_workshop.goods_settings.purple]
+[subflow_configs.jewelry_workshop.sell_goods.purple]
+
+[backpack_full]
+goods_dir = "town_building/Jewelry_workshop/goods"
+
+# 背包滿時右側永久銷毀 SSOT；初始值複製出售清單，但兩者互不連動。
+[backpack_full.destroy_goods]
+
+[backpack_full.destroy_goods.gray]
+Sandworm_scales = true
+Spider_silk = true
+Spider_venom_glands = true
+Warcraft_Fang = false
+lizard_skin = true
+scrap = true
+Frog_Skin = true
+Purple_Spore = true
+Slime_Mucus = true
+Bat_wings = true
+Wolf_skin = true
+
+[backpack_full.destroy_goods.green]
+The_cloth_wrapped_around_the_dead = true
+Giant_Beast_Gold_Tooth = true
+Toad_Venom = true
+Dead_Soul_Core = true
+Wild_boar_tusk = true
+Scorpion_Shell = true
+Venom_Fang = true
+
+[backpack_full.destroy_goods.blue]
+rune_shard = true
+
+[backpack_full.destroy_goods.purple]
 
 [subflow_configs.lord_boss]
 name = "首領領主討伐"

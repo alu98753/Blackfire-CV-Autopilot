@@ -98,16 +98,12 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
     def get_dynamic_destroyable_colors(self):
         """
-        [顏色判定 + jewelry_workshop goods_settings]
+        [顏色判定 + backpack_full.destroy_goods]
         動態計算右側背包允許被銷毀的品質顏色清單：
-        檢查 jewelry_workshop.goods_settings 中各品質 (gray, green, blue, purple) 是否有任何物品配置為 True。
+        檢查 backpack_full.destroy_goods 中各品質是否有任何物品配置為 True。
         若該品質有至少一個 True 物品，則將對應的顏色納入允許銷毀清單。
         """
-        from config import SUBFLOW_CONFIGS, PRIMARY_MODES
-        jw_config = SUBFLOW_CONFIGS.get("jewelry_workshop", {}) or PRIMARY_MODES.get("jewelry_workshop", {})
-        
-        cfg = getattr(self.machine, "config", {}) or {}
-        goods_settings = cfg.get("goods_settings") or jw_config.get("goods_settings", {})
+        goods_settings = self._get_destroy_goods()
 
         color_mapping = {
             "gray": ["gray_or_empty", "gray"],
@@ -129,11 +125,18 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         return allowed_colors
 
+    @staticmethod
+    def _get_destroy_goods():
+        """Return the profile-aware SSOT for destructive item authorization."""
+        from config import BACKPACK_FULL_SETTINGS
+
+        return BACKPACK_FULL_SETTINGS.get("destroy_goods", {})
+
     def is_item_authorized_by_goods_settings(self, screen_img, slot_color):
         """
         [物品層級二次防護對照]
-        當點擊右側格子彈出銷毀對話框時，依據 goods_settings 進行特定物品模板匹配：
-        - 取得此 slot_color (如 "green", "gray", "blue", "purple") 在 goods_settings 中配置的所有品項。
+        當點擊右側格子彈出銷毀對話框時，依據 destroy_goods 進行特定物品模板匹配：
+        - 取得此 slot_color 在 destroy_goods 中配置的所有品項。
         - 若該品質在 goods_settings 中無明確品項定義 (dict 為空)，代表該品質無細粒度限制，允許銷毀 (回傳 True)。
         - 若該品質在 goods_settings 中有明確品項定義 (例 green 包含 Scorpion_Shell, Toad_Venom 等)：
           * 遍歷該品質下的所有圖片模板 (templates/town_building/Jewelry_workshop/goods/<color>/<item>.png)。
@@ -143,12 +146,12 @@ class BackpackFullSortingHandler(BaseStateHandler):
           * 若在畫面中完全沒比對到任何已知的授權 item 模板 (代表可能為裝備或未列入 goods_settings 的保留物品)：
             - 為了防護使用者珍貴裝備/物品不被誤刪 ➔ 回傳 False (防護攔截)！
         """
-        from config import SUBFLOW_CONFIGS, PRIMARY_MODES
-        jw_config = SUBFLOW_CONFIGS.get("jewelry_workshop", {}) or PRIMARY_MODES.get("jewelry_workshop", {})
-        
-        cfg = getattr(self.machine, "config", {}) or {}
-        goods_settings = cfg.get("goods_settings") or jw_config.get("goods_settings", {})
-        goods_dir = cfg.get("goods_dir") or jw_config.get("goods_dir", "town_building/Jewelry_workshop/goods")
+        from config import BACKPACK_FULL_SETTINGS
+
+        goods_settings = self._get_destroy_goods()
+        goods_dir = BACKPACK_FULL_SETTINGS.get(
+            "goods_dir", "town_building/Jewelry_workshop/goods"
+        )
 
         color_key = "gray" if slot_color in ["gray", "gray_or_empty"] else slot_color
         items_dict = goods_settings.get(color_key, {})
@@ -169,7 +172,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                 has_any_existing_template = True
                 pos, conf = self.matcher.match(screen_img, tpl_rel_path, threshold=0.75, quiet=True)
                 if pos:
-                    logging.info(f"🔍 [背包分選防護] 彈窗內成功匹配到物品模板 [{item_name}] (相似度: {conf:.4f})，goods_settings 授權狀態: {is_enabled}")
+                    logging.info(f"🔍 [背包分選防護] 彈窗內成功匹配到物品模板 [{item_name}] (相似度: {conf:.4f})，destroy_goods 授權狀態: {is_enabled}")
                     matched_item = item_name
                     matched_enabled = is_enabled
                     break
@@ -184,7 +187,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # 若該品質定義了單品項清單且硬碟存在模板，但在畫面中未匹配到任何一個 True/False 物品模板
         # 代表當前物品可能為「未授權的綠色/藍色/紫色裝備」或「不在清單中的貴重物品」！
-        logging.warning(f"🛡️ [背包分選安全防護] 在 [{slot_color}] 格子彈窗中未能比對到任何 goods_settings 授權物品模板！判定為非授權裝備/物品，防護攔截，禁止銷毀！")
+        logging.warning(f"🛡️ [背包分選安全防護] 在 [{slot_color}] 格子彈窗中未能比對到任何 destroy_goods 授權物品模板！判定為非授權裝備/物品，防護攔截，禁止銷毀！")
         return False
 
     def scroll_grid_rows(self, rows=2, direction="down", right_center_x=0, right_center_y=0, scale_y=1.0):
@@ -241,7 +244,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
         step_y = 139.5
 
         keep_colors = self.machine.config.get("keep_colors", ["blue", "purple", "orange_yellow", "red"])
-        # 動態計算允許銷毀/覆蓋清單：顏色判定 + 在 jewelry_workshop goods_settings 中不同品質下為 True 的品質
+        # 動態計算允許銷毀/覆蓋清單：只採用 backpack_full.destroy_goods。
         destroyable_colors = self.get_dynamic_destroyable_colors()
 
         def is_high_rarity(color):
@@ -302,12 +305,13 @@ class BackpackFullSortingHandler(BaseStateHandler):
         target_right_slot = None  # (row, col, color)
         right_slots_data = []
 
-        # 收集 goods_settings 中所有授權為 True 的品項圖片檔名與相對路徑
-        from config import SUBFLOW_CONFIGS, PRIMARY_MODES
-        jw_config = SUBFLOW_CONFIGS.get("jewelry_workshop", {}) or PRIMARY_MODES.get("jewelry_workshop", {})
-        cfg = getattr(self.machine, "config", {}) or {}
-        goods_settings = cfg.get("goods_settings") or jw_config.get("goods_settings", {})
-        goods_dir = cfg.get("goods_dir") or jw_config.get("goods_dir", "town_building/Jewelry_workshop/goods")
+        # 收集 destroy_goods 中所有授權為 True 的品項圖片檔名與相對路徑
+        from config import BACKPACK_FULL_SETTINGS
+
+        goods_settings = self._get_destroy_goods()
+        goods_dir = BACKPACK_FULL_SETTINGS.get(
+            "goods_dir", "town_building/Jewelry_workshop/goods"
+        )
 
         authorized_templates = []  # list of (color_key, item_name, tpl_rel_path)
         for quality_key, items_dict in goods_settings.items():
@@ -369,10 +373,10 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
                 # 若該品質有定義授權範本，但當前網格頁面上完全沒比對到任何授權材料 (代表皆為未授權裝備)
                 # 則直接回傳空 candidates ➔ 觸發 0 延遲滾動向下！
-                logging.info(f"🎒 [背包分選Pre-Click] 當前頁面無任何 goods_settings 授權物品範本，跳過所有裝備格子，發起滾動...")
+                logging.info(f"🎒 [背包分選Pre-Click] 當前頁面無任何 destroy_goods 授權物品範本，跳過所有裝備格子，發起滾動...")
                 return candidates
 
-            # 3. 兜底備用：若 goods_settings 完全未配置具體範本，回退為邊框顏色粗篩
+            # 3. 兜底備用：若 destroy_goods 完全未配置具體範本，回退為邊框顏色粗篩
             for (r, c), (color, whole_std, center_std) in grid_color_map.items():
                 if color in destroyable_colors and color not in keep_colors and whole_std >= 18.0 and center_std >= 12.0:
                     candidates.append((r, c, color))
@@ -399,7 +403,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
                 pos_dest, conf_dest = self.matcher.match(new_screen, "common/destroy.png", threshold=0.8)
                 if pos_dest:
-                    # 🛡️ 物品層級二次防護對照：檢查彈窗內的物品是否真的屬於 goods_settings 授權銷毀的 True 物品
+                    # 🛡️ 物品層級二次防護：只接受 destroy_goods 明確授權的物品。
                     if self.is_item_authorized_by_goods_settings(new_screen, r_color):
                         target_right_slot = (r_row, r_col, r_color)
                         dest_x = rect["left"] + pos_dest[0]
@@ -421,7 +425,7 @@ class BackpackFullSortingHandler(BaseStateHandler):
                                 time.sleep(0.1)
                         break
                     else:
-                        logging.warning(f"🛡️ [背包分選安全防護] 物品 [{r_color}] 非 goods_settings 授權銷毀品項（或為非授權裝備），取消銷毀並關閉彈窗！")
+                        logging.warning(f"🛡️ [背包分選安全防護] 物品 [{r_color}] 非 destroy_goods 授權銷毀品項（或為非授權裝備），取消銷毀並關閉彈窗！")
                         pos_cancel, _ = self.matcher.match(new_screen, "exceptions/cancel.png", threshold=0.7)
                         if pos_cancel:
                             self.mouse.click(rect["left"] + pos_cancel[0], rect["top"] + pos_cancel[1])

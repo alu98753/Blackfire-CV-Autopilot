@@ -8,7 +8,7 @@ import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import GAME_CONFIGS
+from config import BACKPACK_FULL_SETTINGS, GAME_CONFIGS
 from states.state_machine import GameStateMachine
 
 from tests._legacy_state_machine_test_support import StateMachineLogicTestCase
@@ -292,7 +292,14 @@ class TestBagStateMachine(StateMachineLogicTestCase):
         """
         self.state_machine.config = GAME_CONFIGS["stage"].copy()
         # 自訂只分解/銷毀 灰色、綠色、藍色 裝備
-        self.state_machine.config["goods_settings"] = {"gray": {"item": True}, "green": {"item": True}, "blue": {"item": True}}
+        destroy_settings = {
+            "destroy_goods": {
+                "gray": {"item": True},
+                "green": {"item": True},
+                "blue": {"item": True},
+                "purple": {},
+            }
+        }
         # 設定保留紫色及以上（藍色不在保留名單中，因此可以被銷毀）
         self.state_machine.config["keep_colors"] = ["purple", "orange_yellow", "red"]
         self.state_machine.current_state = self.state_machine.STATE_BACKPACK_FULL_SORTING
@@ -346,7 +353,8 @@ class TestBagStateMachine(StateMachineLogicTestCase):
             
         handler = self.state_machine.handlers[self.state_machine.STATE_BACKPACK_FULL_SORTING]
         with patch.object(handler, 'classify_slot_color', side_effect=classify_slot_color_impl), \
-             patch.object(handler, 'is_item_authorized_by_goods_settings', return_value=True):
+             patch.object(handler, 'is_item_authorized_by_goods_settings', return_value=True), \
+             patch.dict(BACKPACK_FULL_SETTINGS, destroy_settings, clear=True):
             self.state_machine.step()
 
             

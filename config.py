@@ -39,6 +39,7 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("defaults", "activities"),
     ("primary_modes",),
     ("subflow_configs",),
+    ("backpack_full", "destroy_goods"),
     ("base_stage_levels",),
 )
 
@@ -100,7 +101,23 @@ def _get_override_config() -> dict:
         return {}
     if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
         _PROFILE_MANAGER = TomlConfigManager(target_path, default={})
-    return _PROFILE_MANAGER.snapshot()
+    return _normalize_legacy_override(_PROFILE_MANAGER.snapshot())
+
+
+def _normalize_legacy_override(override: dict) -> dict:
+    """Map the former jewelry goods_settings key before merging with defaults."""
+    normalized = deepcopy(override)
+    subflows = normalized.get("subflow_configs")
+    if not isinstance(subflows, dict):
+        return normalized
+
+    workshop = subflows.get("jewelry_workshop")
+    if not isinstance(workshop, dict):
+        return normalized
+
+    if "sell_goods" not in workshop and "goods_settings" in workshop:
+        workshop["sell_goods"] = workshop.pop("goods_settings")
+    return normalized
 
 
 def _load_legacy_exports() -> dict:
@@ -141,6 +158,7 @@ BULLETIN_BOARD_OCR_OFFSET = _SETTINGS["ocr"]["bulletin_board"]
 
 PRIMARY_MODES = _restore_mode_key_types(_SETTINGS["primary_modes"])
 SUBFLOW_CONFIGS = _SETTINGS["subflow_configs"]
+BACKPACK_FULL_SETTINGS = _SETTINGS["backpack_full"]
 BASE_STAGE_LEVELS = _SETTINGS["base_stage_levels"]
 
 DEFAULT_DISASSEMBLE_COLORS = _SETTINGS["defaults"]["disassemble_colors"]
@@ -246,6 +264,7 @@ def _reapply_all_settings(settings: dict) -> None:
     _replace_mapping(GLOBAL_SETTINGS, settings["global"])
     _replace_mapping(PRIMARY_MODES, _restore_mode_key_types(settings["primary_modes"]))
     _replace_mapping(SUBFLOW_CONFIGS, settings["subflow_configs"])
+    _replace_mapping(BACKPACK_FULL_SETTINGS, settings["backpack_full"])
     _replace_mapping(BASE_STAGE_LEVELS, settings["base_stage_levels"])
     DEFAULT_DISASSEMBLE_COLORS = settings["defaults"]["disassemble_colors"]
     DEFAULT_KEEP_COLORS = settings["defaults"]["keep_colors"]

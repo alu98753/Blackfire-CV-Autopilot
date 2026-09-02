@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 from unittest.mock import MagicMock, patch
+from config import BACKPACK_FULL_SETTINGS
 from states.handlers.bag_cleaning import BagCleaningHandler
 from states.handlers.backpack_full_sorting import BackpackFullSortingHandler
 
@@ -59,10 +60,18 @@ class TestBehaviorBagCleaning(unittest.TestCase):
         handler.classify_slot_color = MagicMock(side_effect=lambda crop: classify_returns.pop(0) if classify_returns else "gray_or_empty")
         mock_std.return_value = 25.0
 
-        handler.machine.config = {"goods_settings": {"gray": {"item": True}, "green": {}}}
+        destroy_settings = {
+            "destroy_goods": {
+                "gray": {"item": True},
+                "green": {},
+                "blue": {},
+                "purple": {},
+            }
+        }
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
 
-        with patch('states.handlers.backpack_full_sorting.time.sleep'):
+        with patch.dict(BACKPACK_FULL_SETTINGS, destroy_settings, clear=True), \
+             patch('states.handlers.backpack_full_sorting.time.sleep'):
             handler.handle(fake_img, self.rect)
 
         # 驗證發射點擊之 X 座標大於 650 (即正確點擊第 1 格 gray_or_empty，而非第 0 格 green)
@@ -176,4 +185,3 @@ class TestBehaviorBagCleaning(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
