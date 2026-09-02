@@ -37,7 +37,15 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((300, 300), 0.9) if name == "dungeons/Treasure.png" else (None, 0.0)
         )
-        self.state_machine.step()
+        explore_handler = self.state_machine.handlers[
+            self.state_machine.STATE_DUNGEON_EXPLORING
+        ]
+        with patch.object(
+            explore_handler,
+            "_run_treasure_subflow",
+            return_value=True,
+        ):
+            self.state_machine.step()
         self.mock_mouse.click.assert_called_with(300, 300)
         self.assertTrue(self.state_machine.chest_opened_this_floor)
         

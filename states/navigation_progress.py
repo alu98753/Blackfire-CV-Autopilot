@@ -122,6 +122,15 @@ class NavigationProgress:
         self._recovery_requested.discard(intent_id)
         self._outcomes[intent_id] = outcome
 
+    def acknowledge(self, action_id: ActionId) -> bool:
+        """Complete one matching transient action without changing its intent."""
+        action = self.in_flight
+        if action is None or action.action_id != action_id:
+            return False
+        self.in_flight = None
+        self._failure_counts.pop(action.intent_id, None)
+        return True
+
     def clear(self, intent_id: IntentId | None = None):
         if self.in_flight and (
             intent_id is None or self.in_flight.intent_id == intent_id

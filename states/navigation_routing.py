@@ -1,6 +1,6 @@
 """Compatibility bridge from legacy machine fields to the pure navigation policy."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 import time
 
@@ -12,8 +12,13 @@ from states.navigation_intent import (
     IntentSnapshot,
     NavigationIntentPolicy,
     IntentId,
+    ReasonCode,
 )
-from states.navigation_progress import NavigationProgress, ProgressStatus
+from states.navigation_progress import (
+    InFlightAction,
+    NavigationProgress,
+    ProgressStatus,
+)
 from utils.scene_snapshot import SceneSnapshot, snapshot_from_scene_info
 
 
@@ -23,6 +28,8 @@ class NavigationRoutingContext:
     intent_snapshot: IntentSnapshot
     active_intent: ActiveIntent
     decision: ActionDecision
+    progress_status: ProgressStatus = ProgressStatus.IDLE
+    observed_action: InFlightAction | None = None
 
 
 def _next_frame_id(machine) -> int:
@@ -59,6 +66,7 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
     policy = NavigationIntentPolicy()
     candidate = getattr(machine, "navigation_progress", None)
     progress = candidate if isinstance(candidate, NavigationProgress) else None
+    observed_action = progress.in_flight if progress is not None else None
     progress_status = (
         progress.observe(scene, now) if progress is not None else ProgressStatus.IDLE
     )
@@ -74,20 +82,39 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
         active_intent = ActiveIntent(recovery_intent)
         machine.active_navigation_intent = active_intent
         return NavigationRoutingContext(
-            scene, intent_snapshot, active_intent, ActionDecision.wait()
+            scene,
+            intent_snapshot,
+            active_intent,
+            ActionDecision.wait(),
+            progress_status,
+            observed_action,
         )
     if progress_status == ProgressStatus.WAITING:
         active_intent = ActiveIntent(progress.in_flight.intent_id)
-        decision = ActionDecision.wait()
+        decision = ActionDecision.wait(ReasonCode.IN_FLIGHT_ACTION_WAITING)
         machine.active_navigation_intent = active_intent
         return NavigationRoutingContext(
-            scene, intent_snapshot, active_intent, decision
+            scene,
+            intent_snapshot,
+            active_intent,
+            decision,
+            progress_status,
+            observed_action,
         )
 
     active_intent = _select_available_intent(policy, intent_snapshot, progress, now)
     machine.active_navigation_intent = active_intent
     decision = policy.resolve(scene, active_intent)
-    return NavigationRoutingContext(scene, intent_snapshot, active_intent, decision)
+    if progress_status == ProgressStatus.TIMED_OUT and decision.kind != DecisionKind.WAIT:
+        decision = replace(decision, reason=ReasonCode.ACTION_TIMEOUT_RETRY)
+    return NavigationRoutingContext(
+        scene,
+        intent_snapshot,
+        active_intent,
+        decision,
+        progress_status,
+        observed_action,
+    )
 
 
 def _select_available_intent(policy, snapshot, progress, now):
@@ -117,13 +144,33 @@ class NavigationDecisionExecutor:
 
     def execute(self, context, screen_img, rect, *, start_callback=None) -> bool:
         decision = context.decision
-        logging.info(
-            "[IntentRouting] intent=%s scene=%s action=%s reason=%s",
-            context.active_intent.intent_id.value,
-            context.scene.scene.value,
-            decision.action.value if decision.action else "none",
-            decision.reason.value,
-        )
+        action = context.observed_action
+        if action is not None:
+            now = _monotonic_now(self.machine)
+            logging.info(
+                "[IntentRouting] intent=%s scene=%s action=%s reason=%s "
+                "progress=%s in_flight=%s expected=%s age=%.1fs "
+                "deadline=%.3f attempt=%d",
+                context.active_intent.intent_id.value,
+                context.scene.scene.value,
+                decision.action.value if decision.action else "none",
+                decision.reason.value,
+                context.progress_status.value,
+                action.action_id.value,
+                action.expected.value,
+                max(0.0, now - action.issued_at),
+                action.deadline,
+                action.attempt,
+            )
+        else:
+            logging.info(
+                "[IntentRouting] intent=%s scene=%s action=%s reason=%s progress=%s",
+                context.active_intent.intent_id.value,
+                context.scene.scene.value,
+                decision.action.value if decision.action else "none",
+                decision.reason.value,
+                context.progress_status.value,
+            )
         if decision.kind == DecisionKind.WAIT:
             return True
         if decision.action == ActionId.CONTINUE_PRIMARY:

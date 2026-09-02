@@ -55,6 +55,57 @@ class TestBehaviorNavigationProgress(unittest.TestCase):
         self.assertEqual(status, ProgressStatus.PROGRESSED)
         self.assertIsNone(self.progress.in_flight)
 
+    def test_acknowledge_only_completes_the_matching_action(self):
+        self._begin_diamond(1, 10.0)
+
+        self.assertFalse(self.progress.acknowledge(ActionId.START_PRIMARY))
+        self.assertIsNotNone(self.progress.in_flight)
+        self.assertTrue(self.progress.acknowledge(ActionId.OPEN_DIAMOND))
+        self.assertIsNone(self.progress.in_flight)
+
+    def test_loading_or_battle_transition_completes_primary_start(self):
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.navigation_progress.begin(
+            IntentId.PRIMARY_NAVIGATION,
+            ActionId.START_PRIMARY,
+            PostconditionId.LOADING_OR_BATTLE,
+            1,
+            10.0,
+        )
+
+        machine.transition_to(machine.STATE_BATTLE)
+
+        self.assertIsNone(machine.navigation_progress.in_flight)
+
+    def test_result_and_navigation_boundaries_discard_stale_primary_actions(self):
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.navigation_progress.begin(
+            IntentId.PRIMARY_NAVIGATION,
+            ActionId.START_PRIMARY,
+            PostconditionId.LOADING_OR_BATTLE,
+            1,
+            10.0,
+        )
+
+        machine.transition_to(machine.STATE_RESULT)
+
+        self.assertIsNone(machine.navigation_progress.in_flight)
+
+        machine.navigation_progress.begin(
+            IntentId.PRIMARY_NAVIGATION,
+            ActionId.ENTER_LOBBY,
+            PostconditionId.LOBBY,
+            2,
+            11.0,
+        )
+        machine.transition_to(machine.STATE_NAVIGATING)
+
+        self.assertIsNone(machine.navigation_progress.in_flight)
+
     def test_same_frame_cannot_confirm_a_click(self):
         self._begin_diamond(1, 10.0)
         scene = SceneSnapshot(1, 10.0, SceneId.DIAMOND_WINDOW)

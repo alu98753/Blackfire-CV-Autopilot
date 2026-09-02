@@ -140,6 +140,23 @@ class TestBehaviorNavigationIntent(unittest.TestCase):
         self.assertEqual(decision.action, ActionId.START_PRIMARY)
         self.assertEqual(decision.reason, ReasonCode.PRIMARY_START_READY)
 
+    def test_primary_intent_enters_lobby_from_town(self):
+        scene = SceneSnapshot(
+            1,
+            1.0,
+            SceneId.TOWN,
+            elements=self._match(ElementId.DOOR, "common/door.png"),
+        )
+        intent = self.policy.select_intent(
+            IntentSnapshot(False, False, PrimaryPayload("stage"))
+        )
+
+        decision = self.policy.resolve(scene, intent)
+
+        self.assertEqual(decision.kind, DecisionKind.CLICK)
+        self.assertEqual(decision.action, ActionId.ENTER_LOBBY)
+        self.assertEqual(decision.reason, ReasonCode.PRIMARY_ENTER_LOBBY)
+
     def test_collection_waits_when_scene_evidence_is_insufficient(self):
         scene = SceneSnapshot(1, 1.0, SceneId.UNKNOWN)
         intent = self.policy.select_intent(

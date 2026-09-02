@@ -49,9 +49,12 @@ class ReasonCode(str, Enum):
     BREAD_WINDOW_READY = "bread_window_ready"
     BREAD_ENTER_LOBBY = "bread_enter_lobby"
     BREAD_ENTRY_READY = "bread_entry_ready"
+    PRIMARY_ENTER_LOBBY = "primary_enter_lobby"
     PRIMARY_START_READY = "primary_start_ready"
     PRIMARY_ROUTE_DELEGATED = "primary_route_delegated"
     SCENE_EVIDENCE_INSUFFICIENT = "scene_evidence_insufficient"
+    IN_FLIGHT_ACTION_WAITING = "in_flight_action_waiting"
+    ACTION_TIMEOUT_RETRY = "action_timeout_retry"
     DIAMOND_CLOSE_OVERLAY = "diamond_close_overlay"
 
 
@@ -110,8 +113,8 @@ class ActionDecision:
         return cls(DecisionKind.DELEGATE, reason, action, expected)
 
     @classmethod
-    def wait(cls):
-        return cls(DecisionKind.WAIT, ReasonCode.SCENE_EVIDENCE_INSUFFICIENT)
+    def wait(cls, reason=ReasonCode.SCENE_EVIDENCE_INSUFFICIENT):
+        return cls(DecisionKind.WAIT, reason)
 
 
 class NavigationIntentPolicy:

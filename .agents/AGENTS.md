@@ -4,6 +4,18 @@
 
 ---
 
+## Mandatory AI Test Execution Policy
+
+- AI agents must never run the complete test suite, including
+  `python -m unittest discover tests`.
+- During implementation, AI agents may run only the smallest directly relevant
+  test method, test class, or test file for the changed behavior.
+- After all requested work and focused tests are complete, the AI agent must ask
+  the user to run the complete test suite and report any remaining failures.
+- These rules supersede every older instruction in this repository that asks an
+  AI agent to run a full-suite, pre-merge, branch-completion, or coverage-union
+  verification.
+
 ## 核心原則：AI Agent 5 大極簡原則 💡
 
 1. **「感知」與「決策」分離 + 分層禁止反向依賴**：`Detector` 只負責觀察畫面並輸出狀態 (`SceneInfo`)，絕不觸發點擊；`Handler` 只根據狀態做決策，絕不現場比對畫面。

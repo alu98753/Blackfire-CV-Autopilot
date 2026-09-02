@@ -23,7 +23,7 @@ class TestBehaviorNavigationTable(unittest.TestCase):
             for edge in V1_NAVIGATION_EDGES
         }
 
-        self.assertEqual(len(V1_NAVIGATION_EDGES), 6)
+        self.assertEqual(len(V1_NAVIGATION_EDGES), 7)
         self.assertIn(
             (IntentId.COLLECT_BREAD, SceneId.TOWN, SceneId.LOBBY), routes
         )
@@ -34,6 +34,9 @@ class TestBehaviorNavigationTable(unittest.TestCase):
                 SceneId.DIAMOND_WINDOW,
             ),
             routes,
+        )
+        self.assertIn(
+            (IntentId.PRIMARY_NAVIGATION, SceneId.TOWN, SceneId.LOBBY), routes
         )
         self.assertIn(
             (
@@ -59,6 +62,21 @@ class TestBehaviorNavigationTable(unittest.TestCase):
         self.assertIsNone(
             NavigationTable().next_edge(scene, IntentId.COLLECT_DIAMOND)
         )
+
+    def test_primary_navigation_enters_lobby_from_town_door(self):
+        scene = SceneSnapshot(
+            1,
+            1.0,
+            SceneId.TOWN,
+            elements=self._element(ElementId.DOOR),
+        )
+
+        edge = NavigationTable().next_edge(
+            scene, IntentId.PRIMARY_NAVIGATION
+        )
+
+        self.assertEqual(edge.action, ActionId.ENTER_LOBBY)
+        self.assertEqual(edge.postcondition, PostconditionId.LOBBY)
 
     def test_declaration_order_prioritizes_overlay_before_go_back(self):
         elements = {

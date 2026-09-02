@@ -70,6 +70,15 @@ V1_NAVIGATION_EDGES = (
     ),
     NavigationEdge(
         IntentId.PRIMARY_NAVIGATION,
+        SceneId.TOWN,
+        SceneId.LOBBY,
+        ElementId.DOOR,
+        ActionId.ENTER_LOBBY,
+        PostconditionId.LOBBY,
+        ReasonCode.PRIMARY_ENTER_LOBBY,
+    ),
+    NavigationEdge(
+        IntentId.PRIMARY_NAVIGATION,
         SceneId.LOBBY,
         SceneId.LOADING,
         ElementId.START,
