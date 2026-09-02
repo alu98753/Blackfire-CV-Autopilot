@@ -558,6 +558,47 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         # 且沒有點擊過 dungeon.png (100 + 400 = 500)
         self.mock_mouse.click.assert_called_once_with(300, 300)
 
+    @patch("os.path.exists", return_value=True)
+    def test_result_exit_rescheduled_dungeon_reenters_from_open_tab(
+        self, _mock_exists
+    ):
+        """A repeated dungeon quest must resume after RESULT without stale progress."""
+        from states.navigation_intent import ActionId, IntentId, PostconditionId
+
+        config = GAME_CONFIGS["dungeon"].copy()
+        config["navigation_path"] = [
+            "common/door.png",
+            "dungeons/dungeon.png",
+            "dungeons/Slime_entry.png",
+        ]
+        self.state_machine.config = config
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.navigation_progress.begin(
+            IntentId.PRIMARY_NAVIGATION,
+            ActionId.START_PRIMARY,
+            PostconditionId.LOADING_OR_BATTLE,
+            frame_id=1,
+            now=time.monotonic(),
+        )
+
+        self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
+
+        self.assertIsNone(self.state_machine.navigation_progress.in_flight)
+
+        def match_open_dungeon_tab(_image, template, **_kwargs):
+            if template == "dungeons/dungeon_after.png":
+                return (300, 300), 0.95
+            if template == "dungeons/Slime_entry.png":
+                return (200, 200), 0.90
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = match_open_dungeon_tab
+        self.mock_mouse.click.reset_mock()
+
+        self.state_machine.step()
+
+        self.mock_mouse.click.assert_called_once_with(200, 200)
+
     @patch('os.path.exists')
     @patch('cv2.imread')
     @patch('cv2.minMaxLoc')

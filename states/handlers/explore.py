@@ -223,13 +223,37 @@ class ExploreHandler(BaseStateHandler):
                     time.sleep(1.0)
                     continue
             elif not confirm_clicked:
-                pos_c, conf_c = self.matcher.match(screen_img, "dungeons/Get_tresure_comfirm.png", threshold=0.70)
+                confirm_template = "dungeons/Get_tresure_comfirm.png"
+                pos_c, conf_c = self.matcher.match(screen_img, confirm_template, threshold=0.70)
                 if pos_c:
-                    logging.info(f"📦 [子流程] 偵測到獲得寶物確認按鈕 'dungeons/Get_tresure_comfirm.png'，相似度: {conf_c:.4f}，進行點擊。")
-                    self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
-                    confirm_clicked = True
+                    logging.info(
+                        "📦 [子流程] 偵測到獲得寶物確認按鈕 '%s'，"
+                        "相似度: %.4f，開始閉環點擊直到按鈕消失。",
+                        confirm_template,
+                        conf_c,
+                    )
+                    remaining_timeout = max(
+                        0.1,
+                        timeout - (time.time() - start_time),
+                    )
+                    confirm_clicked = self.click_and_wait_until_gone(
+                        confirm_template,
+                        rect["left"] + pos_c[0],
+                        rect["top"] + pos_c[1],
+                        rect,
+                        timeout=remaining_timeout,
+                        threshold=0.70,
+                        check_interval=0.25,
+                        post_delay=0.3,
+                        retry_interval=0.75,
+                    )
                     last_click_time = time.time()
-                    time.sleep(1.0)
+                    if not confirm_clicked:
+                        logging.warning(
+                            "📦 [子流程] 獲得寶物確認按鈕在時限內未消失，"
+                            "保留本層寶箱重試資格。"
+                        )
+                        return False
                     continue
                     
                 pos_quit, conf_quit = self.matcher.match(screen_img, "common/quit.png", threshold=0.75)
