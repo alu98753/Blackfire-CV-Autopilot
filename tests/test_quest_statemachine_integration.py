@@ -290,6 +290,7 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         # 手動將所有任務設為 completed
         for t in scheduler.tasks:
             t.completed_count = t.target_count
+            self.daily_mgr.remove_accepted_quest(t.quest_title)
 
         res = sm.check_and_advance_quest_target()
         self.assertIsNone(res)

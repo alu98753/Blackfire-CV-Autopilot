@@ -1330,6 +1330,31 @@ class GameStateMachine:
             return None
 
         if self.quest_scheduler.is_all_completed():
+            daily_manager = getattr(self, "daily_manager", None)
+            accepted_quests = []
+            if daily_manager is not None:
+                accepted_quests = daily_manager.status.get("subflows", {}).get(
+                    "bulletin_board", {}
+                ).get("accepted_quests", [])
+
+            if accepted_quests:
+                logging.warning(
+                    "⚠️ [懸賞排程修復] 記憶體排程器已完成，但持久化資料仍有 %d 項 "
+                    "accepted_quests；從持久化事實重建排程器。",
+                    len(accepted_quests),
+                )
+                self.attach_quest_scheduler(daily_manager.load_quest_scheduler())
+                remaining_accepted = daily_manager.status.get("subflows", {}).get(
+                    "bulletin_board", {}
+                ).get("accepted_quests", [])
+                if self.quest_scheduler.is_all_completed() and remaining_accepted:
+                    logging.error(
+                        "⚠️ [懸賞排程修復] accepted_quests 仍有資料，但無法建立可執行任務；"
+                        "保留排程器並禁止誤判為全部完成。"
+                    )
+                    return None
+
+        if self.quest_scheduler.is_all_completed():
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器並切換至退守模式。")
             self.quest_scheduler = None
             self.apply_tier4_fallback_config()
