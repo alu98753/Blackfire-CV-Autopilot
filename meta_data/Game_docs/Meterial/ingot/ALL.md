@@ -18,3 +18,5 @@
 * **誓約鋼錠 (4星橘)**：`ingot_oathbound`
 
 > 💡 在鐵匠鋪資料庫中，金屬錠分類存放在：`blacksmith.processing_dic.ingot`
+> 
+> 🔗 **全素材資料手冊**：[《黑火遠征》全素材與材料資料手冊 (0~6 星全收錄)](../ALL_MATERIALS.md)
