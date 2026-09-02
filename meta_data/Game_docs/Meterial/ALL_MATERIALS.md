@@ -92,7 +92,7 @@
 | :---: | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | **巨熊碎骨** | `bear_bone_fragment` | 原生採集/掉落 | - | `bear_forest_giant`, `bear_forest` | 【高級骨粉】, `necklace_bone_fury`, `shield_bear_bone` |
 | 2 | **巨獸之骨** | `behemoth_bone` | 原生採集/掉落 | - | 任務 / 商店 / 特殊掉落 | 【高級骨粉】, `head_ancient_beast_warden` |
-| 3 | **高級骨粉** | `bone_powder_advanced` | `processing_bone_powder` | 巨熊碎骨 x1<br>巨獸之骨 x1<br>強化骨粉 x2<br>詛咒骨片 x1<br>惡魔之角 x1<br>冥骨鋼 x1 | 任務 / 商店 / 特殊掉落 | `ap_potion`, `energy_potion`, `frog_eye_potion` 等 (5項) |
+| 3 | **高級骨粉** | `bone_powder_advanced` | `processing_bone_powder` | 巨熊碎骨 x1<br>巨獸之骨 x1<br>強化骨粉 x2<br>詛咒骨片 x1<br>惡魔之角 x1<br>冥界鐵骨 x1 | 任務 / 商店 / 特殊掉落 | `ap_potion`, `energy_potion`, `frog_eye_potion` 等 (5項) |
 | 4 | **寒卵孵化液** | `chillspawn_hatch_fluid` | 原生採集/掉落 | - | `spider_frozen_egg` | 【二階精華 (優秀精華)】, `frostshield_potion` |
 | 5 | **詛咒骨片** | `cursed_bone_fragment` | 原生採集/掉落 | - | `skeleton_bone_warden`, `skeleton_eclipse_executioner`, `skeleton_kaldor` 等 (7處) | 【高級骨粉】, `earring_netherworld`, `necklace_bone_fury` |
 | 6 | **惡魔之角** | `demon_horn` | 原生採集/掉落 | - | 任務 / 商店 / 特殊掉落 | 【高級骨粉】, `head_demon_vargon`, `quiver_frost_demon` |
@@ -108,7 +108,7 @@
 | 16 | **重皮革 (厚重皮革)** | `leather_heavy` | `processing_leather` | 巨獸毛皮 x1<br>巨人毛皮 x2<br>冰原毛皮 x2<br>中皮革 x4<br>蛇皮 x2<br>厚熊皮 x2 | 任務 / 商店 / 特殊掉落 | `chest_ancient_beast_warden`, `feet_ancient_beast_warden`, `hands_ancient_beast_warden` 等 (10項) |
 | 17 | **獸人碎皮** | `leather_orc_fragment` | 原生採集/掉落 | - | 任務 / 商店 / 特殊掉落 | 【獸人皮革】 |
 | 18 | **魔物血液 (3級)** | `monster_blood_3` | `monster_blood` | - | `bat_darkwing_king`, `boar_iron_tusk`, `frogman_bog_chieftain` 等 (17處) | `hp_potion_3` |
-| 19 | **冥骨鋼** | `netherbone_teel` | 原生採集/掉落 | - | 任務 / 商店 / 特殊掉落 | 【高級骨粉】, `chest_boneplate_helm`, `scepter_ingot_demonite` |
+| 19 | **冥界鐵骨** | `netherbone_teel` | 原生採集/掉落 | - | 任務 / 商店 / 特殊掉落 | 【高級骨粉】, `chest_boneplate_helm`, `scepter_ingot_demonite` |
 | 20 | **符文碎塊** | `rune_shard` | 原生採集/掉落 | - | 任務 / 商店 / 特殊掉落 | `axe_rune_shard`, `shield_rune_shard`, `waist_runic_girdle` |
 | 21 | **枷鎖碎片** | `shackled_fragment` | 原生採集/掉落 | - | `human_chained_slave` | `hands_chained_slave`, 【精煉鋼錠】 |
 | 22 | **蛇皮** | `snake_hide` | 原生採集/掉落 | - | 任務 / 商店 / 特殊掉落 | 【重皮革 (厚重皮革)】 |

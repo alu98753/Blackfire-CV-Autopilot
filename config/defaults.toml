@@ -251,6 +251,7 @@ Purple_Spore = true
 Slime_Mucus = true
 Bat_wings = true
 Wolf_skin = true
+monster_blood_1 = true
 
 [subflow_configs.jewelry_workshop.sell_goods.green]
 The_cloth_wrapped_around_the_dead = true
@@ -260,11 +261,17 @@ Dead_Soul_Core = true
 Wild_boar_tusk = true
 Scorpion_Shell = true
 Venom_Fang = true
+monster_blood_2 = true
 
 [subflow_configs.jewelry_workshop.sell_goods.blue]
 rune_shard = true
+bear_bone_fragment = false
+netherbone_teel = true
+cursed_bone_fragment = true
+monster_blood_3 = false
 
 [subflow_configs.jewelry_workshop.sell_goods.purple]
+
 
 [backpack_full]
 goods_dir = "town_building/Jewelry_workshop/goods"
@@ -276,7 +283,7 @@ goods_dir = "town_building/Jewelry_workshop/goods"
 Sandworm_scales = true
 Spider_silk = true
 Spider_venom_glands = true
-Warcraft_Fang = false
+Warcraft_Fang = true
 lizard_skin = true
 scrap = true
 Frog_Skin = true
@@ -286,16 +293,16 @@ Bat_wings = true
 Wolf_skin = true
 
 [backpack_full.destroy_goods.green]
-The_cloth_wrapped_around_the_dead = true
-Giant_Beast_Gold_Tooth = true
-Toad_Venom = true
-Dead_Soul_Core = true
-Wild_boar_tusk = true
-Scorpion_Shell = true
-Venom_Fang = true
+# The_cloth_wrapped_around_the_dead = true
+# Giant_Beast_Gold_Tooth = true
+# Toad_Venom = true
+# Dead_Soul_Core = true
+# Wild_boar_tusk = true
+# Scorpion_Shell = true
+# Venom_Fang = true
 
 [backpack_full.destroy_goods.blue]
-rune_shard = true
+# rune_shard = true
 
 [backpack_full.destroy_goods.purple]
 
