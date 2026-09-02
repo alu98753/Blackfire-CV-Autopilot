@@ -31,6 +31,7 @@ class JsonConfigManager:
         self._validator = validator
         self._snapshot: dict[str, Any] | None = None
         self._signature: tuple[int, int] | None = None
+        self._failed_signature: tuple[int, int] | None = None
         self.last_error: ConfigLoadError | None = None
 
     def snapshot(self, *, force: bool = False) -> dict[str, Any]:
@@ -51,6 +52,8 @@ class JsonConfigManager:
 
         if not force and self._snapshot is not None and signature == self._signature:
             return False
+        if not force and signature == self._failed_signature:
+            return False
 
         try:
             loaded = self._read_file()
@@ -59,10 +62,12 @@ class JsonConfigManager:
             if self._validator is not None:
                 self._validator(loaded)
         except (OSError, ValueError, TypeError) as error:
+            self._failed_signature = signature
             return self._handle_error(ConfigLoadError(f"設定檔無法套用 ({error}): {self.path}"))
 
         self._snapshot = deepcopy(loaded)
         self._signature = signature
+        self._failed_signature = None
         self.last_error = None
         return True
 
@@ -143,4 +148,3 @@ def dump_toml_dict(data: dict[str, Any]) -> str:
             dump_section([section_name], section_val)
 
     return "\n".join(lines).strip() + "\n"
-

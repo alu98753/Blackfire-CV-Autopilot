@@ -4,10 +4,33 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from utils.config_manager import ConfigLoadError, JsonConfigManager
+from utils.config_manager import ConfigLoadError, JsonConfigManager, TomlConfigManager
 
 
 class TestJsonConfigManager(unittest.TestCase):
+    def test_defaults_validator_keeps_last_good_snapshot_during_partial_save(self):
+        import config
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "defaults.toml"
+            path.write_text(
+                config.DEFAULTS_PATH.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            manager = TomlConfigManager(
+                path,
+                validator=config._validate_defaults_snapshot,
+            )
+            valid_snapshot = manager.snapshot()
+
+            path.write_text(
+                "config_version = 1\n\n[global]\nmonitor_index = 1\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(manager.snapshot(), valid_snapshot)
+            self.assertIsInstance(manager.last_error, ConfigLoadError)
+
     def test_hot_reload_publishes_new_complete_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "settings.json"
@@ -111,4 +134,3 @@ class TestJsonConfigManager(unittest.TestCase):
         # 3. 還原至 native
         set_active_profile("native")
         self.assertEqual(get_monitor_index(), 1)
-

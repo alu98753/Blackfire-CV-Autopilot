@@ -16,9 +16,51 @@ CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
 LOCAL_CONFIG_PATH = CONFIG_DIR / "local.toml"
-_DEFAULTS_MANAGER = TomlConfigManager(DEFAULTS_PATH)
 _ACTIVE_PROFILE: str = "native"
 _PROFILE_MANAGER = None
+
+_REQUIRED_DEFAULT_SETTING_PATHS = (
+    ("global",),
+    ("navigation", "action_timeout_seconds"),
+    ("navigation", "action_max_attempts"),
+    ("navigation", "collection_backoff_seconds"),
+    ("navigation", "collection_recovery_failure_limit"),
+    ("quest", "max_run_limit"),
+    ("quest", "target_count"),
+    ("quest", "stage_batch_size"),
+    ("quest", "dungeon_batch_size"),
+    ("catalog", "dungeon_names"),
+    ("catalog", "dungeon_entry_templates"),
+    ("catalog", "stage_templates"),
+    ("ocr", "task_banner"),
+    ("ocr", "bulletin_board"),
+    ("defaults", "disassemble_colors"),
+    ("defaults", "keep_colors"),
+    ("defaults", "activities"),
+    ("primary_modes",),
+    ("subflow_configs",),
+    ("base_stage_levels",),
+)
+
+
+def _validate_defaults_snapshot(settings: dict) -> None:
+    """Reject syntactically valid but incomplete defaults during an editor save."""
+    if settings.get("config_version") != 1:
+        raise ValueError("不支援的 config/defaults.toml config_version")
+
+    for path in _REQUIRED_DEFAULT_SETTING_PATHS:
+        value = settings
+        for key in path:
+            if not isinstance(value, dict) or key not in value:
+                dotted_path = ".".join(path)
+                raise ValueError(f"config/defaults.toml 缺少必要設定: {dotted_path}")
+            value = value[key]
+
+
+_DEFAULTS_MANAGER = TomlConfigManager(
+    DEFAULTS_PATH,
+    validator=_validate_defaults_snapshot,
+)
 
 
 def get_active_profile() -> str:
