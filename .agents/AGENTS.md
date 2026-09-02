@@ -89,14 +89,12 @@
 3. **測試執行與修復疊代流程 (Test Execution Efficiency)**：
    > [!IMPORTANT]
    > **測試執行三大精確規則**：
-   > 1. **日常開發與核心修改 (Daily Development & Behavioral Slicing)**：日常開發、修改核心代碼（`states/`, `utils/`, `config.py`, `main.py`）或微調邏輯時，**優先精準執行該業務領域的單元測試檔案** (例如: `.venv\Scripts\python -m unittest tests.test_behavior_xxx`)（耗時 0.5~5 秒），以取得即時反饋並快速迭代。
+   > 1. **日常開發與核心修改 (Daily Development & Behavioral Slicing)**：日常開發、修改核心代碼（`states/`, `utils/`, `config.py`, `main.py`）或微調邏輯時，**僅限精準執行該業務領域最小相關的單元測試檔案** (例如: `.venv\Scripts\python -m unittest tests.test_behavior_xxx`)（耗時 0.5~5 秒），以取得即時反饋並快速迭代。
    > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後再推進。
-   > 3. **全套測試執行時機 (Full Test Suite Execution)**：僅在 **Feature/Fix 分支開發收尾、準備 Commit 或準備合併回 `main` 前**，才發起全套單元測試 (`.venv\Scripts\python -m unittest discover tests`) 作為全域最終防護網。
-   > 4. **背景測試定時輪詢間隔 (Background Timer Interval)**：當全套測試於背景執行時，AI 的定時檢查計時器 (`schedule`) **統一設定為 60 秒 (1 分鐘)** (`DurationSeconds="60"`)，減少過於頻繁的進度輪詢與訊息干擾。
-
+   > 3. **全套測試執行時機 (Full Test Suite by USER ONLY)**：AI **嚴禁自行發起全套測試**。當 Feature/Fix 分支開發收尾、準備 Commit 或準備合併回 `main` 前，AI 必須在對話中**提醒使用者手動執行全套測試** (`.venv\Scripts\python -m unittest discover tests`)，並請使用者回報剩餘失敗。
 
 4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
-   - 當僅更新、編寫或補強單一行為測試檔，而沒有修改邏輯實作時，**禁止盲目每次重新執行 4 分鐘全套測試**。
+   - 當僅更新、編寫或補強單一行為測試檔，而沒有修改邏輯實作時，**禁止執行全套測試**。
    - **精要兩步流程**：
      1. **增量累加**：使用 `-a` (`--append`) 僅執行新編寫之測試檔，將覆蓋數據與原數據庫求**聯集 (Union)**：
         ```bash
@@ -106,7 +104,7 @@
         ```bash
         .venv\Scripts\python -m coverage report --include="states/handlers/navigation.py,utils/scene_detector.py" -m
         ```
-   - **最終全域驗證**：完成所有增量開發準備 Commit 前，才執行全套測試 (`.venv\Scripts\python -m unittest discover tests`) 作為收尾。
+   - **全域收尾提醒**：完成所有增量開發後，由 AI 提示使用者手動執行全套測試驗證。
 
 ### 7. Markdown 文檔與超連結繪製規範 📄
 - **嚴禁使用絕對路徑 `file:///`**：在撰寫 `docs/` 下的 Markdown 技術文檔時，**絕對禁止使用 `file:///...` 絕對路徑**（避免 VS Code Markdown Preview 預覽器無法解析而自動斷行，呈現未解析的長文字網址）。
