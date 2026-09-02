@@ -16,6 +16,20 @@ class ResultHandler(BaseStateHandler):
         self.no_match_count = 0
         self._recorded_kill_for_current_battle = False
 
+    def _commit_lord_boss_result(self):
+        """Commit one verified fight and return control to the Boss workflow."""
+        boss_key = getattr(self.machine, "current_lord_boss_key", None)
+        if boss_key is None:
+            return False
+
+        daily_manager = getattr(self.machine, "daily_manager", None)
+        if daily_manager is not None:
+            daily_manager.record_lord_boss_fight(boss_key)
+        self.machine.current_lord_boss_key = None
+        self.reset_state()
+        self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+        return True
+
     def _check_final_buttons_exist(self, screen_img, should_exit_battle):
         """檢查終局離場或再戰按鈕是否已經出現在畫面上"""
         if should_exit_battle:
@@ -105,13 +119,9 @@ class ResultHandler(BaseStateHandler):
                     "[load/Lord_entry_after.png] (confidence: %.4f).",
                     conf_l,
                 )
-                boss_key = getattr(self.machine, "current_lord_boss_key", None)
-                daily_manager = getattr(self.machine, "daily_manager", None)
-                if boss_key and daily_manager:
-                    daily_manager.record_lord_boss_fight(boss_key)
-                self.machine.current_lord_boss_key = None
-                self.reset_state()
-                self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+                if not self._commit_lord_boss_result():
+                    self.reset_state()
+                    self.machine.transition_to(self.machine.STATE_LORD_BOSS)
                 return True
 
         # =========================================================================
@@ -312,15 +322,11 @@ class ResultHandler(BaseStateHandler):
                             logging.info(f"👉 [結算子流程 Step 3] 離場條件成立 (第 4/8/10 場或需領獎)，發現離場按鈕 [{exit_btn}] ({conf_exit:.4f})，點擊退出戰鬥 (配對確認直到消失)...")
                             self.click_and_wait_until_gone(exit_btn, rect["left"] + pos_exit[0], rect["top"] + pos_exit[1], rect)
                             self.machine.is_in_dungeon = False
-                            self.reset_state()
-
-                            if getattr(self.machine, "current_lord_boss_key", None):
-                                b_key = self.machine.current_lord_boss_key
-                                self.machine.current_lord_boss_key = None
-                                if getattr(self.machine, "daily_manager", None):
-                                    self.machine.daily_manager.record_lord_boss_fight(b_key)
-
                             self.machine.pending_daily_reset_exit = False
+                            if self._commit_lord_boss_result():
+                                return True
+
+                            self.reset_state()
                             next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
                             self.machine.transition_to(next_state)
                             return True

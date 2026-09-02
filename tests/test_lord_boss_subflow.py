@@ -147,6 +147,55 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
             1,
         )
 
+    @patch("os.path.exists", return_value=True)
+    def test_lord_boss_generic_exit_returns_to_workflow_for_next_boss(
+        self,
+        _mock_exists,
+    ):
+        """A verified generic exit must not terminate a multi-Boss workflow."""
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.current_lord_boss_key = "lord_spectre"
+        handler = ResultHandler(self.state_machine)
+        handler.subflow_step = "FINAL_MATCH"
+        self.state_machine.matcher.match.side_effect = (
+            lambda _image, template, **_kwargs: (
+                ((65, 900), 0.92)
+                if template == "goback_town.png"
+                else (None, 0.0)
+            )
+        )
+
+        with (
+            patch.object(
+                self.state_machine,
+                "is_daily_pipeline_active",
+                return_value=True,
+            ),
+            patch.object(
+                self.state_machine,
+                "has_available_selected_lord_boss",
+                return_value=True,
+            ),
+            patch.object(handler, "click_and_wait_until_gone") as click_exit,
+        ):
+            self.assertTrue(handler._handle_impl(None, {"left": 0, "top": 0}))
+
+        click_exit.assert_called_once()
+        self.assertEqual(
+            self.state_machine.current_state,
+            self.state_machine.STATE_LORD_BOSS,
+        )
+        self.assertIsNone(self.state_machine.current_lord_boss_key)
+        self.assertEqual(
+            self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["today_count"],
+            1,
+        )
+        self.assertIn(
+            "lord_spider",
+            self.state_machine.get_available_selected_lord_bosses(),
+        )
+
     def test_lord_boss_reset_at_0830(self):
         """測試：跨越 08:30 時，所有 Boss 的今日次數清零"""
         self.daily_manager.record_lord_boss_fight("lord_spider")
