@@ -467,6 +467,14 @@ class GameStateMachine:
         """Escalate recovery through the configured process boundary."""
         return self.process_port.relaunch(self, reason)
 
+    def has_dungeon_context(self) -> bool:
+        """Return whether dungeon-only scene anchors may own the current frame."""
+        config_type = (self.config or {}).get("type")
+        is_dungeon_run = config_type == "dungeon" or (
+            config_type == "mix" and self.is_in_dungeon
+        )
+        return is_dungeon_run and getattr(self, "current_lord_boss_key", None) is None
+
     def ensure_explore_config(self):
         """Restore a route config that can safely run ``ExploreHandler``.
 
@@ -804,18 +812,19 @@ class GameStateMachine:
         # 1. 檢查是否在戰鬥中 (看到 common/auto.png 或 battle/ 特徵圖案)
         # Dungeon transition/result anchors must take precedence over battle
         # features: some of those screens can falsely match auto.png.
-        for btn_name in self.DUNGEON_SCENE_FEATURES:
-            if os.path.exists(os.path.join("templates", btn_name)):
-                pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
-                if pos:
-                    logging.info(
-                        "[State detection] Dungeon anchor [%s] (confidence: %.4f); entering EXPLORING before battle detection.",
-                        btn_name,
-                        conf,
-                    )
-                    self.is_in_dungeon = True
-                    self.transition_to(self.STATE_DUNGEON_EXPLORING)
-                    return
+        if self.has_dungeon_context():
+            for btn_name in self.DUNGEON_SCENE_FEATURES:
+                if os.path.exists(os.path.join("templates", btn_name)):
+                    pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
+                    if pos:
+                        logging.info(
+                            "[State detection] Dungeon anchor [%s] (confidence: %.4f); entering EXPLORING before battle detection.",
+                            btn_name,
+                            conf,
+                        )
+                        self.is_in_dungeon = True
+                        self.transition_to(self.STATE_DUNGEON_EXPLORING)
+                        return
 
         for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
             if os.path.exists(os.path.join("templates", feat)):

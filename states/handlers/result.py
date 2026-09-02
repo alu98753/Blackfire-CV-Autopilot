@@ -82,6 +82,38 @@ class ResultHandler(BaseStateHandler):
                         self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
                         return True
 
+        # Lord Boss may return directly to its lobby after the last Continue.
+        # Treat that lobby as terminal evidence before the continue loop waits.
+        is_lord_boss_result = (
+            cur_type == "lord_boss"
+            or "lord_boss" in (getattr(self.machine, "dev_subflows", []) or [])
+            or getattr(self.machine, "current_lord_boss_key", None) is not None
+        )
+        if is_lord_boss_result and os.path.exists(
+            os.path.join("templates", "load/Lord_entry_after.png")
+        ):
+            pos_l, conf_l = self.matcher.match(
+                screen_img,
+                "load/Lord_entry_after.png",
+                threshold=0.80,
+                brightness_threshold=0.70,
+                quiet=True,
+            )
+            if pos_l:
+                logging.info(
+                    "Lord Boss result completed: returned to lobby "
+                    "[load/Lord_entry_after.png] (confidence: %.4f).",
+                    conf_l,
+                )
+                boss_key = getattr(self.machine, "current_lord_boss_key", None)
+                daily_manager = getattr(self.machine, "daily_manager", None)
+                if boss_key and daily_manager:
+                    daily_manager.record_lord_boss_fight(boss_key)
+                self.machine.current_lord_boss_key = None
+                self.reset_state()
+                self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+                return True
+
         # =========================================================================
         # 步驟 1：結算初登場沉澱 (INIT_DELAY)
         # =========================================================================
@@ -244,13 +276,6 @@ class ResultHandler(BaseStateHandler):
                     timeout=5.0, threshold=0.9, brightness_threshold=0.70, check_interval=0.25, post_delay=0.8, retry_interval=1.0
                 )
 
-                if getattr(self.machine, "current_lord_boss_key", None):
-                    b_key = self.machine.current_lord_boss_key
-                    self.machine.current_lord_boss_key = None
-                    dm = getattr(self.machine, "daily_manager", None)
-                    if dm:
-                        dm.record_lord_boss_fight(b_key)
-
                 return True
 
             # 2. 若畫面上已無 continue 按鈕，檢查是否有通用 confirm.png
@@ -317,18 +342,6 @@ class ResultHandler(BaseStateHandler):
                     time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗響應點擊並啟動載入
                     logging.info(f"🚀 點擊再戰按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
                     self.machine.transition_to(self.machine.STATE_LOADING)
-                    return True
-
-        # 結算如果看到 Lord_entry_after 且屬於 lord_boss 模式
-        cur_type = self.machine.config.get("type") if self.machine.config else None
-        dev_subflows = getattr(self.machine, "dev_subflows", []) or []
-        if cur_type == "lord_boss" or "lord_boss" in dev_subflows:
-            if os.path.exists(os.path.join("templates", "load/Lord_entry_after.png")):
-                pos_l, conf_l = self.matcher.match(screen_img, "load/Lord_entry_after.png", threshold=0.80, brightness_threshold=0.70, quiet=True)
-                if pos_l:
-                    logging.info(f"👉 結算辨識 (Lord Boss 模式)：偵測到已切回大廳 [load/Lord_entry_after.png] (相似度: {conf_l:.4f})，結束結算。")
-                    self.reset_state()
-                    self.machine.transition_to(self.machine.STATE_LORD_BOSS)
                     return True
 
         # 領地模式 (Domain Mode)：結算完成後切回 DOMAIN_EXPLORE

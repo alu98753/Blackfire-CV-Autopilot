@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from utils.daily_manager import DailyManager
 from states.state_machine import GameStateMachine
 from states.handlers.lord_boss import LordBossHandler
+from states.handlers.battle import BattleHandler
+from states.handlers.result import ResultHandler
 from config import GAME_CONFIGS
 
 class TestLordBossSubflowMatrix(unittest.TestCase):
@@ -22,7 +24,12 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         mock_capturer = MagicMock()
         mock_matcher = MagicMock()
         mock_mouse = MagicMock()
-        self.state_machine = GameStateMachine(capturer=mock_capturer, matcher=mock_matcher, mouse=mock_mouse)
+        self.state_machine = GameStateMachine(
+            capturer=mock_capturer,
+            matcher=mock_matcher,
+            mouse=mock_mouse,
+            preload_ocr=False,
+        )
         self.state_machine.daily_manager = self.daily_manager
         os.environ["DEBUG_PAUSE_BOSS"] = "0"
 
@@ -56,6 +63,89 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         spider_status["today_count"] = 5
         avail = self.daily_manager.get_available_lord_bosses()
         self.assertNotIn("lord_spider", avail)
+
+    @patch("os.path.exists", return_value=True)
+    def test_lord_boss_result_ignores_false_dungeon_anchor(self, _mock_exists):
+        """Lord Boss 結算不得被地下城特徵誤導至 EXPLORING。"""
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.current_lord_boss_key = "lord_spider"
+
+        def fake_match(_image, template, **_kwargs):
+            if template == "dungeons/gungeon_godown_confirm.png":
+                return (766, 524), 0.8702
+            if template == "common/continue.png":
+                return (956, 665), 1.0
+            return None, 0.0
+
+        self.state_machine.matcher.match.side_effect = fake_match
+        BattleHandler(self.state_machine).handle(
+            None, {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        )
+
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
+        self.state_machine.mouse.click.assert_not_called()
+
+    @patch("os.path.exists", return_value=True)
+    def test_real_dungeon_still_owns_dungeon_anchor(self, _mock_exists):
+        """Dungeon context keeps the existing battle recovery behavior."""
+        self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.is_in_dungeon = True
+        self.state_machine.matcher.match.side_effect = lambda _image, template, **_kwargs: (
+            ((766, 524), 0.95)
+            if template == "dungeons/gungeon_godown_confirm.png"
+            else (None, 0.0)
+        )
+
+        BattleHandler(self.state_machine).handle(
+            None, {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        )
+
+        self.assertEqual(
+            self.state_machine.current_state,
+            self.state_machine.STATE_DUNGEON_EXPLORING,
+        )
+
+    @patch("os.path.exists", return_value=True)
+    def test_lord_boss_continue_does_not_record_before_lobby(self, _mock_exists):
+        """Continue 只是中間結算動作，不可提前提交 Boss 完成。"""
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_lord_boss_key = "lord_spider"
+        handler = ResultHandler(self.state_machine)
+        handler.subflow_step = "CONTINUE_LOOP"
+        self.state_machine.matcher.match.side_effect = lambda _image, template, **_kwargs: (
+            ((956, 665), 1.0) if template == "common/continue.png" else (None, 0.0)
+        )
+
+        with patch.object(handler, "click_and_wait_until_gone"):
+            self.assertTrue(handler._handle_impl(None, {"left": 0, "top": 0}))
+
+        self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spider")
+        self.assertEqual(
+            self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"],
+            0,
+        )
+
+    @patch("os.path.exists", return_value=True)
+    def test_lord_boss_lobby_return_records_fight_once(self, _mock_exists):
+        """Lord Boss 大廳是結算完成的終止證據。"""
+        self.state_machine.config = GAME_CONFIGS["lord_boss"].copy()
+        self.state_machine.current_lord_boss_key = "lord_spider"
+        handler = ResultHandler(self.state_machine)
+        handler.subflow_step = "CONTINUE_LOOP"
+        self.state_machine.matcher.match.side_effect = lambda _image, template, **_kwargs: (
+            ((500, 500), 0.95) if template == "load/Lord_entry_after.png" else (None, 0.0)
+        )
+
+        self.assertTrue(handler._handle_impl(None, {"left": 0, "top": 0}))
+
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LORD_BOSS)
+        self.assertIsNone(self.state_machine.current_lord_boss_key)
+        self.assertEqual(
+            self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"],
+            1,
+        )
 
     def test_lord_boss_reset_at_0830(self):
         """測試：跨越 08:30 時，所有 Boss 的今日次數清零"""
