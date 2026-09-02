@@ -266,7 +266,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         4. 驗證透過子流程搜尋並點擊 common/quit.png 或 goback_town.png， defeat_count 清零並切回 STATE_NAVIGATING。
         """
         self.state_machine.config = GAME_CONFIGS["stage"].copy()
-        self.state_machine.config["stage_max_defeat"] = 2
+        self.state_machine.config["battle_max_defeat"] = 2
         self.state_machine.defeat_count = 0
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
