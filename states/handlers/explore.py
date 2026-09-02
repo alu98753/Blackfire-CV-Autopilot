@@ -5,6 +5,12 @@ import numpy as np
 from states.handlers.base import BaseStateHandler
 
 class ExploreHandler(BaseStateHandler):
+    TREASURE_TERMINAL_ANCHORS = (
+        "dungeons/gungeon_godown.png",
+        "dungeons/dungeons_complete.png",
+    )
+    TREASURE_TERMINAL_THRESHOLD = 0.80
+
     def handle(self, screen_img, rect):
         """
         [地下城專屬] 依照優先級掃描探險事件。
@@ -279,7 +285,21 @@ class ExploreHandler(BaseStateHandler):
                             has_any = True
                             break
                 if not has_any:
-                    logging.info("📦 [子流程] 畫面已無寶箱關聯按鈕且無新動作，提前結束子流程。")
+                    terminal = self._match_treasure_terminal(screen_img)
+                    if terminal is not None:
+                        anchor, confidence = terminal
+                        logging.info(
+                            "[Treasure subflow] Completion verified by [%s] "
+                            "(confidence: %.4f).",
+                            anchor,
+                            confidence,
+                        )
+                        return True
+                    logging.info(
+                        "📦 [子流程] 寶箱按鈕已消失，"
+                        "正在等待下樓或通關畫面作為完成確認。"
+                    )
+                    last_click_time = time.time()
                     time.sleep(0.3)
                     continue
 
@@ -290,10 +310,6 @@ class ExploreHandler(BaseStateHandler):
         return False
 
     def _wait_for_treasure_terminal(self, rect, timeout) -> bool:
-        terminal_anchors = (
-            "dungeons/gungeon_godown.png",
-            "dungeons/dungeons_complete.png",
-        )
         terminal_wait_start = time.time()
         while time.time() - terminal_wait_start < timeout:
             screen_img = self.machine.capturer.capture(rect)
@@ -301,16 +317,16 @@ class ExploreHandler(BaseStateHandler):
                 time.sleep(0.2)
                 continue
 
-            for anchor in terminal_anchors:
-                pos, conf = self.matcher.match(screen_img, anchor, threshold=0.80)
-                if pos:
-                    logging.info(
-                        "[Treasure subflow] Completion verified by [%s] "
-                        "(confidence: %.4f).",
-                        anchor,
-                        conf,
-                    )
-                    return True
+            terminal = self._match_treasure_terminal(screen_img)
+            if terminal is not None:
+                anchor, confidence = terminal
+                logging.info(
+                    "[Treasure subflow] Completion verified by [%s] "
+                    "(confidence: %.4f).",
+                    anchor,
+                    confidence,
+                )
+                return True
             time.sleep(0.3)
 
         logging.warning(
@@ -318,6 +334,18 @@ class ExploreHandler(BaseStateHandler):
             "anchor appeared before timeout."
         )
         return False
+
+    def _match_treasure_terminal(self, screen_img):
+        """Return the terminal anchor visible after a treasure interaction."""
+        for anchor in self.TREASURE_TERMINAL_ANCHORS:
+            pos, confidence = self.matcher.match(
+                screen_img,
+                anchor,
+                threshold=self.TREASURE_TERMINAL_THRESHOLD,
+            )
+            if pos:
+                return anchor, confidence
+        return None
 
     def _run_bless_subflow(self, rect) -> bool:
         """

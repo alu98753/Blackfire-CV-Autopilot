@@ -145,6 +145,33 @@ class TestExploreSubflow(unittest.TestCase):
         )
         self.assertGreaterEqual(confirm_checks, 5)
 
+    @patch("states.handlers.explore.os.path.exists", return_value=True)
+    def test_run_treasure_subflow_accepts_terminal_anchor_without_quit(
+        self,
+        _mock_exists,
+    ):
+        """A treasure UI that closes directly into the next floor is complete."""
+        self.mock_capturer.capture.return_value = MagicMock()
+        get_treasure_checks = 0
+
+        def side_effect(_img, name, threshold, **_kwargs):
+            nonlocal get_treasure_checks
+            if name == "dungeons/Get_tresure.png":
+                get_treasure_checks += 1
+                if get_treasure_checks == 1:
+                    return (100, 200), 0.9999
+            if name == "dungeons/gungeon_godown.png" and get_treasure_checks > 1:
+                return (400, 500), 0.9999
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = side_effect
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        result = self.handler._run_treasure_subflow(rect)
+
+        self.assertTrue(result)
+        self.mock_mouse.click.assert_called_once_with(110, 220)
+
     @patch('states.handlers.explore.os.path.exists')
     def test_run_bless_subflow_success(self, mock_exists):
         """
