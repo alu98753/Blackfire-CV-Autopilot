@@ -166,6 +166,15 @@ class CollectOnlyHandler(BaseStateHandler):
                 self.machine.start_subflow_queue(pending_town)
                 return
 
+        # 3.5.1.5 檢查深淵魔王 (enable_demon_lords)
+        if hasattr(self.machine, "has_available_demon_lords") and self.machine.has_available_demon_lords():
+            if not getattr(self.machine, "town_subflow_queue", []):
+                res = dm.is_demon_lords_available() if dm and hasattr(dm, "is_demon_lords_available") else None
+                reason = res[1] if isinstance(res, (tuple, list)) and len(res) > 1 else ""
+                logging.info(f"👑 [定時待機喚醒] 偵測到深淵魔王次數可用 ({reason}) ➔ 喚醒轉入 DEMON_LORDS！")
+                self.machine.start_subflow_queue(["demon_lords"])
+                return
+
         # 3.5.2 檢查目前 Profile 選取且可討伐的首領
         if dm:
             avail_bosses = self.machine.get_available_selected_lord_bosses()

@@ -236,10 +236,12 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
 
-        # 設蜘蛛今日 5 次全滿
+        # 設蜘蛛與其他非惡靈 Boss 今日 5 次全滿
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
-        bosses["lord_spider"]["today_count"] = 5
-        bosses["lord_spider"]["completed_today"] = True
+        for b_name, b_info in bosses.items():
+            if b_name != "lord_spectre":
+                b_info["today_count"] = 5
+                b_info["completed_today"] = True
 
         # 設惡靈 4 次且處於冷卻中
         now_ts = time.time()
@@ -514,6 +516,58 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertIsNone(sm.quest_scheduler, "全完結後應解除 quest_scheduler")
 
 
+
+
+    def test_tier1_5_demon_lords_priority_over_lord_boss(self):
+        """驗證 Tier 1 城鎮速領完成後，Tier 1.5 深淵魔王 (0 CD, 3次) 優先於 Tier 2 Lord Boss 被派發"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+
+        self.assertEqual(self.daily_mgr.get_pending_town_subflows(), [])
+
+        custom_subflow_configs = dict(self.mock_subflow_configs)
+        custom_subflow_configs["demon_lords"] = {"enabled": True, "name": "深淵魔王"}
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        scheduler = self.daily_mgr.load_quest_scheduler()
+        sm.attach_quest_scheduler(scheduler)
+
+        with patch("config.SUBFLOW_CONFIGS", custom_subflow_configs):
+            scheduled = sm.evaluate_and_schedule_daily_pipeline()
+            self.assertTrue(scheduled)
+            self.assertEqual(sm.current_state, sm.STATE_DEMON_LORDS)
+
+            for _ in range(3):
+                self.daily_mgr.record_demon_lords_fight()
+            self.assertTrue(self.daily_mgr.status["subflows"]["demon_lords"]["completed_today"])
+
+            scheduled_lord = sm.evaluate_and_schedule_daily_pipeline()
+            self.assertTrue(scheduled_lord)
+            self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+
+    def test_tier1_5_demon_lords_disabled_skips_to_lord_boss(self):
+        """驗證當 enable_demon_lords = False 時，系統自動跳過魔王直接進入 Lord Boss"""
+        self.daily_mgr.record_subflow_completed("chest")
+        self.daily_mgr.record_subflow_completed("hero_draw")
+        self.daily_mgr.record_subflow_completed("blood_altar")
+        self.daily_mgr.record_subflow_completed("jewelry_workshop")
+        self.daily_mgr.record_subflow_completed("bulletin_board")
+
+        custom_subflow_configs = dict(self.mock_subflow_configs)
+        custom_subflow_configs["demon_lords"] = {"enabled": True, "name": "深淵魔王"}
+
+        sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
+        sm.daily_manager = self.daily_mgr
+        sm.config = {"enable_demon_lords": False}
+
+        with patch("config.SUBFLOW_CONFIGS", custom_subflow_configs):
+            scheduled = sm.evaluate_and_schedule_daily_pipeline()
+            self.assertTrue(scheduled)
+            self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
 class TestTierConfigMatrix(unittest.TestCase):
     """專門驗證 Tier 1~4 全階梯調度時 Config 設定正確性之測試矩陣」"""

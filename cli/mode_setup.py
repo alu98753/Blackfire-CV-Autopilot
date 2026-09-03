@@ -32,6 +32,8 @@ def setup_mode_config(args):
         config["enable_stage_farming"] = args.enable_stage_farming
     if args.enable_town_daily is not None:
         config["enable_town_daily"] = args.enable_town_daily
+    if getattr(args, "enable_demon_lords", None) is not None:
+        config["enable_demon_lords"] = args.enable_demon_lords
 
     # A restarted process must never wait for stdin.  The profile already holds
     # the user's last choices; rebuild only the derived navigation paths.
