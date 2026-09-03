@@ -1,5 +1,5 @@
 import logging
-from utils.quest_mapper import TaskNode
+from utils.quest_mapper import TaskNode, is_quest_allowed
 
 class QuestScheduler:
     """
@@ -132,7 +132,6 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
-        from utils.quest_mapper import is_quest_allowed
         for target_task in pending:
             if self.bounty_config and not is_quest_allowed(target_task, self.bounty_config):
                 continue
@@ -172,7 +171,6 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
-        from utils.quest_mapper import is_quest_allowed
         for target_task in pending:
             if self.bounty_config and not is_quest_allowed(target_task, self.bounty_config):
                 continue
@@ -210,7 +208,7 @@ class QuestScheduler:
         :param daily_manager: DailyManager 實例 (可選，用於記錄 unknown_quests)
         :param bounty_config: dict (可選，例如 {"max_stage": 4, "max_dungeon": 4})
         """
-        from utils.quest_mapper import QuestMapper, is_quest_allowed
+        from utils.quest_mapper import QuestMapper
         mapper = QuestMapper()
         scheduler = cls(daily_manager=daily_manager, bounty_config=bounty_config)
         unknown_titles = []

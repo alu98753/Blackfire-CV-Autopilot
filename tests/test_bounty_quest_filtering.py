@@ -3,8 +3,10 @@ import json
 import time
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
+import config
 from config import (
     get_bounty_quest_config,
     get_defaults_config,
@@ -22,11 +24,21 @@ class TestBountyQuestFiltering(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
+        self.user_data_path = Path(self.temp_dir.name) / "user_data"
+        self.sandbox_dir = self.user_data_path / "sandbox"
+        self.sandbox_dir.mkdir(parents=True, exist_ok=True)
+        (self.sandbox_dir / "config.toml").write_text(
+            "[bounty_quests]\nmax_stage = 4\nmax_dungeon = 4\n",
+            encoding="utf-8",
+        )
+        self.patcher = patch.object(config, "USER_DATA_DIR", self.user_data_path)
+        self.patcher.start()
         self.mapper = QuestMapper()
 
     def tearDown(self):
-        self.temp_dir.cleanup()
+        self.patcher.stop()
         set_active_profile("native")
+        self.temp_dir.cleanup()
 
     def test_defaults_toml_bounty_quests_config(self):
         """驗證 config/defaults.toml 正確配置全域預設 max_stage=6, max_dungeon=5"""
@@ -51,6 +63,20 @@ class TestBountyQuestFiltering(unittest.TestCase):
 
         set_active_profile("native")
         self.assertEqual(get_bounty_quest_config(), {"max_stage": 6, "max_dungeon": 5})
+
+    def test_get_bounty_quest_config_isolation_across_profiles(self):
+        """驗證跨 Profile 查詢時不會被當前 active profile 的覆蓋值污染"""
+        set_active_profile("sandbox")
+        self.assertEqual(get_bounty_quest_config()["max_stage"], 4)
+
+        # 查詢未定義 bounty_quests 的其他 profile，必須回退至 defaults (max_stage=6) 而非繼承 sandbox
+        empty_dir = self.user_data_path / "empty_profile"
+        empty_dir.mkdir(parents=True, exist_ok=True)
+        (empty_dir / "config.toml").write_text("[global]\nmonitor_index = 1\n", encoding="utf-8")
+
+        empty_cfg = get_bounty_quest_config("empty_profile")
+        self.assertEqual(empty_cfg["max_stage"], 6)
+        self.assertEqual(empty_cfg["max_dungeon"], 5)
 
     def test_is_quest_allowed_predicate(self):
         """驗證 is_quest_allowed 純函式對關卡與地下城上限的邊界判定"""
@@ -153,6 +179,50 @@ class TestBountyQuestFiltering(unittest.TestCase):
             manager.status["subflows"]["bulletin_board"]["accepted_quests"],
             ["破除遺跡的詛咒", "清除沙蟲"]
         )
+
+    def test_reload_status_if_modified_does_not_loop_after_self_heal_save(self):
+        """驗證 reload_status_if_modified 於自癒儲存後，不會因舊時間戳覆寫而重複觸發重載循環"""
+        status_file = os.path.join(self.temp_dir.name, "daily_status.json")
+        manager = DailyManager(status_file=status_file, profile="sandbox")
+        manager.status["subflows"]["bulletin_board"]["accepted_quests"] = ["清除野豬"]
+        manager.save_status()
+
+        time.sleep(0.05)
+        # 模擬手動修改寫入包含超標任務 (討伐惡魔 為 Stage 6，sandbox 上限為 4)
+        with open(status_file, "r", encoding="utf-8") as f:
+            disk_data = json.load(f)
+        disk_data["subflows"]["bulletin_board"]["accepted_quests"] = ["討伐惡魔", "清除野豬"]
+        with open(status_file, "w", encoding="utf-8") as f:
+            json.dump(disk_data, f, ensure_ascii=False, indent=2)
+
+        # 首次 reload：偵測到修改，呼叫 load_status 清洗超標任務並 save_status
+        first_reload = manager.reload_status_if_modified()
+        self.assertTrue(first_reload)
+        self.assertEqual(
+            manager.status["subflows"]["bulletin_board"]["accepted_quests"],
+            ["清除野豬"],
+        )
+
+        # 緊接著再次檢查：磁碟未被再次外部修改，必須回傳 False，杜絕無限重載
+        second_reload = manager.reload_status_if_modified()
+        self.assertFalse(second_reload)
+
+    def test_reevaluate_unknown_quests_applies_bounty_filter_to_promoted_quests(self):
+        """驗證 unknown_quests 自癒晉升時，超標任務不會繞過門檻被加入 accepted_quests"""
+        status_file = os.path.join(self.temp_dir.name, "daily_status.json")
+        manager = DailyManager(status_file=status_file, profile="sandbox")
+        bb = manager.status.setdefault("subflows", {}).setdefault("bulletin_board", {})
+        bb["accepted_quests"] = ["清除野豬"]
+        # 放入一個能被 mapper 解析為 Stage 6 (討伐惡魔) 的任務，但先記錄在 unknown_quests
+        bb["unknown_quests"] = ["討伐惡魔"]
+
+        # 觸發 reevaluate_unknown_quests
+        changed = manager.reevaluate_unknown_quests()
+        self.assertTrue(changed)
+        # 討伐惡魔 (Stage 6) 在 sandbox (max_stage=4) 應該在 sort_quests 時被過濾
+        self.assertNotIn("討伐惡魔", bb["accepted_quests"])
+        self.assertEqual(bb["accepted_quests"], ["清除野豬"])
+        self.assertEqual(bb["unknown_quests"], [])
 
 
 if __name__ == "__main__":

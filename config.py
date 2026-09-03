@@ -236,20 +236,23 @@ def get_stamina_retreat_settings() -> dict:
 
 def get_bounty_quest_config(profile: str | None = None) -> dict:
     """Return [bounty_quests] settings for the active or specified profile."""
-    if profile and profile.strip().lower() != get_active_profile():
-        target_path = get_profile_config_path(profile)
-        if target_path.exists():
-            import tomllib
-            try:
-                with target_path.open("rb") as f:
-                    data = tomllib.load(f)
-                if "bounty_quests" in data:
-                    merged = dict(BOUNTY_QUESTS_CONFIG)
-                    merged.update(data["bounty_quests"])
-                    return merged
-            except Exception:
-                pass
-    return dict(get_defaults_config().get("bounty_quests", BOUNTY_QUESTS_CONFIG))
+    base = dict(_DEFAULTS_MANAGER.snapshot().get("bounty_quests", {}))
+    p = (profile or get_active_profile()).strip().lower()
+    target_path = get_profile_config_path(p)
+    if not target_path.exists():
+        return base
+
+    try:
+        import tomllib
+        with target_path.open("rb") as f:
+            data = tomllib.load(f)
+        override = data.get("bounty_quests")
+        if isinstance(override, dict):
+            base.update(override)
+    except Exception as e:
+        logging.warning("讀取 Profile [%s] bounty_quests 設定失敗: %s", p, e)
+
+    return base
 
 
 def normalize_config(config):
