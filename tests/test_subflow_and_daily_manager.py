@@ -549,9 +549,11 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         dm = DailyManager(data_dir=TEST_DATA_DIR, status_file="test_daily_dynamic.json")
         now = time.time()
         
-        # 1. 設置 蜘蛛 (3600s CD) 剛打完 (剩 3600s)，惡靈 (7200s CD) 3000s 前打完 (剩 4200s)
+        # 1. 設置 蜘蛛 (3600s CD) 剛打完 (剩 3600s)，惡靈 (7200s CD) 3000s 前打完 (剩 4200s)，雪山食屍王剛打完 (剩 10800s)
         dm.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["last_fight_timestamp"] = now
         dm.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["last_fight_timestamp"] = now - 3000.0
+        if "ghoul_snow" in dm.status["subflows"]["lord_boss"]["bosses"]:
+            dm.status["subflows"]["lord_boss"]["bosses"]["ghoul_snow"]["last_fight_timestamp"] = now
 
         # 動態計算最快解鎖秒數：最快解鎖的蜘蛛為 3600 秒
         sec = dm.get_next_lord_boss_available_seconds(now_ts=now)

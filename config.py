@@ -242,9 +242,9 @@ def normalize_config(config):
         elif activity_key == "lord_boss_targets":
             cfg[activity_key] = list(default_value)
         elif activity_key == "enable_town_daily":
-            cfg[activity_key] = False if mode_type == "collect_only" else default_value
+            cfg[activity_key] = mode_type in ["daily", "mix"]
         elif activity_key == "enable_demon_lords":
-            cfg[activity_key] = False if mode_type in ["collect_only", "stage"] else default_value
+            cfg[activity_key] = mode_type in ["daily", "mix"]
         elif activity_key == "enable_quests":
             cfg[activity_key] = mode_type == "daily"
         elif activity_key == "enable_golden_empire":

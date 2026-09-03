@@ -763,8 +763,11 @@ class TestTierConfigMatrix(unittest.TestCase):
         self.assertEqual(config["stage_target"], "stages/level6_final.png")
         self.assertIn("stages/level6_final.png", config["stage_navigation_path"])
 
+    @patch('cli.stage_setup.persist_mode_updates')
+    @patch('cli.tier4_setup.persist_mode_updates')
+    @patch('cli.dungeon_setup.persist_mode_updates')
     @patch('builtins.input', return_value="")
-    def test_setup_mode_config_daily_reads_tier4_toml(self, mock_input):
+    def test_setup_mode_config_daily_reads_tier4_toml(self, mock_input, _d1, _d2, _d3):
         """[TOML 配置測試] 驗證 setup_mode_config 在 daily 模式下可無縫讀取 TOML 中的 tier4 退守大關與小關配置"""
         import argparse
         from cli.mode_setup import setup_mode_config
@@ -780,12 +783,14 @@ class TestTierConfigMatrix(unittest.TestCase):
             stage=None,
             sub=None
         )
-        from config import PRIMARY_MODES
+        from config import PRIMARY_MODES, GAME_CONFIGS
         expected_sub = PRIMARY_MODES["daily"].get("tier4_sub_stage", "first")
-        cfg = setup_mode_config(args)
-        self.assertEqual(cfg["stage_name"], f"冰凍峽谷 ({expected_sub})")
-        self.assertEqual(cfg["stage_entry"], "stages/level6_ice_cave.png")
-        self.assertTrue(os.path.exists(os.path.join("templates", cfg["stage_target"])))
+        with patch.dict(PRIMARY_MODES["daily"], {"tier4_mode": "stage"}), \
+             patch.dict(GAME_CONFIGS["daily"], {"tier4_mode": "stage", "enable_stage_farming": True}):
+            cfg = setup_mode_config(args)
+            self.assertEqual(cfg["stage_name"], f"冰凍峽谷 ({expected_sub})")
+            self.assertEqual(cfg["stage_entry"], "stages/level6_ice_cave.png")
+            self.assertTrue(os.path.exists(os.path.join("templates", cfg["stage_target"])))
 
     def test_tier4_preemption_on_lord_boss_cooldown_expiry(self):
         """[Tier 4 結算插隊測試] 驗證即便 subflows.lord_boss.completed_today 為 True，只要 Boss 冷卻過期 (has_available_lord_boss 為 True)，ResultHandler 必須判定離場並點擊 exit_battle 而非 retry"""
