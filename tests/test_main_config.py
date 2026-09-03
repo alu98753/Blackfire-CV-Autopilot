@@ -112,8 +112,9 @@ class TestMainConfig(unittest.TestCase):
     @patch('os.path.exists')
     @patch('cli.stage_setup.persist_mode_updates')
     @patch('cli.tier4_setup.persist_mode_updates')
-    @patch('builtins.input', side_effect=["1", "6", "1"])
-    def test_setup_mode_config_daily_default(self, mock_input, _tier4_persist, _stage_persist, mock_exists):
+    @patch('cli.dungeon_setup.persist_mode_updates')
+    @patch('builtins.input', side_effect=["6", "1", "2", "1", "6", "1"])
+    def test_setup_mode_config_daily_default(self, mock_input, _dungeon_persist, _tier4_persist, _stage_persist, mock_exists):
         """Daily Tier 4 可選 stage，並進入大關與小關子選單。"""
         mock_exists.return_value = True
         mock_args = MagicMock()
@@ -134,8 +135,9 @@ class TestMainConfig(unittest.TestCase):
 
     @patch('os.path.exists')
     @patch('cli.tier4_setup.persist_mode_updates')
-    @patch('builtins.input', side_effect=["2", "1"])
-    def test_setup_mode_config_daily_domain(self, mock_input, _persist, mock_exists):
+    @patch('cli.dungeon_setup.persist_mode_updates')
+    @patch('builtins.input', side_effect=["6", "1", "2", "2", "1"])
+    def test_setup_mode_config_daily_domain(self, mock_input, _dungeon_persist, _persist, mock_exists):
         """Daily Tier 4 可選 domain，並進入目前唯一的黃金古國子選單。"""
         mock_exists.return_value = True
         mock_args = MagicMock()
@@ -156,8 +158,9 @@ class TestMainConfig(unittest.TestCase):
     @patch('os.path.exists')
     @patch('cli.stage_setup.persist_mode_updates')
     @patch('cli.tier4_setup.persist_mode_updates')
-    @patch('builtins.input', side_effect=["1", "1", "4"])
-    def test_setup_mode_config_daily_custom(self, mock_input, _tier4_persist, _stage_persist, mock_exists):
+    @patch('cli.dungeon_setup.persist_mode_updates')
+    @patch('builtins.input', side_effect=["6", "1", "2", "1", "1", "4"])
+    def test_setup_mode_config_daily_custom(self, mock_input, _dungeon_persist, _tier4_persist, _stage_persist, mock_exists):
         """Daily Tier 4 stage 子選單可指定蒼穹平原魔王關。"""
         mock_exists.return_value = True
         mock_args = MagicMock()

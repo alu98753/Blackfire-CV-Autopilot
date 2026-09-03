@@ -97,6 +97,8 @@ def setup_mode_config(args):
         print("\n[*] 【每日懸賞任務模式】週期活動會優先執行，Tier 4 僅在等待期間長駐：")
         print(f"    地下城：{'啟用' if config.get('enable_dungeon', True) else '停用（Profile TOML / CLI）'}")
         print(f"    Lord：{'啟用' if config.get('enable_lord_boss', True) else '停用（Profile TOML / CLI）'}")
+        if config.get("enable_dungeon", True):
+            setup_dungeon_config(config, args)
         setup_daily_tier4_config(config)
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]

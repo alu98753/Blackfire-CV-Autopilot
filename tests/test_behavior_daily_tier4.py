@@ -169,6 +169,29 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(machine.get_available_selected_lord_bosses(), [])
         self.assertFalse(machine.has_available_selected_lord_boss())
 
+    @patch("cli.mode_setup.setup_daily_tier4_config")
+    @patch("cli.mode_setup.setup_dungeon_config")
+    def test_daily_mode_prompts_dungeon_selection_when_enabled(
+        self, mock_setup_dungeon, mock_setup_tier4
+    ):
+        from cli.mode_setup import setup_mode_config
+
+        args = MagicMock()
+        args.subflow = None
+        args.mode = "daily"
+        args.backend = "win32"
+        args.enable_lord_boss = None
+        args.enable_dungeon = None
+        args.enable_stage_farming = None
+        args.enable_town_daily = None
+        args.enable_demon_lords = None
+        args.resume = False
+
+        cfg = setup_mode_config(args)
+
+        mock_setup_dungeon.assert_called_once_with(cfg, args)
+        mock_setup_tier4.assert_called_once_with(cfg)
+
 
 if __name__ == "__main__":
     unittest.main()
