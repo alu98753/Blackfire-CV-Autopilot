@@ -6,6 +6,7 @@ from config import (
     QUEST_STAGE_BATCH_SIZE,
     QUEST_DUNGEON_BATCH_SIZE
 )
+from utils.dungeon_catalog import DungeonCatalog
 
 class TaskNode:
     """
@@ -134,8 +135,8 @@ class TaskNode:
 
         if self.mode_type == "dungeon" and self.dungeon_index is not None:
             idx = self.dungeon_index
-            entry_img = dungeon_entries[idx - 1] if 1 <= idx <= len(dungeon_entries) else "dungeons/Ice_entry.png"
-            dname = dungeon_names[idx - 1] if 1 <= idx <= len(dungeon_names) else "地下城"
+            entry_img = DungeonCatalog.get_entry_template(idx, custom_entries=dungeon_entries)
+            dname = DungeonCatalog.get_name(idx, custom_names=dungeon_names)
             
             cfg = PRIMARY_MODES["dungeon"].copy()
             cfg["enable_dungeon"] = True

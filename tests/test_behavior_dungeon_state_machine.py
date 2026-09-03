@@ -217,7 +217,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
-        self.state_machine.dungeon_cooldowns = {i: float("inf") for i in range(num_dungeons) if i not in (0, 2)}
+        self.state_machine.dungeon_cooldowns = {i: float("inf") for i in range(1, num_dungeons + 1) if i not in (1, 3)}
         
         import numpy as np
         self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -271,8 +271,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         # Slime 的 center x = 200 + 173 = 373, center y = 170 (以 scale=1.0 計算)
         self.mock_mouse.click.assert_called_with(373, 170)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
-        # 確保 Forest 索引 (2) 的冷卻時間被設為未來時間
-        self.assertGreater(self.state_machine.dungeon_cooldowns[2], time.time())
+        # 確保 Forest 索引 (3) 的冷卻時間被設為未來時間
+        self.assertGreater(self.state_machine.dungeon_cooldowns[3], time.time())
 
     @patch('os.path.exists')
     def test_greedy_dungeon_allowed_filter(self, mock_exists):
@@ -284,8 +284,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         """
         self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.config["greedy_dungeon"] = True
-        # 僅允許打 Slime (idx 0) 與 Forest (idx 2)
-        self.state_machine.config["greedy_allowed_indices"] = [0, 2]
+        # 僅允許打 Slime (idx 1) 與 Forest (idx 3)
+        self.state_machine.config["greedy_allowed_indices"] = [1, 3]
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
@@ -350,8 +350,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         
-        # 設為 Slime (index 0) 正在冷卻
-        self.state_machine.dungeon_cooldowns = {0: time.time() + 100.0}
+        # 設為 Slime (index 1) 正在冷卻
+        self.state_machine.dungeon_cooldowns = {1: time.time() + 100.0}
         
         import numpy as np
         self.mock_capturer.capture.return_value = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -409,8 +409,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         # 驗證：因為畫面偵測到冷卻，不應呼叫點擊
         self.mock_mouse.click.assert_not_called()
         # 驗證：冷卻時間被成功記錄在記憶體中 (約為未來 930 秒)
-        self.assertIn(0, self.state_machine.dungeon_cooldowns)
-        self.assertGreater(self.state_machine.dungeon_cooldowns[0], time.time() + 900.0)
+        self.assertIn(1, self.state_machine.dungeon_cooldowns)
+        self.assertGreater(self.state_machine.dungeon_cooldowns[1], time.time() + 900.0)
 
     @patch('os.path.exists')
     def test_stage_navigation_horizontal_drag_flow(self, mock_exists):
@@ -789,7 +789,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         mock_exists.return_value = True
 
         # 情況 1: 地下城可用，在大廳匹配到 dungeons/dungeon.png
-        self.state_machine.dungeon_cooldowns = {0: 0.0} # 黏糊糊的石窟可用
+        self.state_machine.dungeon_cooldowns = {1: 0.0} # 黏糊糊的石窟可用
         def mock_match_1(img, name, threshold=0.7, **kwargs):
             if name == "dungeons/dungeon.png":
                 return (100, 100), 0.85
@@ -802,7 +802,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
 
         # 情況 2: 所有地下城皆在冷卻中，在大廳匹配到 common/select_stage.png
         num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
-        self.state_machine.dungeon_cooldowns = {i: time.time() + 1800 for i in range(num_dungeons)}
+        self.state_machine.dungeon_cooldowns = {i: time.time() + 1800 for i in range(1, num_dungeons + 1)}
         def mock_match_2(img, name, threshold=0.7, **kwargs):
             if name == "common/select_stage.png":
                 return (200, 200), 0.85
@@ -830,7 +830,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         ]
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
-        self.state_machine.dungeon_cooldowns = {i: time.time() + 1800 for i in range(num_dungeons)}
+        self.state_machine.dungeon_cooldowns = {i: time.time() + 1800 for i in range(1, num_dungeons + 1)}
         mock_exists.return_value = True
 
         # 模擬在活動大廳匹配到 common/select_stage.png
@@ -871,15 +871,15 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         self.state_machine.config = {
             "type": "mix",
             "greedy_dungeon": True,
-            "greedy_allowed_indices": [0, 1, 2, 3, 4],
+            "greedy_allowed_indices": [1, 2, 3, 4, 5],
             "dungeon_names": ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "冰雪洞窟"]
         }
         self.state_machine.dungeon_cooldowns = {
-            0: 0.0,
-            1: now + 300.0,
-            2: float('inf'),
-            3: 0.0,
-            4: now + 600.0
+            1: 0.0,
+            2: now + 300.0,
+            3: float('inf'),
+            4: 0.0,
+            5: now + 600.0
         }
         status_str, avail = self.state_machine.get_dungeon_cooldown_status()
         self.assertIn("[黏糊糊的石窟]: 就緒 (可打)", status_str)

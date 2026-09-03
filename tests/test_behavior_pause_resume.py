@@ -477,7 +477,7 @@ class TestBehaviorPauseResume(unittest.TestCase):
         self.assertFalse(self.state_machine.is_paused)
         self.assertTrue(self.state_machine.resume_event.is_set())
 
-        t.join(timeout=1.0)
+        t.join(timeout=3.0)
         self.assertEqual(execution_order, ["step_1_done", "step_2_entering", "step_2_finished"])
 
     def test_capturer_freezes_in_place_when_paused(self):

@@ -16,6 +16,7 @@ from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardListNavigator
 from utils.scene_detector import SceneDetector, SceneType
+from utils.dungeon_catalog import DungeonCatalog
 from states.navigation_routing import (
     NavigationDecisionExecutor,
     resolve_navigation_context,
@@ -83,25 +84,14 @@ class NavigationHandler(BaseStateHandler):
         if allowed_indices is None:
             raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單。")
         
-        cd_details = []
-        min_remaining = 180.0
-        for idx in allowed_indices:
-            cd_until = self.machine.dungeon_cooldowns.get(idx, 0.0)
-            rem = cd_until - now
-            if rem > 0:
-                if cd_until == float('inf'):
-                    cd_details.append(f"[{dungeon_names[idx]}]: 永久不可打")
-                else:
-                    cd_str = format_seconds_to_readable(rem)
-                    cd_details.append(f"[{dungeon_names[idx]}]: 冷卻中 ({cd_str})")
-                    if rem < min_remaining:
-                        min_remaining = rem
-            else:
-                cd_details.append(f"[{dungeon_names[idx]}]: 就緒")
-
-        cd_summary = ", ".join(cd_details)
-        self.machine.all_dungeons_on_cooldown_until = now + max(30.0, min_remaining)
-        logging.info(f"⏳ 混合模式：{reason} ➔ 各地下城冷卻狀態: {cd_summary}。設定冷卻緩衝 {int(max(30.0, min_remaining))} 秒！")
+        report = DungeonCatalog.format_cooldown_report(
+            self.machine.dungeon_cooldowns,
+            target_indices=allowed_indices,
+            now_ts=now,
+            custom_names=dungeon_names,
+        )
+        self.machine.all_dungeons_on_cooldown_until = now + max(30.0, report.min_remaining_seconds)
+        logging.info(f"⏳ 混合模式：{reason} ➔ 各地下城冷卻狀態: {report.summary_str}。設定冷卻緩衝 {int(max(30.0, report.min_remaining_seconds))} 秒！")
 
         if self.machine.is_daily_pipeline_active() and getattr(self.machine, "quest_scheduler", None) is not None and not self.machine.config.get("is_tier4_fallback", False):
             logging.info("⏳ [每日懸賞動態調度] 偵測到當前懸賞目標地下城冷卻中，權立即觸發動態重新排程，順延切換下一個任務...")
@@ -502,10 +492,7 @@ class NavigationHandler(BaseStateHandler):
                 else:
                     # 非貪婪模式（指定特定副本）：目標 index 直接從 navigation_path 中尋找
                     nav_path = self.machine.config.get("navigation_path", [])
-                    for idx, temp_name in enumerate(entry_templates, start=1):
-                        if temp_name in nav_path:
-                            target_idx = idx
-                            break
+                    target_idx = DungeonCatalog.resolve_index_from_nav_path(nav_path, entry_templates)
                     if target_idx is None:
                         raw_idx = self.machine.config.get("tier4_dungeon_index", self.machine.config.get("dungeon_index"))
                         if raw_idx is not None:

@@ -2,6 +2,7 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
+from utils.dungeon_catalog import DungeonCatalog
 
 class ResultHandler(BaseStateHandler):
     def __init__(self, machine):
@@ -435,11 +436,13 @@ class ResultHandler(BaseStateHandler):
             time.sleep(0.3)
 
         if is_dungeon:
-            idx = getattr(self.machine, "current_dungeon_index", 0)
-            cooldown_map = self.machine.config.get("cooldown_map", {})
-            cd_seconds = cooldown_map.get(idx, 900.0)
-            self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
-            logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定地下城 {idx} 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+            idx = getattr(self.machine, "current_dungeon_index", None)
+            if idx is not None and DungeonCatalog.is_valid_index(idx):
+                cooldown_map = self.machine.config.get("cooldown_map", {})
+                cd_seconds = cooldown_map.get(idx, 900.0)
+                self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
+                dname = DungeonCatalog.get_name(idx)
+                logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定 [{dname}] (#{idx}) 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
         else:
             logging.warning("⚠️ 普通關卡戰敗放棄完成，重置戰敗計數並切換至 NAVIGATING。")
 
