@@ -40,6 +40,8 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("quest", "target_count"),
     ("quest", "stage_batch_size"),
     ("quest", "dungeon_batch_size"),
+    ("bounty_quests", "max_stage"),
+    ("bounty_quests", "max_dungeon"),
     ("catalog", "dungeon_names"),
     ("catalog", "dungeon_entry_templates"),
     ("catalog", "stage_templates"),
@@ -159,6 +161,7 @@ QUEST_MAX_RUN_LIMIT = _SETTINGS["quest"]["max_run_limit"]
 QUEST_TARGET_COUNT = _SETTINGS["quest"]["target_count"]
 QUEST_STAGE_BATCH_SIZE = _SETTINGS["quest"]["stage_batch_size"]
 QUEST_DUNGEON_BATCH_SIZE = _SETTINGS["quest"]["dungeon_batch_size"]
+BOUNTY_QUESTS_CONFIG = dict(_SETTINGS["bounty_quests"])
 
 DUNGEON_NAMES = _SETTINGS["catalog"]["dungeon_names"]
 DUNGEON_ENTRY_TEMPLATES = _SETTINGS["catalog"]["dungeon_entry_templates"]
@@ -231,6 +234,27 @@ def get_stamina_retreat_settings() -> dict:
     }
 
 
+def get_bounty_quest_config(profile: str | None = None) -> dict:
+    """Return [bounty_quests] settings for the active or specified profile."""
+    base = dict(_DEFAULTS_MANAGER.snapshot().get("bounty_quests", {}))
+    p = (profile or get_active_profile()).strip().lower()
+    target_path = get_profile_config_path(p)
+    if not target_path.exists():
+        return base
+
+    try:
+        import tomllib
+        with target_path.open("rb") as f:
+            data = tomllib.load(f)
+        override = data.get("bounty_quests")
+        if isinstance(override, dict):
+            base.update(override)
+    except Exception as e:
+        logging.warning("讀取 Profile [%s] bounty_quests 設定失敗: %s", p, e)
+
+    return base
+
+
 def normalize_config(config):
     """Populate the mode-independent equipment and activity defaults."""
     if not isinstance(config, dict):
@@ -289,6 +313,7 @@ def _reapply_all_settings(settings: dict) -> None:
     _replace_mapping(SUBFLOW_CONFIGS, settings["subflow_configs"])
     _replace_mapping(BACKPACK_FULL_SETTINGS, settings["backpack_full"])
     _replace_mapping(BASE_STAGE_LEVELS, settings["base_stage_levels"])
+    _replace_mapping(BOUNTY_QUESTS_CONFIG, settings.get("bounty_quests", {}))
     DEFAULT_DISASSEMBLE_COLORS = settings["defaults"]["disassemble_colors"]
     DEFAULT_KEEP_COLORS = settings["defaults"]["keep_colors"]
     DEFAULT_ACTIVITIES = settings["defaults"]["activities"]

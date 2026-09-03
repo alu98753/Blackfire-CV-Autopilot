@@ -24,6 +24,10 @@ target_count = 20
 stage_batch_size = 4
 dungeon_batch_size = 1
 
+[bounty_quests]
+max_stage = 6
+max_dungeon = 5
+
 [catalog]
 dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 dungeon_entry_templates = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]

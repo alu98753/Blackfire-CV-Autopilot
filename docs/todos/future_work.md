@@ -3,12 +3,21 @@
 本文件彙整《黑火遠征》專案的所有**待辦事項 (Active TODOs)**、**暫時擱置需求 (Shelved)** 與**已解決/已驗證項目 (Completed & Verified)**，作為長期維護與疊代之單一清單。
 
 ---
+## 已經完成 正在觀察
+
+- 應該要有個設定 filter 不能做的任務 我想法是根據不同模式 用toml 追蹤最高上限關卡 這樣就可以filter掉後面的
+- 像是stage 若只有到冰雪洞窟 那冰雪洞窟以上的任務就要filter(在接完任務後)
+dengeon同理
 
 ## 📌 一、 進行中與待開發項目 (Active TODOs)
 
-應該要有個設定 filter 不能做的任務 我想法是根據不同模式 用toml 追蹤最高上限關卡 這樣就可以filter掉後面的
-像是stage 若只有到冰雪洞窟 那冰雪洞窟以上的任務就要filter(在接完任務後)
-dengeon同理
+TODO : 關卡等沒看到 要向左滑動到底 直到看到第一關
+
+### 0. 📐 統一地下城與關卡編號為 1-based (消除 0-indexed 歷史包袱)
+- **需求背景**：目前關卡 (Stage) 為 1-based (1~6)，而地下城 (Dungeon) 為 0-based (0~5)。這導致 `defaults.toml` 出現 `max_stage = 6` 與 `max_dungeon = 5` 的直覺認知衝突，且多處需手動 `+1` / `-1` 補釘轉換，容易造成 Off-by-one 邊界錯誤。
+- **規劃方向**：
+  - 將地下城編號全面統一為 1-based (`1 ~ 6`)，與關卡編號對齊。
+  - 同步重構：`config/defaults.toml`、`user_data/*/config.toml`、`config/quest_rules.json` (dungeon_rules)、`utils/quest_mapper.py`、`cli/dungeon_setup.py`、`states/handlers/navigation.py` 及相關單元測試。
 
 因為我有所有角色的資料 所以實際上我可以做戰鬥系統 因為點擊是固定位置就不需要cv, 只需要專注在戰鬥
 

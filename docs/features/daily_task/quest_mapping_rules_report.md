@@ -117,3 +117,18 @@
 3. **情況 C：EasyOCR 錯別字誤判**（如 `直領` ➔ `首領`）
    開啟 [utils/quest_mapper.py](../../../utils/quest_mapper.py#L41)：
    - 於 `TYPO_GROUPS` 的 Key 下補充對應的 OCR 錯別字，系統自動進行清洗與正名。
+
+## 🛡️ 動態懸賞任務能力門檻篩選機制 (`[bounty_quests]`)
+
+為了解決小帳戰力不足（如無法戰勝第 6 關冰雪魔王或高階地下城）導致滅團死循環，系統支援獨立的 `[bounty_quests]` 配置表與多時機能力動態門閥：
+
+### 1. 配置規範 (`defaults.toml` & `user_data/<profile>/config.toml`)
+- **全域預設 ([config/defaults.toml](../../../config/defaults.toml))**：基準上限設為 `max_stage = 6` 與 `max_dungeon = 5`（全內容開放）。
+- **小帳 Profile 覆蓋 (`user_data/sandbox/config.toml`)**：可獨立覆寫自身戰力天花板（例如 `max_stage = 4, max_dungeon = 4`）。
+- **本帳 Profile (`user_data/native/config.toml`)**：設定為 `max_stage = 6, max_dungeon = 5`。
+
+### 2. 三時機能力門閥與防誤排機制
+1. **告示牌接取過濾**：於 [DailyManager.update_bulletin_board_quests()](../../../utils/daily_manager.py) 中，透過 `is_quest_allowed` 判定，超過當前角色上限的任務直接不寫入 `accepted_quests`。
+2. **磁碟熱重載感知 (`reload_status_if_modified`)**：若使用者手動修改 `daily_status.json`，系統自動比對時間戳即時重載，絕不以過期記憶體快取覆蓋手動修改。
+3. **排程器雙重門閥**：於 [QuestScheduler.from_daily_status](../../../utils/quest_scheduler.py) 與 `get_next_action_node` 逐一檢查任務，超標任務直接自執行佇列排除，杜絕任何滅團風險。
+
