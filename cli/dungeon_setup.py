@@ -3,21 +3,29 @@
 from cli.profile_updates import persist_mode_updates
 from cli.prompts import prompt_choice
 
-def setup_dungeon_config(config, args, interactive=True):
+def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
     """Build runtime paths; supervisor restarts reuse persisted policy values."""
+    allow_disable = allow_disable or config.get("_config_mode_key") == "daily"
     prompt_choice = globals()["prompt_choice"]
     if not interactive:
         prompt_choice = lambda _prompt, default: default
     original_settings = {
         key: config.get(key)
         for key in (
-            "greedy_dungeon", "tier4_dungeon_index", "greedy_allowed_indices",
+            "enable_dungeon", "greedy_dungeon", "tier4_dungeon_index", "greedy_allowed_indices",
             "bless_mode", "auto_resume_dungeon_on_cd",
         )
     }
+    is_dungeon_enabled = config.get("enable_dungeon", True)
     configured_index = config.get("tier4_dungeon_index", 5)
-    default_dungeon_choice = "7" if config.get("greedy_dungeon", False) else str(configured_index + 1)
-    if default_dungeon_choice not in {"1", "2", "3", "4", "5", "6", "7"}:
+    if allow_disable and not is_dungeon_enabled:
+        default_dungeon_choice = "8"
+    elif config.get("greedy_dungeon", False):
+        default_dungeon_choice = "7"
+    else:
+        default_dungeon_choice = str(configured_index + 1)
+    valid_choices = {"1", "2", "3", "4", "5", "6", "7", "8"} if allow_disable else {"1", "2", "3", "4", "5", "6", "7"}
+    if default_dungeon_choice not in valid_choices:
         default_dungeon_choice = "5"
 
     print("請選擇要探索的地下城：")
@@ -28,7 +36,20 @@ def setup_dungeon_config(config, args, interactive=True):
     print(f" 5) 幽暗監獄 (dark_prison) {'- 當前預設' if default_dungeon_choice == '5' else ''}")
     print(f" 6) 冰雪洞窟 (Ice_entry) {'- 當前預設' if default_dungeon_choice == '6' else ''}")
     print(f" 7) 自動貪婪挑選 (Greedy Select) {'- 當前預設' if default_dungeon_choice == '7' else ''}")
-    choice = prompt_choice(f"請輸入地下城數字 [1-7] (直接 Enter 鍵保持為 {default_dungeon_choice}): ", default_dungeon_choice)
+    if allow_disable:
+        print(f" 8) 不打地下城 (停用) {'- 當前預設' if default_dungeon_choice == '8' else ''}")
+    prompt_range = "[1-8]" if allow_disable else "[1-7]"
+    choice = prompt_choice(f"請輸入地下城數字 {prompt_range} (直接 Enter 鍵保持為 {default_dungeon_choice}): ", default_dungeon_choice)
+
+    if allow_disable and choice == "8":
+        config["enable_dungeon"] = False
+        if original_settings.get("enable_dungeon", True) is not False:
+            persist_mode_updates(config, {"enable_dungeon": False})
+        print("[*] 已設定：停用地下城，每日任務期間將跳過地下城挑戰。")
+        return config
+
+    if allow_disable:
+        config["enable_dungeon"] = True
 
     dungeon_map = {
         "1": ("dungeons/Slime_entry.png", "黏糊糊的石窟", False),
@@ -126,3 +147,5 @@ def setup_dungeon_config(config, args, interactive=True):
         print("[*] 已啟用：體力退避期間若地下城冷卻結束，將自動切回刷地下城。")
     else:
         print("[*] 未啟用：體力退避期間維持純定時領取，直到滿時間。")
+
+    return config

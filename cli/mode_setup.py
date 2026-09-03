@@ -47,7 +47,8 @@ def setup_mode_config(args):
             if config.get("enable_stage_farming", False):
                 setup_stage_config(config, interactive=False)
         elif args.mode == "daily":
-            setup_dungeon_config(config, args, interactive=False)
+            if config.get("enable_dungeon", True):
+                setup_dungeon_config(config, args, interactive=False, allow_disable=True)
             setup_daily_tier4_config(config, interactive=False)
             config["lobby_start_btn"] = "stages/start.png"
             config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
@@ -97,8 +98,11 @@ def setup_mode_config(args):
         print("\n[*] 【每日懸賞任務模式】週期活動會優先執行，Tier 4 僅在等待期間長駐：")
         print(f"    地下城：{'啟用' if config.get('enable_dungeon', True) else '停用（Profile TOML / CLI）'}")
         print(f"    Lord：{'啟用' if config.get('enable_lord_boss', True) else '停用（Profile TOML / CLI）'}")
-        if config.get("enable_dungeon", True):
-            setup_dungeon_config(config, args)
+        if getattr(args, "enable_dungeon", None) is False:
+            print("[*] 地下城已依 CLI 參數 (--no-dungeon) 停用。")
+            config["enable_dungeon"] = False
+        else:
+            setup_dungeon_config(config, args, allow_disable=True)
         setup_daily_tier4_config(config)
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]

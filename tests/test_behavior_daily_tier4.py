@@ -189,7 +189,7 @@ class TestDailyTier4Behavior(unittest.TestCase):
 
         cfg = setup_mode_config(args)
 
-        mock_setup_dungeon.assert_called_once_with(cfg, args)
+        mock_setup_dungeon.assert_called_once_with(cfg, args, allow_disable=True)
         mock_setup_tier4.assert_called_once_with(cfg)
 
 
