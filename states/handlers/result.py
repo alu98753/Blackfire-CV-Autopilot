@@ -16,6 +16,31 @@ class ResultHandler(BaseStateHandler):
         self.no_match_count = 0
         self._recorded_kill_for_current_battle = False
 
+    def _commit_lord_boss_result(self):
+        """Commit one verified fight and return control to the Boss workflow."""
+        boss_key = getattr(self.machine, "current_lord_boss_key", None)
+        if boss_key is None:
+            return False
+
+        daily_manager = getattr(self.machine, "daily_manager", None)
+        if daily_manager is not None:
+            daily_manager.record_lord_boss_fight(boss_key)
+        self.machine.current_lord_boss_key = None
+        self.reset_state()
+        self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+        return True
+
+    def _commit_demon_lords_result(self):
+        """Commit one verified fight and return control to the Demon Lords workflow."""
+        boss_key = getattr(self.machine, "current_demon_lord_key", None)
+        daily_manager = getattr(self.machine, "daily_manager", None)
+        if daily_manager is not None:
+            daily_manager.record_demon_lords_fight(boss_key)
+        self.machine.current_demon_lord_key = None
+        self.reset_state()
+        self.machine.transition_to(self.machine.STATE_DEMON_LORDS)
+        return True
+
     def _check_final_buttons_exist(self, screen_img, should_exit_battle):
         """檢查終局離場或再戰按鈕是否已經出現在畫面上"""
         if should_exit_battle:
@@ -82,6 +107,61 @@ class ResultHandler(BaseStateHandler):
                         self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
                         return True
 
+        # Lord Boss may return directly to its lobby after the last Continue.
+        # Treat that lobby as terminal evidence before the continue loop waits.
+        is_lord_boss_result = (
+            cur_type == "lord_boss"
+            or "lord_boss" in (getattr(self.machine, "dev_subflows", []) or [])
+            or getattr(self.machine, "current_lord_boss_key", None) is not None
+        )
+        if is_lord_boss_result and os.path.exists(
+            os.path.join("templates", "load/Lord_entry_after.png")
+        ):
+            pos_l, conf_l = self.matcher.match(
+                screen_img,
+                "load/Lord_entry_after.png",
+                threshold=0.80,
+                brightness_threshold=0.70,
+                quiet=True,
+            )
+            if pos_l:
+                logging.info(
+                    "Lord Boss result completed: returned to lobby "
+                    "[load/Lord_entry_after.png] (confidence: %.4f).",
+                    conf_l,
+                )
+                if not self._commit_lord_boss_result():
+                    self.reset_state()
+                    self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+                return True
+
+        # Demon Lords may return directly to its lobby after the last Continue.
+        is_demon_lords_result = (
+            cur_type == "demon_lords"
+            or "demon_lords" in (getattr(self.machine, "dev_subflows", []) or [])
+            or getattr(self.machine, "current_demon_lord_key", None) is not None
+        )
+        if is_demon_lords_result and os.path.exists(
+            os.path.join("templates", "demon_lords/demon_lords_entry_after.png")
+        ):
+            pos_dl, conf_dl = self.matcher.match(
+                screen_img,
+                "demon_lords/demon_lords_entry_after.png",
+                threshold=0.80,
+                brightness_threshold=0.70,
+                quiet=True,
+            )
+            if pos_dl:
+                logging.info(
+                    "Demon Lords result completed: returned to lobby "
+                    "[demon_lords/demon_lords_entry_after.png] (confidence: %.4f).",
+                    conf_dl,
+                )
+                if not self._commit_demon_lords_result():
+                    self.reset_state()
+                    self.machine.transition_to(self.machine.STATE_DEMON_LORDS)
+                return True
+
         # =========================================================================
         # 步驟 1：結算初登場沉澱 (INIT_DELAY)
         # =========================================================================
@@ -105,16 +185,10 @@ class ResultHandler(BaseStateHandler):
                     self.machine.config.get("type") == "dungeon" or
                     getattr(self.machine, "is_in_dungeon", False)
                 )
-                is_domain = (
-                    self.machine.config.get("type") == "domain" or
-                    bool(self.machine.config.get("domain"))
+                from config import BATTLE_MAX_DEFEAT
+                max_defeat = self.machine.config.get(
+                    "battle_max_defeat", BATTLE_MAX_DEFEAT
                 )
-                if is_dungeon:
-                    max_defeat = 2
-                elif is_domain:
-                    max_defeat = self.machine.config.get("domain_max_defeat", 5)
-                else:
-                    max_defeat = self.machine.config.get("stage_max_defeat", 2)
                 
                 if self.machine.defeat_count >= (max_defeat - 1):
                     self.reset_state()
@@ -166,8 +240,10 @@ class ResultHandler(BaseStateHandler):
         # 計算是否滿足離場條件 (第 4、8、10 場 / 滿背包 / 體力退避等)
         is_daily = self.machine.is_daily_pipeline_active()
         boss_available = False
+        demon_available = False
         if is_daily and getattr(self.machine, "daily_manager", None):
             dm = self.machine.daily_manager
+            demon_available = getattr(self.machine, "has_available_demon_lords", lambda: False)()
             boss_available = self.machine.has_available_selected_lord_boss()
 
         is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
@@ -189,6 +265,8 @@ class ResultHandler(BaseStateHandler):
         )
         if daily_quest_ready_to_preempt_tier4:
             logging.info("📋 [Tier 4 插隊] 偵測到 Daily 懸賞任務冷卻結束；本場結算後離場並切回懸賞任務。")
+        elif is_daily and demon_available:
+            logging.info("👑 [Tier 4 插隊] 偵測到深淵魔王次數未用盡；本場結算後離場並切回魔王討伐。")
         elif is_daily and boss_available:
             logging.info("⚔️ [Tier 4 插隊] 偵測到領主 Boss 冷卻結束可挑戰；本場結算後離場並切回 Boss 討伐。")
 
@@ -199,6 +277,7 @@ class ResultHandler(BaseStateHandler):
             self.machine.need_diamond_collection or 
             (self.machine.enable_bread and self.machine.need_bread_collection) or
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
+            (is_daily and demon_available) or
             (is_daily and boss_available) or
             daily_quest_ready_to_preempt_tier4 or
             (is_daily and quest_batch_completed and not is_in_tier4) or
@@ -244,13 +323,6 @@ class ResultHandler(BaseStateHandler):
                     timeout=5.0, threshold=0.9, brightness_threshold=0.70, check_interval=0.25, post_delay=0.8, retry_interval=1.0
                 )
 
-                if getattr(self.machine, "current_lord_boss_key", None):
-                    b_key = self.machine.current_lord_boss_key
-                    self.machine.current_lord_boss_key = None
-                    dm = getattr(self.machine, "daily_manager", None)
-                    if dm:
-                        dm.record_lord_boss_fight(b_key)
-
                 return True
 
             # 2. 若畫面上已無 continue 按鈕，檢查是否有通用 confirm.png
@@ -293,15 +365,11 @@ class ResultHandler(BaseStateHandler):
                             logging.info(f"👉 [結算子流程 Step 3] 離場條件成立 (第 4/8/10 場或需領獎)，發現離場按鈕 [{exit_btn}] ({conf_exit:.4f})，點擊退出戰鬥 (配對確認直到消失)...")
                             self.click_and_wait_until_gone(exit_btn, rect["left"] + pos_exit[0], rect["top"] + pos_exit[1], rect)
                             self.machine.is_in_dungeon = False
-                            self.reset_state()
-
-                            if getattr(self.machine, "current_lord_boss_key", None):
-                                b_key = self.machine.current_lord_boss_key
-                                self.machine.current_lord_boss_key = None
-                                if getattr(self.machine, "daily_manager", None):
-                                    self.machine.daily_manager.record_lord_boss_fight(b_key)
-
                             self.machine.pending_daily_reset_exit = False
+                            if self._commit_lord_boss_result():
+                                return True
+
+                            self.reset_state()
                             next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
                             self.machine.transition_to(next_state)
                             return True
@@ -319,18 +387,6 @@ class ResultHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_LOADING)
                     return True
 
-        # 結算如果看到 Lord_entry_after 且屬於 lord_boss 模式
-        cur_type = self.machine.config.get("type") if self.machine.config else None
-        dev_subflows = getattr(self.machine, "dev_subflows", []) or []
-        if cur_type == "lord_boss" or "lord_boss" in dev_subflows:
-            if os.path.exists(os.path.join("templates", "load/Lord_entry_after.png")):
-                pos_l, conf_l = self.matcher.match(screen_img, "load/Lord_entry_after.png", threshold=0.80, brightness_threshold=0.70, quiet=True)
-                if pos_l:
-                    logging.info(f"👉 結算辨識 (Lord Boss 模式)：偵測到已切回大廳 [load/Lord_entry_after.png] (相似度: {conf_l:.4f})，結束結算。")
-                    self.reset_state()
-                    self.machine.transition_to(self.machine.STATE_LORD_BOSS)
-                    return True
-
         # 領地模式 (Domain Mode)：結算完成後切回 DOMAIN_EXPLORE
         if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
             logging.info("👉 結算辨識 (領地模式)：戰鬥結算已結束，轉移回 DOMAIN_EXPLORE 繼續探索。")
@@ -345,7 +401,6 @@ class ResultHandler(BaseStateHandler):
                 pos_auto, conf_auto = self.matcher.match(screen_img, feat, threshold=thresh)
                 if pos_auto:
                     logging.info(f"⚔️ 結算畫面偵測到戰鬥特徵 [{feat}] (相似度: {conf_auto:.4f})，判定已進入戰鬥，將狀態切換至 BATTLE。")
-                    self.machine.battle_start_time = time.time()
                     self.machine.transition_to(self.machine.STATE_BATTLE)
                     return True
 

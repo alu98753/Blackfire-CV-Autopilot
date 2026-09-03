@@ -4,6 +4,8 @@ from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional
 from vision.matcher import TemplateMatcher
+from utils.detector_registry import DetectorGroup, DetectorRegistry
+from utils.scene_snapshot import DetectionProfileId
 
 
 class SceneType(Enum):
@@ -35,22 +37,53 @@ class SceneInfo:
 class SceneDetector:
     def __init__(self, matcher: Optional[TemplateMatcher] = None):
         self.matcher = matcher or TemplateMatcher()
+        self.registry = DetectorRegistry()
+        self._active_profile = DetectionProfileId.UNKNOWN
+        self._runtime_templates = {}
+        self._frame_match_cache = {}
 
     def _safe_match(self, screen_img, template_name: str, threshold: float = 0.8) -> Tuple[Optional[Tuple[int, int]], float]:
         """
         安全包裝 TemplateMatcher.match()，相容包含 MagicMock 在內的各類回傳結構。
         """
+        if not self.registry.allows_template(
+            self._active_profile, template_name, self._runtime_templates
+        ):
+            return None, 0.0
+        cache_key = (template_name, float(threshold))
+        if cache_key in self._frame_match_cache:
+            return self._frame_match_cache[cache_key]
         res = self.matcher.match(screen_img, template_name, threshold=threshold)
         if isinstance(res, (tuple, list)) and len(res) >= 2:
-            return res[0], float(res[1]) if res[1] is not None else 0.0
-        return None, 0.0
+            match = (res[0], float(res[1]) if res[1] is not None else 0.0)
+        else:
+            match = (None, 0.0)
+        self._frame_match_cache[cache_key] = match
+        return match
 
-    def detect(self, screen_img, machine_state=None, machine=None) -> SceneInfo:
+    def detect(
+        self,
+        screen_img,
+        machine_state=None,
+        machine=None,
+        profile=DetectionProfileId.UNKNOWN,
+    ) -> SceneInfo:
         """
         偵測傳入畫面 screen_img 之完整場景資訊與 UI 頁籤狀態。
         嚴格遵循 階段0 ➔ 階段1 ➔ 階段2 ➔ 階段3 ➔ 階段4 之優先順序。
         """
+        self._active_profile = profile
+        self._frame_match_cache = {}
+        self._runtime_templates = self._build_runtime_templates(machine)
         scene_info = SceneInfo(scene_type=SceneType.UNKNOWN)
+        if profile == DetectionProfileId.TOWN:
+            scene_info.is_town = True
+        elif profile in {
+            DetectionProfileId.LOBBY,
+            DetectionProfileId.STAGE_SELECT,
+            DetectionProfileId.DUNGEON_SELECT,
+        }:
+            scene_info.is_lobby = True
 
         # 0. 全域最高優先防護與視窗狀態
         if os.path.exists(os.path.join("templates", "task_complete.png")):
@@ -119,6 +152,15 @@ class SceneDetector:
         if pos_goback or pos_bread_btn:
             scene_info.is_lobby = True
 
+        if scene_info.is_lobby and os.path.exists(os.path.join("templates", "common/quit.png")):
+            pos_quit, conf_quit = self._safe_match(
+                screen_img,
+                "common/quit.png",
+                threshold=0.75,
+            )
+            if pos_quit:
+                scene_info.matched_elements["common/quit.png"] = (pos_quit, conf_quit)
+
         if scene_info.is_town:
             scene_info.scene_type = SceneType.TOWN
             return scene_info
@@ -126,10 +168,11 @@ class SceneDetector:
         lobby_start_btn = "stages/start.png"
         if machine and getattr(machine, "config", None):
             lobby_start_btn = machine.config.get("lobby_start_btn", lobby_start_btn)
-        if scene_info.is_lobby and os.path.exists(os.path.join("templates", lobby_start_btn)):
+        if os.path.exists(os.path.join("templates", lobby_start_btn)):
             pos_start, conf_start = self._safe_match(screen_img, lobby_start_btn, threshold=0.8)
             if pos_start:
                 scene_info.scene_type = SceneType.LOBBY_OTHER
+                scene_info.is_lobby = True
                 scene_info.matched_elements[lobby_start_btn] = (pos_start, conf_start)
                 return scene_info
 
@@ -137,9 +180,11 @@ class SceneDetector:
         stage_select_open = False
         dungeon_select_open = False
 
-        res_tabs = self.matcher.match_mutually_exclusive_tabs(
-            screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
-        )
+        res_tabs = None
+        if self.registry.allows_group(profile, DetectorGroup.TABS):
+            res_tabs = self.matcher.match_mutually_exclusive_tabs(
+                screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
+            )
         if isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4 and type(res_tabs).__name__ != "MagicMock":
             stage_select_open, dungeon_select_open, _, _ = res_tabs
         else:
@@ -191,3 +236,17 @@ class SceneDetector:
             scene_info.scene_type = SceneType.LOBBY_OTHER
 
         return scene_info
+
+    @staticmethod
+    def _build_runtime_templates(machine):
+        if machine is None or not getattr(machine, "config", None):
+            return {}
+        config = machine.config
+        templates = {
+            config.get("lobby_start_btn", "stages/start.png"): DetectorGroup.LOBBY
+        }
+        for template in config.get("stage_templates", []):
+            templates[template] = DetectorGroup.TABS
+        for template in config.get("dungeon_entries", []):
+            templates[template] = DetectorGroup.TABS
+        return templates

@@ -28,6 +28,8 @@ def parse_arguments():
                         default=None, help="啟用/停用普通關卡打怪 (stage farming)")
     parser.add_argument("--town", dest="enable_town_daily", action=argparse.BooleanOptionalAction,
                         default=None, help="啟用/停用每日城鎮速領 (chest, hero, altar, jewelry)")
+    parser.add_argument("--demon-lords", dest="enable_demon_lords", action=argparse.BooleanOptionalAction,
+                        default=None, help="啟用/停用深淵魔王討伐 (demon lords)")
     parser.add_argument("--profile", type=str, default=None,
                         help="指定帳號配置名稱 (例如 native, sandbox, acc2)，將自動綁定 user_data/<profile>/ (包含專屬 config.toml 與 daily_status.json)")
     parser.add_argument(

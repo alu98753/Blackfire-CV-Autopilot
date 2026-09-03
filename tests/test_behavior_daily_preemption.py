@@ -134,6 +134,61 @@ class TestDailyQuestPreemptionBehavior(unittest.TestCase):
         self.assertTrue(machine.config.get("is_tier4_fallback", False))
         self.assertEqual(machine.config.get("name"), self.primary_config["name"])
 
+    def test_completed_memory_projection_rebuilds_when_accepted_quest_remains(self):
+        """Persisted accepted quests prevent a stale scheduler from entering Tier 4."""
+        machine = self._tier4_machine()
+        stale_task = self.mapper.parse_quest("清除蜥蜴")
+        stale_task.completed_count = stale_task.target_count
+        stale_scheduler = QuestScheduler()
+        stale_scheduler.add_task(stale_task)
+        machine.attach_quest_scheduler(stale_scheduler)
+
+        manager = MagicMock()
+        manager.status = {
+            "subflows": {
+                "bulletin_board": {"accepted_quests": ["清除蜥蜴"]}
+            }
+        }
+        manager.load_quest_scheduler.side_effect = lambda: (
+            QuestScheduler.from_daily_status(
+                manager.status["subflows"]["bulletin_board"]["accepted_quests"],
+                daily_manager=manager,
+            )
+        )
+        machine.daily_manager = manager
+
+        scheduled = machine.check_and_advance_quest_target()
+
+        self.assertIsNotNone(scheduled)
+        self.assertEqual(scheduled.quest_title, "清除蜥蜴")
+        self.assertIsNot(machine.quest_scheduler, stale_scheduler)
+        self.assertFalse(machine.quest_scheduler.is_all_completed())
+        self.assertFalse(machine.config.get("is_tier4_fallback", False))
+
+    def test_unresolved_persisted_quest_cannot_be_declared_complete(self):
+        """A failed projection rebuild must keep persisted work pending."""
+        machine = self._tier4_machine()
+        completed = self.mapper.parse_quest("清除蜥蜴")
+        completed.completed_count = completed.target_count
+        stale_scheduler = QuestScheduler()
+        stale_scheduler.add_task(completed)
+        machine.attach_quest_scheduler(stale_scheduler)
+        machine.set_config(completed.to_config_dict(base_config=self.primary_config))
+
+        manager = MagicMock()
+        manager.status = {
+            "subflows": {
+                "bulletin_board": {"accepted_quests": ["尚未支援的任務"]}
+            }
+        }
+        manager.load_quest_scheduler.return_value = QuestScheduler()
+        machine.daily_manager = manager
+
+        self.assertIsNone(machine.check_and_advance_quest_target())
+
+        self.assertIsNotNone(machine.quest_scheduler)
+        self.assertFalse(machine.config.get("is_tier4_fallback", False))
+
     def test_advancing_when_all_tasks_cooling_switches_to_tier4_fallback(self):
         """When all remaining quests are on cooldown, machine must fall back to Tier 4."""
         machine = self._tier4_machine()

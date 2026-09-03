@@ -1,3 +1,3 @@
-display_name: Project Test Rules
-short_description: Run this project's standard unittest suite.
-default_prompt: Use the repository-standard unittest discovery command and report any environment blockers precisely.
+display_name: Project Focused Test Rules
+short_description: Guidelines for running focused unittest modules.
+default_prompt: Run only the smallest directly relevant test method or class, and remind the user to run the full suite.

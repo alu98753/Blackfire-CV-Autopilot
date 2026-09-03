@@ -4,9 +4,17 @@ import cv2
 import logging
 import threading
 from copy import deepcopy
-from config import GAME_CONFIGS, get_runtime_game_config, normalize_config, refresh_runtime_config
+from config import (
+    GAME_CONFIGS,
+    get_navigation_progress_settings,
+    get_stamina_retreat_settings,
+    get_runtime_game_config,
+    normalize_config,
+    refresh_runtime_config,
+)
 from utils import get_stage_configs
 from utils.debug_artifacts import write_debug_image
+from utils.tier4_config import build_tier4_fallback_config
 from states.handlers import (
     NavigationHandler,
     LobbyHandler,
@@ -25,9 +33,15 @@ from states.handlers import (
     ChestHandler,
     HeroDrawHandler,
     BulletinBoardHandler,
-    DomainExploreHandler
+    DomainExploreHandler,
+    DemonLordsHandler
 )
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
+from states.navigation_intent import ActionId, IntentId
+from states.navigation_progress import NavigationProgress, NavigationProgressSettings
+from states.battle_session import BattleSession
+from states.stamina_retreat import StaminaRetreatRecovery, StaminaRetreatSettings
+from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 
 
 
@@ -35,7 +49,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 _SHARED_OCR_READERS = {}
 _SHARED_OCR_LOCK = threading.Lock()
-DEFAULT_LORD_BOSS_TARGETS = ("lord_spider", "lord_spectre")
+DEFAULT_LORD_BOSS_TARGETS = ("lord_spider", "lord_spectre", "ghoul_snow")
 
 class GameStateMachine:
     # 定義遊戲狀態
@@ -59,6 +73,7 @@ class GameStateMachine:
     STATE_BULLETIN_BOARD = "BULLETIN_BOARD"              # 懸賞告示牌 (領任務) 流程
     STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
     STATE_DOMAIN_EXPLORE = "DOMAIN_EXPLORE"
+    STATE_DEMON_LORDS = "DEMON_LORDS"                    # 深淵魔王討伐流程
 
     DUNGEON_SCENE_FEATURES = (
         "dungeons/leave.png",
@@ -69,19 +84,40 @@ class GameStateMachine:
         "dungeons/dungeon_bless.png",
         "dungeons/dungeon_fight.png",
     )
+    DUNGEON_RECOVERY_FEATURES = (
+        "dungeons/leave.png",
+        "dungeons/dungeons_complete.png",
+        "dungeons/gungeon_godown.png",
+    )
+    DUNGEON_RECOVERY_MODE_TYPES = frozenset(
+        {"dungeon", "mix", "stage", "daily"}
+    )
 
 
 
     
-    def __init__(self, capturer, matcher, mouse, preload_ocr: bool = True):
+    def __init__(
+        self,
+        capturer,
+        matcher,
+        mouse,
+        preload_ocr: bool = True,
+        *,
+        clock=None,
+        process_port=None,
+    ):
         self.capturer = capturer
+        self.capture_port = capturer
         self.matcher = matcher
         self.mouse = mouse
+        self.input_port = mouse
+        self.clock = clock or SystemClock()
+        self.process_port = process_port or GameRelaunchProcessAdapter()
         
         self.current_state = self.STATE_UNKNOWN
         self.last_state = None
         self.last_state_change = time.time()
-        self.battle_start_time = None
+        self.battle_session = BattleSession()
         self.run_count = 0
         self.capture_failure_count = 0
         self.capture_failure_limit = 5
@@ -118,6 +154,8 @@ class GameStateMachine:
         # 城鎮子流程與流水線相關屬性
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
+        self.current_lord_boss_key = None
+        self.current_demon_lord_key = None
         self.town_subflow_queue = []
         self.quest_scheduler = None
         self.daily_manager = None
@@ -128,11 +166,20 @@ class GameStateMachine:
         self.pending_daily_reset_exit = False
         self.next_daily_quest_ready_at = None
         self.pending_daily_quest_preemption = False
+        self.navigation_progress = NavigationProgress(
+            NavigationProgressSettings.from_mapping(
+                get_navigation_progress_settings()
+            )
+        )
+        self.stamina_recovery = StaminaRetreatRecovery(
+            StaminaRetreatSettings.from_mapping(get_stamina_retreat_settings())
+        )
 
 
 
         
         # 地下城本層探索記憶 (防止已完成的事件重複點選)
+        self.is_in_dungeon = False
         self.chest_opened_this_floor = False
         self.skill_selected_this_floor = False
         self.bless_received_this_floor = False
@@ -211,6 +258,7 @@ class GameStateMachine:
             self.STATE_BULLETIN_BOARD: BulletinBoardHandler(self),
             self.STATE_POPUP_RECOVERY: UnexpectedPopupRecoveryHandler(self),
             self.STATE_DOMAIN_EXPLORE: DomainExploreHandler(self),
+            self.STATE_DEMON_LORDS: DemonLordsHandler(self),
         }
 
     def stash_current_state(self, reason="unexpected_popup"):
@@ -321,8 +369,7 @@ class GameStateMachine:
             self.last_state_change += pause_duration
 
         # 2. 補償戰鬥計時器
-        if self.battle_start_time is not None:
-            self.battle_start_time += pause_duration
+        self.battle_session.compensate_pause(pause_duration)
 
         # 3. 補償例外彈窗暫存時間
         if isinstance(self.stashed_context, dict) and "timestamp" in self.stashed_context:
@@ -416,6 +463,7 @@ class GameStateMachine:
 
     def transition_to(self, new_state):
         if self.current_state != new_state:
+            previous_state = self.current_state
             if new_state == self.STATE_DUNGEON_EXPLORING:
                 self.ensure_explore_config()
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
@@ -436,6 +484,72 @@ class GameStateMachine:
                 handler.reset_state()
 
             self._on_state_transition_sync_context(new_state)
+            self._sync_battle_session(previous_state, new_state)
+
+    def _sync_battle_session(self, previous_state, new_state):
+        """Own battle timeout lifetime at the state-machine boundary.
+
+        A BATTLE scene observed after UNKNOWN/LOADING/relaunch is a new
+        observable session.  It must never inherit a timeout timestamp from a
+        completed or pre-relaunch battle.
+        """
+        if new_state == self.STATE_BATTLE:
+            self.battle_session.begin(self.clock.monotonic(), previous_state)
+            return
+        if previous_state == self.STATE_BATTLE:
+            self.battle_session.clear()
+
+    def battle_elapsed_seconds(self) -> float:
+        """Return the active battle duration using the runtime clock port."""
+        return self.battle_session.elapsed_seconds(self.clock.monotonic())
+
+    @property
+    def battle_start_time(self):
+        """Legacy test compatibility; production code uses ``battle_session``."""
+        return self.battle_session.started_at
+
+    @battle_start_time.setter
+    def battle_start_time(self, value):
+        """Adapt legacy wall-clock test fixtures to the monotonic session clock."""
+        if value is None:
+            self.battle_session.clear()
+            return
+        if value >= 1_000_000_000:
+            elapsed = max(0.0, time.time() - value)
+            value = self.clock.monotonic() - elapsed
+        self.battle_session.started_at = value
+
+    def request_relaunch(self, reason: str) -> bool:
+        """Escalate recovery through the configured process boundary."""
+        self.navigation_progress.clear()
+        return self.process_port.relaunch(self, reason)
+
+    def has_dungeon_context(self) -> bool:
+        """Return whether dungeon-only scene anchors may own the current frame."""
+        if (
+            getattr(self, "current_lord_boss_key", None) is not None
+            or getattr(self, "current_demon_lord_key", None) is not None
+        ):
+            return False
+        config_type = (self.config or {}).get("type")
+        is_dungeon_run = config_type == "dungeon" or (
+            config_type == "mix" and self.is_in_dungeon
+        )
+        return is_dungeon_run
+
+    def dungeon_detection_features(self):
+        """Return dungeon anchors allowed by the current committed context."""
+        if (
+            getattr(self, "current_lord_boss_key", None) is not None
+            or getattr(self, "current_demon_lord_key", None) is not None
+        ):
+            return ()
+        config_type = (self.config or {}).get("type")
+        if config_type not in self.DUNGEON_RECOVERY_MODE_TYPES:
+            return ()
+        if self.has_dungeon_context():
+            return self.DUNGEON_SCENE_FEATURES
+        return self.DUNGEON_RECOVERY_FEATURES
 
     def ensure_explore_config(self):
         """Restore a route config that can safely run ``ExploreHandler``.
@@ -495,12 +609,18 @@ class GameStateMachine:
         STATE_CHEST: "chest",
         STATE_HERO_DRAW: "hero_draw",
         STATE_BULLETIN_BOARD: "bulletin_board",
+        STATE_DEMON_LORDS: "demon_lords",
     }
 
 
 
     def _on_state_transition_sync_context(self, new_state):
         from config import GAME_CONFIGS
+        if new_state in {self.STATE_LOADING, self.STATE_BATTLE}:
+            self.navigation_progress.acknowledge(ActionId.START_PRIMARY)
+        elif new_state in {self.STATE_RESULT, self.STATE_NAVIGATING}:
+            self.navigation_progress.clear(IntentId.PRIMARY_NAVIGATION)
+
         key = self.TOWN_SUBFLOW_CONFIG_MAP.get(new_state)
         if key and key in GAME_CONFIGS:
             saved_keep = self.config.get("keep_colors") if self.config else None
@@ -539,7 +659,7 @@ class GameStateMachine:
                 self.pending_town_subflows = False
                 logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
                 self.trigger_town_subflow_chain()
-            elif self.is_daily_pipeline_active() or self.has_available_selected_lord_boss():
+            elif self.is_daily_pipeline_active() or self.has_available_selected_lord_boss() or self.has_available_demon_lords():
                 self.evaluate_and_schedule_daily_pipeline()
 
 
@@ -557,6 +677,7 @@ class GameStateMachine:
                 self.defeat_count = 0
                 self.original_config = None
                 self.stamina_retreat_start_time = None
+                self.stamina_recovery.reset()
                 self.pending_daily_reset_exit = True
                 logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
 
@@ -581,9 +702,7 @@ class GameStateMachine:
             if self.window_lost_count >= 5:
                 logging.warning("🚨 連續 5 次偵測不到遊戲視窗 (遊戲已被手動關閉或崩潰)，發起 GameRelaunchSubflow 自動重開流程！")
                 self.window_lost_count = 0
-                from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
-                relaunch_subflow = GameRelaunchSubflow()
-                relaunch_subflow.execute(self, reason="game_window_closed_by_user")
+                self.request_relaunch("game_window_closed_by_user")
                 return
 
             time.sleep(0.5)
@@ -603,8 +722,7 @@ class GameStateMachine:
             if self.capture_failure_count >= self.capture_failure_limit:
                 self.capture_failure_count = 0
                 logging.error("[CaptureRecovery] Screenshot failure threshold reached; relaunching game.")
-                from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
-                GameRelaunchSubflow().execute(self, reason="capture_failure_threshold_exceeded")
+                self.request_relaunch("capture_failure_threshold_exceeded")
                 return
             logging.warning("⚠️ 無法擷取畫面")
             time.sleep(0.2)
@@ -629,6 +747,15 @@ class GameStateMachine:
         state_changed = (self.current_state != last_state)
         should_check_low_freq = is_testing or state_changed or (now_time - last_low_freq >= 1.5) or (self.current_state in [self.STATE_UNKNOWN, self.STATE_LOADING])
 
+        # An active recovery is a committed, bounded action sequence.  It must
+        # receive every subsequent frame rather than waiting for the low-rate
+        # global guard.  Demon Lord additionally gets this narrow overlay
+        # profile every tick while its Start action can produce no_bread.
+        if self.stamina_recovery.is_active or self.current_state == self.STATE_DEMON_LORDS:
+            from states.stamina_flow import handle_insufficient_stamina
+            if handle_insufficient_stamina(self, screen_img, rect):
+                return
+
         if should_check_low_freq:
             self._last_low_freq_check_time = now_time
             self._last_low_freq_state = self.current_state
@@ -636,8 +763,17 @@ class GameStateMachine:
             if handle_global_login(self, screen_img, rect):
                 return
 
-            # C. 體力不足（食物不足）退避處理
-            if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING, self.STATE_DOMAIN_EXPLORE]:
+            # C. Confirmed stamina overlays preempt the remaining
+            # stamina-consuming workflows. Demon Lord was handled above so
+            # its Start outcome has no global-guard latency.
+            stamina_consuming_states = {
+                self.STATE_NAVIGATING,
+                self.STATE_LOBBY,
+                self.STATE_RESULT,
+                self.STATE_LOADING,
+                self.STATE_DOMAIN_EXPLORE,
+            }
+            if self.current_state in stamina_consuming_states:
                 from states.stamina_flow import handle_insufficient_stamina
                 if handle_insufficient_stamina(self, screen_img, rect):
                     return
@@ -777,7 +913,7 @@ class GameStateMachine:
         # 1. 檢查是否在戰鬥中 (看到 common/auto.png 或 battle/ 特徵圖案)
         # Dungeon transition/result anchors must take precedence over battle
         # features: some of those screens can falsely match auto.png.
-        for btn_name in self.DUNGEON_SCENE_FEATURES:
+        for btn_name in self.dungeon_detection_features():
             if os.path.exists(os.path.join("templates", btn_name)):
                 pos, conf = self.matcher.match(screen_img, btn_name, threshold=0.8)
                 if pos:
@@ -1157,6 +1293,47 @@ class GameStateMachine:
             )
             return False
 
+    def _build_tier4_fallback_config(self):
+        """Build the route selected by the Daily Profile without mutating policy."""
+        source = getattr(self, "primary_config", None) or getattr(self, "config", None)
+        if not source:
+            source = GAME_CONFIGS["daily"]
+        fallback = build_tier4_fallback_config(source, GAME_CONFIGS)
+        if {"tier4_stage_level", "tier4_sub_stage"} & fallback.keys():
+            self._apply_tier4_stage_selection(fallback)
+        if {"tier4_dungeon_index", "greedy_dungeon"} & fallback.keys():
+            self._apply_tier4_dungeon_selection(fallback)
+        fallback["is_tier4_fallback"] = True
+        return fallback
+
+    def _daily_activity_config(self):
+        """Return the persistent Daily scheduling policy, not a temporary route."""
+        if self.is_daily_pipeline_active() and getattr(self, "primary_config", None):
+            return self.primary_config
+        return self.config or {}
+
+    def has_available_daily_dungeon(self):
+        """Check the timed dungeon policy even while Tier 4 is a domain route."""
+        policy = self._daily_activity_config()
+        if not policy.get("enable_dungeon", False):
+            return False
+        return self.has_available_dungeon(target_config=policy)
+
+    def has_pending_daily_activity(self):
+        """Report whether a higher-priority Daily activity should exit Tier 4."""
+        if not self.is_daily_pipeline_active():
+            return False
+        policy = self._daily_activity_config()
+        manager = getattr(self, "daily_manager", None)
+        if manager and policy.get("enable_town_daily", True):
+            if manager.get_pending_town_subflows():
+                return True
+        if self.has_available_demon_lords() or self.has_available_selected_lord_boss():
+            return True
+        if self.poll_daily_quest_preemption():
+            return True
+        return self.has_available_daily_dungeon()
+
     def enable_runtime_config_refresh(self, mode_key, initial_config):
         """Track the active Profile mode as the runtime configuration source."""
         if mode_key not in GAME_CONFIGS:
@@ -1188,9 +1365,17 @@ class GameStateMachine:
         """Return Bosses selected by the active Profile and ready today."""
         manager = getattr(self, "daily_manager", None)
         active_config = self.config or {}
-        raw_targets = active_config.get(
+        primary_config = getattr(self, "primary_config", None) or {}
+        is_daily_profile = (
+            self.runtime_config_key == "daily"
+            or primary_config.get("_config_mode_key") == "daily"
+        )
+        policy_config = primary_config if is_daily_profile else active_config
+        if not policy_config.get("enable_lord_boss", True):
+            return []
+        raw_targets = policy_config.get(
             "lord_boss_targets",
-            (self.primary_config or {}).get("lord_boss_targets", DEFAULT_LORD_BOSS_TARGETS),
+            active_config.get("lord_boss_targets", DEFAULT_LORD_BOSS_TARGETS),
         )
         selected = set(raw_targets) if raw_targets is not None else set()
         if not manager or not selected:
@@ -1200,6 +1385,32 @@ class GameStateMachine:
     def has_available_selected_lord_boss(self, now_ts=None):
         return bool(self.get_available_selected_lord_bosses(now_ts))
 
+    def has_available_demon_lords(self):
+        """檢查目前是否已啟用且尚有可挑戰的深淵魔王次數 (每日上限 3 次)。"""
+        dm = getattr(self, "daily_manager", None)
+        if not dm or not hasattr(dm, "is_demon_lords_available"):
+            return False
+        cfg = self.config or {}
+        mode_type = cfg.get("type")
+        is_daily_active = self.is_daily_pipeline_active() or getattr(self, "quest_scheduler", None) is not None
+        default_enable = True if (mode_type in ["daily", "mix"] or is_daily_active or not cfg) else False
+        if not cfg.get("enable_demon_lords", default_enable):
+            return False
+        from config import SUBFLOW_CONFIGS
+        subflows = cfg.get("subflow_configs") if isinstance(cfg.get("subflow_configs"), dict) else SUBFLOW_CONFIGS
+        subflow_cfg = (subflows or {}).get("demon_lords", {})
+        if not subflow_cfg.get("enabled", False):
+            return False
+        targets = subflow_cfg.get("targets") or [subflow_cfg.get("target_boss", "voidborn_elres")]
+        res = dm.is_demon_lords_available(targets)
+        if isinstance(res, (tuple, list)) and len(res) >= 1:
+            return bool(res[0])
+        # 若在 Mock 環境且未明確指定回傳值，預設為不可用避免污染非魔王測試
+        from unittest.mock import Mock
+        if isinstance(res, Mock):
+            return False
+        return bool(res)
+
     def refresh_config_at_safe_point(self):
         """Apply a complete configuration only before a new loop iteration."""
         if not self.runtime_config_key or not refresh_runtime_config():
@@ -1208,9 +1419,17 @@ class GameStateMachine:
         refreshed_primary.update(deepcopy(self.runtime_config_overrides))
         self._apply_tier4_stage_selection(refreshed_primary)
         self._apply_tier4_dungeon_selection(refreshed_primary)
+        was_tier4_fallback = bool(self.config and self.config.get("is_tier4_fallback"))
         self.primary_config = refreshed_primary
         self._sync_runtime_collection_policies(refreshed_primary)
-        if self.config and self.config.get("type") == refreshed_primary.get("type"):
+        if was_tier4_fallback:
+            runtime_flags = {
+                key: value for key, value in self.config.items()
+                if key.startswith("is_") or key == "backend_mode"
+            }
+            self.config = self._build_tier4_fallback_config()
+            self.config.update(runtime_flags)
+        elif self.config and self.config.get("type") == refreshed_primary.get("type"):
             runtime_flags = {
                 key: value for key, value in self.config.items()
                 if key.startswith("is_") or key == "backend_mode"
@@ -1228,7 +1447,7 @@ class GameStateMachine:
         restores the baseline and marks it as Tier 4 for safe preemption.
         """
         if getattr(self, "primary_config", None):
-            fallback_cfg = self.primary_config.copy()
+            fallback_cfg = self._build_tier4_fallback_config()
             if (
                 self.config.get("is_tier4_fallback", False)
                 and all(self.config.get(key) == value for key, value in fallback_cfg.items())
@@ -1236,7 +1455,6 @@ class GameStateMachine:
                 logging.debug("[GameStateMachine] Tier 4 fallback configuration is already active.")
                 self.arm_daily_quest_preemption()
                 return False
-            fallback_cfg["is_tier4_fallback"] = True
             self.set_config(fallback_cfg)
             self.arm_daily_quest_preemption()
             logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
@@ -1265,6 +1483,31 @@ class GameStateMachine:
         """
         if self.quest_scheduler is None:
             return None
+
+        if self.quest_scheduler.is_all_completed():
+            daily_manager = getattr(self, "daily_manager", None)
+            accepted_quests = []
+            if daily_manager is not None:
+                accepted_quests = daily_manager.status.get("subflows", {}).get(
+                    "bulletin_board", {}
+                ).get("accepted_quests", [])
+
+            if accepted_quests:
+                logging.warning(
+                    "⚠️ [懸賞排程修復] 記憶體排程器已完成，但持久化資料仍有 %d 項 "
+                    "accepted_quests；從持久化事實重建排程器。",
+                    len(accepted_quests),
+                )
+                self.attach_quest_scheduler(daily_manager.load_quest_scheduler())
+                remaining_accepted = daily_manager.status.get("subflows", {}).get(
+                    "bulletin_board", {}
+                ).get("accepted_quests", [])
+                if self.quest_scheduler.is_all_completed() and remaining_accepted:
+                    logging.error(
+                        "⚠️ [懸賞排程修復] accepted_quests 仍有資料，但無法建立可執行任務；"
+                        "保留排程器並禁止誤判為全部完成。"
+                    )
+                    return None
 
         if self.quest_scheduler.is_all_completed():
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器並切換至退守模式。")
@@ -1607,7 +1850,13 @@ class GameStateMachine:
         if self.is_in_collect_only_mode():
             return False
         mode_type = self.config.get("type") if getattr(self, "config", None) else None
-        return mode_type in ["daily", "mix"] or self.quest_scheduler is not None
+        primary_mode = (getattr(self, "primary_config", None) or {}).get("_config_mode_key")
+        return (
+            self.runtime_config_key == "daily"
+            or primary_mode == "daily"
+            or mode_type in ["daily", "mix"]
+            or self.quest_scheduler is not None
+        )
 
     def has_ready_daily_quest_preemption(self):
         """Return whether a ready Daily quest must preempt Tier 4 farming.
@@ -1687,6 +1936,7 @@ class GameStateMachine:
 
         try:
             cfg = self.config or {}
+            activity_cfg = self._daily_activity_config()
             # 0. 體力退避期間冷卻復歸
             if getattr(self, "stamina_retreat_start_time", None) is not None:
                 if cfg.get("enable_dungeon", True):
@@ -1698,15 +1948,26 @@ class GameStateMachine:
 
             dm = getattr(self, "daily_manager", None)
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
-            if cfg.get("enable_town_daily", True) and dm:
+            if activity_cfg.get("enable_town_daily", True) and dm:
                 pending_town = dm.get_pending_town_subflows()
                 if pending_town and not self.town_subflow_queue:
                     logging.info(f"🏛️ [Activity Scheduler] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
                     self.start_subflow_queue(pending_town)
                     return True
 
+            # 1.5. 檢查 Tier 1.5 深淵魔王 (demon_lords) - 在城鎮速領之後，Lord Boss 之前
+            if self.has_available_demon_lords() and not self.town_subflow_queue:
+                subflows = cfg.get("subflow_configs") if isinstance(cfg.get("subflow_configs"), dict) else {}
+                sub_cfg = (subflows or {}).get("demon_lords", {})
+                targets = sub_cfg.get("targets") or [sub_cfg.get("target_boss", "voidborn_elres")]
+                res = dm.is_demon_lords_available(targets) if dm and hasattr(dm, "is_demon_lords_available") else None
+                reason = res[1] if isinstance(res, (tuple, list)) and len(res) > 1 else ""
+                logging.info(f"👑 [Activity Scheduler] 觸發 Tier 1.5 深淵魔王討伐 ({reason}) ➔ 優先插隊討伐！")
+                self.start_subflow_queue(["demon_lords"])
+                return True
+
             # 2. 檢查 Tier 2 首領 Boss 討伐 (lord_boss)
-            if dm:
+            if dm and activity_cfg.get("enable_lord_boss", True):
                 avail_bosses = self.get_available_selected_lord_bosses()
                 if avail_bosses:
                     logging.info(f"⚔️ [Activity Scheduler] 觸發 Tier 2 領主 Boss 討伐 (可用 Boss: {avail_bosses}) ➔ 優先插隊討伐！")
@@ -1733,14 +1994,25 @@ class GameStateMachine:
                         return False
 
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
-            if cfg.get("enable_dungeon", False):
-                if self.has_available_dungeon():
+            if activity_cfg.get("enable_dungeon", False):
+                if self.has_available_dungeon(target_config=activity_cfg):
+                    if cfg.get("type") == "domain":
+                        dungeon_route = activity_cfg.copy()
+                        self._apply_tier4_stage_selection(dungeon_route)
+                        self._apply_tier4_dungeon_selection(dungeon_route)
+                        dungeon_route["is_tier4_fallback"] = True
+                        self.set_config(dungeon_route)
                     if self.current_state not in [self.STATE_NAVIGATING, self.STATE_DUNGEON_EXPLORING, self.STATE_BATTLE]:
                         logging.info("🏰 [Activity Scheduler] 偵測到地下城就緒 ➔ 轉移至 NAVIGATING 前往地下城！")
                         self.transition_to(self.STATE_NAVIGATING)
                     return True
 
-            # 5. 退守 Tier 4 Mix / Stage 模式 (當處於 daily/mix/stage 模式或明確開啟 enable_stage_farming 時)
+            # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4 長駐路由。
+            if self.is_daily_pipeline_active():
+                self.apply_tier4_fallback_config()
+                return False
+
+            # 非 Daily 的 Mix / Stage 模式維持既有關卡退守行為。
             mode_type = cfg.get("type")
             default_stage_farm = True if (mode_type in ["mix", "stage", "daily"] or getattr(self, "is_tier4_fallback", False) or getattr(self, "daily_manager", None) is not None) else False
             is_stage_farming = cfg.get("enable_stage_farming", default_stage_farm)

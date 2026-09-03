@@ -9,12 +9,17 @@ from config import (
     SUB_STAGE_THRESHOLD,
     EXIT_BATTLE_THRESHOLD,
     ENTRY_THRESHOLD,
+    TIER4_MODE_DOMAIN,
     get_template_threshold
 )
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardListNavigator
 from utils.scene_detector import SceneDetector, SceneType
+from states.navigation_routing import (
+    NavigationDecisionExecutor,
+    resolve_navigation_context,
+)
 
 
 def filter_navigation_path(nav_path, active_tabs=None):
@@ -101,6 +106,22 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.is_daily_pipeline_active() and getattr(self.machine, "quest_scheduler", None) is not None and not self.machine.config.get("is_tier4_fallback", False):
             logging.info("⏳ [每日懸賞動態調度] 偵測到當前懸賞目標地下城冷卻中，權立即觸發動態重新排程，順延切換下一個任務...")
             self.machine.evaluate_and_schedule_daily_pipeline()
+            return
+
+        daily_policy = getattr(self.machine, "primary_config", None) or {}
+        if (
+            self.machine.is_daily_pipeline_active()
+            and daily_policy.get("tier4_mode") == TIER4_MODE_DOMAIN
+        ):
+            logging.info("🏛️ [Daily Tier 4] 地下城冷卻中，切換至使用者設定的領地長駐路由。")
+            pos_back, _ = self.matcher.match(
+                screen_img, "goback_town.png", threshold=0.75, quiet=True
+            )
+            if pos_back:
+                self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                time.sleep(0.5)
+            self.machine.apply_tier4_fallback_config()
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return
 
         # 若未啟用普通關卡打怪 (enable_stage_farming == False)，直接返回城鎮轉入 COLLECT_ONLY 待機
@@ -245,18 +266,6 @@ class NavigationHandler(BaseStateHandler):
                 frame_matches[cache_key] = self.matcher.match(screen_img, template_name, **normalized_options)
             return frame_matches[cache_key]
 
-        lobby_btn = self.machine.config.get("lobby_start_btn")
-        cached_start = scene.matched_elements.get(lobby_btn) if lobby_btn else None
-        if cached_start:
-            _, conf_start = cached_start
-            logging.info(
-                "Navigation detected lobby Start button [%s] (confidence %.4f); entering LOBBY before further navigation.",
-                lobby_btn,
-                conf_start,
-            )
-            self.machine.transition_to(self.machine.STATE_LOBBY)
-            return
-
         # 0. 全域最高優先防護：檢查畫面上是否有任務完成彈窗 (task_complete.png) 阻擋
         if scene.scene_type == SceneType.POPUP_TASK_COMPLETE:
             matched = scene.matched_elements.get("task_complete.png")
@@ -310,76 +319,13 @@ class NavigationHandler(BaseStateHandler):
             logging.info("⌛ 尋路中：背包已滿，正在等待退出戰鬥或返回城鎮畫面...")
             return
 
-        # 1. 檢查已開啟對話視窗
-        if scene.scene_type == SceneType.WINDOW_DIAMOND:
-            logging.info("💎 尋路中：偵測到鑽石視窗已開啟，跳轉至 DIAMOND_COLLECTION。")
-            self.machine.transition_to(self.machine.STATE_DIAMOND_COLLECTION)
-            self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
-            return
-
-        if scene.scene_type == SceneType.WINDOW_BREAD:
-            logging.info("🍞 尋路中：偵測到體力視窗已開啟，跳轉至 BREAD_COLLECTION。")
-            self.machine.transition_to(self.machine.STATE_BREAD_COLLECTION)
-            self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
-            return
-
-        # 提取場景診斷結果與特徵座標
-        is_town = scene.is_town
-        is_lobby = scene.is_lobby
+        # Shared intent policy owns Diamond/Bread/Start precedence.
         stage_select_open = "stage" in scene.active_tabs
         dungeon_select_open = "dungeon" in scene.active_tabs
-
-        pos_door = scene.matched_elements.get("common/door.png", (None, 0.0))[0]
-        pos_diamond = scene.matched_elements.get("diamond.png", (None, 0.0))[0]
-        pos_goback = scene.matched_elements.get("goback_town.png", (None, 0.0))[0]
-        pos_bread_btn = scene.matched_elements.get("common/bread.png", (None, 0.0))[0]
-
-
-        # 2. 領鑽石優先流程
-        if self.machine.need_diamond_collection:
-            if is_town:
-                logging.info("💎 尋路中：在城鎮畫面，跳轉至 DIAMOND_COLLECTION。")
-                self.machine.transition_to(self.machine.STATE_DIAMOND_COLLECTION)
-                self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
-                return
-            elif is_lobby:
-                # 若畫面上開啟了子視窗/卡片詳情 (如黃金古國 entry 卡片)，優先點擊 quit.png 收合前景
-                if os.path.exists(os.path.join("templates", "common/quit.png")):
-                    pos_q, conf_q = self.matcher.match(screen_img, "common/quit.png", threshold=0.75, quiet=True)
-                    if pos_q:
-                        logging.info(f"💎 領鑽石：偵測到前景開啟之子視窗/卡片 [common/quit.png] ({conf_q:.4f})，優先點擊關閉以露出大廳...")
-                        self.click_and_wait_until_gone("common/quit.png", rect["left"] + pos_q[0], rect["top"] + pos_q[1], rect, threshold=0.75)
-                        return
-
-                if pos_goback:
-                    logging.info("💎 領鑽石：在大廳畫面，點擊返回城鎮按鈕 [goback_town.png] 以進行鑽石領取。")
-                    self.mouse.click(rect["left"] + pos_goback[0], rect["top"] + pos_goback[1])
-                    time.sleep(0.1)
-                    return
-            # 輔助：如果都沒比對到，但有鑽石入口在畫面上，直接跳轉
-            if pos_diamond:
-                self.machine.transition_to(self.machine.STATE_DIAMOND_COLLECTION)
-                self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION].handle(screen_img, rect)
-                return
-
-        # 3. 領體力流程
-        elif self.machine.enable_bread and self.machine.need_bread_collection:
-            if is_lobby:
-                logging.info("🍞 尋路中：在大廳畫面，跳轉至 BREAD_COLLECTION。")
-                self.machine.transition_to(self.machine.STATE_BREAD_COLLECTION)
-                self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
-                return
-            elif is_town:
-                if pos_door:
-                    logging.info("🍞 領體力：在城鎮畫面，點擊入口按鈕 [common/door.png] 進入大廳以領取體力。")
-                    self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
-                    time.sleep(0.1)
-                    return
-            # 輔助：如果都沒比對到，但有體力入口在畫面上，直接跳轉
-            if pos_bread_btn:
-                self.machine.transition_to(self.machine.STATE_BREAD_COLLECTION)
-                self.machine.handlers[self.machine.STATE_BREAD_COLLECTION].handle(screen_img, rect)
-                return
+        routing = resolve_navigation_context(self.machine, scene)
+        executor = NavigationDecisionExecutor(self)
+        if executor.execute(routing, screen_img, rect):
+            return
 
 
         # 檢查體力退避期間是否所有地下城皆已進入冷卻 (僅當前配置非 collect_only 時評估)
@@ -708,19 +654,6 @@ class NavigationHandler(BaseStateHandler):
             self.machine.transition_to(self.machine.STATE_LOBBY)
             return
 
-        # 0. 優先判定：如果已經可以直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳，直接移轉狀態！
-        lobby_btn = self.machine.config.get("lobby_start_btn")
-        if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
-            cached_start = scene.matched_elements.get(lobby_btn)
-            if cached_start:
-                pos_start, conf_start = cached_start
-            else:
-                pos_start, conf_start = match_current_frame(lobby_btn, threshold=0.8)
-            if pos_start:
-                logging.info(f"🧭 尋路成功！偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達準備大廳，狀態轉移至 LOBBY。")
-                self.machine.transition_to(self.machine.STATE_LOBBY)
-                return
-
         # （已於 handle 前段完成頁籤開啟狀態統一對比與判定）
 
         # 判斷是否已經在關卡內部細節畫面 (提前判定以避免小島在抽屜下方時水平滑動邏輯誤觸)
@@ -905,16 +838,6 @@ class NavigationHandler(BaseStateHandler):
                     break
 
         if not clicked_any:
-            # 如果能直接匹配到大廳開始按鈕，說明已經成功抵達準備大廳
-            lobby_btn = self.machine.config.get("lobby_start_btn")
-            if lobby_btn and os.path.exists(os.path.join("templates", lobby_btn)):
-                pos_start, conf_start = self.matcher.match(screen_img, lobby_btn, threshold=0.8)
-                if pos_start:
-                    logging.info(f"🧭 尋路完成：偵測到準備大廳開始按鈕 [{lobby_btn}] (信心度: {conf_start:.4f})，已抵達大廳。")
-                    self.machine.defeat_count = 0
-                    self.machine.transition_to(self.machine.STATE_LOBBY)
-                    return
-
             # 備用邏輯：若在普通關卡模式下，已進入關卡細節畫面但未看見魔王關 (final.png)，則向下滾動尋找魔王關
             if self.machine.config.get("type") == "stage":
                 if pos_label and not pos_final:

@@ -383,26 +383,14 @@ class TestCollectionStateMachine(StateMachineLogicTestCase):
 
         
         # 以 patch 縮短 stamina_flow 的 sleep 時間以加快測試速度
-        with patch('states.stamina_flow.time.sleep') as mock_sleep:
-            self.state_machine.step()
+        self.state_machine.step()
             
-        # 驗證點擊序列：
-        # 1. 點擊取消 (100 + 150 = 250, 100 + 250 = 350)
-        # 2. 點擊 quit 兩次 (100 + 300 = 400, 100 + 50 = 150)
-        # 3. 點擊 goback_town (100 + 50 = 150, 100 + 450 = 550)
-        from unittest.mock import call
-        expected_clicks = [
-            call(250, 350), # 點擊取消
-            call(400, 150), # 點擊 quit (第一輪)
-            call(400, 150), # 點擊 quit (第二輪)
-            call(150, 550)  # 點擊返回城鎮
-        ]
-        self.mock_mouse.click.assert_has_calls(expected_clicks)
+        self.mock_mouse.click.assert_called_once_with(250, 350)
         
         # 驗證配置已被切換為 collect_only
-        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertTrue(self.state_machine.stamina_recovery.is_active)
         # 驗證狀態已轉移至 STATE_COLLECT_ONLY
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOBBY)
 
     @patch('os.path.exists')
     def test_bread_collection_window_missing_self_healing(self, mock_exists):
@@ -502,8 +490,11 @@ class TestCollectionStateMachine(StateMachineLogicTestCase):
             
         self.mock_matcher.match.side_effect = mock_match_nobread
         
-        with patch('states.stamina_flow.time.sleep') as mock_sleep:
-            self.state_machine.step()
+        self.state_machine.step()
+        self.mock_matcher.match.side_effect = lambda *args, **kwargs: (None, 0.0)
+        self.state_machine.step()  # overlay disappearance observed
+        self.state_machine.step()  # no quit available; advance to return phase
+        self.state_machine.step()  # commit COLLECT_ONLY
             
         # 驗證 original_config 與 stamina_retreat_start_time 已設定
         self.assertEqual(self.state_machine.original_config, orig_config)

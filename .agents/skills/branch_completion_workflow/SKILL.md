@@ -11,13 +11,9 @@ description: 當一個 Feature/Fix 分支開發結束、準備收尾或準備合
 
 ## 🎯 4 大收尾步驟 (Completion Checklist)
 
-### 步驟 1：全域單元測試與驗證 (Full Test Verification)
-- **原則**：任何分支在收尾前，必須執行全套單元測試，確保全域無 Regression。
-- **執行指令**：
-  ```bash
-  .venv\Scripts\python -m unittest discover tests
-  ```
-- **檢核標準**：測試結果必須呈現 `OK` 且 100% 通過。若有任何失敗，須依據 `AGENTS.md` 第 6 條測試規範精確修復至全綠。
+### 步驟 1：最小聚焦單元測試與全套手動提醒 (Focused Test Verification & Manual Full Suite Prompt)
+- **原則**：AI 僅執行本次分支修改直接相關之最小單元測試檔案或方法，確保改動邏輯通過。
+- **全套測試提醒**：AI 嚴禁自行執行耗時的全套測試 (`.venv\Scripts\python -m unittest discover tests`)。在完成分支收尾與報告時，AI 必須主動生成全套測試指令，提醒使用者手動執行並回報任何剩餘失敗。
 
 ### 步驟 2：技術文檔與故事同步 (Docs & PARS Story Sync)
 分支開發過程中若有涉及配置、規則、架構或新增功能的改動，必須審查並更新 `docs/` 下的技術文檔：

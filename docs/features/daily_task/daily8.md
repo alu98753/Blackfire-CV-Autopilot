@@ -4,7 +4,7 @@
 
 1. **每日主模式 (`--mode daily`) 全自動四階梯流水線**：
    - 使用 `python main.py --mode daily` 作為全自動日常掛機的唯一主入口。
-   - 啟動後由 `Daily Master Pipeline` 全自動依照動態優先級連貫執行：城鎮速領 ➔ 領主 Boss 討伐 ➔ 懸賞任務 ➔ 退守 Mix 模式。
+   - 啟動後由 `Daily Master Pipeline` 全自動依照動態優先級連貫執行：城鎮速領 ➔ 領主 Boss 討伐 ➔ 懸賞任務 ➔ 玩家指定的 Tier 4 長駐模式。
 
 2. **08:05 定時自動觸發與中斷切換**：
    - 每日早上 08:05 由 `DailyManager` 自動觸發日常任務重置與連動。
@@ -36,8 +36,10 @@
    ⚡ 戰鬥途中若 Tier 2 Boss 冷卻結束 ➔ 打完該場戰鬥後立刻搶先切回打 Boss！
                              │
                              ▼
-🎖️ Tier 4: 四極退守 (動態自訂 mix 模式，預設: 冰雪洞窟 + 冰凍峽谷 6-1)
-   👉 懸賞全清且無 Boss 可打時，自動退守刷資源與定時領體力/鑽石 (啟動時可動態挑選目標地下城、普通關卡與祝福模式)
+🎖️ Tier 4: 四極長駐 (玩家可選 stage / domain，預設: 冰凍峽谷 6-1)
+   👉 地下城與 Lord 屬於定時活動，預設啟用並在就緒時插隊；可由 Profile TOML 個別停用。
+   👉 stage 子選單選擇大關與小關；domain 子選單目前支援黃金古國。
+   👉 CLI 選擇持久化至 user_data/<profile>/config.toml，native / sandbox / 其他帳號互不影響。
 
    ⚡ 刷關期間若 Tier 2 Boss 冷卻結束 ➔ 自動切回打 Boss！
 ```
@@ -75,6 +77,18 @@
 **日常長途掛機運作唯一主入口**。啟動後由 Daily Master Pipeline 全自動運作：
 ```bash
 python main.py --backend --mode daily
+```
+
+啟動時會先顯示 Tier 4 模式選單，再進入 `stage` 或 `domain` 子選單。對應的玩家設定範例如下：
+
+```toml
+[primary_modes.daily]
+enable_dungeon = true
+enable_lord_boss = true
+tier4_mode = "stage" # 或 "domain"
+tier4_domain = "golden_empire"
+tier4_stage_level = 6
+tier4_sub_stage = "first"
 ```
 
 ---

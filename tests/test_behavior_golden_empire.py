@@ -1,8 +1,11 @@
 import unittest
+import time
 from unittest.mock import MagicMock, patch
 from states.handlers.domain_explore import DomainExploreHandler
+from states.handlers.battle import BattleHandler
 from states.domains.golden_empire import GoldenEmpireStrategy
 from states.handlers.navigation import NavigationHandler
+from states.state_machine import GameStateMachine
 
 class TestBehaviorGoldenEmpire(unittest.TestCase):
     """
@@ -54,6 +57,42 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
     # =========================================================================
     # 1. 進場導航與進入領地行為測試
     # =========================================================================
+
+    @patch("os.path.exists", return_value=True)
+    def test_domain_battle_ignores_false_dungeon_recovery_anchor(
+        self,
+        _mock_exists,
+    ):
+        """Domain battle result owns the frame even if a dungeon anchor matches."""
+        machine = GameStateMachine(
+            capturer=MagicMock(),
+            matcher=MagicMock(),
+            mouse=MagicMock(),
+            preload_ocr=False,
+        )
+        machine.config = self.mock_machine.config.copy()
+        machine.current_state = machine.STATE_BATTLE
+        machine.battle_start_time = time.time() - 10.0
+
+        def fake_match(_image, template, **_kwargs):
+            if template == "dungeons/gungeon_godown_confirm.png":
+                return (766, 524), 0.8094
+            if template == "common/continue.png":
+                return (765, 525), 0.9499
+            return None, 0.0
+
+        machine.matcher.match.side_effect = fake_match
+
+        BattleHandler(machine).handle(MagicMock(), self.rect)
+
+        self.assertEqual(machine.current_state, machine.STATE_RESULT)
+        matched_templates = [
+            call.args[1] for call in machine.matcher.match.call_args_list
+        ]
+        self.assertNotIn(
+            "dungeons/gungeon_godown_confirm.png",
+            matched_templates,
+        )
 
     def test_navigation_into_golden_empire_scene(self):
         """
@@ -340,9 +379,9 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
     # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試
     # =========================================================================
 
-    def test_regular_battle_defeat_retry_uses_domain_max_defeat(self):
+    def test_regular_battle_defeat_retry_uses_battle_max_defeat(self):
         """
-        Given: 領地模式常規戰鬥戰敗 (defeat.png)，當前 defeat_count = 3 (< domain_max_defeat - 1 = 4)
+        Given: 領地模式常規戰鬥戰敗 (defeat.png)，當前 defeat_count = 3 (< battle_max_defeat - 1 = 4)
         When: 執行 ResultHandler.handle()
         Then: 點擊重新開始按鈕，defeat_count 累加為 4，進入 STATE_LOADING 繼續重試
         """
@@ -352,7 +391,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         self.mock_machine.config["type"] = "domain"
         self.mock_machine.config["domain"] = "golden_empire"
-        self.mock_machine.config["domain_max_defeat"] = 5
+        self.mock_machine.config["battle_max_defeat"] = 5
         self.mock_machine.is_in_dungeon = False
         self.mock_machine.defeat_count = 3
 
@@ -427,7 +466,8 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         self.assertTrue(triggered)
         self.mock_machine.mouse.click.assert_called()
-        self.mock_machine.transition_to.assert_called_with("COLLECT_ONLY")
+        self.assertTrue(self.mock_machine.stamina_recovery.is_active)
+        self.mock_machine.transition_to.assert_not_called()
 
     # =========================================================================
     # 11. 黃金古國日常領主 Boss (Lord Boss) 插隊挑戰與自動回歸測試

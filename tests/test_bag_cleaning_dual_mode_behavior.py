@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
+from config import BACKPACK_FULL_SETTINGS
 from states.handlers.bag_cleaning import BagCleaningHandler
 
 class TestBagCleaningDualModeBehavior(unittest.TestCase):
@@ -121,12 +122,20 @@ class TestBackpackFullDestroyableColorsDecoupling(unittest.TestCase):
         classify_returns = ["purple"] + ["gray_or_empty"] * 15 + ["green", "gray_or_empty"] + ["gray_or_empty"] * 14
         handler.classify_slot_color = MagicMock(side_effect=lambda crop: classify_returns.pop(0) if classify_returns else "gray_or_empty")
         mock_std.return_value = 25.0
-        handler.machine.config = {"goods_settings": {"gray": {"item": True}, "green": {}}}
+        destroy_settings = {
+            "destroy_goods": {
+                "gray": {"item": True},
+                "green": {},
+                "blue": {},
+                "purple": {},
+            }
+        }
         import numpy as np
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
 
-        with patch('states.handlers.backpack_full_sorting.time.sleep'):
+        with patch.dict(BACKPACK_FULL_SETTINGS, destroy_settings, clear=True), \
+             patch('states.handlers.backpack_full_sorting.time.sleep'):
             handler.handle(fake_img, rect)
 
         # 驗證核心：當 destroyable_colors 為 ["gray_or_empty"] 時，右側被選中的標的 (target_right_slot) 必須是 (0, 1, 'gray_or_empty')，絕對不能是 (0, 0, 'green')！

@@ -237,8 +237,8 @@ class TestRecoveryStateMachine(StateMachineLogicTestCase):
         self.mock_matcher.match.side_effect = match_no_bread
         self.state_machine.step()
         
-        # 應觸發退避並變為 COLLECT_ONLY
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        # 應啟動有界退避狀態機
+        self.assertTrue(self.state_machine.stamina_recovery.is_active)
 
     @patch('os.path.exists')
     @patch('states.handlers.battle.time.sleep')

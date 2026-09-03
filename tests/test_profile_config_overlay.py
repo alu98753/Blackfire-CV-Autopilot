@@ -15,7 +15,8 @@ from config import (
     get_runtime_game_config,
     GAME_CONFIGS,
     PRIMARY_MODES,
-    SUBFLOW_CONFIGS
+    SUBFLOW_CONFIGS,
+    BACKPACK_FULL_SETTINGS,
 )
 
 
@@ -86,6 +87,60 @@ enabled = true
             
             reloaded = refresh_runtime_config()
             self.assertTrue(reloaded)
+
+    def test_sell_and_destroy_goods_are_independent_per_profile(self):
+        sandbox_config = """
+[subflow_configs.jewelry_workshop.sell_goods.gray]
+Warcraft_Fang = true
+
+[backpack_full.destroy_goods.gray]
+Warcraft_Fang = false
+"""
+        native_config = """
+[subflow_configs.jewelry_workshop.sell_goods.gray]
+Warcraft_Fang = false
+
+[backpack_full.destroy_goods.gray]
+Warcraft_Fang = true
+"""
+        (self.sandbox_dir / "config.toml").write_text(
+            sandbox_config, encoding="utf-8"
+        )
+        (self.native_dir / "config.toml").write_text(
+            native_config, encoding="utf-8"
+        )
+
+        with patch.object(config, "USER_DATA_DIR", self.test_user_data_dir):
+            set_active_profile("sandbox")
+            self.assertTrue(
+                SUBFLOW_CONFIGS["jewelry_workshop"]["sell_goods"]["gray"]["Warcraft_Fang"]
+            )
+            self.assertFalse(
+                BACKPACK_FULL_SETTINGS["destroy_goods"]["gray"]["Warcraft_Fang"]
+            )
+
+            set_active_profile("native")
+            self.assertFalse(
+                SUBFLOW_CONFIGS["jewelry_workshop"]["sell_goods"]["gray"]["Warcraft_Fang"]
+            )
+            self.assertTrue(
+                BACKPACK_FULL_SETTINGS["destroy_goods"]["gray"]["Warcraft_Fang"]
+            )
+
+    def test_legacy_jewelry_goods_settings_overrides_sell_goods(self):
+        legacy_config = """
+[subflow_configs.jewelry_workshop.goods_settings.gray]
+Warcraft_Fang = true
+"""
+        (self.sandbox_dir / "config.toml").write_text(
+            legacy_config, encoding="utf-8"
+        )
+
+        with patch.object(config, "USER_DATA_DIR", self.test_user_data_dir):
+            set_active_profile("sandbox")
+            workshop = SUBFLOW_CONFIGS["jewelry_workshop"]
+            self.assertTrue(workshop["sell_goods"]["gray"]["Warcraft_Fang"])
+            self.assertNotIn("goods_settings", workshop)
 
     def test_sandbox_profile_reload_syncs_running_daily_mode(self):
         """A running daily machine must consume changed sandbox Profile values."""

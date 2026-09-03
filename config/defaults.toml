@@ -9,6 +9,14 @@ default_town_subflow_order = ["blood_altar", "jewelry_workshop"]
 dry_run_bag_clean = false
 default_backpack_full_max_scroll = 5
 monitor_index = 1
+battle_max_defeat = 20 # 所有模式通用的連續戰敗重試上限；達到此次數後放棄當前關卡
+
+[navigation]
+action_timeout_seconds = 5.0
+action_max_attempts = 3
+collection_backoff_seconds = 60.0
+collection_recovery_failure_limit = 3
+stamina_retreat_quit_max_attempts = 3
 
 [quest]
 max_run_limit = 20
@@ -52,9 +60,11 @@ keep_colors = ["purple", "orange_yellow", "red"]
 [defaults.activities]
 auto_diamond = true
 auto_bread = true # true, false
-lord_boss_targets = ["lord_spider", "lord_spectre"] # 指定 Boss 清單（例如 ["lord_spider"] 僅打蜘蛛，或 [] 完全跳過 Boss
+lord_boss_targets = ["lord_spider", "lord_spectre", "ghoul_snow"] # 指定 Boss 清單（例如 ["lord_spider"] 僅打蜘蛛，或 [] 完全跳過 Boss
 enable_dungeon = true
 enable_town_daily = true
+enable_demon_lords = true
+enable_lord_boss = true
 enable_quests = false
 enable_stage_farming = false
 enable_golden_empire = false
@@ -66,9 +76,10 @@ name = "黃金古國"
 type = "domain"
 domain = "golden_empire"
 bread_cost = 3
-domain_max_defeat = 5
 nemesis_action = "pause" # "flee" (自動放棄戰鬥退出) 或 "pause" (自動暫停交給使用者手動打)
 enable_lord_boss = true # 是否在掛古國時若領主 Boss 冷卻結束自動插隊挑戰
+# nemesis_templates 為 list 型態，可在 user_data/<profile>/config.toml 中定義同名 key 整份覆蓋
+# 當角色變強後可縮減此清單，例如只保留 golden_king.png
 nemesis_templates = [
     "domains/golden_empire/exception/golden_king.png",
     "domains/golden_empire/exception/elf_mythril_hag.png",
@@ -89,7 +100,7 @@ stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_G
 navigation_path = ["common/door.png", "exit_battle.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
-stage_max_defeat = 4
+
 
 [primary_modes.dungeon]
 name = "地下城"
@@ -131,7 +142,6 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 stage_name = "冰凍峽谷 (first)"
 stage_entry = "stages/level6_ice_cave.png"
 stage_target = "stages/first_stage.png"
-stage_max_defeat = 4
 stage_navigation_path = ["common/door.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
@@ -155,6 +165,9 @@ stamina_retreat_duration = 7
 [primary_modes.daily]
 name = "每日懸賞任務"
 type = "mix"
+# 週期活動預設啟用；每位玩家可在 user_data/<profile>/config.toml 覆蓋為 false。
+enable_dungeon = true
+enable_lord_boss = true
 dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
@@ -169,6 +182,8 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 enable_stage_farming = true
+tier4_mode = "stage"  # 可選: "stage", "domain"
+tier4_domain = "golden_empire"  # tier4_mode="domain" 時目前支援黃金古國
 tier4_stage_level = 6  # 大關數字 1~6 (6 代表 冰凍峽谷)
 tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (魔王關)
 
@@ -229,9 +244,10 @@ goods_dir = "town_building/Jewelry_workshop/goods"
 navigation_path = []
 lobby_start_btn = "stages/start.png"
 
-[subflow_configs.jewelry_workshop.goods_settings]
+# 珠寶店出售 SSOT；各 user_data/<profile>/config.toml 可獨立覆寫。
+[subflow_configs.jewelry_workshop.sell_goods]
 
-[subflow_configs.jewelry_workshop.goods_settings.gray]
+[subflow_configs.jewelry_workshop.sell_goods.gray]
 Sandworm_scales = true
 Spider_silk = true
 Spider_venom_glands = true
@@ -243,8 +259,9 @@ Purple_Spore = true
 Slime_Mucus = true
 Bat_wings = true
 Wolf_skin = true
+monster_blood_1 = true
 
-[subflow_configs.jewelry_workshop.goods_settings.green]
+[subflow_configs.jewelry_workshop.sell_goods.green]
 The_cloth_wrapped_around_the_dead = true
 Giant_Beast_Gold_Tooth = true
 Toad_Venom = true
@@ -252,11 +269,50 @@ Dead_Soul_Core = true
 Wild_boar_tusk = true
 Scorpion_Shell = true
 Venom_Fang = true
+monster_blood_2 = true
 
-[subflow_configs.jewelry_workshop.goods_settings.blue]
+[subflow_configs.jewelry_workshop.sell_goods.blue]
 rune_shard = true
+bear_bone_fragment = false
+netherbone_teel = true
+cursed_bone_fragment = true
+monster_blood_3 = false
 
-[subflow_configs.jewelry_workshop.goods_settings.purple]
+[subflow_configs.jewelry_workshop.sell_goods.purple]
+
+
+[backpack_full]
+goods_dir = "town_building/Jewelry_workshop/goods"
+
+# 背包滿時右側永久銷毀 SSOT；初始值複製出售清單，但兩者互不連動。
+[backpack_full.destroy_goods]
+
+[backpack_full.destroy_goods.gray]
+Sandworm_scales = true
+Spider_silk = true
+Spider_venom_glands = true
+Warcraft_Fang = true
+lizard_skin = true
+scrap = true
+Frog_Skin = true
+Purple_Spore = true
+Slime_Mucus = true
+Bat_wings = true
+Wolf_skin = true
+
+[backpack_full.destroy_goods.green]
+# The_cloth_wrapped_around_the_dead = true
+# Giant_Beast_Gold_Tooth = true
+# Toad_Venom = true
+# Dead_Soul_Core = true
+# Wild_boar_tusk = true
+# Scorpion_Shell = true
+# Venom_Fang = true
+
+[backpack_full.destroy_goods.blue]
+# rune_shard = true
+
+[backpack_full.destroy_goods.purple]
 
 [subflow_configs.lord_boss]
 name = "首領領主討伐"
@@ -278,6 +334,38 @@ cooldown_seconds = 3600.0
 name = "古代惡靈伊瑟倫"
 template = "load/lord_spectre.png"
 cooldown_seconds = 7200.0
+
+[subflow_configs.lord_boss.bosses.ghoul_snow]
+name = "雪山食屍王瓦爾瑪"
+template = "load/ghoul_snow.png"
+cooldown_seconds = 10800.0
+
+[subflow_configs.demon_lords]
+enabled = true
+name = "深淵魔王"
+type = "demon_lords"
+entry_btn = "demon_lords/demon_lords_entry.png"
+entry_after_btn = "demon_lords/demon_lords_entry_after.png"
+start_btn = "stages/start.png"
+stone_container_btn = "demon_lords/meterial/stone_slot.png"
+empty_slot_btn = "demon_lords/meterial/slot.png"
+choose_btn = "common/choose.png"
+max_daily_count = 3
+target_boss = "voidborn_elres"
+targets = ["voidborn_elres"]
+
+# 封印石配比需求字典：總數為 3 (例如 1 個 2 階，2 個 1 階)
+stone_selection = { "2" = 1, "1" = 2 }
+
+[subflow_configs.demon_lords.stone_templates]
+"1" = "demon_lords/meterial/demon_seal_stone_1.png"
+"2" = "demon_lords/meterial/demon_seal_stone_2.png"
+"3" = "demon_lords/meterial/demon_seal_stone_3.png"
+"4" = "demon_lords/meterial/demon_seal_stone_4.png"
+
+[subflow_configs.demon_lords.bosses.voidborn_elres]
+name = "虛空行者厄爾雷斯"
+template = "demon_lords/voidborn_elres.png"
 
 [subflow_configs.chest]
 enabled = true

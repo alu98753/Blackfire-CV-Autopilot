@@ -17,4 +17,5 @@ from states.handlers.chest import ChestHandler
 from states.handlers.hero_draw import HeroDrawHandler
 from states.handlers.bulletin_board import BulletinBoardHandler
 from states.handlers.domain_explore import DomainExploreHandler
+from states.handlers.demon_lords import DemonLordsHandler
 

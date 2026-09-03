@@ -137,10 +137,13 @@ class JewelryWorkshopHandler(BaseStateHandler):
         sell_max_btn = cfg.get("sell_max_btn", "town_building/sell_max.png")
         exit_building_btn = cfg.get("exit_building_btn", "town_building/exitfromhouse_and_to_town.png")
 
-        goods_settings = cfg.get("goods_settings")
+        goods_settings = cfg.get("sell_goods", cfg.get("goods_settings"))
         if goods_settings is None:
             from config import GAME_CONFIGS
-            goods_settings = GAME_CONFIGS.get("jewelry_workshop", {}).get("goods_settings", {})
+            workshop_config = GAME_CONFIGS.get("jewelry_workshop", {})
+            goods_settings = workshop_config.get(
+                "sell_goods", workshop_config.get("goods_settings", {})
+            )
         goods_dir = cfg.get("goods_dir", "town_building/Jewelry_workshop/goods")
 
         # 整理要出售的商品清單 (支援品質子目錄 gray/green/blue/purple 與特例覆蓋)

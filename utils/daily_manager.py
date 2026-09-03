@@ -31,6 +31,27 @@ DEFAULT_DAILY_STATUS = {
                     "cooldown_seconds": 7200,
                     "last_fight_timestamp": 0.0,
                     "completed_today": False
+                },
+                "ghoul_snow": {
+                    "name": "雪山食屍王瓦爾瑪",
+                    "today_count": 0,
+                    "max_daily_count": 5,
+                    "cooldown_seconds": 10800,
+                    "last_fight_timestamp": 0.0,
+                    "completed_today": False
+                }
+            }
+        },
+        "demon_lords": {
+            "completed_today": False,
+            "last_executed_at": "",
+            "bosses": {
+                "voidborn_elres": {
+                    "name": "虛空行者厄爾雷斯",
+                    "today_count": 0,
+                    "max_daily_count": 3,
+                    "completed_today": False,
+                    "last_fight_timestamp": 0.0
                 }
             }
         }
@@ -94,6 +115,25 @@ class DailyManager:
         if not self.status.get("last_daily_reset_date"):
             self.status["last_daily_reset_date"] = self.get_today_reset_tag()
             self.save_status()
+
+        # 💡 [Boss 同步自癒機制] 確保預設清單中新增的 Boss 結構能自動同步進現有存檔中
+        default_bosses = DEFAULT_DAILY_STATUS.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
+        saved_bosses = self.status.setdefault("subflows", {}).setdefault("lord_boss", {}).setdefault("bosses", {})
+        boss_added = False
+        for b_key, b_info in default_bosses.items():
+            if b_key not in saved_bosses:
+                saved_bosses[b_key] = json.loads(json.dumps(b_info))
+                boss_added = True
+        if boss_added:
+            self.save_status()
+            logging.info("✨ [DailyManager] 自動同步補齊新增的 Lord Boss 結構至持久化存檔。")
+
+        # 💡 [子流程同步自癒機制] 確保預設清單中新增的子流程 (如 demon_lords) 能自動同步進現有存檔中
+        for sf_key, sf_def in DEFAULT_DAILY_STATUS.get("subflows", {}).items():
+            if sf_key not in self.status.setdefault("subflows", {}):
+                self.status["subflows"][sf_key] = json.loads(json.dumps(sf_def))
+                self.save_status()
+                logging.info(f"✨ [DailyManager] 自動同步補齊新增的子流程 [{sf_key}] 結構至持久化存檔。")
 
         # 💡 [自癒機制] 載入時自動校正並正名清洗 accepted_quests 存檔
         subflows = self.status.get("subflows", {})
@@ -226,14 +266,24 @@ class DailyManager:
 
         subflows = self.status.get("subflows", {})
         for key, sf in subflows.items():
-            if key != "lord_boss":
+            if key not in ["lord_boss", "demon_lords"]:
                 sf["completed_today"] = False
+                if "today_count" in sf:
+                    sf["today_count"] = 0
 
         boss_data = subflows.get("lord_boss", {})
         boss_data["completed_today"] = False
         for b_key, b_info in boss_data.get("bosses", {}).items():
             b_info["today_count"] = 0
             b_info["completed_today"] = False
+
+        demon_data = subflows.get("demon_lords", {})
+        demon_data["completed_today"] = False
+        if "today_count" in demon_data:
+            demon_data["today_count"] = 0
+        for d_key, d_info in demon_data.get("bosses", {}).items():
+            d_info["today_count"] = 0
+            d_info["completed_today"] = False
 
         # 跨日重置時，自動重新評估歷史 unknown_quests 自癒晉升項目 (保留歷史佇列並與晉升項目自動排序)
         self.reevaluate_unknown_quests()
@@ -403,6 +453,110 @@ class DailyManager:
         紀錄完成一次 Boss 戰鬥 (別名轉接)。
         """
         return self.record_boss_fight(boss_key, now_ts)
+
+    def _ensure_demon_lords_structure(self):
+        """確保 status 中 demon_lords 具備 bosses 字典結構，並支援舊格式無痛遷移。"""
+        subflows = self.status.setdefault("subflows", {})
+        dl = subflows.setdefault("demon_lords", {
+            "completed_today": False,
+            "last_executed_at": "",
+            "bosses": {}
+        })
+        if "bosses" not in dl or not isinstance(dl["bosses"], dict):
+            dl["bosses"] = {}
+        if not dl["bosses"]:
+            legacy_count = dl.get("today_count", 0)
+            legacy_completed = dl.get("completed_today", False)
+            legacy_max = dl.get("max_daily_count", 3)
+            dl["bosses"]["voidborn_elres"] = {
+                "name": "虛空行者厄爾雷斯",
+                "today_count": legacy_count,
+                "max_daily_count": legacy_max,
+                "completed_today": legacy_completed,
+                "last_fight_timestamp": 0.0
+            }
+
+    def get_available_demon_lords(self, targets=None):
+        """回傳目前尚可挑戰的魔王 key 清單 (未打滿且未標記 completed_today)"""
+        self._ensure_demon_lords_structure()
+        dl = self.status.get("subflows", {}).get("demon_lords", {})
+        if dl.get("completed_today", False):
+            return []
+        bosses = dl.get("bosses", {})
+        if targets is None:
+            targets = list(bosses.keys()) if bosses else ["voidborn_elres"]
+        available = []
+        for b_key in targets:
+            b_info = bosses.get(b_key)
+            if not b_info:
+                available.append(b_key)
+                continue
+            if b_info.get("completed_today", False):
+                continue
+            if b_info.get("today_count", 0) >= b_info.get("max_daily_count", 3):
+                continue
+            available.append(b_key)
+        return available
+
+    def is_demon_lords_available(self, targets=None):
+        """檢查魔王挑戰今日是否仍有剩餘次數 (回傳布林與狀態字串)"""
+        avail_list = self.get_available_demon_lords(targets)
+        if not avail_list:
+            return False, "今日所有配置魔王皆已打滿"
+        return True, f"可挑戰魔王清單: {avail_list}"
+
+    def mark_demon_lord_completed(self, boss_key=None, now_ts=None):
+        """當某魔王挑戰次數耗盡或插槽無反應時，將該魔王標記為完成"""
+        self._ensure_demon_lords_structure()
+        subflows = self.status.setdefault("subflows", {})
+        dl = subflows.setdefault("demon_lords", {})
+        bosses = dl.setdefault("bosses", {})
+        if boss_key is None:
+            boss_key = "voidborn_elres"
+        b_info = bosses.setdefault(boss_key, {
+            "name": boss_key,
+            "today_count": 0,
+            "max_daily_count": 3,
+            "completed_today": False,
+            "last_fight_timestamp": 0.0
+        })
+        b_info["completed_today"] = True
+        if now_ts is None:
+            now_ts = time.time()
+        dl["last_executed_at"] = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        if all(b.get("completed_today", False) for b in bosses.values()):
+            dl["completed_today"] = True
+        self.save_status()
+        logging.info(f"👑 [DailyManager] 已標記魔王 [{boss_key}] 今日完成！")
+
+    def record_demon_lords_fight(self, boss_key=None, now_ts=None):
+        """紀錄完成一次魔王挑戰 (特定 Boss today_count + 1，滿上限自動標記完成)"""
+        self._ensure_demon_lords_structure()
+        subflows = self.status.setdefault("subflows", {})
+        dl = subflows.setdefault("demon_lords", {})
+        bosses = dl.setdefault("bosses", {})
+        if boss_key is None:
+            boss_key = "voidborn_elres"
+        b_info = bosses.setdefault(boss_key, {
+            "name": boss_key,
+            "today_count": 0,
+            "max_daily_count": 3,
+            "completed_today": False,
+            "last_fight_timestamp": 0.0
+        })
+        b_info["today_count"] = b_info.get("today_count", 0) + 1
+        dl["today_count"] = dl.get("today_count", 0) + 1
+        if now_ts is None:
+            now_ts = time.time()
+        b_info["last_fight_timestamp"] = now_ts
+        dl["last_executed_at"] = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        max_count = b_info.get("max_daily_count", 3)
+        if b_info["today_count"] >= max_count:
+            b_info["completed_today"] = True
+        if all(b.get("completed_today", False) for b in bosses.values()):
+            dl["completed_today"] = True
+        self.save_status()
+        logging.info(f"⚔️ [DailyManager] 記錄魔王 [{boss_key}] 戰鬥完成 (今日進度: {b_info['today_count']}/{max_count})")
 
     def update_bulletin_board_quests(self, today_new_quests):
         """

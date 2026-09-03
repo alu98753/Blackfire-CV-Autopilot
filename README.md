@@ -117,7 +117,7 @@
 ### 2. 核心模式執行方法
 
 #### 🔹 模式 A：每日懸賞任務 (`--mode daily`) [推薦]
-* **功能**：全自動調度懸賞告示牌、動態挑選地下城與普通關卡任務、討伐首領 Boss，任務全清後自動退守。
+* **功能**：全自動調度懸賞告示牌、定時地下城與首領 Boss；等待期間依 CLI 選擇長駐普通關卡或領地探索。選擇會保存到各玩家的 `user_data/<profile>/config.toml`。
 * **啟動指令**：
   ```powershell
   .\.venv\Scripts\python main.py --mode daily --backend

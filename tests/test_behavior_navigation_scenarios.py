@@ -136,9 +136,16 @@ class TestNavigationScenarios(BehavioralScenarioTestCase):
         self.mock_mouse.click.assert_called_with(50, 50)
 
         # 步驟 1: 畫面看到 common/select_stage.png
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((150, 150), 0.9) if name == "common/select_stage.png" else (None, 0.0)
-        )
+        # The frame after clicking the town door must prove that ENTER_LOBBY
+        # reached its postcondition before the legacy route may continue.
+        def match_lobby_stage_selection(img, name, threshold):
+            if name == "common/select_stage.png":
+                return (150, 150), 0.9
+            if name == "goback_town.png":
+                return (100, 800), 0.9
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = match_lobby_stage_selection
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(150, 150)

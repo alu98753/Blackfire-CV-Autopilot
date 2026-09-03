@@ -2,6 +2,8 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
+from states.handlers.collection_progress import complete_collection, defer_collection
+from states.navigation_intent import IntentId
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 
 class DiamondCollectionHandler(BaseStateHandler):
@@ -130,6 +132,11 @@ class DiamondCollectionHandler(BaseStateHandler):
                 else:
                     # 退出按鈕已經不在畫面上，說明視窗成功關閉！
                     logging.info("💎 領鑽石：退出按鈕已消失，確認視窗已關閉。領鑽石流程結束。")
+                    complete_collection(
+                        self.machine,
+                        IntentId.COLLECT_DIAMOND,
+                        getattr(self.machine, "diamond_cooldown_detected", False),
+                    )
                     self.machine.need_diamond_collection = False
                     self.machine.diamond_collected_this_run = False
                     self.machine.diamond_cooldown_detected = False
@@ -141,7 +148,12 @@ class DiamondCollectionHandler(BaseStateHandler):
                         self.machine.last_diamond_collection_time = time.time()
                     else:
                         self.machine.diamond_ocr_success = False
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                    next_state = (
+                        self.machine.STATE_COLLECT_ONLY
+                        if self.machine.is_in_collect_only_mode()
+                        else self.machine.STATE_NAVIGATING
+                    )
+                    self.machine.transition_to(next_state)
                     return
  
             # 情況二：尚未領取且無冷卻，點擊免費鑽石
@@ -164,6 +176,14 @@ class DiamondCollectionHandler(BaseStateHandler):
                 self.machine.diamond_window_opened = False
                 self.machine.diamond_window_missing_count = 0
                 self.machine.diamond_free_clicked = False
+                if defer_collection(self.machine, IntentId.COLLECT_DIAMOND):
+                    return
+                next_state = (
+                    self.machine.STATE_COLLECT_ONLY
+                    if self.machine.is_in_collect_only_mode()
+                    else self.machine.STATE_NAVIGATING
+                )
+                self.machine.transition_to(next_state)
             return
         else:
             # B. 情況三：尚未開啟鑽石彈窗，尋找並點選城鎮中的鑽石入口

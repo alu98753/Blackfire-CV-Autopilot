@@ -3,6 +3,14 @@ import os
 import time
 
 from states.handlers.base import BaseStateHandler
+from states.navigation_routing import (
+    NavigationDecisionExecutor,
+    resolve_navigation_context,
+)
+from states.navigation_intent import ActionId, IntentId, PostconditionId
+from states.navigation_progress import NavigationProgress
+from utils.scene_detector import SceneDetector
+from utils.scene_snapshot import DetectionProfileId
 
 
 class LobbyHandler(BaseStateHandler):
@@ -12,6 +20,7 @@ class LobbyHandler(BaseStateHandler):
         self.last_start_click_time = None
         self.start_retry_interval = 1.0
         self.start_max_timeout = 5.0
+        self.scene_detector = SceneDetector(self.matcher)
 
     def reset_state(self):
         self.start_first_click_time = None
@@ -27,7 +36,6 @@ class LobbyHandler(BaseStateHandler):
             if pos:
                 logging.info("Battle feature [%s] detected (confidence %.4f); entering BATTLE.", feat, confidence)
                 self.reset_state()
-                self.machine.battle_start_time = time.time()
                 self.machine.transition_to(self.machine.STATE_BATTLE)
                 return
 
@@ -55,6 +63,20 @@ class LobbyHandler(BaseStateHandler):
         if self._handle_preconditions(screen_img, rect):
             return
 
+        scene = self.scene_detector.detect(
+            screen_img,
+            machine=self.machine,
+            profile=DetectionProfileId.LOBBY,
+        )
+        routing = resolve_navigation_context(self.machine, scene)
+        executor = NavigationDecisionExecutor(self)
+        if executor.execute(
+            routing,
+            screen_img,
+            rect,
+            start_callback=lambda: self._handle_start_button(screen_img, rect),
+        ):
+            return
         self._handle_start_button(screen_img, rect)
 
     def _handle_preconditions(self, screen_img, rect):
@@ -90,15 +112,6 @@ class LobbyHandler(BaseStateHandler):
             self.machine.pop_and_next_town_subflow()
             return True
 
-        if not getattr(self.machine, "dev_subflows", None):
-            if self.machine.need_diamond_collection or (
-                self.machine.enable_bread and self.machine.need_bread_collection
-            ):
-                logging.info("Lobby: collection is pending; entering NAVIGATING.")
-                self.reset_state()
-                self.machine.transition_to(self.machine.STATE_NAVIGATING)
-                return True
-
         stage_farming_enabled = self.machine.config.get("enable_stage_farming", False)
         if not stage_farming_enabled and not getattr(self.machine, "is_in_dungeon", False):
             logging.info("Lobby: stage farming disabled; entering COLLECT_ONLY.")
@@ -121,6 +134,9 @@ class LobbyHandler(BaseStateHandler):
         if not pos:
             if self.start_first_click_time is not None:
                 logging.info("Lobby start button disappeared; entering LOADING.")
+                progress = getattr(self.machine, "navigation_progress", None)
+                if isinstance(progress, NavigationProgress):
+                    progress.clear(IntentId.PRIMARY_NAVIGATION)
                 self.reset_state()
                 self.notify_ui_progress()
                 self.machine.last_lobby_start_click_time = now
@@ -143,6 +159,15 @@ class LobbyHandler(BaseStateHandler):
             self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
             self.start_first_click_time = now
             self.last_start_click_time = now
+            progress = getattr(self.machine, "navigation_progress", None)
+            if isinstance(progress, NavigationProgress):
+                progress.begin(
+                    IntentId.PRIMARY_NAVIGATION,
+                    ActionId.START_PRIMARY,
+                    PostconditionId.LOADING_OR_BATTLE,
+                    getattr(self.machine, "_navigation_frame_id", 0),
+                    now,
+                )
             return
 
         total_elapsed = now - self.start_first_click_time
@@ -151,6 +176,9 @@ class LobbyHandler(BaseStateHandler):
                 "Lobby start button remained visible for %.1fs; resetting click tracking.",
                 total_elapsed,
             )
+            progress = getattr(self.machine, "navigation_progress", None)
+            if isinstance(progress, NavigationProgress):
+                progress.clear(IntentId.PRIMARY_NAVIGATION)
             self.reset_state()
             return
 

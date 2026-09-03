@@ -37,7 +37,15 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((300, 300), 0.9) if name == "dungeons/Treasure.png" else (None, 0.0)
         )
-        self.state_machine.step()
+        explore_handler = self.state_machine.handlers[
+            self.state_machine.STATE_DUNGEON_EXPLORING
+        ]
+        with patch.object(
+            explore_handler,
+            "_run_treasure_subflow",
+            return_value=True,
+        ):
+            self.state_machine.step()
         self.mock_mouse.click.assert_called_with(300, 300)
         self.assertTrue(self.state_machine.chest_opened_this_floor)
         
@@ -230,16 +238,17 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
             
         self.mock_matcher.match.side_effect = mock_match
              
-        # 第一次戰敗
+        # 第一次戰敗 (設定為第 19 次戰敗: count=18)
+        self.state_machine.dungeon_defeat_count = 18
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
-        self.assertEqual(self.state_machine.dungeon_defeat_count, 1)
+        self.assertEqual(self.state_machine.dungeon_defeat_count, 19)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         
-        # 回歸到結算狀態準備第二次
+        # 回歸到結算狀態準備第 20 次戰敗 (達到 20 次上限)
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
-        # 第二次戰敗：這次因為 count=1 >= 1，會點選放棄與確認退出
+        # 第 20 次戰敗：這次因為 count=19 >= 20-1，會點選放棄與確認退出
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了對應的冷卻
@@ -257,7 +266,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         4. 驗證透過子流程搜尋並點擊 common/quit.png 或 goback_town.png， defeat_count 清零並切回 STATE_NAVIGATING。
         """
         self.state_machine.config = GAME_CONFIGS["stage"].copy()
-        self.state_machine.config["stage_max_defeat"] = 2
+        self.state_machine.config["battle_max_defeat"] = 2
         self.state_machine.defeat_count = 0
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         

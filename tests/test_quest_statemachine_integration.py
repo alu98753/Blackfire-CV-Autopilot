@@ -276,6 +276,11 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.daily_mgr.record_subflow_completed("blood_altar")
         self.daily_mgr.record_subflow_completed("jewelry_workshop")
         self.daily_mgr.record_subflow_completed("bulletin_board")
+        self.daily_mgr.record_subflow_completed("demon_lords")
+        demon_bosses = self.daily_mgr.status.get("subflows", {}).get("demon_lords", {}).get("bosses", {})
+        for db in demon_bosses.values():
+            db["today_count"] = 3
+            db["completed_today"] = True
         bosses = self.daily_mgr.status["subflows"]["lord_boss"]["bosses"]
         for b in bosses.values():
             b["today_count"] = 5
@@ -290,15 +295,19 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         # 手動將所有任務設為 completed
         for t in scheduler.tasks:
             t.completed_count = t.target_count
+            self.daily_mgr.remove_accepted_quest(t.quest_title)
 
         res = sm.check_and_advance_quest_target()
         self.assertIsNone(res)
         self.assertIsNone(sm.quest_scheduler)
         
+        from config import PRIMARY_MODES
+        expected_sub = PRIMARY_MODES["daily"].get("tier4_sub_stage", "first")
+
         # 測試由 evaluate_and_schedule_daily_pipeline 統一將配置切換至動態/預設 Tier 4 Mix 模式
         sm.evaluate_and_schedule_daily_pipeline()
         self.assertEqual(sm.config["type"], "mix")
-        self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
+        self.assertEqual(sm.config["stage_name"], f"冰凍峽谷 ({expected_sub})")
 
     def test_result_handler_batch_exit_on_fourth_run(self):
         """驗證當普通關卡任務 (batch_size=4) 戰鬥勝利至第 4 場時，ResultHandler 自動累加 completed_count 並觸發批次離場」"""

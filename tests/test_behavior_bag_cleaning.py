@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
 from unittest.mock import MagicMock, patch
+from config import BACKPACK_FULL_SETTINGS
 from states.handlers.bag_cleaning import BagCleaningHandler
 from states.handlers.backpack_full_sorting import BackpackFullSortingHandler
 
@@ -59,10 +60,18 @@ class TestBehaviorBagCleaning(unittest.TestCase):
         handler.classify_slot_color = MagicMock(side_effect=lambda crop: classify_returns.pop(0) if classify_returns else "gray_or_empty")
         mock_std.return_value = 25.0
 
-        handler.machine.config = {"goods_settings": {"gray": {"item": True}, "green": {}}}
+        destroy_settings = {
+            "destroy_goods": {
+                "gray": {"item": True},
+                "green": {},
+                "blue": {},
+                "purple": {},
+            }
+        }
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
 
-        with patch('states.handlers.backpack_full_sorting.time.sleep'):
+        with patch.dict(BACKPACK_FULL_SETTINGS, destroy_settings, clear=True), \
+             patch('states.handlers.backpack_full_sorting.time.sleep'):
             handler.handle(fake_img, self.rect)
 
         # 驗證發射點擊之 X 座標大於 650 (即正確點擊第 1 格 gray_or_empty，而非第 0 格 green)
@@ -173,6 +182,55 @@ class TestBehaviorBagCleaning(unittest.TestCase):
 
         self.assertFalse(self.mock_machine.need_bag_cleaning)
         self.mock_machine.transition_to.assert_called()
+
+    @patch('os.path.exists', return_value=True)
+    def test_5_6_deselect_valuable_items_with_calibrated_offsets(self, mock_exists):
+        """
+        [5.6 Behavior Test]
+        Given: 大量分解畫面中，Row 1 Col 1 為紫色貴重裝備且帶有打勾，Row 0 Col 0 貴重但無打勾
+        When: 執行 handler.deselect_valuable_items()
+        Then: 成功依校準偏移偵測到 Row 1 Col 1 打勾，發射點擊反選並記錄至 bag_deselected_slots
+        """
+        self.mock_machine.config = {"disassemble_colors": ["gray_or_empty", "green", "blue"]}
+        self.mock_machine.bag_deselected_slots = set()
+
+        handler = BagCleaningHandler(self.mock_machine)
+        handler.matcher = MagicMock()
+        handler.mouse = MagicMock()
+        handler.classify_slot_color = MagicMock()
+
+        # 模擬比對 quit.png 於標準座標 (1391, 185)
+        handler.matcher.match.side_effect = lambda img, tpl, **kw: ((1391, 185), 0.95) if tpl == "common/quit.png" else (None, 0.0)
+
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        # 根據校準常數計算 Row 1 Col 1 中心及打勾區
+        btn_cx = 1391 + int(handler.QUIT_OFFSET_X * 1.0)
+        btn_cy = 185 + int(handler.QUIT_OFFSET_Y * 1.0)
+        x1_r1c1 = int(btn_cx + 1 * handler.CELL_WIDTH)
+        y1_r1c1 = int(btn_cy + 1 * handler.CELL_HEIGHT)
+        cx_r1c1 = int(x1_r1c1 + handler.CELL_WIDTH / 2.0)
+        cy_r1c1 = int(y1_r1c1 + handler.CELL_HEIGHT / 2.0)
+        fake_img[y1_r1c1+10:y1_r1c1+120, x1_r1c1+10:x1_r1c1+120] = (80, 20, 80)
+
+        chk_x = int(cx_r1c1 + handler.CHECK_OFFSET_X)
+        chk_y = int(cy_r1c1 + handler.CHECK_OFFSET_Y)
+        fake_img[chk_y:chk_y+20, chk_x:chk_x+20] = (0, 200, 0)
+
+        # 設定色彩分類：Row 1 Col 1 為 purple，其餘為 gray_or_empty
+        def mock_classify(crop):
+            if crop.shape[0] > 0 and crop.shape[1] > 0 and np.mean(crop) > 1.0:
+                return "purple"
+            return "gray_or_empty"
+
+        handler.classify_slot_color.side_effect = mock_classify
+
+        with patch('states.handlers.bag_cleaning.time.sleep'):
+            res = handler.deselect_valuable_items(fake_img, self.rect)
+
+        self.assertTrue(res)
+        handler.mouse.click.assert_called_once_with(self.rect["left"] + cx_r1c1, self.rect["top"] + cy_r1c1)
+        self.assertIn((1, 1), self.mock_machine.bag_deselected_slots)
 
 if __name__ == "__main__":
     unittest.main()

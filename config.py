@@ -12,13 +12,67 @@ from utils.config_manager import JsonConfigManager, TomlConfigManager, dump_toml
 
 WINDOW_TITLE = "Blackfire Crusade"
 STEAM_APP_ID = "1765770"
+TIER4_MODE_STAGE = "stage"
+TIER4_MODE_DOMAIN = "domain"
+DEFAULT_TIER4_DOMAIN = "golden_empire"
+TIER4_MODE_OPTIONS = (
+    (TIER4_MODE_STAGE, "普通關卡 (Stage)"),
+    (TIER4_MODE_DOMAIN, "領地探索 (Domain)"),
+)
+TIER4_DOMAIN_OPTIONS = (
+    (DEFAULT_TIER4_DOMAIN, "黃金古國"),
+)
 CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
 LOCAL_CONFIG_PATH = CONFIG_DIR / "local.toml"
-_DEFAULTS_MANAGER = TomlConfigManager(DEFAULTS_PATH)
 _ACTIVE_PROFILE: str = "native"
 _PROFILE_MANAGER = None
+
+_REQUIRED_DEFAULT_SETTING_PATHS = (
+    ("global",),
+    ("navigation", "action_timeout_seconds"),
+    ("navigation", "action_max_attempts"),
+    ("navigation", "collection_backoff_seconds"),
+    ("navigation", "collection_recovery_failure_limit"),
+    ("navigation", "stamina_retreat_quit_max_attempts"),
+    ("quest", "max_run_limit"),
+    ("quest", "target_count"),
+    ("quest", "stage_batch_size"),
+    ("quest", "dungeon_batch_size"),
+    ("catalog", "dungeon_names"),
+    ("catalog", "dungeon_entry_templates"),
+    ("catalog", "stage_templates"),
+    ("ocr", "task_banner"),
+    ("ocr", "bulletin_board"),
+    ("defaults", "disassemble_colors"),
+    ("defaults", "keep_colors"),
+    ("defaults", "activities"),
+    ("primary_modes",),
+    ("subflow_configs",),
+    ("backpack_full", "destroy_goods"),
+    ("base_stage_levels",),
+)
+
+
+def _validate_defaults_snapshot(settings: dict) -> None:
+    """Reject syntactically valid but incomplete defaults during an editor save."""
+    if settings.get("config_version") != 1:
+        raise ValueError("不支援的 config/defaults.toml config_version")
+
+    for path in _REQUIRED_DEFAULT_SETTING_PATHS:
+        value = settings
+        for key in path:
+            if not isinstance(value, dict) or key not in value:
+                dotted_path = ".".join(path)
+                raise ValueError(f"config/defaults.toml 缺少必要設定: {dotted_path}")
+            value = value[key]
+
+
+_DEFAULTS_MANAGER = TomlConfigManager(
+    DEFAULTS_PATH,
+    validator=_validate_defaults_snapshot,
+)
 
 
 def get_active_profile() -> str:
@@ -58,7 +112,23 @@ def _get_override_config() -> dict:
         return {}
     if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
         _PROFILE_MANAGER = TomlConfigManager(target_path, default={})
-    return _PROFILE_MANAGER.snapshot()
+    return _normalize_legacy_override(_PROFILE_MANAGER.snapshot())
+
+
+def _normalize_legacy_override(override: dict) -> dict:
+    """Map the former jewelry goods_settings key before merging with defaults."""
+    normalized = deepcopy(override)
+    subflows = normalized.get("subflow_configs")
+    if not isinstance(subflows, dict):
+        return normalized
+
+    workshop = subflows.get("jewelry_workshop")
+    if not isinstance(workshop, dict):
+        return normalized
+
+    if "sell_goods" not in workshop and "goods_settings" in workshop:
+        workshop["sell_goods"] = workshop.pop("goods_settings")
+    return normalized
 
 
 def _load_legacy_exports() -> dict:
@@ -84,6 +154,7 @@ def _restore_mode_key_types(modes: dict) -> dict:
 
 # Existing imports remain valid while configuration data now lives in TOML.
 GLOBAL_SETTINGS = _SETTINGS["global"]
+BATTLE_MAX_DEFEAT = GLOBAL_SETTINGS.get("battle_max_defeat", 20)
 QUEST_MAX_RUN_LIMIT = _SETTINGS["quest"]["max_run_limit"]
 QUEST_TARGET_COUNT = _SETTINGS["quest"]["target_count"]
 QUEST_STAGE_BATCH_SIZE = _SETTINGS["quest"]["stage_batch_size"]
@@ -98,6 +169,7 @@ BULLETIN_BOARD_OCR_OFFSET = _SETTINGS["ocr"]["bulletin_board"]
 
 PRIMARY_MODES = _restore_mode_key_types(_SETTINGS["primary_modes"])
 SUBFLOW_CONFIGS = _SETTINGS["subflow_configs"]
+BACKPACK_FULL_SETTINGS = _SETTINGS["backpack_full"]
 BASE_STAGE_LEVELS = _SETTINGS["base_stage_levels"]
 
 DEFAULT_DISASSEMBLE_COLORS = _SETTINGS["defaults"]["disassemble_colors"]
@@ -134,6 +206,31 @@ def get_battle_max_duration_seconds() -> float:
     return float(GLOBAL_SETTINGS.get("battle_max_duration_sec", 900.0))
 
 
+def get_navigation_progress_settings() -> dict:
+    """Return required TOML-only action timeout and collection backoff settings."""
+    settings = get_defaults_config()["navigation"]
+    return {
+        "action_timeout_seconds": float(settings["action_timeout_seconds"]),
+        "action_max_attempts": int(settings["action_max_attempts"]),
+        "collection_backoff_seconds": float(
+            settings["collection_backoff_seconds"]
+        ),
+        "collection_recovery_failure_limit": int(
+            settings["collection_recovery_failure_limit"]
+        ),
+    }
+
+
+def get_stamina_retreat_settings() -> dict:
+    """Return TOML-only limits for the bounded stamina retreat recovery."""
+    settings = get_defaults_config()["navigation"]
+    return {
+        "dismiss_max_attempts": int(settings["action_max_attempts"]),
+        "quit_max_attempts": int(settings["stamina_retreat_quit_max_attempts"]),
+        "return_town_max_attempts": int(settings["action_max_attempts"]),
+    }
+
+
 def normalize_config(config):
     """Populate the mode-independent equipment and activity defaults."""
     if not isinstance(config, dict):
@@ -156,7 +253,9 @@ def normalize_config(config):
         elif activity_key == "lord_boss_targets":
             cfg[activity_key] = list(default_value)
         elif activity_key == "enable_town_daily":
-            cfg[activity_key] = False if mode_type == "collect_only" else default_value
+            cfg[activity_key] = mode_type in ["daily", "mix"]
+        elif activity_key == "enable_demon_lords":
+            cfg[activity_key] = mode_type in ["daily", "mix"]
         elif activity_key == "enable_quests":
             cfg[activity_key] = mode_type == "daily"
         elif activity_key == "enable_golden_empire":
@@ -188,6 +287,7 @@ def _reapply_all_settings(settings: dict) -> None:
     _replace_mapping(GLOBAL_SETTINGS, settings["global"])
     _replace_mapping(PRIMARY_MODES, _restore_mode_key_types(settings["primary_modes"]))
     _replace_mapping(SUBFLOW_CONFIGS, settings["subflow_configs"])
+    _replace_mapping(BACKPACK_FULL_SETTINGS, settings["backpack_full"])
     _replace_mapping(BASE_STAGE_LEVELS, settings["base_stage_levels"])
     DEFAULT_DISASSEMBLE_COLORS = settings["defaults"]["disassemble_colors"]
     DEFAULT_KEEP_COLORS = settings["defaults"]["keep_colors"]

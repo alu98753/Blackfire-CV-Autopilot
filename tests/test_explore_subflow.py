@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 import os
 import sys
 import time
@@ -44,7 +44,7 @@ class TestExploreSubflow(unittest.TestCase):
         # 第二次比對：發現 Get_tresure_comfirm.png
         # 第三次比對：發現 quit.png
         match_call_count = 0
-        def side_effect(img, name, threshold):
+        def side_effect(img, name, threshold, **_kwargs):
             nonlocal match_call_count
             if name == "dungeons/Get_tresure.png" and match_call_count == 0:
                 match_call_count += 1
@@ -55,6 +55,9 @@ class TestExploreSubflow(unittest.TestCase):
             elif name == "common/quit.png" and match_call_count == 2:
                 match_call_count += 1
                 return (300, 100), 0.95
+            elif name == "dungeons/gungeon_godown.png" and match_call_count == 3:
+                match_call_count += 1
+                return (400, 500), 0.95
             return None, 0.0
             
         self.mock_matcher.match.side_effect = side_effect
@@ -63,13 +66,111 @@ class TestExploreSubflow(unittest.TestCase):
         
         # 以 patch 縮短 subflow 的 sleep 時間以加快測試速度
         with patch('states.handlers.explore.time.sleep') as mock_sleep:
-            self.handler._run_treasure_subflow(rect)
+            result = self.handler._run_treasure_subflow(rect)
             
         # 驗證是否點擊了這三個按鈕，且座標加了 rect["left"] / rect["top"]
         self.assertEqual(self.mock_mouse.click.call_count, 3)
+        self.assertTrue(result)
         self.mock_mouse.click.assert_any_call(110, 220)  # 10 + 100, 20 + 200
         self.mock_mouse.click.assert_any_call(160, 270)  # 10 + 150, 20 + 250
         self.mock_mouse.click.assert_any_call(310, 120)  # 10 + 300, 20 + 100
+
+    def test_run_treasure_subflow_waits_through_transient_misses(self):
+        """Loading frames without buttons must not end the treasure subflow."""
+        self.mock_capturer.capture.return_value = MagicMock()
+        open_checks = 0
+        confirm_checks = 0
+
+        def side_effect(_img, name, threshold, **_kwargs):
+            nonlocal open_checks, confirm_checks
+            if name == "dungeons/Get_tresure.png":
+                open_checks += 1
+                if open_checks == 3:
+                    return (100, 200), 0.9999
+            if name == "dungeons/Get_tresure_comfirm.png":
+                confirm_checks += 1
+                if confirm_checks == 1:
+                    return (150, 250), 0.8230
+            if name == "common/quit.png":
+                return (300, 100), 0.95
+            if name == "dungeons/dungeons_complete.png":
+                return (400, 500), 0.95
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = side_effect
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        with patch("states.handlers.explore.time.sleep"):
+            result = self.handler._run_treasure_subflow(rect)
+
+        self.assertTrue(result)
+        self.assertEqual(self.mock_mouse.click.call_count, 3)
+        self.assertEqual(open_checks, 3)
+
+    @patch("states.handlers.explore.os.path.exists", return_value=True)
+    def test_run_treasure_subflow_reclicks_confirm_until_disappeared(
+        self,
+        _mock_exists,
+    ):
+        """A sticky treasure confirmation must be re-clicked before advancing."""
+        self.mock_capturer.capture.return_value = MagicMock()
+        open_visible = True
+        confirm_checks = 0
+
+        def side_effect(_img, name, threshold, **_kwargs):
+            nonlocal open_visible, confirm_checks
+            if name == "dungeons/Get_tresure.png" and open_visible:
+                open_visible = False
+                return (100, 200), 0.9999
+            if name == "dungeons/Get_tresure_comfirm.png":
+                confirm_checks += 1
+                if confirm_checks <= 4:
+                    return (150, 250), 0.9999
+            if name == "common/quit.png":
+                return (300, 100), 0.95
+            if name == "dungeons/gungeon_godown.png":
+                return (400, 500), 0.95
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = side_effect
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        result = self.handler._run_treasure_subflow(rect)
+
+        confirm_click = call(160, 270)
+        self.assertTrue(result)
+        self.assertGreaterEqual(
+            self.mock_mouse.click.call_args_list.count(confirm_click),
+            2,
+        )
+        self.assertGreaterEqual(confirm_checks, 5)
+
+    @patch("states.handlers.explore.os.path.exists", return_value=True)
+    def test_run_treasure_subflow_accepts_terminal_anchor_without_quit(
+        self,
+        _mock_exists,
+    ):
+        """A treasure UI that closes directly into the next floor is complete."""
+        self.mock_capturer.capture.return_value = MagicMock()
+        get_treasure_checks = 0
+
+        def side_effect(_img, name, threshold, **_kwargs):
+            nonlocal get_treasure_checks
+            if name == "dungeons/Get_tresure.png":
+                get_treasure_checks += 1
+                if get_treasure_checks == 1:
+                    return (100, 200), 0.9999
+            if name == "dungeons/gungeon_godown.png" and get_treasure_checks > 1:
+                return (400, 500), 0.9999
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = side_effect
+        rect = {"left": 10, "top": 20, "width": 800, "height": 600}
+
+        result = self.handler._run_treasure_subflow(rect)
+
+        self.assertTrue(result)
+        self.mock_mouse.click.assert_called_once_with(110, 220)
 
     @patch('states.handlers.explore.os.path.exists')
     def test_run_bless_subflow_success(self, mock_exists):

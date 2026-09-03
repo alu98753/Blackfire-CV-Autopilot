@@ -7,9 +7,10 @@ import time
 
 from actions.mouse import MouseController
 from capture.screen import ScreenCapturer
-from config import get_monitor_index, normalize_config
+from config import GAME_CONFIGS, TIER4_MODE_STAGE, get_monitor_index, normalize_config
 from states.state_machine import GameStateMachine
 from utils.daily_manager import DailyManager
+from utils.tier4_config import build_tier4_fallback_config
 from vision.matcher import TemplateMatcher
 from cli.profiles import resolve_profile_name
 
@@ -74,8 +75,18 @@ def check_mode_templates(config):
         for btn in bag_files:
             if not os.path.exists(os.path.join("templates", btn)):
                 missing.append(btn)
-                
-    return missing
+
+    if config.get("_config_mode_key") == "daily":
+        tier4_config = build_tier4_fallback_config(config, GAME_CONFIGS)
+        tier4_config.pop("_config_mode_key", None)
+        if tier4_config.get("tier4_mode") == TIER4_MODE_STAGE:
+            tier4_config["type"] = "stage"
+            tier4_config["navigation_path"] = tier4_config.get(
+                "stage_navigation_path", []
+            )
+        missing.extend(check_mode_templates(tier4_config))
+
+    return list(dict.fromkeys(missing))
 
 
 def init_state_machine_system(args, config, target_hwnd=None):
@@ -193,4 +204,3 @@ def init_state_machine_system(args, config, target_hwnd=None):
     print("[*] 將在 3 秒後開始偵測...")
     time.sleep(3)
     return state_machine
-
