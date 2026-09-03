@@ -178,6 +178,11 @@ class TestDemonLordsSubflow(unittest.TestCase):
         ret = handler.handle(dummy_screen, rect)
         self.assertTrue(ret)
         self.mock_mouse.click.assert_called_with(800, 700)
+        self.assertTrue(handler.launch_pending)
+
+        # 第二 Tick：觀察到進入戰鬥特徵，狀態機完成後驗證進入 STATE_BATTLE
+        ret2 = handler.handle(dummy_screen, rect)
+        self.assertTrue(ret2)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         self.assertEqual(self.state_machine.current_demon_lord_key, "voidborn_elres")
 
@@ -377,8 +382,13 @@ class TestDemonLordsSubflow(unittest.TestCase):
 
         ret = handler.handle(dummy_screen, rect)
         self.assertTrue(ret)
-        # 斷言：點擊的是開始戰鬥按鈕 (800, 700)，且狀態轉入 BATTLE
+        # 斷言：點擊的是開始戰鬥按鈕 (800, 700)
         self.mock_mouse.click.assert_called_with(800, 700)
+        self.assertTrue(handler.launch_pending)
+
+        # 第二 Tick：觀察到進入戰鬥特徵，狀態機完成後驗證進入 STATE_BATTLE
+        ret2 = handler.handle(dummy_screen, rect)
+        self.assertTrue(ret2)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         # 斷言：未被重新初始化成 ['2', '1', '1']
         self.assertIsNone(handler.pending_stone_queue)
