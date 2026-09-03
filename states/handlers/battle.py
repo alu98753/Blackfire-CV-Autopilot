@@ -31,7 +31,7 @@ class BattleHandler(BaseStateHandler):
         for feature in self.machine.dungeon_detection_features():
             if not os.path.exists(os.path.join("templates", feature)):
                 continue
-            pos, conf = self.matcher.match(screen_img, feature, threshold=0.8, quiet=True)
+            pos, conf = self.matcher.match(screen_img, feature, threshold=0.88, quiet=True)
             if pos:
                 logging.info(
                     "[Battle recovery] Dungeon anchor [%s] (confidence: %.4f); recovering to EXPLORING.",
@@ -197,6 +197,10 @@ class BattleHandler(BaseStateHandler):
         else:
             check_buttons = res_buttons
 
+        for extra_c in ["common/continue1.png", "common/continue2.png"]:
+            if "common/continue.png" in check_buttons and extra_c not in check_buttons:
+                check_buttons.append(extra_c)
+
         best_match_pos = None
         best_match_conf = 0.80
         best_match_temp = None
@@ -213,10 +217,14 @@ class BattleHandler(BaseStateHandler):
 
         if best_match_pos:
             is_dungeon_run = (
-                self.machine.config.get("type") == "dungeon" or
-                (
-                    getattr(self.machine, "is_in_dungeon", False) and 
-                    getattr(self.machine, "last_state", None) == self.machine.STATE_DUNGEON_EXPLORING
+                getattr(self.machine, "current_demon_lord_key", None) is None
+                and getattr(self.machine, "current_lord_boss_key", None) is None
+                and (
+                    self.machine.config.get("type") == "dungeon"
+                    or (
+                        getattr(self.machine, "is_in_dungeon", False)
+                        and getattr(self.machine, "last_state", None) == self.machine.STATE_DUNGEON_EXPLORING
+                    )
                 )
             )
             if is_dungeon_run:

@@ -32,9 +32,10 @@ class ResultHandler(BaseStateHandler):
 
     def _commit_demon_lords_result(self):
         """Commit one verified fight and return control to the Demon Lords workflow."""
+        boss_key = getattr(self.machine, "current_demon_lord_key", None)
         daily_manager = getattr(self.machine, "daily_manager", None)
         if daily_manager is not None:
-            daily_manager.record_demon_lords_fight()
+            daily_manager.record_demon_lords_fight(boss_key)
         self.machine.current_demon_lord_key = None
         self.reset_state()
         self.machine.transition_to(self.machine.STATE_DEMON_LORDS)
@@ -239,8 +240,10 @@ class ResultHandler(BaseStateHandler):
         # 計算是否滿足離場條件 (第 4、8、10 場 / 滿背包 / 體力退避等)
         is_daily = self.machine.is_daily_pipeline_active()
         boss_available = False
+        demon_available = False
         if is_daily and getattr(self.machine, "daily_manager", None):
             dm = self.machine.daily_manager
+            demon_available = getattr(self.machine, "has_available_demon_lords", lambda: False)()
             boss_available = self.machine.has_available_selected_lord_boss()
 
         is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
@@ -262,6 +265,8 @@ class ResultHandler(BaseStateHandler):
         )
         if daily_quest_ready_to_preempt_tier4:
             logging.info("📋 [Tier 4 插隊] 偵測到 Daily 懸賞任務冷卻結束；本場結算後離場並切回懸賞任務。")
+        elif is_daily and demon_available:
+            logging.info("👑 [Tier 4 插隊] 偵測到深淵魔王次數未用盡；本場結算後離場並切回魔王討伐。")
         elif is_daily and boss_available:
             logging.info("⚔️ [Tier 4 插隊] 偵測到領主 Boss 冷卻結束可挑戰；本場結算後離場並切回 Boss 討伐。")
 
@@ -272,6 +277,7 @@ class ResultHandler(BaseStateHandler):
             self.machine.need_diamond_collection or 
             (self.machine.enable_bread and self.machine.need_bread_collection) or
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
+            (is_daily and demon_available) or
             (is_daily and boss_available) or
             daily_quest_ready_to_preempt_tier4 or
             (is_daily and quest_batch_completed and not is_in_tier4) or
