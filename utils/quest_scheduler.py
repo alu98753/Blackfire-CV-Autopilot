@@ -6,9 +6,10 @@ class QuestScheduler:
     每日懸賞任務動態排程器 (Quest Scheduler & Task Maintainer)。
     負責管理全套每日任務佇列，並動態生成與調整 CLI 啟動指令。
     """
-    def __init__(self, daily_manager=None):
+    def __init__(self, daily_manager=None, bounty_config=None):
         self.tasks = []
         self.daily_manager = daily_manager
+        self.bounty_config = bounty_config
 
     def add_task(self, task_node):
         """
@@ -131,7 +132,10 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
+        from utils.quest_mapper import is_quest_allowed
         for target_task in pending:
+            if self.bounty_config and not is_quest_allowed(target_task, self.bounty_config):
+                continue
             if target_task.mode_type == "dungeon":
                 idx = target_task.dungeon_index
                 if dungeon_cooldowns and idx is not None:
@@ -168,7 +172,10 @@ class QuestScheduler:
         if not pending:
             return None, "🎉 所有每日懸賞任務均已 100% 完成！"
 
+        from utils.quest_mapper import is_quest_allowed
         for target_task in pending:
+            if self.bounty_config and not is_quest_allowed(target_task, self.bounty_config):
+                continue
             if target_task.mode_type == "dungeon":
                 idx = target_task.dungeon_index
                 if dungeon_cooldowns and idx is not None:
@@ -196,24 +203,29 @@ class QuestScheduler:
 
 
     @classmethod
-    def from_daily_status(cls, accepted_quests, daily_manager=None):
+    def from_daily_status(cls, accepted_quests, daily_manager=None, bounty_config=None):
         """
         [Factory Method] 從已接受任務標題陣列大量解析 TaskNode 並建立 QuestScheduler。
         :param accepted_quests: list of str (任務標題)
         :param daily_manager: DailyManager 實例 (可選，用於記錄 unknown_quests)
+        :param bounty_config: dict (可選，例如 {"max_stage": 4, "max_dungeon": 4})
         """
-        from utils.quest_mapper import QuestMapper
+        from utils.quest_mapper import QuestMapper, is_quest_allowed
         mapper = QuestMapper()
-        scheduler = cls(daily_manager=daily_manager)
+        scheduler = cls(daily_manager=daily_manager, bounty_config=bounty_config)
         unknown_titles = []
 
-        sorted_quests = mapper.sort_quests(accepted_quests)
+        sorted_quests = mapper.sort_quests(accepted_quests, bounty_config=bounty_config)
         for q_title in sorted_quests:
             if q_title:
                 task_node = mapper.parse_quest(q_title)
                 if task_node is not None:
                     if task_node.mode_type == "ignored":
                         logging.info(f"🚫 [懸賞排程器] 任務 [{q_title}] 屬於明確設定跳過/忽略執行的任務，不上報 unknown_quests，不加入執行佇列。")
+                        continue
+                    if bounty_config and not is_quest_allowed(task_node, bounty_config):
+                        lvl = task_node.stage_level if task_node.mode_type == "stage" else task_node.dungeon_index
+                        logging.info(f"🚫 [懸賞排程過濾] 任務 [{q_title}] (等級={lvl}) 超出當前配置上限，不排入執行佇列。")
                         continue
                     scheduler.add_task(task_node)
                 else:

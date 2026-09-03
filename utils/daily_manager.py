@@ -64,6 +64,7 @@ class DailyManager:
     支援每日 08:05 自動重置、各 Boss 獨立 5 次上限與 2 小時 CD 計算。
     """
     def __init__(self, data_dir="user_data", status_file="daily_status.json", profile=None, reset_hour=8, reset_minute=5):
+        self.profile = profile.strip().lower() if profile else None
         if os.path.isabs(status_file):
             self.file_path = status_file
             self.data_dir = os.path.dirname(status_file)
@@ -77,6 +78,7 @@ class DailyManager:
         self.reset_minute = reset_minute
         self.status = {}
         self.last_check_ts = 0.0
+        self._last_file_mtime = 0.0
         self.load_status()
         self.next_reset_timestamp = self.calculate_next_reset_timestamp()
 
@@ -140,7 +142,9 @@ class DailyManager:
         bb = subflows.get("bulletin_board", {})
         raw_quests = bb.get("accepted_quests", [])
         if raw_quests:
+            from config import get_bounty_quest_config
             from utils.quest_mapper import QuestMapper
+            bounty_cfg = get_bounty_quest_config(self.profile)
             mapper = QuestMapper()
             unknowns_found = [q for q in raw_quests if q and mapper.parse_quest(q) is None]
             if unknowns_found:
@@ -148,11 +152,11 @@ class DailyManager:
                     self.record_unknown_quest(uq)
                 raw_quests = [q for q in raw_quests if q not in unknowns_found]
                 bb["accepted_quests"] = raw_quests
-            cleaned_quests = mapper.sort_quests(raw_quests)
+            cleaned_quests = mapper.sort_quests(raw_quests, bounty_config=bounty_cfg)
             if cleaned_quests != raw_quests or unknowns_found:
                 bb["accepted_quests"] = cleaned_quests
                 self.save_status()
-                logging.info(f"✨ [DailyManager] 自動自癒清洗存檔中未正名/未知的任務佇列: {cleaned_quests}")
+                logging.info(f"✨ [DailyManager] 自動自癒清洗存檔中未正名/未知/超標的任務佇列: {cleaned_quests}")
 
         self.reevaluate_unknown_quests()
 
@@ -161,6 +165,12 @@ class DailyManager:
         if self.status.get("last_daily_reset_date") != current_tag:
             logging.info(f"🌅 [DailyManager] 載入存檔時偵測到過期日期標籤 ({self.status.get('last_daily_reset_date')} ➔ {current_tag})，立即執行跨日清零！")
             self.check_and_reset_daily(force=True)
+
+        if os.path.exists(self.file_path):
+            try:
+                self._last_file_mtime = os.path.getmtime(self.file_path)
+            except OSError:
+                pass
 
     def reevaluate_unknown_quests(self):
         """
@@ -220,9 +230,32 @@ class DailyManager:
             os.makedirs(self.data_dir, exist_ok=True)
             with open(self.file_path, "w", encoding="utf-8") as f:
                 json.dump(self.status, f, ensure_ascii=False, indent=2)
+            if os.path.exists(self.file_path):
+                try:
+                    self._last_file_mtime = os.path.getmtime(self.file_path)
+                except OSError:
+                    pass
             logging.info("💾 [DailyManager] 已更新並儲存日常持久化狀態檔。")
         except Exception as e:
             logging.error(f"⚠️ [DailyManager] 儲存狀態檔失敗: {e}")
+
+    def reload_status_if_modified(self):
+        """
+        若磁碟上的 daily_status.json 被使用者手動修改過 (mtime 改變)，
+        自動重新載入最新狀態，確保手動編輯不被記憶體過期快取覆蓋。
+        """
+        if not os.path.exists(self.file_path):
+            return False
+        try:
+            current_mtime = os.path.getmtime(self.file_path)
+        except OSError:
+            return False
+        if current_mtime > getattr(self, "_last_file_mtime", 0.0):
+            logging.info(f"🔄 [DailyManager] 偵測到磁碟狀態檔已被外部修改 ({self.file_path})，重新載入最新狀態...")
+            self.load_status()
+            self._last_file_mtime = current_mtime
+            return True
+        return False
 
     def get_today_reset_tag(self, now_dt=None):
         """
@@ -571,6 +604,10 @@ class DailyManager:
         # 優先重新評估歷史 unknown_quests 嘗試自癒晉升
         self.reevaluate_unknown_quests()
 
+        from config import get_bounty_quest_config
+        from utils.quest_mapper import is_quest_allowed
+        bounty_cfg = get_bounty_quest_config(self.profile)
+
         subflows = self.status.setdefault("subflows", {})
         bb = subflows.setdefault("bulletin_board", {"completed_today": False, "last_executed_at": "", "accepted_quests": []})
         old_quests = bb.get("accepted_quests", [])
@@ -582,6 +619,10 @@ class DailyManager:
             node = mapper.parse_quest(q)
             if node is not None and node.mode_type == "ignored":
                 logging.info(f"🚫 [DailyManager] 新抓取任務 [{q}] 為顯式忽略任務，不寫入 accepted_quests。")
+                continue
+            if node is not None and not is_quest_allowed(node, bounty_cfg):
+                lvl = node.stage_level if node.mode_type == "stage" else node.dungeon_index
+                logging.info(f"🚫 [DailyManager] 新抓取任務 [{q}] (等級={lvl}) 超出當前配置上限，予以過濾不寫入。")
                 continue
             if node is None:
                 logging.warning(f"⚠️ [DailyManager] 新抓取任務 [{q}] 為未知/無法解析任務，自動移至 unknown_quests，不寫入 accepted_quests。")
@@ -596,6 +637,9 @@ class DailyManager:
             node = mapper.parse_quest(q)
             if node is not None and node.mode_type == "ignored":
                 continue
+            if node is not None and not is_quest_allowed(node, bounty_cfg):
+                logging.info(f"🚫 [DailyManager] 既有任務 [{q}] 超出當前配置上限，予以過濾移除。")
+                continue
             if node is None:
                 self.record_unknown_quest(q)
                 continue
@@ -603,11 +647,11 @@ class DailyManager:
                 updated.append(q)
 
         # 使用 mapper.sort_quests 進行多階梯優先級排序 (確定性 ➔ 地下城/關卡 ➔ idx/level大者優先)
-        sorted_quests = mapper.sort_quests(updated)
+        sorted_quests = mapper.sort_quests(updated, bounty_config=bounty_cfg)
 
         bb["accepted_quests"] = sorted_quests
         self.save_status()
-        logging.info(f"📋 [DailyManager] 懸賞任務佇列更新完成 (已自動排序與剔除 ignored 任務): {sorted_quests}")
+        logging.info(f"📋 [DailyManager] 懸賞任務佇列更新完成 (已自動排序與剔除 ignored/超標任務): {sorted_quests}")
         return sorted_quests
 
 
@@ -666,10 +710,14 @@ class DailyManager:
     def load_quest_scheduler(self):
         """
         讀取當前 accepted_quests 並呼叫 QuestScheduler.from_daily_status 建立動態排程器。
+        載入前自動檢查磁碟狀態檔是否被外部手動修改，確保載入最新資料。
         """
+        self.reload_status_if_modified()
+        from config import get_bounty_quest_config
         from utils.quest_scheduler import QuestScheduler
+        bounty_cfg = get_bounty_quest_config(self.profile)
         accepted = self.status.get("subflows", {}).get("bulletin_board", {}).get("accepted_quests", [])
-        return QuestScheduler.from_daily_status(accepted, daily_manager=self)
+        return QuestScheduler.from_daily_status(accepted, daily_manager=self, bounty_config=bounty_cfg)
 
     def record_unknown_quest(self, quest_title):
         """

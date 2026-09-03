@@ -228,6 +228,28 @@ def normalize_quest_title(title):
     return mapper.normalize_quest_title(title)
 
 
+def is_quest_allowed(task_node, bounty_config=None):
+    """
+    [Greenfield-lite Pure Predicate Policy] 判定任務節點是否在玩家允許的關卡/地下城上限內。
+    :param task_node: TaskNode 實例
+    :param bounty_config: dict，例如 {"max_stage": 4, "max_dungeon": 4}
+    :return: bool
+    """
+    if task_node is None or getattr(task_node, "mode_type", None) == "ignored":
+        return False
+    if not bounty_config or not isinstance(bounty_config, dict):
+        return True
+    max_stage = bounty_config.get("max_stage")
+    max_dungeon = bounty_config.get("max_dungeon")
+    if task_node.mode_type == "stage" and max_stage is not None and task_node.stage_level is not None:
+        if task_node.stage_level > max_stage:
+            return False
+    if task_node.mode_type == "dungeon" and max_dungeon is not None and task_node.dungeon_index is not None:
+        if task_node.dungeon_index > max_dungeon:
+            return False
+    return True
+
+
 class QuestMapper:
     """
     懸賞任務與指令映射器 (Quest-to-CLI Mapper) [支援 config/quest_rules.json 熱重載與 ValueError 防呆]。
@@ -359,10 +381,11 @@ class QuestMapper:
 
         return (mode_score, policy_score, idx_score, sub_score)
 
-    def sort_quests(self, quest_titles):
+    def sort_quests(self, quest_titles, bounty_config=None):
         """
         對懸賞任務標題陣列進行多階梯優先級排序。
-        過濾掉 ignored 與 unknown (node is None) 任務，並按 [確定性 ➔ 地下城/關卡 ➔ idx/level大者優先] 排序。
+        過濾掉 ignored 與 unknown (node is None) 任務，若傳入 bounty_config 則一併過濾超出上限的任務，
+        並按 [確定性 ➔ 地下城/關卡 ➔ idx/level大者優先] 排序。
         """
         if not quest_titles:
             return []
@@ -370,9 +393,11 @@ class QuestMapper:
         for t in quest_titles:
             if not t:
                 continue
-            norm = normalize_quest_title(t)
+            norm = self.normalize_quest_title(t)
             node = self.parse_quest(norm)
             if node is None or node.mode_type == "ignored":
+                continue
+            if bounty_config is not None and not is_quest_allowed(node, bounty_config):
                 continue
             if norm not in valid_titles:
                 valid_titles.append(norm)
