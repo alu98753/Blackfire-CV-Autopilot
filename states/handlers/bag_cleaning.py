@@ -13,6 +13,24 @@ class BagCleaningHandler(BaseStateHandler):
     將背包清理 8 大核心動作抽取為獨立且可重用的成員 Functions，
     提供其他 Handler 或 Subflow 隨時單獨調用 (例如 open_backpack, tidy_backpack, quit_backpack 等)。
     """
+    # 網格座標與定位錨點常數 (以 1920x1080 基準解析度)
+    QUIT_OFFSET_X = -842
+    QUIT_OFFSET_Y = 87
+    SELECT_ALL_OFFSET_X = -127
+    SELECT_ALL_OFFSET_Y = -520
+    GRID_ROWS = 3
+    GRID_COLS = 6
+    CELL_WIDTH = 134.0
+    CELL_HEIGHT = 139.5
+
+    # 打勾標記取樣區域常數 (相對於格子中心 cx, cy)
+    CHECK_OFFSET_X = -21
+    CHECK_OFFSET_Y = -5
+    CHECK_ZONE_WIDTH = 34
+    CHECK_ZONE_HEIGHT = 30
+    CHECK_HSV_LOWER = np.array([55, 120, 90])
+    CHECK_HSV_UPPER = np.array([85, 255, 255])
+    CHECK_MIN_PIXELS = 15
 
     def is_backpack_opened(self, screen_img) -> bool:
         """防禦性檢查是否處於背包介面 (辨識 5 大背包內部按鈕特徵)"""
@@ -122,15 +140,15 @@ class BagCleaningHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", "common/quit.png")):
             pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.6, brightness_threshold=0.70)
             if pos:
-                btn_cx = pos[0] - int(838 * scale_x)
-                btn_cy = pos[1] + int(87 * scale_y)
+                btn_cx = pos[0] + int(self.QUIT_OFFSET_X * scale_x)
+                btn_cy = pos[1] + int(self.QUIT_OFFSET_Y * scale_y)
                 logging.info(f"🎒 背包清理：優先使用「關閉 X」定位錨點 ({pos[0]}, {pos[1]}) 算得 Row 0 Col 0 左上角 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
 
         if btn_cx is None and os.path.exists(os.path.join("templates", "common/select_all.png")):
             pos, conf = self.matcher.match(screen_img, "common/select_all.png", threshold=0.6, brightness_threshold=0.70)
             if pos:
-                btn_cx = pos[0] - int(127 * scale_x)
-                btn_cy = pos[1] - int(520 * scale_y)
+                btn_cx = pos[0] + int(self.SELECT_ALL_OFFSET_X * scale_x)
+                btn_cy = pos[1] + int(self.SELECT_ALL_OFFSET_Y * scale_y)
                 logging.info(f"🎒 背包清理：備用使用「全選」定位錨點 ({pos[0]}, {pos[1]}) 算得 Row 0 Col 0 左上角 ({btn_cx}, {btn_cy})，信心度: {conf:.4f}")
 
         if btn_cx is not None and btn_cy is not None:
@@ -141,13 +159,16 @@ class BagCleaningHandler(BaseStateHandler):
             target_to_deselect = None
             grid_info = []
 
-            cell_w = 134.0 * scale_x
-            cell_h = 139.5 * scale_y
-            step_x = 134.0 * scale_x
-            step_y = 139.5 * scale_y
+            cell_w = self.CELL_WIDTH * scale_x
+            cell_h = self.CELL_HEIGHT * scale_y
+            step_x = self.CELL_WIDTH * scale_x
+            step_y = self.CELL_HEIGHT * scale_y
 
-            for r in range(3):
-                for c in range(6):
+            cz_w = int(self.CHECK_ZONE_WIDTH * scale_x)
+            cz_h = int(self.CHECK_ZONE_HEIGHT * scale_y)
+
+            for r in range(self.GRID_ROWS):
+                for c in range(self.GRID_COLS):
                     x1 = int(btn_cx + c * step_x)
                     y1 = int(btn_cy + r * step_y)
                     x2 = int(x1 + cell_w)
@@ -160,7 +181,7 @@ class BagCleaningHandler(BaseStateHandler):
                     has_item = crop.size > 0 and np.std(crop) > 20.0
                     color = self.classify_slot_color(crop) if has_item else "gray_or_empty"
 
-                    disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green"])
+                    disassemble_colors = self.machine.config.get("disassemble_colors", ["gray_or_empty", "green", "blue"])
                     is_valuable = has_item and (color not in disassemble_colors)
                     if is_valuable:
                         valuable_found += 1
@@ -168,21 +189,17 @@ class BagCleaningHandler(BaseStateHandler):
                     if has_item:
                         items_found += 1
 
-                    cz_w = int(34 * scale_x)
-                    cz_h = int(30 * scale_y)
-                    check_x = int(cx - 17 * scale_x)
-                    check_y = int(cy - 25 * scale_y)
+                    check_x = int(cx + self.CHECK_OFFSET_X * scale_x)
+                    check_y = int(cy + self.CHECK_OFFSET_Y * scale_y)
                     check_zone = screen_img[max(0, check_y):min(h_limit, check_y + cz_h), max(0, check_x):min(w_limit, check_x + cz_w)]
 
                     has_check_mark = False
                     if check_zone.size > 0:
                         hsv_check = cv2.cvtColor(check_zone, cv2.COLOR_BGR2HSV)
-                        lower_green = np.array([45, 80, 80])
-                        upper_green = np.array([95, 255, 255])
-                        mask_green = cv2.inRange(hsv_check, lower_green, upper_green)
-                        has_check_mark = (mask_green > 0).sum() > 10
+                        mask_green = cv2.inRange(hsv_check, self.CHECK_HSV_LOWER, self.CHECK_HSV_UPPER)
+                        has_check_mark = (mask_green > 0).sum() > self.CHECK_MIN_PIXELS
 
-                    grid_info.append((r, c, cx, cy, x1, y1, x2, y2, color, is_valuable, has_check_mark))
+                    grid_info.append((r, c, cx, cy, x1, y1, x2, y2, check_x, check_y, cz_w, cz_h, color, is_valuable, has_check_mark))
 
                     deselected_slots = getattr(self.machine, "bag_deselected_slots", set())
                     if is_valuable and has_check_mark and ((r, c) not in deselected_slots):
@@ -465,11 +482,19 @@ class BagCleaningHandler(BaseStateHandler):
         }
 
         for item in grid_info:
-            r, c, cx, cy, x1, y1, x2, y2, color, is_valuable, has_check = item
+            if len(item) == 15:
+                r, c, cx, cy, x1, y1, x2, y2, chk_x, chk_y, cz_w, cz_h, color, is_valuable, has_check = item
+            else:
+                r, c, cx, cy, x1, y1, x2, y2, color, is_valuable, has_check = item
+                chk_x, chk_y, cz_w, cz_h = None, None, None, None
 
             box_color = color_bgr_map.get(color, (255, 255, 255))
             cv2.rectangle(debug_img, (x1, y1), (x2, y2), box_color, 2)
             cv2.circle(debug_img, (cx, cy), 3, (0, 255, 255), -1)
+
+            # 繪製打勾採樣檢測框 (黃色小方框)
+            if chk_x is not None:
+                cv2.rectangle(debug_img, (chk_x, chk_y), (chk_x + cz_w, chk_y + cz_h), (0, 255, 255), 1)
 
             check_str = "[V]" if has_check else "[X]"
             val_str = "VAL" if is_valuable else "COM"
