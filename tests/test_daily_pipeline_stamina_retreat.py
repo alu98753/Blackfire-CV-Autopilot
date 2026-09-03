@@ -51,7 +51,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         self.state_machine.primary_config = daily_cfg
 
         # 1. 建立包含地下城 #1 懸賞任務的 QuestScheduler
-        node1 = TaskNode("史萊姆王的毀滅", "dungeon", dungeon_index=0)
+        node1 = TaskNode("史萊姆王的毀滅", "dungeon", dungeon_index=1)
         scheduler = QuestScheduler(daily_manager=self.daily_manager)
         scheduler.add_task(node1)
         self.state_machine.quest_scheduler = scheduler
@@ -66,7 +66,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         scheduled = self.state_machine.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
         self.assertEqual(self.state_machine.config["name"], "懸賞任務 - 黏糊糊的石窟 (任務: 史萊姆王的毀滅)")
-        self.assertEqual(self.state_machine.config["dungeon_index"], 0)
+        self.assertEqual(self.state_machine.config["dungeon_index"], 1)
 
         # 2. 懸賞全清後，再次觸發調度 ➔ 斷言退守 Tier 4 Mix 指定配置
         node1.completed_count = node1.target_count
@@ -85,7 +85,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         tier4_cfg = {
             "name": "每日懸賞任務 - 冰雪洞窟 (關卡: default)",
             "type": "mix",
-            "dungeon_index": 4,
+            "dungeon_index": 6,
             "is_tier4_fallback": True,
             "auto_resume_dungeon_on_cd": True
         }
@@ -93,7 +93,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         self.state_machine.primary_config = tier4_cfg.copy()
 
         # 設定 accepted_quests 裡面有其他懸賞任務 (例如地下城 #1 史萊姆, index 0)
-        node1 = TaskNode("史萊姆王的毀滅", "dungeon", dungeon_index=0)
+        node1 = TaskNode("史萊姆王的毀滅", "dungeon", dungeon_index=1)
         scheduler = QuestScheduler(daily_manager=self.daily_manager)
         scheduler.add_task(node1)
         self.state_machine.quest_scheduler = scheduler
@@ -104,7 +104,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         # 觸發調度 ➔ 斷言必須執行 primary_config 中指定的 Tier 4 退守地下城 (#5 冰雪洞窟, index 4)，而非 accepted_quests (#1 史萊姆, index 0)
         scheduled = self.state_machine.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
-        self.assertEqual(self.state_machine.config["dungeon_index"], 4)
+        self.assertEqual(self.state_machine.config["dungeon_index"], 6)
         self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
 
     def test_stamina_retreat_timestamp_preserved_across_re_retreat(self):

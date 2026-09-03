@@ -1040,7 +1040,7 @@ class GameStateMachine:
         if explicit_target_idx is None and not is_greedy:
             entry_templates = cfg.get("dungeon_entries") or []
             nav_path = cfg.get("navigation_path") or []
-            for idx, temp_name in enumerate(entry_templates):
+            for idx, temp_name in enumerate(entry_templates, start=1):
                 if temp_name in nav_path:
                     explicit_target_idx = idx
                     break
@@ -1065,11 +1065,12 @@ class GameStateMachine:
             if nav_path is None:
                 raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
 
-            target_idx = None
-            for idx, temp_name in enumerate(entry_templates):
-                if temp_name in nav_path:
-                    target_idx = idx
-                    break
+            target_idx = explicit_target_idx
+            if target_idx is None:
+                for idx, temp_name in enumerate(entry_templates, start=1):
+                    if temp_name in nav_path:
+                        target_idx = idx
+                        break
             
             if target_idx is not None:
                 return now >= self.dungeon_cooldowns.get(target_idx, 0.0)
@@ -1272,19 +1273,19 @@ class GameStateMachine:
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
             return True
 
-        raw_idx = config.get("tier4_dungeon_index", config.get("dungeon_index", 5))
+        raw_idx = config.get("tier4_dungeon_index", config.get("dungeon_index", 6))
         try:
             target_idx = int(raw_idx)
         except (ValueError, TypeError):
-            target_idx = 5
+            target_idx = 6
 
-        if 0 <= target_idx < len(dungeon_entries):
-            entry_img = dungeon_entries[target_idx]
+        if 1 <= target_idx <= len(dungeon_entries):
+            entry_img = dungeon_entries[target_idx - 1]
             config["dungeon_index"] = target_idx
             config["tier4_dungeon_index"] = target_idx
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
             if config.get("type") == "dungeon":
-                config["name"] = f"地下城 - {dungeon_names[target_idx]}"
+                config["name"] = f"地下城 - {dungeon_names[target_idx - 1]}"
             return True
         else:
             logging.warning(

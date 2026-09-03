@@ -26,7 +26,7 @@ dungeon_batch_size = 1
 
 [bounty_quests]
 max_stage = 6
-max_dungeon = 5
+max_dungeon = 6
 
 [catalog]
 dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
@@ -114,7 +114,7 @@ dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dung
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [0, 1, 2, 3, 4, 5]
+greedy_allowed_indices = [1, 2, 3, 4, 5, 6]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -122,12 +122,12 @@ dungeon_battle_results = ["common/continue.png", "common/continue_gray.png"]
 explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "common/continue.png", "common/continue_gray.png", "dungeons/gungeon_godown_confirm.png", "common/ok.png", "dungeons/dungeon_fight.png", "common/quit.png", "dungeons/Treasure.png", "dungeons/skill_event.png", "dungeons/dungeon_bless.png", "dungeons/gungeon_godown.png", "dungeons/leave.png"]
 
 [primary_modes.dungeon.cooldown_map]
-0 = 0.0
-1 = 300.0
-2 = 900.0
-3 = 1200.0
-4 = 1500.0
-5 = 1800.0
+1 = 0.0
+2 = 300.0
+3 = 900.0
+4 = 1200.0
+5 = 1500.0
+6 = 1800.0
 
 [primary_modes.mix]
 name = "混合模式"
@@ -137,7 +137,7 @@ dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dung
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [0, 1, 2, 3, 4, 5]
+greedy_allowed_indices = [1, 2, 3, 4, 5, 6]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -151,12 +151,12 @@ lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 
 [primary_modes.mix.cooldown_map]
-0 = 0.0
-1 = 300.0
-2 = 900.0
-3 = 1200.0
-4 = 1500.0
-5 = 1800.0
+1 = 0.0
+2 = 300.0
+3 = 900.0
+4 = 1200.0
+5 = 1500.0
+6 = 1800.0
 
 [primary_modes.collect_only]
 name = "定時領取麵包與鑽石"
@@ -177,7 +177,7 @@ dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dung
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [0, 1, 2, 3, 4, 5]
+greedy_allowed_indices = [1, 2, 3, 4, 5, 6]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -193,12 +193,12 @@ tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (�
 
 
 [primary_modes.daily.cooldown_map]
-0 = 0.0
-1 = 300.0
-2 = 900.0
-3 = 1200.0
-4 = 1500.0
-5 = 1800.0
+1 = 0.0
+2 = 300.0
+3 = 900.0
+4 = 1200.0
+5 = 1500.0
+6 = 1800.0
 
 [subflow_configs]
 

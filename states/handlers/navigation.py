@@ -182,15 +182,15 @@ class NavigationHandler(BaseStateHandler):
             scale=scale
         )
         if has_cd:
-            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 偵測到畫面中存在冷卻木牌，判定為冷卻中。")
+            logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i - 1]}] 偵測到畫面中存在冷卻木牌，判定為冷卻中。")
             in_cooldown = True
             if parsed_secs is not None and 0 < parsed_secs < cd_seconds:
-                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)})")
+                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i - 1]}] 成功辨識出精確剩餘時間: \"{raw_text}\" ({format_seconds_to_readable(parsed_secs)})")
                 self.machine.dungeon_cooldowns[i] = time.time() + parsed_secs
                 ocr_success = True
         if in_cooldown:
             if not ocr_success:
-                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 剩餘時間辨識未成功，使用 30 秒臨時冷卻退避...")
+                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i - 1]}] 剩餘時間辨識未成功，使用 30 秒臨時冷卻退避...")
                 self.machine.dungeon_cooldowns[i] = time.time() + 30.0
             return True
             
@@ -215,9 +215,9 @@ class NavigationHandler(BaseStateHandler):
                     resized_light_t = cv2.resize(light_t, (s_w, s_h))
                     res_s = cv2.matchTemplate(skull_crop, resized_light_t, cv2.TM_CCOEFF_NORMED)
                     _, max_val_skull, _, _ = cv2.minMaxLoc(res_s)
-                    logging.info(f"🧭 貪婪地下城：[{dungeon_names[i]}] 亮骨頭匹配相似度: {max_val_skull:.4f} (閾值: 0.75)")
+                    logging.info(f"🧭 貪婪地下城：[{dungeon_names[i - 1]}] 亮骨頭匹配相似度: {max_val_skull:.4f} (閾值: 0.75)")
                     if max_val_skull < 0.75:
-                        logging.warning(f"🔒 貪婪地下城：[{dungeon_names[i]}] 亮骨頭相似度過低 ({max_val_skull:.4f})，判定為未解鎖或無法自動刷，設為無限冷卻。")
+                        logging.warning(f"🔒 貪婪地下城：[{dungeon_names[i - 1]}] 亮骨頭相似度過低 ({max_val_skull:.4f})，判定為未解鎖或無法自動刷，設為無限冷卻。")
                         self.machine.dungeon_cooldowns[i] = float('inf')
                         return True
                         
@@ -397,7 +397,7 @@ class NavigationHandler(BaseStateHandler):
                 raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
             temp_confidences = {}
             
-            for idx, temp_name in enumerate(entry_templates):
+            for idx, temp_name in enumerate(entry_templates, start=1):
                 if os.path.exists(os.path.join("templates", temp_name)):
                     t_img = cv2.imread(os.path.join("templates", temp_name))
                     if t_img is not None:
@@ -407,7 +407,7 @@ class NavigationHandler(BaseStateHandler):
                         resized_t = cv2.resize(t_img, (t_w, t_h))
                         res = cv2.matchTemplate(screen_img, resized_t, cv2.TM_CCOEFF_NORMED)
                         _, max_val, _, max_loc = cv2.minMaxLoc(res)
-                        temp_confidences[dungeon_names[idx]] = max_val
+                        temp_confidences[dungeon_names[idx - 1]] = max_val
                         if max_val >= 0.6:
                             visible_dungeons[idx] = (max_loc, t_w, t_h)
                             is_dungeon_page = True
@@ -470,17 +470,17 @@ class NavigationHandler(BaseStateHandler):
                 if is_greedy:
                     allowed_indices = self.machine.config.get("greedy_allowed_indices")
                     if allowed_indices is None:
-                        raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [0, 1, 2, 3, 4])。")
+                        raise ValueError("配置錯誤：config 未設定 'greedy_allowed_indices'，請在 config.py 或啟動設定中指定允許的地下城索引清單 (例如: [1, 2, 3, 4, 5, 6])。")
                     # 貪婪模式：從高到低遍歷，尋找第一個就緒且解鎖的地下城
-                    for i in range(len(entry_templates) - 1, -1, -1):
+                    for i in range(len(entry_templates), 0, -1):
                         if i not in allowed_indices:
                             continue
                         cooldown_until = self.machine.dungeon_cooldowns.get(i, 0.0)
                         if time.time() < cooldown_until:
                             if cooldown_until == float('inf'):
-                                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 處於永久不可打狀態，跳過。")
+                                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i - 1]}] 處於永久不可打狀態，跳過。")
                             else:
-                                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，跳過。")
+                                logging.info(f"⏳ 貪婪地下城：[{dungeon_names[i - 1]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，跳過。")
                             continue
                             
                         # 如果目標地下城在畫面上，我們檢測冷卻與解鎖狀態
@@ -502,7 +502,7 @@ class NavigationHandler(BaseStateHandler):
                 else:
                     # 非貪婪模式（指定特定副本）：目標 index 直接從 navigation_path 中尋找
                     nav_path = self.machine.config.get("navigation_path", [])
-                    for idx, temp_name in enumerate(entry_templates):
+                    for idx, temp_name in enumerate(entry_templates, start=1):
                         if temp_name in nav_path:
                             target_idx = idx
                             break
@@ -511,7 +511,7 @@ class NavigationHandler(BaseStateHandler):
                         if raw_idx is not None:
                             try:
                                 parsed_idx = int(raw_idx)
-                                if 0 <= parsed_idx < len(entry_templates):
+                                if 1 <= parsed_idx <= len(entry_templates):
                                     target_idx = parsed_idx
                             except (ValueError, TypeError):
                                 pass
@@ -521,17 +521,17 @@ class NavigationHandler(BaseStateHandler):
                         cooldown_until = self.machine.dungeon_cooldowns.get(target_idx, 0.0)
                         if time.time() < cooldown_until:
                             if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
-                                self._switch_to_stage_or_back(screen_img, rect, f"指定副本 [{dungeon_names[target_idx]}] 處於冷卻中")
+                                self._switch_to_stage_or_back(screen_img, rect, f"指定副本 [{dungeon_names[target_idx - 1]}] 處於冷卻中")
                                 return
                             if self.machine.config.get("type") == "dungeon":
                                 self._enter_collect_only_after_dungeon_cooldown(
-                                    screen_img, rect, f"target dungeon [{dungeon_names[target_idx]}] is on cooldown"
+                                    screen_img, rect, f"target dungeon [{dungeon_names[target_idx - 1]}] is on cooldown"
                                 )
                                 return
                             if cooldown_until == float('inf'):
-                                logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於永久不可打狀態，原地等待中...")
+                                logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx - 1]}] 處於永久不可打狀態，原地等待中...")
                             else:
-                                logging.info(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，原地等待中...")
+                                logging.info(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx - 1]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，原地等待中...")
                             time.sleep(1.0)
                             return
                             
@@ -542,11 +542,11 @@ class NavigationHandler(BaseStateHandler):
                             )
                             if is_unavailable:
                                 if self.machine.config.get("type") == "mix" or self.machine.is_daily_pipeline_active():
-                                    self._switch_to_stage_or_back(screen_img, rect, f"畫面偵測指定副本 [{dungeon_names[target_idx]}] 冷卻中")
+                                    self._switch_to_stage_or_back(screen_img, rect, f"畫面偵測指定副本 [{dungeon_names[target_idx - 1]}] 冷卻中")
                                     return
                                 if self.machine.config.get("type") == "dungeon":
                                     self._enter_collect_only_after_dungeon_cooldown(
-                                        screen_img, rect, f"target dungeon [{dungeon_names[target_idx]}] was detected on cooldown"
+                                        screen_img, rect, f"target dungeon [{dungeon_names[target_idx - 1]}] was detected on cooldown"
                                     )
                                     return
                                 time.sleep(1.0)
@@ -577,7 +577,7 @@ class NavigationHandler(BaseStateHandler):
                     max_loc, t_w, t_h = visible_dungeons[target_idx]
                     click_x = rect["left"] + max_loc[0] + t_w // 2
                     click_y = rect["top"] + max_loc[1] + t_h // 2
-                    logging.info(f"👉 貪婪地下城：選擇進入 [{dungeon_names[target_idx]}]，點擊座標 ({click_x}, {click_y})。")
+                    logging.info(f"👉 貪婪地下城：選擇進入 [{dungeon_names[target_idx - 1]}]，點擊座標 ({click_x}, {click_y})。")
                     self.mouse.click(click_x, click_y)
                     self.machine.current_dungeon_index = target_idx
                     self.machine.is_in_dungeon = True

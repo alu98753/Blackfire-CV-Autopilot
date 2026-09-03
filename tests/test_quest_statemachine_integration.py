@@ -197,7 +197,7 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         node_slime = mapper.parse_quest("史萊姆王的毀減")  # OCR 誤判 '毀減'
         self.assertIsNotNone(node_slime)
         self.assertEqual(node_slime.mode_type, "dungeon")
-        self.assertEqual(node_slime.dungeon_index, 0)
+        self.assertEqual(node_slime.dungeon_index, 1)
 
         # 2. 測試完成任務階段 (record_task_complete 包含錯別字)
         scheduler = QuestScheduler()
@@ -233,10 +233,10 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertEqual(mapper.parse_quest("完成任何地下城").mode_type, "ignored")
         
         entries = PRIMARY_MODES["dungeon"]["dungeon_entries"]
-        slime_idx = entries.index("dungeons/Slime_entry.png")
-        forest_idx = entries.index("dungeons/Forest_entry.png")
-        ruins_idx = entries.index("dungeons/Ruins_entry.png")
-        ice_idx = entries.index("dungeons/Ice_entry.png")
+        slime_idx = entries.index("dungeons/Slime_entry.png") + 1
+        forest_idx = entries.index("dungeons/Forest_entry.png") + 1
+        ruins_idx = entries.index("dungeons/Ruins_entry.png") + 1
+        ice_idx = entries.index("dungeons/Ice_entry.png") + 1
 
         # 冰雪洞窟的暴君 -> 冰雪洞窟
         self.assertEqual(mapper.parse_quest("冰雪洞窟的暴君").dungeon_index, ice_idx)

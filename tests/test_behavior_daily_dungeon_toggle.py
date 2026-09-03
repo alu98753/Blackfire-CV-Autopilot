@@ -43,7 +43,7 @@ class TestDailyDungeonToggle(unittest.TestCase):
         res = setup_dungeon_config(config, args, interactive=True, allow_disable=True)
 
         self.assertTrue(res["enable_dungeon"])
-        self.assertEqual(res["tier4_dungeon_index"], 5) # 6 - 1 = 5
+        self.assertEqual(res["tier4_dungeon_index"], 6)
         self.assertTrue(mock_persist.called)
         last_updates = mock_persist.call_args[0][1]
         self.assertTrue(last_updates.get("enable_dungeon"))
@@ -101,7 +101,7 @@ class TestDailyDungeonToggle(unittest.TestCase):
         res = setup_dungeon_config(config, args, interactive=True, allow_disable=False)
 
         self.assertTrue(res.get("enable_dungeon", True))
-        self.assertEqual(res["tier4_dungeon_index"], 4)
+        self.assertEqual(res["tier4_dungeon_index"], 5)
 
 
 if __name__ == "__main__":

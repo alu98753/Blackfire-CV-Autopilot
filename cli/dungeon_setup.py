@@ -17,16 +17,16 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
         )
     }
     is_dungeon_enabled = config.get("enable_dungeon", True)
-    configured_index = config.get("tier4_dungeon_index", 5)
+    configured_index = config.get("tier4_dungeon_index", 6)
     if allow_disable and not is_dungeon_enabled:
         default_dungeon_choice = "8"
     elif config.get("greedy_dungeon", False):
         default_dungeon_choice = "7"
     else:
-        default_dungeon_choice = str(configured_index + 1)
+        default_dungeon_choice = str(configured_index)
     valid_choices = {"1", "2", "3", "4", "5", "6", "7", "8"} if allow_disable else {"1", "2", "3", "4", "5", "6", "7"}
     if default_dungeon_choice not in valid_choices:
-        default_dungeon_choice = "5"
+        default_dungeon_choice = "6"
 
     print("請選擇要探索的地下城：")
     print(f" 1) 黏糊糊的石窟 (Slime_entry)")
@@ -61,14 +61,14 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
         "7": (None, "自動貪婪挑選", True)
     }
     if choice not in dungeon_map:
-        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第五關 [幽暗監獄]...")
-        choice = "5"
+        print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
+        choice = "6"
 
     entry_btn, dungeon_name, is_greedy = dungeon_map[choice]
     config["name"] = f"地下城 - {dungeon_name}"
     config["greedy_dungeon"] = is_greedy
     if not is_greedy:
-        config["tier4_dungeon_index"] = int(choice) - 1
+        config["tier4_dungeon_index"] = int(choice)
     if is_greedy:
         config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
         
@@ -80,8 +80,8 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
         print(" 4) 神秘遺跡 (Ruins)")
         print(" 5) 幽暗監獄 (Prison)")
         print(" 6) 冰雪洞窟 (Ice)")
-        configured_allowed = config.get("greedy_allowed_indices", [0, 1, 2, 3, 4, 5])
-        default_allowed = "".join(str(index + 1) for index in configured_allowed if index in range(6))
+        configured_allowed = config.get("greedy_allowed_indices", [1, 2, 3, 4, 5, 6])
+        default_allowed = "".join(str(index) for index in configured_allowed if 1 <= index <= 6)
         if not default_allowed:
             default_allowed = "123456"
         allowed_input = prompt_choice(
@@ -90,14 +90,14 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
         allowed_indices = []
         for char in allowed_input:
             if char in "123456":
-                idx = int(char) - 1
+                idx = int(char)
                 if idx not in allowed_indices:
                     allowed_indices.append(idx)
         if not allowed_indices:
-            allowed_indices = [0, 1, 2, 3, 4, 5]
+            allowed_indices = [1, 2, 3, 4, 5, 6]
             
         config["greedy_allowed_indices"] = allowed_indices
-        allowed_names = [dungeon_map[str(idx+1)][1] for idx in allowed_indices]
+        allowed_names = [dungeon_map[str(idx)][1] for idx in allowed_indices]
         print(f"[*] 貪婪模式允許關卡：{', '.join(allowed_names)}")
     else:
         config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_btn]

@@ -146,7 +146,7 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
             "dungeon_entries": dungeon_entries,
             "dungeon_names": dungeon_names,
             "greedy_dungeon": False,
-            "tier4_dungeon_index": 3,
+            "tier4_dungeon_index": 4,
             "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
         }
         changed = {
@@ -154,7 +154,7 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
             "dungeon_entries": dungeon_entries,
             "dungeon_names": dungeon_names,
             "greedy_dungeon": False,
-            "tier4_dungeon_index": 1,
+            "tier4_dungeon_index": 2,
             "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
         }
         get_mode.return_value = changed
@@ -164,12 +164,12 @@ class TestRuntimeConfigRefresh(unittest.TestCase):
         machine.enable_runtime_config_refresh("daily", machine.config)
 
         # 初始啟動時應已正確更新為第 4 關 (Ruins)
-        self.assertEqual(machine.config["tier4_dungeon_index"], 3)
+        self.assertEqual(machine.config["tier4_dungeon_index"], 4)
         self.assertIn("dungeons/Ruins_entry.png", machine.config["navigation_path"])
 
         # 安全點熱重載後應更新為第 2 關 (Ghost)
         self.assertTrue(machine.refresh_config_at_safe_point())
-        self.assertEqual(machine.config["tier4_dungeon_index"], 1)
+        self.assertEqual(machine.config["tier4_dungeon_index"], 2)
         self.assertIn("dungeons/Ghost_entry.png", machine.config["navigation_path"])
 
     @patch("states.state_machine.get_stage_configs")

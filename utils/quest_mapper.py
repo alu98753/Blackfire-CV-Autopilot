@@ -34,7 +34,7 @@ class TaskNode:
         self.mode_type = mode_type          # "dungeon", "stage", "ignored"
         self.target_count = target_count
         self.completed_count = 0
-        self.dungeon_index = dungeon_index  # 0~4
+        self.dungeon_index = dungeon_index  # 1~6
         self.stage_level = stage_level      # 1~6
         self.sub_stage = sub_stage          # "first", "middle", "six", "final"
         self.raw_desc = raw_desc
@@ -61,7 +61,7 @@ class TaskNode:
         轉換為腳本啟動 CLI 指令字串。
         """
         if self.mode_type == "dungeon":
-            idx_str = str(self.dungeon_index + 1)
+            idx_str = str(self.dungeon_index)
             return f".venv\\Scripts\\python main.py --backend --mode dungeon --dungeon {idx_str}"
         elif self.mode_type == "stage":
             lvl_str = str(self.stage_level)
@@ -134,8 +134,8 @@ class TaskNode:
 
         if self.mode_type == "dungeon" and self.dungeon_index is not None:
             idx = self.dungeon_index
-            entry_img = dungeon_entries[idx] if 0 <= idx < len(dungeon_entries) else "dungeons/Ice_entry.png"
-            dname = dungeon_names[idx] if 0 <= idx < len(dungeon_names) else "地下城"
+            entry_img = dungeon_entries[idx - 1] if 1 <= idx <= len(dungeon_entries) else "dungeons/Ice_entry.png"
+            dname = dungeon_names[idx - 1] if 1 <= idx <= len(dungeon_names) else "地下城"
             
             cfg = PRIMARY_MODES["dungeon"].copy()
             cfg["enable_dungeon"] = True
@@ -302,7 +302,7 @@ class QuestMapper:
             self.dungeon_rules = []
             for item in data.get("dungeon_rules", []):
                 pat = item.get("pattern", "")
-                idx = item.get("dungeon_index", 0)
+                idx = item.get("dungeon_index", 1)
                 pol_str = item.get("policy", "deterministic_count")
                 pol = policy_map.get(pol_str, TaskNode.POLICY_DETERMINISTIC)
                 self.dungeon_rules.append((pat, idx, pol))
