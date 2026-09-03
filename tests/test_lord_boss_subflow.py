@@ -40,13 +40,15 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
     # 1. DailyManager 首領討伐 CD 與計數測試
     # ------------------------------------------------------------------
     def test_lord_boss_initial_state(self):
-        """測試：初始化時兩個 Boss 均應為可用狀態，且 CD 較大者 (lord_spectre: 7200s) 優先於 (lord_spider: 3600s)"""
+        """測試：初始化時所有 Boss 均應為可用狀態，且按 CD (ghoul_snow: 10800s > lord_spectre: 7200s > lord_spider: 3600s) 排序"""
         avail = self.daily_manager.get_available_lord_bosses()
         self.assertIn("lord_spider", avail)
         self.assertIn("lord_spectre", avail)
+        self.assertIn("ghoul_snow", avail)
         self.assertTrue(self.daily_manager.has_available_lord_boss())
-        self.assertEqual(avail[0], "lord_spectre")
-        self.assertEqual(avail[1], "lord_spider")
+        self.assertEqual(avail[0], "ghoul_snow")
+        self.assertEqual(avail[1], "lord_spectre")
+        self.assertEqual(avail[2], "lord_spider")
 
     def test_lord_boss_cd_and_max_count(self):
         """測試：戰鬥後記錄 timestamp，CD 未過期前判定不可挑戰，過期後自動恢復"""
@@ -212,8 +214,8 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
     # ------------------------------------------------------------------
     def test_lord_boss_return_routing_in_stage_mode(self):
         """測試：在 stage 模式下打完 Boss 佇列全空時，應回復原 stage config 並轉移至 NAVIGATING"""
-        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"] = 5
-        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["today_count"] = 5
+        for b_info in self.daily_manager.status["subflows"]["lord_boss"]["bosses"].values():
+            b_info["today_count"] = 5
         
         # 設置主模式配置為 stage
         stage_cfg = GAME_CONFIGS["stage"].copy()
@@ -230,8 +232,8 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
 
     def test_lord_boss_return_routing_in_dungeon_mode(self):
         """測試：在 dungeon 模式下打完 Boss 佇列全空時，應回復原 dungeon config 並轉移至 NAVIGATING"""
-        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"] = 5
-        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["today_count"] = 5
+        for b_info in self.daily_manager.status["subflows"]["lord_boss"]["bosses"].values():
+            b_info["today_count"] = 5
         
         dungeon_cfg = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.primary_config = dungeon_cfg
@@ -246,8 +248,8 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
 
     def test_lord_boss_return_routing_in_stamina_retreat(self):
         """測試：在體力退避期間打完 Boss 佇列全空時，應回復配置並轉移至 COLLECT_ONLY"""
-        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]["today_count"] = 5
-        self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spectre"]["today_count"] = 5
+        for b_info in self.daily_manager.status["subflows"]["lord_boss"]["bosses"].values():
+            b_info["today_count"] = 5
         
         stage_cfg = GAME_CONFIGS["stage"].copy()
         self.state_machine.primary_config = stage_cfg
@@ -263,7 +265,7 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
 
     @patch('os.path.exists')
     def test_lord_boss_priority_selection(self, mock_exists):
-        """測試：高優先權鎖定測試 (古代惡靈 lord_spectre: 7200s 應優先於 育母蜘蛛 lord_spider: 3600s)"""
+        """測試：高優先權鎖定測試 (雪山食屍王 ghoul_snow: 10800s 應優先於 古代惡靈 lord_spectre: 7200s 與 育母蜘蛛 lord_spider: 3600s)"""
         mock_exists.return_value = True
         stage_cfg = GAME_CONFIGS["stage"].copy()
         self.state_machine.primary_config = stage_cfg
@@ -281,8 +283,8 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
-        # 斷言：發起戰鬥時鎖定的目標必須是高優先權 Boss (lord_spectre: 7200s)
-        self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spectre")
+        # 斷言：發起戰鬥時鎖定的目標必須是最高優先權 Boss (ghoul_snow: 10800s)
+        self.assertEqual(self.state_machine.current_lord_boss_key, "ghoul_snow")
 
     def test_update_boss_cooldown_in_daily_manager(self):
         """測試：DailyManager.update_boss_cooldown 依據剩餘秒數即時修復時間戳"""

@@ -31,6 +31,14 @@ DEFAULT_DAILY_STATUS = {
                     "cooldown_seconds": 7200,
                     "last_fight_timestamp": 0.0,
                     "completed_today": False
+                },
+                "ghoul_snow": {
+                    "name": "雪山食屍王瓦爾瑪",
+                    "today_count": 0,
+                    "max_daily_count": 5,
+                    "cooldown_seconds": 10800,
+                    "last_fight_timestamp": 0.0,
+                    "completed_today": False
                 }
             }
         }
@@ -94,6 +102,18 @@ class DailyManager:
         if not self.status.get("last_daily_reset_date"):
             self.status["last_daily_reset_date"] = self.get_today_reset_tag()
             self.save_status()
+
+        # 💡 [Boss 同步自癒機制] 確保預設清單中新增的 Boss 結構能自動同步進現有存檔中
+        default_bosses = DEFAULT_DAILY_STATUS.get("subflows", {}).get("lord_boss", {}).get("bosses", {})
+        saved_bosses = self.status.setdefault("subflows", {}).setdefault("lord_boss", {}).setdefault("bosses", {})
+        boss_added = False
+        for b_key, b_info in default_bosses.items():
+            if b_key not in saved_bosses:
+                saved_bosses[b_key] = json.loads(json.dumps(b_info))
+                boss_added = True
+        if boss_added:
+            self.save_status()
+            logging.info("✨ [DailyManager] 自動同步補齊新增的 Lord Boss 結構至持久化存檔。")
 
         # 💡 [自癒機制] 載入時自動校正並正名清洗 accepted_quests 存檔
         subflows = self.status.get("subflows", {})

@@ -19,6 +19,7 @@ meta_data/
 │   ├── attr_i18n.json             # 50+ 項數值屬性標籤 (暴擊、流血、冰凍、護盾等)
 │   ├── hero_i18n.json             # 英雄專屬官方稱號對照
 │   ├── material_i18n.json         # 全 207 種材料繁中名稱與變數 ID 對照字典
+│   ├── potion_i18n.json           # 全 51 種藥水、聖油與秘藥對照字典
 │   ├── skill_i18n.json            # 技能官方中文名稱對照
 │   └── generate_dicts.py          # 字典快速生成與批量更新腳本
 ├── outputs/                       # 自動解析產出的 4 大資料集與圖鑑報表
@@ -28,7 +29,8 @@ meta_data/
 │   ├── 4_hero_skill_analytics.json# 英雄與技能綜合主數據庫 (Master JSON)
 │   └── HERO_ANALYSIS_REPORT.md    # ④ 繁體中文全景分析圖鑑 (800+ 行 Markdown)
 ├── scripts/                       # 數據分析與文檔自動化腳本
-│   └── update_all_materials_doc.py# 材料圖鑑與字典自動生成腳本
+│   ├── update_all_materials_doc.py# 材料圖鑑與字典自動生成腳本
+│   └── update_all_potions_doc.py  # 藥水圖鑑與字典自動生成腳本
 ├── tres_parser.py                 # Godot .tres 語法核心解析器
 ├── hero_analyzer.py               # 數據處理、翻譯與報表導出主程式
 └── README.md                      # 本說明文檔

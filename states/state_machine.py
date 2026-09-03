@@ -44,7 +44,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 _SHARED_OCR_READERS = {}
 _SHARED_OCR_LOCK = threading.Lock()
-DEFAULT_LORD_BOSS_TARGETS = ("lord_spider", "lord_spectre")
+DEFAULT_LORD_BOSS_TARGETS = ("lord_spider", "lord_spectre", "ghoul_snow")
 
 class GameStateMachine:
     # 定義遊戲狀態

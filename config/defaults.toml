@@ -59,7 +59,7 @@ keep_colors = ["purple", "orange_yellow", "red"]
 [defaults.activities]
 auto_diamond = true
 auto_bread = true # true, false
-lord_boss_targets = ["lord_spider", "lord_spectre"] # 指定 Boss 清單（例如 ["lord_spider"] 僅打蜘蛛，或 [] 完全跳過 Boss
+lord_boss_targets = ["lord_spider", "lord_spectre", "ghoul_snow"] # 指定 Boss 清單（例如 ["lord_spider"] 僅打蜘蛛，或 [] 完全跳過 Boss
 enable_dungeon = true
 enable_town_daily = true
 enable_quests = false
@@ -326,6 +326,11 @@ cooldown_seconds = 3600.0
 name = "古代惡靈伊瑟倫"
 template = "load/lord_spectre.png"
 cooldown_seconds = 7200.0
+
+[subflow_configs.lord_boss.bosses.ghoul_snow]
+name = "雪山食屍王瓦爾瑪"
+template = "load/ghoul_snow.png"
+cooldown_seconds = 10800.0
 
 [subflow_configs.chest]
 enabled = true
