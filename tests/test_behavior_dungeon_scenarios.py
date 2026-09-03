@@ -204,7 +204,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         """
         # 初始化配置為地下城模式
         self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
-        target_idx = self.state_machine.config["dungeon_entries"].index("dungeons/Ice_entry.png")
+        target_idx = self.state_machine.config["dungeon_entries"].index("dungeons/Ice_entry.png") + 1
         expected_cd = self.state_machine.config.get("cooldown_map", {}).get(target_idx, 900.0)
         self.state_machine.current_dungeon_index = target_idx  # 冰雪洞窟
         self.state_machine.dungeon_defeat_count = 0
@@ -359,7 +359,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
             return (None, 0.0)
 
         config["greedy_dungeon"] = False
-        config["greedy_allowed_indices"] = [0, 1, 2, 3, 4]
+        config["greedy_allowed_indices"] = [1, 2, 3, 4, 5, 6]
         self.state_machine.config = config
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
         
@@ -382,7 +382,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         
         # --- 階段 3：進入地下城選關介面，看到 Ice_entry.png 選擇並點擊入場 ---
         is_dungeon_page_active[0] = True
-        ice_idx = config["dungeon_entries"].index("dungeons/Ice_entry.png")
+        ice_idx = config["dungeon_entries"].index("dungeons/Ice_entry.png") + 1
         self.mock_matcher.match.side_effect = lambda img, name, **kw: (
             ((1400, 300), 0.9) if name == "dungeons/Ice_entry.png" else (None, 0.0)
         )

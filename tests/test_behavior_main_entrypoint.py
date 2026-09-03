@@ -91,7 +91,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     ):
         config = {
             "greedy_dungeon": False, "tier4_dungeon_index": 4,
-            "greedy_allowed_indices": [0, 1], "bless_mode": "combat",
+            "greedy_allowed_indices": [1, 2], "bless_mode": "combat",
             "auto_resume_dungeon_on_cd": False,
         }
         args = make_args(blessmode="combat")
@@ -99,13 +99,13 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         setup_dungeon_config(config, args)
 
         self.assertTrue(config["greedy_dungeon"])
-        self.assertEqual(config["greedy_allowed_indices"], [0, 2])
+        self.assertEqual(config["greedy_allowed_indices"], [1, 3])
         self.assertTrue(config["auto_resume_dungeon_on_cd"])
         persist.assert_called_once_with(
             config,
             {
                 "greedy_dungeon": True,
-                "greedy_allowed_indices": [0, 2],
+                "greedy_allowed_indices": [1, 3],
                 "auto_resume_dungeon_on_cd": True,
             },
         )
@@ -114,21 +114,21 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("builtins.input", side_effect=["2", "3", "2"])
     def test_dungeon_prompt_updates_blessing_and_cooldown_return_policy(self, _input, persist):
         config = {
-            "greedy_dungeon": False, "tier4_dungeon_index": 0,
-            "greedy_allowed_indices": [0, 1], "bless_mode": "combat",
+            "greedy_dungeon": False, "tier4_dungeon_index": 1,
+            "greedy_allowed_indices": [1, 2], "bless_mode": "combat",
             "auto_resume_dungeon_on_cd": True,
         }
         args = make_args(blessmode=None)
 
         setup_dungeon_config(config, args)
 
-        self.assertEqual(config["tier4_dungeon_index"], 1)
+        self.assertEqual(config["tier4_dungeon_index"], 2)
         self.assertEqual(config["bless_mode"], "exp")
         self.assertFalse(config["auto_resume_dungeon_on_cd"])
         persist.assert_called_once_with(
             config,
             {
-                "tier4_dungeon_index": 1,
+                "tier4_dungeon_index": 2,
                 "bless_mode": "exp",
                 "auto_resume_dungeon_on_cd": False,
             },

@@ -3,6 +3,7 @@ import time
 import logging
 import numpy as np
 from states.handlers.base import BaseStateHandler
+from utils.dungeon_catalog import DungeonCatalog
 
 class ExploreHandler(BaseStateHandler):
     TREASURE_TERMINAL_ANCHORS = (
@@ -88,7 +89,8 @@ class ExploreHandler(BaseStateHandler):
                         cooldown_map = self.machine.config.get("cooldown_map", {})
                         cd_seconds = cooldown_map.get(self.machine.current_dungeon_index, 900.0)
                         self.machine.dungeon_cooldowns[self.machine.current_dungeon_index] = time.time() + cd_seconds
-                        logging.info(f"⏳ 貪婪地下城：設定第 {self.machine.current_dungeon_index + 1} 個地下城進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+                        dname = DungeonCatalog.get_name(self.machine.current_dungeon_index)
+                        logging.info(f"⏳ 貪婪地下城：設定 [{dname}] (#{self.machine.current_dungeon_index}) 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
                         if self.machine.config.get("type") == "mix":
                             status_str, avail_names = self.machine.get_dungeon_cooldown_status()
                             avail_str = ", ".join(avail_names) if avail_names else "無"

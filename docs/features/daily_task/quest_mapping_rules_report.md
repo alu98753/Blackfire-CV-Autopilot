@@ -49,7 +49,7 @@
 - **第二梯隊：模式優先 (`mode_score`)**
   `dungeon` (地下城) ➔ **優先 (0)** > `stage` (普通關卡) ➔ **次之 (1)** > `generic_boss` (通用 Boss) ➔ **(2)**
 - **第三梯隊：索引與等級大者優先 (`idx_score`)**
-  - **地下城 (`dungeon_index`)**：`index` 大者優先 (`dungeon 4 (冰雪洞窟)` > `dungeon 3 (神秘遺跡)` > `dungeon 2 (森林迷宮)` > `dungeon 1` > `dungeon 0 (黏糊糊的石窟)`).
+  - **地下城 (`dungeon_index`)**：`index` 大者優先 (`dungeon 6 (冰雪洞窟)` > `dungeon 5 (幽暗監獄)` > `dungeon 4 (神秘遺跡)` > `dungeon 3 (森林迷宮)` > `dungeon 2 (幽影地穴)` > `dungeon 1 (黏糊糊的石窟)`).
   - **普通關卡 (`stage_level`)**：`level` 大者優先 (`Level 6 (冰凍峽谷)` > `Level 5 (幽暗沼澤)` > `Level 4 (沙漠廢墟)` > `Level 3` > `Level 1`).
   - **子關卡類型**：`final` (魔王關) > `middle` (中間關) > `first` (第一關).
 
@@ -66,7 +66,7 @@
   "清除史萊姆",      // 3. DETERMINISTIC, 地下城 #1 (黏糊糊的石窟)
   "清除蛙人",        // 4. DETERMINISTIC, 關卡 Level 5 (幽暗沼澤 第一關)
   "清除沙蟲",        // 5. DETERMINISTIC, 關卡 Level 4 (沙漠廢墟 中間關)
-  "冰雪洞窟的暴君",  // 6. BANNER_VERIFY, 地下城 #5 (冰雪洞窟)
+  "冰雪洞窟的暴君",  // 6. BANNER_VERIFY, 地下城 #6 (冰雪洞窟)
   "破除森林的枷鎖",  // 7. BANNER_VERIFY, 地下城 #3 (森林迷宮)
   "史萊姆王的毀滅"   // 8. BANNER_VERIFY, 地下城 #1 (黏糊糊的石窟)
 ]

@@ -146,8 +146,8 @@ class TestBehaviorDungeonCards(unittest.TestCase):
 
         self.handler.handle(screen_img, self.rect)
 
-        # 斷言地下城 0 的冷卻時間寫入約 now + 600
-        cd_until = self.mock_machine.dungeon_cooldowns.get(0, 0.0)
+        # 斷言地下城 1 的冷卻時間寫入約 now + 600
+        cd_until = self.mock_machine.dungeon_cooldowns.get(1, 0.0)
         self.assertGreaterEqual(cd_until, now_before + 595.0)
         self.assertLessEqual(cd_until, now_before + 605.0)
 
@@ -180,8 +180,8 @@ class TestBehaviorDungeonCards(unittest.TestCase):
 
         self.handler.handle(screen_img, self.rect)
 
-        # 斷言地下城 0 的冷卻時間寫入約 now + 30
-        cd_until = self.mock_machine.dungeon_cooldowns.get(0, 0.0)
+        # 斷言地下城 1 的冷卻時間寫入約 now + 30
+        cd_until = self.mock_machine.dungeon_cooldowns.get(1, 0.0)
         self.assertGreaterEqual(cd_until, now_before + 28.0)
         self.assertLessEqual(cd_until, now_before + 32.0)
 
@@ -229,8 +229,8 @@ class TestBehaviorDungeonCards(unittest.TestCase):
 
         self.handler.handle(screen_img, self.rect)
 
-        # 斷言地下城 0 被判定為未解鎖，冷卻時間設為 float('inf')
-        self.assertEqual(self.mock_machine.dungeon_cooldowns.get(0), float('inf'))
+        # 斷言地下城 1 被判定為未解鎖，冷卻時間設為 float('inf')
+        self.assertEqual(self.mock_machine.dungeon_cooldowns.get(1), float('inf'))
 
     # =========================================================================
     # 2.4 全冷卻混合模式防死鎖切換測試
@@ -253,8 +253,8 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         mock_exists.return_value = True
         self.mock_machine.stamina_retreat_start_time = None
         self.mock_machine.config = GAME_CONFIGS["mix"].copy()
-        self.mock_machine.config["greedy_allowed_indices"] = [0]
-        self.mock_machine.dungeon_cooldowns = {0: time.time() + 600.0}
+        self.mock_machine.config["greedy_allowed_indices"] = [1]
+        self.mock_machine.dungeon_cooldowns = {1: time.time() + 600.0}
         mock_detect_cd.return_value = (True, 600.0, "10:00")
 
         def fake_match(img, template, threshold=0.6, *args, **kwargs):
@@ -297,8 +297,8 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.mock_machine.stamina_retreat_start_time = None
         self.mock_machine.original_config = None
         self.mock_machine.config["type"] = "mix"
-        self.mock_machine.config["greedy_allowed_indices"] = [0]
-        self.mock_machine.dungeon_cooldowns = {0: time.time() + 600.0}
+        self.mock_machine.config["greedy_allowed_indices"] = [1]
+        self.mock_machine.dungeon_cooldowns = {1: time.time() + 600.0}
         mock_detect_cd.return_value = (True, 600.0, "10:00")
 
         def fake_match(img, template, threshold=0.6, *args, **kwargs):

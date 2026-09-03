@@ -29,7 +29,7 @@ class TestMainConfig(unittest.TestCase):
         set_active_profile("native")
 
     def test_toml_config_preserves_integer_cooldown_indices(self):
-        self.assertEqual(GAME_CONFIGS["dungeon"]["cooldown_map"][1], 300.0)
+        self.assertEqual(GAME_CONFIGS["dungeon"]["cooldown_map"][2], 300.0)
 
     @patch('os.path.exists')
     @patch('builtins.input', return_value="")
@@ -69,7 +69,7 @@ class TestMainConfig(unittest.TestCase):
         setup_dungeon_config(config, mock_args)
         
         self.assertTrue(config["greedy_dungeon"])
-        self.assertEqual(config["greedy_allowed_indices"], [0, 2, 4])
+        self.assertEqual(config["greedy_allowed_indices"], [1, 3, 5])
         self.assertEqual(config["bless_mode"], "combat")
 
     @patch('os.path.exists')

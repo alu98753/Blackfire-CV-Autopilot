@@ -57,12 +57,12 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         self.assertEqual(normalize_quest_title("1. 清除骷髏"), "清除骷髏")
         node_frost = self.mapper.parse_quest("0終結寒冰獸王")
         self.assertEqual(node_frost.mode_type, "dungeon")
-        self.assertEqual(node_frost.dungeon_index, 5)
+        self.assertEqual(node_frost.dungeon_index, 6)
 
         # 驗證幽暗監獄 (副本 5) 任務: 終結獄炎統治
         node_prison = self.mapper.parse_quest("終結獄炎統治")
         self.assertEqual(node_prison.mode_type, "dungeon")
-        self.assertEqual(node_prison.dungeon_index, 4)
+        self.assertEqual(node_prison.dungeon_index, 5)
         self.assertEqual(node_prison.counting_policy, "banner_verify_only")
 
     def test_missing_quest_rules_json_raises_value_error(self):
@@ -88,7 +88,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
             "banner_verify_quests": [],
             "ignored_quests": [],
             "typo_groups": {},
-            "dungeon_rules": [{"pattern": "(清除骷髏)", "dungeon_index": 3, "policy": "deterministic_count"}],
+            "dungeon_rules": [{"pattern": "(清除骷髏)", "dungeon_index": 4, "policy": "deterministic_count"}],
             "stage_rules": []
         }
         with open(test_json, "w", encoding="utf-8") as f:
@@ -100,14 +100,14 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
         time.sleep(0.01)
         initial_data["deterministic_quests"].append("火焰龍王")
-        initial_data["dungeon_rules"].append({"pattern": "(火焰龍王)", "dungeon_index": 0, "policy": "deterministic_count"})
+        initial_data["dungeon_rules"].append({"pattern": "(火焰龍王)", "dungeon_index": 1, "policy": "deterministic_count"})
         with open(test_json, "w", encoding="utf-8") as f:
             json.dump(initial_data, f, ensure_ascii=False)
 
         node = mapper.parse_quest("火焰龍王")
         self.assertIsNotNone(node)
         self.assertEqual(node.mode_type, "dungeon")
-        self.assertEqual(node.dungeon_index, 0)
+        self.assertEqual(node.dungeon_index, 1)
 
         if os.path.exists(test_json):
             os.remove(test_json)
@@ -157,7 +157,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         # 1. 圖片 1: 清除骷髏 (可精確計數)
         node1 = self.mapper.parse_quest("清除骷髏", "骷髏在戰場上肆虐...", "擊殺: 骷髏 x 10")
         self.assertEqual(node1.mode_type, "dungeon")
-        self.assertEqual(node1.dungeon_index, 3)
+        self.assertEqual(node1.dungeon_index, 4)
         self.assertEqual(node1.target_count, QUEST_TARGET_COUNT)
         self.assertEqual(node1.counting_policy, TaskNode.POLICY_DETERMINISTIC)
         self.assertIn("--mode dungeon --dungeon 4", node1.to_cli_args())
@@ -187,7 +187,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         # 5. 圖片 5: 史萊姆王的毀滅 (不確定 Boss 任務 -> POLICY_BANNER_VERIFY, 固定 20 次)
         node5 = self.mapper.parse_quest("史萊姆王的毀滅", "在地下城黏糊糊的石窟最深處...", "擊殺: [史萊姆王] x 1")
         self.assertEqual(node5.mode_type, "dungeon")
-        self.assertEqual(node5.dungeon_index, 0)
+        self.assertEqual(node5.dungeon_index, 1)
         self.assertEqual(node5.target_count, QUEST_TARGET_COUNT)
         self.assertEqual(node5.counting_policy, TaskNode.POLICY_BANNER_VERIFY)
         self.assertIn("--mode dungeon --dungeon 1", node5.to_cli_args())
@@ -224,7 +224,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         print(f"\n[動態排程 step 1] 指令: {cmd1} | 說明: {msg1}")
 
         # 3. 模擬通關地下城 1
-        self.scheduler.record_kill_event(enemy_name="史萊姆王", is_boss=True, dungeon_index=0, kill_count=1)
+        self.scheduler.record_kill_event(enemy_name="史萊姆王", is_boss=True, dungeon_index=1, kill_count=1)
 
         # 斷言：史萊姆王的毀滅屬於 POLICY_BANNER_VERIFY，record_kill_event 絕不自動加算進度！
         slime_task = [t for t in self.scheduler.tasks if t.quest_title == "史萊姆王的毀滅"][0]
@@ -239,7 +239,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         print(f"[動態排程 step 2] 指令: {cmd2} | 說明: {msg2}")
 
         # 模擬打完地下城 4 清除骷髏任務 (DETERMINISTIC_QUESTS 自動加算完成)
-        self.scheduler.record_kill_event(enemy_name="骷髏", dungeon_index=3, kill_count=QUEST_TARGET_COUNT)
+        self.scheduler.record_kill_event(enemy_name="骷髏", dungeon_index=4, kill_count=QUEST_TARGET_COUNT)
 
         # 5. 第三次取得啟動指令 ➔ 應傳回關卡 6 第一關 (冰元素)
         cmd3, msg3 = self.scheduler.get_next_action_config()
@@ -335,13 +335,13 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         cmd1, msg1 = scheduler.get_next_action_config(dungeon_cooldowns={}, now_ts=now)
         self.assertIn("--dungeon 4", cmd1)
 
-        # 2. 設 Dungeon 3 (神秘遺跡) 冷卻 1800 秒 ➔ 應自動跳過並選取第 2 優先任務 [清除樹人] (Dungeon 3, index 2)
-        cd_map_1 = {3: now + 1800.0}
+        # 2. 設 Dungeon 4 (神秘遺跡) 冷卻 1800 秒 ➔ 應自動跳過並選取第 2 優先任務 [清除樹人] (Dungeon 3)
+        cd_map_1 = {4: now + 1800.0}
         cmd2, msg2 = scheduler.get_next_action_config(dungeon_cooldowns=cd_map_1, now_ts=now)
         self.assertIn("--dungeon 3", cmd2)
 
-        # 3. 設 Dungeon 3 與 Dungeon 2 皆在冷卻中 ➔ 應自動跳過所有地下城並選取關卡任務 [清除蛙人] (Stage 5)
-        cd_map_2 = {3: now + 1800.0, 2: now + 1800.0}
+        # 3. 設 Dungeon 4 與 Dungeon 3 皆在冷卻中 ➔ 應自動跳過所有地下城並選取關卡任務 [清除蛙人] (Stage 5)
+        cd_map_2 = {4: now + 1800.0, 3: now + 1800.0}
         cmd3, msg3 = scheduler.get_next_action_config(dungeon_cooldowns=cd_map_2, now_ts=now)
         self.assertIn("--mode stage --stage 5", cmd3)
 
@@ -637,7 +637,7 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
         toad_node.completed_count = 5  # 5/10 未滿批次
         
         stage5_cfg = toad_node.to_config_dict()
-        cd_map = {2: now + 100.0} # Dungeon 3 (index 2) 在冷卻中
+        cd_map = {3: now + 100.0} # Dungeon 3 在冷卻中
         
         # 當冷卻未結束 (now = 1050.0) ➔ 無更高優先度任務就緒 ➔ False
         self.assertFalse(

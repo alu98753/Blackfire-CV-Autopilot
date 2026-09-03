@@ -45,7 +45,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
 
         self.mock_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.mock_machine.config["greedy_dungeon"] = True
-        self.mock_machine.config["greedy_allowed_indices"] = [0, 1, 2, 3]
+        self.mock_machine.config["greedy_allowed_indices"] = [1, 2, 3, 4]
 
         self.handler = NavigationHandler(self.mock_machine)
         self.handler.mouse = self.mock_mouse
@@ -183,7 +183,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         mock_exists.return_value = True
         mock_detect_cd.return_value = (False, None, "")
 
-        self.mock_machine.dungeon_cooldowns = {3: time.time() + 999, 2: time.time() + 999}
+        self.mock_machine.dungeon_cooldowns = {4: time.time() + 999, 3: time.time() + 999}
 
         def imread_side_effect(path):
             if "Ruins_entry.png" in path:
@@ -243,7 +243,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
 
         self.mock_mouse.drag.assert_not_called()
         self.assertTrue(self.mock_mouse.click.called)
-        self.assertEqual(self.mock_machine.current_dungeon_index, 3)
+        self.assertEqual(self.mock_machine.current_dungeon_index, 4)
         self.assertTrue(self.mock_machine.is_in_dungeon)
         self.assertEqual(self.mock_machine.fallback_swipe_count, 0)
 

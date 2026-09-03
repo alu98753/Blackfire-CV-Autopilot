@@ -5,8 +5,8 @@
     "ignored_quests": "1. 顯式忽略/跳過執行的任務關鍵字 (告示牌掃描直接跳過不接取，不上報 unknown_quests)",
     "typo_groups": "常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 (正確字為 Key -> 錯字陣列為 Value)",
     "dungeon_rules_info": {
-      "note": "2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 0~4, counting_policy)。註記：dungeon_rules 要記錄的是「完整的官方任務全名」或「特有地圖名」",
-      "dungeon_index_map": "0: 黏糊糊的石窟, 1: 幽影地穴, 2: 森林迷宮, 3: 神秘遺跡, 4: 幽暗監獄, 5: 冰雪洞窟"
+      "note": "2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 1~6, counting_policy)。註記：dungeon_rules 要記錄的是「完整的官方任務全名」或「特有地圖名」",
+      "dungeon_index_map": "1: 黏糊糊的石窟, 2: 幽影地穴, 3: 森林迷宮, 4: 神秘遺跡, 5: 幽暗監獄, 6: 冰雪洞窟"
     },
     "stage_rules_info": {
       "note": "3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型, counting_policy)。註記：stage_rules 要記錄的是「完整的官方任務全名」",
@@ -148,52 +148,52 @@
   "dungeon_rules": [
     {
       "pattern": "(史萊姆王的毀滅|史萊姆王)",
-      "dungeon_index": 0,
+      "dungeon_index": 1,
       "policy": "banner_verify_only"
     },
     {
       "pattern": "(清除史萊姆|黏糊糊的石窟)",
-      "dungeon_index": 0,
+      "dungeon_index": 1,
       "policy": "deterministic_count"
     },
     {
       "pattern": "(蛛後之死|消滅蛛王與蛛後|蛛王與蛛後)",
-      "dungeon_index": 1,
+      "dungeon_index": 2,
       "policy": "banner_verify_only"
     },
     {
       "pattern": "(清除蜘蛛|幽影地穴)",
-      "dungeon_index": 1,
+      "dungeon_index": 2,
       "policy": "deterministic_count"
     },
     {
       "pattern": "(破除森林的枷鎖)",
-      "dungeon_index": 2,
+      "dungeon_index": 3,
       "policy": "banner_verify_only"
     },
     {
       "pattern": "(清除樹人|森林迷宮)",
-      "dungeon_index": 2,
-      "policy": "deterministic_count"
-    },
-    {
-      "pattern": "(清除骷髏|神秘遺跡|破除遺跡的詛咒|破除遺跡附詛咒)",
       "dungeon_index": 3,
       "policy": "deterministic_count"
     },
     {
-      "pattern": "(終結獄炎統治|幽暗監獄|黑暗監獄)",
+      "pattern": "(清除骷髏|神秘遺跡|破除遺跡的詛咒|破除遺跡附詛咒)",
       "dungeon_index": 4,
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(終結獄炎統治|幽暗監獄|黑暗監獄)",
+      "dungeon_index": 5,
       "policy": "banner_verify_only"
     },
     {
       "pattern": "(冰雪洞窟的暴君|終結寒冰獸王)",
-      "dungeon_index": 5,
+      "dungeon_index": 6,
       "policy": "banner_verify_only"
     },
     {
       "pattern": "(冰雪洞窟)",
-      "dungeon_index": 5,
+      "dungeon_index": 6,
       "policy": "deterministic_count"
     }
   ],

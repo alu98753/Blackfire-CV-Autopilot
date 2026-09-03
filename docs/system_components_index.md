@@ -177,7 +177,7 @@
   * `banner_verify_quests`: 無法自動累計、僅憑彈窗核銷之任務全名清單。
   * `ignored_quests`: 顯式跳過不接取之任務關鍵字（不納入 unknown 統計）。
   * `typo_groups`: EasyOCR 錯別字自動清洗容錯對照表（例如 `"毀滅": ["致滅", "毀減"]`）。
-  * `dungeon_rules`: 地下城任務關鍵字配對至 `dungeon_index` (0~4) 規則列表。
+  * `dungeon_rules`: 地下城任務關鍵字配對至 `dungeon_index` (1~6) 規則列表。
   * `stage_rules`: 普通關卡怪物關鍵字配對至 `stage_level` (1~6) 與 `sub_stage` (`first`, `middle`, `six`, `final`) 規則列表。
 
 #### 4. [config/exception_features.json](../config/exception_features.json) (掌管類別: [UnexpectedPopupRecoveryHandler](../states/exceptions/handler.py) & [Watchdog](../states/exceptions/watchdog.py))

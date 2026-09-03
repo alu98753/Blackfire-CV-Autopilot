@@ -247,7 +247,7 @@ class QuestScheduler:
         logging.info(f"📋 [懸賞排程器] 當前共載入 {len(self.tasks)} 項任務 (未完成: {len(pending)} 項):")
         for idx, t in enumerate(self.tasks, 1):
             status_icon = "✅" if t.is_completed else "⏳"
-            mode_desc = f"地下城 #{t.dungeon_index + 1}" if t.mode_type == "dungeon" else (
+            mode_desc = f"地下城 #{t.dungeon_index}" if t.mode_type == "dungeon" else (
                 f"關卡 Lvl {t.stage_level} ({t.sub_stage})" if t.mode_type == "stage" else "通用首領"
             )
             cli_cmd = t.to_cli_args()

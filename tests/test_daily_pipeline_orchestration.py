@@ -153,14 +153,14 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         scheduler = self.daily_mgr.load_quest_scheduler()
         sm.attach_quest_scheduler(scheduler)
 
-        # 模擬地下城 3 (index 3 神秘遺跡: 清除骷髏) 正在冷卻中
+        # 模擬地下城 4 (神秘遺跡: 清除骷髏) 正在冷卻中
         now_ts = time.time()
-        sm.dungeon_cooldowns[3] = now_ts + 600.0
+        sm.dungeon_cooldowns[4] = now_ts + 600.0
 
         # 在 daily 模式觸發動態重排
         sm.evaluate_and_schedule_daily_pipeline()
 
-        # 斷言已自動跳過冷卻中的地下城 3 (神秘遺跡)，切換為下一個任務 (清除樹人 - 森林迷宮 index 2)
+        # 斷言已自動跳過冷卻中的地下城 4 (神秘遺跡)，切換為下一個任務 (清除樹人 - 森林迷宮 index 3)
         self.assertIn("森林迷宮", sm.config["name"])
 
     def test_navigation_dungeon_cooldown_triggers_pipeline_reevaluation(self):
@@ -183,7 +183,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         # 模擬 2 號地下城 (森林迷宮) 冷卻 10 分鐘
         now_ts = time.time()
-        sm.dungeon_cooldowns[2] = now_ts + 600.0
+        sm.dungeon_cooldowns[4] = now_ts + 600.0
 
         # 呼叫 _switch_to_stage_or_back 模擬冷卻發現
         nav_handler._switch_to_stage_or_back(screen_img=MagicMock(), rect={"left": 0, "top": 0}, reason="森林迷宮冷卻中")
@@ -397,7 +397,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         # 設 Dungeon 3 冷卻 10 分鐘
         now_ts = time.time()
-        sm.dungeon_cooldowns[2] = now_ts + 600.0
+        sm.dungeon_cooldowns[3] = now_ts + 600.0
 
         # 評估 daily pipeline，因任務冷卻，應回傳 False 並自動載入 Tier 4 退守模式 (Mix/Stage)
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
@@ -425,7 +425,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         # 1. 設冷卻 600 秒，初次排程退守至 Tier 4
         now_ts = time.time()
-        sm.dungeon_cooldowns[2] = now_ts + 600.0
+        sm.dungeon_cooldowns[3] = now_ts + 600.0
         sm.evaluate_and_schedule_daily_pipeline()
         tier4_cfg = sm.config.copy()
         self.assertTrue(tier4_cfg.get("is_tier4_fallback"))
@@ -439,11 +439,11 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertTrue(has_ready, "冷卻解凍後應傳回 True 以觸發結算離場搶佔！")
 
         # 3. 離場後重新排程，驗證已成功切換回 Tier 3 (破除森林的枷鎖)
-        sm.dungeon_cooldowns[2] = 0.0  # 解凍
+        sm.dungeon_cooldowns[3] = 0.0  # 解凍
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
         self.assertEqual(sm.config["type"], "dungeon")
-        self.assertEqual(sm.config["dungeon_index"], 2)
+        self.assertEqual(sm.config["dungeon_index"], 3)
 
     def test_ready_daily_quest_preempts_tier4_at_result_screen(self):
         """Tier 4 結算時，任何已就緒的 Daily 任務都必須離場，不能按再戰。"""
@@ -641,7 +641,7 @@ class TestTierConfigMatrix(unittest.TestCase):
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
         self.assertEqual(sm.config["type"], "dungeon")
-        self.assertEqual(sm.config["dungeon_index"], 0)
+        self.assertEqual(sm.config["dungeon_index"], 1)
         self.assertIn("史萊姆", sm.config["name"])
 
     def test_tier4_config_and_state_verification(self):

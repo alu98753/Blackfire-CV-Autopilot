@@ -42,6 +42,7 @@ from states.navigation_progress import NavigationProgress, NavigationProgressSet
 from states.battle_session import BattleSession
 from states.stamina_retreat import StaminaRetreatRecovery, StaminaRetreatSettings
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
+from utils.dungeon_catalog import DungeonCatalog
 
 
 
@@ -188,8 +189,8 @@ class GameStateMachine:
         self.consecutive_stuck_count = 0
         
         # 地下城與關卡戰敗計數與退避相關屬性
-        self.dungeon_cooldowns = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0}
-        self.current_dungeon_index = 0
+        self.dungeon_cooldowns = DungeonCatalog.build_default_cooldowns()
+        self.current_dungeon_index = None
         self.defeat_count = 0
         self.fallback_swipe_count = 0
         
@@ -1040,10 +1041,7 @@ class GameStateMachine:
         if explicit_target_idx is None and not is_greedy:
             entry_templates = cfg.get("dungeon_entries") or []
             nav_path = cfg.get("navigation_path") or []
-            for idx, temp_name in enumerate(entry_templates):
-                if temp_name in nav_path:
-                    explicit_target_idx = idx
-                    break
+            explicit_target_idx = DungeonCatalog.resolve_index_from_nav_path(nav_path, entry_templates)
 
         if target_config is not None and explicit_target_idx is not None and not is_greedy:
             return now >= self.dungeon_cooldowns.get(explicit_target_idx, 0.0)
@@ -1065,11 +1063,9 @@ class GameStateMachine:
             if nav_path is None:
                 raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
 
-            target_idx = None
-            for idx, temp_name in enumerate(entry_templates):
-                if temp_name in nav_path:
-                    target_idx = idx
-                    break
+            target_idx = explicit_target_idx
+            if target_idx is None:
+                target_idx = DungeonCatalog.resolve_index_from_nav_path(nav_path, entry_templates)
             
             if target_idx is not None:
                 return now >= self.dungeon_cooldowns.get(target_idx, 0.0)
@@ -1088,58 +1084,27 @@ class GameStateMachine:
         if dungeon_names is None:
             raise ValueError("配置錯誤：config 未設定 'dungeon_names'，請在 config.py 或啟動設定中指定地下城名稱清單。")
 
-        from utils.time_parser import format_seconds_to_readable
-        now = time.time()
-
         is_greedy = self.config.get("greedy_dungeon", False)
         if is_greedy:
             report_indices = self.config.get("greedy_allowed_indices")
             if report_indices is None:
                 raise ValueError("配置錯誤：貪婪地下城模式未設定 'greedy_allowed_indices'。")
-            target_indices = report_indices
         else:
             entry_templates = self.config.get("dungeon_entries")
-            if entry_templates is None:
-                raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
             nav_path = self.config.get("navigation_path")
-            if nav_path is None:
-                raise ValueError("配置錯誤：config 未設定 'navigation_path'。")
-
-            target_idx = None
-            for idx, temp_name in enumerate(entry_templates):
-                if temp_name in nav_path:
-                    target_idx = idx
-                    break
+            target_idx = DungeonCatalog.resolve_index_from_nav_path(nav_path, entry_templates)
             if target_idx is None:
                 target_idx = self.config.get("dungeon_index")
             if target_idx is None:
                 raise ValueError("配置錯誤：指定地下城模式找不到 'dungeon_index' 或對應入口路徑。")
             report_indices = [target_idx]
-            target_indices = report_indices
 
-        cd_details = []
-        available_names = []
-
-        for idx in report_indices:
-            if idx >= len(dungeon_names):
-                raise ValueError(f"配置錯誤：greedy_allowed_indices 中的索引 {idx} 超出 dungeon_names 長度 ({len(dungeon_names)})。")
-            name = dungeon_names[idx]
-            cd_until = self.dungeon_cooldowns.get(idx, 0.0)
-            rem = cd_until - now
-            if rem > 0:
-                if cd_until == float('inf'):
-                    cd_details.append(f"[{name}]: 永久不可打")
-                else:
-                    cd_str = format_seconds_to_readable(rem)
-                    cd_details.append(f"[{name}]: 冷卻中 ({cd_str})")
-            else:
-                if idx in target_indices:
-                    cd_details.append(f"[{name}]: 就緒 (可打)")
-                    available_names.append(name)
-                else:
-                    cd_details.append(f"[{name}]: 就緒 (未啟用)")
-
-        return ", ".join(cd_details), available_names
+        report = DungeonCatalog.format_cooldown_report(
+            self.dungeon_cooldowns,
+            target_indices=report_indices,
+            custom_names=dungeon_names,
+        )
+        return report.summary_str, report.available_names
 
     def has_dungeon_status_context(self):
         """Return whether the active route contains enough data to report dungeon cooldowns."""
@@ -1272,19 +1237,19 @@ class GameStateMachine:
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
             return True
 
-        raw_idx = config.get("tier4_dungeon_index", config.get("dungeon_index", 5))
+        raw_idx = config.get("tier4_dungeon_index", config.get("dungeon_index", 6))
         try:
             target_idx = int(raw_idx)
         except (ValueError, TypeError):
-            target_idx = 5
+            target_idx = 6
 
-        if 0 <= target_idx < len(dungeon_entries):
-            entry_img = dungeon_entries[target_idx]
+        if DungeonCatalog.is_valid_index(target_idx, dungeon_entries):
+            entry_img = DungeonCatalog.get_entry_template(target_idx, custom_entries=dungeon_entries)
             config["dungeon_index"] = target_idx
             config["tier4_dungeon_index"] = target_idx
             config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
             if config.get("type") == "dungeon":
-                config["name"] = f"地下城 - {dungeon_names[target_idx]}"
+                config["name"] = f"地下城 - {DungeonCatalog.get_name(target_idx, custom_names=dungeon_names)}"
             return True
         else:
             logging.warning(

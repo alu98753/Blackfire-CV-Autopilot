@@ -46,7 +46,7 @@ class TestBountyQuestFiltering(unittest.TestCase):
         self.assertIn("bounty_quests", defaults)
         bounty_cfg = defaults["bounty_quests"]
         self.assertEqual(bounty_cfg["max_stage"], 6)
-        self.assertEqual(bounty_cfg["max_dungeon"], 5)
+        self.assertEqual(bounty_cfg["max_dungeon"], 6)
 
     def test_profile_bounty_quests_overlay(self):
         """驗證 sandbox 與 native profile 取得獨立的 [bounty_quests] 配置"""
@@ -56,13 +56,13 @@ class TestBountyQuestFiltering(unittest.TestCase):
 
         native_cfg = get_bounty_quest_config("native")
         self.assertEqual(native_cfg["max_stage"], 6)
-        self.assertEqual(native_cfg["max_dungeon"], 5)
+        self.assertEqual(native_cfg["max_dungeon"], 6)
 
         set_active_profile("sandbox")
         self.assertEqual(get_bounty_quest_config(), {"max_stage": 4, "max_dungeon": 4})
 
         set_active_profile("native")
-        self.assertEqual(get_bounty_quest_config(), {"max_stage": 6, "max_dungeon": 5})
+        self.assertEqual(get_bounty_quest_config(), {"max_stage": 6, "max_dungeon": 6})
 
     def test_get_bounty_quest_config_isolation_across_profiles(self):
         """驗證跨 Profile 查詢時不會被當前 active profile 的覆蓋值污染"""
@@ -76,7 +76,7 @@ class TestBountyQuestFiltering(unittest.TestCase):
 
         empty_cfg = get_bounty_quest_config("empty_profile")
         self.assertEqual(empty_cfg["max_stage"], 6)
-        self.assertEqual(empty_cfg["max_dungeon"], 5)
+        self.assertEqual(empty_cfg["max_dungeon"], 6)
 
     def test_is_quest_allowed_predicate(self):
         """驗證 is_quest_allowed 純函式對關卡與地下城上限的邊界判定"""
@@ -93,16 +93,16 @@ class TestBountyQuestFiltering(unittest.TestCase):
         self.assertFalse(is_quest_allowed(node_stage5, bounty_cfg))
         self.assertFalse(is_quest_allowed(node_stage6, bounty_cfg))
 
-        # 地下城測試 (Dungeon 0~4 允許，Dungeon 5 拒絕)
-        node_dungeon0 = self.mapper.parse_quest("史萊姆王的毀滅")  # Dungeon 0
-        node_dungeon3 = self.mapper.parse_quest("破除遺跡的詛咒")  # Dungeon 3
-        node_dungeon4 = self.mapper.parse_quest("終結獄炎統治")    # Dungeon 4
-        node_dungeon5 = self.mapper.parse_quest("冰雪洞窟的暴君")  # Dungeon 5
+        # 地下城測試 (Dungeon 1~4 允許，Dungeon 5~6 拒絕)
+        node_dungeon1 = self.mapper.parse_quest("史萊姆王的毀滅")  # Dungeon 1
+        node_dungeon4 = self.mapper.parse_quest("破除遺跡的詛咒")  # Dungeon 4
+        node_dungeon5 = self.mapper.parse_quest("終結獄炎統治")    # Dungeon 5
+        node_dungeon6 = self.mapper.parse_quest("冰雪洞窟的暴君")  # Dungeon 6
 
-        self.assertTrue(is_quest_allowed(node_dungeon0, bounty_cfg))
-        self.assertTrue(is_quest_allowed(node_dungeon3, bounty_cfg))
+        self.assertTrue(is_quest_allowed(node_dungeon1, bounty_cfg))
         self.assertTrue(is_quest_allowed(node_dungeon4, bounty_cfg))
         self.assertFalse(is_quest_allowed(node_dungeon5, bounty_cfg))
+        self.assertFalse(is_quest_allowed(node_dungeon6, bounty_cfg))
 
         # 忽略任務與空節點
         node_ignored = self.mapper.parse_quest("獵金之蟲")
@@ -115,7 +115,7 @@ class TestBountyQuestFiltering(unittest.TestCase):
         bounty_cfg = {"max_stage": 4, "max_dungeon": 4}
 
         sorted_filtered = self.mapper.sort_quests(raw_list, bounty_config=bounty_cfg)
-        # 討伐惡魔 (Stage 6) 與 冰雪洞窟的暴君 (Dungeon 5) 必須被過濾
+        # 討伐惡魔 (Stage 6) 與 冰雪洞窟的暴君 (Dungeon 6) 必須被過濾
         self.assertNotIn("討伐惡魔", sorted_filtered)
         self.assertNotIn("冰雪洞窟的暴君", sorted_filtered)
         self.assertIn("破除遺跡的詛咒", sorted_filtered)

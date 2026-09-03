@@ -13,12 +13,6 @@ dengeon同理
 
 TODO : 關卡等沒看到 要向左滑動到底 直到看到第一關
 
-### 0. 📐 統一地下城與關卡編號為 1-based (消除 0-indexed 歷史包袱)
-- **需求背景**：目前關卡 (Stage) 為 1-based (1~6)，而地下城 (Dungeon) 為 0-based (0~5)。這導致 `defaults.toml` 出現 `max_stage = 6` 與 `max_dungeon = 5` 的直覺認知衝突，且多處需手動 `+1` / `-1` 補釘轉換，容易造成 Off-by-one 邊界錯誤。
-- **規劃方向**：
-  - 將地下城編號全面統一為 1-based (`1 ~ 6`)，與關卡編號對齊。
-  - 同步重構：`config/defaults.toml`、`user_data/*/config.toml`、`config/quest_rules.json` (dungeon_rules)、`utils/quest_mapper.py`、`cli/dungeon_setup.py`、`states/handlers/navigation.py` 及相關單元測試。
-
 因為我有所有角色的資料 所以實際上我可以做戰鬥系統 因為點擊是固定位置就不需要cv, 只需要專注在戰鬥
 
 ### 1. 🔔 異常暫停與中斷即時通知 (Discord / LINE Webhook Notification)
@@ -129,3 +123,8 @@ TODO : 關卡等沒看到 要向左滑動到底 直到看到第一關
   - Tier 3: 懸賞告示牌與動態任務 (`bulletin_board`)。
   - Tier 4: 動態退守刷關。
 - [已完成並驗證] **背包已滿 18 格標題中心錨定與 2 格 (279px) 精準像素 Drag 位移銷毀**。
+- [已完成並驗證] **地下城索引全面統一為 1-based (消除 0-indexed 歷史包袱)**：
+  - 徹底將地下城編號由 `0..5` 統一為 `1..6`，全面對齊關卡 `1..6`。
+  - 消除所有 `+ 1` / `- 1` 混亂轉換與認知衝突；更新 `defaults.toml` (`max_dungeon = 6`、`greedy_allowed_indices = [1..6]`、`cooldown_map` 鍵值 `1..6`)。
+  - 同步重構 `config/quest_rules.json`、`utils/quest_mapper.py`、`utils/quest_scheduler.py`、`cli/dungeon_setup.py`、`states/state_machine.py`、`states/handlers/navigation.py`。
+  - 11 個單元測試套件已 100% 綠燈通過驗證。
