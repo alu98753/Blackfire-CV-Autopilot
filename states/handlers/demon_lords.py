@@ -24,12 +24,16 @@ class DemonLordsHandler(BaseStateHandler):
         self.pending_stone_queue = None
         self.stone_insert_completed = False
         self.slot_no_reaction_count = 0
+        self.launch_pending = False
+        self.launch_started_at = None
 
     def reset_state(self):
         self.current_target_boss = None
         self.pending_stone_queue = None
         self.stone_insert_completed = False
         self.slot_no_reaction_count = 0
+        self.launch_pending = False
+        self.launch_started_at = None
 
     def _get_configured_targets(self):
         cfg = self.machine.config or {}
@@ -50,6 +54,9 @@ class DemonLordsHandler(BaseStateHandler):
 
         if self._handle_popup_guards(screen_img, rect):
             return True
+
+        if self.launch_pending:
+            return self._observe_launch_outcome(screen_img)
 
         subscene = self.classify_subscene(screen_img)
         dispatch = {
@@ -263,27 +270,39 @@ class DemonLordsHandler(BaseStateHandler):
         self.stone_insert_completed = False
         self.pending_stone_queue = None
         self.slot_no_reaction_count = 0
+        self.launch_pending = True
+        self.launch_started_at = time.monotonic()
+        logging.info("[DemonLords] Start committed; awaiting BATTLE or stamina-overlay observation.")
+        return True
 
+    def _observe_launch_outcome(self, screen_img):
+        """Resolve the Start action on a later frame without recapturing here."""
         features = ["battle/battle_features_1.png", "battle/battle_features_2.png", "common/auto.png"]
-        start_t = time.time()
-        while time.time() - start_t < 2.5:
-            time.sleep(0.3)
-            if not self.capturer or not rect:
-                continue
-            fresh = self.capturer.capture(rect)
-            if fresh is None:
-                continue
-            for feat in features:
-                if os.path.exists(os.path.join("templates", feat)):
-                    p, _ = self.matcher.match(fresh, feat, threshold=0.85, quiet=True)
-                    if p:
-                        logging.info(f"⚔️ [深淵魔王] 確認進入戰鬥！轉移至 STATE_BATTLE [{boss_key}]...")
-                        self.machine.current_demon_lord_key = boss_key
-                        self.machine.transition_to(self.machine.STATE_BATTLE)
-                        return True
-        return False
+        for feat in features:
+            if os.path.exists(os.path.join("templates", feat)):
+                position, _ = self.matcher.match(screen_img, feat, threshold=0.85, quiet=True)
+                if position:
+                    boss_key = self.current_target_boss or self.machine.config.get("target_boss", "voidborn_elres")
+                    logging.info(f"⚔️ [深淵魔王] Start postcondition met; entering BATTLE [{boss_key}].")
+                    self.machine.current_demon_lord_key = boss_key
+                    self.machine.transition_to(self.machine.STATE_BATTLE)
+                    return True
+
+        timeout = float((self.machine.config or {}).get("demon_start_timeout_seconds", 5.0))
+        if self.launch_started_at is not None and time.monotonic() - self.launch_started_at >= timeout:
+            logging.warning("[DemonLords] Start action timed out without BATTLE or stamina overlay; returning to UNKNOWN for bounded recovery.")
+            self.machine.transition_to(self.machine.STATE_UNKNOWN)
+            return True
+        return True
 
     def _handle_popup_guards(self, screen_img, rect):
+        # The state-machine stamina recovery owns no_bread overlays.  A generic
+        # confirm click here would hide their evidence and lose the retreat
+        # intent, so this guard must leave them untouched.
+        for no_bread in ["no_bread/no_bread.png", "no_bread/no_bread2.png"]:
+            if os.path.exists(os.path.join("templates", no_bread)):
+                if self.matcher.match(screen_img, no_bread, threshold=0.85, quiet=True)[0]:
+                    return False
         for popup_btn in ["common/confirm.png", "common/ok.png"]:
             if os.path.exists(os.path.join("templates", popup_btn)):
                 pos, conf = self.matcher.match(screen_img, popup_btn, threshold=0.90, quiet=True)

@@ -466,7 +466,8 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         self.assertTrue(triggered)
         self.mock_machine.mouse.click.assert_called()
-        self.mock_machine.transition_to.assert_called_with("COLLECT_ONLY")
+        self.assertTrue(self.mock_machine.stamina_recovery.is_active)
+        self.mock_machine.transition_to.assert_not_called()
 
     # =========================================================================
     # 11. 黃金古國日常領主 Boss (Lord Boss) 插隊挑戰與自動回歸測試

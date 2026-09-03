@@ -16,6 +16,7 @@ action_timeout_seconds = 5.0
 action_max_attempts = 3
 collection_backoff_seconds = 60.0
 collection_recovery_failure_limit = 3
+stamina_retreat_quit_max_attempts = 3
 
 [quest]
 max_run_limit = 20

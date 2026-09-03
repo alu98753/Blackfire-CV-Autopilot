@@ -35,6 +35,7 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("navigation", "action_max_attempts"),
     ("navigation", "collection_backoff_seconds"),
     ("navigation", "collection_recovery_failure_limit"),
+    ("navigation", "stamina_retreat_quit_max_attempts"),
     ("quest", "max_run_limit"),
     ("quest", "target_count"),
     ("quest", "stage_batch_size"),
@@ -217,6 +218,16 @@ def get_navigation_progress_settings() -> dict:
         "collection_recovery_failure_limit": int(
             settings["collection_recovery_failure_limit"]
         ),
+    }
+
+
+def get_stamina_retreat_settings() -> dict:
+    """Return TOML-only limits for the bounded stamina retreat recovery."""
+    settings = get_defaults_config()["navigation"]
+    return {
+        "dismiss_max_attempts": int(settings["action_max_attempts"]),
+        "quit_max_attempts": int(settings["stamina_retreat_quit_max_attempts"]),
+        "return_town_max_attempts": int(settings["action_max_attempts"]),
     }
 
 

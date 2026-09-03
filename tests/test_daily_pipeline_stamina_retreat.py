@@ -127,7 +127,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
 
         self.assertTrue(triggered)
         self.assertEqual(self.state_machine.stamina_retreat_start_time, original_ts)
-        self.assertTrue(self.state_machine.is_in_collect_only_mode())
+        self.assertTrue(self.state_machine.stamina_recovery.is_active)
 
 if __name__ == '__main__':
     unittest.main()

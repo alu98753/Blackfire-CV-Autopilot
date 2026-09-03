@@ -227,6 +227,26 @@ OpenCV matcher 留在 perception adapter；不為每個 helper 建 interface。T
 這使戰鬥 timeout 符合 recovery 的「有效進展與可觀測邊界」：單純殘留的
 mutable timestamp 不是進入嚴重復原的證據。
 
+### 4.9 StaminaRetreatRecovery：Start 的非戰鬥結果
+
+消耗食物的 Start action（包含 Demon Lord）有兩個可預期結果：`BATTLE` 或
+`no_bread` overlay。後者不是未知錯誤，也不能由通用 `confirm` handler 吞掉。
+
+`StaminaRetreatRecovery` 由 `GameStateMachine` 唯一持有，使用同一張已擷取
+畫面建立狹域 observation，並以一 tick 一個動作執行：
+
+```text
+dismiss overlay → verify disappeared → quit once → verify scene
+  → repeat quit up to TOML limit → return town → COLLECT_ONLY
+```
+
+- 每次 dismiss、quit、return town 都要由下一張畫面驗證；不在一個 handler call
+  內重複 capture、sleep 或連點。
+- `stamina_retreat_quit_max_attempts` 是 TOML default，預設為 3；用盡仍無法
+  回城時，升級至有界 recovery，而不猜測座標。
+- 退避會 defer 被中斷的 Daily 工作。Demon Lord 不記為完成，恢復後由 Daily
+  scheduler 以新 scene 重新選擇，不能回到過期的準備彈窗。
+
 ## 5. v1 明確不做的東西
 
 | 不做項目 | 原因 |

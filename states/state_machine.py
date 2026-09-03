@@ -7,6 +7,7 @@ from copy import deepcopy
 from config import (
     GAME_CONFIGS,
     get_navigation_progress_settings,
+    get_stamina_retreat_settings,
     get_runtime_game_config,
     normalize_config,
     refresh_runtime_config,
@@ -39,6 +40,7 @@ from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 from states.navigation_intent import ActionId, IntentId
 from states.navigation_progress import NavigationProgress, NavigationProgressSettings
 from states.battle_session import BattleSession
+from states.stamina_retreat import StaminaRetreatRecovery, StaminaRetreatSettings
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 
 
@@ -168,6 +170,9 @@ class GameStateMachine:
             NavigationProgressSettings.from_mapping(
                 get_navigation_progress_settings()
             )
+        )
+        self.stamina_recovery = StaminaRetreatRecovery(
+            StaminaRetreatSettings.from_mapping(get_stamina_retreat_settings())
         )
 
 
@@ -672,6 +677,7 @@ class GameStateMachine:
                 self.defeat_count = 0
                 self.original_config = None
                 self.stamina_retreat_start_time = None
+                self.stamina_recovery.reset()
                 self.pending_daily_reset_exit = True
                 logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
 
@@ -741,6 +747,15 @@ class GameStateMachine:
         state_changed = (self.current_state != last_state)
         should_check_low_freq = is_testing or state_changed or (now_time - last_low_freq >= 1.5) or (self.current_state in [self.STATE_UNKNOWN, self.STATE_LOADING])
 
+        # An active recovery is a committed, bounded action sequence.  It must
+        # receive every subsequent frame rather than waiting for the low-rate
+        # global guard.  Demon Lord additionally gets this narrow overlay
+        # profile every tick while its Start action can produce no_bread.
+        if self.stamina_recovery.is_active or self.current_state == self.STATE_DEMON_LORDS:
+            from states.stamina_flow import handle_insufficient_stamina
+            if handle_insufficient_stamina(self, screen_img, rect):
+                return
+
         if should_check_low_freq:
             self._last_low_freq_check_time = now_time
             self._last_low_freq_state = self.current_state
@@ -748,8 +763,17 @@ class GameStateMachine:
             if handle_global_login(self, screen_img, rect):
                 return
 
-            # C. 體力不足（食物不足）退避處理
-            if self.current_state in [self.STATE_NAVIGATING, self.STATE_LOBBY, self.STATE_RESULT, self.STATE_LOADING, self.STATE_DOMAIN_EXPLORE]:
+            # C. Confirmed stamina overlays preempt the remaining
+            # stamina-consuming workflows. Demon Lord was handled above so
+            # its Start outcome has no global-guard latency.
+            stamina_consuming_states = {
+                self.STATE_NAVIGATING,
+                self.STATE_LOBBY,
+                self.STATE_RESULT,
+                self.STATE_LOADING,
+                self.STATE_DOMAIN_EXPLORE,
+            }
+            if self.current_state in stamina_consuming_states:
                 from states.stamina_flow import handle_insufficient_stamina
                 if handle_insufficient_stamina(self, screen_img, rect):
                     return

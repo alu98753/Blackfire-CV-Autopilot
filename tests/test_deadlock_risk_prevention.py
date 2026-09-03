@@ -97,9 +97,9 @@ class TestDeadlockRiskPrevention(unittest.TestCase):
             triggered = handle_insufficient_stamina(self.state_machine, None, {"left": 0, "top": 0, "width": 1000, "height": 800})
 
         self.assertTrue(triggered)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
-        self.assertIsNotNone(self.state_machine.stamina_retreat_start_time)
-        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertTrue(self.state_machine.stamina_recovery.is_active)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
+        self.assertIsNone(self.state_machine.stamina_retreat_start_time)
 
     def test_quest_scheduler_max_run_limit_and_all_completed_transition(self):
         """
