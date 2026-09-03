@@ -47,7 +47,7 @@ class DomainExploreHandler(BaseStateHandler):
         if self.strategy.handle_custom_events(screen_img, rect):
             return
 
-        # 4.1 檢查是否有日常領主 Boss (Lord Boss) 冷卻解鎖需插隊挑戰
+        # 4.1 檢查 Daily 較高優先級活動是否需插隊
         if self._check_lord_boss_preemption(screen_img, rect):
             return
 
@@ -117,10 +117,15 @@ class DomainExploreHandler(BaseStateHandler):
         return False
 
     def _check_lord_boss_preemption(self, screen_img, rect) -> bool:
-        """檢查是否有日常領主 Boss (Lord Boss) 冷卻解鎖，若有則主動退場回城討伐"""
+        """Exit the domain when any enabled Daily activity is ready to preempt."""
         dm = getattr(self.machine, "daily_manager", None)
-        if dm and self.machine.has_available_selected_lord_boss():
-            logging.info("⚔️ [領地探索 ➔ 領主插隊] 偵測到日常領主 Boss 冷卻結束可挑戰；退出領地前往城鎮討伐！")
+        boss_ready = bool(dm and self.machine.has_available_selected_lord_boss())
+        daily_ready = (
+            self.machine.is_daily_pipeline_active() is True
+            and self.machine.has_pending_daily_activity() is True
+        )
+        if boss_ready or daily_ready:
+            logging.info("⏰ [領地探索 ➔ Daily 插隊] 偵測到較高優先級活動已就緒；退出領地並重新排程！")
             exit_candidates = ["domains/common/exit_to_lobby.png", "goback_town.png", "common/quit.png"]
             for exit_btn in exit_candidates:
                 if os.path.exists(os.path.join("templates", exit_btn)):

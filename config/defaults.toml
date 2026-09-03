@@ -164,6 +164,9 @@ stamina_retreat_duration = 7
 [primary_modes.daily]
 name = "每日懸賞任務"
 type = "mix"
+# 週期活動預設啟用；每位玩家可在 user_data/<profile>/config.toml 覆蓋為 false。
+enable_dungeon = true
+enable_lord_boss = true
 dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
@@ -178,6 +181,8 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 enable_stage_farming = true
+tier4_mode = "stage"  # 可選: "stage", "domain"
+tier4_domain = "golden_empire"  # tier4_mode="domain" 時目前支援黃金古國
 tier4_stage_level = 6  # 大關數字 1~6 (6 代表 冰凍峽谷)
 tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (魔王關)
 

@@ -7,6 +7,7 @@ from cli.dungeon_setup import setup_dungeon_config
 from cli.profile_updates import persist_mode_updates
 from cli.prompts import prompt_choice
 from cli.stage_setup import setup_stage_config
+from cli.tier4_setup import setup_daily_tier4_config
 
 def setup_mode_config(args):
     # 若指定了 --subflow，為純城鎮子流程測試，完全不跳出地下城與關卡選單提示！
@@ -47,11 +48,7 @@ def setup_mode_config(args):
                 setup_stage_config(config, interactive=False)
         elif args.mode == "daily":
             setup_dungeon_config(config, args, interactive=False)
-            if config.get("enable_stage_farming", True):
-                setup_stage_config(config, interactive=False)
-                config["name"] = f"Daily Tier 4 ({config.get('stage_name', '')})"
-            else:
-                config["name"] = "Daily Tier 4 (stage disabled)"
+            setup_daily_tier4_config(config, interactive=False)
             config["lobby_start_btn"] = "stages/start.png"
             config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
         return config
@@ -97,43 +94,10 @@ def setup_mode_config(args):
             if config["enable_lord_boss"]:
                 print("[*] 已啟用：定時待機期間，Boss 冷卻結束將自動前往討伐！")
     elif args.mode == "daily":
-        print("\n[*] 【每日懸賞任務模式】設定 Tier 4 退守目標 (當懸賞全清且無 Boss 可打時)：")
-        
-        # Backend controls game input only; it must never suppress configuration choices.
-        setup_dungeon_config(config, args)
-
-        # 2. 是否前往普通關卡刷怪
-        current_farm = config.get("enable_stage_farming", True)
-        default_farm_num = "1" if current_farm else "2"
-        if args.enable_stage_farming is not None:
-            config["enable_stage_farming"] = args.enable_stage_farming
-        else:
-            print(f"\n當所有懸賞任務與地下城皆完成/冷卻時，是否要前往普通關卡刷怪 (當前 Profile TOML 設定: {'是' if current_farm else '否'})？")
-            print(f" 1) 是 (前往普通關卡刷怪) {'- 當前預設' if current_farm else ''}")
-            print(f" 2) 否 (回到城鎮待機，零浪費體力) {'- 當前預設' if not current_farm else ''}")
-            try:
-                stage_farm_choice = input(f"請輸入數字 [1-2] (直接 Enter 鍵保持為 {default_farm_num}): ").strip()
-                if not stage_farm_choice:
-                    stage_farm_choice = default_farm_num
-            except KeyboardInterrupt:
-                print("\n[!] 取消啟動。")
-                sys.exit(0)
-            except Exception:
-                stage_farm_choice = default_farm_num
-            new_farm = (stage_farm_choice == "1")
-            if new_farm != config.get("enable_stage_farming"):
-                config["enable_stage_farming"] = new_farm
-                persist_mode_updates(config, {"enable_stage_farming": new_farm})
-            else:
-                config["enable_stage_farming"] = new_farm
-
-        if config.get("enable_stage_farming", True):
-            setup_stage_config(config, prompt_prefix="[Tier 4 退守關卡] ")
-            config["name"] = f"每日懸賞任務 (Tier 4 退守: {config.get('stage_name', '')})"
-            print(f"[*] 懸賞任務模式啟動：完成所有懸賞任務後，將自動退守執行【{config.get('stage_name', '')}】。")
-        else:
-            config["name"] = "每日懸賞任務 (Tier 4 退守: 城鎮待機)"
-            print("[*] 懸賞任務模式啟動：完成所有懸賞任務後，將回到城鎮待機 (COLLECT_ONLY)，不打小怪。")
+        print("\n[*] 【每日懸賞任務模式】週期活動會優先執行，Tier 4 僅在等待期間長駐：")
+        print(f"    地下城：{'啟用' if config.get('enable_dungeon', True) else '停用（Profile TOML / CLI）'}")
+        print(f"    Lord：{'啟用' if config.get('enable_lord_boss', True) else '停用（Profile TOML / CLI）'}")
+        setup_daily_tier4_config(config)
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 

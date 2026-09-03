@@ -9,6 +9,7 @@ from config import (
     SUB_STAGE_THRESHOLD,
     EXIT_BATTLE_THRESHOLD,
     ENTRY_THRESHOLD,
+    TIER4_MODE_DOMAIN,
     get_template_threshold
 )
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
@@ -105,6 +106,22 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.is_daily_pipeline_active() and getattr(self.machine, "quest_scheduler", None) is not None and not self.machine.config.get("is_tier4_fallback", False):
             logging.info("⏳ [每日懸賞動態調度] 偵測到當前懸賞目標地下城冷卻中，權立即觸發動態重新排程，順延切換下一個任務...")
             self.machine.evaluate_and_schedule_daily_pipeline()
+            return
+
+        daily_policy = getattr(self.machine, "primary_config", None) or {}
+        if (
+            self.machine.is_daily_pipeline_active()
+            and daily_policy.get("tier4_mode") == TIER4_MODE_DOMAIN
+        ):
+            logging.info("🏛️ [Daily Tier 4] 地下城冷卻中，切換至使用者設定的領地長駐路由。")
+            pos_back, _ = self.matcher.match(
+                screen_img, "goback_town.png", threshold=0.75, quiet=True
+            )
+            if pos_back:
+                self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
+                time.sleep(0.5)
+            self.machine.apply_tier4_fallback_config()
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return
 
         # 若未啟用普通關卡打怪 (enable_stage_farming == False)，直接返回城鎮轉入 COLLECT_ONLY 待機

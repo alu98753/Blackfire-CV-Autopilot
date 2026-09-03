@@ -12,6 +12,16 @@ from utils.config_manager import JsonConfigManager, TomlConfigManager, dump_toml
 
 WINDOW_TITLE = "Blackfire Crusade"
 STEAM_APP_ID = "1765770"
+TIER4_MODE_STAGE = "stage"
+TIER4_MODE_DOMAIN = "domain"
+DEFAULT_TIER4_DOMAIN = "golden_empire"
+TIER4_MODE_OPTIONS = (
+    (TIER4_MODE_STAGE, "普通關卡 (Stage)"),
+    (TIER4_MODE_DOMAIN, "領地探索 (Domain)"),
+)
+TIER4_DOMAIN_OPTIONS = (
+    (DEFAULT_TIER4_DOMAIN, "黃金古國"),
+)
 CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
