@@ -54,20 +54,21 @@ class TestDemonLordsSubflow(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_daily_manager_tracking(self):
-        """測試：DailyManager 正確追蹤魔王挑戰次數 (0/3 -> 1/3 -> 3/3 完成)"""
+        """測試：DailyManager 正確追蹤魔王清單次數 (0/3 -> 1/3 -> 3/3 完成)"""
         avail, msg = self.daily_manager.is_demon_lords_available()
         self.assertTrue(avail)
-        self.assertIn("0/3", msg)
+        self.assertEqual(self.daily_manager.get_available_demon_lords(), ["voidborn_elres"])
 
-        self.daily_manager.record_demon_lords_fight()
+        self.daily_manager.record_demon_lords_fight("voidborn_elres")
         avail, msg = self.daily_manager.is_demon_lords_available()
         self.assertTrue(avail)
-        self.assertIn("1/3", msg)
+        self.assertEqual(self.daily_manager.status["subflows"]["demon_lords"]["bosses"]["voidborn_elres"]["today_count"], 1)
 
-        self.daily_manager.record_demon_lords_fight()
-        self.daily_manager.record_demon_lords_fight()
+        self.daily_manager.record_demon_lords_fight("voidborn_elres")
+        self.daily_manager.record_demon_lords_fight("voidborn_elres")
         avail, msg = self.daily_manager.is_demon_lords_available()
         self.assertFalse(avail)
+        self.assertEqual(self.daily_manager.get_available_demon_lords(), [])
         self.assertTrue(self.daily_manager.is_subflow_completed("demon_lords"))
 
     @patch("os.path.exists", return_value=True)
@@ -333,4 +334,83 @@ class TestDemonLordsSubflow(unittest.TestCase):
         self.assertTrue(ret)
         self.assertIn("demon_lords/meterial/demon_seal_stone_1.png", selected_templates)
         self.assertEqual(handler.pending_stone_queue, ["1"])
+
+    @patch("time.sleep")
+    @patch("os.path.exists", return_value=True)
+    def test_three_stones_completed_launches_battle_without_reinit(self, _mock_exists, _mock_sleep):
+        """測試：當 3 顆石頭鑲嵌完畢後，絕不重新初始化鑲嵌計畫，而是直接點擊 start 進入戰鬥"""
+        handler = DemonLordsHandler(self.state_machine)
+        handler.current_target_boss = "voidborn_elres"
+        dummy_screen = np.zeros((800, 1000, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        # 1. 模擬最後一顆石頭 (1 階) 在 STONE_DIALOG 中被點選並確認
+        handler.pending_stone_queue = ["1"]
+        handler.stone_insert_completed = False
+
+        def match_choose(img, temp, **kw):
+            if temp == "demon_lords/meterial/demon_seal_stone_1.png":
+                return ((200, 300), 0.92)
+            if temp == "common/choose.png":
+                return ((700, 600), 0.95)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = match_choose
+        ret = handler.handle(dummy_screen, rect)
+        self.assertTrue(ret)
+        self.assertEqual(handler.pending_stone_queue, [])
+        self.assertTrue(handler.stone_insert_completed)
+
+        # 2. 回到 PREPARE_MODAL：畫面上即便有低相似度雜訊，也絕不誤判點擊 slot 或重製 queue
+        def match_modal(img, temp, **kw):
+            if temp == "demon_lords/meterial/stone_slot.png":
+                return ((500, 300), 0.90)
+            if temp == "stages/start.png":
+                return ((800, 700), 0.95)
+            if temp == "battle/battle_features_1.png":
+                return ((100, 100), 0.95)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.4)
+        self.state_machine.matcher.match.side_effect = match_modal
+        self.mock_capturer.capture.return_value = dummy_screen
+
+        ret = handler.handle(dummy_screen, rect)
+        self.assertTrue(ret)
+        # 斷言：點擊的是開始戰鬥按鈕 (800, 700)，且狀態轉入 BATTLE
+        self.mock_mouse.click.assert_called_with(800, 700)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
+        # 斷言：未被重新初始化成 ['2', '1', '1']
+        self.assertIsNone(handler.pending_stone_queue)
+
+    @patch("os.path.exists", return_value=True)
+    def test_slot_no_reaction_exhausted_exits_to_navigating(self, _mock_exists):
+        """測試：當連續 2 次點擊插槽無反應時，自動標記當前魔王完成，點擊 quit 退出並轉移至 NAVIGATING"""
+        handler = DemonLordsHandler(self.state_machine)
+        handler.current_target_boss = "voidborn_elres"
+        handler.slot_no_reaction_count = 2
+        dummy_screen = np.zeros((800, 1000, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        def match_modal(img, temp, **kw):
+            if temp == "demon_lords/meterial/stone_slot.png":
+                return ((500, 300), 0.90)
+            if temp == "demon_lords/meterial/slot.png":
+                return ((400, 300), 0.90)
+            if temp == "common/quit.png":
+                return ((900, 100), 0.95)
+            return (None, 0.0)
+
+        self.state_machine.pop_and_next_town_subflow = MagicMock()
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.90, 0.4)
+        self.state_machine.matcher.match.side_effect = match_modal
+
+        ret = handler.handle(dummy_screen, rect)
+        self.assertTrue(ret)
+        # 斷言：點擊 quit.png 退出彈窗
+        self.mock_mouse.click.assert_called_with(900, 100)
+        # 斷言：魔王已被標記完成
+        self.assertTrue(self.daily_manager.status["subflows"]["demon_lords"]["bosses"]["voidborn_elres"]["completed_today"])
+        # 斷言：呼叫 pop_and_next_town_subflow 推進子流程佇列
+        self.state_machine.pop_and_next_town_subflow.assert_called_once()
 

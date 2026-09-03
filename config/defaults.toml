@@ -62,6 +62,8 @@ auto_bread = true # true, false
 lord_boss_targets = ["lord_spider", "lord_spectre", "ghoul_snow"] # 指定 Boss 清單（例如 ["lord_spider"] 僅打蜘蛛，或 [] 完全跳過 Boss
 enable_dungeon = true
 enable_town_daily = true
+enable_demon_lords = true
+enable_lord_boss = true
 enable_quests = false
 enable_stage_farming = false
 enable_golden_empire = false
@@ -344,6 +346,7 @@ empty_slot_btn = "demon_lords/meterial/slot.png"
 choose_btn = "common/choose.png"
 max_daily_count = 3
 target_boss = "voidborn_elres"
+targets = ["voidborn_elres"]
 
 # 封印石配比需求字典：總數為 3 (例如 1 個 2 階，2 個 1 階)
 stone_selection = { "2" = 1, "1" = 2 }
