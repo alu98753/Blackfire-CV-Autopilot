@@ -51,11 +51,18 @@
      - `tests/test_behavior_dungeon_scenarios.py` (7/7 通過)
      - `tests/test_behavior_navigation.py` (16/16 通過)
 
+5. **封裝領域目錄服務與消除重複手寫邏輯 (Domain Catalog & Code Integrity)**：
+   - 建立 [utils/dungeon_catalog.py](../../utils/dungeon_catalog.py)，提供 `DungeonCatalog` 與不可變資料契約 `DungeonCooldownReport`。
+   - 集中提供 1-based 名稱/模板查詢（`get_name`、`get_entry_template`）、路徑逆向解析（`resolve_index_from_nav_path`）與冷卻狀態報表格式化（`format_cooldown_report`）。
+   - 修復 `states/handlers/navigation.py` 的 `IndexError` 與 `states/state_machine.py` 的 `ValueError`（越界崩潰點）。
+   - 新增 `tests/test_dungeon_catalog.py` (9 項測試 100% 通過)。
+   - 更新 `test_behavior_dungeon_cards.py`、`test_behavior_dungeon_state_machine.py` 與 `test_behavior_pause_resume.py` 測試套件，消除舊 0-based 遺留夾具與超時競爭。
+
 ---
 
 ### 3. Result (結果)
-- **148 項聚焦行為單元測試 100% 綠燈全數通過**。
-- 專案程式碼與設定檔中徹底清除了數十處 `+ 1` / `- 1` 的 Off-by-one 轉換 gymnastics。
+- **單元測試全數綠燈通過**，包含新增之 `test_dungeon_catalog.py` 與修復之 `test_behavior_dungeon_cards.py`、`test_behavior_dungeon_state_machine.py` 等。
+- 專案程式碼與設定檔中徹底清除了數十處 `+ 1` / `- 1` 的 Off-by-one 轉換 gymnastics 與手寫重複迴圈。
 - 使用者設定檔中 `max_stage = 6` 與 `max_dungeon = 6` 語意高度統一，徹底符合直覺。
 
 ---
