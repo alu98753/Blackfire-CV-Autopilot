@@ -103,7 +103,6 @@ class DomainExploreHandler(BaseStateHandler):
             if pos_auto:
                 logging.info(f"⚔️ [領地探索] 偵測到戰鬥開始 (auto 按鈕信心度: {conf_auto:.4f})，重置單場戰敗次數並轉移至 STATE_BATTLE！")
                 self.machine.defeat_count = 0
-                self.machine.battle_start_time = time.time()
                 self.machine.transition_to(self.machine.STATE_BATTLE)
                 return True
         return False

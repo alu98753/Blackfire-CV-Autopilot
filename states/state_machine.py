@@ -38,6 +38,7 @@ from states.handlers import (
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 from states.navigation_intent import ActionId, IntentId
 from states.navigation_progress import NavigationProgress, NavigationProgressSettings
+from states.battle_session import BattleSession
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 
 
@@ -114,7 +115,7 @@ class GameStateMachine:
         self.current_state = self.STATE_UNKNOWN
         self.last_state = None
         self.last_state_change = time.time()
-        self.battle_start_time = None
+        self.battle_session = BattleSession()
         self.run_count = 0
         self.capture_failure_count = 0
         self.capture_failure_limit = 5
@@ -363,8 +364,7 @@ class GameStateMachine:
             self.last_state_change += pause_duration
 
         # 2. 補償戰鬥計時器
-        if self.battle_start_time is not None:
-            self.battle_start_time += pause_duration
+        self.battle_session.compensate_pause(pause_duration)
 
         # 3. 補償例外彈窗暫存時間
         if isinstance(self.stashed_context, dict) and "timestamp" in self.stashed_context:
@@ -458,6 +458,7 @@ class GameStateMachine:
 
     def transition_to(self, new_state):
         if self.current_state != new_state:
+            previous_state = self.current_state
             if new_state == self.STATE_DUNGEON_EXPLORING:
                 self.ensure_explore_config()
             logging.info(f"🔄 狀態轉移: {self.current_state} -> {new_state}")
@@ -478,6 +479,40 @@ class GameStateMachine:
                 handler.reset_state()
 
             self._on_state_transition_sync_context(new_state)
+            self._sync_battle_session(previous_state, new_state)
+
+    def _sync_battle_session(self, previous_state, new_state):
+        """Own battle timeout lifetime at the state-machine boundary.
+
+        A BATTLE scene observed after UNKNOWN/LOADING/relaunch is a new
+        observable session.  It must never inherit a timeout timestamp from a
+        completed or pre-relaunch battle.
+        """
+        if new_state == self.STATE_BATTLE:
+            self.battle_session.begin(self.clock.monotonic(), previous_state)
+            return
+        if previous_state == self.STATE_BATTLE:
+            self.battle_session.clear()
+
+    def battle_elapsed_seconds(self) -> float:
+        """Return the active battle duration using the runtime clock port."""
+        return self.battle_session.elapsed_seconds(self.clock.monotonic())
+
+    @property
+    def battle_start_time(self):
+        """Legacy test compatibility; production code uses ``battle_session``."""
+        return self.battle_session.started_at
+
+    @battle_start_time.setter
+    def battle_start_time(self, value):
+        """Adapt legacy wall-clock test fixtures to the monotonic session clock."""
+        if value is None:
+            self.battle_session.clear()
+            return
+        if value >= 1_000_000_000:
+            elapsed = max(0.0, time.time() - value)
+            value = self.clock.monotonic() - elapsed
+        self.battle_session.started_at = value
 
     def request_relaunch(self, reason: str) -> bool:
         """Escalate recovery through the configured process boundary."""

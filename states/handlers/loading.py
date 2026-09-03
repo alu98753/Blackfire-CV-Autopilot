@@ -20,7 +20,6 @@ class LoadingHandler(BaseStateHandler):
                 pos, conf = self.matcher.match(screen_img, feat, threshold=thresh, quiet=True)
                 if pos:
                     logging.info(f"⚔️ 載入完成！偵測到戰鬥特徵 [{feat}] (相似度: {conf:.4f})，轉移至 BATTLE 狀態。")
-                    self.machine.battle_start_time = time.time()
                     self.machine.transition_to(self.machine.STATE_BATTLE)
                     return
 

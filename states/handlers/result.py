@@ -401,7 +401,6 @@ class ResultHandler(BaseStateHandler):
                 pos_auto, conf_auto = self.matcher.match(screen_img, feat, threshold=thresh)
                 if pos_auto:
                     logging.info(f"⚔️ 結算畫面偵測到戰鬥特徵 [{feat}] (相似度: {conf_auto:.4f})，判定已進入戰鬥，將狀態切換至 BATTLE。")
-                    self.machine.battle_start_time = time.time()
                     self.machine.transition_to(self.machine.STATE_BATTLE)
                     return True
 

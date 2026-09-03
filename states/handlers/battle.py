@@ -40,7 +40,6 @@ class BattleHandler(BaseStateHandler):
                 )
                 self.machine.is_in_dungeon = True
                 self.non_battle_feature_start_time = None
-                self.machine.battle_start_time = None
                 self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
                 return
 
@@ -52,7 +51,6 @@ class BattleHandler(BaseStateHandler):
                     if pos:
                         logging.info(f"🧭 [手動介入恢復] 偵測到大廳按鈕特徵 [{lobby_btn}] (信心度: {conf:.4f} >= 0.90)，判定已退回大廳，切換至 UNKNOWN 重設定位。")
                         self.non_battle_feature_start_time = None
-                        self.machine.battle_start_time = None
                         self.machine.transition_to(self.machine.STATE_UNKNOWN)
                         return
 
@@ -62,7 +60,7 @@ class BattleHandler(BaseStateHandler):
             return
 
         battle_max_duration = get_battle_max_duration_seconds()
-        battle_duration = time.time() - self.machine.battle_start_time if self.machine.battle_start_time else 0.0
+        battle_duration = self.machine.battle_elapsed_seconds()
         if battle_duration >= battle_max_duration:
             logging.error(
                 "[Battle timeout] Battle has lasted %.1fs (hard limit %.1fs); relaunching game for recovery.",
@@ -85,7 +83,7 @@ class BattleHandler(BaseStateHandler):
         # B. 監控戰鬥結算
         # 為了防範剛進入戰鬥時，由於畫面轉換延遲與殘留按鈕導致誤判上一次戰鬥的結算按鈕，
         # 在進入戰鬥狀態的前 8 秒內，不進行任何結算/戰敗判定。
-        if self.machine.battle_start_time and (time.time() - self.machine.battle_start_time < 8.0):
+        if self.machine.battle_session.is_active and self.machine.battle_elapsed_seconds() < 8.0:
             self.log_battle_duration()
             time.sleep(0.15)
             return
@@ -169,7 +167,6 @@ class BattleHandler(BaseStateHandler):
 
                     # 3.4 重置狀態與計時器，轉移至 UNKNOWN
                     self.non_battle_feature_start_time = None
-                    self.machine.battle_start_time = None
                     self.machine.transition_to(self.machine.STATE_UNKNOWN)
                     return
         else:
@@ -343,7 +340,6 @@ class BattleHandler(BaseStateHandler):
         # 4. 強敵撤退處置 (主動放棄不計入單場戰敗次數，重置為 0)
         self.machine.defeat_count = 0
         self.non_battle_feature_start_time = None
-        self.machine.battle_start_time = None
 
         logging.info("👉 [領域強敵撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 NAVIGATING 重新進場探索。")
         self.machine.transition_to(self.machine.STATE_NAVIGATING)
@@ -354,8 +350,8 @@ class BattleHandler(BaseStateHandler):
         last_logged = getattr(self, "_last_battle_duration_logged_time", 0)
         if now - last_logged >= 60.0:
             self._last_battle_duration_logged_time = now
-            if self.machine.battle_start_time:
-                duration = now - self.machine.battle_start_time
+            if self.machine.battle_session.is_active:
+                duration = self.machine.battle_elapsed_seconds()
                 logging.info(f"⚔️ 戰鬥進行中... 已持續 {int(duration)} 秒")
             else:
                 logging.info(f"⚔️ 戰鬥進行中...")

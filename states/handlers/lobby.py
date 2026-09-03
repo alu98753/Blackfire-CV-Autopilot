@@ -36,7 +36,6 @@ class LobbyHandler(BaseStateHandler):
             if pos:
                 logging.info("Battle feature [%s] detected (confidence %.4f); entering BATTLE.", feat, confidence)
                 self.reset_state()
-                self.machine.battle_start_time = time.time()
                 self.machine.transition_to(self.machine.STATE_BATTLE)
                 return
 

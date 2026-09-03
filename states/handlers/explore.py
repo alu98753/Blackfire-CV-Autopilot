@@ -36,7 +36,6 @@ class ExploreHandler(BaseStateHandler):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
             if pos_auto:
                 logging.info(f"⚔️ 偵測到戰鬥已真正開始（出現 auto 按鈕，相似度: {conf_auto:.4f}），進入戰鬥狀態！")
-                self.machine.battle_start_time = time.time()
                 self.machine.transition_to(self.machine.STATE_BATTLE)
                 return
 

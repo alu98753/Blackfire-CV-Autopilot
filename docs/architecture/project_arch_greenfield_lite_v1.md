@@ -210,6 +210,23 @@ OpenCV matcher 留在 perception adapter；不為每個 helper 建 interface。T
 - 戰鬥上限、capture failure limit、action timeout、retry 與 backoff 全放 TOML defaults。
 - Recovery 參數不提供 CLI 覆寫，避免 24/7 行為因臨時參數漂移。
 
+### 4.8 BattleSession：戰鬥逾時的唯一 owner
+
+`BattleSession` 由 `GameStateMachine` 唯一持有，使用 runtime `ClockPort`
+的 monotonic 時間。任何 Handler 只能回報「已觀測到 BATTLE」或離開
+`BATTLE`；不得自行設定、延續或清除戰鬥逾時計時器。
+
+- 非 `BATTLE → BATTLE` 的轉入會建立一個新 session；其起點是該次可驗證的
+  戰鬥 scene observation。
+- 離開 `BATTLE`（結果、重定位、地下城 anchor 或重新啟動）會終止 session。
+- 重啟完成回到 `UNKNOWN` 後再次觀測到戰鬥，必須建立新的 bounded window，
+  不可沿用重啟前的 session。
+- `BattleHandler` 只消費 session 的 elapsed time，逾時才透過 `ProcessPort`
+  升級至 relaunch；它不判斷 Boss 戰術或戰鬥是否必然失敗。
+
+這使戰鬥 timeout 符合 recovery 的「有效進展與可觀測邊界」：單純殘留的
+mutable timestamp 不是進入嚴重復原的證據。
+
 ## 5. v1 明確不做的東西
 
 | 不做項目 | 原因 |
