@@ -41,6 +41,12 @@ DEFAULT_DAILY_STATUS = {
                     "completed_today": False
                 }
             }
+        },
+        "demon_lords": {
+            "completed_today": False,
+            "today_count": 0,
+            "max_daily_count": 3,
+            "last_executed_at": ""
         }
     }
 }
@@ -114,6 +120,13 @@ class DailyManager:
         if boss_added:
             self.save_status()
             logging.info("✨ [DailyManager] 自動同步補齊新增的 Lord Boss 結構至持久化存檔。")
+
+        # 💡 [子流程同步自癒機制] 確保預設清單中新增的子流程 (如 demon_lords) 能自動同步進現有存檔中
+        for sf_key, sf_def in DEFAULT_DAILY_STATUS.get("subflows", {}).items():
+            if sf_key not in self.status.setdefault("subflows", {}):
+                self.status["subflows"][sf_key] = json.loads(json.dumps(sf_def))
+                self.save_status()
+                logging.info(f"✨ [DailyManager] 自動同步補齊新增的子流程 [{sf_key}] 結構至持久化存檔。")
 
         # 💡 [自癒機制] 載入時自動校正並正名清洗 accepted_quests 存檔
         subflows = self.status.get("subflows", {})
@@ -248,6 +261,8 @@ class DailyManager:
         for key, sf in subflows.items():
             if key != "lord_boss":
                 sf["completed_today"] = False
+                if "today_count" in sf:
+                    sf["today_count"] = 0
 
         boss_data = subflows.get("lord_boss", {})
         boss_data["completed_today"] = False
@@ -423,6 +438,36 @@ class DailyManager:
         紀錄完成一次 Boss 戰鬥 (別名轉接)。
         """
         return self.record_boss_fight(boss_key, now_ts)
+
+    def is_demon_lords_available(self):
+        """檢查魔王挑戰今日是否仍有剩餘次數 (每日 3 次上限)"""
+        dl = self.status.get("subflows", {}).get("demon_lords", {})
+        if dl.get("completed_today", False):
+            return False, "今日魔王挑戰已打滿"
+        today_count = dl.get("today_count", 0)
+        max_count = dl.get("max_daily_count", 3)
+        if today_count >= max_count:
+            return False, f"今天已打滿 {today_count}/{max_count} 次"
+        return True, f"可進行挑戰 (今日進度: {today_count}/{max_count})"
+
+    def record_demon_lords_fight(self, now_ts=None):
+        """紀錄完成一次魔王挑戰 (today_count + 1，滿 3 次標記完成)"""
+        subflows = self.status.setdefault("subflows", {})
+        dl = subflows.setdefault("demon_lords", {
+            "completed_today": False,
+            "today_count": 0,
+            "max_daily_count": 3,
+            "last_executed_at": ""
+        })
+        dl["today_count"] = dl.get("today_count", 0) + 1
+        if now_ts is None:
+            now_ts = time.time()
+        now_str = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
+        dl["last_executed_at"] = now_str
+        if dl["today_count"] >= dl.get("max_daily_count", 3):
+            dl["completed_today"] = True
+        self.save_status()
+        logging.info(f"⚔️ [DailyManager] 記錄魔王挑戰完成 (今日進度: {dl['today_count']}/{dl.get('max_daily_count', 3)})")
 
     def update_bulletin_board_quests(self, today_new_quests):
         """

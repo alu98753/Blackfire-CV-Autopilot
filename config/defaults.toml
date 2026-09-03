@@ -332,6 +332,32 @@ name = "雪山食屍王瓦爾瑪"
 template = "load/ghoul_snow.png"
 cooldown_seconds = 10800.0
 
+[subflow_configs.demon_lords]
+enabled = true
+name = "深淵魔王"
+type = "demon_lords"
+entry_btn = "demon_lords/demon_lords_entry.png"
+entry_after_btn = "demon_lords/demon_lords_entry_after.png"
+start_btn = "stages/start.png"
+stone_container_btn = "demon_lords/meterial/stone_slot.png"
+empty_slot_btn = "demon_lords/meterial/slot.png"
+choose_btn = "common/choose.png"
+max_daily_count = 3
+target_boss = "voidborn_elres"
+
+# 封印石配比需求字典：總數為 3 (例如 1 個 2 階，2 個 1 階)
+stone_selection = { "2" = 1, "1" = 2 }
+
+[subflow_configs.demon_lords.stone_templates]
+"1" = "demon_lords/meterial/demon_seal_stone_1.png"
+"2" = "demon_lords/meterial/demon_seal_stone_2.png"
+"3" = "demon_lords/meterial/demon_seal_stone_3.png"
+"4" = "demon_lords/meterial/demon_seal_stone_4.png"
+
+[subflow_configs.demon_lords.bosses.voidborn_elres]
+name = "虛空行者厄爾雷斯"
+template = "demon_lords/voidborn_elres.png"
+
 [subflow_configs.chest]
 enabled = true
 name = "神秘寶箱"

@@ -31,7 +31,8 @@ from states.handlers import (
     ChestHandler,
     HeroDrawHandler,
     BulletinBoardHandler,
-    DomainExploreHandler
+    DomainExploreHandler,
+    DemonLordsHandler
 )
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 from states.navigation_intent import ActionId, IntentId
@@ -68,6 +69,7 @@ class GameStateMachine:
     STATE_BULLETIN_BOARD = "BULLETIN_BOARD"              # 懸賞告示牌 (領任務) 流程
     STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
     STATE_DOMAIN_EXPLORE = "DOMAIN_EXPLORE"
+    STATE_DEMON_LORDS = "DEMON_LORDS"                    # 深淵魔王討伐流程
 
     DUNGEON_SCENE_FEATURES = (
         "dungeons/leave.png",
@@ -149,6 +151,8 @@ class GameStateMachine:
         # 城鎮子流程與流水線相關屬性
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
+        self.current_lord_boss_key = None
+        self.current_demon_lord_key = None
         self.town_subflow_queue = []
         self.quest_scheduler = None
         self.daily_manager = None
@@ -248,6 +252,7 @@ class GameStateMachine:
             self.STATE_BULLETIN_BOARD: BulletinBoardHandler(self),
             self.STATE_POPUP_RECOVERY: UnexpectedPopupRecoveryHandler(self),
             self.STATE_DOMAIN_EXPLORE: DomainExploreHandler(self),
+            self.STATE_DEMON_LORDS: DemonLordsHandler(self),
         }
 
     def stash_current_state(self, reason="unexpected_popup"):
@@ -556,6 +561,7 @@ class GameStateMachine:
         STATE_CHEST: "chest",
         STATE_HERO_DRAW: "hero_draw",
         STATE_BULLETIN_BOARD: "bulletin_board",
+        STATE_DEMON_LORDS: "demon_lords",
     }
 
 

@@ -30,6 +30,16 @@ class ResultHandler(BaseStateHandler):
         self.machine.transition_to(self.machine.STATE_LORD_BOSS)
         return True
 
+    def _commit_demon_lords_result(self):
+        """Commit one verified fight and return control to the Demon Lords workflow."""
+        daily_manager = getattr(self.machine, "daily_manager", None)
+        if daily_manager is not None:
+            daily_manager.record_demon_lords_fight()
+        self.machine.current_demon_lord_key = None
+        self.reset_state()
+        self.machine.transition_to(self.machine.STATE_DEMON_LORDS)
+        return True
+
     def _check_final_buttons_exist(self, screen_img, should_exit_battle):
         """檢查終局離場或再戰按鈕是否已經出現在畫面上"""
         if should_exit_battle:
@@ -122,6 +132,33 @@ class ResultHandler(BaseStateHandler):
                 if not self._commit_lord_boss_result():
                     self.reset_state()
                     self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+                return True
+
+        # Demon Lords may return directly to its lobby after the last Continue.
+        is_demon_lords_result = (
+            cur_type == "demon_lords"
+            or "demon_lords" in (getattr(self.machine, "dev_subflows", []) or [])
+            or getattr(self.machine, "current_demon_lord_key", None) is not None
+        )
+        if is_demon_lords_result and os.path.exists(
+            os.path.join("templates", "demon_lords/demon_lords_entry_after.png")
+        ):
+            pos_dl, conf_dl = self.matcher.match(
+                screen_img,
+                "demon_lords/demon_lords_entry_after.png",
+                threshold=0.80,
+                brightness_threshold=0.70,
+                quiet=True,
+            )
+            if pos_dl:
+                logging.info(
+                    "Demon Lords result completed: returned to lobby "
+                    "[demon_lords/demon_lords_entry_after.png] (confidence: %.4f).",
+                    conf_dl,
+                )
+                if not self._commit_demon_lords_result():
+                    self.reset_state()
+                    self.machine.transition_to(self.machine.STATE_DEMON_LORDS)
                 return True
 
         # =========================================================================
