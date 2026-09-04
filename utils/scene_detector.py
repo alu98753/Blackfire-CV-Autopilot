@@ -225,19 +225,19 @@ class SceneDetector:
         )
 
         if config_type == "domain":
-            domain_tab = self._runtime_config_value(
-                machine,
-                "domain_tab_btn",
-                "domains/Domains_entry.png",
-            )
-            domain_pos, domain_conf = self._safe_match(
+            domain_select_open = self._selected_from_active_inactive_pair(
                 screen_img,
-                domain_tab,
-                threshold=0.65,
+                self._runtime_config_value(
+                    machine,
+                    "domain_tab_after_btn",
+                    "domains/Domains_entry_after.png",
+                ),
+                self._runtime_config_value(
+                    machine,
+                    "domain_tab_btn",
+                    "domains/Domains_entry.png",
+                ),
             )
-            if domain_pos and self._has_red_selection_ring(screen_img, domain_pos):
-                domain_select_open = True
-                scene_info.matched_elements[domain_tab] = (domain_pos, domain_conf)
 
         if config_type == "lord_boss":
             lord_select_open = self._selected_from_active_inactive_pair(
@@ -341,38 +341,6 @@ class SceneDetector:
         )
 
     @staticmethod
-    def _has_red_selection_ring(screen_img, center):
-        """Detect the selected red outline around the Domains tab.
-
-        Domains currently has no dedicated ``*_after.png`` asset. The inactive
-        icon provides the location anchor; the red ring is the independent
-        selected-state postcondition.
-        """
-        if type(screen_img).__name__ != "ndarray" or center is None:
-            return False
-        try:
-            import cv2
-            import numpy as np
-
-            height, width = screen_img.shape[:2]
-            scale = max(0.5, width / 1920.0)
-            radius_x = max(35, int(85 * scale))
-            radius_y = max(40, int(95 * scale))
-            center_x, center_y = int(center[0]), int(center[1] - 8 * scale)
-            x1, x2 = max(0, center_x - radius_x), min(width, center_x + radius_x)
-            y1, y2 = max(0, center_y - radius_y), min(height, center_y + radius_y)
-            roi = screen_img[y1:y2, x1:x2]
-            if roi.size == 0:
-                return False
-            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-            low_red = cv2.inRange(hsv, np.array([0, 135, 90]), np.array([12, 255, 255]))
-            high_red = cv2.inRange(hsv, np.array([168, 135, 90]), np.array([179, 255, 255]))
-            red_pixels = int(cv2.countNonZero(cv2.bitwise_or(low_red, high_red)))
-            return red_pixels >= max(24, int(120 * scale * scale))
-        except (AttributeError, TypeError, ValueError):
-            return False
-
-    @staticmethod
     def _build_runtime_templates(machine):
         if machine is None or not getattr(machine, "config", None):
             return {}
@@ -386,6 +354,7 @@ class SceneDetector:
             templates[template] = DetectorGroup.TABS
         for key, default in {
             "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
             "entry_btn": "",
             "entry_after_btn": "",
         }.items():

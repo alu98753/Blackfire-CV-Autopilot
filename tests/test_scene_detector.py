@@ -139,38 +139,41 @@ class TestSceneDetector(unittest.TestCase):
         self.assertNotIn("stages/level1_sky_plains.png", matched_templates)
 
     @patch("os.path.exists", return_value=True)
-    def test_domain_selected_requires_red_ring_postcondition(self, _mock_exists):
+    def test_domain_selected_requires_active_tab_postcondition(self, _mock_exists):
         self.mock_machine.config = {
             "type": "domain",
             "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
             "stage_templates": [],
             "dungeon_entries": [],
         }
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
-            False,
-            False,
-            0.4,
-            0.4,
-        )
 
         def match_side_effect(_img, template, threshold=0.8):
             if template == "goback_town.png":
                 return ((64, 726), 0.95)
-            if template == "domains/Domains_entry.png":
-                return ((500, 700), 0.82)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = match_side_effect
-        inactive_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        selected_frame = inactive_frame.copy()
-        selected_frame[620:630, 480:520] = (0, 0, 255)
 
-        inactive = self.detector.detect(inactive_frame, machine=self.mock_machine)
-        selected = self.detector.detect(selected_frame, machine=self.mock_machine)
+        def tab_side_effect(_img, template_a, _template_b, **_kwargs):
+            if template_a == "domains/Domains_entry_after.png":
+                return (is_active, not is_active, 0.93 if is_active else 0.40, 0.40 if is_active else 0.92)
+            return (False, False, 0.40, 0.40)
 
+        self.mock_matcher.match_mutually_exclusive_tabs.side_effect = tab_side_effect
+
+        # 情況 1: 未選中 (after 分數低於 before 或無優勢) -> 保持 LOBBY_OTHER
+        is_active = False
+        inactive = self.detector.detect("lobby_frame", machine=self.mock_machine)
         self.assertEqual(inactive.scene_type, SceneType.LOBBY_OTHER)
+        self.assertEqual(inactive.active_tabs, [])
+
+        # 情況 2: 已選中 (after 具備明確相對優勢) -> 確立 DOMAIN_SELECT
+        is_active = True
+        selected = self.detector.detect("lobby_frame", machine=self.mock_machine)
         self.assertEqual(selected.scene_type, SceneType.DOMAIN_SELECT)
         self.assertEqual(selected.active_tabs, ["domain"])
+
 
     @patch("os.path.exists", return_value=True)
     def test_lord_and_demon_lord_selected_scenes_are_distinct(self, _mock_exists):

@@ -93,6 +93,7 @@ nemesis_templates = [
 ]
 navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
 domain_tab_btn = "domains/Domains_entry.png"
+domain_tab_after_btn = "domains/Domains_entry_after.png"
 domain_entry_btn = "domains/golden_empire/entry.png"
 domain_reset_max_attempts = 7
 explore_priorities = ["domains/golden_empire/explore_btn.png"]
