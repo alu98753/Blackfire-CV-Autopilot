@@ -170,13 +170,59 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
     @patch("states.handlers.navigation.time.sleep")
     @patch("states.handlers.navigation.CardListNavigator.reset_to_left")
     @patch("os.path.exists", return_value=True)
+    def test_domain_card_alignment_retains_attempts_across_flickering_tab_frames(
+        self,
+        _mock_exists,
+        mock_reset_to_left,
+        _mock_sleep,
+    ):
+        """Alignment attempts are preserved across transient tab detection misses."""
+        self.nav_handler.scene_detector = MagicMock()
+        self.nav_handler.scene_detector.matcher = self.mock_machine.matcher
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+
+        # 幀 1: 確認處於 Domain 頁籤且找不到第一張卡 -> 觸發第 1 次向右拉回
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.DOMAIN_SELECT,
+            is_lobby=True,
+            active_tabs=["domain"],
+        )
+        self.nav_handler.handle(MagicMock(), self.rect)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 1)
+        self.assertEqual(mock_reset_to_left.call_count, 1)
+
+        # 幀 2: 單幀掉幀或漏判頁籤 (LOBBY_OTHER, active_tabs 為空)
+        # 驗證: 絕不滑動，且嚴禁將 card_alignment_attempts 清空為 0！
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.LOBBY_OTHER,
+            is_lobby=True,
+            active_tabs=[],
+        )
+        handled = self.nav_handler.handle(MagicMock(), self.rect)
+        self.assertFalse(handled)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 1)
+        self.assertEqual(mock_reset_to_left.call_count, 1)
+
+        # 幀 3: 再次穩定辨識為 Domain 頁籤 -> 累加執行第 2 次拉回
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.DOMAIN_SELECT,
+            is_lobby=True,
+            active_tabs=["domain"],
+        )
+        self.nav_handler.handle(MagicMock(), self.rect)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 2)
+        self.assertEqual(mock_reset_to_left.call_count, 2)
+
+    @patch("states.handlers.navigation.time.sleep")
+    @patch("states.handlers.navigation.CardListNavigator.reset_to_left")
+    @patch("os.path.exists", return_value=True)
     def test_domain_card_alignment_relaunches_after_bounded_reset_limit(
         self,
         _mock_exists,
         mock_reset_to_left,
         _mock_sleep,
     ):
-        """Domain alignment escalates instead of swiping forever."""
+        """Domain alignment reaches 7-attempt limit (EXHAUSTED), zeroes counter, and relaunches."""
         self.nav_handler.scene_detector = MagicMock()
         self.nav_handler.scene_detector.matcher = self.mock_machine.matcher
         self.nav_handler.scene_detector.detect.return_value = SceneInfo(
@@ -185,11 +231,15 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
             active_tabs=["domain"],
         )
         self.mock_machine.matcher.match.return_value = (None, 0.0)
+        # 設定當前 target_tab 已經是 domain，且已達到上限 7 次
+        self.nav_handler.card_alignment_target_tab = "domain"
         self.nav_handler.card_alignment_attempts = 7
 
         self.nav_handler.handle(MagicMock(), self.rect)
 
+        # 不再發起滑動，避免無限滑動
         mock_reset_to_left.assert_not_called()
+        # 驗證達到上限後正確觸發重啟並歸零嘗試計數
         self.mock_machine.request_relaunch.assert_called_once_with(
             "domain_card_alignment_failed"
         )

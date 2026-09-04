@@ -44,6 +44,7 @@ class NavigationHandler(BaseStateHandler):
 
     def __init__(self, machine):
         super().__init__(machine)
+        self.card_alignment_target_tab = None
         self.card_alignment_tab = None
         self.card_alignment_attempts = 0
 
@@ -70,30 +71,37 @@ class NavigationHandler(BaseStateHandler):
         config = self.machine.config or {}
         config_type = config.get("type")
         if config_type == "domain":
-            tab = "domain"
-        elif config_type == "dungeon" and "dungeon" in scene.active_tabs:
-            tab = "dungeon"
-        elif config_type == "stage" and "stage" in scene.active_tabs:
-            tab = "stage"
+            desired_tab = "domain"
+        elif config_type == "dungeon":
+            desired_tab = "dungeon"
+        elif config_type == "stage":
+            desired_tab = "stage"
         elif config_type in {"mix", "daily"}:
             desired_tab = (
                 "dungeon" if self.machine.has_available_dungeon() else "stage"
             )
-            tab = desired_tab if desired_tab in scene.active_tabs else None
         else:
-            tab = None
-        if tab is None:
+            desired_tab = None
+
+        if desired_tab is None:
+            self.card_alignment_target_tab = None
             self.card_alignment_tab = None
             self.card_alignment_attempts = 0
             return False
 
-        if tab not in scene.active_tabs:
+        prev_target = getattr(self, "card_alignment_target_tab", None)
+        if prev_target is not None and prev_target != desired_tab:
             self.card_alignment_tab = None
             self.card_alignment_attempts = 0
+        self.card_alignment_target_tab = desired_tab
+
+        if desired_tab not in scene.active_tabs:
             return False
 
-        if self.card_alignment_tab == tab:
+        if self.card_alignment_tab == desired_tab:
             return False
+
+        tab = desired_tab
 
         if tab == "domain":
             _, first_card = self._resolve_domain_navigation_templates()
