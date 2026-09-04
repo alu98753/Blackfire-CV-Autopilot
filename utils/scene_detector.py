@@ -12,6 +12,9 @@ class SceneType(Enum):
     TOWN = auto()                 # 城鎮主畫面
     LOBBY_STAGE = auto()          # 活動大廳 - 普通關卡頁籤開啟
     LOBBY_DUNGEON = auto()        # 活動大廳 - 地下城頁籤開啟
+    DOMAIN_SELECT = auto()        # 活動大廳 - 領地頁籤開啟
+    LORD_SELECT = auto()          # 活動大廳 - 領主頁籤開啟
+    DEMON_LORD_SELECT = auto()    # 活動大廳 - 魔王頁籤開啟
     LOBBY_OTHER = auto()          # 活動大廳 - 其他頁籤
     IN_DUNGEON = auto()           # 地下城內部戰鬥/探索中
     DUNGEON_PREPARE = auto()      # 地下城備戰畫面 (戰鬥開始按鈕)
@@ -83,6 +86,9 @@ class SceneDetector:
             DetectionProfileId.LOBBY,
             DetectionProfileId.STAGE_SELECT,
             DetectionProfileId.DUNGEON_SELECT,
+            DetectionProfileId.DOMAIN_SELECT,
+            DetectionProfileId.LORD_SELECT,
+            DetectionProfileId.DEMON_LORD_SELECT,
         }:
             scene_info.is_lobby = True
 
@@ -177,9 +183,17 @@ class SceneDetector:
                 scene_info.matched_elements[lobby_start_btn] = (pos_start, conf_start)
                 return scene_info
 
-        # 4. 頁籤互斥與模板備援
+        # 4. 頁籤互斥與高信心度內容備援
+        # 頁籤是主要證據；卡片只在高信心度時協助定位。Lobby 各分類
+        # 共用卡片版型與水平位置，因此一般卡片或 locked_entry 不能單獨
+        # 證明目前所在的分類頁。
         stage_select_open = False
         dungeon_select_open = False
+        domain_select_open = False
+        lord_select_open = False
+        demon_lord_select_open = False
+        stage_tab_confidence = 0.0
+        dungeon_tab_confidence = 0.0
 
         res_tabs = None
         if self.registry.allows_group(profile, DetectorGroup.TABS):
@@ -187,7 +201,10 @@ class SceneDetector:
                 screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
             )
         if isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4 and type(res_tabs).__name__ != "MagicMock":
-            stage_select_open, dungeon_select_open, _, _ = res_tabs
+            stage_select_open = bool(res_tabs[0])
+            dungeon_select_open = bool(res_tabs[1])
+            stage_tab_confidence = self._as_confidence(res_tabs[2])
+            dungeon_tab_confidence = self._as_confidence(res_tabs[3])
         else:
             conf_stage_after, conf_dungeon_after = 0.0, 0.0
             if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
@@ -198,45 +215,162 @@ class SceneDetector:
 
             stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
             dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
+            stage_tab_confidence = conf_stage_after
+            dungeon_tab_confidence = conf_dungeon_after
+
+        stage_dungeon_conflict = (
+            stage_tab_confidence >= 0.70
+            and dungeon_tab_confidence >= 0.70
+            and not (stage_select_open ^ dungeon_select_open)
+        )
+
+        if config_type == "domain":
+            domain_tab = self._runtime_config_value(
+                machine,
+                "domain_tab_btn",
+                "domains/Domains_entry.png",
+            )
+            domain_pos, domain_conf = self._safe_match(
+                screen_img,
+                domain_tab,
+                threshold=0.65,
+            )
+            if domain_pos and self._has_red_selection_ring(screen_img, domain_pos):
+                domain_select_open = True
+                scene_info.matched_elements[domain_tab] = (domain_pos, domain_conf)
+
+        if config_type == "lord_boss":
+            lord_select_open = self._selected_from_active_inactive_pair(
+                screen_img,
+                self._runtime_config_value(machine, "entry_after_btn", "load/Lord_entry_after.png"),
+                self._runtime_config_value(machine, "entry_btn", "load/Lord_entry.png"),
+            )
+
+        if config_type == "demon_lords":
+            demon_lord_select_open = self._selected_from_active_inactive_pair(
+                screen_img,
+                self._runtime_config_value(
+                    machine,
+                    "entry_after_btn",
+                    "demon_lords/demon_lords_entry_after.png",
+                ),
+                self._runtime_config_value(
+                    machine,
+                    "entry_btn",
+                    "demon_lords/demon_lords_entry.png",
+                ),
+            )
 
         # 模板備援掃描
-        if not stage_select_open and not dungeon_select_open and machine and getattr(machine, "config", None):
+        allow_card_fallback = (
+            config_type in {"stage", "dungeon", "mix", "daily"}
+            and not stage_dungeon_conflict
+        )
+        if allow_card_fallback and not stage_select_open and not dungeon_select_open and machine and getattr(machine, "config", None):
             stage_templates = machine.config.get("stage_templates", [])
             for st_temp in stage_templates:
                 if os.path.exists(os.path.join("templates", st_temp)):
-                    pos, conf = self._safe_match(screen_img, st_temp, threshold=0.75)
+                    pos, conf = self._safe_match(screen_img, st_temp, threshold=0.85)
                     if pos:
                         stage_select_open = True
                         scene_info.matched_elements[st_temp] = (pos, conf)
                         break
 
-        if not stage_select_open and not dungeon_select_open and machine and getattr(machine, "config", None):
+        if allow_card_fallback and not stage_select_open and not dungeon_select_open and machine and getattr(machine, "config", None):
             dungeon_templates = machine.config.get("dungeon_entries", [])
             for dg_temp in dungeon_templates:
                 if os.path.exists(os.path.join("templates", dg_temp)):
-                    pos, conf = self._safe_match(screen_img, dg_temp, threshold=0.75)
+                    pos, conf = self._safe_match(screen_img, dg_temp, threshold=0.85)
                     if pos:
                         dungeon_select_open = True
                         scene_info.matched_elements[dg_temp] = (pos, conf)
                         break
 
-            if not dungeon_select_open and os.path.exists(os.path.join("templates", "common/locked_entry.png")):
-                pos_l, conf_l = self._safe_match(screen_img, "common/locked_entry.png", threshold=0.75)
-                if pos_l:
-                    dungeon_select_open = True
-                    scene_info.matched_elements["common/locked_entry.png"] = (pos_l, conf_l)
-
         # 最終場景分類
-        if dungeon_select_open:
-            scene_info.scene_type = SceneType.LOBBY_DUNGEON
-            scene_info.active_tabs.append("dungeon")
-        elif stage_select_open:
-            scene_info.scene_type = SceneType.LOBBY_STAGE
-            scene_info.active_tabs.append("stage")
+        selected_tabs = [
+            (dungeon_select_open, SceneType.LOBBY_DUNGEON, "dungeon"),
+            (stage_select_open, SceneType.LOBBY_STAGE, "stage"),
+            (domain_select_open, SceneType.DOMAIN_SELECT, "domain"),
+            (lord_select_open, SceneType.LORD_SELECT, "lord"),
+            (demon_lord_select_open, SceneType.DEMON_LORD_SELECT, "demon_lord"),
+        ]
+        active = [candidate for candidate in selected_tabs if candidate[0]]
+        if len(active) == 1:
+            _, scene_type, tab_name = active[0]
+            scene_info.scene_type = scene_type
+            scene_info.active_tabs.append(tab_name)
+        elif len(active) > 1:
+            logging.warning(
+                "Conflicting active lobby tabs detected; refusing to guess: %s",
+                [candidate[2] for candidate in active],
+            )
+            scene_info.scene_type = SceneType.LOBBY_OTHER
         elif scene_info.is_lobby:
             scene_info.scene_type = SceneType.LOBBY_OTHER
 
         return scene_info
+
+    @staticmethod
+    def _as_confidence(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def _runtime_config_value(machine, key, default):
+        config = getattr(machine, "config", None) if machine is not None else None
+        return (config or {}).get(key, default)
+
+    def _selected_from_active_inactive_pair(self, screen_img, active, inactive):
+        if not self.registry.allows_group(self._active_profile, DetectorGroup.TABS):
+            return False
+        result = self.matcher.match_mutually_exclusive_tabs(
+            screen_img,
+            active,
+            inactive,
+            margin=0.02,
+            threshold=0.70,
+        )
+        return bool(
+            isinstance(result, (tuple, list))
+            and len(result) == 4
+            and type(result).__name__ != "MagicMock"
+            and result[0]
+            and not result[1]
+        )
+
+    @staticmethod
+    def _has_red_selection_ring(screen_img, center):
+        """Detect the selected red outline around the Domains tab.
+
+        Domains currently has no dedicated ``*_after.png`` asset. The inactive
+        icon provides the location anchor; the red ring is the independent
+        selected-state postcondition.
+        """
+        if type(screen_img).__name__ != "ndarray" or center is None:
+            return False
+        try:
+            import cv2
+            import numpy as np
+
+            height, width = screen_img.shape[:2]
+            scale = max(0.5, width / 1920.0)
+            radius_x = max(35, int(85 * scale))
+            radius_y = max(40, int(95 * scale))
+            center_x, center_y = int(center[0]), int(center[1] - 8 * scale)
+            x1, x2 = max(0, center_x - radius_x), min(width, center_x + radius_x)
+            y1, y2 = max(0, center_y - radius_y), min(height, center_y + radius_y)
+            roi = screen_img[y1:y2, x1:x2]
+            if roi.size == 0:
+                return False
+            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            low_red = cv2.inRange(hsv, np.array([0, 135, 90]), np.array([12, 255, 255]))
+            high_red = cv2.inRange(hsv, np.array([168, 135, 90]), np.array([179, 255, 255]))
+            red_pixels = int(cv2.countNonZero(cv2.bitwise_or(low_red, high_red)))
+            return red_pixels >= max(24, int(120 * scale * scale))
+        except (AttributeError, TypeError, ValueError):
+            return False
 
     @staticmethod
     def _build_runtime_templates(machine):
@@ -250,4 +384,12 @@ class SceneDetector:
             templates[template] = DetectorGroup.TABS
         for template in config.get("dungeon_entries", []):
             templates[template] = DetectorGroup.TABS
+        for key, default in {
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "entry_btn": "",
+            "entry_after_btn": "",
+        }.items():
+            template = config.get(key, default)
+            if template:
+                templates[template] = DetectorGroup.TABS
         return templates

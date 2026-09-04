@@ -93,6 +93,7 @@ class GameStateMachine:
     DUNGEON_RECOVERY_MODE_TYPES = frozenset(
         {"dungeon", "mix", "stage", "daily"}
     )
+    UNKNOWN_SCENE_RELAUNCH_ATTEMPTS = 5
 
 
 
@@ -122,6 +123,7 @@ class GameStateMachine:
         self.run_count = 0
         self.capture_failure_count = 0
         self.capture_failure_limit = 5
+        self.unknown_scene_count = 0
         
         # 紀錄上次點選自動戰鬥的時間，用以判斷 CD
         self.last_auto_click_time = 0
@@ -472,6 +474,8 @@ class GameStateMachine:
             self.current_state = new_state
             self.last_state_change = time.time()
             self.consecutive_stuck_count = 0
+            if new_state != self.STATE_UNKNOWN:
+                self.unknown_scene_count = 0
             self.just_resumed_from_user = False
             
             # 狀態發生真實轉移且非 POPUP_RECOVERY 時，歸零 Watchdog 連續卡死計數
@@ -851,6 +855,7 @@ class GameStateMachine:
                 if pos_popup:
                     logging.info(f"👉 [全域防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
                     self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])
+                    self.unknown_scene_count = 0
                     time.sleep(0.5)
                     return
 
@@ -1005,35 +1010,37 @@ class GameStateMachine:
                 if pos:
                     logging.info(f"🧭 全域定位：未能辨識主要狀態，但偵測到退出/確認按鈕 [{quit_btn}] (信心度: {conf:.4f})，嘗試點擊以返回大廳。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
+                    self.unknown_scene_count = 0
                     # 點擊後不轉移狀態，等待下一幀的 UNKNOWN 重新進行定位與尋路
                     time.sleep(0.3)
                     return
 
-        # 7. 如果真的是完全沒有任何可交互按鈕，才依模式給予最安全的預設落點
-        if self.config["type"] == "dungeon":
-            # 地下城模式下，大部份時間都在走格探索，預設回到 EXPLORING 狀態最為安全
-            logging.info("❓ 未能辨識出特定探索按鈕，預設進入 EXPLORING 狀態。")
-            self.transition_to(self.STATE_DUNGEON_EXPLORING)
-        elif self.config["type"] == "domain":
-            # 領地模式下，預設回到 DOMAIN_EXPLORE 狀態
-            logging.info("❓ 未能辨識出特定領地按鈕，領地模式下預設進入 DOMAIN_EXPLORE 狀態。")
-            self.transition_to(self.STATE_DOMAIN_EXPLORE)
-        else:
-            # 普通關卡模式下，如果能匹配到自動戰鬥特徵，預設為 BATTLE；否則預設為 NAVIGATING 以重啟大廳尋路
-            has_auto = False
-            for feat in ["common/auto.png", "battle/battle_features_1.png", "battle/battle_features_2.png"]:
-                if os.path.exists(os.path.join("templates", feat)):
-                    pos_auto, _ = self.matcher.match(screen_img, feat, threshold=0.7)
-                    if pos_auto:
-                        has_auto = True
-                        break
-            
-            if has_auto:
-                logging.info("⚔️ 未能辨識出關卡大廳特徵，但偵測到自動戰鬥特徵，預設進入 BATTLE 狀態。")
-                self.transition_to(self.STATE_BATTLE)
-            else:
-                logging.info("❓ 未能辨識出關卡大廳特徵，且無自動戰鬥特徵，預設進入 NAVIGATING 狀態重啟尋路.")
-                self.transition_to(self.STATE_NAVIGATING)
+        # 7. 完全沒有證據時保持 UNKNOWN。短暫動畫允許重新觀測；連續
+        # 多幀仍無法辨識才升級至重開，不能用 config 意圖猜測實際場景。
+        self.unknown_scene_count += 1
+        max_unknown_frames = max(
+            1,
+            int(
+                (self.config or {}).get(
+                    "unknown_scene_relaunch_attempts",
+                    self.UNKNOWN_SCENE_RELAUNCH_ATTEMPTS,
+                )
+            ),
+        )
+        if self.unknown_scene_count >= max_unknown_frames:
+            logging.error(
+                "❌ 全域定位連續 %d 幀無法辨識任何場景證據，啟動重開復原。",
+                max_unknown_frames,
+            )
+            self.unknown_scene_count = 0
+            self.request_relaunch("unknown_scene_detection_exhausted")
+            return
+
+        logging.info(
+            "❓ 未能辨識場景證據，保持 UNKNOWN 並等待下一幀 (%d/%d)。",
+            self.unknown_scene_count,
+            max_unknown_frames,
+        )
 
     def has_available_dungeon(self, target_config=None):
         """檢查記憶體中是否有冷卻已結束且允許打的地下城"""

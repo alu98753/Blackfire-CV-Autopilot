@@ -50,6 +50,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.handler = NavigationHandler(self.mock_machine)
         self.handler.mouse = self.mock_mouse
         self.handler.matcher = self.mock_matcher
+        self.handler.card_alignment_tab = "dungeon"
 
         self.rect = {"left": 100, "top": 50, "width": 1000, "height": 800}
 
@@ -61,7 +62,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
     def test_fallback_swipe_when_no_unlocked_dungeon_visible(
         self, mock_matchTemplate, mock_resize, mock_imread, mock_exists, mock_detect_cd
     ):
-        """[地下城滑動測試 1] 無可見解鎖卡片時發動防呆長拖曳拉回 (Right Drag)"""
+        """[地下城滑動測試 1] 已確認地下城頁且無可見解鎖卡片時，發動防呆長拖曳拉回。"""
         mock_exists.return_value = True
         mock_detect_cd.return_value = (False, None, "")
 
@@ -88,7 +89,9 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.handler.handle(screen_img, self.rect)
 
         # 驗證執行右滑 drag: start_x = 100 + 200 = 300, end_x = 100 + 800 = 900, y_pos = 50 + 400 = 450
-        self.mock_mouse.drag.assert_called_once_with(300, 450, 900, 450)
+        self.mock_mouse.drag.assert_called_once_with(
+            300, 450, 900, 450, duration=0.8, inertia=False
+        )
         self.assertEqual(self.mock_machine.fallback_swipe_count, 1)
 
     @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
@@ -99,7 +102,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
     def test_fallback_swipe_max_count_exceeded_switches_back(
         self, mock_matchTemplate, mock_resize, mock_imread, mock_exists, mock_detect_cd
     ):
-        """[地下城滑動測試 2] 防呆滑動達到上限 3 次後，點擊 goback_town 返回"""
+        """[地下城滑動測試 2] 防呆滑動達到上限 7 次後，點擊 goback_town 返回"""
         mock_exists.return_value = True
         mock_detect_cd.return_value = (False, None, "")
 
@@ -128,7 +131,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match
 
         screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
-        self.mock_machine.fallback_swipe_count = 3
+        self.mock_machine.fallback_swipe_count = 7
 
         self.handler.handle(screen_img, self.rect)
 

@@ -6,6 +6,7 @@ from states.handlers.battle import BattleHandler
 from states.domains.golden_empire import GoldenEmpireStrategy
 from states.handlers.navigation import NavigationHandler
 from states.state_machine import GameStateMachine
+from utils.scene_detector import SceneInfo, SceneType
 
 class TestBehaviorGoldenEmpire(unittest.TestCase):
     """
@@ -113,6 +114,87 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
             self.nav_handler.handle(mock_img, self.rect)
 
         self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
+
+    @patch("states.handlers.navigation.time.sleep")
+    @patch("states.handlers.navigation.CardListNavigator.reset_to_left")
+    @patch("os.path.exists", return_value=True)
+    def test_domain_tab_switch_then_resets_shared_card_position_to_left(
+        self,
+        _mock_exists,
+        mock_reset_to_left,
+        _mock_sleep,
+    ):
+        """After switching to Domains, a missing index-1 card triggers bounded left reset."""
+        self.nav_handler.scene_detector = MagicMock()
+        self.nav_handler.scene_detector.matcher = self.mock_machine.matcher
+        self.nav_handler.scene_detector.detect.side_effect = [
+            SceneInfo(scene_type=SceneType.LOBBY_OTHER, is_lobby=True),
+            SceneInfo(
+                scene_type=SceneType.DOMAIN_SELECT,
+                is_lobby=True,
+                active_tabs=["domain"],
+            ),
+        ]
+
+        def match_side_effect(_img, template, **_kwargs):
+            if template == "domains/Domains_entry.png":
+                return ((500, 700), 0.95)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.nav_handler.handle(MagicMock(), self.rect)
+        self.mock_machine.mouse.click.assert_called_once_with(500, 700)
+        mock_reset_to_left.assert_not_called()
+
+        self.mock_machine.mouse.click.reset_mock()
+        self.nav_handler.handle(MagicMock(), self.rect)
+
+        mock_reset_to_left.assert_called_once_with(
+            self.mock_machine.mouse,
+            self.rect,
+            duration=0.8,
+            inertia=False,
+        )
+        self.mock_machine.mouse.click.assert_not_called()
+        target_calls = [
+            call
+            for call in self.mock_machine.matcher.match.call_args_list
+            if call.args[1] == "domains/golden_empire/entry.png"
+        ]
+        self.assertTrue(target_calls)
+        self.assertTrue(
+            all(call.kwargs["brightness_threshold"] == 0.70 for call in target_calls)
+        )
+
+    @patch("states.handlers.navigation.time.sleep")
+    @patch("states.handlers.navigation.CardListNavigator.reset_to_left")
+    @patch("os.path.exists", return_value=True)
+    def test_domain_card_alignment_relaunches_after_bounded_reset_limit(
+        self,
+        _mock_exists,
+        mock_reset_to_left,
+        _mock_sleep,
+    ):
+        """Domain alignment escalates instead of swiping forever."""
+        self.nav_handler.scene_detector = MagicMock()
+        self.nav_handler.scene_detector.matcher = self.mock_machine.matcher
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.DOMAIN_SELECT,
+            is_lobby=True,
+            active_tabs=["domain"],
+        )
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+        self.nav_handler.card_alignment_attempts = 7
+
+        self.nav_handler.handle(MagicMock(), self.rect)
+
+        mock_reset_to_left.assert_not_called()
+        self.mock_machine.request_relaunch.assert_called_once_with(
+            "domain_card_alignment_failed"
+        )
+        self.assertIsNone(self.nav_handler.card_alignment_tab)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 0)
 
     # =========================================================================
     # 2. 領地主場景探索點擊行為測試

@@ -46,8 +46,11 @@
 | **`IN_DUNGEON`** | `dungeons/leave.png`<br>`dungeons/dungeon_bless.png`<br>`dungeons/Treasure.png`<br>`dungeons/gungeon_godown.png` | `threshold = 0.80`<br>(僅當 `config.type` 包含 `dungeon`/`mix`) | 原 `navigation.py` L183-189。<br>匹配到上述任一內部特徵，代表已進入戰鬥/探索地圖內部。 |
 | **`DUNGEON_PREPARE`** | `dungeons/dungeon_fight.png` | `threshold = 0.80`<br>(僅當 `config.type` 包含 `dungeon`/`mix`) | 原 `navigation.py` L193-199。<br>畫面上出現出擊戰鬥按鈕，但尚未看見 `leave.png` 等內部圖案。 |
 | **`TOWN`** | `common/door.png` (大門)<br>`diamond.png` (領鑽石) | `threshold = 0.80` | 原 `navigation.py` L244-247。<br>匹配到大門或鑽石圖示，判定在城鎮主畫面。當為城鎮時，頁籤皆強制的為未開啟 (`False`)。 |
-| **`LOBBY_STAGE`** | 1. 基礎標誌：`goback_town.png` 或 `common/bread.png`<br>2. 頁籤與備援：`common/select_stage_after.png` 或 `config.stage_templates` | 基礎 `0.80`<br>頁籤互斥 `0.70`<br>`margin = 0.02`<br>關卡模板 `0.75` | 原 `navigation.py` L249-295。<br>大廳指標存在且非城鎮。頁籤比對使用 `match_mutually_exclusive_tabs`，`stage_after` 比 `dungeon_after` 信心度高出 0.02 且 $\ge 0.70$；或掃描到 `stage_templates` 中之關卡封面。 |
-| **`LOBBY_DUNGEON`** | 1. 基礎標誌：`goback_town.png` 或 `common/bread.png`<br>2. 頁籤與備援：`dungeons/dungeon_after.png` 或 `config.dungeon_entries` / `common/locked_entry.png` | 基礎 `0.80`<br>頁籤互斥 `0.70`<br>`margin = 0.02`<br>入口 `0.60`<br>鎖定 `0.75` | 原 `navigation.py` L249-295 & L415-430。<br>大廳指標存在且非城鎮。`dungeon_after` 信心度顯著高於 `stage_after`；或配對到地下城入口卡片 (`dungeon_entries`) 或 `locked_entry.png`。 |
+| **`LOBBY_STAGE`** | 1. 基礎標誌：`goback_town.png` 或 `common/bread.png`<br>2. 頁籤與備援：`common/select_stage_after.png` 或 `config.stage_templates` | 基礎 `0.80`<br>頁籤互斥 `0.70`<br>`margin = 0.02`<br>關卡模板 `0.85` | 大廳指標存在且非城鎮。頁籤比對使用 `match_mutually_exclusive_tabs`，`stage_after` 比 `dungeon_after` 信心度高出 0.02 且 $\ge 0.70$；命名關卡模板只允許作高信心度備援。 |
+| **`LOBBY_DUNGEON`** | 1. 基礎標誌：`goback_town.png` 或 `common/bread.png`<br>2. 頁籤與備援：`dungeons/dungeon_after.png` 或 `config.dungeon_entries` | 基礎 `0.80`<br>頁籤互斥 `0.70`<br>`margin = 0.02`<br>入口 `0.85` | 大廳指標存在且非城鎮。`dungeon_after` 信心度顯著高於 `stage_after`；命名地下城入口只允許作高信心度備援。`common/locked_entry.png` 是各 Lobby 分類共用元素，不能作為地下城場景 anchor。 |
+| **`DOMAIN_SELECT`** | `domains/Domains_entry.png` 位置錨點 + 周圍紅色選取框 | icon `0.65` + red-ring postcondition | Domains 尚無獨立 `*_after.png`；只有圖示位置與紅色選取框同時成立才算已切換，單純看見可點擊圖示不成立。 |
+| **`LORD_SELECT`** | `load/Lord_entry_after.png` 對 `load/Lord_entry.png` | 互斥 `0.70`，`margin = 0.02` | 只在 lord-boss control phase 啟用。 |
+| **`DEMON_LORD_SELECT`** | `demon_lords/demon_lords_entry_after.png` 對 `demon_lords/demon_lords_entry.png` | 互斥 `0.70`，`margin = 0.02` | 只在 demon-lords control phase 啟用。 |
 | **`LOBBY_OTHER`** | 基礎標誌：`goback_town.png` 或 `common/bread.png` | `threshold = 0.80` | 原 `navigation.py` L249-253。<br>大廳指標存在，但既未選中普通關卡頁籤，也未選中地下城頁籤（例如在其他子頁面）。 |
 | **`UNKNOWN`** | 無匹配項目 | N/A | 無法比對到任何上述標誌，屬於動畫切換中、讀條或未知 UI 視窗。 |
 
@@ -64,6 +67,9 @@ class SceneType(Enum):
     TOWN = auto()                 # 城鎮主畫面
     LOBBY_STAGE = auto()          # 活動大廳 - 普通關卡頁籤開啟
     LOBBY_DUNGEON = auto()        # 活動大廳 - 地下城頁籤開啟
+    DOMAIN_SELECT = auto()        # 活動大廳 - 領地頁籤開啟
+    LORD_SELECT = auto()          # 活動大廳 - 領主頁籤開啟
+    DEMON_LORD_SELECT = auto()    # 活動大廳 - 魔王頁籤開啟
     LOBBY_OTHER = auto()          # 活動大廳 - 其他頁籤
     IN_DUNGEON = auto()           # 地下城內部戰鬥/探索中
     DUNGEON_PREPARE = auto()      # 地下城備戰畫面 (戰鬥開始按鈕)
@@ -79,7 +85,7 @@ class SceneInfo:
     is_lobby: bool = False
     is_in_dungeon: bool = False
     is_dungeon_prepare: bool = False
-    active_tabs: List[str] = field(default_factory=list) # ["stage"], ["dungeon"]
+    active_tabs: List[str] = field(default_factory=list) # exactly one of the five tabs
     matched_elements: Dict[str, Tuple[Tuple[int, int], float]] = field(default_factory=dict)
 ```
 
@@ -124,4 +130,16 @@ returns without checking tab or stage-island fallback templates.
 `handle(screen_img, rect)` invocation. The cache is a local variable, is not retained
 on the handler, and therefore cannot survive a click, drag, state transition, or the
 next captured screenshot.
+
+## Shared lobby card position
+
+Stage、Dungeon、Domains、Lord 與 Demon Lord 共用遊戲本身的水平卡片位置。切換分類頁籤不保證回到該分類的第一張卡，因此導航必須遵守：
+
+1. 先以頁籤證據確認目前分類；目標 config 不能取代畫面觀測。
+2. 只有確認 `LOBBY_DUNGEON` 後才能執行地下城卡片掃描或滑動。
+3. Stage、Dungeon、Domains、Lord、Demon Lord 都使用 `CardListNavigator.reset_to_left()` 拉回；每幀最多做一次 action，下一幀重新觀測第一張卡片才算 postcondition 成立。
+4. 五種卡片清單的拉回上限皆為 7 次；達上限仍未看到第一張卡時必須進 recovery，禁止把「次數用完」當作「已經歸左」。
+5. `common/locked_entry.png` 只能描述可見卡片的鎖定狀態，不能辨識卡片所屬分類。
+6. Stage/Dungeon 頁籤分數同時高於門檻但差距不足時屬證據衝突；即使卡片模板高於 `0.85` 也不得覆蓋成特定頁籤。
+7. 全域場景完全無證據時保持 `UNKNOWN` 重新觀測；連續 5 幀仍未知才要求 relaunch，不再依 config 預設猜成 `NAVIGATING`、`DUNGEON_EXPLORING` 或 `DOMAIN_EXPLORE`。
 - 審查 `navigation.py` 代碼結構與行數，確認無重複的比對邏輯並大幅降低複雜度。

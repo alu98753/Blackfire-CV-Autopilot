@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from states.handlers.navigation import NavigationHandler
 from states.handlers.collect_only import CollectOnlyHandler
 from config import GAME_CONFIGS
+from utils.scene_detector import SceneInfo, SceneType
 
 class TestBehaviorDungeonCards(unittest.TestCase):
     """
@@ -45,6 +46,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.handler = NavigationHandler(self.mock_machine)
         self.handler.mouse = self.mock_mouse
         self.handler.matcher = self.mock_matcher
+        self.handler.card_alignment_tab = "dungeon"
         self.rect = {"left": 100, "top": 50, "width": 1000, "height": 800}
 
     def test_collect_only_resumes_saved_dungeon_config_when_cooldown_expires(self):
@@ -70,6 +72,37 @@ class TestBehaviorDungeonCards(unittest.TestCase):
     # 2.1 地下城卡片定位與對齊行為測試
     # =========================================================================
 
+    @patch("os.path.exists", return_value=True)
+    @patch("cv2.imread")
+    @patch("cv2.resize")
+    @patch("cv2.matchTemplate")
+    def test_locked_cards_on_other_lobby_switch_tab_before_dungeon_scan(
+        self, mock_match_template, mock_resize, mock_imread, _mock_exists
+    ):
+        """A dungeon intent cannot authorize dungeon scanning on another lobby tab."""
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.mock_matcher
+        self.handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.LOBBY_OTHER,
+            is_lobby=True,
+        )
+
+        def match_side_effect(_img, template, **_kwargs):
+            if template == "dungeons/dungeon.png":
+                return ((400, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+        mock_imread.return_value = np.ones((41, 238, 3), dtype=np.uint8)
+        mock_resize.side_effect = lambda image, _size: image
+        mock_match_template.return_value = np.array([[0.95]], dtype=np.float32)
+
+        self.handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), self.rect)
+
+        mock_match_template.assert_not_called()
+        self.mock_mouse.drag.assert_not_called()
+        self.mock_mouse.click.assert_called_once_with(500, 150)
+
     @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
     @patch("os.path.exists")
     @patch("cv2.imread")
@@ -80,7 +113,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
     ):
         """
         [2.1 Behavior Test]
-        Given: 地下城選關介面看得到 locked_entry.png (判定為地下城選關頁面)，但無任何可打卡片，且 fallback_swipe_count < 3
+        Given: 已確認在地下城頁籤，畫面看得到 locked_entry.png，但無任何可打卡片，且 fallback_swipe_count < 7
         When: 執行 NavigationHandler.handle()
         Then: 觸發向右長滑動 (CardListNavigator.reset_to_left)，且 fallback_swipe_count 遞增為 1
         """
@@ -110,7 +143,9 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.handler.handle(screen_img, self.rect)
 
         # 驗證執行向右拉回滑動 drag
-        self.mock_mouse.drag.assert_called_once_with(300, 450, 900, 450)
+        self.mock_mouse.drag.assert_called_once_with(
+            300, 450, 900, 450, duration=0.8, inertia=False
+        )
         self.assertEqual(self.mock_machine.fallback_swipe_count, 1)
 
     # =========================================================================
@@ -333,7 +368,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
     ):
         """
         [2.6 Behavior Test]
-        Given: dungeon 模式下連滑 fallback_swipe_count >= 3 仍無可打卡片，看得到 goback_town.png
+        Given: dungeon 模式下連滑 fallback_swipe_count >= 7 仍無可打卡片，看得到 goback_town.png
         When: 執行 NavigationHandler.handle()
         Then: 點擊 goback_town.png 退回城鎮，且重置 fallback_swipe_count 為 0
         """
@@ -341,7 +376,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.mock_machine.stamina_retreat_start_time = None
         self.mock_machine.original_config = None
         self.mock_machine.config["type"] = "dungeon"
-        self.mock_machine.fallback_swipe_count = 3
+        self.mock_machine.fallback_swipe_count = 7
         mock_detect_cd.return_value = (False, None, "")
 
         def imread_side_effect(path):

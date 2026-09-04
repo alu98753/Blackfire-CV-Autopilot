@@ -14,6 +14,9 @@ class SceneId(str, Enum):
     BREAD_WINDOW = "bread_window"
     STAGE_SELECT = "stage_select"
     DUNGEON_SELECT = "dungeon_select"
+    DOMAIN_SELECT = "domain_select"
+    LORD_SELECT = "lord_select"
+    DEMON_LORD_SELECT = "demon_lord_select"
     STAGE_LOBBY = "stage_lobby"
     DUNGEON_LOBBY = "dungeon_lobby"
     DUNGEON_EXPLORING = "dungeon_exploring"
@@ -42,6 +45,9 @@ class OverlayId(str, Enum):
 class TabId(str, Enum):
     STAGE = "stage"
     DUNGEON = "dungeon"
+    DOMAIN = "domain"
+    LORD = "lord"
+    DEMON_LORD = "demon_lord"
 
 
 class DetectionProfileId(str, Enum):
@@ -50,6 +56,9 @@ class DetectionProfileId(str, Enum):
     LOBBY = "lobby"
     STAGE_SELECT = "stage_select"
     DUNGEON_SELECT = "dungeon_select"
+    DOMAIN_SELECT = "domain_select"
+    LORD_SELECT = "lord_select"
+    DEMON_LORD_SELECT = "demon_lord_select"
     LOADING = "loading"
     BATTLE = "battle"
     RESULT = "result"
@@ -88,6 +97,9 @@ _SCENE_TYPE_MAP = {
     "TOWN": SceneId.TOWN,
     "LOBBY_STAGE": SceneId.STAGE_SELECT,
     "LOBBY_DUNGEON": SceneId.DUNGEON_SELECT,
+    "DOMAIN_SELECT": SceneId.DOMAIN_SELECT,
+    "LORD_SELECT": SceneId.LORD_SELECT,
+    "DEMON_LORD_SELECT": SceneId.DEMON_LORD_SELECT,
     "LOBBY_OTHER": SceneId.LOBBY,
     "WINDOW_DIAMOND": SceneId.DIAMOND_WINDOW,
     "WINDOW_BREAD": SceneId.BREAD_WINDOW,

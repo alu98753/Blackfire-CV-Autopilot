@@ -115,6 +115,50 @@ class TestDemonLordsSubflow(unittest.TestCase):
         self.mock_mouse.click.assert_called_with(300, 400)
         self.assertEqual(handler.current_target_boss, "voidborn_elres")
 
+    @patch("states.handlers.demon_lords.time.sleep")
+    @patch("os.path.exists", return_value=True)
+    def test_missing_demon_lord_card_resets_to_left(self, _mock_exists, _mock_sleep):
+        handler = DemonLordsHandler(self.state_machine)
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (
+            True,
+            False,
+            0.95,
+            0.4,
+        )
+        self.state_machine.matcher.match.return_value = (None, 0.0)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        handled = handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), rect)
+
+        self.assertTrue(handled)
+        self.mock_mouse.drag.assert_called_once_with(
+            200, 400, 800, 400, duration=0.8, inertia=False
+        )
+        self.assertEqual(handler.card_reset_attempts, 1)
+
+    @patch("states.handlers.demon_lords.time.sleep")
+    @patch("os.path.exists", return_value=True)
+    def test_demon_lord_reset_limit_relaunches(self, _mock_exists, _mock_sleep):
+        handler = DemonLordsHandler(self.state_machine)
+        handler.card_reset_attempts = 7
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (
+            True,
+            False,
+            0.95,
+            0.4,
+        )
+        self.state_machine.matcher.match.return_value = (None, 0.0)
+        self.state_machine.request_relaunch = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        handled = handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), rect)
+
+        self.assertTrue(handled)
+        self.mock_mouse.drag.assert_not_called()
+        self.state_machine.request_relaunch.assert_called_once_with(
+            "demon_lord_card_alignment_failed"
+        )
+
     @patch("os.path.exists", return_value=True)
     def test_slot_filling_and_scoped_stone_selection(self, _mock_exists):
         """測試：點擊空插槽 (slot.png) 觸發選石，且 Scoped ROI 僅在左半邊比對封印石"""

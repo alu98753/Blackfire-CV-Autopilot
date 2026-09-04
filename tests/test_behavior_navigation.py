@@ -40,6 +40,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         }
 
         self.handler = NavigationHandler(self.mock_machine)
+        self.handler.card_alignment_tab = "stage"
         self.rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
 
     # =========================================================================

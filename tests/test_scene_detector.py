@@ -1,4 +1,5 @@
 import unittest
+import numpy as np
 from unittest.mock import MagicMock, patch
 from utils.scene_detector import SceneDetector, SceneType, SceneInfo
 
@@ -71,6 +72,146 @@ class TestSceneDetector(unittest.TestCase):
         scene = self.detector.detect("dummy_img", machine=self.mock_machine)
         self.assertEqual(scene.scene_type, SceneType.LOBBY_DUNGEON)
         self.assertEqual(scene.active_tabs, ["dungeon"])
+
+    @patch("os.path.exists", return_value=True)
+    def test_ambiguous_tabs_and_shared_locked_cards_remain_lobby_other(self, _mock_exists):
+        """Shared lobby cards must not guess Stage or Dungeon when tab evidence is ambiguous."""
+        self.mock_machine.config = {
+            "type": "mix",
+            "stage_templates": ["stages/level2_barren_rocks.png"],
+            "dungeon_entries": [],
+        }
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False,
+            False,
+            0.9028,
+            0.8968,
+        )
+
+        def match_side_effect(_img, template, threshold=0.8):
+            if template == "goback_town.png":
+                return ((64, 726), 0.92)
+            if template == "stages/level2_barren_rocks.png":
+                confidence = 0.7711
+                return (((281, 522), confidence) if confidence >= threshold else (None, confidence))
+            if template == "common/locked_entry.png":
+                return ((300, 400), 0.95)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        scene = self.detector.detect("domains_lobby_frame", machine=self.mock_machine)
+
+        self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
+        self.assertEqual(scene.active_tabs, [])
+
+    @patch("os.path.exists", return_value=True)
+    def test_high_confidence_tab_conflict_blocks_high_confidence_card_fallback(
+        self, _mock_exists
+    ):
+        """Conflicting tab anchors cannot be overruled by a shared card match."""
+        self.mock_machine.config = {
+            "type": "stage",
+            "stage_templates": ["stages/level1_sky_plains.png"],
+            "dungeon_entries": [],
+        }
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False,
+            False,
+            0.91,
+            0.90,
+        )
+
+        def match_side_effect(_img, template, threshold=0.8):
+            if template == "goback_town.png":
+                return ((64, 726), 0.95)
+            if template == "stages/level1_sky_plains.png":
+                return ((300, 400), 0.97)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        scene = self.detector.detect("conflicting_frame", machine=self.mock_machine)
+
+        self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
+        self.assertEqual(scene.active_tabs, [])
+        matched_templates = [call.args[1] for call in self.mock_matcher.match.call_args_list]
+        self.assertNotIn("stages/level1_sky_plains.png", matched_templates)
+
+    @patch("os.path.exists", return_value=True)
+    def test_domain_selected_requires_red_ring_postcondition(self, _mock_exists):
+        self.mock_machine.config = {
+            "type": "domain",
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "stage_templates": [],
+            "dungeon_entries": [],
+        }
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False,
+            False,
+            0.4,
+            0.4,
+        )
+
+        def match_side_effect(_img, template, threshold=0.8):
+            if template == "goback_town.png":
+                return ((64, 726), 0.95)
+            if template == "domains/Domains_entry.png":
+                return ((500, 700), 0.82)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+        inactive_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        selected_frame = inactive_frame.copy()
+        selected_frame[620:630, 480:520] = (0, 0, 255)
+
+        inactive = self.detector.detect(inactive_frame, machine=self.mock_machine)
+        selected = self.detector.detect(selected_frame, machine=self.mock_machine)
+
+        self.assertEqual(inactive.scene_type, SceneType.LOBBY_OTHER)
+        self.assertEqual(selected.scene_type, SceneType.DOMAIN_SELECT)
+        self.assertEqual(selected.active_tabs, ["domain"])
+
+    @patch("os.path.exists", return_value=True)
+    def test_lord_and_demon_lord_selected_scenes_are_distinct(self, _mock_exists):
+        def match_side_effect(_img, template, threshold=0.8):
+            if template == "goback_town.png":
+                return ((64, 726), 0.95)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        cases = (
+            (
+                "lord_boss",
+                "load/Lord_entry_after.png",
+                SceneType.LORD_SELECT,
+                "lord",
+            ),
+            (
+                "demon_lords",
+                "demon_lords/demon_lords_entry_after.png",
+                SceneType.DEMON_LORD_SELECT,
+                "demon_lord",
+            ),
+        )
+        for config_type, active_template, expected_scene, expected_tab in cases:
+            with self.subTest(config_type=config_type):
+                self.mock_machine.config = {
+                    "type": config_type,
+                    "stage_templates": [],
+                    "dungeon_entries": [],
+                }
+
+                def tab_side_effect(_img, template_a, _template_b, **_kwargs):
+                    if template_a == active_template:
+                        return (True, False, 0.92, 0.40)
+                    return (False, False, 0.40, 0.40)
+
+                self.mock_matcher.match_mutually_exclusive_tabs.side_effect = tab_side_effect
+                scene = self.detector.detect("lobby_frame", machine=self.mock_machine)
+                self.assertEqual(scene.scene_type, expected_scene)
+                self.assertEqual(scene.active_tabs, [expected_tab])
 
     @patch("os.path.exists", return_value=True)
     def test_detect_lobby_start_skips_expensive_stage_search(self, mock_exists):
