@@ -565,7 +565,7 @@ class NavigationHandler(BaseStateHandler):
                 logging.info("🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。")
                 
                 if not visible_dungeons:
-                    fallback_count = getattr(self.machine, "fallback_swipe_count", 0)
+                    fallback_count = self.card_alignment_attempts
                     max_attempts = int(
                         self.machine.config.get(
                             "dungeon_reset_max_attempts",
@@ -586,7 +586,7 @@ class NavigationHandler(BaseStateHandler):
                         )
                         self.notify_ui_progress()
                         self.machine.last_dungeon_scroll_time = time.time()
-                        self.machine.fallback_swipe_count = fallback_count + 1
+                        self.card_alignment_attempts = fallback_count + 1
                         time.sleep(1.2)
                     else:
                         logging.warning(
@@ -594,7 +594,7 @@ class NavigationHandler(BaseStateHandler):
                             max_attempts,
                         )
                         if self.machine.config.get("type") == "mix":
-                            self.machine.fallback_swipe_count = 0
+                            self.card_alignment_attempts = 0
                             self._switch_to_stage_or_back(screen_img, rect, "地下城頁面經防呆滑動後仍無可打關卡")
                             return
                         pos_back = None
@@ -603,7 +603,7 @@ class NavigationHandler(BaseStateHandler):
                         if pos_back:
                             logging.info(f"👉 偵測到返回按鈕 [goback_town.png] (信心度: {conf_back:.4f})，點擊返回。")
                             self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-                            self.machine.fallback_swipe_count = 0  # 重置計數
+                            self.card_alignment_attempts = 0  # 重置計數
                             time.sleep(1.0)
                         else:
                             logging.warning("⚠️ 無法定位返回按鈕 [goback_town.png]，原地等待中...")
@@ -611,7 +611,7 @@ class NavigationHandler(BaseStateHandler):
                     return
                 
                 # 有找到解鎖卡片，重置防呆滑動計數
-                self.machine.fallback_swipe_count = 0
+                self.card_alignment_attempts = 0
                 
                 target_idx = None
                 is_greedy = self.machine.config.get("greedy_dungeon", False)

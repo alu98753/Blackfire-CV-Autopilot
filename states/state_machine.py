@@ -194,7 +194,6 @@ class GameStateMachine:
         self.dungeon_cooldowns = DungeonCatalog.build_default_cooldowns()
         self.current_dungeon_index = None
         self.defeat_count = 0
-        self.fallback_swipe_count = 0
         
         # 使用者手動介入偵測相關屬性
         self.user_operating = False

@@ -151,15 +151,20 @@ class TestNavigationScenarios(BehavioralScenarioTestCase):
         self.mock_mouse.click.assert_called_with(150, 150)
         
         # 步驟 2: 畫面看到 stages/level2_barren_rocks.png
-        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
-            ((250, 250), 0.9) if name == "stages/level2_barren_rocks.png" else (None, 0.0)
-        )
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_tab = "stage"
+        def match_stage_level2(img, name, threshold):
+            if name == "stages/level2_barren_rocks.png":
+                return (250, 250), 0.9
+            if name == "common/select_stage_after.png":
+                return (150, 150), 0.9
+            return None, 0.0
+        self.mock_matcher.match.side_effect = match_stage_level2
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(250, 90)
         
         # 步驟 3: 畫面看到 stages/stage_label.png，但沒有 stages/level2_final.png ➔ 滾動
-        # 設定模擬時間
         mock_time.return_value = 1000.0
         self.state_machine.last_stage_scroll_time = 0.0
         

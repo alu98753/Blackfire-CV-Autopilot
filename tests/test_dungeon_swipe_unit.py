@@ -25,6 +25,33 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.mock_capturer = MagicMock()
         self.mock_matcher = MagicMock()
 
+import unittest
+import numpy as np
+import os
+import time
+import logging
+from unittest.mock import MagicMock, patch
+from states.handlers.navigation import NavigationHandler
+from config import GAME_CONFIGS
+
+class TestDungeonSwipeLogic(unittest.TestCase):
+    """
+    專門防歸回測試 (Regression Tests)：
+    鎖定 NavigationHandler 中針對地下城 (Dungeon) 的左右滑動與選關邏輯。
+    包含：
+    1. 防呆拉回滑動 (無卡片可見時向右長滑動)
+    2. 防呆滑動次數上限處理 (回到大廳/返回)
+    3. 目標卡片在右側時向左滑動 (Drag Left)
+    4. 目標卡片在左側時向右滑動 (Drag Right)
+    5. 目標卡片在畫面上時直接點擊不引發滑動
+    """
+
+    def setUp(self):
+        self.mock_machine = MagicMock()
+        self.mock_mouse = MagicMock()
+        self.mock_capturer = MagicMock()
+        self.mock_matcher = MagicMock()
+
         self.mock_machine.mouse = self.mock_mouse
         self.mock_machine.capturer = self.mock_capturer
         self.mock_machine.matcher = self.mock_matcher
@@ -32,7 +59,6 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, (0, 0), 0.95)
 
         self.mock_machine.dungeon_cooldowns = {}
-        self.mock_machine.fallback_swipe_count = 0
         self.mock_machine.last_dungeon_scroll_time = 0.0
         self.mock_machine.current_dungeon_index = None
         self.mock_machine.is_in_dungeon = False
@@ -84,7 +110,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         mock_matchTemplate.side_effect = match_side_effect
 
         screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
-        self.mock_machine.fallback_swipe_count = 0
+        self.handler.card_alignment_attempts = 0
 
         self.handler.handle(screen_img, self.rect)
 
@@ -92,7 +118,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.mock_mouse.drag.assert_called_once_with(
             300, 450, 900, 450, duration=0.8, inertia=False
         )
-        self.assertEqual(self.mock_machine.fallback_swipe_count, 1)
+        self.assertEqual(self.handler.card_alignment_attempts, 1)
 
     @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
     @patch("os.path.exists")
@@ -131,13 +157,13 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.mock_matcher.match.side_effect = mock_match
 
         screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
-        self.mock_machine.fallback_swipe_count = 7
+        self.handler.card_alignment_attempts = 7
 
         self.handler.handle(screen_img, self.rect)
 
         self.mock_mouse.drag.assert_not_called()
         self.mock_mouse.click.assert_called_once_with(150, 100)
-        self.assertEqual(self.mock_machine.fallback_swipe_count, 0)
+        self.assertEqual(self.handler.card_alignment_attempts, 0)
 
     @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
     @patch("os.path.exists")
@@ -248,7 +274,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.assertTrue(self.mock_mouse.click.called)
         self.assertEqual(self.mock_machine.current_dungeon_index, 4)
         self.assertTrue(self.mock_machine.is_in_dungeon)
-        self.assertEqual(self.mock_machine.fallback_swipe_count, 0)
+        self.assertEqual(self.handler.card_alignment_attempts, 0)
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,7 +26,6 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, (0, 0), 0.95)
 
         self.mock_machine.dungeon_cooldowns = {}
-        self.mock_machine.fallback_swipe_count = 0
         self.mock_machine.last_dungeon_scroll_time = 0.0
         self.mock_machine.current_dungeon_index = None
         self.mock_machine.is_in_dungeon = False
@@ -113,9 +112,9 @@ class TestBehaviorDungeonCards(unittest.TestCase):
     ):
         """
         [2.1 Behavior Test]
-        Given: 已確認在地下城頁籤，畫面看得到 locked_entry.png，但無任何可打卡片，且 fallback_swipe_count < 7
+        Given: 已確認在地下城頁籤，畫面看得到 locked_entry.png，但無任何可打卡片，且 card_alignment_attempts < 7
         When: 執行 NavigationHandler.handle()
-        Then: 觸發向右長滑動 (CardListNavigator.reset_to_left)，且 fallback_swipe_count 遞增為 1
+        Then: 觸發向右長滑動 (CardListNavigator.reset_to_left)，且 card_alignment_attempts 遞增為 1
         """
         mock_exists.return_value = True
         mock_detect_cd.return_value = (False, None, "")
@@ -138,7 +137,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         mock_matchTemplate.side_effect = match_side_effect
 
         screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
-        self.mock_machine.fallback_swipe_count = 0
+        self.handler.card_alignment_attempts = 0
 
         self.handler.handle(screen_img, self.rect)
 
@@ -146,7 +145,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.mock_mouse.drag.assert_called_once_with(
             300, 450, 900, 450, duration=0.8, inertia=False
         )
-        self.assertEqual(self.mock_machine.fallback_swipe_count, 1)
+        self.assertEqual(self.handler.card_alignment_attempts, 1)
 
     # =========================================================================
     # 2.2 冷卻木牌 OCR 解析與退避行為測試
@@ -363,20 +362,20 @@ class TestBehaviorDungeonCards(unittest.TestCase):
     @patch("cv2.imread")
     @patch("cv2.resize")
     @patch("cv2.matchTemplate")
-    def test_2_6_dungeon_mode_max_fallback_swipes_clicks_goback_town(
+    def test_2_6_dungeon_mode_max_card_alignment_attempts_clicks_goback_town(
         self, mock_matchTemplate, mock_resize, mock_imread, mock_exists, mock_detect_cd
     ):
         """
         [2.6 Behavior Test]
-        Given: dungeon 模式下連滑 fallback_swipe_count >= 7 仍無可打卡片，看得到 goback_town.png
+        Given: dungeon 模式下連滑 card_alignment_attempts >= 7 仍無可打卡片，看得到 goback_town.png
         When: 執行 NavigationHandler.handle()
-        Then: 點擊 goback_town.png 退回城鎮，且重置 fallback_swipe_count 為 0
+        Then: 點擊 goback_town.png 退回城鎮，且重置 card_alignment_attempts 為 0
         """
         mock_exists.return_value = True
         self.mock_machine.stamina_retreat_start_time = None
         self.mock_machine.original_config = None
         self.mock_machine.config["type"] = "dungeon"
-        self.mock_machine.fallback_swipe_count = 7
+        self.handler.card_alignment_attempts = 7
         mock_detect_cd.return_value = (False, None, "")
 
         def imread_side_effect(path):
@@ -405,8 +404,8 @@ class TestBehaviorDungeonCards(unittest.TestCase):
 
         # 驗證點擊 goback_town.png
         self.mock_mouse.click.assert_called_once_with(160, 500)
-        # 驗證重置 fallback_swipe_count 為 0
-        self.assertEqual(self.mock_machine.fallback_swipe_count, 0)
+        # 驗證重置 card_alignment_attempts 為 0
+        self.assertEqual(self.handler.card_alignment_attempts, 0)
 
 if __name__ == "__main__":
     unittest.main()
