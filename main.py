@@ -11,6 +11,7 @@
 import sys
 import logging
 from config import get_monitor_index
+from utils.game_process import is_window_hung
 from utils.steam_launcher import SteamGameLauncher
 from utils.window import select_game_window
 from cli.arguments import parse_arguments
@@ -55,7 +56,13 @@ def main():
     # 3. 檢查遊戲是否開啟，發起直連啟動並傳送至指定螢幕與最大化全螢幕
     active_monitor = args.monitor if args.monitor is not None else get_monitor_index()
     launcher = SteamGameLauncher(game_title=args.title, backend_mode=args.backend, monitor_index=active_monitor, hwnd=target_hwnd)
-    if not launcher.ensure_game_ready():
+
+    force_relaunch = getattr(args, "restart_game", False) is True
+    if not force_relaunch and target_hwnd and is_window_hung(target_hwnd):
+        logging.warning("⚠️ 偵測到遊戲視窗處於未回應 (Hung) 狀態，自動升級為重啟遊戲流程！")
+        force_relaunch = True
+
+    if not launcher.ensure_game_ready(force_relaunch=force_relaunch):
         print("[!] 遊戲啟動準備失敗，終止腳本。")
         sys.exit(1)
 
