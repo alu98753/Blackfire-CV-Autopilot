@@ -192,6 +192,83 @@ class TestDailyTier4Behavior(unittest.TestCase):
         mock_setup_dungeon.assert_called_once_with(cfg, args, allow_disable=True)
         mock_setup_tier4.assert_called_once_with(cfg)
 
+    def test_stage_fallback_has_stage_type_and_clean_navigation_path(self):
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.daily_manager = MagicMock()
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "name": "每日懸賞任務",
+            "type": "mix",
+            "tier4_mode": "stage",
+            "tier4_stage_level": 4,
+            "tier4_sub_stage": "final",
+            "enable_stage_farming": True,
+            "enable_dungeon": False,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [1, 2, 3, 4, 5, 6],
+            "dungeon_entries": ["dungeons/Slime_entry.png"],
+            "dungeon_names": ["Slime"],
+        }
+        machine.apply_tier4_fallback_config()
+
+        self.assertEqual(machine.config["type"], "stage")
+        self.assertEqual(machine.config["tier4_mode"], "stage")
+        self.assertTrue(machine.config["is_tier4_fallback"])
+        self.assertFalse(machine.config["greedy_dungeon"])
+        self.assertNotIn("dungeons/dungeon.png", machine.config["navigation_path"])
+        self.assertIn("stages/level4_desert_ruins.png", machine.config["navigation_path"])
+        self.assertIn("stages/level4_final.png", machine.config["navigation_path"])
+
+    def test_disabled_dungeon_policy_strictly_rejects_has_available_dungeon(self):
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.primary_config = {
+            "type": "mix",
+            "enable_dungeon": False,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [1, 2, 3],
+        }
+        machine.config = machine.primary_config.copy()
+        machine.dungeon_cooldowns = {1: 0.0, 2: 0.0, 3: 0.0}
+
+        self.assertFalse(machine.has_available_dungeon())
+        self.assertFalse(machine.has_available_dungeon(target_config=machine.primary_config))
+
+    def test_daily_disabled_dungeon_stage_fallback_in_navigation_alignment(self):
+        from states.handlers import NavigationHandler
+        from utils.scene_detector import SceneInfo, SceneType
+
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "tier4_mode": "stage",
+            "tier4_stage_level": 4,
+            "tier4_sub_stage": "final",
+            "enable_stage_farming": True,
+            "enable_dungeon": False,
+        }
+        machine.apply_tier4_fallback_config()
+
+        handler = NavigationHandler(machine)
+        fake_scene = SceneInfo(
+            scene_type=SceneType.LOBBY_STAGE,
+            is_lobby=True,
+            active_tabs={"stage"},
+        )
+        from utils.card_navigator import CardAlignmentStatus
+        with patch("utils.card_navigator.CardListNavigator.align_first_card", return_value=(CardAlignmentStatus.ALIGNED, 0, 1.0)):
+            handler._handle_primary_card_alignment(None, {"left": 0, "top": 0}, fake_scene)
+            self.assertEqual(handler.card_alignment_target_tab, "stage")
+            self.assertEqual(handler.card_alignment_tab, "stage")
+
 
 if __name__ == "__main__":
     unittest.main()
+
