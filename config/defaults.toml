@@ -17,6 +17,7 @@ action_max_attempts = 3
 collection_backoff_seconds = 60.0
 collection_recovery_failure_limit = 3
 stamina_retreat_quit_max_attempts = 3
+sub_stage_scroll_max_attempts = 5
 
 [quest]
 max_run_limit = 20
@@ -103,6 +104,7 @@ result_buttons = ["common/continue.png", "common/continue_gray.png"]
 name = "普通關卡"
 type = "stage"
 stage_reset_max_attempts = 7
+sub_stage_scroll_max_attempts = 5
 dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
@@ -153,6 +155,7 @@ stage_name = "冰凍峽谷 (first)"
 stage_entry = "stages/level6_ice_cave.png"
 stage_target = "stages/first_stage.png"
 stage_navigation_path = ["common/door.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
+sub_stage_scroll_max_attempts = 5
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 

@@ -1856,6 +1856,7 @@ class GameStateMachine:
             or primary_mode == "daily"
             or mode_type in ["daily", "mix"]
             or self.quest_scheduler is not None
+            or bool((getattr(self, "config", None) or {}).get("is_tier4_fallback", False))
         )
 
     def has_ready_daily_quest_preemption(self):

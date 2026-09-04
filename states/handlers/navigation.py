@@ -15,6 +15,7 @@ from config import (
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardAlignmentStatus, CardListNavigator
+from utils.sub_stage_navigator import SubStageDirection, SubStageListNavigator
 from utils.scene_detector import SceneDetector, SceneType
 from utils.dungeon_catalog import DungeonCatalog
 from states.navigation_routing import (
@@ -41,12 +42,17 @@ def filter_navigation_path(nav_path, active_tabs=None):
 
 class NavigationHandler(BaseStateHandler):
     CARD_RESET_MAX_ATTEMPTS = 7
+    SUB_STAGE_SCROLL_MAX_ATTEMPTS = 5
+    SUB_STAGE_SCROLL_OFFSET_Y = 100
+    SUB_STAGE_SCROLL_COOLDOWN = 1.5
+    SUB_STAGE_MISSING_DEBOUNCE = 1.5
 
     def __init__(self, machine):
         super().__init__(machine)
         self.card_alignment_target_tab = None
         self.card_alignment_tab = None
         self.card_alignment_attempts = 0
+        self.sub_stage_scroll_attempts = 0
 
     def _resolve_domain_navigation_templates(self):
         config = self.machine.config or {}
@@ -176,6 +182,91 @@ class NavigationHandler(BaseStateHandler):
         self.card_alignment_tab = None
         self.card_alignment_attempts = 0
         self.machine.request_relaunch(f"{tab}_card_alignment_failed")
+        return True
+
+    def _handle_sub_stage_scroll(
+        self,
+        rect: dict,
+        target_sub_stage_btn: str,
+        match_current_frame,
+        filtered_nav_path: list[str],
+    ) -> bool:
+        """
+        在普通關卡子關卡抽屜內，當目標子關卡尚未出現在畫面上時，執行自適應雙向滑動。
+        回傳 True 代表已執行動作或等待冷卻（應中斷後續點擊）；回傳 False 則代表無需處理。
+        """
+        if not target_sub_stage_btn:
+            return False
+
+        # 1. 缺失計時器防抖 (1.5 秒等待加載穩定)
+        missing_time = getattr(self.machine, f"missing_time_{target_sub_stage_btn}", 0.0)
+        if not isinstance(missing_time, (int, float)):
+            missing_time = 0.0
+        now = time.time()
+        if missing_time == 0.0:
+            self.machine.__setattr__(f"missing_time_{target_sub_stage_btn}", now)
+            logging.info(f"⌛ 尋路中：偵測到關卡背景，但目標子關卡 [{target_sub_stage_btn}] 尚未出現，等待載入與穩定中...")
+            return True
+        elif now - missing_time < self.SUB_STAGE_MISSING_DEBOUNCE:
+            return True
+
+        # 2. 收集當前畫面上可見的其他子關卡
+        candidates = SubStageListNavigator.get_candidate_sub_stage_templates(filtered_nav_path)
+        visible_sub_stages = []
+        for cand in candidates:
+            if os.path.exists(os.path.join("templates", cand)):
+                thresh_cand = get_template_threshold(cand, default=SUB_STAGE_THRESHOLD)
+                pos_c, _ = match_current_frame(cand, threshold=thresh_cand)
+                if pos_c:
+                    visible_sub_stages.append(cand)
+
+        # 3. 取得最大重試次數與自適應方向判定
+        config = self.machine.config or {}
+        max_attempts = int(
+            config.get(
+                "sub_stage_scroll_max_attempts",
+                self.SUB_STAGE_SCROLL_MAX_ATTEMPTS,
+            )
+        )
+        direction, next_attempts = SubStageListNavigator.evaluate(
+            visible_templates=visible_sub_stages,
+            target_template=target_sub_stage_btn,
+            attempts=self.sub_stage_scroll_attempts,
+            max_attempts=max_attempts,
+        )
+
+        if direction == SubStageDirection.NONE:
+            self.sub_stage_scroll_attempts = 0
+            return False
+
+        if direction == SubStageDirection.EXHAUSTED:
+            logging.warning(
+                f"⚠️ [子關卡導航] 已執行 {max_attempts} 次自適應滑動仍未見目標 [{target_sub_stage_btn}]，進入有界恢復..."
+            )
+            self.sub_stage_scroll_attempts = 0
+            self.machine.request_relaunch("sub_stage_scroll_exhausted")
+            return True
+
+        # 4. 滾動冷卻時間限制 (1.5 秒)，防範快速連續滾動
+        last_scroll = getattr(self.machine, "last_stage_scroll_time", 0.0)
+        if now - last_scroll <= self.SUB_STAGE_SCROLL_COOLDOWN:
+            return True
+
+        # 5. 計算實體座標並執行拖曳（維持原本 center_y ± 100px 手感）
+        start_x, start_y, end_x, end_y = SubStageListNavigator.calculate_drag_coords(
+            rect,
+            direction,
+            offset_y=self.SUB_STAGE_SCROLL_OFFSET_Y,
+        )
+        dir_text = "向下滾動 (手勢往上拉)" if direction == SubStageDirection.SCROLL_DOWN else "向上滾動 (手勢往下拉)"
+        logging.info(
+            f"🧭 尋路中：在關卡背景 [stages/stage_label.png]，執行自適應{dir_text}尋找目標 [{target_sub_stage_btn}] "
+            f"(第 {next_attempts}/{max_attempts} 次)..."
+        )
+        self.mouse.drag(start_x, start_y, end_x, end_y)
+        self.machine.last_stage_scroll_time = now
+        self.sub_stage_scroll_attempts = next_attempts
+        time.sleep(0.3)
         return True
 
     def _parse_time_to_seconds(self, time_str):
@@ -820,6 +911,7 @@ class NavigationHandler(BaseStateHandler):
                     pos_f, _ = match_current_frame(btn, threshold=thresh_btn)
                     if pos_f:
                         pos_final = pos_f
+                        self.sub_stage_scroll_attempts = 0
                         # 成功找到目標小關/魔王關，重置其缺失計時器
                         self.machine.__setattr__(f"missing_time_{btn}", 0.0)
                         break
@@ -942,33 +1034,18 @@ class NavigationHandler(BaseStateHandler):
             pos, conf = match_current_frame(btn, threshold=thresh, brightness_threshold=b_thresh)
             if pos:
                 if btn == "stages/stage_label.png":
-                    # 特別處置：如果是分關入口背景，代表需要向下滾動尋找魔王關
-                    # 為了讓魔王關卡載入與 scan 完全，引入 1.5 秒的缺失計時器
-                    if target_final_btn:
-                        missing_time = getattr(self.machine, f"missing_time_{target_final_btn}", 0.0)
-                        if not isinstance(missing_time, (int, float)):
-                            missing_time = 0.0
-                        if missing_time == 0.0:
-                            self.machine.__setattr__(f"missing_time_{target_final_btn}", time.time())
-                            logging.info(f"⌛ 尋路中：偵測到關卡背景，但魔王關 [{target_final_btn}] 尚未出現，等待載入與穩定中...")
-                            return
-                        elif time.time() - missing_time < 1.5:
-                            # 仍處於 1.5 秒等待緩衝期內，暫不執行滾動
-                            return
-
-                    # 為了防範快速連續滾動，限制滾動 CD 為 1.5 秒
-                    last_scroll = getattr(self.machine, "last_stage_scroll_time", 0.0)
-                    if time.time() - last_scroll > 1.5:
-                        logging.info("🧭 尋路中：偵測到第二關畫面 [stages/stage_label.png] 但未見魔王關，執行溫和滑動向下滾動...")
-                        center_x = rect["left"] + rect["width"] // 2
-                        center_y = rect["top"] + rect["height"] // 2
-                        # 改為使用拖曳手勢，向上滑動拖曳 350 像素使列表向下滾動，繞過後台滾輪無焦點失效問題
-                        self.mouse.drag(center_x, center_y + 100, center_x, center_y - 100)
-                        self.machine.last_stage_scroll_time = time.time()
+                    if self._handle_sub_stage_scroll(
+                        rect,
+                        target_final_btn,
+                        match_current_frame,
+                        filtered_nav_path,
+                    ):
                         clicked_any = True
-                        time.sleep(0.3)
                         break
+                    return
                 else:
+                    if is_sub_stage_target:
+                        self.sub_stage_scroll_attempts = 0
                     click_x = rect["left"] + pos[0]
                     click_y = rect["top"] + pos[1]
                     if not is_sub_stage_target and "level" in btn and "entry" not in btn:
@@ -985,31 +1062,15 @@ class NavigationHandler(BaseStateHandler):
                     break
 
         if not clicked_any:
-            # 備用邏輯：若在普通關卡模式下，已進入關卡細節畫面但未看見魔王關 (final.png)，則向下滾動尋找魔王關
+            # 備用邏輯：若在普通關卡模式下，已進入關卡細節畫面但未看見目標子關卡，執行自適應滑動
             if self.machine.config.get("type") == "stage":
-                if pos_label and not pos_final:
-                    if target_final_btn:
-                        missing_time = getattr(self.machine, f"missing_time_{target_final_btn}", 0.0)
-                        if not isinstance(missing_time, (int, float)):
-                            missing_time = 0.0
-                        if missing_time == 0.0:
-                            self.machine.__setattr__(f"missing_time_{target_final_btn}", time.time())
-                            logging.info(f"⌛ 尋路中：判定已在細節畫面但未見魔王關 [{target_final_btn}]，等待載入與穩定中...")
-                            return
-                        elif time.time() - missing_time < 1.5:
-                            # 仍處於 1.5 秒等待緩衝期內，暫不執行滾動
-                            return
-
-                    last_scroll = getattr(self.machine, "last_stage_scroll_time", 0.0)
-                    if time.time() - last_scroll > 1.5:
-                        logging.info("🧭 尋路中：判定已在關卡細節畫面但未見魔王關，執行溫和向下滑動滾動尋找魔王...")
-                        center_x = rect["left"] + rect["width"] // 2
-                        center_y = rect["top"] + rect["height"] // 2
-                        # 改為使用拖曳手勢，向上滑動拖曳 350 像素使列表向下滾動，繞過後台滾輪無焦點失效問題
-                        self.mouse.drag(center_x, center_y + 150, center_x, center_y - 200)
-                        self.machine.last_stage_scroll_time = time.time()
-                        clicked_any = True
-                        time.sleep(0.3)
+                if pos_label and not pos_final and target_final_btn:
+                    if self._handle_sub_stage_scroll(
+                        rect,
+                        target_final_btn,
+                        match_current_frame,
+                        filtered_nav_path,
+                    ):
                         return
 
             # 其他情況 (例如動畫播放、切換關卡加載黑屏)，原地等待畫面載入

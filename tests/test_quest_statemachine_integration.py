@@ -304,9 +304,10 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         from config import PRIMARY_MODES
         expected_sub = PRIMARY_MODES["daily"].get("tier4_sub_stage", "first")
 
-        # 測試由 evaluate_and_schedule_daily_pipeline 統一將配置切換至動態/預設 Tier 4 Mix 模式
+        # 測試由 evaluate_and_schedule_daily_pipeline 統一將配置切換至動態/預設 Tier 4 關卡退守模式
         sm.evaluate_and_schedule_daily_pipeline()
-        self.assertEqual(sm.config["type"], "mix")
+        self.assertEqual(sm.config["type"], "stage")
+        self.assertTrue(sm.config.get("is_tier4_fallback", False))
         self.assertEqual(sm.config["stage_name"], f"冰凍峽谷 ({expected_sub})")
 
     def test_result_handler_batch_exit_on_fourth_run(self):

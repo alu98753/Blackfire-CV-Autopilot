@@ -31,6 +31,7 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
         fallback["tier4_mode"] = TIER4_MODE_STAGE
         fallback["enable_stage_farming"] = True
         fallback["enable_golden_empire"] = False
+        fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
         fallback["greedy_dungeon"] = False
         stage_cfg = mode_configs.get("stage", {})
         if "stage_templates" not in fallback and "stage_templates" in stage_cfg:
@@ -50,4 +51,5 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
     fallback["tier4_domain"] = domain_key
     fallback["enable_stage_farming"] = False
     fallback["enable_golden_empire"] = True
+    fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
     return fallback
