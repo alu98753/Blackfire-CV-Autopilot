@@ -194,9 +194,13 @@ class BattleHandler(BaseStateHandler):
         else:
             check_buttons = res_buttons
 
-        for extra_c in ["common/continue1.png", "common/continue2.png"]:
-            if "common/continue.png" in check_buttons and extra_c not in check_buttons:
-                check_buttons.append(extra_c)
+        if not check_buttons:
+            default_continue = getattr(self.machine, "continue_template", "common/continue.png")
+            check_buttons = [default_continue, "common/continue1.png", "common/continue2.png", "common/continue_gray.png"]
+        else:
+            for extra_c in ["common/continue1.png", "common/continue2.png"]:
+                if "common/continue.png" in check_buttons and extra_c not in check_buttons:
+                    check_buttons.append(extra_c)
 
         best_match_pos = None
         best_match_conf = 0.80

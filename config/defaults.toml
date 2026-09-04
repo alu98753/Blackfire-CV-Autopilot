@@ -351,6 +351,7 @@ type = "demon_lords"
 entry_btn = "demon_lords/demon_lords_entry.png"
 entry_after_btn = "demon_lords/demon_lords_entry_after.png"
 start_btn = "stages/start.png"
+result_buttons = ["common/continue.png", "common/continue1.png", "common/continue2.png", "common/continue_gray.png"]
 stone_container_btn = "demon_lords/meterial/stone_slot.png"
 empty_slot_btn = "demon_lords/meterial/slot.png"
 choose_btn = "common/choose.png"
