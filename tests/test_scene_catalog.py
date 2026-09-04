@@ -19,9 +19,13 @@ class TestSceneCatalog(unittest.TestCase):
             SceneId.LOBBY: DetectionProfileId.LOBBY,
             SceneId.STAGE_SELECT: DetectionProfileId.STAGE_SELECT,
             SceneId.DUNGEON_SELECT: DetectionProfileId.DUNGEON_SELECT,
+            SceneId.DOMAIN_SELECT: DetectionProfileId.DOMAIN_SELECT,
+            SceneId.LORD_SELECT: DetectionProfileId.LORD_SELECT,
+            SceneId.DEMON_LORD_SELECT: DetectionProfileId.DEMON_LORD_SELECT,
             SceneId.LOADING: DetectionProfileId.LOADING,
             SceneId.BATTLE: DetectionProfileId.BATTLE,
             SceneId.RESULT: DetectionProfileId.RESULT,
+            SceneId.DOMAIN_EXPLORE: DetectionProfileId.DOMAIN,
         }
 
         for scene_id, profile in expected.items():
@@ -44,6 +48,26 @@ class TestSceneCatalog(unittest.TestCase):
                 SceneType.DUNGEON_PREPARE,
                 SceneId.DUNGEON_LOBBY,
                 DetectionProfileId.DUNGEON_SELECT,
+            ),
+            (
+                SceneType.DOMAIN_EXPLORE,
+                SceneId.DOMAIN_EXPLORE,
+                DetectionProfileId.DOMAIN,
+            ),
+            (
+                SceneType.DOMAIN_SELECT,
+                SceneId.DOMAIN_SELECT,
+                DetectionProfileId.DOMAIN_SELECT,
+            ),
+            (
+                SceneType.LORD_SELECT,
+                SceneId.LORD_SELECT,
+                DetectionProfileId.LORD_SELECT,
+            ),
+            (
+                SceneType.DEMON_LORD_SELECT,
+                SceneId.DEMON_LORD_SELECT,
+                DetectionProfileId.DEMON_LORD_SELECT,
             ),
         )
 

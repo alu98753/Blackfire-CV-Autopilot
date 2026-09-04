@@ -25,7 +25,7 @@
 - [x] **2.3 亮骨頭未解鎖過濾行為**：比對出 `light_skull.png` 相似度 < 0.75 時，設定無限冷卻防呆並切換頁籤/回城。
 - [x] **2.4 全冷卻混合模式防死鎖切換**：地下城貪婪模式下若所有允許地下城均在冷卻中且模式為 `mix`，觸發 `_switch_to_stage_or_back` 切換關卡頁籤。
 - [x] **2.5 全冷卻且無關卡頁籤時退回城鎮**：切換頁籤時若畫面上無 `select_stage.png` 但看得到 `goback_town.png`，點擊 `goback_town.png` 退回城鎮。
-- [x] **2.6 地下城多次滑動無卡片極限退回城鎮**：單一模式下當 `fallback_swipe_count >= 3` 且無可打卡片時，點擊 `goback_town.png` 重置計數並退回城鎮。
+- [x] **2.6 地下城多次滑動無卡片極限退回城鎮**：單一模式下當 `card_alignment_attempts >= 7` 且無可打卡片時，點擊 `goback_town.png` 重置計數並退回城鎮。
 
 ### 3. `tests/test_behavior_stamina_retreat.py` (體力退避與狀態切換行為)
 - [x] **3.1 地下城全冷卻切換 Collect Only**：混合/地下城模式下全冷卻時，自動退回 `STATE_COLLECT_ONLY`。

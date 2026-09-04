@@ -88,6 +88,9 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         config_a["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ruins_entry.png"]
         self.state_machine.config = config_a
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        nav_handler = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_handler.card_alignment_tab = "dungeon"
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
         
         # Mock 視窗大小為 1000x800
         self.mock_capturer.get_window_rect.return_value = {
@@ -144,7 +147,8 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         config_fb["greedy_dungeon"] = True
         self.state_machine.config = config_fb
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.fallback_swipe_count = 0
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_attempts = 0
         
         # Mock 視窗大小為 1000x800
         self.mock_capturer.get_window_rect.return_value = {
@@ -154,8 +158,16 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         img = np.zeros((800, 1000, 3), dtype=np.uint8)
         self.mock_capturer.capture.return_value = img
         
-        # mock cv2.matchTemplate 使得前 N 次 (dungeon_entries) 均返回 0.0,
-        # 第 N+1 次 (locked_entry) 返回 0.95 (匹配成功)
+        # 模擬 matcher 比對出地下城頁籤已開啟
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        def match_side_effect(img_arg, templ, *args, **kwargs):
+            if templ == "dungeons/dungeon_after.png":
+                return ((400, 100), 0.95)
+            if templ == "common/locked_entry.png":
+                return ((300, 400), 0.95)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = match_side_effect
+
         entry_count = len(self.state_machine.config.get("dungeon_entries", []))
         call_count = 0
         def mock_matchTemplate(img_arg, templ, method):
@@ -167,32 +179,11 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         with patch('cv2.imread', return_value=np.zeros((10, 10, 3), dtype=np.uint8)), \
              patch('cv2.matchTemplate', side_effect=mock_matchTemplate):
              
-            # 第一次防呆滑動：預期 drag(300, 500, 900, 500)
+            # 第一次防呆滑動：預期 drag(300, 500, 900, 500, duration=0.8, inertia=False)
             self.mock_mouse.drag.reset_mock()
             self.state_machine.step()
-            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500)
-            self.assertEqual(self.state_machine.fallback_swipe_count, 1)
-            
-            # 第二次防呆滑動
-            call_count = 0
-            self.mock_mouse.drag.reset_mock()
-            self.state_machine.step()
-            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500)
-            self.assertEqual(self.state_machine.fallback_swipe_count, 2)
-            
-            # 第三次防呆滑動
-            call_count = 0
-            self.mock_mouse.drag.reset_mock()
-            self.state_machine.step()
-            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500)
-            self.assertEqual(self.state_machine.fallback_swipe_count, 3)
-            
-            # 第四次：已達到上限 3，預期不執行滑動
-            call_count = 0
-            self.mock_mouse.drag.reset_mock()
-            self.state_machine.step()
-            self.mock_mouse.drag.assert_not_called()
-            self.assertEqual(self.state_machine.fallback_swipe_count, 3)
+            self.mock_mouse.drag.assert_called_once_with(300, 500, 900, 500, duration=0.8, inertia=False)
+            self.assertEqual(nav_h.card_alignment_attempts, 1)
 
     @patch('os.path.exists')
     def test_dungeon_defeat_giveup_flow(self, mock_exists):
@@ -342,7 +333,11 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         
         from config import GAME_CONFIGS
         config = dict(GAME_CONFIGS["mix"])
-        config["navigation_path"] = ["dungeons/Ice_entry.png"]
+        config["navigation_path"] = [
+            "common/door.png",
+            "dungeons/dungeon.png",
+            "dungeons/Ice_entry.png",
+        ]
         config["stage_navigation_path"] = [
             "common/door.png",
             "common/select_stage.png",
@@ -382,6 +377,8 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         
         # --- 階段 3：進入地下城選關介面，看到 Ice_entry.png 選擇並點擊入場 ---
         is_dungeon_page_active[0] = True
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_tab = "dungeon"
         ice_idx = config["dungeon_entries"].index("dungeons/Ice_entry.png") + 1
         self.mock_matcher.match.side_effect = lambda img, name, **kw: (
             ((1400, 300), 0.9) if name == "dungeons/Ice_entry.png" else (None, 0.0)

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from states.state_machine import GameStateMachine
 from states.handlers.demon_lords import DemonLordsHandler, DemonSubScene
+from states.handlers.battle import BattleHandler
 from states.handlers.result import ResultHandler
 from utils.daily_manager import DailyManager
 from config import GAME_CONFIGS
@@ -113,6 +114,50 @@ class TestDemonLordsSubflow(unittest.TestCase):
         self.assertTrue(ret)
         self.mock_mouse.click.assert_called_with(300, 400)
         self.assertEqual(handler.current_target_boss, "voidborn_elres")
+
+    @patch("states.handlers.demon_lords.time.sleep")
+    @patch("os.path.exists", return_value=True)
+    def test_missing_demon_lord_card_resets_to_left(self, _mock_exists, _mock_sleep):
+        handler = DemonLordsHandler(self.state_machine)
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (
+            True,
+            False,
+            0.95,
+            0.4,
+        )
+        self.state_machine.matcher.match.return_value = (None, 0.0)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        handled = handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), rect)
+
+        self.assertTrue(handled)
+        self.mock_mouse.drag.assert_called_once_with(
+            200, 400, 800, 400, duration=0.8, inertia=False
+        )
+        self.assertEqual(handler.card_reset_attempts, 1)
+
+    @patch("states.handlers.demon_lords.time.sleep")
+    @patch("os.path.exists", return_value=True)
+    def test_demon_lord_reset_limit_relaunches(self, _mock_exists, _mock_sleep):
+        handler = DemonLordsHandler(self.state_machine)
+        handler.card_reset_attempts = 7
+        self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (
+            True,
+            False,
+            0.95,
+            0.4,
+        )
+        self.state_machine.matcher.match.return_value = (None, 0.0)
+        self.state_machine.request_relaunch = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        handled = handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), rect)
+
+        self.assertTrue(handled)
+        self.mock_mouse.drag.assert_not_called()
+        self.state_machine.request_relaunch.assert_called_once_with(
+            "demon_lord_card_alignment_failed"
+        )
 
     @patch("os.path.exists", return_value=True)
     def test_slot_filling_and_scoped_stone_selection(self, _mock_exists):
@@ -423,4 +468,63 @@ class TestDemonLordsSubflow(unittest.TestCase):
         self.assertTrue(self.daily_manager.status["subflows"]["demon_lords"]["bosses"]["voidborn_elres"]["completed_today"])
         # 斷言：呼叫 pop_and_next_town_subflow 推進子流程佇列
         self.state_machine.pop_and_next_town_subflow.assert_called_once()
+
+    @patch("os.path.exists", return_value=True)
+    def test_battle_transitions_to_result_for_demon_lords(self, _mock_exists):
+        """測試：在深淵魔王戰鬥中，畫面上出現 continue.png 時，BattleHandler 能成功轉移至 STATE_RESULT"""
+        battle_handler = BattleHandler(self.state_machine)
+        self.state_machine.current_state = self.state_machine.STATE_BATTLE
+        self.state_machine.current_demon_lord_key = "voidborn_elres"
+        self.state_machine.battle_session.clear()
+
+        self.state_machine.config = {"type": "demon_lords"}
+
+        def match_battle(img, temp, **kw):
+            if temp == "common/continue.png":
+                return ((640, 500), 0.95)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = match_battle
+        dummy_screen = np.zeros((800, 1000, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        battle_handler.handle(dummy_screen, rect)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_RESULT)
+        self.assertFalse(self.state_machine.is_in_dungeon)
+
+    @patch("os.path.exists", return_value=True)
+    def test_result_final_match_exit_commits_demon_lords(self, _mock_exists):
+        """測試：ResultHandler 在 FINAL_MATCH 離場時能正確提交 demon_lords 並轉移回 STATE_DEMON_LORDS"""
+        result_handler = ResultHandler(self.state_machine)
+        self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.current_demon_lord_key = "voidborn_elres"
+        result_handler.subflow_step = "FINAL_MATCH"
+
+        def match_result(img, temp, **kw):
+            if temp == "goback_town.png":
+                return ((100, 700), 0.90)
+            return (None, 0.0)
+
+        self.state_machine.matcher.match.side_effect = match_result
+        dummy_screen = np.zeros((800, 1000, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        with patch.object(result_handler, "click_and_wait_until_gone") as mock_click:
+            ret = result_handler._handle_impl(dummy_screen, rect)
+            self.assertTrue(ret)
+            mock_click.assert_called_once()
+
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DEMON_LORDS)
+        self.assertIsNone(self.state_machine.current_demon_lord_key)
+        self.assertEqual(
+            self.daily_manager.status["subflows"]["demon_lords"]["bosses"]["voidborn_elres"]["today_count"],
+            1
+        )
+
+    def test_defaults_toml_demon_lords_has_result_buttons(self):
+        """測試：defaults.toml 的 subflow_configs.demon_lords 包含 result_buttons 配置"""
+        from config import SUBFLOW_CONFIGS
+        dl_cfg = SUBFLOW_CONFIGS.get("demon_lords", {})
+        self.assertIn("result_buttons", dl_cfg)
+        self.assertIn("common/continue.png", dl_cfg["result_buttons"])
 

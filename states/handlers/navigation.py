@@ -14,7 +14,7 @@ from config import (
 )
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
-from utils.card_navigator import CardListNavigator
+from utils.card_navigator import CardAlignmentStatus, CardListNavigator
 from utils.scene_detector import SceneDetector, SceneType
 from utils.dungeon_catalog import DungeonCatalog
 from states.navigation_routing import (
@@ -40,6 +40,144 @@ def filter_navigation_path(nav_path, active_tabs=None):
     return [btn for btn in nav_path if btn not in skip_btns]
 
 class NavigationHandler(BaseStateHandler):
+    CARD_RESET_MAX_ATTEMPTS = 7
+
+    def __init__(self, machine):
+        super().__init__(machine)
+        self.card_alignment_target_tab = None
+        self.card_alignment_tab = None
+        self.card_alignment_attempts = 0
+
+    def _resolve_domain_navigation_templates(self):
+        config = self.machine.config or {}
+        nav_path = config.get("navigation_path", [])
+        tab_template = config.get("domain_tab_btn", "domains/Domains_entry.png")
+        target_template = config.get("domain_entry_btn")
+        if not target_template:
+            target_template = next(
+                (
+                    template
+                    for template in nav_path
+                    if template.startswith("domains/")
+                    and template.endswith("/entry.png")
+                    and template != tab_template
+                ),
+                None,
+            )
+        return tab_template, target_template
+
+    def _handle_primary_card_alignment(self, screen_img, rect, scene):
+        """Align primary-mode shared cards only after the active tab is observed."""
+        config = self.machine.config or {}
+        config_type = config.get("type")
+        if config_type == "domain":
+            desired_tab = "domain"
+        elif config_type == "dungeon":
+            desired_tab = "dungeon"
+        elif config_type == "stage":
+            desired_tab = "stage"
+        elif config_type in {"mix", "daily"}:
+            desired_tab = (
+                "dungeon" if self.machine.has_available_dungeon() else "stage"
+            )
+        else:
+            desired_tab = None
+
+        if desired_tab is None:
+            self.card_alignment_target_tab = None
+            self.card_alignment_tab = None
+            self.card_alignment_attempts = 0
+            return False
+
+        prev_target = getattr(self, "card_alignment_target_tab", None)
+        if prev_target is not None and prev_target != desired_tab:
+            self.card_alignment_tab = None
+            self.card_alignment_attempts = 0
+        self.card_alignment_target_tab = desired_tab
+
+        if desired_tab not in scene.active_tabs:
+            return False
+
+        if self.card_alignment_tab == desired_tab:
+            return False
+
+        tab = desired_tab
+
+        if tab == "domain":
+            _, first_card = self._resolve_domain_navigation_templates()
+            match_options = {"brightness_threshold": 0.70}
+        elif tab == "dungeon":
+            dungeon_entries = config.get("dungeon_entries", [])
+            first_card = config.get("dungeon_first_card_btn") or (
+                dungeon_entries[0] if dungeon_entries else None
+            )
+            match_options = None
+        else:
+            stage_templates = config.get("stage_templates", [])
+            first_card = config.get("stage_first_card_btn") or (
+                stage_templates[0] if stage_templates else None
+            )
+            match_options = None
+        if not first_card:
+            logging.error("Card alignment has no first-card anchor for tab=%s", tab)
+            self.machine.request_relaunch(f"{tab}_card_alignment_config_missing")
+            return True
+
+        max_attempts = int(
+            config.get(
+                f"{tab}_reset_max_attempts",
+                config.get("card_reset_max_attempts", self.CARD_RESET_MAX_ATTEMPTS),
+            )
+        )
+        threshold = get_template_threshold(first_card, default=ENTRY_THRESHOLD)
+        status, attempts, confidence = CardListNavigator.align_first_card(
+            screen_img,
+            self.matcher,
+            self.mouse,
+            rect,
+            first_card,
+            self.card_alignment_attempts,
+            max_attempts=max_attempts,
+            threshold=threshold,
+            duration=0.8,
+            inertia=False,
+            match_options=match_options,
+        )
+        self.card_alignment_attempts = attempts
+
+        if status == CardAlignmentStatus.ALIGNED:
+            logging.info(
+                "Card list aligned: tab=%s first_card=%s confidence=%.4f",
+                tab,
+                first_card,
+                confidence,
+            )
+            self.card_alignment_tab = tab
+            return False
+
+        if status == CardAlignmentStatus.RETRYING:
+            logging.info(
+                "Resetting shared card list: tab=%s first_card=%s attempt=%d/%d",
+                tab,
+                first_card,
+                attempts,
+                max_attempts,
+            )
+            self.notify_ui_progress()
+            time.sleep(1.2)
+            return True
+
+        logging.error(
+            "Card list alignment exhausted: tab=%s first_card=%s attempts=%d",
+            tab,
+            first_card,
+            max_attempts,
+        )
+        self.card_alignment_tab = None
+        self.card_alignment_attempts = 0
+        self.machine.request_relaunch(f"{tab}_card_alignment_failed")
+        return True
+
     def _parse_time_to_seconds(self, time_str):
         """
         將 OCR 識別出的時間字串解析為總秒數 (委充自 utils.time_parser 共用模組)。
@@ -317,6 +455,8 @@ class NavigationHandler(BaseStateHandler):
         if executor.execute(routing, screen_img, rect):
             return
 
+        if self._handle_primary_card_alignment(screen_img, rect, scene):
+            return
 
         # 檢查體力退避期間是否所有地下城皆已進入冷卻 (僅當前配置非 collect_only 時評估)
         if getattr(self.machine, "stamina_retreat_start_time", None) is not None and getattr(self.machine, "original_config", None) is not None:
@@ -345,14 +485,15 @@ class NavigationHandler(BaseStateHandler):
             self.machine.handlers[self.machine.STATE_BLOOD_ALTAR].handle(screen_img, rect)
             return
         
-        # 判斷是否需要執行地下城卡片掃描：
-        # - dungeon 模式：必然掃描
-        # - mix 模式：只有記憶體判定有可用地下城 (has_available_dungeon() == True) 時才掃描
-        should_scan_dungeons = False
+        # 判斷意圖是否需要地下城卡片掃描。真正的掃描還必須由畫面
+        # 證據確認 dungeon 頁籤已開啟；config 只代表想去哪裡，不能代表
+        # 現在在哪裡。
+        wants_dungeon_scan = False
         if config_type == "dungeon":
-            should_scan_dungeons = True
+            wants_dungeon_scan = True
         elif config_type == "mix":
-            should_scan_dungeons = self.machine.has_available_dungeon()
+            wants_dungeon_scan = self.machine.has_available_dungeon()
+        should_scan_dungeons = wants_dungeon_scan and dungeon_select_open
         
         # 為了避免在單元測試中使用 MagicMock 時 cv2 運算崩潰，僅在 screen_img 有 shape 屬性時執行 OpenCV 模板匹配
         is_dungeon_page = False
@@ -424,17 +565,36 @@ class NavigationHandler(BaseStateHandler):
                 logging.info("🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。")
                 
                 if not visible_dungeons:
-                    fallback_count = getattr(self.machine, "fallback_swipe_count", 0)
-                    if fallback_count < 3:
-                        logging.info("🧭 貪婪地下城：未見任何解鎖的卡片，執行防呆向右滑動拉回左側關卡...")
-                        CardListNavigator.reset_to_left(self.mouse, rect)
+                    fallback_count = self.card_alignment_attempts
+                    max_attempts = int(
+                        self.machine.config.get(
+                            "dungeon_reset_max_attempts",
+                            self.CARD_RESET_MAX_ATTEMPTS,
+                        )
+                    )
+                    if fallback_count < max_attempts:
+                        logging.info(
+                            "🧭 貪婪地下城：未見任何解鎖卡片，執行拉回左側 %d/%d 次。",
+                            fallback_count + 1,
+                            max_attempts,
+                        )
+                        CardListNavigator.reset_to_left(
+                            self.mouse,
+                            rect,
+                            duration=0.8,
+                            inertia=False,
+                        )
+                        self.notify_ui_progress()
                         self.machine.last_dungeon_scroll_time = time.time()
-                        self.machine.fallback_swipe_count = fallback_count + 1
+                        self.card_alignment_attempts = fallback_count + 1
                         time.sleep(1.2)
                     else:
-                        logging.warning("⚠️ 警告：已執行防呆拉回滑動但仍未發現解鎖卡片，判定目前無可打關卡...")
+                        logging.warning(
+                            "⚠️ 地下城拉回已達 %d 次，仍未發現解鎖卡片，開始 recovery。",
+                            max_attempts,
+                        )
                         if self.machine.config.get("type") == "mix":
-                            self.machine.fallback_swipe_count = 0
+                            self.card_alignment_attempts = 0
                             self._switch_to_stage_or_back(screen_img, rect, "地下城頁面經防呆滑動後仍無可打關卡")
                             return
                         pos_back = None
@@ -443,7 +603,7 @@ class NavigationHandler(BaseStateHandler):
                         if pos_back:
                             logging.info(f"👉 偵測到返回按鈕 [goback_town.png] (信心度: {conf_back:.4f})，點擊返回。")
                             self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-                            self.machine.fallback_swipe_count = 0  # 重置計數
+                            self.card_alignment_attempts = 0  # 重置計數
                             time.sleep(1.0)
                         else:
                             logging.warning("⚠️ 無法定位返回按鈕 [goback_town.png]，原地等待中...")
@@ -451,7 +611,7 @@ class NavigationHandler(BaseStateHandler):
                     return
                 
                 # 有找到解鎖卡片，重置防呆滑動計數
-                self.machine.fallback_swipe_count = 0
+                self.card_alignment_attempts = 0
                 
                 target_idx = None
                 is_greedy = self.machine.config.get("greedy_dungeon", False)

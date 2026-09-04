@@ -36,6 +36,15 @@ class SceneCatalog:
             SceneId.DUNGEON_SELECT: SceneDefinition(
                 SceneId.DUNGEON_SELECT, DetectionProfileId.DUNGEON_SELECT
             ),
+            SceneId.DOMAIN_SELECT: SceneDefinition(
+                SceneId.DOMAIN_SELECT, DetectionProfileId.DOMAIN_SELECT
+            ),
+            SceneId.LORD_SELECT: SceneDefinition(
+                SceneId.LORD_SELECT, DetectionProfileId.LORD_SELECT
+            ),
+            SceneId.DEMON_LORD_SELECT: SceneDefinition(
+                SceneId.DEMON_LORD_SELECT, DetectionProfileId.DEMON_LORD_SELECT
+            ),
             SceneId.STAGE_LOBBY: SceneDefinition(
                 SceneId.STAGE_LOBBY, DetectionProfileId.STAGE_SELECT
             ),
@@ -53,6 +62,9 @@ class SceneCatalog:
             ),
             SceneId.RESULT: SceneDefinition(
                 SceneId.RESULT, DetectionProfileId.RESULT
+            ),
+            SceneId.DOMAIN_EXPLORE: SceneDefinition(
+                SceneId.DOMAIN_EXPLORE, DetectionProfileId.DOMAIN
             ),
         }
     )

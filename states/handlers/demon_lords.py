@@ -3,6 +3,7 @@ import time
 import logging
 from enum import Enum
 from states.handlers.base import BaseStateHandler
+from utils.card_navigator import CardAlignmentStatus, CardListNavigator
 from utils.debug_artifacts import write_debug_image
 
 class DemonSubScene(str, Enum):
@@ -26,6 +27,8 @@ class DemonLordsHandler(BaseStateHandler):
         self.slot_no_reaction_count = 0
         self.launch_pending = False
         self.launch_started_at = None
+        self.card_alignment_complete = False
+        self.card_reset_attempts = 0
 
     def reset_state(self):
         self.current_target_boss = None
@@ -34,6 +37,8 @@ class DemonLordsHandler(BaseStateHandler):
         self.slot_no_reaction_count = 0
         self.launch_pending = False
         self.launch_started_at = None
+        self.card_alignment_complete = False
+        self.card_reset_attempts = 0
 
     def _get_configured_targets(self):
         cfg = self.machine.config or {}
@@ -125,6 +130,8 @@ class DemonLordsHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", card_template)):
             pos_card, conf = self.matcher.match(screen_img, card_template, threshold=self.BOSS_CARD_THRESHOLD, quiet=True)
             if pos_card:
+                self.card_alignment_complete = True
+                self.card_reset_attempts = 0
                 boss_name = boss_cfg.get("name", target_key)
                 logging.info(f"🎯 [深淵魔王] 點擊魔王卡片 [{boss_name}] ({conf:.4f}) 進入準備介面...")
                 self.mouse.click(rect["left"] + pos_card[0], rect["top"] + pos_card[1])
@@ -135,6 +142,62 @@ class DemonLordsHandler(BaseStateHandler):
                 logging.info(f"📋 [深淵魔王] 初始化鑲嵌計畫: {self.pending_stone_queue}")
                 time.sleep(0.6)
                 return True
+
+        if not self.card_alignment_complete:
+            bosses = self.machine.config.get("bosses", {})
+            first_key = next(iter(bosses), None)
+            first_template = bosses.get(first_key, {}).get("template") if first_key else None
+            if not first_template:
+                logging.error("Demon Lord card alignment has no first-card template.")
+                self.reset_state()
+                self.machine.request_relaunch(
+                    "demon_lord_card_alignment_config_missing"
+                )
+                return True
+            max_attempts = int(
+                self.machine.config.get("demon_lord_reset_max_attempts", 7)
+            )
+            status, attempts, confidence = CardListNavigator.align_first_card(
+                screen_img,
+                self.matcher,
+                self.mouse,
+                rect,
+                first_template,
+                self.card_reset_attempts,
+                max_attempts=max_attempts,
+                threshold=self.BOSS_CARD_THRESHOLD,
+                duration=0.8,
+                inertia=False,
+                match_options={"quiet": True},
+            )
+            self.card_reset_attempts = attempts
+            if status == CardAlignmentStatus.RETRYING:
+                logging.info(
+                    "🧭 [魔王討伐] 未見首張卡片 [%s]，執行拉回 %d/%d 次。",
+                    first_key,
+                    attempts,
+                    max_attempts,
+                )
+                self.notify_ui_progress()
+                time.sleep(1.2)
+                return True
+            if status == CardAlignmentStatus.EXHAUSTED:
+                logging.error(
+                    "❌ [魔王討伐] 拉回 %d 次仍未見首張卡片 [%s]，啟動重開復原。",
+                    max_attempts,
+                    first_key,
+                )
+                self.reset_state()
+                self.machine.request_relaunch("demon_lord_card_alignment_failed")
+                return True
+
+            self.card_alignment_complete = True
+            self.card_reset_attempts = 0
+            logging.info(
+                "🎯 [魔王討伐] 已確認首張卡片 [%s] (信心度: %.4f)。",
+                first_key,
+                confidence,
+            )
         return False
 
     def _step_handle_prepare_modal(self, screen_img, rect):

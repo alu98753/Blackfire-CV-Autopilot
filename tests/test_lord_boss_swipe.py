@@ -57,7 +57,9 @@ class TestLordBossSwipeLogic(unittest.TestCase):
         screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
         # 第一次呼叫 handle：第一個 Boss 未出現，執行向右拖曳拉回第 1 次
         self.handler.handle(screen_img, self.rect)
-        self.mock_mouse.drag.assert_called_once_with(300, 450, 900, 450)
+        self.mock_mouse.drag.assert_called_once_with(
+            300, 450, 900, 450, duration=0.8, inertia=False
+        )
         self.assertEqual(self.handler.reset_swipe_count, 1)
         self.assertFalse(self.handler.has_reset_to_left)
 
@@ -109,6 +111,22 @@ class TestLordBossSwipeLogic(unittest.TestCase):
 
         # 驗證發動向左滑動: 100 + 600 = 700 -> 100 + 400 = 500, duration=0.8, inertia=False
         self.mock_mouse.drag.assert_called_once_with(700, 450, 500, 450, duration=0.8, inertia=False)
+
+    @patch("states.handlers.lord_boss.time.sleep")
+    @patch("states.handlers.lord_boss.detect_cooldown_sign_and_time")
+    @patch("os.path.exists", return_value=True)
+    def test_lord_boss_reset_limit_relaunches(
+        self, _mock_exists, mock_detect_cd, _mock_sleep
+    ):
+        mock_detect_cd.return_value = (False, None, "")
+        self.handler.reset_swipe_count = 7
+
+        self.handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), self.rect)
+
+        self.mock_mouse.drag.assert_not_called()
+        self.mock_machine.request_relaunch.assert_called_once_with(
+            "lord_card_alignment_failed"
+        )
 
 if __name__ == "__main__":
     unittest.main()

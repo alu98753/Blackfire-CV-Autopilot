@@ -6,6 +6,7 @@ from states.handlers.battle import BattleHandler
 from states.domains.golden_empire import GoldenEmpireStrategy
 from states.handlers.navigation import NavigationHandler
 from states.state_machine import GameStateMachine
+from utils.scene_detector import SceneInfo, SceneType
 
 class TestBehaviorGoldenEmpire(unittest.TestCase):
     """
@@ -113,6 +114,137 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
             self.nav_handler.handle(mock_img, self.rect)
 
         self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
+
+    @patch("states.handlers.navigation.time.sleep")
+    @patch("states.handlers.navigation.CardListNavigator.reset_to_left")
+    @patch("os.path.exists", return_value=True)
+    def test_domain_tab_switch_then_resets_shared_card_position_to_left(
+        self,
+        _mock_exists,
+        mock_reset_to_left,
+        _mock_sleep,
+    ):
+        """After switching to Domains, a missing index-1 card triggers bounded left reset."""
+        self.nav_handler.scene_detector = MagicMock()
+        self.nav_handler.scene_detector.matcher = self.mock_machine.matcher
+        self.nav_handler.scene_detector.detect.side_effect = [
+            SceneInfo(scene_type=SceneType.LOBBY_OTHER, is_lobby=True),
+            SceneInfo(
+                scene_type=SceneType.DOMAIN_SELECT,
+                is_lobby=True,
+                active_tabs=["domain"],
+            ),
+        ]
+
+        def match_side_effect(_img, template, **_kwargs):
+            if template == "domains/Domains_entry.png":
+                return ((500, 700), 0.95)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.nav_handler.handle(MagicMock(), self.rect)
+        self.mock_machine.mouse.click.assert_called_once_with(500, 700)
+        mock_reset_to_left.assert_not_called()
+
+        self.mock_machine.mouse.click.reset_mock()
+        self.nav_handler.handle(MagicMock(), self.rect)
+
+        mock_reset_to_left.assert_called_once_with(
+            self.mock_machine.mouse,
+            self.rect,
+            duration=0.8,
+            inertia=False,
+        )
+        self.mock_machine.mouse.click.assert_not_called()
+        target_calls = [
+            call
+            for call in self.mock_machine.matcher.match.call_args_list
+            if call.args[1] == "domains/golden_empire/entry.png"
+        ]
+        self.assertTrue(target_calls)
+        self.assertTrue(
+            all(call.kwargs["brightness_threshold"] == 0.70 for call in target_calls)
+        )
+
+    @patch("states.handlers.navigation.time.sleep")
+    @patch("states.handlers.navigation.CardListNavigator.reset_to_left")
+    @patch("os.path.exists", return_value=True)
+    def test_domain_card_alignment_retains_attempts_across_flickering_tab_frames(
+        self,
+        _mock_exists,
+        mock_reset_to_left,
+        _mock_sleep,
+    ):
+        """Alignment attempts are preserved across transient tab detection misses."""
+        self.nav_handler.scene_detector = MagicMock()
+        self.nav_handler.scene_detector.matcher = self.mock_machine.matcher
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+
+        # 幀 1: 確認處於 Domain 頁籤且找不到第一張卡 -> 觸發第 1 次向右拉回
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.DOMAIN_SELECT,
+            is_lobby=True,
+            active_tabs=["domain"],
+        )
+        self.nav_handler.handle(MagicMock(), self.rect)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 1)
+        self.assertEqual(mock_reset_to_left.call_count, 1)
+
+        # 幀 2: 單幀掉幀或漏判頁籤 (LOBBY_OTHER, active_tabs 為空)
+        # 驗證: 絕不滑動，且嚴禁將 card_alignment_attempts 清空為 0！
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.LOBBY_OTHER,
+            is_lobby=True,
+            active_tabs=[],
+        )
+        handled = self.nav_handler.handle(MagicMock(), self.rect)
+        self.assertFalse(handled)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 1)
+        self.assertEqual(mock_reset_to_left.call_count, 1)
+
+        # 幀 3: 再次穩定辨識為 Domain 頁籤 -> 累加執行第 2 次拉回
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.DOMAIN_SELECT,
+            is_lobby=True,
+            active_tabs=["domain"],
+        )
+        self.nav_handler.handle(MagicMock(), self.rect)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 2)
+        self.assertEqual(mock_reset_to_left.call_count, 2)
+
+    @patch("states.handlers.navigation.time.sleep")
+    @patch("states.handlers.navigation.CardListNavigator.reset_to_left")
+    @patch("os.path.exists", return_value=True)
+    def test_domain_card_alignment_relaunches_after_bounded_reset_limit(
+        self,
+        _mock_exists,
+        mock_reset_to_left,
+        _mock_sleep,
+    ):
+        """Domain alignment reaches 7-attempt limit (EXHAUSTED), zeroes counter, and relaunches."""
+        self.nav_handler.scene_detector = MagicMock()
+        self.nav_handler.scene_detector.matcher = self.mock_machine.matcher
+        self.nav_handler.scene_detector.detect.return_value = SceneInfo(
+            scene_type=SceneType.DOMAIN_SELECT,
+            is_lobby=True,
+            active_tabs=["domain"],
+        )
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+        # 設定當前 target_tab 已經是 domain，且已達到上限 7 次
+        self.nav_handler.card_alignment_target_tab = "domain"
+        self.nav_handler.card_alignment_attempts = 7
+
+        self.nav_handler.handle(MagicMock(), self.rect)
+
+        # 不再發起滑動，避免無限滑動
+        mock_reset_to_left.assert_not_called()
+        # 驗證達到上限後正確觸發重啟並歸零嘗試計數
+        self.mock_machine.request_relaunch.assert_called_once_with(
+            "domain_card_alignment_failed"
+        )
+        self.assertIsNone(self.nav_handler.card_alignment_tab)
+        self.assertEqual(self.nav_handler.card_alignment_attempts, 0)
 
     # =========================================================================
     # 2. 領地主場景探索點擊行為測試
@@ -528,6 +660,72 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertEqual(sm.config["name"], "黃金古國")
         self.assertEqual(sm.config["type"], "domain")
         self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
+
+    # 12. UNKNOWN 狀態辨識出黃金古國主場景 (explore_btn.png) 精確轉移至 DOMAIN_EXPLORE
+    def test_unknown_state_detects_golden_empire_scene(self):
+        """
+        Given: 狀態機處於 UNKNOWN 全域定位，畫面出現黃金古國主場景特徵 (domains/golden_empire/explore_btn.png)
+        When: 執行 detect_game_state
+        Then: 精確斷言轉移至 STATE_DOMAIN_EXPLORE，絕不掉入 NAVIGATING 兜底
+        """
+        from states.state_machine import GameStateMachine
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.config = self.mock_machine.config.copy()
+        mock_screen = MagicMock()
+        
+        def fake_match(screen, template, threshold=0.8, **kwargs):
+            if template == "domains/golden_empire/explore_btn.png":
+                return (100, 200), 0.95
+            return None, 0.0
+
+        sm.matcher.match.side_effect = fake_match
+        sm.detect_current_state(mock_screen, self.rect)
+        self.assertEqual(sm.current_state, sm.STATE_DOMAIN_EXPLORE)
+
+    # 13. 戰鬥畫面結束回到黃金古國主場景時，觸發領地錨點自癒
+    def test_battle_recovery_to_domain_explore(self):
+        """
+        Given: 戰鬥狀態 (BATTLE) 下畫面已回到黃金古國主場景 (explore_btn.png)
+        When: 執行 BattleHandler.handle
+        Then: 觸發 [Battle recovery] Domain anchor，立即自癒恢復至 STATE_DOMAIN_EXPLORE
+        """
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_screen = MagicMock()
+
+        def fake_match(screen, template, threshold=0.8, **kwargs):
+            if template == "domains/golden_empire/explore_btn.png":
+                return (100, 200), 0.92
+            return None, 0.0
+
+        battle_handler.matcher.match.side_effect = fake_match
+        battle_handler.handle(mock_screen, self.rect)
+        self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
+
+    # 14. 首領討伐在領地內部激活時，觸發退場邊 (Egress Edge) 返回大廳
+    @patch("states.handlers.lord_boss.LordBossHandler.click_and_wait_until_gone")
+    def test_lord_boss_handler_egress_from_domain(self, mock_click_gone):
+        """
+        Given: 狀態機處於 STATE_LORD_BOSS，但實體畫面仍在領地內部 (出現 domains/common/exit_to_lobby.png)
+        When: 執行 LordBossHandler.handle
+        Then: 觸發領地退場邊 (Egress Edge)，點擊 exit_to_lobby.png 並返回 True
+        """
+        from states.handlers.lord_boss import LordBossHandler
+        self.mock_machine.daily_manager = MagicMock()
+        self.mock_machine.get_available_selected_lord_bosses.return_value = ["lord_spider"]
+        lord_handler = LordBossHandler(self.mock_machine)
+        mock_screen = MagicMock()
+
+        def fake_match(screen, template, threshold=0.8, **kwargs):
+            if template == "domains/common/exit_to_lobby.png":
+                return (50, 60), 0.90
+            return None, 0.0
+
+        lord_handler.matcher.match.side_effect = fake_match
+        lord_handler.match_mutually_exclusive_tabs = MagicMock(return_value=(False, None, None, 0.0))
+        res = lord_handler.handle(mock_screen, self.rect)
+        self.assertTrue(res)
+        mock_click_gone.assert_called_once()
+        self.assertEqual(mock_click_gone.call_args[0][0], "domains/common/exit_to_lobby.png")
 
 
 if __name__ == "__main__":

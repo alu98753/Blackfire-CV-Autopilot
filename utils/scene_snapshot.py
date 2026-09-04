@@ -14,12 +14,16 @@ class SceneId(str, Enum):
     BREAD_WINDOW = "bread_window"
     STAGE_SELECT = "stage_select"
     DUNGEON_SELECT = "dungeon_select"
+    DOMAIN_SELECT = "domain_select"
+    LORD_SELECT = "lord_select"
+    DEMON_LORD_SELECT = "demon_lord_select"
     STAGE_LOBBY = "stage_lobby"
     DUNGEON_LOBBY = "dungeon_lobby"
     DUNGEON_EXPLORING = "dungeon_exploring"
     LOADING = "loading"
     BATTLE = "battle"
     RESULT = "result"
+    DOMAIN_EXPLORE = "domain_explore"
 
 
 class ElementId(str, Enum):
@@ -29,6 +33,8 @@ class ElementId(str, Enum):
     BREAD_ENTRY = "bread_entry"
     START = "start"
     CLOSE_OVERLAY = "close_overlay"
+    EXIT_TO_LOBBY = "exit_to_lobby"
+    DOMAIN_EXPLORE_BTN = "domain_explore_btn"
 
 
 class OverlayId(str, Enum):
@@ -39,6 +45,9 @@ class OverlayId(str, Enum):
 class TabId(str, Enum):
     STAGE = "stage"
     DUNGEON = "dungeon"
+    DOMAIN = "domain"
+    LORD = "lord"
+    DEMON_LORD = "demon_lord"
 
 
 class DetectionProfileId(str, Enum):
@@ -47,9 +56,13 @@ class DetectionProfileId(str, Enum):
     LOBBY = "lobby"
     STAGE_SELECT = "stage_select"
     DUNGEON_SELECT = "dungeon_select"
+    DOMAIN_SELECT = "domain_select"
+    LORD_SELECT = "lord_select"
+    DEMON_LORD_SELECT = "demon_lord_select"
     LOADING = "loading"
     BATTLE = "battle"
     RESULT = "result"
+    DOMAIN = "domain"
 
 
 @dataclass(frozen=True)
@@ -84,11 +97,15 @@ _SCENE_TYPE_MAP = {
     "TOWN": SceneId.TOWN,
     "LOBBY_STAGE": SceneId.STAGE_SELECT,
     "LOBBY_DUNGEON": SceneId.DUNGEON_SELECT,
+    "DOMAIN_SELECT": SceneId.DOMAIN_SELECT,
+    "LORD_SELECT": SceneId.LORD_SELECT,
+    "DEMON_LORD_SELECT": SceneId.DEMON_LORD_SELECT,
     "LOBBY_OTHER": SceneId.LOBBY,
     "WINDOW_DIAMOND": SceneId.DIAMOND_WINDOW,
     "WINDOW_BREAD": SceneId.BREAD_WINDOW,
     "IN_DUNGEON": SceneId.DUNGEON_EXPLORING,
     "DUNGEON_PREPARE": SceneId.DUNGEON_LOBBY,
+    "DOMAIN_EXPLORE": SceneId.DOMAIN_EXPLORE,
 }
 
 _ELEMENT_TEMPLATE_MAP = {
@@ -97,6 +114,8 @@ _ELEMENT_TEMPLATE_MAP = {
     "goback_town.png": ElementId.GOBACK_TOWN,
     "common/bread.png": ElementId.BREAD_ENTRY,
     "common/quit.png": ElementId.CLOSE_OVERLAY,
+    "domains/common/exit_to_lobby.png": ElementId.EXIT_TO_LOBBY,
+    "domains/golden_empire/explore_btn.png": ElementId.DOMAIN_EXPLORE_BTN,
 }
 
 

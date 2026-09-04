@@ -1,5 +1,12 @@
 import time
 import logging
+from enum import Enum
+
+
+class CardAlignmentStatus(str, Enum):
+    ALIGNED = "aligned"
+    RETRYING = "retrying"
+    EXHAUSTED = "exhausted"
 
 class CardListNavigator:
     """
@@ -9,7 +16,13 @@ class CardListNavigator:
     """
 
     @staticmethod
-    def is_first_card_visible(screen_img, matcher, first_card_template, threshold=0.75):
+    def is_first_card_visible(
+        screen_img,
+        matcher,
+        first_card_template,
+        threshold=0.75,
+        **match_options,
+    ):
         """
         檢查第一個卡片 (起點關卡/Boss) 是否已經出現在畫面上
         :param screen_img: 螢幕截圖
@@ -21,7 +34,12 @@ class CardListNavigator:
         if not first_card_template or matcher is None or screen_img is None:
             return False, None, 0.0
         try:
-            pos, conf = matcher.match(screen_img, first_card_template, threshold=threshold)
+            pos, conf = matcher.match(
+                screen_img,
+                first_card_template,
+                threshold=threshold,
+                **match_options,
+            )
             if pos is not None:
                 return True, pos, conf
         except Exception as e:
@@ -47,6 +65,51 @@ class CardListNavigator:
         if inertia is not None:
             kwargs["inertia"] = inertia
         mouse.drag(start_x, y_pos, end_x, y_pos, **kwargs)
+
+    @classmethod
+    def align_first_card(
+        cls,
+        screen_img,
+        matcher,
+        mouse,
+        rect,
+        first_card_template,
+        attempt_count,
+        *,
+        max_attempts=7,
+        threshold=0.78,
+        duration=0.8,
+        inertia=False,
+        match_options=None,
+    ):
+        """Perform one bounded left-alignment step and report its postcondition.
+
+        A reset is successful only when the first-card template is observed on a
+        later frame. Reaching the attempt limit is therefore an explicit failure,
+        never an implicit success.
+        """
+        is_visible, _, confidence = cls.is_first_card_visible(
+            screen_img,
+            matcher,
+            first_card_template,
+            threshold=threshold,
+            **(match_options or {}),
+        )
+        if is_visible:
+            return CardAlignmentStatus.ALIGNED, 0, confidence
+
+        normalized_attempts = max(0, int(attempt_count))
+        normalized_limit = max(1, int(max_attempts))
+        if normalized_attempts >= normalized_limit:
+            return CardAlignmentStatus.EXHAUSTED, normalized_attempts, confidence
+
+        cls.reset_to_left(
+            mouse,
+            rect,
+            duration=duration,
+            inertia=inertia,
+        )
+        return CardAlignmentStatus.RETRYING, normalized_attempts + 1, confidence
 
     @staticmethod
     def swipe_left_page(mouse, rect, duration=0.8, inertia=False):

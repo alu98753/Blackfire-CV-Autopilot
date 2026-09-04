@@ -34,6 +34,9 @@ class ResultHandler(BaseStateHandler):
     def _commit_demon_lords_result(self):
         """Commit one verified fight and return control to the Demon Lords workflow."""
         boss_key = getattr(self.machine, "current_demon_lord_key", None)
+        if boss_key is None:
+            return False
+
         daily_manager = getattr(self.machine, "daily_manager", None)
         if daily_manager is not None:
             daily_manager.record_demon_lords_fight(boss_key)
@@ -272,6 +275,9 @@ class ResultHandler(BaseStateHandler):
             logging.info("⚔️ [Tier 4 插隊] 偵測到領主 Boss 冷卻結束可挑戰；本場結算後離場並切回 Boss 討伐。")
 
         should_exit_battle = (
+            getattr(self.machine, "current_demon_lord_key", None) is not None or
+            getattr(self.machine, "current_lord_boss_key", None) is not None or
+            cur_type in ["lord_boss", "demon_lords"] or
             getattr(self.machine, "pending_daily_reset_exit", False) or
             self.machine.stamina_retreat_start_time is not None or
             self.machine.need_bag_cleaning or 
@@ -368,6 +374,8 @@ class ResultHandler(BaseStateHandler):
                             self.machine.is_in_dungeon = False
                             self.machine.pending_daily_reset_exit = False
                             if self._commit_lord_boss_result():
+                                return True
+                            if self._commit_demon_lords_result():
                                 return True
 
                             self.reset_state()

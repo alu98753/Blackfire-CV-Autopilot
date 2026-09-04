@@ -92,12 +92,17 @@ nemesis_templates = [
     "domains/golden_empire/exception/golden_wall_guard_tulan.png"
 ]
 navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/golden_empire/entry.png", "domains/common/start_btn.png"]
+domain_tab_btn = "domains/Domains_entry.png"
+domain_tab_after_btn = "domains/Domains_entry_after.png"
+domain_entry_btn = "domains/golden_empire/entry.png"
+domain_reset_max_attempts = 7
 explore_priorities = ["domains/golden_empire/explore_btn.png"]
 result_buttons = ["common/continue.png", "common/continue_gray.png"]
 
 [primary_modes.stage]
 name = "普通關卡"
 type = "stage"
+stage_reset_max_attempts = 7
 dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
@@ -109,6 +114,7 @@ result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gr
 [primary_modes.dungeon]
 name = "地下城"
 type = "dungeon"
+dungeon_reset_max_attempts = 7
 dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
 stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
@@ -321,6 +327,7 @@ Wolf_skin = true
 [subflow_configs.lord_boss]
 name = "首領領主討伐"
 type = "lord_boss"
+lord_reset_max_attempts = 7
 entry_btn = "load/Lord_entry.png"
 entry_after_btn = "load/Lord_entry_after.png"
 start_btn = "stages/start.png"
@@ -348,9 +355,11 @@ cooldown_seconds = 10800.0
 enabled = true
 name = "深淵魔王"
 type = "demon_lords"
+demon_lord_reset_max_attempts = 7
 entry_btn = "demon_lords/demon_lords_entry.png"
 entry_after_btn = "demon_lords/demon_lords_entry_after.png"
 start_btn = "stages/start.png"
+result_buttons = ["common/continue.png", "common/continue1.png", "common/continue2.png", "common/continue_gray.png"]
 stone_container_btn = "demon_lords/meterial/stone_slot.png"
 empty_slot_btn = "demon_lords/meterial/slot.png"
 choose_btn = "common/choose.png"

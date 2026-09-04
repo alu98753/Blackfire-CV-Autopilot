@@ -40,6 +40,15 @@ class DetectorRegistry:
                 DetectorGroup.DUNGEON,
             }
         ),
+        DetectionProfileId.DOMAIN_SELECT: frozenset(
+            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+        ),
+        DetectionProfileId.LORD_SELECT: frozenset(
+            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+        ),
+        DetectionProfileId.DEMON_LORD_SELECT: frozenset(
+            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+        ),
         DetectionProfileId.LOADING: frozenset({DetectorGroup.SAFETY}),
         DetectionProfileId.BATTLE: frozenset({DetectorGroup.SAFETY}),
         DetectionProfileId.RESULT: frozenset({DetectorGroup.SAFETY}),
@@ -74,6 +83,12 @@ class DetectorRegistry:
         if template_name in {
             "common/select_stage_after.png",
             "dungeons/dungeon_after.png",
+            "domains/Domains_entry.png",
+            "domains/Domains_entry_after.png",
+            "load/Lord_entry.png",
+            "load/Lord_entry_after.png",
+            "demon_lords/demon_lords_entry.png",
+            "demon_lords/demon_lords_entry_after.png",
             "common/locked_entry.png",
         }:
             return DetectorGroup.TABS

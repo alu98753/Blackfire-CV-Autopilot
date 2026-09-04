@@ -5,7 +5,7 @@ import logging
 from states.handlers.base import BaseStateHandler
 from utils.time_parser import format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
-from utils.card_navigator import CardListNavigator
+from utils.card_navigator import CardAlignmentStatus, CardListNavigator
 
 class LordBossHandler(BaseStateHandler):
     """
@@ -19,6 +19,7 @@ class LordBossHandler(BaseStateHandler):
         self.current_target_boss = None
         self.last_card_click_time = 0.0
         self.has_reset_to_left = False
+        self.reset_swipe_count = 0
         self.last_lord_scroll_time = 0.0
 
     def reset_state(self):
@@ -105,6 +106,17 @@ class LordBossHandler(BaseStateHandler):
         # 2. 若頁籤尚未開啟，進行大廳入口與頁籤點擊
         if not is_opened:
             self.has_reset_to_left = False  # 頁籤未開啟前重置拉左旗標
+
+            # 2.0 檢查是否身處領地內部 (如黃金古國)，需先點擊退出領地按鈕退回大廳 (Navigation Egress Edge)
+            exit_domain_btn = "domains/common/exit_to_lobby.png"
+            if os.path.exists(os.path.join("templates", exit_domain_btn)):
+                pos_exit, conf_exit = self.matcher.match(screen_img, exit_domain_btn, threshold=0.75, quiet=True)
+                if pos_exit:
+                    logging.info(f"🚪 [首領討伐 ➔ 領地退場] 偵測到處於領地內部按鈕 [{exit_domain_btn}] (信心度: {conf_exit:.4f})，點擊退出領地以返回大廳...")
+                    self.click_and_wait_until_gone(exit_domain_btn, rect["left"] + pos_exit[0], rect["top"] + pos_exit[1], rect, threshold=0.75)
+                    time.sleep(0.3)
+                    return True
+
             # 先檢查是否在城鎮，需要點擊門進入大廳
             pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.85)
             if pos_door:
@@ -192,30 +204,52 @@ class LordBossHandler(BaseStateHandler):
             bosses_config = self.machine.config.get("bosses", {})
             first_boss_key = list(bosses_config.keys())[0] if bosses_config else None
             first_template = bosses_config.get(first_boss_key, {}).get("template") if first_boss_key else None
-            
-            # 檢查第一個 Boss (起點) 是否已經在畫面上
-            is_start_visible = False
-            conf_first = 0.0
-            if first_template:
-                is_start_visible, _, conf_first = CardListNavigator.is_first_card_visible(screen_img, self.matcher, first_template, threshold=0.78)
-            
-            if is_start_visible:
+            if not first_template:
+                logging.error("Lord card alignment has no first-card template.")
+                self.reset_state()
+                self.machine.request_relaunch("lord_card_alignment_config_missing")
+                return True
+            max_attempts = int(
+                self.machine.config.get("lord_reset_max_attempts", 7)
+            )
+            status, attempts, conf_first = CardListNavigator.align_first_card(
+                screen_img,
+                self.matcher,
+                self.mouse,
+                rect,
+                first_template,
+                self.reset_swipe_count,
+                max_attempts=max_attempts,
+                threshold=0.78,
+                duration=0.8,
+                inertia=False,
+            )
+            self.reset_swipe_count = attempts
+
+            if status == CardAlignmentStatus.ALIGNED:
                 logging.info(f"🎯 [首領討伐] 偵測到第一個 Boss (起點) [{first_boss_key}] (信心度: {conf_first:.4f})，已確立回歸最左側起點！")
                 self.has_reset_to_left = True
                 self.reset_swipe_count = 0
+            elif status == CardAlignmentStatus.RETRYING:
+                logging.info(
+                    "🧭 [首領討伐] 未見第一個 Boss [%s]，執行拉回 %d/%d 次。",
+                    first_boss_key,
+                    attempts,
+                    max_attempts,
+                )
+                self.notify_ui_progress()
+                self.last_lord_scroll_time = now
+                time.sleep(1.2)
+                return True
             else:
-                reset_count = getattr(self, "reset_swipe_count", 0)
-                if reset_count < 4:
-                    logging.info(f"🧭 [首領討伐] 未見第一個 Boss [{first_boss_key}] (起點)，執行向右滑動拖曳拉回第 {reset_count + 1}/4 次...")
-                    CardListNavigator.reset_to_left(self.mouse, rect)
-                    self.reset_swipe_count = reset_count + 1
-                    self.last_lord_scroll_time = now
-                    time.sleep(1.2)
-                    return True
-                else:
-                    logging.warning("⚠️ [首領討伐] 已連續向右拉動 4 次仍未見第一個 Boss，預設已達極限，停止拉回。")
-                    self.has_reset_to_left = True
-                    self.reset_swipe_count = 0
+                logging.error(
+                    "❌ [首領討伐] 拉回 %d 次仍未見第一個 Boss [%s]，啟動重開復原。",
+                    max_attempts,
+                    first_boss_key,
+                )
+                self.reset_state()
+                self.machine.request_relaunch("lord_card_alignment_failed")
+                return True
 
         # 滑動冷卻保護：若剛執行過滾動滑動，等待動畫完全靜止
         if now - self.last_lord_scroll_time < 1.2:

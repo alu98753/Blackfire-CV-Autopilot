@@ -227,6 +227,9 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         # 模擬 match_side_effect 用於大廳/尋路 (如果有比對的話)
         self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
         
         # 用於模擬 cv2.imread
@@ -297,6 +300,9 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         # 模擬 match_side_effect 用於大廳/尋路
         self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
         
         # 模擬 matchTemplate / minMaxLoc 的呼叫次數
@@ -359,6 +365,9 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         mock_exists.return_value = True
         self.mock_matcher.match.return_value = (None, 0.0)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
         
         def mock_minMaxLoc_impl_cooldown(res):
@@ -385,6 +394,9 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         self.state_machine.config["navigation_path"] = ["dungeons/Slime_entry.png"]
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         self.state_machine.dungeon_cooldowns = {}
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
         
         # 模擬比對到冷卻木牌的 side effect
@@ -453,6 +465,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         # 模擬目標關卡已經缺失 2.0 秒，使等待緩衝期已過
         self.state_machine.__setattr__("missing_time_stages/level4_desert_ruins.png", time.time() - 2.0)
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_tab = "stage"
         
         self.state_machine.step()
         
@@ -605,15 +619,18 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
     def test_dungeon_navigation_stuck_exit(self, mock_minMaxLoc, mock_imread, mock_exists):
         """
         測試地下城選單選關卡卡死自癒退出邏輯：
-        當 `fallback_swipe_count` >= 3，且 visible_dungeons 為空時，
-        應自動尋找並點擊返回按鈕 `goback_town.png`，並重置 `fallback_swipe_count` 為 0。
+        當 `card_alignment_attempts` >= 7，且 visible_dungeons 為空時，
+        應自動尋找並點擊返回按鈕 `goback_town.png`，並重置 `card_alignment_attempts` 為 0。
         """
         config = GAME_CONFIGS["dungeon"].copy()
         config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
         self.state_machine.config = config
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.fallback_swipe_count = 3
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
+        nav_h.card_alignment_attempts = 7
+        nav_h.card_alignment_tab = "dungeon"
         
         mock_exists.return_value = True
         self.mock_capturer.get_window_rect.return_value = {"left": 100, "top": 100, "width": 1000, "height": 800}
@@ -639,6 +656,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         def match_side_effect(img, name, threshold=None, **kwargs):
             if name == "goback_town.png":
                 return ((50, 50), 0.9)
+            if name == "dungeons/dungeon_after.png":
+                return ((200, 200), 0.9)
             return (None, 0.0)
         self.mock_matcher.match.side_effect = match_side_effect
         
@@ -648,8 +667,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         # 驗證點擊了返回按鈕 (100 + 50 = 150, 100 + 50 = 150)
         self.mock_mouse.click.assert_called_once_with(150, 150)
-        # 驗證 `fallback_swipe_count` 已經被重置為 0
-        self.assertEqual(self.state_machine.fallback_swipe_count, 0)
+        # 驗證 `card_alignment_attempts` 已經被重置為 0
+        self.assertEqual(nav_h.card_alignment_attempts, 0)
 
     @patch('os.path.exists')
     def test_auto_resume_dungeon_full_cycle_and_re_retreat(self, mock_exists):
