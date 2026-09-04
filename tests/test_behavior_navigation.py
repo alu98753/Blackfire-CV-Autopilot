@@ -468,8 +468,8 @@ class TestBehaviorNavigation(unittest.TestCase):
 
         self.handler.handle(mock_img, self.rect)
 
-        # 驗證發射 mouse.drag 向下拖曳
-        self.mock_machine.mouse.drag.assert_called_once()
+        # 驗證發射 mouse.drag 向下滾動 (手勢向上拖曳：960, 640 -> 960, 440)
+        self.mock_machine.mouse.drag.assert_called_once_with(960, 640, 960, 440)
 
     @patch("os.path.exists")
     def test_1_9_diamond_collection_closes_sub_modal_first_when_retreating(self, mock_exists):
@@ -558,6 +558,77 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.handler.handle(mock_img, self.rect)
         # 斷言：精確點擊真實第六關座標 (600, 780)
         self.mock_machine.mouse.click.assert_called_once_with(600, 780)
+
+    @patch("os.path.exists")
+    def test_1_12_stage_label_detected_first_missing_drags_up(self, mock_exists):
+        """
+        [1.12 Behavior Test]
+        Given: 偵測到關卡背景 stages/stage_label.png，目標為第一小關 stages/first_stage.png，
+               畫面上未見 first_stage 但看見 level1_final.png (代表視野在底部)
+        When: 執行 NavigationHandler.handle()
+        Then: 自適應判定目標在上方，發射 mouse.drag 手勢向上滾動畫面 (手勢向下拖曳: 960, 440 -> 960, 640)
+        """
+        import time
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        self.mock_machine.config = {
+            "name": "測試關卡",
+            "type": "stage",
+            "navigation_path": ["common/door.png", "stages/first_stage.png"]
+        }
+        setattr(self.mock_machine, "missing_time_stages/first_stage.png", time.time() - 2.0)
+        self.mock_machine.last_stage_scroll_time = 0.0
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/stage_label.png":
+                return ((100, 200), 0.85)
+            if template == "stages/level1_final.png":
+                return ((300, 700), 0.90)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        # 驗證自適應發射 mouse.drag 向上滾動 (手勢向下拖曳：960, 440 -> 960, 640)
+        self.mock_machine.mouse.drag.assert_called_once_with(960, 440, 960, 640)
+
+    @patch("os.path.exists")
+    def test_1_13_sub_stage_scroll_exhausted_triggers_recovery(self, mock_exists):
+        """
+        [1.13 Behavior Test]
+        Given: 偵測到關卡背景 stages/stage_label.png，目標為 stages/first_stage.png，但已連續滑動達到上限 (attempts=5)
+        When: 執行 NavigationHandler.handle()
+        Then: 觸發有界恢復流程 request_relaunch("sub_stage_scroll_exhausted")
+        """
+        import time
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        self.mock_machine.config = {
+            "name": "測試關卡",
+            "type": "stage",
+            "sub_stage_scroll_max_attempts": 5,
+            "navigation_path": ["common/door.png", "stages/first_stage.png"]
+        }
+        setattr(self.mock_machine, "missing_time_stages/first_stage.png", time.time() - 2.0)
+        self.mock_machine.last_stage_scroll_time = 0.0
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self.handler.sub_stage_scroll_attempts = 5
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/stage_label.png":
+                return ((100, 200), 0.85)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        self.mock_machine.request_relaunch.assert_called_once_with("sub_stage_scroll_exhausted")
+        self.assertEqual(self.handler.sub_stage_scroll_attempts, 0)
 
 
 if __name__ == "__main__":
