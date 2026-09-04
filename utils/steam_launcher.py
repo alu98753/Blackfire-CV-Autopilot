@@ -41,6 +41,7 @@ class SteamGameLauncher:
         self.game_title = game_title
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
+        self.hwnd = hwnd
         self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode, monitor_index=monitor_index, hwnd=hwnd)
         self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode, hwnd=hwnd)
         self.matcher = matcher or TemplateMatcher()
@@ -80,14 +81,20 @@ class SteamGameLauncher:
 
         return None, 0.0
 
-    def ensure_game_ready(self) -> bool:
+    def ensure_game_ready(self, force_relaunch: bool = False) -> bool:
         """
         全流程開關與登入檢測入口：
-        1. 判斷 is_game_open()
-        2. 若未開啟，發起 run_launch_subflow() 直連啟動遊戲並等待 HWND 視窗建立
-        3. 確保視窗定位至 1 號筆電螢幕並最大化全螢幕後，立即返回 True，將登入與狀態診斷 100% 交由主狀態機處理
+        1. 若 force_relaunch 為 True，強制關閉舊遊戲進程
+        2. 判斷 is_game_open()
+        3. 若未開啟，發起 run_launch_subflow() 直連啟動遊戲並等待 HWND 視窗建立
+        4. 確保視窗定位至指定螢幕並最大化全螢幕後，立即返回 True，將登入與狀態診斷 100% 交由主狀態機處理
         """
-        logging.info("[SteamGameLauncher] 開始執行 ensure_game_ready 檢查與啟動流程...")
+        logging.info("[SteamGameLauncher] 開始執行 ensure_game_ready 檢查與啟動流程 (force_relaunch=%s)...", force_relaunch)
+
+        if force_relaunch:
+            logging.info("🔥 [SteamGameLauncher] force_relaunch 啟用，強制終止現有遊戲進程...")
+            from utils.game_process import terminate_game_process
+            terminate_game_process(game_title=self.game_title, hwnd=self.hwnd)
 
         if not self.is_game_open():
             logging.info("🌐 偵測到遊戲未開啟，發起 Steam 啟動 Subflow...")
@@ -99,7 +106,7 @@ class SteamGameLauncher:
         if hasattr(self.capturer, "ensure_window_on_monitor"):
             self.capturer.ensure_window_on_monitor()
 
-        logging.info("🎉 視窗已成功定位至 1 號筆電螢幕並最大化！立即交由主狀態機接管。")
+        logging.info("🎉 視窗已成功定位至指定螢幕並最大化！立即交由主狀態機接管。")
         return True
 
     def is_game_open(self) -> bool:

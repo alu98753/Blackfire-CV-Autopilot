@@ -1,12 +1,13 @@
 import os
 import time
 import logging
-import subprocess
 from states.exceptions.subflows.base import BaseExceptionSubflow
 from runtime.incident_journal import record_recovery
 from utils.steam_launcher import SteamGameLauncher
 from utils.sandbox_manager import SandboxManager
 from config import WINDOW_TITLE
+
+from utils.game_process import terminate_game_process
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
@@ -36,35 +37,11 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         }
         record_recovery(machine, "game_relaunch_started", incident_details)
 
-        current_script_pid = os.getpid()
-        logging.info(f'💥 [GameRelaunchSubflow] 發起目標實例終止 (標題: {game_title}, 沙盒: {is_sandbox}, 腳本 PID: {current_script_pid})...')
+        target_hwnd = None
+        if hasattr(machine, 'capturer') and machine.capturer:
+            target_hwnd = machine.capturer.get_hwnd()
 
-        try:
-            import win32gui
-            import win32process
-
-            target_hwnd = None
-            if hasattr(machine, 'capturer') and machine.capturer:
-                target_hwnd = machine.capturer.get_hwnd()
-            if not target_hwnd or not win32gui.IsWindow(target_hwnd):
-                target_hwnd = win32gui.FindWindow(None, game_title)
-
-            if target_hwnd and win32gui.IsWindow(target_hwnd):
-                _, pid = win32process.GetWindowThreadProcessId(target_hwnd)
-                if pid and pid != current_script_pid:
-                    logging.info(f'💥 [GameRelaunchSubflow] 偵測到目標進程 PID: {pid}，執行精確 taskkill /f /pid {pid}...')
-                    subprocess.run(f'taskkill /f /pid {pid}', shell=True, capture_output=True)
-
-            start_k_time = time.time()
-            while time.time() - start_k_time < 5.0:
-                h_check = win32gui.FindWindow(None, game_title)
-                if not h_check:
-                    logging.info('✅ [GameRelaunchSubflow] 目標遊戲視窗與進程已確定完全終止！')
-                    break
-                time.sleep(0.3)
-        except Exception as e:
-            logging.error(f'❌ 終止遊戲進程時發生異常: {e}')
-
+        terminate_game_process(game_title=game_title, hwnd=target_hwnd)
         time.sleep(2.0)
 
         logging.info('🚀 [GameRelaunchSubflow] 調用 SteamGameLauncher 發起專屬遊戲直連啟動與視窗定位...')

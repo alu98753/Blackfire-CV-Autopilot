@@ -78,9 +78,13 @@ def prepare_child_command(command: Sequence[str], session_id: str) -> list[str]:
     return [*prepared, "--incident-session-id", session_id]
 
 
-def prepare_resume_command(command: Sequence[str], heartbeat: dict[str, object]) -> list[str]:
+def prepare_resume_command(
+    command: Sequence[str],
+    heartbeat: dict[str, object],
+    restart_game: bool = False,
+) -> list[str]:
     """Preserve first-run CLI options and restore the selected instance on restart."""
-    resumed = list(command)
+    resumed = [tok for tok in command if tok != "--restart-game"]
     options = set(resumed)
     for option, field in (("--target", "target"), ("--profile", "profile")):
         value = heartbeat.get(field)
@@ -88,6 +92,8 @@ def prepare_resume_command(command: Sequence[str], heartbeat: dict[str, object])
             resumed.extend((option, value.strip()))
     if "--resume" not in options:
         resumed.append("--resume")
+    if restart_game:
+        resumed.append("--restart-game")
     return resumed
 
 
@@ -303,7 +309,12 @@ def supervise(
                     "last_heartbeat": last_heartbeat.get("timestamp"),
                 },
             )
-        launch_command = prepare_resume_command(launch_command, read_heartbeat(heartbeat_path))
+        need_restart_game = scheduled_restart or (termination_reason == "heartbeat_stale")
+        launch_command = prepare_resume_command(
+            launch_command,
+            read_heartbeat(heartbeat_path),
+            restart_game=need_restart_game,
+        )
         restart_count = 0 if scheduled_restart else restart_count + 1
         delay = min(60.0, 2.0 ** min(restart_count, 5))
         if scheduled_restart:

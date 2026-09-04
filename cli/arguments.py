@@ -36,5 +36,9 @@ def parse_arguments():
         "--resume", action="store_true",
         help="Supervisor restart: reuse the selected profile and skip startup prompts.",
     )
+    parser.add_argument(
+        "--restart-game", action="store_true", default=False,
+        help="強制關閉現有遊戲視窗並由 Steam 重新拉起遊戲 (用於定時維護或嚴重卡死自癒)",
+    )
     parser.add_argument("--incident-session-id", type=str, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()

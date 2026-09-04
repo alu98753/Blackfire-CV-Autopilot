@@ -159,6 +159,19 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertTrue(args.resume)
         self.assertEqual(args.target, "sandbox")
 
+    def test_argument_parser_accepts_restart_game_flag(self):
+        with patch("sys.argv", ["main.py", "--profile", "native", "--resume", "--restart-game"]):
+            args = main.parse_arguments()
+
+        self.assertTrue(args.resume)
+        self.assertTrue(args.restart_game)
+
+    def test_argument_parser_defaults_restart_game_to_false(self):
+        with patch("sys.argv", ["main.py", "--profile", "native", "--resume"]):
+            args = main.parse_arguments()
+
+        self.assertFalse(args.restart_game)
+
     def test_profile_selection_prefers_explicit_profile_then_target_then_window_title(self):
         self.assertEqual(main.resolve_profile_name(make_args(profile="ACC2"), "[#] Game"), "acc2")
         self.assertEqual(main.resolve_profile_name(make_args(target="sandbox"), "Game"), "sandbox")
