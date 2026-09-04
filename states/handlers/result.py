@@ -250,6 +250,10 @@ class ResultHandler(BaseStateHandler):
             demon_available = getattr(self.machine, "has_available_demon_lords", lambda: False)()
             boss_available = self.machine.has_available_selected_lord_boss()
 
+        daily_dungeon_available = (
+            is_daily and self.machine.has_available_daily_dungeon()
+        )
+
         is_in_tier4 = is_daily and self.machine.config.get("is_tier4_fallback", False)
         quest_batch_completed = False
         has_higher_priority_task = False
@@ -273,6 +277,8 @@ class ResultHandler(BaseStateHandler):
             logging.info("👑 [Tier 4 插隊] 偵測到深淵魔王次數未用盡；本場結算後離場並切回魔王討伐。")
         elif is_daily and boss_available:
             logging.info("⚔️ [Tier 4 插隊] 偵測到領主 Boss 冷卻結束可挑戰；本場結算後離場並切回 Boss 討伐。")
+        elif is_daily and is_in_tier4 and daily_dungeon_available:
+            logging.info("🏰 [Tier 4 插隊] 偵測到週期地下城冷卻結束；本場結算後離場並切回地下城探索。")
 
         should_exit_battle = (
             getattr(self.machine, "current_demon_lord_key", None) is not None or
@@ -286,6 +292,7 @@ class ResultHandler(BaseStateHandler):
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
             (is_daily and demon_available) or
             (is_daily and boss_available) or
+            (is_daily and is_in_tier4 and daily_dungeon_available) or
             daily_quest_ready_to_preempt_tier4 or
             (is_daily and quest_batch_completed and not is_in_tier4) or
             (is_daily and has_higher_priority_task and not is_in_tier4)

@@ -269,6 +269,144 @@ class TestDailyTier4Behavior(unittest.TestCase):
             self.assertEqual(handler.card_alignment_tab, "stage")
 
 
+    def test_tier4_stage_with_enable_dungeon_true_exits_on_cooldown_ready(self):
+        import numpy as np
+        from states.handlers.result import ResultHandler
+
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "daily",
+            "tier4_mode": "stage",
+            "enable_stage_farming": True,
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [1, 2],
+            "dungeon_entries": ["dungeons/Ice_entry.png"],
+            "dungeon_names": ["Ice"],
+        }
+        machine.config = {
+            "name": "Tier 4 退守",
+            "type": "stage",
+            "is_tier4_fallback": True,
+            "enable_stage_farming": True,
+            "enable_dungeon": True,
+            "greedy_dungeon": False,
+        }
+        machine.dungeon_cooldowns = {1: 0.0}
+        machine.quest_scheduler = None
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.is_subflow_completed.return_value = True
+        machine.daily_manager.has_available_lord_boss.return_value = False
+        machine.daily_manager.has_available_demon_lords.return_value = False
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+
+        self.assertTrue(machine.has_available_daily_dungeon())
+
+        handler = ResultHandler(machine)
+        handler.subflow_step = "FINAL_MATCH"
+        machine.transition_to = MagicMock()
+
+        def match_exit_or_retry(_screen, template, **_kwargs):
+            if template == "exit_battle.png":
+                return (500, 500), 0.95
+            if template == "stages/retry.png":
+                return (700, 500), 0.95
+            return None, 0.0
+
+        machine.matcher.match.side_effect = match_exit_or_retry
+        fake_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        with patch("os.path.exists", return_value=True), \
+             patch.object(handler, "click_and_wait_until_gone") as mock_click:
+            handler.handle(fake_screen, rect)
+
+            mock_click.assert_called_once()
+            self.assertEqual(mock_click.call_args[0][0], "exit_battle.png")
+            machine.transition_to.assert_called_once_with(machine.STATE_NAVIGATING)
+
+    def test_tier4_stage_with_enable_dungeon_false_retries_stage(self):
+        import numpy as np
+        from states.handlers.result import ResultHandler
+
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "daily",
+            "tier4_mode": "stage",
+            "enable_stage_farming": True,
+            "enable_dungeon": False,
+        }
+        machine.config = {
+            "name": "Tier 4 退守",
+            "type": "stage",
+            "is_tier4_fallback": True,
+            "enable_stage_farming": True,
+            "enable_dungeon": False,
+        }
+        machine.dungeon_cooldowns = {1: 0.0}
+        machine.quest_scheduler = None
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.is_subflow_completed.return_value = True
+        machine.daily_manager.has_available_lord_boss.return_value = False
+        machine.daily_manager.has_available_demon_lords.return_value = False
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+
+        self.assertFalse(machine.has_available_daily_dungeon())
+
+        handler = ResultHandler(machine)
+        handler.subflow_step = "FINAL_MATCH"
+        machine.transition_to = MagicMock()
+
+        def match_exit_or_retry(_screen, template, **_kwargs):
+            if template == "exit_battle.png":
+                return (500, 500), 0.95
+            if template == "stages/retry.png":
+                return (700, 500), 0.95
+            return None, 0.0
+
+        machine.matcher.match.side_effect = match_exit_or_retry
+        fake_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        with patch("os.path.exists", return_value=True), \
+             patch.object(handler, "click_and_wait_until_gone") as mock_click:
+            handler.handle(fake_screen, rect)
+
+            mock_click.assert_called_once()
+            self.assertEqual(mock_click.call_args[0][0], "stages/retry.png")
+            machine.transition_to.assert_called_once_with(machine.STATE_LOADING)
+
+    def test_tier4_config_preserves_enable_dungeon_in_stage_and_domain(self):
+        mode_configs = {
+            "stage": {"name": "關卡", "type": "stage"},
+            "golden_empire": {"name": "黃金帝國", "type": "domain"},
+        }
+        # Stage fallback with enable_dungeon True/False
+        stage_cfg_true = {"tier4_mode": "stage", "enable_dungeon": True}
+        stage_fb_true = build_tier4_fallback_config(stage_cfg_true, mode_configs)
+        self.assertTrue(stage_fb_true["enable_dungeon"])
+        self.assertEqual(stage_fb_true["type"], "stage")
+
+        stage_cfg_false = {"tier4_mode": "stage", "enable_dungeon": False}
+        stage_fb_false = build_tier4_fallback_config(stage_cfg_false, mode_configs)
+        self.assertFalse(stage_fb_false["enable_dungeon"])
+        self.assertEqual(stage_fb_false["type"], "stage")
+
+        # Domain fallback with enable_dungeon True/False
+        domain_cfg_true = {"tier4_mode": "domain", "enable_dungeon": True}
+        domain_fb_true = build_tier4_fallback_config(domain_cfg_true, mode_configs)
+        self.assertTrue(domain_fb_true["enable_dungeon"])
+        self.assertEqual(domain_fb_true["type"], "domain")
+
+        domain_cfg_false = {"tier4_mode": "domain", "enable_dungeon": False}
+        domain_fb_false = build_tier4_fallback_config(domain_cfg_false, mode_configs)
+        self.assertFalse(domain_fb_false["enable_dungeon"])
+        self.assertEqual(domain_fb_false["type"], "domain")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
