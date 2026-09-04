@@ -22,6 +22,7 @@ class TestSceneCatalog(unittest.TestCase):
             SceneId.LOADING: DetectionProfileId.LOADING,
             SceneId.BATTLE: DetectionProfileId.BATTLE,
             SceneId.RESULT: DetectionProfileId.RESULT,
+            SceneId.DOMAIN_EXPLORE: DetectionProfileId.DOMAIN,
         }
 
         for scene_id, profile in expected.items():
@@ -44,6 +45,11 @@ class TestSceneCatalog(unittest.TestCase):
                 SceneType.DUNGEON_PREPARE,
                 SceneId.DUNGEON_LOBBY,
                 DetectionProfileId.DUNGEON_SELECT,
+            ),
+            (
+                SceneType.DOMAIN_EXPLORE,
+                SceneId.DOMAIN_EXPLORE,
+                DetectionProfileId.DOMAIN,
             ),
         )
 

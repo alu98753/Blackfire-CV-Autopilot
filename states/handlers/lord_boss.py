@@ -105,6 +105,17 @@ class LordBossHandler(BaseStateHandler):
         # 2. 若頁籤尚未開啟，進行大廳入口與頁籤點擊
         if not is_opened:
             self.has_reset_to_left = False  # 頁籤未開啟前重置拉左旗標
+
+            # 2.0 檢查是否身處領地內部 (如黃金古國)，需先點擊退出領地按鈕退回大廳 (Navigation Egress Edge)
+            exit_domain_btn = "domains/common/exit_to_lobby.png"
+            if os.path.exists(os.path.join("templates", exit_domain_btn)):
+                pos_exit, conf_exit = self.matcher.match(screen_img, exit_domain_btn, threshold=0.75, quiet=True)
+                if pos_exit:
+                    logging.info(f"🚪 [首領討伐 ➔ 領地退場] 偵測到處於領地內部按鈕 [{exit_domain_btn}] (信心度: {conf_exit:.4f})，點擊退出領地以返回大廳...")
+                    self.click_and_wait_until_gone(exit_domain_btn, rect["left"] + pos_exit[0], rect["top"] + pos_exit[1], rect, threshold=0.75)
+                    time.sleep(0.3)
+                    return True
+
             # 先檢查是否在城鎮，需要點擊門進入大廳
             pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.85)
             if pos_door:

@@ -20,6 +20,7 @@ class SceneId(str, Enum):
     LOADING = "loading"
     BATTLE = "battle"
     RESULT = "result"
+    DOMAIN_EXPLORE = "domain_explore"
 
 
 class ElementId(str, Enum):
@@ -29,6 +30,8 @@ class ElementId(str, Enum):
     BREAD_ENTRY = "bread_entry"
     START = "start"
     CLOSE_OVERLAY = "close_overlay"
+    EXIT_TO_LOBBY = "exit_to_lobby"
+    DOMAIN_EXPLORE_BTN = "domain_explore_btn"
 
 
 class OverlayId(str, Enum):
@@ -50,6 +53,7 @@ class DetectionProfileId(str, Enum):
     LOADING = "loading"
     BATTLE = "battle"
     RESULT = "result"
+    DOMAIN = "domain"
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,7 @@ _SCENE_TYPE_MAP = {
     "WINDOW_BREAD": SceneId.BREAD_WINDOW,
     "IN_DUNGEON": SceneId.DUNGEON_EXPLORING,
     "DUNGEON_PREPARE": SceneId.DUNGEON_LOBBY,
+    "DOMAIN_EXPLORE": SceneId.DOMAIN_EXPLORE,
 }
 
 _ELEMENT_TEMPLATE_MAP = {
@@ -97,6 +102,8 @@ _ELEMENT_TEMPLATE_MAP = {
     "goback_town.png": ElementId.GOBACK_TOWN,
     "common/bread.png": ElementId.BREAD_ENTRY,
     "common/quit.png": ElementId.CLOSE_OVERLAY,
+    "domains/common/exit_to_lobby.png": ElementId.EXIT_TO_LOBBY,
+    "domains/golden_empire/explore_btn.png": ElementId.DOMAIN_EXPLORE_BTN,
 }
 
 

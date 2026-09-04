@@ -19,6 +19,7 @@ class SceneType(Enum):
     WINDOW_DIAMOND = auto()       # 鑽石領取視窗已開啟
     WINDOW_BREAD = auto()         # 體力領取視窗已開啟
     POPUP_UNEXPECTED = auto()     # 意外視窗/彈窗已開啟
+    DOMAIN_EXPLORE = auto()       # 領地探索主畫面 (例如黃金古國)
     UNKNOWN = auto()              # 未知/切換中
 
 

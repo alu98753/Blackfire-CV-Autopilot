@@ -43,6 +43,22 @@ class BattleHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_DUNGEON_EXPLORING)
                 return
 
+        # Check domain anchor before auto.png
+        cur_type = self.machine.config.get("type") if self.machine.config else None
+        is_domain = cur_type == "domain" or bool(self.machine.config and self.machine.config.get("domain"))
+        domain_anchor = "domains/golden_empire/explore_btn.png"
+        if is_domain and os.path.exists(os.path.join("templates", domain_anchor)):
+            pos, conf = self.matcher.match(screen_img, domain_anchor, threshold=0.85, quiet=True)
+            if pos:
+                logging.info(
+                    "[Battle recovery] Domain anchor [%s] (confidence: %.4f); recovering to DOMAIN_EXPLORE.",
+                    domain_anchor,
+                    conf,
+                )
+                self.non_battle_feature_start_time = None
+                self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+                return
+
         if getattr(self.machine, "just_resumed_from_user", False):
             self.machine.just_resumed_from_user = False  # 單次評估，無論是否命中均立刻重置
             for lobby_btn in ["common/door.png", "goback_town.png", "common/select_stage.png"]:
@@ -140,8 +156,22 @@ class BattleHandler(BaseStateHandler):
                                 is_in_lobby = True
                                 break
                     
+                    is_in_domain = False
+                    cur_type = self.machine.config.get("type") if self.machine.config else None
+                    if cur_type == "domain" or bool(self.machine.config and self.machine.config.get("domain")):
+                        domain_btn = "domains/golden_empire/explore_btn.png"
+                        if os.path.exists(os.path.join("templates", domain_btn)):
+                            pos_de, conf_de = self.matcher.match(screen_img, domain_btn, threshold=0.80)
+                            if pos_de:
+                                is_in_domain = True
+
                     if is_in_lobby:
                         logging.info("🧭 偵測到目前已處於安全大廳畫面，直接重設狀態機為 UNKNOWN 進行定位。")
+                    elif is_in_domain:
+                        logging.info("🧭 [防卡死自癒] 偵測到目前已處於領地主場景畫面，直接轉移回 STATE_DOMAIN_EXPLORE。")
+                        self.non_battle_feature_start_time = None
+                        self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
+                        return
                     else:
                         # 3.2 不在大廳，嘗試尋找通用退出/確認按鈕並點選以清除可能誤觸開啟的子視窗
                         logging.info("🧭 未能偵測到大廳特徵，可能卡在子選單。嘗試尋找並點選通用退出/確認按鈕...")

@@ -974,6 +974,25 @@ class GameStateMachine:
                     self.transition_to(self.STATE_DUNGEON_EXPLORING)
                     return
                         
+        # 4.5 檢查是否在領地探索中 (例如黃金古國主場景 explore_btn.png 或 exit_to_lobby.png)
+        domain_features = [
+            "domains/golden_empire/explore_btn.png",
+            "domains/common/exit_to_lobby.png",
+        ]
+        is_domain_mode = (
+            self.config.get("type") == "domain"
+            or bool(self.config.get("domain"))
+            or bool(getattr(self, "primary_config", {}).get("domain"))
+        )
+        for d_btn in domain_features:
+            if os.path.exists(os.path.join("templates", d_btn)):
+                thresh = 0.80 if d_btn.endswith("explore_btn.png") else 0.85
+                pos, conf = self.matcher.match(screen_img, d_btn, threshold=thresh)
+                if pos and (d_btn.endswith("explore_btn.png") or is_domain_mode):
+                    logging.info(f"🏛️ 全域定位：偵測到領地探索主場景特徵 [{d_btn}] (信心度: {conf:.4f})，鎖定領地探索狀態 (DOMAIN_EXPLORE)！")
+                    self.transition_to(self.STATE_DOMAIN_EXPLORE)
+                    return
+
         # 5. 如果是背包整理模式，強制跳轉至 BAG_CLEANING
         if self.config["type"] == "bag_clean":
             self.transition_to(self.STATE_BAG_CLEANING)
@@ -995,6 +1014,10 @@ class GameStateMachine:
             # 地下城模式下，大部份時間都在走格探索，預設回到 EXPLORING 狀態最為安全
             logging.info("❓ 未能辨識出特定探索按鈕，預設進入 EXPLORING 狀態。")
             self.transition_to(self.STATE_DUNGEON_EXPLORING)
+        elif self.config["type"] == "domain":
+            # 領地模式下，預設回到 DOMAIN_EXPLORE 狀態
+            logging.info("❓ 未能辨識出特定領地按鈕，領地模式下預設進入 DOMAIN_EXPLORE 狀態。")
+            self.transition_to(self.STATE_DOMAIN_EXPLORE)
         else:
             # 普通關卡模式下，如果能匹配到自動戰鬥特徵，預設為 BATTLE；否則預設為 NAVIGATING 以重啟大廳尋路
             has_auto = False

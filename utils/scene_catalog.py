@@ -54,6 +54,9 @@ class SceneCatalog:
             SceneId.RESULT: SceneDefinition(
                 SceneId.RESULT, DetectionProfileId.RESULT
             ),
+            SceneId.DOMAIN_EXPLORE: SceneDefinition(
+                SceneId.DOMAIN_EXPLORE, DetectionProfileId.DOMAIN
+            ),
         }
     )
 

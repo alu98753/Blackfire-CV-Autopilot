@@ -529,6 +529,72 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertEqual(sm.config["type"], "domain")
         self.assertEqual(sm.current_state, sm.STATE_NAVIGATING)
 
+    # 12. UNKNOWN 狀態辨識出黃金古國主場景 (explore_btn.png) 精確轉移至 DOMAIN_EXPLORE
+    def test_unknown_state_detects_golden_empire_scene(self):
+        """
+        Given: 狀態機處於 UNKNOWN 全域定位，畫面出現黃金古國主場景特徵 (domains/golden_empire/explore_btn.png)
+        When: 執行 detect_game_state
+        Then: 精確斷言轉移至 STATE_DOMAIN_EXPLORE，絕不掉入 NAVIGATING 兜底
+        """
+        from states.state_machine import GameStateMachine
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        sm.config = self.mock_machine.config.copy()
+        mock_screen = MagicMock()
+        
+        def fake_match(screen, template, threshold=0.8, **kwargs):
+            if template == "domains/golden_empire/explore_btn.png":
+                return (100, 200), 0.95
+            return None, 0.0
+
+        sm.matcher.match.side_effect = fake_match
+        sm.detect_current_state(mock_screen, self.rect)
+        self.assertEqual(sm.current_state, sm.STATE_DOMAIN_EXPLORE)
+
+    # 13. 戰鬥畫面結束回到黃金古國主場景時，觸發領地錨點自癒
+    def test_battle_recovery_to_domain_explore(self):
+        """
+        Given: 戰鬥狀態 (BATTLE) 下畫面已回到黃金古國主場景 (explore_btn.png)
+        When: 執行 BattleHandler.handle
+        Then: 觸發 [Battle recovery] Domain anchor，立即自癒恢復至 STATE_DOMAIN_EXPLORE
+        """
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_screen = MagicMock()
+
+        def fake_match(screen, template, threshold=0.8, **kwargs):
+            if template == "domains/golden_empire/explore_btn.png":
+                return (100, 200), 0.92
+            return None, 0.0
+
+        battle_handler.matcher.match.side_effect = fake_match
+        battle_handler.handle(mock_screen, self.rect)
+        self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
+
+    # 14. 首領討伐在領地內部激活時，觸發退場邊 (Egress Edge) 返回大廳
+    @patch("states.handlers.lord_boss.LordBossHandler.click_and_wait_until_gone")
+    def test_lord_boss_handler_egress_from_domain(self, mock_click_gone):
+        """
+        Given: 狀態機處於 STATE_LORD_BOSS，但實體畫面仍在領地內部 (出現 domains/common/exit_to_lobby.png)
+        When: 執行 LordBossHandler.handle
+        Then: 觸發領地退場邊 (Egress Edge)，點擊 exit_to_lobby.png 並返回 True
+        """
+        from states.handlers.lord_boss import LordBossHandler
+        self.mock_machine.daily_manager = MagicMock()
+        self.mock_machine.get_available_selected_lord_bosses.return_value = ["lord_spider"]
+        lord_handler = LordBossHandler(self.mock_machine)
+        mock_screen = MagicMock()
+
+        def fake_match(screen, template, threshold=0.8, **kwargs):
+            if template == "domains/common/exit_to_lobby.png":
+                return (50, 60), 0.90
+            return None, 0.0
+
+        lord_handler.matcher.match.side_effect = fake_match
+        lord_handler.match_mutually_exclusive_tabs = MagicMock(return_value=(False, None, None, 0.0))
+        res = lord_handler.handle(mock_screen, self.rect)
+        self.assertTrue(res)
+        mock_click_gone.assert_called_once()
+        self.assertEqual(mock_click_gone.call_args[0][0], "domains/common/exit_to_lobby.png")
+
 
 if __name__ == "__main__":
     unittest.main()
