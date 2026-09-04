@@ -6,6 +6,8 @@ import threading
 from copy import deepcopy
 from config import (
     GAME_CONFIGS,
+    TIER4_MODE_DOMAIN,
+    TIER4_MODE_STAGE,
     get_navigation_progress_settings,
     get_stamina_retreat_settings,
     get_runtime_game_config,
@@ -1053,6 +1055,10 @@ class GameStateMachine:
         if not cfg:
             return False
 
+        # 如果模式未啟用地下城 (enable_dungeon=False)，直接傳回 False
+        if not cfg.get("enable_dungeon", True):
+            return False
+
         # 如果模式類型不是地下城/mix/daily，直接傳回 False（防呆非地下城模式）
         cfg_type = cfg.get("type")
         if cfg_type not in ["dungeon", "mix", "daily"]:
@@ -1990,7 +1996,7 @@ class GameStateMachine:
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
             if activity_cfg.get("enable_dungeon", False):
                 if self.has_available_dungeon(target_config=activity_cfg):
-                    if cfg.get("type") == "domain":
+                    if cfg.get("type") in ["domain", "stage"]:
                         dungeon_route = activity_cfg.copy()
                         self._apply_tier4_stage_selection(dungeon_route)
                         self._apply_tier4_dungeon_selection(dungeon_route)
