@@ -1073,6 +1073,14 @@ class GameStateMachine:
         is_greedy = cfg.get("greedy_dungeon", False)
 
         explicit_target_idx = cfg.get("dungeon_index")
+        if explicit_target_idx is None:
+            explicit_target_idx = cfg.get("tier4_dungeon_index")
+        if explicit_target_idx is not None:
+            try:
+                explicit_target_idx = int(explicit_target_idx)
+            except (ValueError, TypeError):
+                explicit_target_idx = None
+
         if explicit_target_idx is None and not is_greedy:
             entry_templates = cfg.get("dungeon_entries") or []
             nav_path = cfg.get("navigation_path") or []
@@ -1990,9 +1998,10 @@ class GameStateMachine:
                     # ResultHandler will preempt Tier 4 at the next safe result
                     # screen as soon as any Daily quest becomes runnable.
                     if self.quest_scheduler.get_pending_tasks():
-                        logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
-                        self.apply_tier4_fallback_config()
-                        return False
+                        if not (activity_cfg.get("enable_dungeon", False) and self.has_available_dungeon(target_config=activity_cfg)):
+                            logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
+                            self.apply_tier4_fallback_config()
+                            return False
 
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
             if activity_cfg.get("enable_dungeon", False):

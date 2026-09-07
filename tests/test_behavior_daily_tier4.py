@@ -406,6 +406,176 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(domain_fb_false["type"], "domain")
 
 
+    def test_has_available_dungeon_reads_correct_cooldown_for_tier4_dungeon_index(self):
+        """驗證 has_available_dungeon 正確讀取 tier4_dungeon_index 的冷卻，而非誤讀史萊姆 (index=1) 的 0.0。"""
+        import time
+
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        now = time.time()
+        machine.primary_config = {
+            "type": "mix",
+            "enable_dungeon": True,
+            "greedy_dungeon": False,
+            "tier4_dungeon_index": 6,
+            "navigation_path": [
+                "common/door.png",
+                "dungeons/dungeon.png",
+                "dungeons/Slime_entry.png",
+            ],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+            ],
+        }
+        # 第 1 號史萊姆無冷卻 (0.0)，第 6 號冰雪洞窟冷卻中 (剩餘 28 分鐘)
+        machine.dungeon_cooldowns = {1: 0.0, 6: now + 1715.0}
+
+        # 必須正確讀取 6 號冷卻，堅決回傳 False
+        self.assertFalse(
+            machine.has_available_dungeon(target_config=machine.primary_config)
+        )
+
+        # 當第 6 號冰雪洞窟冷卻結束時，回傳 True
+        machine.dungeon_cooldowns[6] = now - 10.0
+        self.assertTrue(
+            machine.has_available_dungeon(target_config=machine.primary_config)
+        )
+
+    def test_domain_explore_keeps_farming_during_dungeon_cooldown(self):
+        """驗證地下城冷卻中時，領地探索不發起插隊，穩定在黃金古國中掛機。"""
+        import time
+        from states.handlers.domain_explore import DomainExploreHandler
+
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.is_subflow_completed.return_value = True
+        machine.daily_manager.has_available_lord_boss.return_value = False
+        machine.daily_manager.has_available_demon_lords.return_value = False
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        now = time.time()
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "name": "Daily",
+            "type": "mix",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_town_daily": False,
+            "enable_demon_lords": False,
+            "enable_lord_boss": False,
+            "enable_dungeon": True,
+            "greedy_dungeon": False,
+            "tier4_dungeon_index": 6,
+            "navigation_path": [
+                "common/door.png",
+                "dungeons/dungeon.png",
+                "dungeons/Slime_entry.png",
+            ],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+            ],
+            "dungeon_names": ["Slime", "Ghost", "Forest", "Ruins", "Prison", "Ice", "Orc"],
+        }
+        machine.apply_tier4_fallback_config()
+        machine.current_state = machine.STATE_DOMAIN_EXPLORE
+        machine.dungeon_cooldowns = {1: 0.0, 6: now + 1715.0}
+
+        # 6 號冷卻中 ➔ 無可用地下城且無插隊活動
+        self.assertFalse(machine.has_available_daily_dungeon())
+        self.assertFalse(machine.has_pending_daily_activity())
+
+        handler = DomainExploreHandler(machine)
+        # 領地探索檢查插隊回傳 False (不離場)
+        fake_rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        self.assertFalse(handler._check_lord_boss_preemption(None, fake_rect))
+        self.assertEqual(machine.current_state, machine.STATE_DOMAIN_EXPLORE)
+
+    def test_domain_explore_preempts_when_dungeon_cooldown_expires(self):
+        """驗證地下城冷卻結束時，領地探索正常發動定時插隊退出古國。"""
+        import time
+        import numpy as np
+        from states.handlers.domain_explore import DomainExploreHandler
+
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.is_subflow_completed.return_value = True
+        machine.daily_manager.has_available_lord_boss.return_value = False
+        machine.daily_manager.has_available_demon_lords.return_value = False
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        now = time.time()
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "name": "Daily",
+            "type": "mix",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_town_daily": False,
+            "enable_demon_lords": False,
+            "enable_lord_boss": False,
+            "enable_dungeon": True,
+            "greedy_dungeon": False,
+            "tier4_dungeon_index": 6,
+            "navigation_path": [
+                "common/door.png",
+                "dungeons/dungeon.png",
+                "dungeons/Slime_entry.png",
+            ],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+            ],
+            "dungeon_names": ["Slime", "Ghost", "Forest", "Ruins", "Prison", "Ice", "Orc"],
+        }
+        machine.apply_tier4_fallback_config()
+        machine.current_state = machine.STATE_DOMAIN_EXPLORE
+        # 6 號冷卻已結束
+        machine.dungeon_cooldowns = {1: 0.0, 6: now - 10.0}
+
+        self.assertTrue(machine.has_available_daily_dungeon())
+        self.assertTrue(machine.has_pending_daily_activity())
+
+        handler = DomainExploreHandler(machine)
+        handler.click_and_wait_until_gone = MagicMock()
+
+        def fake_match(_screen, template, **_kwargs):
+            if template == "domains/common/exit_to_lobby.png":
+                return (66, 724), 0.95
+            return None, 0.0
+
+        machine.matcher.match.side_effect = fake_match
+        fake_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        fake_rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+
+        with patch("os.path.exists", return_value=True):
+            res = handler._check_lord_boss_preemption(fake_screen, fake_rect)
+            self.assertTrue(res)
+            handler.click_and_wait_until_gone.assert_called_once()
+            self.assertEqual(machine.current_state, machine.STATE_NAVIGATING)
+
+
 if __name__ == "__main__":
     unittest.main()
 
