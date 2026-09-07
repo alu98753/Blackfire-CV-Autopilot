@@ -11,6 +11,9 @@
   * `door.png`: [common/door.png](../templates/common/door.png) - 城鎮大門 ➔ 切換進入 `STATE_LOBBY` / 觸發 `STATE_BREAD_COLLECTION` / `STATE_DIAMOND_COLLECTION`
   * `blood_altar`: [town_building/Blood_Altar/Blood_Altar.png](../templates/town_building/Blood_Altar/Blood_Altar.png) - 血之祭壇門牌 ➔ 對應 **`STATE_BLOOD_ALTAR`** ([BloodAltarHandler](../states/handlers/blood_altar.py))
   * `jewelry_workshop`: [town_building/Jewelry_workshop/Jewelry_workshop.png](../templates/town_building/Jewelry_workshop/Jewelry_workshop.png) - 珠寶加工廠門牌 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`** ([JewelryWorkshopHandler](../states/handlers/jewelry_workshop.py))
+  * `alchemy_hut`: [town_building/alchemy_hut/alchemy_hut.png](../templates/town_building/alchemy_hut/alchemy_hut.png) - 煉金小屋門牌 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`** (商店出售輪換)
+  * `equipment_workshop`: [town_building/equipment_workshop/equipment_workshop.png](../templates/town_building/equipment_workshop/equipment_workshop.png) - 裝備鐵匠鋪門牌 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`** (商店出售輪換)
+  * `grocery_store`: [town_building/grocery_store/grocery_store.png](../templates/town_building/grocery_store/grocery_store.png) - 雜貨店門牌 ➔ 對應 **`STATE_JEWELRY_WORKSHOP`** (商店出售輪換)
   * `tavern`: [town_building/Tavern/Tavern.png](../templates/town_building/Tavern/Tavern.png) - 酒館門牌 ➔ 對應 **`STATE_HERO_DRAW`** ([HeroDrawHandler](../states/handlers/hero_draw.py))
   * `bulletin_board`: [town_building/bulletin_board/bulletin_board.png](../templates/town_building/bulletin_board/bulletin_board.png) - 懸賞告示牌門牌 ➔ 對應 **`STATE_BULLETIN_BOARD`** ([BulletinBoardHandler](../states/handlers/bulletin_board.py))
   * `chest`: [town_building/mysterious_treasure/mysterious_treasure.png](../templates/town_building/mysterious_treasure/mysterious_treasure.png) - 神秘寶箱門牌 ➔ 對應 **`STATE_CHEST`** ([ChestHandler](../states/handlers/chest.py))

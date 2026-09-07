@@ -10,7 +10,16 @@ DEFAULT_DAILY_STATUS = {
         "chest": {"completed_today": False, "last_executed_at": ""},
         "hero_draw": {"completed_today": False, "last_executed_at": ""},
         "blood_altar": {"completed_today": False, "last_executed_at": ""},
-        "jewelry_workshop": {"completed_today": False, "last_executed_at": ""},
+        "jewelry_workshop": {
+            "completed_today": False,
+            "last_executed_at": "",
+            "shop_visit_counts": {
+                "jewelry_workshop": 0,
+                "alchemy_hut": 0,
+                "equipment_workshop": 0,
+                "grocery_store": 0,
+            },
+        },
         "bulletin_board": {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []},
 
         "lord_boss": {
@@ -136,6 +145,17 @@ class DailyManager:
                 self.status["subflows"][sf_key] = json.loads(json.dumps(sf_def))
                 self.save_status()
                 logging.info(f"✨ [DailyManager] 自動同步補齊新增的子流程 [{sf_key}] 結構至持久化存檔。")
+
+        # 💡 [商店統計自癒機制] 確保 jewelry_workshop 的 shop_visit_counts 結構存在
+        jw_saved = self.status.setdefault("subflows", {}).setdefault("jewelry_workshop", {})
+        if "shop_visit_counts" not in jw_saved or not isinstance(jw_saved["shop_visit_counts"], dict):
+            jw_saved["shop_visit_counts"] = {
+                "jewelry_workshop": 0,
+                "alchemy_hut": 0,
+                "equipment_workshop": 0,
+                "grocery_store": 0,
+            }
+            self.save_status()
 
         # 💡 [自癒機制] 載入時自動校正並正名清洗 accepted_quests 存檔
         subflows = self.status.get("subflows", {})
@@ -703,6 +723,33 @@ class DailyManager:
 
         self.save_status()
         logging.info(f"✅ [DailyManager] 記錄通用子流程 [{subflow_key}] 今日已完成。")
+
+    def get_shop_visit_counts(self):
+        """
+        取得城鎮各商店出售造訪次數字典。
+        :return: dict (例如 {"jewelry_workshop": 1, "alchemy_hut": 0, ...})
+        """
+        subflows = self.status.setdefault("subflows", {})
+        jw = subflows.setdefault("jewelry_workshop", {"completed_today": False, "last_executed_at": ""})
+        counts = jw.setdefault("shop_visit_counts", {})
+        if not isinstance(counts, dict):
+            counts = {}
+            jw["shop_visit_counts"] = counts
+        return counts
+
+    def record_shop_visit(self, shop_id):
+        """
+        記錄指定商店出售造訪次數 +1 並持久化。
+        :param shop_id: 商店識別碼 (例如 jewelry_workshop, alchemy_hut, etc.)
+        :return: 該商店累計造訪次數
+        """
+        if not shop_id:
+            return 0
+        counts = self.get_shop_visit_counts()
+        counts[shop_id] = counts.get(shop_id, 0) + 1
+        self.save_status()
+        logging.info(f"💎 [DailyManager] 商店 [{shop_id}] 訪問次數已更新: {counts[shop_id]} 次")
+        return counts[shop_id]
 
     def load_quest_scheduler(self):
         """

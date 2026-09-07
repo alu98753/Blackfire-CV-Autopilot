@@ -257,6 +257,27 @@ goods_dir = "town_building/Jewelry_workshop/goods"
 navigation_path = []
 lobby_start_btn = "stages/start.png"
 
+# 支援輪換出售的商店清單
+[[subflow_configs.jewelry_workshop.shops]]
+id = "jewelry_workshop"
+name = "珠寶加工廠"
+template = "town_building/Jewelry_workshop/Jewelry_workshop.png"
+
+[[subflow_configs.jewelry_workshop.shops]]
+id = "alchemy_hut"
+name = "煉金小屋"
+template = "town_building/alchemy_hut/alchemy_hut.png"
+
+[[subflow_configs.jewelry_workshop.shops]]
+id = "equipment_workshop"
+name = "裝備鐵匠鋪"
+template = "town_building/equipment_workshop/equipment_workshop.png"
+
+[[subflow_configs.jewelry_workshop.shops]]
+id = "grocery_store"
+name = "雜貨店"
+template = "town_building/grocery_store/grocery_store.png"
+
 # 珠寶店出售 SSOT；各 user_data/<profile>/config.toml 可獨立覆寫。
 [subflow_configs.jewelry_workshop.sell_goods]
 

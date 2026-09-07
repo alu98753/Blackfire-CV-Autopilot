@@ -49,3 +49,19 @@
   3. 若仍未尋獲 ➔ 認定未持有該商品 ➔ **向上滑動 2 次還原畫面高度** ➔ 繼續比對下一個商品。
 - **出售與確認**：點擊商品圖示 ➔ 點擊 `sell.png` ➔ 點擊 `sell_max.png` (拉滿) ➔ `click_and_wait_until_gone` 雙層 `ok.png` / `confirm.png` 閉環確認。
 - **離場**：全數商品處置完畢後，點擊 `exitfromhouse_and_to_town.png` 離開建築回到城鎮並安全退出程式。
+
+---
+
+## 🏬 多商店出售輪換機制 (Multi-Shop Rotation Selection)
+
+城鎮中具備出售功能之商店共有 4 間（共享相同的內部販售介面）：
+1. **珠寶加工廠**：`town_building/Jewelry_workshop/Jewelry_workshop.png`
+2. **煉金小屋**：`town_building/alchemy_hut/alchemy_hut.png`
+3. **裝備鐵匠鋪**：`town_building/equipment_workshop/equipment_workshop.png`
+4. **雜貨店**：`town_building/grocery_store/grocery_store.png`
+
+### 輪換策略與持久化
+- **純策略選擇器 ([shop_selector.py](../../../utils/shop_selector.py))**：在城鎮畫面中，依據 [DailyManager](../../../utils/daily_manager.py) 所記錄的各店歷史造訪次數 (`shop_visit_counts`) 由少至多排序，優先選取目前在畫面中可見且造訪次數最少的建築點擊進入。
+- **平手打破 (Tie-Break)**：若次數相同，依配置清單宣告順序穩定 tie-break。
+- **次數累加閉環**：當出售流程全數完成並退回城鎮後，系統自動將該商店的造訪次數 +1，並保存至 `user_data/daily_status.json`，實現長久掛機下造訪次數的完美均衡。
+

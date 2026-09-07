@@ -26,6 +26,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.item_sub_step = "SEARCH"    # SEARCH, CLICKED_ITEM, CLICKED_SELL, CLICKED_MAX
         self.repeat_sell_count = 0
         self.pre_tidy_done = False
+        self.current_shop_id = "jewelry_workshop"
+        self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
         from states.handlers.bag_cleaning import BagCleaningHandler
         self.bag_handler = BagCleaningHandler(machine)
         self.bag_handler.matcher = self.matcher
@@ -40,12 +42,17 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.item_sub_step = "SEARCH"
         self.repeat_sell_count = 0
         self.pre_tidy_done = False
+        self.current_shop_id = "jewelry_workshop"
+        self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
 
     def _record_completion(self):
-        """記錄 DailyManager 珠寶加工廠今日已完成"""
+        """記錄 DailyManager 珠寶加工廠今日已完成，並累加該商店造訪次數"""
         dm = getattr(self.machine, "daily_manager", None)
-        if dm and hasattr(dm, "record_subflow_completed"):
-            dm.record_subflow_completed("jewelry_workshop")
+        if dm:
+            if hasattr(dm, "record_subflow_completed"):
+                dm.record_subflow_completed("jewelry_workshop")
+            if hasattr(dm, "record_shop_visit") and self.current_shop_id:
+                dm.record_shop_visit(self.current_shop_id)
 
     def _get_enabled_goods(self, goods_dir, goods_settings):
         """
@@ -115,9 +122,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
             pos_door_chk, conf_door_chk = self.matcher.match(screen_img, "common/door.png", threshold=0.80)
             if pos_door_chk:
                 logging.warning(f"💎 [珠寶加工廠] 防護攔截 - 處於 [{self.step_phase}] 階段但畫面上已看見城鎮大門 [common/door.png] ({conf_door_chk:.4f})，結束出售流程。")
+                self._record_completion()
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
-                self._record_completion()
                 self.last_action_time = now
                 self.machine.pop_and_next_town_subflow()
                 return
@@ -132,6 +139,13 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", "town_building/Jewelry_workshop/Jewelry_workshop.png")
+        shops_cfg = cfg.get("shops")
+        if not shops_cfg:
+            from config import GAME_CONFIGS
+            workshop_config = GAME_CONFIGS.get("jewelry_workshop", {})
+            shops_cfg = workshop_config.get("shops", [
+                {"id": "jewelry_workshop", "name": "珠寶加工廠", "template": building_btn}
+            ])
         sell_out_btn = cfg.get("sell_out_btn", "town_building/sell_out.png")
         sell_btn = cfg.get("sell_btn", "town_building/sell.png")
         sell_max_btn = cfg.get("sell_max_btn", "town_building/sell_max.png")
@@ -309,12 +323,12 @@ class JewelryWorkshopHandler(BaseStateHandler):
         # =========================================================================
         if self.step_phase == "ALL_DONE_EXITING":
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-            pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
+            pos_building, _ = self.matcher.match(screen_img, self.current_building_btn, threshold=0.75)
             if pos_door or pos_building:
                 logging.info("✅ [珠寶加工廠] 偵測到目前已處於城鎮大門畫面，視為已退回城鎮，完成出售流程！")
+                self._record_completion()
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
-                self._record_completion()
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
 
@@ -335,9 +349,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
             if pos_exit:
                 logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
+                self._record_completion()
                 self.reset_state()
                 self.machine.need_jewelry_workshop = False
-                self._record_completion()
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
 
@@ -392,23 +406,55 @@ class JewelryWorkshopHandler(BaseStateHandler):
                     self.last_action_time = now
                     return
 
-            # 3.3.2 若背包未開啟，且處於城鎮 (pos_building & pos_door 可見)
+            # 3.3.2 若背包未開啟，且處於城鎮 (pos_door 可見)
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-            pos_building, conf_building = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
-            if pos_building and pos_door:
+            if pos_door:
                 if not self.pre_tidy_done:
-                    logging.info("💎 [珠寶加工廠] 進入前執行城鎮背包預先整理，優先開啟背包...")
+                    logging.info("💎 [城鎮商店] 進入前執行城鎮背包預先整理，優先開啟背包...")
                     if self.bag_handler.open_backpack(screen_img, rect):
                         self.last_action_time = now
                         return
 
-                logging.info(f"💎 [珠寶加工廠] 於城鎮發現珠寶加工廠建築 [{building_btn}] (信心度: {conf_building:.4f})，點擊進入...")
-                self.mouse.click(left + pos_building[0], top + pos_building[1])
-                self.step_phase = "ENTERED_BUILDING"
-                self.last_action_time = now
-                self.machine.notify_ui_progress()
+                # 依造訪次數由少至多排序候選商店，並於畫面中尋找可見建築
+                dm = getattr(self.machine, "daily_manager", None)
+                visit_counts = dm.get_shop_visit_counts() if (dm and hasattr(dm, "get_shop_visit_counts")) else {}
+                from utils.shop_selector import sort_shops_by_visit_count
+                sorted_shops = sort_shops_by_visit_count(shops_cfg, visit_counts)
 
-                return
+                matched_shop = None
+                matched_pos = None
+                matched_conf = 0.0
+
+                for s in sorted_shops:
+                    tmpl = s.get("template", building_btn)
+                    if not tmpl:
+                        continue
+                    pos_b, conf_b = self.matcher.match(screen_img, tmpl, threshold=0.65, brightness_threshold=0.70, quiet=True)
+                    if pos_b:
+                        matched_shop = s
+                        matched_pos = pos_b
+                        matched_conf = conf_b
+                        break
+
+                # 相容性 fallback：若未比對到任何輪換商店，比對預設 building_btn
+                if not matched_shop:
+                    pos_b, conf_b = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
+                    if pos_b:
+                        matched_shop = {"id": "jewelry_workshop", "name": "珠寶加工廠", "template": building_btn}
+                        matched_pos = pos_b
+                        matched_conf = conf_b
+
+                if matched_shop and matched_pos:
+                    self.current_shop_id = matched_shop.get("id", "jewelry_workshop")
+                    self.current_building_btn = matched_shop.get("template", building_btn)
+                    shop_name = matched_shop.get("name", self.current_shop_id)
+                    cur_visits = visit_counts.get(self.current_shop_id, 0)
+                    logging.info(f"💎 [城鎮商店] 於城鎮發現目標商店 [{shop_name}] ({self.current_building_btn}) (歷史訪問: {cur_visits}次, 信心度: {matched_conf:.4f})，點擊進入...")
+                    self.mouse.click(left + matched_pos[0], top + matched_pos[1])
+                    self.step_phase = "ENTERED_BUILDING"
+                    self.last_action_time = now
+                    self.machine.notify_ui_progress()
+                    return
 
         if pos_sell_out:
             logging.info(f"💎 [珠寶加工廠] 發現出售選單按鈕 [{sell_out_btn}]，點擊開啟選單...")
