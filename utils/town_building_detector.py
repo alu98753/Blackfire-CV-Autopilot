@@ -30,7 +30,7 @@ def detect_building_with_red_dot(
     matcher,
     red_dot_template: str = "town_building/red_dot.png",
     building_threshold: float = 0.65,
-    red_dot_threshold: float = 0.75,
+    red_dot_threshold: float = 0.65,
     **match_kwargs,
 ) -> BuildingCheckResult:
     """
@@ -106,8 +106,14 @@ def detect_building_with_red_dot(
             confidence_building=conf_building,
         )
 
-    # 局部比對驚嘆號紅點
-    pos_dot, conf_dot = matcher.match(crop_roi, red_dot_template, threshold=red_dot_threshold)
+    # 局部比對驚嘆號紅點 (繼承全螢幕之縮放比例，避免局部裁切導致 auto_scale 回退)
+    screen_scale = getattr(matcher, "_compute_auto_scale", lambda w: None)(screen_w)
+    pos_dot, conf_dot = matcher.match(
+        crop_roi,
+        red_dot_template,
+        threshold=red_dot_threshold,
+        scale=screen_scale,
+    )
     if pos_dot:
         global_dot_pos = (x1 + pos_dot[0], y1 + pos_dot[1])
         return BuildingCheckResult(
@@ -119,9 +125,21 @@ def detect_building_with_red_dot(
             confidence_red_dot=conf_dot,
         )
 
+    # 比對未通過時，輸出診斷截圖供現場除錯 (符合 debug-artifact-management 規範)
+    if isinstance(crop_roi, np.ndarray):
+        try:
+            from utils.debug_artifacts import write_debug_image
+            write_debug_image("debug_red_dot_crop.png", crop_roi)
+            logging.debug(
+                f"🔍 [RedDotDebug] 建築下方未檢出紅點 (最大信心度: {conf_dot:.4f}, 門檻: {red_dot_threshold}, scale: {screen_scale})，已寫入 debug_red_dot_crop.png"
+            )
+        except Exception:
+            pass
+
     return BuildingCheckResult(
         found_building=True,
         has_red_dot=False,
         building_pos=pos_building,
         confidence_building=conf_building,
+        confidence_red_dot=conf_dot,
     )
