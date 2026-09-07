@@ -12,6 +12,8 @@ class TestTownBuildingDetector(unittest.TestCase):
     def setUp(self):
         self.mock_matcher = MagicMock()
         self.mock_matcher.templates_dir = "templates"
+        from vision.matcher import TemplateMatcher
+        self.mock_matcher.compute_candidate_scales = TemplateMatcher().compute_candidate_scales
         self.dummy_screen = np.zeros((600, 800, 3), dtype=np.uint8)
 
     def test_none_input_handling(self):
@@ -89,7 +91,8 @@ class TestTownBuildingDetector(unittest.TestCase):
             elif template == "town_building/red_dot.png":
                 # 模擬只有在特定 scale (例如 1.0) 下才高於門檻
                 scale = kwargs.get("scale")
-                if scale == 1.0:
+                scales = kwargs.get("scales")
+                if scale == 1.0 or (scales and any(abs(s - 1.0) < 1e-3 for s in scales)):
                     return ((60, 50), 0.82)
                 return (None, 0.45)
             return (None, 0.0)

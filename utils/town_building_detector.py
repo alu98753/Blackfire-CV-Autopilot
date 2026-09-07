@@ -164,18 +164,31 @@ def detect_building_with_red_dot(
     if screen_img is None or matcher is None:
         return BuildingCheckResult(found_building=False, has_red_dot=False)
 
-    pos_building, conf_building = matcher.match(
-        screen_img, building_template, threshold=building_threshold, **match_kwargs
-    )
-    if not pos_building:
-        return BuildingCheckResult(found_building=False, has_red_dot=False)
-
     screen_h, screen_w = (600, 800)
     if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2:
         try:
             screen_h, screen_w = screen_img.shape[:2]
         except Exception:
             pass
+
+    # 1. 計算多尺度候選集 (DRY: 委託 TemplateMatcher 統一產生)
+    candidate_scales = (
+        matcher.compute_candidate_scales(screen_w)
+        if hasattr(matcher, "compute_candidate_scales")
+        else None
+    )
+
+    # 2. 建築物比對：關閉亮度過濾 (brightness_threshold=0.0)，並套用多尺度
+    building_kwargs = dict(match_kwargs)
+    building_kwargs.setdefault("brightness_threshold", 0.0)
+    if candidate_scales is not None and "scales" not in building_kwargs:
+        building_kwargs["scales"] = candidate_scales
+
+    pos_building, conf_building = matcher.match(
+        screen_img, building_template, threshold=building_threshold, **building_kwargs
+    )
+    if not pos_building:
+        return BuildingCheckResult(found_building=False, has_red_dot=False)
 
     tag = _resolve_debug_tag(debug_tag, building_template)
     templates_dir = getattr(matcher, "templates_dir", "templates")
@@ -212,23 +225,14 @@ def detect_building_with_red_dot(
             found_building=True, has_red_dot=False, building_pos=pos_building, confidence_building=conf_building
         )
 
-    # 多尺度候選比對驚嘆號紅點
-    candidate_scales = [round(screen_scale, 3)]
-    for s in (1.0, round(screen_scale * 0.9, 3), round(screen_scale * 1.1, 3)):
-        if not any(abs(s - cs) < 0.03 for cs in candidate_scales):
-            candidate_scales.append(s)
-
-    best_pos_dot, best_conf_dot, best_scale_dot = None, 0.0, screen_scale
-    for s in candidate_scales:
-        pos_d, conf_d = matcher.match(crop_roi, red_dot_template, threshold=red_dot_threshold, scale=s)
-        if conf_d > best_conf_dot:
-            best_conf_dot = conf_d
-            best_scale_dot = s
-            if pos_d is not None:
-                best_pos_dot = pos_d
+    # 3. 多尺度候選比對驚嘆號紅點 (DRY: 委託 matcher.match(scales=candidate_scales))
+    best_pos_dot, best_conf_dot = matcher.match(
+        crop_roi, red_dot_template, threshold=red_dot_threshold,
+        scales=candidate_scales, brightness_threshold=0.0
+    )
 
     has_red_dot = best_pos_dot is not None
-    peak_crop_pos = None if has_red_dot else _find_peak_in_crop(matcher, crop_roi, red_dot_template, best_scale_dot)
+    peak_crop_pos = None if has_red_dot else _find_peak_in_crop(matcher, crop_roi, red_dot_template, screen_scale)
     global_dot_pos = (x1 + best_pos_dot[0], y1 + best_pos_dot[1]) if has_red_dot else None
 
     _save_red_dot_diagnostics(
@@ -251,7 +255,7 @@ def detect_building_with_red_dot(
     if has_red_dot:
         logging.info(
             f"🔍 [RedDotDebug] [{tag}] 建築下方成功檢測到紅點！相似度: {best_conf_dot:.4f} "
-            f"(門檻: {red_dot_threshold:.2f}, scale: {best_scale_dot:.3f})，座標: {global_dot_pos}"
+            f"(門檻: {red_dot_threshold:.2f}, scale: {screen_scale:.3f})，座標: {global_dot_pos}"
         )
         return BuildingCheckResult(
             found_building=True,
@@ -264,7 +268,7 @@ def detect_building_with_red_dot(
 
     logging.info(
         f"🔍 [RedDotDebug] [{tag}] 建築下方未檢出紅點 (最高相似度: {best_conf_dot:.4f} < "
-        f"門檻: {red_dot_threshold:.2f}, scale: {best_scale_dot:.3f})，已產出除錯診斷圖: debug_red_dot_{tag}.png"
+        f"門檻: {red_dot_threshold:.2f}, scale: {screen_scale:.3f})，已產出除錯診斷圖: debug_red_dot_{tag}.png"
     )
     return BuildingCheckResult(
         found_building=True,

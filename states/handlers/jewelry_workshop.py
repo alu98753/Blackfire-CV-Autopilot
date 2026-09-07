@@ -425,20 +425,35 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 matched_pos = None
                 matched_conf = 0.0
 
+                screen_w = screen_img.shape[1] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else 1920
+                candidate_scales = (
+                    self.matcher.compute_candidate_scales(screen_w)
+                    if hasattr(self.matcher, "compute_candidate_scales")
+                    else None
+                )
+
                 for s in sorted_shops:
                     tmpl = s.get("template", building_btn)
                     if not tmpl:
                         continue
-                    pos_b, conf_b = self.matcher.match(screen_img, tmpl, threshold=0.65, brightness_threshold=0.70, quiet=True)
+                    pos_b, conf_b = self.matcher.match(
+                        screen_img, tmpl, threshold=0.65, brightness_threshold=0.0,
+                        scales=candidate_scales, quiet=True
+                    )
                     if pos_b:
                         matched_shop = s
                         matched_pos = pos_b
                         matched_conf = conf_b
                         break
+                    else:
+                        logging.debug(f"💎 [城鎮商店] 候選商店 [{s.get('name')}] 未達標 (信心度: {conf_b:.4f} < 0.65)")
 
                 # 相容性 fallback：若未比對到任何輪換商店，比對預設 building_btn
                 if not matched_shop:
-                    pos_b, conf_b = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
+                    pos_b, conf_b = self.matcher.match(
+                        screen_img, building_btn, threshold=0.65, brightness_threshold=0.0,
+                        scales=candidate_scales, quiet=True
+                    )
                     if pos_b:
                         matched_shop = {"id": "jewelry_workshop", "name": "珠寶加工廠", "template": building_btn}
                         matched_pos = pos_b
