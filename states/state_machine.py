@@ -1062,7 +1062,16 @@ class GameStateMachine:
         # 如果模式類型不是地下城/mix/daily，直接傳回 False（防呆非地下城模式）
         cfg_type = cfg.get("type")
         if cfg_type not in ["dungeon", "mix", "daily"]:
-            return False
+            has_domain_dungeon = (
+                cfg.get("enable_dungeon", False)
+                and (
+                    cfg.get("tier4_mode") == TIER4_MODE_DOMAIN
+                    or cfg.get("is_tier4_fallback", False)
+                    or "greedy_allowed_indices" in cfg
+                )
+            )
+            if not has_domain_dungeon:
+                return False
 
         # 如果先前已確認所有地下城皆在冷卻中，且尚未超過暫存冷卻時間，直接傳回 False
         all_cd_until = getattr(self, "all_dungeons_on_cooldown_until", 0.0)
@@ -1316,9 +1325,30 @@ class GameStateMachine:
 
     def _daily_activity_config(self):
         """Return the persistent Daily scheduling policy, not a temporary route."""
-        if self.is_daily_pipeline_active() and getattr(self, "primary_config", None):
-            return self.primary_config
+        primary = getattr(self, "primary_config", None)
+        if primary and (
+            getattr(self, "runtime_config_key", None) == "daily"
+            or primary.get("_config_mode_key") == "daily"
+            or self.is_daily_pipeline_active()
+        ):
+            return primary
         return self.config or {}
+
+    def build_dungeon_resume_route(self, source_config=None):
+        """Build an executable dungeon route from policy/source when resuming from collect_only."""
+        policy = self._daily_activity_config()
+        base = policy if (policy and policy.get("enable_dungeon")) else (source_config or self.config or {})
+        route = deepcopy(base)
+        route["type"] = "mix"
+        route["enable_dungeon"] = True
+        route["is_tier4_fallback"] = True
+        route["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+        if "dungeon_entries" not in route and "daily" in GAME_CONFIGS:
+            route["dungeon_entries"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_entries", []))
+            route["dungeon_names"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_names", []))
+        self._apply_tier4_stage_selection(route)
+        self._apply_tier4_dungeon_selection(route)
+        return route
 
     def has_available_daily_dungeon(self):
         """Check the timed dungeon policy even while Tier 4 is a domain route."""

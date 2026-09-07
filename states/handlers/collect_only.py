@@ -28,7 +28,10 @@ class CollectOnlyHandler(BaseStateHandler):
                     logging.info("[Dungeon cooldown resume] bread collection is pending; resumption deferred.")
                 else:
                     logging.warning("[Dungeon cooldown resume] cooldown complete; returning to dungeon mode.")
-                    self.machine.config = cooldown_return_config
+                    if cooldown_return_config.get("type") == "domain" or cooldown_return_config.get("tier4_mode") == "domain":
+                        self.machine.config = self.machine.build_dungeon_resume_route(cooldown_return_config)
+                    else:
+                        self.machine.config = cooldown_return_config
                     self.machine.dungeon_cooldown_return_config = None
                     self.machine.transition_to(self.machine.STATE_UNKNOWN)
                     return
@@ -99,7 +102,10 @@ class CollectOnlyHandler(BaseStateHandler):
                         logging.info("🍞 [冷卻結束復歸] 偵測到地下城冷卻結束，先執行體力領取...")
                     else:
                         logging.warning(f"🔄 [冷卻結束復歸] 偵測到地下城冷卻結束，暫時離開 collect_only 切回刷地下城！(退避總剩餘時間持續倒數中...)")
-                        self.machine.config = self.machine.original_config
+                        if self.machine.original_config.get("type") == "domain" or self.machine.original_config.get("tier4_mode") == "domain":
+                            self.machine.config = self.machine.build_dungeon_resume_route(self.machine.original_config)
+                        else:
+                            self.machine.config = self.machine.original_config
                         # 保持 self.machine.original_config 與 self.machine.stamina_retreat_start_time 不變
                         self.machine.transition_to(self.machine.STATE_UNKNOWN)
                         return
@@ -186,14 +192,18 @@ class CollectOnlyHandler(BaseStateHandler):
         # 3.5.3 檢查地下城探索 (enable_dungeon)
         pending_quests = getattr(self.machine, "quest_scheduler", None)
         has_pending_quests = bool(pending_quests and pending_quests.get_pending_tasks())
-        if self.machine.config.get("enable_dungeon", False) and not has_pending_quests:
+        policy = self.machine._daily_activity_config()
+        active_cfg = self.machine.config or {}
+        policy_cfg = policy if policy else active_cfg
+        if policy_cfg.get("enable_dungeon", False) and not has_pending_quests:
             dungeon_ready = False
             try:
-                dungeon_ready = self.machine.has_available_dungeon()
+                dungeon_ready = self.machine.has_available_dungeon(target_config=policy_cfg)
             except Exception:
                 dungeon_ready = False
             if dungeon_ready:
                 logging.info("🏰 [定時待機喚醒] 偵測到地下城冷卻結束 ➔ 喚醒轉入 NAVIGATING 前往地下城！")
+                self.machine.config = self.machine.build_dungeon_resume_route(policy_cfg)
                 self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return
 
