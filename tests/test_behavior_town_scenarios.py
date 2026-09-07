@@ -113,11 +113,13 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
 
         handler.last_action_time = 0.0
+        step4_calls = [0]
         def mock_match_step4(img, name, **kw):
             if kw.get("quiet"):
                 return (None, 0.0)
             if name == "common/quit.png":
-                return ((1200, 100), 0.9)
+                step4_calls[0] += 1
+                return ((1200, 100), 0.9) if step4_calls[0] <= 1 else (None, 0.0)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_step4
@@ -130,7 +132,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         handler.last_action_time = 0.0
         step5_calls = [0]
         def mock_match_step5(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 step5_calls[0] += 1
                 return ((50, 50), 0.9) if step5_calls[0] <= 1 else (None, 0.0)
             return (None, 0.0)
@@ -296,7 +298,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         def mock_match_exit_building(img, name, **kw):
             if kw.get("quiet"):
                 return (None, 0.0)
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 return ((74, 744), 0.90)
             return (None, 0.0)
 
@@ -507,7 +509,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         altar_handler.step_phase = "ALL_DONE_EXITING"
         
         def mock_match_exit(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 return ((74, 744), 0.90)
             return (None, 0.0)
 
@@ -558,7 +560,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         altar_handler.step_phase = "ALL_DONE_EXITING"
         
         def mock_match_exit(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 return ((74, 744), 0.90)
             return (None, 0.0)
 

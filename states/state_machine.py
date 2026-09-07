@@ -1327,8 +1327,10 @@ class GameStateMachine:
         """Return the persistent Daily scheduling policy, not a temporary route."""
         primary = getattr(self, "primary_config", None)
         if primary and (
-            getattr(self, "runtime_config_key", None) == "daily"
-            or primary.get("_config_mode_key") == "daily"
+            getattr(self, "runtime_config_key", None) in ["daily", "mix"]
+            or primary.get("_config_mode_key") in ["daily", "mix"]
+            or primary.get("type") in ["daily", "mix"]
+            or primary.get("enable_dungeon")
             or self.is_daily_pipeline_active()
         ):
             return primary

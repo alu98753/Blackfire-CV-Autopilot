@@ -58,7 +58,7 @@ class TestMainConfig(unittest.TestCase):
         self.assertIn("stages/level1_final.png", config["navigation_path"])
 
     @patch('os.path.exists')
-    @patch('builtins.input', side_effect=["7", "135", "1"])
+    @patch('builtins.input', side_effect=["8", "135", "1"])
     def test_setup_dungeon_config_greedy_custom(self, mock_input, mock_exists):
         """測試 setup_dungeon_config 自訂貪婪挑選 [1, 3, 5] 關卡與戰鬥祝福"""
         mock_exists.return_value = True

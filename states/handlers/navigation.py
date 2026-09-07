@@ -291,6 +291,11 @@ class NavigationHandler(BaseStateHandler):
             logging.warning("[Dungeon cooldown fallback] goback_town.png not found; collect_only will return on its next step.")
 
         current_config = self.machine.config or {}
+        if not getattr(self.machine, "primary_config", None) and (
+            current_config.get("enable_dungeon") or current_config.get("type") in ["daily", "mix"]
+        ):
+            self.machine.primary_config = deepcopy(current_config)
+
         if current_config.get("auto_resume_dungeon_on_cd", False):
             self.machine.dungeon_cooldown_return_config = deepcopy(current_config)
         else:

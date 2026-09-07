@@ -85,7 +85,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         )
 
     @patch("cli.dungeon_setup.persist_mode_updates")
-    @patch("builtins.input", side_effect=["7", "113", "1"])
+    @patch("builtins.input", side_effect=["8", "113", "1"])
     def test_greedy_dungeon_deduplicates_targets_and_persists_only_changed_policy(
         self, _input, persist
     ):

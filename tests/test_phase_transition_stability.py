@@ -78,6 +78,8 @@ class TestPhaseTransitionStability(unittest.TestCase):
         def mock_match(img, template, **kwargs):
             if template == "town_building/Tavern/Tavern.png":
                 return (500, 500), 0.85
+            if "red_dot" in template:
+                return (50, 50), 0.85
             return None, 0.0
 
         self.state_machine.matcher.match.side_effect = mock_match
