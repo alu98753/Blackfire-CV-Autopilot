@@ -1978,14 +1978,27 @@ class GameStateMachine:
         try:
             cfg = self.config or {}
             activity_cfg = self._daily_activity_config()
-            # 0. 體力退避期間冷卻復歸
+            # 0. 體力退避期間只允許已就緒的地下城暫時喚醒。
+            #    Tier 4 fallback 可能是 domain；此處若呼叫 apply_tier4_fallback_config()
+            #    會覆蓋 CollectOnlyHandler 剛提交的地下城 route，形成
+            #    COLLECT_ONLY -> NAVIGATING -> DOMAIN_EXPLORE -> COLLECT_ONLY 迴圈。
             if getattr(self, "stamina_retreat_start_time", None) is not None:
-                if cfg.get("enable_dungeon", True):
-                    logging.info("🔄 [Activity Scheduler] 處於體力退避冷卻復歸期間 ➔ 嘗試執行退守地下城！")
-                    self.apply_tier4_fallback_config()
-                    return True
-                else:
+                dungeon_enabled = activity_cfg.get(
+                    "enable_dungeon", cfg.get("enable_dungeon", True)
+                )
+                if not dungeon_enabled:
                     return False
+
+                if not self.has_available_dungeon(target_config=activity_cfg):
+                    return False
+
+                dungeon_route = self.build_dungeon_resume_route(activity_cfg)
+                self.set_config(dungeon_route)
+                logging.info(
+                    "🔄 [Activity Scheduler] 體力退避期間地下城冷卻已結束 "
+                    "➔ 保留地下城復歸路由，不套用 Tier 4 Domain fallback。"
+                )
+                return True
 
             dm = getattr(self, "daily_manager", None)
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)

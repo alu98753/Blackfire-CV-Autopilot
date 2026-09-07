@@ -107,6 +107,36 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         self.assertEqual(self.state_machine.config["dungeon_index"], 6)
         self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
 
+    def test_navigating_hook_keeps_dungeon_resume_route_when_fallback_is_domain(self):
+        """A committed cooldown resume must not be rewritten to the Domain fallback."""
+        daily_cfg = GAME_CONFIGS["daily"].copy()
+        daily_cfg.update({
+            "_config_mode_key": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6],
+            "auto_resume_dungeon_on_cd": True,
+        })
+        self.state_machine.runtime_config_key = "daily"
+        self.state_machine.primary_config = daily_cfg
+        self.state_machine.dungeon_cooldowns = {6: time.time() - 1.0}
+        self.state_machine.original_config = self.state_machine._build_tier4_fallback_config()
+        self.state_machine.stamina_retreat_start_time = time.time() - 600.0
+        self.state_machine.config = self.state_machine.build_dungeon_resume_route(daily_cfg)
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+
+        self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
+
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertEqual(self.state_machine.config["type"], "mix")
+        self.assertEqual(
+            self.state_machine.config["navigation_path"],
+            ["common/door.png", "dungeons/dungeon.png"],
+        )
+        self.assertEqual(self.state_machine.original_config["type"], "domain")
+
     def test_stamina_retreat_timestamp_preserved_across_re_retreat(self):
         """
         [防護斷言] 驗證從 collect_only Resume 切回打地下城，但實機無體力再次撞到 no_bread 時，
