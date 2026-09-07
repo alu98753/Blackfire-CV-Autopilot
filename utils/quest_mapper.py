@@ -83,9 +83,10 @@ class TaskNode:
             "dungeons/Forest_entry.png",
             "dungeons/Ruins_entry.png",
             "dungeons/dark_prison.png",
-            "dungeons/Ice_entry.png"
+            "dungeons/Ice_entry.png",
+            "dungeons/orc_bunker.png"
         ]
-        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
 
 
         stage_entries = {
@@ -152,6 +153,7 @@ class TaskNode:
             cfg = PRIMARY_MODES["dungeon"].copy()
             cfg["enable_dungeon"] = True
             cfg["dungeon_index"] = idx
+            cfg["tier4_dungeon_index"] = idx
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]

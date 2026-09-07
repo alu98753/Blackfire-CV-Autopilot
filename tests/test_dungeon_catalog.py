@@ -12,10 +12,11 @@ class TestDungeonCatalog(unittest.TestCase):
         self.assertEqual(DungeonCatalog.get_name(4), "神秘遺跡")
         self.assertEqual(DungeonCatalog.get_name(5), "幽暗監獄")
         self.assertEqual(DungeonCatalog.get_name(6), "冰雪洞窟")
+        self.assertEqual(DungeonCatalog.get_name(7), "獸人地堡")
 
     def test_get_name_out_of_bounds_fallback(self):
         self.assertEqual(DungeonCatalog.get_name(0), "地下城")
-        self.assertEqual(DungeonCatalog.get_name(7), "地下城")
+        self.assertEqual(DungeonCatalog.get_name(8), "地下城")
         self.assertEqual(DungeonCatalog.get_name(-1), "地下城")
         self.assertEqual(DungeonCatalog.get_name(None, default="未知"), "未知")
         self.assertEqual(DungeonCatalog.get_name("invalid", default="未知"), "未知")
@@ -23,8 +24,9 @@ class TestDungeonCatalog(unittest.TestCase):
     def test_get_entry_template_valid_and_fallback(self):
         self.assertEqual(DungeonCatalog.get_entry_template(1), "dungeons/Slime_entry.png")
         self.assertEqual(DungeonCatalog.get_entry_template(6), "dungeons/Ice_entry.png")
+        self.assertEqual(DungeonCatalog.get_entry_template(7), "dungeons/orc_bunker.png")
         self.assertEqual(DungeonCatalog.get_entry_template(0), "dungeons/Ice_entry.png")
-        self.assertEqual(DungeonCatalog.get_entry_template(7), "dungeons/Ice_entry.png")
+        self.assertEqual(DungeonCatalog.get_entry_template(8), "dungeons/Ice_entry.png")
         self.assertEqual(DungeonCatalog.get_entry_template(None), "dungeons/Ice_entry.png")
 
     def test_resolve_index_from_nav_path(self):
@@ -33,6 +35,9 @@ class TestDungeonCatalog(unittest.TestCase):
 
         path6 = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
         self.assertEqual(DungeonCatalog.resolve_index_from_nav_path(path6), 6)
+
+        path7 = ["common/door.png", "dungeons/dungeon.png", "dungeons/orc_bunker.png"]
+        self.assertEqual(DungeonCatalog.resolve_index_from_nav_path(path7), 7)
 
         path_empty = []
         self.assertIsNone(DungeonCatalog.resolve_index_from_nav_path(path_empty))
@@ -43,14 +48,15 @@ class TestDungeonCatalog(unittest.TestCase):
     def test_is_valid_index(self):
         self.assertTrue(DungeonCatalog.is_valid_index(1))
         self.assertTrue(DungeonCatalog.is_valid_index(6))
+        self.assertTrue(DungeonCatalog.is_valid_index(7))
         self.assertFalse(DungeonCatalog.is_valid_index(0))
-        self.assertFalse(DungeonCatalog.is_valid_index(7))
+        self.assertFalse(DungeonCatalog.is_valid_index(8))
         self.assertFalse(DungeonCatalog.is_valid_index("1"))
         self.assertFalse(DungeonCatalog.is_valid_index(None))
 
     def test_build_default_cooldowns(self):
         cds = DungeonCatalog.build_default_cooldowns()
-        self.assertEqual(list(cds.keys()), [1, 2, 3, 4, 5, 6])
+        self.assertEqual(list(cds.keys()), [1, 2, 3, 4, 5, 6, 7])
         self.assertTrue(all(v == 0.0 for v in cds.values()))
 
     def test_format_cooldown_report_all_ready(self):

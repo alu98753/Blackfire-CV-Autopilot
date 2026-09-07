@@ -13,9 +13,9 @@ class TestDailyDungeonToggle(unittest.TestCase):
     """Behavior tests for Daily mode dungeon toggle and persistence."""
 
     @patch('cli.dungeon_setup.persist_mode_updates')
-    @patch('builtins.input', return_value="8")
-    def test_daily_dungeon_selection_disable_option_8(self, mock_input, mock_persist):
-        """[選單 8 停用測試] 驗證在 daily 模式下選擇 8 時，停用地下城並寫回 profile，且不提示祝福/退避問答"""
+    @patch('builtins.input', return_value="9")
+    def test_daily_dungeon_selection_disable_option_9(self, mock_input, mock_persist):
+        """[選單 9 停用測試] 驗證在 daily 模式下選擇 9 時，停用地下城並寫回 profile，且不提示祝福/退避問答"""
         config = {
             "_config_mode_key": "daily",
             "enable_dungeon": True,
@@ -51,8 +51,8 @@ class TestDailyDungeonToggle(unittest.TestCase):
 
     @patch('cli.dungeon_setup.persist_mode_updates')
     @patch('builtins.input', return_value="")
-    def test_daily_dungeon_selection_default_is_8_when_disabled(self, mock_input, mock_persist):
-        """[停用狀態 Enter 沿用測試] 驗證當 TOML 已為停用時，預設選擇為 8，Enter 保持停用且不重複寫回"""
+    def test_daily_dungeon_selection_default_is_9_when_disabled(self, mock_input, mock_persist):
+        """[停用狀態 Enter 沿用測試] 驗證當 TOML 已為停用時，預設選擇為 9，Enter 保持停用且不重複寫回"""
         config = {
             "_config_mode_key": "daily",
             "enable_dungeon": False,
@@ -63,7 +63,7 @@ class TestDailyDungeonToggle(unittest.TestCase):
         res = setup_dungeon_config(config, args, interactive=True, allow_disable=True)
 
         self.assertFalse(res["enable_dungeon"])
-        # 原本就是 False，選擇 8 不應重複調用 persist
+        # 原本就是 False，選擇 9 不應重複調用 persist
         mock_persist.assert_not_called()
         self.assertEqual(mock_input.call_count, 1)
 
@@ -89,15 +89,15 @@ class TestDailyDungeonToggle(unittest.TestCase):
         mock_setup_tier4.assert_called_once()
 
     @patch('cli.dungeon_setup.persist_mode_updates')
-    @patch('builtins.input', side_effect=["7", "135", "1", "2"])
+    @patch('builtins.input', side_effect=["8", "135", "1", "2"])
     def test_daily_dungeon_selection_greedy_custom_subset_persists(self, mock_input, mock_persist):
-        """[貪婪自訂子集測試] 驗證選擇 7 並輸入 135 時，啟用地下城、設定 greedy_allowed_indices=[1, 3, 5] 並回寫 profile"""
+        """[貪婪自訂子集測試] 驗證選擇 8 並輸入 135 時，啟用地下城、設定 greedy_allowed_indices=[1, 3, 5] 並回寫 profile"""
         config_dict = {
             "_config_mode_key": "daily",
             "enable_dungeon": False,
             "greedy_dungeon": False,
             "tier4_dungeon_index": 6,
-            "greedy_allowed_indices": [1, 2, 3, 4, 5, 6],
+            "greedy_allowed_indices": [1, 2, 3, 4, 5, 6, 7],
         }
         args = argparse.Namespace(mode="daily", blessmode=None)
 
@@ -113,15 +113,15 @@ class TestDailyDungeonToggle(unittest.TestCase):
         self.assertEqual(last_updates.get("greedy_allowed_indices"), [1, 3, 5])
 
     @patch('cli.dungeon_setup.persist_mode_updates')
-    @patch('builtins.input', side_effect=["7", "", "1", "2"])
+    @patch('builtins.input', side_effect=["8", "", "1", "2"])
     def test_daily_dungeon_selection_greedy_default_all_persists(self, mock_input, mock_persist):
-        """[貪婪預設全部測試] 驗證選擇 7 並直接 Enter 時，預設打全部 1~6 關並回寫 profile"""
+        """[貪婪預設全部測試] 驗證選擇 8 並直接 Enter 時，預設打全部 1~7 關並回寫 profile"""
         config_dict = {
             "_config_mode_key": "daily",
             "enable_dungeon": False,
             "greedy_dungeon": False,
             "tier4_dungeon_index": 6,
-            "greedy_allowed_indices": [1, 2, 3, 4, 5, 6],
+            "greedy_allowed_indices": [1, 2, 3, 4, 5, 6, 7],
         }
         args = argparse.Namespace(mode="daily", blessmode=None)
 
@@ -129,7 +129,7 @@ class TestDailyDungeonToggle(unittest.TestCase):
 
         self.assertTrue(res["enable_dungeon"])
         self.assertTrue(res["greedy_dungeon"])
-        self.assertEqual(res["greedy_allowed_indices"], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(res["greedy_allowed_indices"], [1, 2, 3, 4, 5, 6, 7])
         self.assertTrue(mock_persist.called)
         last_updates = mock_persist.call_args[0][1]
         self.assertTrue(last_updates.get("enable_dungeon"))
@@ -202,9 +202,9 @@ class TestDailyDungeonProfileFilePersistence(unittest.TestCase):
         with profile_toml_path.open("rb") as f:
             return tomllib.load(f)
 
-    @patch('builtins.input', return_value="8")
-    def test_option_8_writes_enable_dungeon_false_to_profile_toml(self, _mock_input):
-        """[真實寫檔測試 - 選項 8] 選擇 8 時，真實寫入 [primary_modes.daily] enable_dungeon = false"""
+    @patch('builtins.input', return_value="9")
+    def test_option_9_writes_enable_dungeon_false_to_profile_toml(self, _mock_input):
+        """[真實寫檔測試 - 選項 9] 選擇 9 時，真實寫入 [primary_modes.daily] enable_dungeon = false"""
         config_dict = {
             "_config_mode_key": "daily",
             "type": "mix",
@@ -240,16 +240,16 @@ class TestDailyDungeonProfileFilePersistence(unittest.TestCase):
         self.assertFalse(daily_cfg.get("greedy_dungeon"))
         self.assertEqual(daily_cfg.get("tier4_dungeon_index"), 6)
 
-    @patch('builtins.input', side_effect=["7", "135", "1", "2"])
-    def test_option_7_writes_greedy_subset_to_profile_toml(self, _mock_input):
-        """[真實寫檔測試 - 選項 7] 選擇貪婪並輸入 135 時，真實寫入 greedy_dungeon = true 與 greedy_allowed_indices = [1, 3, 5]"""
+    @patch('builtins.input', side_effect=["8", "135", "1", "2"])
+    def test_option_8_writes_greedy_subset_to_profile_toml(self, _mock_input):
+        """[真實寫檔測試 - 選項 8] 選擇貪婪並輸入 135 時，真實寫入 greedy_dungeon = true 與 greedy_allowed_indices = [1, 3, 5]"""
         config_dict = {
             "_config_mode_key": "daily",
             "type": "mix",
             "enable_dungeon": False,
             "greedy_dungeon": False,
             "tier4_dungeon_index": 6,
-            "greedy_allowed_indices": [1, 2, 3, 4, 5, 6],
+            "greedy_allowed_indices": [1, 2, 3, 4, 5, 6, 7],
         }
         args = argparse.Namespace(mode="daily", blessmode=None)
 
