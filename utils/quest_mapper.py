@@ -87,17 +87,28 @@ class TaskNode:
         ]
         dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
 
+
         stage_entries = {
             1: "stages/level1_sky_plains.png",
             2: "stages/level2_barren_rocks.png",
             3: "stages/level3_ancient_forest.png",
             4: "stages/level4_desert_ruins.png",
             5: "stages/level5_gloomy_swamp.png",
-            6: "stages/level6_ice_cave.png"
+            6: "stages/level6_ice_cave.png",
+            7: "stages/level7_forgotten_wasteland.png"
         }
         stage_names = {
-            1: "蒼穹平原", 2: "荒蕪岩地", 3: "古樹森林", 4: "沙漠廢墟", 5: "幽暗沼澤", 6: "冰凍峽谷"
+            1: "蒼穹平原", 2: "荒蕪岩地", 3: "古樹森林", 4: "沙漠廢墟", 5: "幽暗沼澤", 6: "冰凍峽谷", 7: "遺忘荒地"
         }
+        try:
+            from config import BASE_STAGE_LEVELS
+            for k, v in BASE_STAGE_LEVELS.items():
+                k_int = int(k)
+                stage_entries[k_int] = v["entry"]
+                stage_names[k_int] = v["name"]
+        except Exception:
+            pass
+
         stage_targets = {
             "first": "stages/first_stage.png",
             "middle": "stages/middle_stage.png",

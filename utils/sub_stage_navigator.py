@@ -60,7 +60,7 @@ class SubStageListNavigator:
             candidates.append(f"stages/level{level_id}_middle.png")
             candidates.append(f"stages/level{level_id}_final.png")
         else:
-            for lvl in range(1, 7):
+            for lvl in range(1, 11):
                 candidates.append(f"stages/level{lvl}_middle.png")
                 candidates.append(f"stages/level{lvl}_final.png")
         return candidates
