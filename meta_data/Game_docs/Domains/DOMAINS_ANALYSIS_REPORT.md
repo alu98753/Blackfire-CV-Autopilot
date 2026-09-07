@@ -23,6 +23,7 @@
 ---
 
 ### 🏛️ Domain 1：黃金帝國 (`golden_empire`)
+> 📖 **完整專屬全景指南**：[golden_empire.md](./golden_empire.md)
 - **建議挑戰等級**：**Lv. 49 ~ Lv. 69**
 - **入場憑證 (門票)**：古老金幣 (`ancient_coin` x1)
 - **前置解鎖任務**：完成主線第 6 關【冰凍峽谷 (`frozen_gorge`)】後，在血之祭壇接取 `blood_altar_golden_empire` 任務。
@@ -56,7 +57,8 @@
 
 ---
 
-### ❄️ Domain 2：冷誓要塞 (`coldoath_citadel`)
+### ❄️ Domain 2：冷誓要塞 / 寒誓古堡 (`coldoath_citadel`)
+> 📖 **完整專屬全景指南與解鎖攻略**：[coldoath_citadel.md](./coldoath_citadel.md)
 - **建議挑戰等級**：**Lv. 69 ~ Lv. 89**
 - **入場憑證 (門票)**：霜縛印記 (`frostbound_sigil` x1)
 - **前置解鎖任務**：通關主線第 7 關【被遺忘的荒原 (`forgotten_wasteland`)】後，在城鎮血之祭司處接取 `blood_altar_coldoath_citadel` 任務。
