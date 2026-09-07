@@ -179,5 +179,36 @@ class TestChestSubflow(unittest.TestCase):
         if os.path.exists(dm.file_path):
             os.remove(dm.file_path)
 
+    def test_click_free_chest_scale_passing_and_coordinates(self):
+        """測試：CLICK_FREE_CHEST 正確傳遞 screen_scale 進行局部 free.png 匹配並計算正確點擊座標"""
+        mock_img = MagicMock()
+        mock_img.shape = (793, 1536, 3)
+        rect = {"left": 0, "top": 0, "width": 1536, "height": 793}
+        self.handler.step_phase = "CLICK_FREE_CHEST"
+
+        recorded_scales = []
+        def fake_match(img, template, threshold=0.75, **kwargs):
+            if template == "town_building/mysterious_treasure/free_treasure.png":
+                return ((556, 405), 0.96)
+            if template == "free.png":
+                recorded_scales.append(kwargs.get("scale"))
+                return ((209, 333), 0.93)
+            return (None, 0.0)
+
+        self.mock_machine.matcher._compute_auto_scale.return_value = 0.8
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True), \
+             patch("cv2.imread", return_value=MagicMock(shape=(477, 537, 3))):
+            res = self.handler.handle(mock_img, rect)
+            self.assertTrue(res)
+            self.assertIn(0.8, recorded_scales)
+            self.mock_machine.click_and_wait_until_gone.assert_called_once()
+            args, _ = self.mock_machine.click_and_wait_until_gone.call_args
+            self.assertEqual(args[0], "free.png")
+            self.assertEqual(args[1], 551)
+            self.assertEqual(args[2], 548)
+
 if __name__ == "__main__":
     unittest.main()
+

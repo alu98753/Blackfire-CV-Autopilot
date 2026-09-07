@@ -54,7 +54,7 @@ class ChestHandler(BaseStateHandler):
         # Step 1: INIT 階段（比對並點擊城鎮寶箱建築，前置紅點預檢）
         if self.step_phase == "INIT":
             if os.path.exists(os.path.join("templates", building_btn)):
-                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="chest")
                 if check.found_building:
                     if not check.has_red_dot:
                         logging.info("🎁 [神秘寶箱 INIT] 寶箱建築下方無驚嘆號紅點，判定今日已領取！標記完成並彈出下一任務...")
@@ -88,27 +88,38 @@ class ChestHandler(BaseStateHandler):
                 if pos_ft:
                     t_img = cv2.imread(os.path.join("templates", dialog_template))
                     t_h, t_w = t_img.shape[:2] if t_img is not None else (350, 400)
-                    h = rect["height"] if rect else (screen_img.shape[0] if isinstance(screen_img, np.ndarray) else 600)
-                    w = rect["width"] if rect else (screen_img.shape[1] if isinstance(screen_img, np.ndarray) else 800)
+                    h = rect["height"] if rect else (screen_img.shape[0] if hasattr(screen_img, "shape") else 600)
+                    w = rect["width"] if rect else (screen_img.shape[1] if hasattr(screen_img, "shape") else 800)
+
+                    # 計算目前畫面縮放比例 (繼承自全螢幕解析度)
+                    raw_scale = getattr(self.matcher, "_compute_auto_scale", lambda w: 1.0)(w)
+                    screen_scale = float(raw_scale) if isinstance(raw_scale, (int, float)) and raw_scale > 0 else 1.0
 
                     cx, cy = pos_ft
-                    x1 = max(0, cx - t_w // 2)
-                    x2 = min(w, cx + t_w // 2)
-                    y1 = max(0, cy - t_h // 2)
-                    y2 = min(h, cy + t_h // 2)
+                    scaled_tw = int(t_w * screen_scale)
+                    scaled_th = int(t_h * screen_scale)
+                    x1 = max(0, cx - scaled_tw // 2)
+                    x2 = min(w, cx + scaled_tw // 2)
+                    y1 = max(0, cy - scaled_th // 2)
+                    y2 = min(h, cy + scaled_th // 2)
                     dialog_crop = screen_img[y1:y2, x1:x2]
 
+                    # Fallback 座標：基於當前縮放高度計算按鈕相對位置 (雙重保險)
                     click_x = left + cx
-                    click_y = top + cy + (t_h // 2) - 35
+                    click_y = top + cy + (scaled_th // 2) - int(38 * screen_scale)
 
+                    matched_free = False
                     if os.path.exists(os.path.join("templates", "free.png")):
-                        pos_sub_free, conf_sub_free = self.matcher.match(dialog_crop, "free.png", threshold=0.70)
+                        pos_sub_free, conf_sub_free = self.matcher.match(
+                            dialog_crop, "free.png", threshold=0.70, scale=screen_scale
+                        )
                         if pos_sub_free:
                             click_x = left + x1 + pos_sub_free[0]
                             click_y = top + y1 + pos_sub_free[1]
+                            matched_free = True
                             logging.info(f"🎁 [神秘寶箱 Step 2] 於免費寶匣彈窗內精確比對到 [free.png] [{conf_sub_free:.4f}]，點擊座標 ({click_x}, {click_y})！")
 
-                    target_template = "free.png" if os.path.exists(os.path.join("templates", "free.png")) and self.matcher.match(dialog_crop, "free.png", threshold=0.70)[0] else dialog_template
+                    target_template = "free.png" if matched_free else dialog_template
                     logging.info(f"🎁 [神秘寶箱 Step 2] 成功鎖定免費寶匣彈窗 [{conf_ft:.4f}]，點擊免費按鈕位置 ({click_x}, {click_y})...")
                     self.machine.click_and_wait_until_gone(
                         target_template, click_x, click_y, rect,
@@ -181,7 +192,7 @@ class ChestHandler(BaseStateHandler):
 
         # Step 5: VERIFY_EXIT 階段（退出後在城鎮再次檢查紅點：有檢查到紅點 vs 沒檢查到紅點）
         elif self.step_phase == "VERIFY_EXIT":
-            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="chest")
             if check.found_building:
                 if check.has_red_dot:
                     logging.warning("⚠️ [神秘寶箱 VERIFY_EXIT] 退出後檢查：寶箱下方仍有驚嘆號紅點！判定未完成領取，不記錄 completed_today，進入 180 秒冷卻退避。")
