@@ -51,6 +51,8 @@ class TestBulletinBoardSubflow(unittest.TestCase):
                 return ((100, 200), 0.9)
             elif name == "town_building/bulletin_board/bulletin_board.png":
                 return ((150, 150), 0.88)
+            elif name == "town_building/red_dot.png":
+                return ((150, 230), 0.85)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = fake_match_step1
@@ -70,21 +72,22 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         handler.handle()
         self.assertEqual(handler.step_phase, "CHECK_RESET")
 
-        # Step 3: 點擊 reset.png 重置按鈕
+        # Step 3: 檢查重置 (看見 reset.png ➔ 點擊重置)
         handler.last_action_time = 0.0
         def fake_match_step3(img, name, **kw):
             if name == "town_building/bulletin_board/reset.png":
-                return ((300, 300), 0.90)
+                return ((500, 500), 0.85)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = fake_match_step3
+        self.mock_mouse.click.reset_mock()
         handler.handle()
-        self.mock_mouse.click.assert_called_once_with(300, 300)
+        self.mock_mouse.click.assert_called_once_with(500, 500)
         self.assertEqual(handler.step_phase, "CHECK_RESET")
-        
-        # 模擬 3.5 秒過後，當前已無 reset.png 推進至 PROCESS_ACCEPT_QUESTS
+
+        # 模擬重置點擊已過 3.1 秒 (大於 3.0 秒渲染等待)
+        handler.last_reset_click_time = time.time() - 3.2
         handler.last_action_time = 0.0
-        handler.last_reset_click_time = time.time() - 3.5
         self.mock_matcher.match.side_effect = lambda img, name, **kw: (None, 0.0)
         handler.handle()
         self.assertEqual(handler.step_phase, "PROCESS_ACCEPT_QUESTS")
@@ -111,21 +114,20 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.assertEqual(handler.accept_sub_phase, "CLICK_CONFIRM_POPUP")
         self.assertIn("清除野豬", handler.accepted_quest_titles)
 
-        # Step 6: 點擊 confirm.png
+        # Step 6: 點擊確認彈窗 confirm.png ➔ 轉移至 WAIT_TASK_ACCEPT_DISMISS
         handler.last_action_time = 0.0
         def fake_match_step6(img, name, **kw):
             if name == "common/confirm.png":
-                return ((400, 400), 0.90)
+                return ((400, 300), 0.92)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = fake_match_step6
         self.mock_mouse.click.reset_mock()
         handler.handle()
-        self.mock_mouse.click.assert_called_once_with(400, 400)
+        self.mock_mouse.click.assert_called_once_with(400, 300)
         self.assertEqual(handler.accept_sub_phase, "WAIT_TASK_ACCEPT_DISMISS")
 
-        # The task-accepted banner is an absolute gate: while visible, do not
-        # scan task.png or leave the waiting sub-phase.
+        # Step 6.5: WAIT_TASK_ACCEPT_DISMISS 屏障：橫幅存在時必須等待，絕不調用 match_all
         handler.last_action_time = 0.0
         def fake_match_banner_present(img, name, **kw):
             if name == "town_building/bulletin_board/task_accept.png":
@@ -164,8 +166,15 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(700, 100)
         self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
 
-        # Step 9: 完成離場寫入 DailyManager
+        # Step 9: 完成離場寫入 DailyManager (檢驗紅點已消除)
         handler.last_action_time = 0.0
+        def fake_match_step9(img, name, **kw):
+            if name == "town_building/bulletin_board/bulletin_board.png":
+                return ((150, 150), 0.88)
+            # 紅點已消除
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match_step9
         handler.handle()
         self.mock_daily_manager.record_subflow_completed.assert_called_once_with(
             "bulletin_board", extra_data={"accepted_quests": ["清除野豬"]}
@@ -269,6 +278,53 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         # 斷言點擊了 confirm 按鈕 (400, 400) 並轉移至 EXIT_BOARD 離場
         self.mock_mouse.click.assert_called_once_with(400, 400)
         self.assertEqual(handler.step_phase, "EXIT_BOARD")
+
+    @patch('os.path.exists', return_value=True)
+    def test_bulletin_board_exit_with_red_dot_still_present(self, mock_exists):
+        """測試：退出後在城鎮再次檢查紅點 (有檢查到紅點 ➔ 判定未完成接取，不標記 completed_today)"""
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.step_phase = "ALL_DONE_EXITING"
+        handler.last_action_time = 0.0
+
+        def fake_match(img, name, **kw):
+            if name in ["common/door.png", "town_building/bulletin_board/bulletin_board.png"]:
+                return ((150, 150), 0.88)
+            if name == "town_building/red_dot.png":
+                return ((150, 230), 0.85)  # 仍然有紅點！
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        handler.handle()
+
+        self.mock_daily_manager.record_subflow_completed.assert_not_called()
+
+    @patch('os.path.exists', return_value=True)
+    def test_bulletin_board_init_skips_when_no_red_dot(self, mock_exists):
+        """測試：進入前預檢 (INIT 發現告示牌下方無紅點 ➔ 判定所有任務已接取，直接標記完成並跳過)"""
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.step_phase = "INIT"
+        handler.last_action_time = 0.0
+
+        def fake_match(img, name, **kw):
+            if name == "common/door.png":
+                return ((100, 200), 0.9)
+            if name == "town_building/bulletin_board/bulletin_board.png":
+                return ((150, 150), 0.88)
+            # 無紅點
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        handler.handle()
+
+        self.mock_daily_manager.record_subflow_completed.assert_called_once_with(
+            "bulletin_board", extra_data={"accepted_quests": []}
+        )
+        self.mock_mouse.click.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

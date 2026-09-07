@@ -58,6 +58,8 @@ class TestHeroDrawSubflow(unittest.TestCase):
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
             if self.handler.step_phase == "INIT" and template == "town_building/Tavern/Tavern.png":
                 return ((200, 200), 0.85)
+            if self.handler.step_phase == "INIT" and template == "town_building/red_dot.png":
+                return ((200, 280), 0.85)
             if self.handler.step_phase == "ENTERED_TAVERN" and template == "town_building/Tavern/free_recruitment.png":
                 return ((300, 300), 0.85)
             if self.handler.step_phase == "CLICKED_FREE_RECRUITMENT" and template == "town_building/Tavern/RECRUITED.png":
@@ -66,12 +68,15 @@ class TestHeroDrawSubflow(unittest.TestCase):
                 return ((400, 400), 0.85)
             if self.handler.step_phase == "ALL_DONE_EXITING" and template == "town_building/exitfromhouse_and_to_town.png":
                 return ((500, 500), 0.85)
+            if self.handler.step_phase == "VERIFY_EXIT" and template == "town_building/Tavern/Tavern.png":
+                return ((200, 200), 0.85)
+            # VERIFY_EXIT 階段 red_dot.png 返回 None (紅點已消除)
             return (None, 0.0)
 
         self.mock_machine.matcher.match.side_effect = fake_match
 
         with patch("os.path.exists", return_value=True):
-            # 1. Step 1: INIT 點擊 Tavern.png
+            # 1. Step 1: INIT 點擊 Tavern.png ➔ ENTERED_TAVERN
             res1 = self.handler.handle(mock_img, rect)
             self.assertTrue(res1)
             self.assertEqual(self.handler.step_phase, "ENTERED_TAVERN")
@@ -100,12 +105,77 @@ class TestHeroDrawSubflow(unittest.TestCase):
                 self.handler.handle(mock_img, rect)
             self.assertEqual(self.handler.step_phase, "ALL_DONE_EXITING")
 
-            # 5. Step 5: ALL_DONE_EXITING 點擊 quit.png 退出並彈出下一任務
+            # 5. Step 5: ALL_DONE_EXITING 點擊 exit 按鈕 ➔ 轉入 VERIFY_EXIT
             self.handler.last_action_time = 0.0
             res5 = self.handler.handle(mock_img, rect)
             self.assertTrue(res5)
+            self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+
+            # 6. Step 6: VERIFY_EXIT 檢驗紅點已消除 ➔ 記錄完成並彈出下一任務
+            self.handler.last_action_time = 0.0
+            res6 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res6)
             self.mock_daily_manager.record_subflow_completed.assert_called_with("hero_draw")
             self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+
+    def test_verify_exit_with_red_dot_still_present(self):
+        """測試：退出後再次檢查紅點 (有檢查到紅點 ➔ 判定招募未成功，不標記 completed_today)"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.handler.step_phase = "VERIFY_EXIT"
+
+        def fake_match(img, template, threshold=0.75, **kwargs):
+            if template == "town_building/Tavern/Tavern.png":
+                return ((200, 200), 0.85)
+            if template == "town_building/red_dot.png":
+                return ((200, 280), 0.85)  # 仍然有紅點！
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+        with patch("os.path.exists", return_value=True):
+            res = self.handler.handle(mock_img, rect)
+            self.assertTrue(res)
+            # 斷言：絕對不得呼叫 record_subflow_completed！
+            self.mock_daily_manager.record_subflow_completed.assert_not_called()
+            self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+
+    def test_init_precheck_skips_when_no_red_dot(self):
+        """測試：進入前預檢 (INIT 發現酒館下方無紅點 ➔ 判定今日已抽角，直接標記完成並跳過)"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.handler.step_phase = "INIT"
+
+        def fake_match(img, template, threshold=0.75, **kwargs):
+            if template == "town_building/Tavern/Tavern.png":
+                return ((200, 200), 0.85)
+            # 無紅點
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+        with patch("os.path.exists", return_value=True):
+            res = self.handler.handle(mock_img, rect)
+            self.assertTrue(res)
+            self.mock_daily_manager.record_subflow_completed.assert_called_with("hero_draw")
+            self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+            # 斷言未發起進屋點擊
+            self.mock_machine.click_and_wait_until_gone.assert_not_called()
+
+    def test_handler_pops_subflow_when_tavern_not_found(self):
+        """測試：當連續 3 輪未發現酒館建築時，彈出下一個任務（絕不標記完成）"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+
+        with patch("os.path.exists", return_value=True):
+            for _ in range(2):
+                self.handler.handle(mock_img, rect)
+                self.handler.last_action_time = 0.0
+            res_last = self.handler.handle(mock_img, rect)
+
+        self.assertTrue(res_last)
+        # 斷言：找不到建築時，絕對不可標記完成！
+        self.mock_daily_manager.record_subflow_completed.assert_not_called()
+        self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
     def test_handler_deassemble_hero_flow(self):
         """測試：在 WAITING_CONFIRM 階段當抽到重複英雄時，優先點擊「分解英雄」 (deassemble_hero.png) 確信消失，隨後點擊 ok.png"""

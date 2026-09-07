@@ -45,6 +45,9 @@ class TestChestSubflow(unittest.TestCase):
                 return (None, 0.0)
             if template == "town_building/mysterious_treasure/mysterious_treasure.png":
                 return ((200, 300), 0.88)
+            if template == "town_building/red_dot.png":
+                # 在 INIT 階段有紅點
+                return ((200, 380), 0.85)
             if template == "town_building/mysterious_treasure/free_treasure.png":
                 return ((400, 400), 0.92)
             if template == "free.png":
@@ -58,7 +61,7 @@ class TestChestSubflow(unittest.TestCase):
         self.mock_machine.matcher.match.side_effect = fake_match
 
         with patch("os.path.exists", return_value=True):
-            # Step 1: INIT ➔ CLICK_FREE_CHEST
+            # Step 1: INIT ➔ 發現建築與紅點 ➔ 點擊進入 ➔ CLICK_FREE_CHEST
             res1 = self.handler.handle(mock_img, rect)
             self.assertTrue(res1)
             self.assertEqual(self.handler.step_phase, "CLICK_FREE_CHEST")
@@ -75,15 +78,70 @@ class TestChestSubflow(unittest.TestCase):
             self.assertTrue(res3)
             self.assertEqual(self.handler.step_phase, "WAITING_QUIT")
 
-            # Step 4: WAITING_QUIT ➔ Complete
+            # Step 4: WAITING_QUIT ➔ 點擊 quit 退出建築 ➔ VERIFY_EXIT
             self.handler.last_action_time = 0.0
             res4 = self.handler.handle(mock_img, rect)
             self.assertTrue(res4)
+            self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+
+            # Step 5: VERIFY_EXIT ➔ 模擬退回城鎮後紅點已消除 (沒檢查到紅點)
+            def fake_match_verified(img, template, threshold=0.75, **kwargs):
+                if template == "town_building/mysterious_treasure/mysterious_treasure.png":
+                    return ((200, 300), 0.88)
+                # 紅點已消失
+                return (None, 0.0)
+
+            self.mock_machine.matcher.match.side_effect = fake_match_verified
+            self.handler.last_action_time = 0.0
+            res5 = self.handler.handle(mock_img, rect)
+            self.assertTrue(res5)
             self.mock_daily_manager.record_subflow_completed.assert_called_with("chest")
             self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
+    def test_verify_exit_with_red_dot_still_present(self):
+        """測試：退出後再次檢查紅點 (有檢查到紅點 ➔ 判定未完成領取，不呼叫 record_subflow_completed)"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.handler.step_phase = "VERIFY_EXIT"
+
+        def fake_match(img, template, threshold=0.75, **kwargs):
+            if template == "town_building/mysterious_treasure/mysterious_treasure.png":
+                return ((200, 300), 0.88)
+            if template == "town_building/red_dot.png":
+                return ((200, 380), 0.85)  # 仍然有紅點！
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+        with patch("os.path.exists", return_value=True):
+            res = self.handler.handle(mock_img, rect)
+            self.assertTrue(res)
+            # 斷言：絕對不得標記完成！
+            self.mock_daily_manager.record_subflow_completed.assert_not_called()
+            self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+
+    def test_init_precheck_skips_when_no_red_dot(self):
+        """測試：進入前預檢 (INIT 階段發現建築無紅點 ➔ 判定今日已領過，直接標記完成並跳過)"""
+        mock_img = MagicMock()
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.handler.step_phase = "INIT"
+
+        def fake_match(img, template, threshold=0.75, **kwargs):
+            if template == "town_building/mysterious_treasure/mysterious_treasure.png":
+                return ((200, 300), 0.88)
+            # 無紅點
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+        with patch("os.path.exists", return_value=True):
+            res = self.handler.handle(mock_img, rect)
+            self.assertTrue(res)
+            self.mock_daily_manager.record_subflow_completed.assert_called_with("chest")
+            self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+            # 斷言未點擊建築
+            self.mock_machine.mouse.click.assert_not_called()
+
     def test_handler_pops_subflow_when_chest_not_found(self):
-        """測試：當連續 5 輪未發現寶箱建築時，標記完成並呼叫 pop_and_next_town_subflow()"""
+        """測試：當連續 5 輪未發現寶箱建築時，彈出下一個任務（絕不標記完成）"""
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
@@ -96,7 +154,8 @@ class TestChestSubflow(unittest.TestCase):
             res_last = self.handler.handle(mock_img, rect)
 
         self.assertTrue(res_last)
-        self.mock_daily_manager.record_subflow_completed.assert_called_with("chest")
+        # 斷言：找不到建築時，絕對不可標記完成！
+        self.mock_daily_manager.record_subflow_completed.assert_not_called()
         self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
     def test_daily_manager_chest_completion_and_reset(self):

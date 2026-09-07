@@ -298,16 +298,28 @@ class BloodAltarHandler(BaseStateHandler):
                 return True
 
         # =========================================================================
-        # 6. ALL_DONE_EXITING 階段：離開建築返回城鎮
+        # 6. ALL_DONE_EXITING 階段：離開建築返回城鎮並驗證紅點
         # =========================================================================
         elif self.step_phase == "ALL_DONE_EXITING":
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-            pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
+            pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.65, quiet=True)
             if pos_door or pos_building:
-                logging.info("✅ [血之祭壇] 偵測到已處於城鎮畫面，完成領血與獻祭流程！")
-                self._record_completion()
-                self.last_action_time = now
-                return True
+                from utils.town_building_detector import detect_building_with_red_dot
+                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+                if check.found_building and check.has_red_dot:
+                    logging.warning("⚠️ [血之祭壇] 退出後檢查：血之祭壇下方仍有驚嘆號紅點！判定領取未成功，不標記 completed_today，進入 180 秒冷卻退避。")
+                    self.reset_state()
+                    self.machine.need_blood_altar = False
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm and hasattr(dm, "defer_subflow"):
+                        dm.defer_subflow("blood_altar", 180)
+                    self.machine.pop_and_next_town_subflow()
+                    return True
+                else:
+                    logging.info("✅ [血之祭壇] 偵測到已處於城鎮畫面且已無紅點，完成領血與獻祭流程！")
+                    self._record_completion()
+                    self.last_action_time = now
+                    return True
 
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
             if pos_quit:
@@ -320,7 +332,6 @@ class BloodAltarHandler(BaseStateHandler):
             if pos_exit:
                 logging.info(f"🩸 [血之祭壇] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
-                self._record_completion()
                 self.last_action_time = now
                 return True
 

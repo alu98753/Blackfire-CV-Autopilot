@@ -49,25 +49,34 @@ class ChestHandler(BaseStateHandler):
         building_btn = cfg.get("building_btn", "town_building/mysterious_treasure/mysterious_treasure.png")
         free_btn = cfg.get("free_btn", "town_building/mysterious_treasure/free_treasure.png")
 
-        # Step 1: INIT 階段（比對並點擊城鎮寶箱建築）
+        from utils.town_building_detector import detect_building_with_red_dot
+
+        # Step 1: INIT 階段（比對並點擊城鎮寶箱建築，前置紅點預檢）
         if self.step_phase == "INIT":
             if os.path.exists(os.path.join("templates", building_btn)):
-                pos_chest, conf_chest = self.matcher.match(screen_img, building_btn, threshold=0.75)
-                if pos_chest:
-                    logging.info(f"🎁 [神秘寶箱 Step 1] 於城鎮發現神秘寶箱建築 [{building_btn}] [{conf_chest:.4f}]，點擊進入！")
-                    self.mouse.click(left + pos_chest[0], top + pos_chest[1])
-                    self.last_action_time = now
-                    self.step_phase = "CLICK_FREE_CHEST"
-                    self.not_found_count = 0
-                    time.sleep(0.3)
-                    return True
+                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+                if check.found_building:
+                    if not check.has_red_dot:
+                        logging.info("🎁 [神秘寶箱 INIT] 寶箱建築下方無驚嘆號紅點，判定今日已領取！標記完成並彈出下一任務...")
+                        dm = getattr(self.machine, "daily_manager", None)
+                        if dm and hasattr(dm, "record_subflow_completed"):
+                            dm.record_subflow_completed("chest")
+                        self.machine.pop_and_next_town_subflow()
+                        return True
+                    else:
+                        pos_chest = check.building_pos
+                        conf_chest = check.confidence_building
+                        logging.info(f"🎁 [神秘寶箱 Step 1] 於城鎮發現神秘寶箱建築且帶有紅點 [{building_btn}] [{conf_chest:.4f}]，點擊進入！")
+                        self.mouse.click(left + pos_chest[0], top + pos_chest[1])
+                        self.last_action_time = now
+                        self.step_phase = "CLICK_FREE_CHEST"
+                        self.not_found_count = 0
+                        time.sleep(0.3)
+                        return True
 
             self.not_found_count += 1
             if self.not_found_count >= 5:
-                logging.info("🎁 [神秘寶箱] 畫面上未發現神秘寶箱建築（可能不在城鎮視野內），標記完成並彈出下一個任務...")
-                dm = getattr(self.machine, "daily_manager", None)
-                if dm and hasattr(dm, "record_subflow_completed"):
-                    dm.record_subflow_completed("chest")
+                logging.info("🎁 [神秘寶箱] 畫面上未發現神秘寶箱建築（可能不在城鎮視野內），彈出下一個任務（不標記完成）...")
                 self.machine.pop_and_next_town_subflow()
                 return True
 
@@ -112,11 +121,9 @@ class ChestHandler(BaseStateHandler):
 
             self.not_found_count += 1
             if self.not_found_count >= 5:
-                logging.info("🎁 [神秘寶箱 Step 2] 未發現免費寶匣彈窗（可能今日已完成免費領取），標記完成並彈出下一任務...")
-                dm = getattr(self.machine, "daily_manager", None)
-                if dm and hasattr(dm, "record_subflow_completed"):
-                    dm.record_subflow_completed("chest")
-                self.machine.pop_and_next_town_subflow()
+                logging.info("🎁 [神秘寶箱 Step 2] 未發現免費寶匣彈窗，轉入 WAITING_QUIT 嘗試退回城鎮...")
+                self.step_phase = "WAITING_QUIT"
+                self.not_found_count = 0
                 return True
 
         # Step 3: WAITING_CONFIRM 階段（檢查彈出的獎勵確認按鈕 confirm.png / ok.png）
@@ -164,13 +171,37 @@ class ChestHandler(BaseStateHandler):
                         break
 
             if quit_clicked or self.not_found_count >= 3:
-                logging.info("🎉 [神秘寶箱 Step 4] 寶箱領取與退出流程完成！記錄 DailyManager 並彈出下一個城鎮任務...")
-                dm = getattr(self.machine, "daily_manager", None)
-                if dm and hasattr(dm, "record_subflow_completed"):
-                    dm.record_subflow_completed("chest")
-                self.machine.pop_and_next_town_subflow()
+                logging.info("🎁 [神秘寶箱 Step 4] 退出建築流程完成，轉入 VERIFY_EXIT 階段進行退出後紅點檢查...")
+                self.step_phase = "VERIFY_EXIT"
+                self.not_found_count = 0
+                self.last_action_time = now
                 return True
             else:
                 self.not_found_count += 1
+
+        # Step 5: VERIFY_EXIT 階段（退出後在城鎮再次檢查紅點：有檢查到紅點 vs 沒檢查到紅點）
+        elif self.step_phase == "VERIFY_EXIT":
+            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+            if check.found_building:
+                if check.has_red_dot:
+                    logging.warning("⚠️ [神秘寶箱 VERIFY_EXIT] 退出後檢查：寶箱下方仍有驚嘆號紅點！判定未完成領取，不記錄 completed_today，進入 180 秒冷卻退避。")
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm and hasattr(dm, "defer_subflow"):
+                        dm.defer_subflow("chest", 180)
+                    self.machine.pop_and_next_town_subflow()
+                    return True
+                else:
+                    logging.info("🎉 [神秘寶箱 VERIFY_EXIT] 退出後檢查：寶箱下方已無紅點！確認領取成功，記錄 completed_today = True。")
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm and hasattr(dm, "record_subflow_completed"):
+                        dm.record_subflow_completed("chest")
+                    self.machine.pop_and_next_town_subflow()
+                    return True
+            else:
+                self.not_found_count += 1
+                if self.not_found_count >= 3:
+                    logging.info("🎁 [神秘寶箱 VERIFY_EXIT] 退出後城鎮視野未對準寶箱建築，安全推進下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
+                    return True
 
         return False

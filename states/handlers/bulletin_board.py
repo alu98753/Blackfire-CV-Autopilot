@@ -111,12 +111,26 @@ class BulletinBoardHandler(BaseStateHandler):
         task_tpl = cfg.get("task_btn", "town_building/bulletin_board/task.png")
 
         # =========================================================================
-        # 1. 紀錄與階段完成 (ALL_DONE_EXITING)
+        # 1. 紀錄與階段完成 (ALL_DONE_EXITING，驗證城鎮紅點是否消除)
         # =========================================================================
         if self.step_phase == "ALL_DONE_EXITING":
-            self._record_completion()
-            self.last_action_time = now
-            return
+            from utils.town_building_detector import detect_building_with_red_dot
+            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+            if check.found_building and check.has_red_dot:
+                logging.warning("⚠️ [懸賞告示牌 ALL_DONE_EXITING] 退出後檢查：告示牌下方仍有驚嘆號紅點！判定任務未全部接取，不標記 completed_today，進入 180 秒冷卻退避。")
+                self.reset_state()
+                if hasattr(self.machine, "need_bulletin_board"):
+                    self.machine.need_bulletin_board = False
+                dm = getattr(self.machine, "daily_manager", None)
+                if dm and hasattr(dm, "defer_subflow"):
+                    dm.defer_subflow("bulletin_board", 180)
+                self.machine.pop_and_next_town_subflow()
+                self.last_action_time = now
+                return
+            else:
+                self._record_completion()
+                self.last_action_time = now
+                return
 
         # =========================================================================
         # 2. 最終退出步驟：點擊 quit.png (EXIT_BOARD)
@@ -367,7 +381,14 @@ class BulletinBoardHandler(BaseStateHandler):
             pos_bb, conf_bb = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
             
             if pos_bb:
-                logging.info(f"📋 [懸賞告示牌] 於城鎮發現告示牌建築 [{building_btn}] (信心度: {conf_bb:.4f})，點擊進入...")
+                from utils.town_building_detector import detect_building_with_red_dot
+                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+                if not check.has_red_dot:
+                    logging.info("📋 [懸賞告示牌 INIT] 告示牌下方無驚嘆號紅點，代表懸賞任務今日已全部接取！直接標記完成並彈出下一任務...")
+                    self._record_completion()
+                    self.last_action_time = now
+                    return
+                logging.info(f"📋 [懸賞告示牌] 於城鎮發現告示牌建築且帶有紅點 [{building_btn}] (信心度: {conf_bb:.4f})，點擊進入...")
                 self.mouse.click(left + pos_bb[0], top + pos_bb[1])
                 self.step_phase = "WAIT_BOARD_OPEN"
                 self.last_action_time = now

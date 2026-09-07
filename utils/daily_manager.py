@@ -88,6 +88,7 @@ class DailyManager:
         self.status = {}
         self.last_check_ts = 0.0
         self._last_file_mtime = 0.0
+        self._deferred_until = {}
         self.load_status()
         self.next_reset_timestamp = self.calculate_next_reset_timestamp()
 
@@ -673,20 +674,42 @@ class DailyManager:
 
 
 
-    def get_pending_town_subflows(self):
+    def defer_subflow(self, subflow_key, defer_seconds=180, now_ts=None):
         """
-        取得 Tier 1 尚未完成的城鎮一次性速領子流程佇列。
+        依據 Greenfield-lite v1 §4.7 規範，將執行未果或退出仍帶紅點之子流程暫緩（Defer）。
+        在 defer_seconds 期間內，get_pending_town_subflows() 將自動過濾該子流程，防止原地死循環重試。
+        """
+        if now_ts is None:
+            now_ts = time.time()
+        self._deferred_until[subflow_key] = now_ts + defer_seconds
+        retry_time_str = datetime.fromtimestamp(self._deferred_until[subflow_key]).strftime("%H:%M:%S")
+        logging.info(f"⏳ [DailyManager] 子流程 [{subflow_key}] 進入退避冷卻，暫緩 {defer_seconds} 秒 (預計至 {retry_time_str} 解除)。")
+
+    def is_subflow_deferred(self, subflow_key, now_ts=None):
+        """檢查指定子流程是否處於退避暫緩冷卻期間。"""
+        if now_ts is None:
+            now_ts = time.time()
+        deadline = self._deferred_until.get(subflow_key, 0.0)
+        return now_ts < deadline
+
+    def get_pending_town_subflows(self, now_ts=None):
+        """
+        取得 Tier 1 尚未完成且不在 defer 退避冷卻中的城鎮一次性速領子流程佇列。
         優先順序：chest ➔ hero_draw ➔ blood_altar ➔ jewelry_workshop ➔ bulletin_board
         自動過濾 enabled=False 的子流程，且各流程獨立判定。
         :return: list of str (例如 ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"])
         """
         from config import SUBFLOW_CONFIGS
+        if now_ts is None:
+            now_ts = time.time()
         pending = []
         for key in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
             flow_cfg = SUBFLOW_CONFIGS.get(key, {})
             if not flow_cfg.get("enabled", True):
                 continue
             if not self.is_subflow_completed(key):
+                if self.is_subflow_deferred(key, now_ts=now_ts):
+                    continue
                 pending.append(key)
         return pending
 
@@ -705,6 +728,7 @@ class DailyManager:
         """
         if now_ts is None:
             now_ts = time.time()
+        self._deferred_until.pop(subflow_key, None)
         subflows = self.status.setdefault("subflows", {})
         sf = subflows.setdefault(subflow_key, {"completed_today": False, "last_executed_at": ""})
         if subflow_key != "lord_boss":
