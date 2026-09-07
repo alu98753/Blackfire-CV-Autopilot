@@ -71,5 +71,38 @@ class TestTownBuildingDetector(unittest.TestCase):
         self.assertAlmostEqual(res.confidence_red_dot, 0.88)
 
 
+    def test_debug_tag_and_tag_resolution(self):
+        """測試：debug_tag 能正確推斷或手動指定"""
+        from utils.town_building_detector import _resolve_debug_tag
+        self.assertEqual(_resolve_debug_tag("custom", "any.png"), "custom")
+        self.assertEqual(_resolve_debug_tag(None, "town_building/mysterious_treasure/mysterious_treasure.png"), "chest")
+        self.assertEqual(_resolve_debug_tag(None, "town_building/Tavern/Tavern.png"), "hero_draw")
+        self.assertEqual(_resolve_debug_tag(None, "town_building/Blood_Altar/Blood_Altar.png"), "blood_altar")
+        self.assertEqual(_resolve_debug_tag(None, "town_building/bulletin_board/task.png"), "bulletin_board")
+        self.assertEqual(_resolve_debug_tag(None, "other.png"), "building")
+
+    def test_multi_scale_red_dot_matching(self):
+        """測試：多尺度紅點候選比對，當某一尺度命中時成功判定帶有紅點"""
+        def fake_match(img, template, threshold=0.60, **kwargs):
+            if template == "building.png":
+                return ((200, 300), 0.90)
+            elif template == "town_building/red_dot.png":
+                # 模擬只有在特定 scale (例如 1.0) 下才高於門檻
+                scale = kwargs.get("scale")
+                if scale == 1.0:
+                    return ((60, 50), 0.82)
+                return (None, 0.45)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        res = detect_building_with_red_dot(
+            self.dummy_screen, "building.png", self.mock_matcher, debug_tag="test_multiscale"
+        )
+        self.assertTrue(res.found_building)
+        self.assertTrue(res.has_red_dot)
+        self.assertAlmostEqual(res.confidence_red_dot, 0.82)
+
+
 if __name__ == "__main__":
     unittest.main()
+

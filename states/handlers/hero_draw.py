@@ -68,7 +68,7 @@ class HeroDrawHandler(BaseStateHandler):
             # 2.2 在城鎮尋找並點擊酒館建築 (Tavern.png，前置紅點預檢)
             if os.path.exists(os.path.join("templates", building_btn)):
                 from utils.town_building_detector import detect_building_with_red_dot
-                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
                 if check.found_building:
                     if not check.has_red_dot:
                         logging.info("🍺 [抽英雄 INIT] 酒館下方無驚嘆號紅點，判定今日招募已完成！標記完成並彈出下一任務...")
@@ -234,7 +234,7 @@ class HeroDrawHandler(BaseStateHandler):
         # 7. VERIFY_EXIT 階段：退出後在城鎮再次檢查酒館下方紅點 (有檢查到紅點 vs 沒檢查到紅點)
         elif self.step_phase == "VERIFY_EXIT":
             from utils.town_building_detector import detect_building_with_red_dot
-            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
             if check.found_building:
                 if check.has_red_dot:
                     logging.warning("⚠️ [抽英雄 VERIFY_EXIT] 退出後檢查：酒館下方仍有驚嘆號紅點！判定招募未成功，不標記 completed_today，進入 180 秒冷卻退避。")

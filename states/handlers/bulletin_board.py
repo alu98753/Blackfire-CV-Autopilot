@@ -115,7 +115,7 @@ class BulletinBoardHandler(BaseStateHandler):
         # =========================================================================
         if self.step_phase == "ALL_DONE_EXITING":
             from utils.town_building_detector import detect_building_with_red_dot
-            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="bulletin_board")
             if check.found_building and check.has_red_dot:
                 logging.warning("⚠️ [懸賞告示牌 ALL_DONE_EXITING] 退出後檢查：告示牌下方仍有驚嘆號紅點！判定任務未全部接取，不標記 completed_today，進入 180 秒冷卻退避。")
                 self.reset_state()
@@ -382,7 +382,7 @@ class BulletinBoardHandler(BaseStateHandler):
             
             if pos_bb:
                 from utils.town_building_detector import detect_building_with_red_dot
-                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher)
+                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="bulletin_board")
                 if not check.has_red_dot:
                     logging.info("📋 [懸賞告示牌 INIT] 告示牌下方無驚嘆號紅點，代表懸賞任務今日已全部接取！直接標記完成並彈出下一任務...")
                     self._record_completion()
