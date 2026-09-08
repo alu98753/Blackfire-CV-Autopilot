@@ -47,6 +47,7 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("catalog", "stage_templates"),
     ("ocr", "task_banner"),
     ("ocr", "bulletin_board"),
+    ("ocr", "merchant_gold"),
     ("defaults", "disassemble_colors"),
     ("defaults", "keep_colors"),
     ("defaults", "activities"),
@@ -169,6 +170,7 @@ STAGE_TEMPLATES = _SETTINGS["catalog"]["stage_templates"]
 
 TASK_BANNER_OCR_OFFSET = _SETTINGS["ocr"]["task_banner"]
 BULLETIN_BOARD_OCR_OFFSET = _SETTINGS["ocr"]["bulletin_board"]
+MERCHANT_GOLD_OCR_ROI = _SETTINGS["ocr"]["merchant_gold"]
 
 PRIMARY_MODES = _restore_mode_key_types(_SETTINGS["primary_modes"])
 SUBFLOW_CONFIGS = _SETTINGS["subflow_configs"]

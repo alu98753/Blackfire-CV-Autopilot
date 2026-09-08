@@ -48,6 +48,12 @@ offset_y = -10
 box_width = 360
 box_height = 57
 
+[ocr.merchant_gold]
+relative_x_min = 0.35
+relative_x_max = 0.90
+relative_y_min = 0.25
+relative_y_max = 0.65
+
 [vision]
 default_threshold = 0.80
 sub_stage_threshold = 0.93
@@ -238,7 +244,7 @@ lobby_start_btn = "stages/start.png"
 [subflow_configs.blood_altar.sacrifice_settings]
 gray = false
 green = false
-blue = false
+blue = true
 purple = false
 
 [subflow_configs.blood_altar.blood_templates]
@@ -288,7 +294,7 @@ template = "town_building/grocery_store/grocery_store.png"
 Sandworm_scales = true
 Spider_silk = true
 Spider_venom_glands = true
-Warcraft_Fang = false
+Warcraft_Fang = true
 lizard_skin = true
 scrap = true
 Frog_Skin = true
