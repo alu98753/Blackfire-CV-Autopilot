@@ -794,6 +794,37 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         self.assertEqual(handler.current_goods_idx, 1)  # 第二堆售罄後進位至商品 1
         self.assertEqual(handler.repeat_sell_count, 0)
 
+    def test_jewelry_workshop_log_settlement_summary(self):
+        """驗證商店出售結算 Summary 的語意輸出與狀態記錄"""
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+
+        # 情境 1: 有商品賣出
+        handler.sold_summary = {
+            "gray": {"Sandworm_scales", "Spider_silk"},
+            "green": {"Toad_Venom"},
+        }
+        with self.assertLogs(level='INFO') as log_ctx:
+            handler._log_settlement_summary()
+            self.assertTrue(handler.summary_logged)
+            logs_str = "\n".join(log_ctx.output)
+            self.assertIn("商店出售結算清單", logs_str)
+            self.assertIn("品質 [gray]：已賣出", logs_str)
+            self.assertIn("Sandworm_scales", logs_str)
+            self.assertIn("Spider_silk", logs_str)
+            self.assertIn("品質 [green]：已賣出", logs_str)
+            self.assertIn("Toad_Venom", logs_str)
+            self.assertIn("3 種商品品項全數成功賣出！", logs_str)
+
+        # 情境 2: 重置後無任何商品賣出
+        handler.reset_state()
+        self.assertFalse(handler.summary_logged)
+        with self.assertLogs(level='INFO') as log_ctx:
+            handler._log_settlement_summary()
+            self.assertTrue(handler.summary_logged)
+            logs_str = "\n".join(log_ctx.output)
+            self.assertIn("背包無商品需要出售", logs_str)
+
 
 if __name__ == "__main__":
     unittest.main()
