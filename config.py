@@ -195,7 +195,7 @@ def get_template_threshold(template_name: str, default: float | None = None) -> 
         return float(TEMPLATE_THRESHOLDS[template_name])
     if default is not None:
         return float(default)
-    is_sub_stage = any(k in template_name for k in ["final", "first", "middle", "six"])
+    is_sub_stage = any(k in template_name for k in ["final", "first", "middle", "six", "boss_skull", "skull"])
     if is_sub_stage:
         return float(SUB_STAGE_THRESHOLD)
     return float(DEFAULT_THRESHOLD)

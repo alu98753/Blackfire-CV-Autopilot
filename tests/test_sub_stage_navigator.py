@@ -25,14 +25,11 @@ class TestSubStageListNavigator(unittest.TestCase):
         cands6 = SubStageListNavigator.get_candidate_sub_stage_templates(nav_path_lvl6)
         self.assertIn("stages/first_stage.png", cands6)
         self.assertIn("stages/six_stage.png", cands6)
-        self.assertIn("stages/level6_middle.png", cands6)
-        self.assertIn("stages/level6_final.png", cands6)
-        self.assertEqual(len(cands6), 4)
+        self.assertIn("stages/boss_skull.png", cands6)
+        self.assertEqual(len(cands6), 3)
 
         cands_generic = SubStageListNavigator.get_candidate_sub_stage_templates([])
-        self.assertIn("stages/first_stage.png", cands_generic)
-        self.assertIn("stages/level1_final.png", cands_generic)
-        self.assertIn("stages/level6_final.png", cands_generic)
+        self.assertEqual(cands_generic, ["stages/first_stage.png", "stages/six_stage.png", "stages/boss_skull.png"])
 
     def test_evaluate_when_target_already_visible(self):
         visible = ["stages/first_stage.png", "stages/level6_middle.png"]

@@ -9,6 +9,23 @@ class SubStageDirection(str, Enum):
     EXHAUSTED = "exhausted"    # 達到最大重試次數，進入恢復流程
 
 
+# 通用子關卡候選範本清單 (Single Source of Truth，保序供視覺掃描與候選比對使用)
+UNIVERSAL_CANDIDATE_TEMPLATES: tuple[str, ...] = (
+    "stages/first_stage.png",
+    "stages/six_stage.png",
+    "stages/boss_skull.png",
+)
+
+# 核心子關卡範本映射 (Single Source of Truth)
+# 鍵名為語意名稱 (first, middle, six, final)，值為通用範本路徑
+UNIVERSAL_SUB_STAGES: dict[str, str] = {
+    "first": "stages/first_stage.png",
+    "middle": "stages/boss_skull.png",
+    "six": "stages/six_stage.png",
+    "final": "stages/boss_skull.png",
+}
+
+
 class SubStageListNavigator:
     """
     普通關卡子關卡清單自適應導航器 (Sub-stage Adaptive Navigator)
@@ -25,7 +42,24 @@ class SubStageListNavigator:
     }
 
     # 所有已知子關卡關鍵字，用於從目前視野提取可見關卡
-    SUB_STAGE_KEYWORDS = ("first", "middle", "six", "final")
+    SUB_STAGE_KEYWORDS = tuple(UNIVERSAL_SUB_STAGES.keys())
+
+    UNIVERSAL_SUB_STAGES = UNIVERSAL_SUB_STAGES
+    UNIVERSAL_CANDIDATE_TEMPLATES = UNIVERSAL_CANDIDATE_TEMPLATES
+
+    @classmethod
+    def is_sub_stage_target(cls, template_name: str) -> bool:
+        """
+        判斷給定範本名稱是否為子關卡目標 (first, middle, six, final 或 boss_skull)。
+        """
+        if not template_name:
+            return False
+        if template_name in cls.UNIVERSAL_CANDIDATE_TEMPLATES:
+            return True
+        lower = template_name.lower()
+        if "label" in lower:
+            return False
+        return any(kw in lower for kw in ("boss_skull", "skull", "final", "first", "middle", "six"))
 
     @classmethod
     def get_stage_key(cls, template_name: str, sub_stage_hint: str | None = None) -> str | None:
@@ -48,29 +82,9 @@ class SubStageListNavigator:
     def get_candidate_sub_stage_templates(cls, nav_path: list[str] | None = None) -> list[str]:
         """
         取得子關卡候選範本清單。
-        若 nav_path 中含有 level{X}，優先回傳該關卡對應的 first, middle, six, final 範本。
+        全關卡統一使用核心通用範本：first_stage, six_stage, boss_skull。
         """
-        level_id = None
-        if nav_path:
-            import re
-            for item in nav_path:
-                match = re.search(r"level(\d+)", item)
-                if match:
-                    level_id = match.group(1)
-                    break
-
-        candidates = ["stages/first_stage.png", "stages/six_stage.png"]
-        if level_id:
-            candidates.append(f"stages/level{level_id}_middle.png")
-            candidates.append(f"stages/level{level_id}_final.png")
-        else:
-            for lvl in range(1, 11):
-                candidates.append(f"stages/level{lvl}_middle.png")
-                candidates.append(f"stages/level{lvl}_final.png")
-        if nav_path and any("boss_skull" in item for item in nav_path):
-            if "stages/boss_skull.png" not in candidates:
-                candidates.append("stages/boss_skull.png")
-        return candidates
+        return list(cls.UNIVERSAL_CANDIDATE_TEMPLATES)
 
     @classmethod
     def evaluate(

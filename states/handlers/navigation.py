@@ -46,18 +46,29 @@ class NavigationHandler(BaseStateHandler):
     SUB_STAGE_SCROLL_OFFSET_Y = 200
     SUB_STAGE_SCROLL_COOLDOWN = 0.25
     SUB_STAGE_MISSING_DEBOUNCE = 0.2
+    SUB_STAGE_ROW1_MAX_RATIO = 0.40
+    SUB_STAGE_BOUNDARY_THRESHOLD = 0.93
 
-    @staticmethod
-    def _is_top_sub_stage_row(pos: tuple[int, int] | None, rect: dict) -> bool:
+    @classmethod
+    def _is_sub_stage_target(cls, btn: str) -> bool:
+        """
+        判斷給定按鈕是否為小關卡目標 (first, middle, six, final)。
+        由 SubStageListNavigator 單一權威 (SSOT) 判定。
+        """
+        return SubStageListNavigator.is_sub_stage_target(btn)
+
+    @classmethod
+    def _is_top_sub_stage_row(cls, pos: tuple[int, int] | None, rect: dict) -> bool:
         """
         核驗偵測到的小關卡標誌 (first_stage 或 six_stage) 是否嚴格位於抽屜第一欄 (Row 1)。
-        在 1080p 基準解析度下，Row 1 約在 Y=250~300，中間 Row 3 (如關卡III) 則在 Y=420 以上。
+        在各解析度下，Row 1 位於抽屜最上方 (約 client_h * 0.33)，
+        而 Row 3 (如關卡III) 則在 Y >= client_h * 0.53。
+        使用 client_h * SUB_STAGE_ROW1_MAX_RATIO (0.40) 可穩健區分 Row 1 與 Row 3。
         """
         if not pos:
             return False
         client_h = rect.get("height") or 1080
-        scale_y = client_h / 1080.0
-        return pos[1] <= int(350 * scale_y)
+        return pos[1] <= int(client_h * cls.SUB_STAGE_ROW1_MAX_RATIO)
 
     def _validate_boss_skull(
         self,
@@ -77,22 +88,24 @@ class NavigationHandler(BaseStateHandler):
         if sub_stage_type not in ["middle", "final"]:
             return pos
 
-        thresh_sub = get_template_threshold("stages/first_stage.png", default=SUB_STAGE_THRESHOLD)
-        pos_six, _ = match_current_frame("stages/six_stage.png", threshold=thresh_sub) if os.path.exists(os.path.join("templates", "stages/six_stage.png")) else (None, 0.0)
-        pos_first, _ = match_current_frame("stages/first_stage.png", threshold=thresh_sub) if os.path.exists(os.path.join("templates", "stages/first_stage.png")) else (None, 0.0)
+        thresh_boundary = self.SUB_STAGE_BOUNDARY_THRESHOLD
+        pos_six, _ = match_current_frame("stages/six_stage.png", threshold=thresh_boundary) if os.path.exists(os.path.join("templates", "stages/six_stage.png")) else (None, 0.0)
+        pos_first, _ = match_current_frame("stages/first_stage.png", threshold=thresh_boundary) if os.path.exists(os.path.join("templates", "stages/first_stage.png")) else (None, 0.0)
 
         is_top_page = self._is_top_sub_stage_row(pos_first, rect)
         is_bottom_page = self._is_top_sub_stage_row(pos_six, rect)
 
         if sub_stage_type == "final" and (is_top_page or not is_bottom_page):
+            page_desc = "頂部頁面" if is_top_page else "未確認為底部頁面"
             logging.info(
-                f"🛡️ [骷髏頭防誤判] 目標為 final 但畫面處於頂部頁面 (is_top={is_top_page}, is_bottom={is_bottom_page})，"
+                f"🛡️ [骷髏頭防誤判] 目標為 final 但畫面處於{page_desc} (is_top={is_top_page}, is_bottom={is_bottom_page})，"
                 f"忽略座標 ({pos[0]}, {pos[1]}) 之 Stage 5 中間小關骷髏頭。"
             )
             return None
         elif sub_stage_type == "middle" and (is_bottom_page or not is_top_page):
+            page_desc = "底部頁面" if is_bottom_page else "未確認為頂部頁面"
             logging.info(
-                f"🛡️ [骷髏頭防誤判] 目標為 middle 但畫面處於底部頁面 (is_top={is_top_page}, is_bottom={is_bottom_page})，"
+                f"🛡️ [骷髏頭防誤判] 目標為 middle 但畫面處於{page_desc} (is_top={is_top_page}, is_bottom={is_bottom_page})，"
                 f"忽略座標 ({pos[0]}, {pos[1]}) 之 Stage 10 魔王骷髏頭。"
             )
             return None
@@ -959,11 +972,11 @@ class NavigationHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
             pos_label, _ = match_current_frame("stages/stage_label.png", threshold=0.70)
         
-        # 尋找路徑中是否有魔王關 / 小關卡目標 (包含 final, first, middle, six, boss_skull) 出現在畫面上
+        # 尋找路徑中是否有魔王關 / 小關卡目標 (first, middle, six, final) 出現在畫面上
         pos_final = None
         target_final_btn = None
         for btn in nav_path:
-            if "final" in btn or "first" in btn or "middle" in btn or "six" in btn or "boss_skull" in btn:
+            if self._is_sub_stage_target(btn):
                 target_final_btn = btn
                 if os.path.exists(os.path.join("templates", btn)):
                     thresh_btn = get_template_threshold(btn, default=SUB_STAGE_THRESHOLD)
@@ -985,7 +998,7 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.config.get("type") in ["stage", "mix"] and stage_select_open and not in_detail_screen:
             target_level_btn = None
             for btn in nav_path:
-                is_sub = "final" in btn or "first" in btn or "middle" in btn or "six" in btn or "boss_skull" in btn
+                is_sub = self._is_sub_stage_target(btn)
                 if not is_sub and "level" in btn and "entry" not in btn:
                     target_level_btn = btn
                     break
@@ -995,6 +1008,8 @@ class NavigationHandler(BaseStateHandler):
                     import sys
                     is_testing = "unittest" in sys.modules
                     last_scroll = getattr(self.machine, "last_stage_scroll_time", 0.0)
+                    if not isinstance(last_scroll, (int, float)):
+                        last_scroll = 0.0
                     time_diff = time.time() - last_scroll
                     if time_diff < 2.2 and not is_testing:
                         logging.info(f"⌛ 剛執行過水平滑動 (僅過 {time_diff:.1f} 秒)，等待地圖滾動完全靜止後再進行圖像辨識...")
@@ -1008,6 +1023,8 @@ class NavigationHandler(BaseStateHandler):
                     else:
                         # 目標關卡尚未在畫面上看見，先等待 1.5 秒讓動畫加載穩定後再滑動
                         missing_time = getattr(self.machine, f"missing_time_{target_level_btn}", 0.0)
+                        if not isinstance(missing_time, (int, float)):
+                            missing_time = 0.0
                         if missing_time == 0.0:
                             self.machine.__setattr__(f"missing_time_{target_level_btn}", time.time())
                             logging.info(f"⌛ 尋路中：目標關卡 [{target_level_btn}] 暫時未出現在畫面上，等待載入與穩定中...")
@@ -1075,7 +1092,7 @@ class NavigationHandler(BaseStateHandler):
         clicked_any = False
         for btn in reversed(filtered_nav_path):
 
-            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn or "boss_skull" in btn
+            is_sub_stage_target = self._is_sub_stage_target(btn)
 
             # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (僅跳過非目標子關卡的 level 小島)
             if in_detail_screen and not is_sub_stage_target and "level" in btn and "entry" not in btn:

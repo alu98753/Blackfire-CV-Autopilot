@@ -404,22 +404,22 @@ class TestQuestMapperAndScheduler(unittest.TestCase):
 
     def test_stage_target_image_existence_and_dynamic_mapping(self):
         """
-        [動態圖片對應測試] 驗證『清除沙蟲』(Level 4 middle) 能精確映射至 level4_middle.png，且圖片在 templates 下實體存在！
+        [動態圖片對應測試] 驗證『清除沙蟲』(Level 4 middle) 能精確映射至通用 boss_skull.png，且圖片在 templates 下實體存在！
         """
         import os
         node_sandworm = self.mapper.parse_quest("清除沙蟲")
         self.assertIsNotNone(node_sandworm)
         
         cfg = node_sandworm.to_config_dict()
-        # 斷言 stage_target 為 stages/level4_middle.png (絕非找不到的 middle_stage.png)
-        self.assertEqual(cfg["stage_target"], "stages/level4_middle.png")
+        # 斷言 stage_target 為 stages/boss_skull.png
+        self.assertEqual(cfg["stage_target"], "stages/boss_skull.png")
         
         # 斷言實體圖檔存在
         full_path = os.path.join("templates", cfg["stage_target"])
         self.assertTrue(os.path.exists(full_path), f"圖檔不存在: {full_path}")
         
-        # 斷言導航路徑最後一個圖標為 level4_middle.png
-        self.assertEqual(cfg["navigation_path"][-1], "stages/level4_middle.png")
+        # 斷言導航路徑最後一個圖標為 stages/boss_skull.png
+        self.assertEqual(cfg["navigation_path"][-1], "stages/boss_skull.png")
 
     def test_task_node_to_cli_args_and_summary_output(self):
         """

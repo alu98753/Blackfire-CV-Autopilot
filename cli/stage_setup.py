@@ -27,7 +27,8 @@ def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_typ
             name = stage_configs[lvl_k]["name"]
             mark = " - 當前預設" if lvl_k == default_lvl else ""
             print(f" {lvl_k}) {name} (Level {lvl_k}){mark}")
-        choice = prompt_choice(f"請輸入關卡數字 [1-6] (直接 Enter 鍵保持為 {default_lvl}): ", default_lvl)
+        max_lvl = max((int(k) for k in stage_configs.keys()), default=6)
+        choice = prompt_choice(f"請輸入關卡數字 [1-{max_lvl}] (直接 Enter 鍵保持為 {default_lvl}): ", default_lvl)
 
     if choice not in stage_configs:
         print(f"[!] 無效選擇 '{choice}'，已自動使用預設的 [{stage_configs[default_lvl]['name']}]...")
@@ -74,13 +75,6 @@ def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_typ
     if changed_level or changed_sub:
         persist_mode_updates(config, {"tier4_stage_level": int(choice), "tier4_sub_stage": sub_choice_key})
     fight_entrance = sub_stages[sub_choice_key]
-    if not os.path.exists(os.path.join("templates", fight_entrance)):
-        fallback = "stages/boss_skull.png" if sub_choice_key in ["middle", "final"] else "stages/first_stage.png"
-        if os.path.exists(os.path.join("templates", fallback)):
-            fight_entrance = fallback
-        else:
-            print(f"\n[!] 錯誤：找不到該關卡的模板圖片 'templates/{fight_entrance}'，請先使用 crop_tool 進行裁剪！")
-            sys.exit(1)
     level_btn = cfg["entry"]
     config["stage_name"] = f"{stage_name} ({sub_choice_key})"
     config["stage_entry"] = level_btn

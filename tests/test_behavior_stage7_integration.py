@@ -64,8 +64,8 @@ class TestStage7Integration(unittest.TestCase):
         cands = SubStageListNavigator.get_candidate_sub_stage_templates(nav_path_lvl7)
         self.assertIn("stages/first_stage.png", cands)
         self.assertIn("stages/six_stage.png", cands)
-        self.assertIn("stages/level7_middle.png", cands)
-        self.assertIn("stages/level7_final.png", cands)
+        self.assertIn("stages/boss_skull.png", cands)
+        self.assertEqual(len(cands), 3)
 
 
 if __name__ == "__main__":

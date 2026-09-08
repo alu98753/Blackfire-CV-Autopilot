@@ -53,9 +53,9 @@ class TestMainConfig(unittest.TestCase):
         
         setup_stage_config(config)
         
-        self.assertEqual(config["stage_target"], "stages/level1_final.png")
+        self.assertEqual(config["stage_target"], "stages/boss_skull.png")
         self.assertEqual(config["stage_entry"], "stages/level1_sky_plains.png")
-        self.assertIn("stages/level1_final.png", config["navigation_path"])
+        self.assertIn("stages/boss_skull.png", config["navigation_path"])
 
     @patch('os.path.exists')
     @patch('builtins.input', side_effect=["8", "135", "1"])
@@ -177,7 +177,7 @@ class TestMainConfig(unittest.TestCase):
         self.assertEqual(config["tier4_mode"], "stage")
         self.assertTrue(config["enable_stage_farming"])
         self.assertEqual(config["stage_entry"], "stages/level1_sky_plains.png")
-        self.assertEqual(config["stage_target"], "stages/level1_final.png")
+        self.assertEqual(config["stage_target"], "stages/boss_skull.png")
 
 if __name__ == "__main__":
     unittest.main()

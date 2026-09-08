@@ -160,19 +160,14 @@ class TaskNode:
             return _apply_base_preferences(cfg)
 
         elif self.mode_type == "stage" and self.stage_level is not None:
-            import os
             lvl = self.stage_level
             sub = self.sub_stage or "first"
             entry_img = stage_entries.get(lvl, "stages/level6_ice_cave.png")
             sname = stage_names.get(lvl, f"關卡 Lvl {lvl}")
 
-            # 動態匹配各關卡專屬的中間關/魔王關圖檔 (如 level4_middle.png, level4_final.png)
-            if sub == "middle":
-                candidate = f"stages/level{lvl}_middle.png"
-                target_img = candidate if os.path.exists(os.path.join("templates", candidate)) else "stages/first_stage.png"
-            elif sub in ["final", "boss"]:
-                candidate = f"stages/level{lvl}_final.png"
-                target_img = candidate if os.path.exists(os.path.join("templates", candidate)) else "stages/first_stage.png"
+            # 核心通用子關卡模板對應
+            if sub in ["middle", "final", "boss"]:
+                target_img = "stages/boss_skull.png"
             elif sub == "six":
                 target_img = "stages/six_stage.png"
             else:
