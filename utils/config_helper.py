@@ -21,19 +21,23 @@ def get_stage_configs(base_levels=None, templates_dir="templates"):
         if os.path.exists(os.path.join(templates_dir, "stages/first_stage.png")):
             sub_stages["first"] = "stages/first_stage.png"
             
-        # 2. 中間小關 (大關獨立名稱: levelX_middle.png)
+        # 2. 中間小關 (大關獨立名稱: levelX_middle.png，若無則降級為通用 stages/boss_skull.png)
         mid_path = f"stages/level{lvl_id}_middle.png"
         if os.path.exists(os.path.join(templates_dir, mid_path)):
             sub_stages["middle"] = mid_path
+        elif os.path.exists(os.path.join(templates_dir, "stages/boss_skull.png")):
+            sub_stages["middle"] = "stages/boss_skull.png"
             
         # 3. 第六小關 (通用固定名稱)
         if os.path.exists(os.path.join(templates_dir, "stages/six_stage.png")):
             sub_stages["six"] = "stages/six_stage.png"
             
-        # 4. 魔王關卡 (大關獨立名稱: levelX_final.png)
+        # 4. 魔王關卡 (大關獨立名稱: levelX_final.png，若無則降級為通用 stages/boss_skull.png)
         final_path = f"stages/level{lvl_id}_final.png"
         if os.path.exists(os.path.join(templates_dir, final_path)):
             sub_stages["final"] = final_path
+        elif os.path.exists(os.path.join(templates_dir, "stages/boss_skull.png")):
+            sub_stages["final"] = "stages/boss_skull.png"
             
         configs[lvl_id] = {
             "name": lvl_info["name"],

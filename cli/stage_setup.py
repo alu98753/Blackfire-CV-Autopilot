@@ -75,8 +75,12 @@ def setup_stage_config(config, prompt_prefix="", stage_level=None, sub_stage_typ
         persist_mode_updates(config, {"tier4_stage_level": int(choice), "tier4_sub_stage": sub_choice_key})
     fight_entrance = sub_stages[sub_choice_key]
     if not os.path.exists(os.path.join("templates", fight_entrance)):
-        print(f"\n[!] 錯誤：找不到該關卡的模板圖片 'templates/{fight_entrance}'，請先使用 crop_tool 進行裁剪！")
-        sys.exit(1)
+        fallback = "stages/boss_skull.png" if sub_choice_key in ["middle", "final"] else "stages/first_stage.png"
+        if os.path.exists(os.path.join("templates", fallback)):
+            fight_entrance = fallback
+        else:
+            print(f"\n[!] 錯誤：找不到該關卡的模板圖片 'templates/{fight_entrance}'，請先使用 crop_tool 進行裁剪！")
+            sys.exit(1)
     level_btn = cfg["entry"]
     config["stage_name"] = f"{stage_name} ({sub_choice_key})"
     config["stage_entry"] = level_btn

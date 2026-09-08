@@ -24,11 +24,15 @@ class TestStage7Integration(unittest.TestCase):
         self.assertEqual(cfg7["name"], "遺忘荒地")
         self.assertEqual(cfg7["entry"], "stages/level7_forgotten_wasteland.png")
         
-        # 驗證通用小關卡 first 與 six 正確掛載
+        # 驗證通用小關卡 first, middle, six, final 全數正確掛載
         self.assertIn("first", cfg7["sub_stages"])
         self.assertEqual(cfg7["sub_stages"]["first"], "stages/first_stage.png")
+        self.assertIn("middle", cfg7["sub_stages"])
+        self.assertEqual(cfg7["sub_stages"]["middle"], "stages/boss_skull.png")
         self.assertIn("six", cfg7["sub_stages"])
         self.assertEqual(cfg7["sub_stages"]["six"], "stages/six_stage.png")
+        self.assertIn("final", cfg7["sub_stages"])
+        self.assertEqual(cfg7["sub_stages"]["final"], "stages/boss_skull.png")
 
     def test_task_node_routes_stage_7(self):
         """驗證懸賞任務節點派發至第 7 關時能正確產出對應配置與導航路徑。"""

@@ -43,9 +43,61 @@ def filter_navigation_path(nav_path, active_tabs=None):
 class NavigationHandler(BaseStateHandler):
     CARD_RESET_MAX_ATTEMPTS = 7
     SUB_STAGE_SCROLL_MAX_ATTEMPTS = 5
-    SUB_STAGE_SCROLL_OFFSET_Y = 100
-    SUB_STAGE_SCROLL_COOLDOWN = 1.5
-    SUB_STAGE_MISSING_DEBOUNCE = 1.5
+    SUB_STAGE_SCROLL_OFFSET_Y = 200
+    SUB_STAGE_SCROLL_COOLDOWN = 0.25
+    SUB_STAGE_MISSING_DEBOUNCE = 0.2
+
+    @staticmethod
+    def _is_top_sub_stage_row(pos: tuple[int, int] | None, rect: dict) -> bool:
+        """
+        核驗偵測到的小關卡標誌 (first_stage 或 six_stage) 是否嚴格位於抽屜第一欄 (Row 1)。
+        在 1080p 基準解析度下，Row 1 約在 Y=250~300，中間 Row 3 (如關卡III) 則在 Y=420 以上。
+        """
+        if not pos:
+            return False
+        client_h = rect.get("height") or 1080
+        scale_y = client_h / 1080.0
+        return pos[1] <= int(350 * scale_y)
+
+    def _validate_boss_skull(
+        self,
+        pos: tuple[int, int] | None,
+        rect: dict,
+        match_current_frame,
+    ) -> tuple[int, int] | None:
+        """
+        驗證通用骷髏頭 (boss_skull) 是否符合當前子關卡目標 (middle vs final) 所在的頁面邊界。
+        若目標為 final，但當前處於 Page 1 (頂部第一小關可見)，或未處於 Page 2 (頂部第六小關可見)，則拒絕該匹配；
+        若目標為 middle，但當前處於 Page 2，或未處於 Page 1，則拒絕該匹配。
+        """
+        if not pos:
+            return None
+        config = self.machine.config or {}
+        sub_stage_type = config.get("tier4_sub_stage") or config.get("sub_stage")
+        if sub_stage_type not in ["middle", "final"]:
+            return pos
+
+        thresh_sub = get_template_threshold("stages/first_stage.png", default=SUB_STAGE_THRESHOLD)
+        pos_six, _ = match_current_frame("stages/six_stage.png", threshold=thresh_sub) if os.path.exists(os.path.join("templates", "stages/six_stage.png")) else (None, 0.0)
+        pos_first, _ = match_current_frame("stages/first_stage.png", threshold=thresh_sub) if os.path.exists(os.path.join("templates", "stages/first_stage.png")) else (None, 0.0)
+
+        is_top_page = self._is_top_sub_stage_row(pos_first, rect)
+        is_bottom_page = self._is_top_sub_stage_row(pos_six, rect)
+
+        if sub_stage_type == "final" and (is_top_page or not is_bottom_page):
+            logging.info(
+                f"🛡️ [骷髏頭防誤判] 目標為 final 但畫面處於頂部頁面 (is_top={is_top_page}, is_bottom={is_bottom_page})，"
+                f"忽略座標 ({pos[0]}, {pos[1]}) 之 Stage 5 中間小關骷髏頭。"
+            )
+            return None
+        elif sub_stage_type == "middle" and (is_bottom_page or not is_top_page):
+            logging.info(
+                f"🛡️ [骷髏頭防誤判] 目標為 middle 但畫面處於底部頁面 (is_top={is_top_page}, is_bottom={is_bottom_page})，"
+                f"忽略座標 ({pos[0]}, {pos[1]}) 之 Stage 10 魔王骷髏頭。"
+            )
+            return None
+
+        return pos
 
     def __init__(self, machine):
         super().__init__(machine)
@@ -216,8 +268,14 @@ class NavigationHandler(BaseStateHandler):
         for cand in candidates:
             if os.path.exists(os.path.join("templates", cand)):
                 thresh_cand = get_template_threshold(cand, default=SUB_STAGE_THRESHOLD)
-                pos_c, _ = match_current_frame(cand, threshold=thresh_cand)
-                if pos_c:
+                pos_c, conf_c = match_current_frame(cand, threshold=thresh_cand)
+                if pos_c and conf_c >= thresh_cand:
+                    if cand in ["stages/first_stage.png", "stages/six_stage.png"]:
+                        if not self._is_top_sub_stage_row(pos_c, rect):
+                            continue
+                    elif "boss_skull" in cand or "skull" in cand:
+                        if not self._validate_boss_skull(pos_c, rect, match_current_frame):
+                            continue
                     visible_sub_stages.append(cand)
 
         # 3. 取得最大重試次數與自適應方向判定
@@ -228,11 +286,13 @@ class NavigationHandler(BaseStateHandler):
                 self.SUB_STAGE_SCROLL_MAX_ATTEMPTS,
             )
         )
+        sub_stage_hint = config.get("tier4_sub_stage") or config.get("sub_stage")
         direction, next_attempts = SubStageListNavigator.evaluate(
             visible_templates=visible_sub_stages,
             target_template=target_sub_stage_btn,
             attempts=self.sub_stage_scroll_attempts,
             max_attempts=max_attempts,
+            sub_stage_hint=sub_stage_hint,
         )
 
         if direction == SubStageDirection.NONE:
@@ -899,21 +959,24 @@ class NavigationHandler(BaseStateHandler):
         if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
             pos_label, _ = match_current_frame("stages/stage_label.png", threshold=0.70)
         
-        # 尋找路徑中是否有魔王關 / 小關卡目標 (包含 final, first, middle, six) 出現在畫面上
+        # 尋找路徑中是否有魔王關 / 小關卡目標 (包含 final, first, middle, six, boss_skull) 出現在畫面上
         pos_final = None
         target_final_btn = None
         for btn in nav_path:
-            if "final" in btn or "first" in btn or "middle" in btn or "six" in btn:
+            if "final" in btn or "first" in btn or "middle" in btn or "six" in btn or "boss_skull" in btn:
                 target_final_btn = btn
                 if os.path.exists(os.path.join("templates", btn)):
                     thresh_btn = get_template_threshold(btn, default=SUB_STAGE_THRESHOLD)
                     pos_f, _ = match_current_frame(btn, threshold=thresh_btn)
                     if pos_f:
-                        pos_final = pos_f
-                        self.sub_stage_scroll_attempts = 0
-                        # 成功找到目標小關/魔王關，重置其缺失計時器
-                        self.machine.__setattr__(f"missing_time_{btn}", 0.0)
-                        break
+                        if "boss_skull" in btn or "skull" in btn:
+                            pos_f = self._validate_boss_skull(pos_f, rect, match_current_frame)
+                        if pos_f:
+                            pos_final = pos_f
+                            self.sub_stage_scroll_attempts = 0
+                            # 成功找到目標小關/魔王關，重置其缺失計時器
+                            self.machine.__setattr__(f"missing_time_{btn}", 0.0)
+                            break
 
         if pos_label or pos_final:
             in_detail_screen = True
@@ -922,7 +985,7 @@ class NavigationHandler(BaseStateHandler):
         if self.machine.config.get("type") in ["stage", "mix"] and stage_select_open and not in_detail_screen:
             target_level_btn = None
             for btn in nav_path:
-                is_sub = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
+                is_sub = "final" in btn or "first" in btn or "middle" in btn or "six" in btn or "boss_skull" in btn
                 if not is_sub and "level" in btn and "entry" not in btn:
                     target_level_btn = btn
                     break
@@ -1012,7 +1075,7 @@ class NavigationHandler(BaseStateHandler):
         clicked_any = False
         for btn in reversed(filtered_nav_path):
 
-            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn
+            is_sub_stage_target = "final" in btn or "first" in btn or "middle" in btn or "six" in btn or "boss_skull" in btn
 
             # 如果已經進入了關卡內部細節畫面，跳過小島選擇入口按鈕以免誤點 (僅跳過非目標子關卡的 level 小島)
             if in_detail_screen and not is_sub_stage_target and "level" in btn and "entry" not in btn:
@@ -1031,6 +1094,9 @@ class NavigationHandler(BaseStateHandler):
                 thresh = get_template_threshold(btn, default=DEFAULT_THRESHOLD)
                 b_thresh = 0.70
             pos, conf = match_current_frame(btn, threshold=thresh, brightness_threshold=b_thresh)
+            if pos:
+                if "boss_skull" in btn or "skull" in btn:
+                    pos = self._validate_boss_skull(pos, rect, match_current_frame)
             if pos:
                 if btn == "stages/stage_label.png":
                     if self._handle_sub_stage_scroll(

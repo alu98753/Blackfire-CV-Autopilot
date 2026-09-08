@@ -17,7 +17,7 @@ dengeon同理
 
 - [x] 驚嘆號排除橘色的任務點 只接受紅色的每日領取點 (已完成)
 
-- [ ] 我在想能否不需要template就能夠辨別 1,5(mid),6,(10)finel  (關卡編號)
+- [x] 關卡小關卡 (1, 5/mid, 6, 10/final) 通用化與零截圖擴充：以通用 `boss_skull.png` 與頂部 (`first_stage.png`) / 底部 (`six_stage.png`) 視覺閉環，實現全章節（含 Stage 7+）全量子關卡免截圖支援，並將防抖冷卻縮短至 0.25s 達成極速選關 (已完成)
 
 [Tier 4 長駐關卡] 請選擇 [冰凍峽谷] 要打的小關卡類型 (當前 Profile TOML 設定: first)：
  1) 第一小關 (First Stage) - 當前預設

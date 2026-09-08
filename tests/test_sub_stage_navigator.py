@@ -160,6 +160,48 @@ class TestSubStageListNavigator(unittest.TestCase):
         )
         self.assertEqual((sx, sy, ex, ey), (center_x, center_y, center_x, center_y))
 
+    def test_evaluate_boss_skull_with_sub_stage_hint(self):
+        """驗證通用骷髏頭在給予 sub_stage_hint 時，能精準與頂部 (first) / 底部 (six) 邊界閉環協同。"""
+        # 1. 目標為 middle，畫面在頂部 (看到 first + skull) ➔ 判定命中 (NONE, 0)
+        direction, attempts = SubStageListNavigator.evaluate(
+            visible_templates=["stages/first_stage.png", "stages/boss_skull.png"],
+            target_template="stages/boss_skull.png",
+            attempts=1,
+            sub_stage_hint="middle",
+        )
+        self.assertEqual(direction, SubStageDirection.NONE)
+        self.assertEqual(attempts, 0)
+
+        # 2. 目標為 middle，但畫面在底部 (看到 six + skull) ➔ 需向上拉動回到頂部 (SCROLL_UP)
+        direction, attempts = SubStageListNavigator.evaluate(
+            visible_templates=["stages/six_stage.png", "stages/boss_skull.png"],
+            target_template="stages/boss_skull.png",
+            attempts=0,
+            sub_stage_hint="middle",
+        )
+        self.assertEqual(direction, SubStageDirection.SCROLL_UP)
+        self.assertEqual(attempts, 1)
+
+        # 3. 目標為 final，畫面在底部 (看到 six + skull) ➔ 判定命中 (NONE, 0)
+        direction, attempts = SubStageListNavigator.evaluate(
+            visible_templates=["stages/six_stage.png", "stages/boss_skull.png"],
+            target_template="stages/boss_skull.png",
+            attempts=1,
+            sub_stage_hint="final",
+        )
+        self.assertEqual(direction, SubStageDirection.NONE)
+        self.assertEqual(attempts, 0)
+
+        # 4. 目標為 final，但畫面在頂部 (看到 first + skull) ➔ 需向下拉動前往底部 (SCROLL_DOWN)
+        direction, attempts = SubStageListNavigator.evaluate(
+            visible_templates=["stages/first_stage.png", "stages/boss_skull.png"],
+            target_template="stages/boss_skull.png",
+            attempts=0,
+            sub_stage_hint="final",
+        )
+        self.assertEqual(direction, SubStageDirection.SCROLL_DOWN)
+        self.assertEqual(attempts, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
