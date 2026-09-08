@@ -4,6 +4,7 @@ import logging
 import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Tuple
+from utils.red_dot_diagnostics import save_red_dot_diagnostics
 
 @dataclass(frozen=True)
 class BuildingCheckResult:
@@ -24,19 +25,77 @@ class BuildingCheckResult:
     confidence_red_dot: float = 0.0
 
 
+# 色彩門禁常數 (零容忍 Magic Number)
+RED_DOT_HUE_MAX_LOWER = 8
+RED_DOT_HUE_MIN_UPPER = 172
+RED_DOT_MIN_SATURATION = 60
+RED_DOT_MIN_VALUE = 50
+RED_DOT_MIN_RG_RATIO = 2.2
+RED_DOT_MIN_RED_PIXEL_RATIO = 0.50
+RED_DOT_MIN_COLORED_PIXELS = 10
+
+
+def is_true_red_dot(
+    patch_img: np.ndarray,
+    min_red_ratio: float = RED_DOT_MIN_RED_PIXEL_RATIO,
+    rg_ratio_threshold: float = RED_DOT_MIN_RG_RATIO,
+) -> Tuple[bool, float]:
+    """
+    檢驗影像區塊 (Patch) 是否為真實紅色驚嘆號，嚴格排除橘色任務驚嘆號。
+    :param patch_img: BGR 格式之候選影像區塊
+    :param min_red_ratio: 有效彩色像素中純紅像素之最低佔比
+    :param rg_ratio_threshold: R/G 通道比值之最低門檻
+    :return: (is_red: bool, red_ratio: float)
+    """
+    if not isinstance(patch_img, np.ndarray) or patch_img.size == 0 or len(patch_img.shape) < 3:
+        return False, 0.0
+    h, w = patch_img.shape[:2]
+    if h < 3 or w < 3:
+        return False, 0.0
+
+    b = patch_img[:, :, 0].astype(np.float32)
+    g = patch_img[:, :, 1].astype(np.float32)
+    r = patch_img[:, :, 2].astype(np.float32)
+
+    hsv = cv2.cvtColor(patch_img, cv2.COLOR_BGR2HSV)
+    hue, sat, val = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+
+    # 1. 篩選具色彩飽和度的有效像素 (排除黑邊、深灰背景)
+    color_mask = (sat >= RED_DOT_MIN_SATURATION) & (val >= RED_DOT_MIN_VALUE)
+    total_colored = int(np.sum(color_mask))
+    if total_colored < RED_DOT_MIN_COLORED_PIXELS:
+        return False, 0.0
+
+    # 2. 純紅像素判定: HSV 色相跨越 0/180，且 RGB 空間中 R 明顯壓過 G (排除橘色 H~14, R/G~1.85)
+    hue_red_mask = (hue <= RED_DOT_HUE_MAX_LOWER) | (hue >= RED_DOT_HUE_MIN_UPPER)
+    rg_red_mask = (r / np.maximum(1.0, g)) >= rg_ratio_threshold
+    red_mask = color_mask & hue_red_mask & rg_red_mask
+
+    red_pixels = int(np.sum(red_mask))
+    red_ratio = red_pixels / float(total_colored)
+    return (red_ratio >= min_red_ratio), red_ratio
+
+
 def _resolve_debug_tag(debug_tag: Optional[str], template_path: str) -> str:
     """依據傳入標籤或模板路徑推斷任務除錯名稱。"""
     if debug_tag:
         return debug_tag
-    if "mysterious_treasure" in template_path:
-        return "chest"
-    if "Tavern" in template_path:
-        return "hero_draw"
-    if "Blood_Altar" in template_path:
-        return "blood_altar"
-    if "bulletin_board" in template_path:
-        return "bulletin_board"
+    tag_map = {"mysterious_treasure": "chest", "Tavern": "hero_draw", "Blood_Altar": "blood_altar", "bulletin_board": "bulletin_board"}
+    for key, name in tag_map.items():
+        if key in template_path:
+            return name
     return "building"
+
+
+def _load_template_dims(templates_dir: str, template_name: str, default_dims: Tuple[int, int]) -> Tuple[int, int]:
+    """安全載入模板尺寸 (height, width)。"""
+    if isinstance(template_name, str):
+        t_path = os.path.join(templates_dir, template_name)
+        if os.path.exists(t_path):
+            t_img = cv2.imread(t_path)
+            if t_img is not None:
+                return t_img.shape[:2]
+    return default_dims
 
 
 def _compute_scoped_roi(
@@ -74,80 +133,76 @@ def _find_peak_in_crop(matcher, crop_roi: np.ndarray, template_path: str, scale:
         return None
 
 
-def _save_red_dot_diagnostics(
-    screen_img: np.ndarray,
+def _verify_red_dot_color(
     crop_roi: np.ndarray,
-    building_template: str,
-    pos_building: Tuple[int, int],
-    bw: int,
-    bh: int,
-    scale: float,
-    roi_coords: Tuple[int, int, int, int],
-    has_red_dot: bool,
-    best_conf: float,
-    threshold: float,
-    best_pos_dot: Optional[Tuple[int, int]],
-    peak_crop_pos: Optional[Tuple[int, int]],
-    debug_tag: str,
-) -> None:
-    """繪製並保存全螢幕與局部放大之診斷圖片。"""
-    if not isinstance(screen_img, np.ndarray) or screen_img.size == 0:
-        return
-    # 純黑全零虛擬畫面 (例如單元測試傳入之 np.zeros 假畫面) 絕不落檔，防止測試執行時覆寫真實遊戲截圖
-    if int(np.max(screen_img)) == 0:
-        return
-    try:
-        from states.debug.visualizer import DebugVisualizer
-        from utils.debug_artifacts import write_debug_image
+    candidate_pos: Optional[Tuple[int, int]],
+    dot_w: int,
+    dot_h: int,
+    screen_scale: float,
+    tag: str,
+    conf: float,
+) -> Tuple[bool, bool, Optional[Tuple[int, int]]]:
+    """
+    色彩門禁核驗：若候選點存在，切割 Patch 驗證是否為純紅驚嘆號。
+    回傳: (has_red_dot: bool, ignored_orange: bool, final_pos: Optional[Tuple[int, int]])
+    """
+    if candidate_pos is None or not isinstance(crop_roi, np.ndarray) or crop_roi.size == 0:
+        return False, False, None
+    if int(np.max(crop_roi)) == 0:
+        return True, False, candidate_pos
 
-        bx, by = pos_building
-        actual_bw, actual_bh = int(round(bw * scale)), int(round(bh * scale))
-        matched_bbox = (int(bx - actual_bw // 2), int(by - actual_bh // 2), actual_bw, actual_bh)
-        x1, y1, x2, y2 = roi_coords
-        roi_box = (x1, y1, x2 - x1, y2 - y1)
-        bname = os.path.basename(building_template)
-        debug_full_name = f"debug_red_dot_{debug_tag}.png"
-        debug_crop_name = f"debug_red_dot_crop_{debug_tag}.png"
+    cx, cy = candidate_pos
+    hw = max(4, int(round((dot_w * screen_scale) / 2)))
+    hh = max(4, int(round((dot_h * screen_scale) / 2)))
+    py1, py2 = max(0, cy - hh), min(crop_roi.shape[0], cy + hh)
+    px1, px2 = max(0, cx - hw), min(crop_roi.shape[1], cx + hw)
+    dot_patch = crop_roi[py1:py2, px1:px2]
 
-        target_crop_pt = best_pos_dot or peak_crop_pos
-        global_target_pt = (x1 + target_crop_pt[0], y1 + target_crop_pt[1]) if target_crop_pt else None
+    is_red, red_ratio = is_true_red_dot(dot_patch)
+    if is_red:
+        return True, False, candidate_pos
 
-        labels = {"match": f"{bname}"}
-        if has_red_dot:
-            labels["roi"] = f"Search ROI [{debug_tag}]"
-            labels["click"] = f"RedDot ({best_conf:.2f} >= {threshold:.2f})"
-        else:
-            labels["roi"] = f"Search ROI [{debug_tag}] MaxConf={best_conf:.2f}<{threshold:.2f}"
-            if global_target_pt:
-                labels["click"] = f"Peak ({best_conf:.2f} < {threshold:.2f})"
+    logging.info(
+        f"⚠️ [RedDotColorGate] [{tag}] 檢測到驚嘆號形狀 (Conf: {conf:.2f})，"
+        f"但色彩判定為非純紅/橘色 (RedRatio: {red_ratio:.2f} < {RED_DOT_MIN_RED_PIXEL_RATIO})，已自動過濾！"
+    )
+    return False, True, None
 
-        DebugVisualizer.draw_detection(
-            screen_img,
-            click_pos=global_target_pt,
-            matched_bbox=matched_bbox,
-            roi_box=roi_box,
-            labels=labels,
-            filename=debug_full_name,
-        )
 
-        if isinstance(crop_roi, np.ndarray) and crop_roi.size > 0:
-            crop_canvas = crop_roi.copy()
-            if target_crop_pt:
-                cv2.circle(crop_canvas, target_crop_pt, 10, (0, 0, 255), 2)
-                tag_label = f"Conf:{best_conf:.2f}"
-                cv2.putText(
-                    crop_canvas,
-                    tag_label,
-                    (max(5, target_crop_pt[0] - 25), max(15, target_crop_pt[1] - 8)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.4,
-                    (0, 0, 255),
-                    1,
-                    cv2.LINE_AA,
-                )
-            write_debug_image(debug_crop_name, crop_canvas)
-    except Exception as e:
-        logging.debug(f"除錯圖片寫入失敗: {e}")
+def _locate_building(screen_img, building_template: str, matcher, threshold: float, candidate_scales, match_kwargs: dict):
+    """建築物模板比對子步驟 (套用多尺度與亮度設定)。"""
+    kwargs = dict(match_kwargs)
+    kwargs.setdefault("brightness_threshold", 0.0)
+    if candidate_scales is not None and "scales" not in kwargs:
+        kwargs["scales"] = candidate_scales
+    return matcher.match(screen_img, building_template, threshold=threshold, **kwargs)
+
+
+def _get_building_crop_roi(screen_img, pos_building: Tuple[int, int], bw: int, bh: int, screen_scale: float):
+    """計算並切取建築正下方感興趣區域 (crop_roi)。"""
+    screen_h, screen_w = screen_img.shape[:2] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else (600, 800)
+    bx, by = pos_building
+    x1, y1, x2, y2 = _compute_scoped_roi(screen_w, screen_h, bx, by, bw, bh, screen_scale)
+    if x2 <= x1 or y2 <= y1:
+        return None, (x1, y1, x2, y2)
+    crop_roi = screen_img[y1:y2, x1:x2] if hasattr(screen_img, "__getitem__") else screen_img
+    if isinstance(crop_roi, np.ndarray) and (crop_roi.size == 0 or crop_roi.shape[0] < 20 or crop_roi.shape[1] < 20):
+        return None, (x1, y1, x2, y2)
+    return crop_roi, (x1, y1, x2, y2)
+
+
+def _detect_and_verify_red_dot(
+    crop_roi, matcher, red_dot_template: str, threshold: float, candidate_scales, templates_dir: str, screen_scale: float, tag: str
+):
+    """比對驚嘆號形狀並執行色彩門禁核驗。"""
+    raw_dot_pos, best_conf_dot = matcher.match(
+        crop_roi, red_dot_template, threshold=threshold, scales=candidate_scales, brightness_threshold=0.0
+    )
+    dot_h, dot_w = _load_template_dims(templates_dir, red_dot_template, (24, 24))
+    has_red_dot, ignored_orange, best_pos_dot = _verify_red_dot_color(
+        crop_roi, raw_dot_pos, dot_w, dot_h, screen_scale, tag, best_conf_dot
+    )
+    return has_red_dot, ignored_orange, best_pos_dot, raw_dot_pos, best_conf_dot
 
 
 def detect_building_with_red_dot(
@@ -164,28 +219,12 @@ def detect_building_with_red_dot(
     if screen_img is None or matcher is None:
         return BuildingCheckResult(found_building=False, has_red_dot=False)
 
-    screen_h, screen_w = (600, 800)
-    if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2:
-        try:
-            screen_h, screen_w = screen_img.shape[:2]
-        except Exception:
-            pass
+    screen_h, screen_w = screen_img.shape[:2] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else (600, 800)
+    candidate_scales = matcher.compute_candidate_scales(screen_w) if hasattr(matcher, "compute_candidate_scales") else None
 
-    # 1. 計算多尺度候選集 (DRY: 委託 TemplateMatcher 統一產生)
-    candidate_scales = (
-        matcher.compute_candidate_scales(screen_w)
-        if hasattr(matcher, "compute_candidate_scales")
-        else None
-    )
-
-    # 2. 建築物比對：關閉亮度過濾 (brightness_threshold=0.0)，並套用多尺度
-    building_kwargs = dict(match_kwargs)
-    building_kwargs.setdefault("brightness_threshold", 0.0)
-    if candidate_scales is not None and "scales" not in building_kwargs:
-        building_kwargs["scales"] = candidate_scales
-
-    pos_building, conf_building = matcher.match(
-        screen_img, building_template, threshold=building_threshold, **building_kwargs
+    # 1. 建築物比對
+    pos_building, conf_building = _locate_building(
+        screen_img, building_template, matcher, building_threshold, candidate_scales, match_kwargs
     )
     if not pos_building:
         return BuildingCheckResult(found_building=False, has_red_dot=False)
@@ -194,48 +233,27 @@ def detect_building_with_red_dot(
     templates_dir = getattr(matcher, "templates_dir", "templates")
     if not isinstance(templates_dir, str):
         templates_dir = "templates"
-    bw, bh = 180, 160
-    if isinstance(building_template, str):
-        t_path = os.path.join(templates_dir, building_template)
-        if os.path.exists(t_path):
-            t_img = cv2.imread(t_path)
-            if t_img is not None:
-                bh, bw = t_img.shape[:2]
 
+    bh, bw = _load_template_dims(templates_dir, building_template, (160, 180))
     raw_scale = getattr(matcher, "_compute_auto_scale", lambda w: 1.0)(screen_w)
-    if isinstance(raw_scale, (int, float)) and raw_scale > 0:
-        screen_scale = float(raw_scale)
-    else:
-        screen_scale = 1.0
+    screen_scale = float(raw_scale) if isinstance(raw_scale, (int, float)) and raw_scale > 0 else 1.0
 
-    bx, by = pos_building
-    x1, y1, x2, y2 = _compute_scoped_roi(screen_w, screen_h, bx, by, bw, bh, screen_scale)
-    if x2 <= x1 or y2 <= y1:
-        return BuildingCheckResult(
-            found_building=True, has_red_dot=False, building_pos=pos_building, confidence_building=conf_building
-        )
+    # 2. 感興趣區域 (ROI) 切割
+    crop_roi, roi_coords = _get_building_crop_roi(screen_img, pos_building, bw, bh, screen_scale)
+    if crop_roi is None:
+        return BuildingCheckResult(found_building=True, has_red_dot=False, building_pos=pos_building, confidence_building=conf_building)
 
-    try:
-        crop_roi = screen_img[y1:y2, x1:x2]
-    except Exception:
-        crop_roi = screen_img
-
-    if isinstance(crop_roi, np.ndarray) and (crop_roi.size == 0 or crop_roi.shape[0] < 20 or crop_roi.shape[1] < 20):
-        return BuildingCheckResult(
-            found_building=True, has_red_dot=False, building_pos=pos_building, confidence_building=conf_building
-        )
-
-    # 3. 多尺度候選比對驚嘆號紅點 (DRY: 委託 matcher.match(scales=candidate_scales))
-    best_pos_dot, best_conf_dot = matcher.match(
-        crop_roi, red_dot_template, threshold=red_dot_threshold,
-        scales=candidate_scales, brightness_threshold=0.0
+    # 3. 比對與色彩門禁核驗
+    has_red_dot, ignored_orange, best_pos_dot, raw_dot_pos, best_conf_dot = _detect_and_verify_red_dot(
+        crop_roi, matcher, red_dot_template, red_dot_threshold, candidate_scales, templates_dir, screen_scale, tag
     )
 
-    has_red_dot = best_pos_dot is not None
     peak_crop_pos = None if has_red_dot else _find_peak_in_crop(matcher, crop_roi, red_dot_template, screen_scale)
-    global_dot_pos = (x1 + best_pos_dot[0], y1 + best_pos_dot[1]) if has_red_dot else None
+    diagnostic_pos = raw_dot_pos if ignored_orange else best_pos_dot
+    x1, y1 = roi_coords[:2]
+    global_dot_pos = (x1 + best_pos_dot[0], y1 + best_pos_dot[1]) if (has_red_dot and best_pos_dot) else None
 
-    _save_red_dot_diagnostics(
+    save_red_dot_diagnostics(
         screen_img=screen_img,
         crop_roi=crop_roi,
         building_template=building_template,
@@ -243,13 +261,14 @@ def detect_building_with_red_dot(
         bw=bw,
         bh=bh,
         scale=screen_scale,
-        roi_coords=(x1, y1, x2, y2),
+        roi_coords=roi_coords,
         has_red_dot=has_red_dot,
         best_conf=best_conf_dot,
         threshold=red_dot_threshold,
-        best_pos_dot=best_pos_dot,
+        best_pos_dot=diagnostic_pos,
         peak_crop_pos=peak_crop_pos,
         debug_tag=tag,
+        ignored_orange=ignored_orange,
     )
 
     if has_red_dot:
@@ -266,10 +285,8 @@ def detect_building_with_red_dot(
             confidence_red_dot=best_conf_dot,
         )
 
-    logging.info(
-        f"🔍 [RedDotDebug] [{tag}] 建築下方未檢出紅點 (最高相似度: {best_conf_dot:.4f} < "
-        f"門檻: {red_dot_threshold:.2f}, scale: {screen_scale:.3f})，已產出除錯診斷圖: debug_red_dot_{tag}.png"
-    )
+    log_reason = f"橘色任務驚嘆號 (Conf: {best_conf_dot:.2f})" if ignored_orange else f"最高相似度: {best_conf_dot:.4f} < 門檻: {red_dot_threshold:.2f}"
+    logging.info(f"🔍 [RedDotDebug] [{tag}] 建築下方無可領取紅點 ({log_reason})，已產出除錯診斷圖: debug_red_dot_{tag}.png")
     return BuildingCheckResult(
         found_building=True,
         has_red_dot=False,
@@ -277,3 +294,4 @@ def detect_building_with_red_dot(
         confidence_building=conf_building,
         confidence_red_dot=best_conf_dot,
     )
+
