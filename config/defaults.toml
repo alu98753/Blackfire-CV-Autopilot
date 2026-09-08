@@ -307,7 +307,7 @@ monster_blood_1 = true
 [subflow_configs.jewelry_workshop.sell_goods.green]
 The_cloth_wrapped_around_the_dead = true
 Giant_Beast_Gold_Tooth = true
-Toad_Venom = true
+Toad_Venom = false
 Dead_Soul_Core = true
 Wild_boar_tusk = true
 Scorpion_Shell = true
