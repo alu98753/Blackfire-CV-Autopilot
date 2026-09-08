@@ -70,6 +70,11 @@ class NavigationHandler(BaseStateHandler):
         client_h = rect.get("height") or 1080
         return pos[1] <= int(client_h * cls.SUB_STAGE_ROW1_MAX_RATIO)
 
+    @staticmethod
+    def _resolve_sub_stage_hint(config: dict) -> str | None:
+        """Resolve the active route before falling back to Tier 4 policy."""
+        return config.get("sub_stage") or config.get("tier4_sub_stage")
+
     def _validate_boss_skull(
         self,
         pos: tuple[int, int] | None,
@@ -84,7 +89,7 @@ class NavigationHandler(BaseStateHandler):
         if not pos:
             return None
         config = self.machine.config or {}
-        sub_stage_type = config.get("tier4_sub_stage") or config.get("sub_stage")
+        sub_stage_type = self._resolve_sub_stage_hint(config)
         if sub_stage_type not in ["middle", "final"]:
             return pos
 
@@ -299,7 +304,7 @@ class NavigationHandler(BaseStateHandler):
                 self.SUB_STAGE_SCROLL_MAX_ATTEMPTS,
             )
         )
-        sub_stage_hint = config.get("tier4_sub_stage") or config.get("sub_stage")
+        sub_stage_hint = self._resolve_sub_stage_hint(config)
         direction, next_attempts = SubStageListNavigator.evaluate(
             visible_templates=visible_sub_stages,
             target_template=target_sub_stage_btn,

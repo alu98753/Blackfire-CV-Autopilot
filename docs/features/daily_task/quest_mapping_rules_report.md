@@ -53,6 +53,12 @@
   - **普通關卡 (`stage_level`)**：`level` 大者優先 (`Level 6 (冰凍峽谷)` > `Level 5 (幽暗沼澤)` > `Level 4 (沙漠廢墟)` > `Level 3` > `Level 1`).
   - **子關卡類型**：`final` (魔王關) > `middle` (中間關) > `first` (第一關).
 
+### 懸賞選關與 Tier 4 設定的優先順序
+
+`tier4_stage_level` 與 `tier4_sub_stage` 只描述「目前沒有可執行活動時」的長駐退守目標；它們不屬於具體懸賞任務。`TaskNode.to_config_dict()` 建立關卡懸賞配置時會移除這兩個 Tier 4 欄位，並以任務規則產生的 `stage_level`、`sub_stage` 為唯一選關依據。
+
+導航端另有防禦性規則：若舊配置或外部呼叫同時帶入 `sub_stage` 與 `tier4_sub_stage`，一律優先使用目前任務的 `sub_stage`。例如「清除野豬」映射為 `stage_level=1, sub_stage=final` 時，即使 Profile 的 Tier 4 設為 `six`，仍會先確認目前位於第二頁，再點擊 final 共用的 `boss_skull.png`，不會誤點第一頁的 middle 骷髏頭。
+
 ---
 
 ### 2. 📋 排序示範與 JSON 硬碟寫入樣貌

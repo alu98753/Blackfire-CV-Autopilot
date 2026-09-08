@@ -8,6 +8,9 @@ from config import (
 )
 from utils.dungeon_catalog import DungeonCatalog
 
+TIER4_STAGE_SELECTION_KEYS = ("tier4_stage_level", "tier4_sub_stage")
+
+
 class TaskNode:
     """
     懸賞任務節點資料結構。
@@ -174,6 +177,10 @@ class TaskNode:
                 target_img = "stages/first_stage.png"
 
             cfg = PRIMARY_MODES["stage"].copy()
+            # Tier 4 values are fallback farming policy, not part of a concrete
+            # bounty route. Keeping them would override this task's stage choice.
+            for policy_key in TIER4_STAGE_SELECTION_KEYS:
+                cfg.pop(policy_key, None)
             cfg["enable_stage_farming"] = True
             cfg["stage_level"] = lvl
             cfg["sub_stage"] = sub
