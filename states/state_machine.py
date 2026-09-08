@@ -1047,7 +1047,14 @@ class GameStateMachine:
         """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
         if target_config is not None:
             cfg = target_config
-        elif getattr(self, "stamina_retreat_start_time", None) is not None and getattr(self, "original_config", None) is not None:
+        elif (
+            (not self.config or self.config.get("type") == "collect_only")
+            and getattr(self, "stamina_retreat_start_time", None) is not None
+            and getattr(self, "original_config", None) is not None
+        ):
+            # COLLECT_ONLY 沒有地下城路由資訊，保留舊有的退避備援；一旦
+            # scheduler 已提交 dungeon resume route，必須改以 active config
+            # 判斷，不能再被中斷前的 stage quest route 遮蔽。
             cfg = self.original_config
         else:
             cfg = self.config

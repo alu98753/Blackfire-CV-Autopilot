@@ -85,15 +85,24 @@ class CollectOnlyHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_UNKNOWN)
                 return
 
-            # 檢查是否啟用【體力退避期間地下城冷卻結束自動復歸】
-            auto_resume = self.machine.original_config.get("auto_resume_dungeon_on_cd", False)
+            # 地下城喚醒屬於長期活動策略，不屬於被中斷的臨時任務 route。
+            # Daily 的 stage 懸賞不會攜帶 greedy / auto-resume 設定，因此必須
+            # 優先讀取 primary policy；獨立 dungeon / mix 模式才回退 original_config。
+            activity_policy = self.machine._daily_activity_config()
+            resume_policy = (
+                activity_policy
+                if activity_policy.get("enable_dungeon", False)
+                else self.machine.original_config
+            )
+            auto_resume = resume_policy.get("auto_resume_dungeon_on_cd", False)
             if auto_resume and not just_entered_collect_only and not self.machine.need_diamond_collection:
                 dungeon_ready = False
                 try:
                     dungeon_ready = self.machine.has_available_dungeon(
-                        target_config=self.machine.original_config
+                        target_config=resume_policy
                     )
-                except Exception:
+                except Exception as exc:
+                    logging.warning("[冷卻結束復歸] 地下城可用性檢查失敗: %s", exc)
                     dungeon_ready = False
 
                 if dungeon_ready:
@@ -102,8 +111,14 @@ class CollectOnlyHandler(BaseStateHandler):
                         logging.info("🍞 [冷卻結束復歸] 偵測到地下城冷卻結束，先執行體力領取...")
                     else:
                         logging.warning(f"🔄 [冷卻結束復歸] 偵測到地下城冷卻結束，暫時離開 collect_only 切回刷地下城！(退避總剩餘時間持續倒數中...)")
-                        if self.machine.original_config.get("type") == "domain" or self.machine.original_config.get("tier4_mode") == "domain":
-                            self.machine.config = self.machine.build_dungeon_resume_route(self.machine.original_config)
+                        use_policy_route = resume_policy is not self.machine.original_config
+                        original_is_domain = (
+                            self.machine.original_config.get("type") == "domain"
+                            or self.machine.original_config.get("tier4_mode") == "domain"
+                        )
+                        if use_policy_route or original_is_domain:
+                            dungeon_route = self.machine.build_dungeon_resume_route(resume_policy)
+                            self.machine.set_config(dungeon_route)
                         else:
                             self.machine.config = self.machine.original_config
                         # 保持 self.machine.original_config 與 self.machine.stamina_retreat_start_time 不變
