@@ -19,6 +19,12 @@ DEFAULT_DAILY_STATUS = {
                 "equipment_workshop": 0,
                 "grocery_store": 0,
             },
+            "shop_gold_balances": {
+                "jewelry_workshop": None,
+                "alchemy_hut": None,
+                "equipment_workshop": None,
+                "grocery_store": None,
+            },
         },
         "bulletin_board": {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []},
 
@@ -147,7 +153,7 @@ class DailyManager:
                 self.save_status()
                 logging.info(f"✨ [DailyManager] 自動同步補齊新增的子流程 [{sf_key}] 結構至持久化存檔。")
 
-        # 💡 [商店統計自癒機制] 確保 jewelry_workshop 的 shop_visit_counts 結構存在
+        # 💡 [商店統計自癒機制] 確保 jewelry_workshop 的 shop_visit_counts 與 shop_gold_balances 結構存在
         jw_saved = self.status.setdefault("subflows", {}).setdefault("jewelry_workshop", {})
         if "shop_visit_counts" not in jw_saved or not isinstance(jw_saved["shop_visit_counts"], dict):
             jw_saved["shop_visit_counts"] = {
@@ -155,6 +161,15 @@ class DailyManager:
                 "alchemy_hut": 0,
                 "equipment_workshop": 0,
                 "grocery_store": 0,
+            }
+            self.save_status()
+
+        if "shop_gold_balances" not in jw_saved or not isinstance(jw_saved["shop_gold_balances"], dict):
+            jw_saved["shop_gold_balances"] = {
+                "jewelry_workshop": None,
+                "alchemy_hut": None,
+                "equipment_workshop": None,
+                "grocery_store": None,
             }
             self.save_status()
 
@@ -327,6 +342,12 @@ class DailyManager:
                 sf["completed_today"] = False
                 if "today_count" in sf:
                     sf["today_count"] = 0
+
+        # 重置珠寶加工廠/城鎮商店金幣餘額為 None (恢復探勘狀態)
+        jw_reset = subflows.get("jewelry_workshop", {})
+        if "shop_gold_balances" in jw_reset and isinstance(jw_reset["shop_gold_balances"], dict):
+            for s_id in jw_reset["shop_gold_balances"]:
+                jw_reset["shop_gold_balances"][s_id] = None
 
         boss_data = subflows.get("lord_boss", {})
         boss_data["completed_today"] = False
@@ -774,6 +795,39 @@ class DailyManager:
         self.save_status()
         logging.info(f"💎 [DailyManager] 商店 [{shop_id}] 訪問次數已更新: {counts[shop_id]} 次")
         return counts[shop_id]
+
+    def get_shop_gold_balances(self):
+        """
+        取得城鎮各商店商人目前記錄的金幣餘額字典。
+        :return: dict (例如 {"jewelry_workshop": 21413, "alchemy_hut": None, ...})
+        """
+        subflows = self.status.setdefault("subflows", {})
+        jw = subflows.setdefault("jewelry_workshop", {"completed_today": False, "last_executed_at": ""})
+        balances = jw.setdefault("shop_gold_balances", {})
+        if not isinstance(balances, dict):
+            balances = {
+                "jewelry_workshop": None,
+                "alchemy_hut": None,
+                "equipment_workshop": None,
+                "grocery_store": None,
+            }
+            jw["shop_gold_balances"] = balances
+        return balances
+
+    def record_shop_gold(self, shop_id, gold_amount):
+        """
+        更新指定商店商人的金幣餘額並持久化。
+        :param shop_id: 商店識別碼 (例如 jewelry_workshop, alchemy_hut, etc.)
+        :param gold_amount: 當前商人持有金幣數量 (int 或 None)
+        :return: 更新後的金幣數量
+        """
+        if not shop_id:
+            return None
+        balances = self.get_shop_gold_balances()
+        balances[shop_id] = gold_amount
+        self.save_status()
+        logging.info("💰 [DailyManager] 商店 [%s] 金幣餘額已更新: %s", shop_id, gold_amount)
+        return balances[shop_id]
 
     def load_quest_scheduler(self):
         """

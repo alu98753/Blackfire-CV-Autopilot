@@ -37,16 +37,16 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         self.handler.bag_handler.mouse = self.handler.mouse
         self.handler.pre_tidy_done = True  # 跳過前置整理，直接測試選店進門
 
-    def test_selects_least_visited_shop_when_multiple_available(self):
+    def test_selects_highest_gold_shop_when_multiple_available(self):
         """
-        當畫面上同時可見多間商店時，應優先選擇訪問次數最少的商店 (alchemy_hut: 1次 < jewelry: 5次)
+        當畫面上同時可見多間商店時，應優先選擇金幣最多的商店 (alchemy_hut: 30000 > jewelry: 5000)
         """
         mock_dm = MagicMock()
-        mock_dm.get_shop_visit_counts.return_value = {
-            "jewelry_workshop": 5,
-            "alchemy_hut": 1,
-            "equipment_workshop": 3,
-            "grocery_store": 4,
+        mock_dm.get_shop_gold_balances.return_value = {
+            "jewelry_workshop": 5000,
+            "alchemy_hut": 30000,
+            "equipment_workshop": 10000,
+            "grocery_store": 8000,
         }
         self.mock_machine.daily_manager = mock_dm
 
@@ -71,17 +71,17 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         self.assertEqual(self.handler.current_building_btn, "town_building/alchemy_hut/alchemy_hut.png")
         self.assertEqual(self.handler.step_phase, "ENTERED_BUILDING")
 
-    def test_fallback_to_next_least_visited_when_least_is_not_visible(self):
+    def test_fallback_to_next_highest_gold_when_highest_is_not_visible(self):
         """
-        當造訪次數最少之商店 (alchemy_hut: 0次) 未在畫面上時，
-        應自動選取次少且可見之商店 (equipment_workshop: 2次)
+        當金幣最多之商店 (alchemy_hut: 50000) 未在畫面上時，
+        應自動選取次多且可見之商店 (equipment_workshop: 25000)
         """
         mock_dm = MagicMock()
-        mock_dm.get_shop_visit_counts.return_value = {
-            "alchemy_hut": 0,
-            "equipment_workshop": 2,
-            "grocery_store": 4,
-            "jewelry_workshop": 5,
+        mock_dm.get_shop_gold_balances.return_value = {
+            "alchemy_hut": 50000,
+            "equipment_workshop": 25000,
+            "grocery_store": 10000,
+            "jewelry_workshop": 5000,
         }
         self.mock_machine.daily_manager = mock_dm
 
@@ -116,13 +116,12 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         mock_dm.record_subflow_completed.assert_called_once_with("jewelry_workshop")
         mock_dm.record_shop_visit.assert_called_once_with("grocery_store")
 
-    def test_daily_manager_shop_visit_counts_persistence(self):
+    def test_daily_manager_shop_visit_and_gold_persistence(self):
         """
-        驗證 DailyManager 實體載入、預設 shop_visit_counts 與 record_shop_visit 持久化寫入
+        驗證 DailyManager 實體載入、預設 shop_gold_balances 與 record_shop_gold 持久化寫入
         """
         import tempfile
         import shutil
-        import os
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -137,9 +136,19 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
             self.assertEqual(new_count, 1)
             self.assertEqual(dm.get_shop_visit_counts().get("alchemy_hut"), 1)
 
+            # 驗證金幣餘額預設與更新
+            balances = dm.get_shop_gold_balances()
+            self.assertIn("jewelry_workshop", balances)
+            self.assertIsNone(balances.get("alchemy_hut"))
+
+            # 記錄 alchemy_hut 金幣
+            dm.record_shop_gold("alchemy_hut", 25000)
+            self.assertEqual(dm.get_shop_gold_balances().get("alchemy_hut"), 25000)
+
             # 重新從檔案載入驗證持久化
             dm2 = DailyManager(data_dir=temp_dir, status_file="test_status.json")
             self.assertEqual(dm2.get_shop_visit_counts().get("alchemy_hut"), 1)
+            self.assertEqual(dm2.get_shop_gold_balances().get("alchemy_hut"), 25000)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

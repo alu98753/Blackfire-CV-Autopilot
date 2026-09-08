@@ -33,6 +33,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.bag_handler.matcher = self.matcher
         self.bag_handler.mouse = self.mouse
         self.bag_handler.capturer = self.capturer
+        from utils.merchant_gold_detector import MerchantGoldDetector
+        self.gold_detector = MerchantGoldDetector()
 
     def reset_state(self):
         self.step_phase = "INIT"
@@ -347,6 +349,16 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
             pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
             if pos_exit:
+                # 離店前更新商人扣減後的最新金幣
+                ocr_reader = getattr(self.machine, "get_ocr_reader", lambda: None)
+                final_gold = self.gold_detector.detect_merchant_gold(
+                    screen_img, ocr_reader=ocr_reader, debug_tag=f"{self.current_shop_id}_exit"
+                )
+                if final_gold is not None:
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm and hasattr(dm, "record_shop_gold"):
+                        dm.record_shop_gold(self.current_shop_id, final_gold)
+
                 logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
                 self._record_completion()
@@ -378,6 +390,16 @@ class JewelryWorkshopHandler(BaseStateHandler):
         pos_sell_out, conf_so = self.matcher.match(screen_img, sell_out_btn, threshold=0.80)
         pos_exit_init, conf_exit = self.matcher.match(screen_img, exit_building_btn, threshold=0.80)
         if pos_sell_out and pos_exit_init:
+            # 進入房間時先辨識商人頭頂看板金幣
+            ocr_reader = getattr(self.machine, "get_ocr_reader", lambda: None)
+            init_gold = self.gold_detector.detect_merchant_gold(
+                screen_img, ocr_reader=ocr_reader, debug_tag=f"{self.current_shop_id}_init"
+            )
+            if init_gold is not None:
+                dm = getattr(self.machine, "daily_manager", None)
+                if dm and hasattr(dm, "record_shop_gold"):
+                    dm.record_shop_gold(self.current_shop_id, init_gold)
+
             logging.info(f"💎 [珠寶加工廠] 辨識到已在建築物內部 (sell_out.png 可見)，點擊開啟出售選單...")
             self.mouse.click(left + pos_sell_out[0], top + pos_sell_out[1])
             self.step_phase = "SELL_MENU_OPEN"
@@ -415,11 +437,11 @@ class JewelryWorkshopHandler(BaseStateHandler):
                         self.last_action_time = now
                         return
 
-                # 依造訪次數由少至多排序候選商店，並於畫面中尋找可見建築
+                # 依商人持有金幣由多至少貪婪排序 (未探勘者優先)，並於畫面中尋找可見建築
                 dm = getattr(self.machine, "daily_manager", None)
-                visit_counts = dm.get_shop_visit_counts() if (dm and hasattr(dm, "get_shop_visit_counts")) else {}
-                from utils.shop_selector import sort_shops_by_visit_count
-                sorted_shops = sort_shops_by_visit_count(shops_cfg, visit_counts)
+                gold_balances = dm.get_shop_gold_balances() if (dm and hasattr(dm, "get_shop_gold_balances")) else {}
+                from utils.shop_selector import sort_shops_by_gold_balance
+                sorted_shops = sort_shops_by_gold_balance(shops_cfg, gold_balances)
 
                 matched_shop = None
                 matched_pos = None
@@ -463,8 +485,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                     self.current_shop_id = matched_shop.get("id", "jewelry_workshop")
                     self.current_building_btn = matched_shop.get("template", building_btn)
                     shop_name = matched_shop.get("name", self.current_shop_id)
-                    cur_visits = visit_counts.get(self.current_shop_id, 0)
-                    logging.info(f"💎 [城鎮商店] 於城鎮發現目標商店 [{shop_name}] ({self.current_building_btn}) (歷史訪問: {cur_visits}次, 信心度: {matched_conf:.4f})，點擊進入...")
+                    cur_gold = gold_balances.get(self.current_shop_id, "未探勘")
+                    logging.info(f"💎 [城鎮商店] 於城鎮發現目標商店 [{shop_name}] ({self.current_building_btn}) (記錄金幣: {cur_gold}, 信心度: {matched_conf:.4f})，點擊進入...")
                     self.mouse.click(left + matched_pos[0], top + matched_pos[1])
                     self.step_phase = "ENTERED_BUILDING"
                     self.last_action_time = now
