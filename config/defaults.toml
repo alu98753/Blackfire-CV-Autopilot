@@ -302,6 +302,7 @@ Purple_Spore = true
 Slime_Mucus = true
 Bat_wings = true
 Wolf_skin = true
+rough_linen = true
 monster_blood_1 = true
 
 [subflow_configs.jewelry_workshop.sell_goods.green]
