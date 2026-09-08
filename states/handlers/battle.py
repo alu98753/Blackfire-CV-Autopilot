@@ -3,6 +3,7 @@ import os
 import logging
 from config import get_battle_max_duration_seconds
 from states.handlers.base import BaseStateHandler
+from utils.dungeon_catalog import DungeonCatalog
 
 class BattleHandler(BaseStateHandler):
     def __init__(self, machine):
@@ -282,9 +283,16 @@ class BattleHandler(BaseStateHandler):
         if getattr(self, "nemesis_check_done", False):
             return False
 
-        cfg = self.machine.config or {}
-        nemesis_templates = cfg.get("nemesis_templates") or cfg.get("flee_bosses", [])
-        if not nemesis_templates:
+        cfg = self.machine.config if isinstance(getattr(self.machine, "config", None), dict) else {}
+        p_cfg = self.machine.primary_config if isinstance(getattr(self.machine, "primary_config", None), dict) else {}
+        nemesis_templates = (
+            cfg.get("nemesis_templates")
+            or p_cfg.get("nemesis_templates")
+            or cfg.get("flee_bosses")
+            or p_cfg.get("flee_bosses")
+            or []
+        )
+        if not isinstance(nemesis_templates, (list, tuple)) or not nemesis_templates:
             self.nemesis_check_done = True
             return False
 
@@ -311,7 +319,14 @@ class BattleHandler(BaseStateHandler):
             logging.info(f"🔍 [領域強敵比對 第 {self.nemesis_check_count}/3 次] 畫面相似度 (門檻 0.75) ➔ {', '.join(scores_summary)}")
 
         if detected_nemesis:
-            action = (cfg.get("nemesis_action") or cfg.get("flee_boss_action") or "flee").lower()
+            raw_action = (
+                cfg.get("nemesis_action")
+                or p_cfg.get("nemesis_action")
+                or cfg.get("flee_boss_action")
+                or p_cfg.get("flee_boss_action")
+                or "flee"
+            )
+            action = str(raw_action).lower() if isinstance(raw_action, str) else "flee"
             if action == "pause":
                 logging.warning("=" * 60)
                 logging.warning(f"🚨 [領域強敵遭遇 - 暫停接管] 偵測到領域強敵特徵 [{detected_nemesis}] (相似度: {detected_conf:.4f} >= 0.75)！")
@@ -333,10 +348,11 @@ class BattleHandler(BaseStateHandler):
 
     def _run_nemesis_flee_subflow(self, rect) -> bool:
         """
-        執行領域強敵放棄戰鬥具體步驟：
+        執行強敵放棄戰鬥具體步驟：
         1. 點擊 battle/setting.png
-        2. 點擊 battle/giveup_battle.png
+        2. 點擊放棄戰鬥按鈕 (battle/giveup_battle.png 或 defeat_giveup.png)
         3. 點擊 common/confirm.png / common/ok.png
+        4. 收尾處置 (地下城設定冷卻，領域重置戰敗次數並重新進場)
         """
         self.notify_ui_progress()
         
@@ -350,15 +366,16 @@ class BattleHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos_s[0], rect["top"] + pos_s[1])
                     time.sleep(0.3)
 
-        # 2. 點擊放棄戰鬥按鈕
-        giveup_temp = "battle/giveup_battle.png"
-        if os.path.exists(os.path.join("templates", giveup_temp)):
-            cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else None
-            if cap_img is not None:
-                pos_g, _ = self.matcher.match(cap_img, giveup_temp, threshold=0.75)
-                if pos_g:
-                    self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
-                    time.sleep(0.3)
+        # 2. 點擊放棄戰鬥按鈕 (相容領域與地下城按鈕)
+        for giveup_temp in ["battle/giveup_battle.png", "defeat_giveup.png"]:
+            if os.path.exists(os.path.join("templates", giveup_temp)):
+                cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else None
+                if cap_img is not None:
+                    pos_g, _ = self.matcher.match(cap_img, giveup_temp, threshold=0.75)
+                    if pos_g:
+                        self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
+                        time.sleep(0.3)
+                        break
 
         # 3. 點擊確認彈窗
         for c_temp in ["common/confirm.png", "common/ok.png"]:
@@ -375,9 +392,44 @@ class BattleHandler(BaseStateHandler):
         self.machine.defeat_count = 0
         self.non_battle_feature_start_time = None
 
-        logging.info("👉 [領域強敵撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 NAVIGATING 重新進場探索。")
-        self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        is_in_dungeon = getattr(self.machine, "is_in_dungeon", False) is True
+        dungeon_idx = getattr(self.machine, "current_dungeon_index", None)
+        has_valid_dungeon = DungeonCatalog.is_valid_index(dungeon_idx)
+        is_dungeon = is_in_dungeon or has_valid_dungeon
+
+        if is_dungeon:
+            if has_valid_dungeon:
+                cooldown_map = self.machine.config.get("cooldown_map", {}) if isinstance(getattr(self.machine, "config", None), dict) else {}
+                cd_seconds = cooldown_map.get(dungeon_idx, 900.0)
+                if hasattr(self.machine, "dungeon_cooldowns") and isinstance(self.machine.dungeon_cooldowns, dict):
+                    self.machine.dungeon_cooldowns[dungeon_idx] = time.time() + cd_seconds
+                dname = DungeonCatalog.get_name(dungeon_idx)
+                logging.info(
+                    f"⏳ 貪婪地下城：強敵撤退！設定 [{dname}] (#{dungeon_idx}) 進入 {int(cd_seconds / 60)} 分鐘冷卻期。"
+                )
+            self.machine.is_in_dungeon = False
+            self.machine.current_dungeon_index = None
+            is_collect_only = (
+                callable(getattr(self.machine, "is_in_collect_only_mode", None))
+                and self.machine.is_in_collect_only_mode() is True
+            )
+            next_state = (
+                self.machine.STATE_COLLECT_ONLY
+                if is_collect_only
+                else self.machine.STATE_NAVIGATING
+            )
+            logging.info(
+                f"👉 [地下城強敵撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 {next_state} 重新調度。"
+            )
+            self.machine.transition_to(next_state)
+        else:
+            logging.info(
+                "👉 [領域強敵撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 NAVIGATING 重新進場探索。"
+            )
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
         return True
+
+
 
     def log_battle_duration(self):
         now = time.time()
