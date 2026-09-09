@@ -14,10 +14,12 @@ WINDOW_TITLE = "Blackfire Crusade"
 STEAM_APP_ID = "1765770"
 TIER4_MODE_STAGE = "stage"
 TIER4_MODE_DOMAIN = "domain"
+TIER4_MODE_NONE = "none"
 DEFAULT_TIER4_DOMAIN = "golden_empire"
 TIER4_MODE_OPTIONS = (
     (TIER4_MODE_STAGE, "普通關卡 (Stage)"),
     (TIER4_MODE_DOMAIN, "領地探索 (Domain)"),
+    (TIER4_MODE_NONE, "停用 (全冷卻時collect only)"),
 )
 TIER4_DOMAIN_OPTIONS = (
     (DEFAULT_TIER4_DOMAIN, "黃金古國"),

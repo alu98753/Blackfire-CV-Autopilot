@@ -10,6 +10,7 @@ from config import (
     EXIT_BATTLE_THRESHOLD,
     ENTRY_THRESHOLD,
     TIER4_MODE_DOMAIN,
+    TIER4_MODE_NONE,
     get_template_threshold
 )
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
@@ -424,6 +425,13 @@ class NavigationHandler(BaseStateHandler):
                 time.sleep(0.5)
             self.machine.apply_tier4_fallback_config()
             self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return
+
+        tier4_mode = daily_policy.get("tier4_mode")
+        if self.machine.is_daily_pipeline_active() and tier4_mode == TIER4_MODE_NONE:
+            self._enter_collect_only_after_dungeon_cooldown(
+                screen_img, rect, "地下城冷卻中且 Tier 4 長駐已停用"
+            )
             return
 
         # 若未啟用普通關卡打怪 (enable_stage_farming == False)，直接返回城鎮轉入 COLLECT_ONLY 待機

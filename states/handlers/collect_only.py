@@ -179,8 +179,12 @@ class CollectOnlyHandler(BaseStateHandler):
 
         # 3.5 [模組化活動主動喚醒] 當無領取任務時，檢查啟用的週期性活動是否已冷卻結束就緒
         dm = getattr(self.machine, "daily_manager", None)
+        policy = self.machine._daily_activity_config()
+        active_cfg = self.machine.config or {}
+        policy_cfg = policy if policy else active_cfg
+
         # 3.5.1 檢查每日城鎮速領 (enable_town_daily)
-        if self.machine.config.get("enable_town_daily", False) and dm:
+        if policy_cfg.get("enable_town_daily", False) and dm:
             pending_town = dm.get_pending_town_subflows()
             if pending_town and not getattr(self.machine, "town_subflow_queue", []):
                 logging.info(f"🏛️ [定時待機喚醒] 偵測到有待執行的每日城鎮速領任務: {pending_town} ➔ 喚醒發起城鎮佇列！")
@@ -206,11 +210,14 @@ class CollectOnlyHandler(BaseStateHandler):
 
         # 3.5.3 檢查地下城探索 (enable_dungeon)
         pending_quests = getattr(self.machine, "quest_scheduler", None)
-        has_pending_quests = bool(pending_quests and pending_quests.get_pending_tasks())
-        policy = self.machine._daily_activity_config()
-        active_cfg = self.machine.config or {}
-        policy_cfg = policy if policy else active_cfg
-        if policy_cfg.get("enable_dungeon", False) and not has_pending_quests:
+        has_ready_quest = False
+        if pending_quests and hasattr(pending_quests, "get_next_action_node"):
+            ready_task, _ = pending_quests.get_next_action_node(
+                dungeon_cooldowns=self.machine.dungeon_cooldowns
+            )
+            has_ready_quest = bool(ready_task)
+
+        if policy_cfg.get("enable_dungeon", False) and not has_ready_quest:
             dungeon_ready = False
             try:
                 dungeon_ready = self.machine.has_available_dungeon(target_config=policy_cfg)
@@ -283,7 +290,7 @@ class CollectOnlyHandler(BaseStateHandler):
                         extra_status.append(f"👑 Boss: {format_time(min_boss_rem)}")
                     else:
                         extra_status.append("👑 Boss: 今日已滿")
-            if self.machine.config.get("enable_dungeon", False) and self.machine.has_dungeon_status_context():
+            if policy_cfg.get("enable_dungeon", False) and self.machine.has_dungeon_status_context():
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()
                 if avail_names:
                     extra_status.append(f"🏰 地下城: 就緒 ({', '.join(avail_names)})")

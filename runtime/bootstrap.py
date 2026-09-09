@@ -7,7 +7,13 @@ import time
 
 from actions.mouse import MouseController
 from capture.screen import ScreenCapturer
-from config import GAME_CONFIGS, TIER4_MODE_STAGE, get_monitor_index, normalize_config
+from config import (
+    GAME_CONFIGS,
+    TIER4_MODE_DOMAIN,
+    TIER4_MODE_STAGE,
+    get_monitor_index,
+    normalize_config,
+)
 from states.state_machine import GameStateMachine
 from utils.daily_manager import DailyManager
 from utils.tier4_config import build_tier4_fallback_config
@@ -84,7 +90,9 @@ def check_mode_templates(config):
             tier4_config["navigation_path"] = tier4_config.get(
                 "stage_navigation_path", []
             )
-        missing.extend(check_mode_templates(tier4_config))
+            missing.extend(check_mode_templates(tier4_config))
+        elif tier4_config.get("tier4_mode") == TIER4_MODE_DOMAIN:
+            missing.extend(check_mode_templates(tier4_config))
 
     return list(dict.fromkeys(missing))
 

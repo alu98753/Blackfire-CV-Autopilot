@@ -220,7 +220,7 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertFalse(machine.config["greedy_dungeon"])
         self.assertNotIn("dungeons/dungeon.png", machine.config["navigation_path"])
         self.assertIn("stages/level4_desert_ruins.png", machine.config["navigation_path"])
-        self.assertIn("stages/level4_final.png", machine.config["navigation_path"])
+        self.assertIn("stages/boss_skull.png", machine.config["navigation_path"])
 
     def test_disabled_dungeon_policy_strictly_rejects_has_available_dungeon(self):
         machine = GameStateMachine(
@@ -753,6 +753,151 @@ class TestDailyTier4Behavior(unittest.TestCase):
         # 地下城 6 冷卻結束 ➔ 回傳 True
         machine.dungeon_cooldowns = {6: now - 10.0, 7: now + 300.0}
         self.assertTrue(machine.has_available_dungeon(target_config=domain_tier4_cfg))
+
+    @patch("cli.tier4_setup.persist_mode_updates")
+    @patch("builtins.input", return_value="3")
+    def test_none_mode_persists_player_choice_and_disables_stage_farming(
+        self, _input, persist
+    ):
+        config = {
+            "_config_mode_key": "daily",
+            "tier4_mode": "stage",
+            "tier4_stage_level": 6,
+            "enable_stage_farming": True,
+        }
+
+        setup_daily_tier4_config(config)
+
+        persist.assert_called_once_with(
+            config,
+            {
+                "tier4_mode": "none",
+                "enable_stage_farming": False,
+            },
+        )
+        self.assertEqual(config["tier4_mode"], "none")
+        self.assertFalse(config["enable_stage_farming"])
+        self.assertIn("無 Tier 4 長駐", config["name"])
+
+    def test_build_tier4_fallback_config_none_mode(self):
+        daily = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "tier4_mode": "none",
+            "enable_dungeon": True,
+            "enable_stage_farming": False,
+        }
+        modes = {}
+
+        fallback = build_tier4_fallback_config(daily, modes)
+
+        self.assertEqual(fallback["type"], "collect_only")
+        self.assertEqual(fallback["tier4_mode"], "none")
+        self.assertFalse(fallback["enable_stage_farming"])
+        self.assertFalse(fallback["enable_golden_empire"])
+        self.assertTrue(fallback["enable_dungeon"])
+
+    def test_evaluate_next_activity_enters_collect_only_when_tier4_none_and_activities_on_cooldown(self):
+        import time
+        now = time.time()
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        machine.daily_manager.is_demon_lords_available.return_value = (False, "已無次數")
+        machine.daily_manager.get_available_lord_bosses.return_value = []
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "tier4_mode": "none",
+            "enable_dungeon": True,
+            "enable_town_daily": True,
+            "enable_lord_boss": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6],
+            "dungeon_entries": ["dungeons/Ice_entry.png"],
+            "dungeon_names": ["Ice"],
+        }
+        machine.dungeon_cooldowns = {6: now + 600.0}
+        machine.current_state = machine.STATE_NAVIGATING
+        machine.quest_scheduler = None
+
+        result = machine.evaluate_next_activity()
+
+        self.assertFalse(result)
+        self.assertEqual(machine.current_state, machine.STATE_COLLECT_ONLY)
+
+    def test_collect_only_wakes_up_dungeon_when_tier4_none(self):
+        import time
+        from states.handlers.collect_only import CollectOnlyHandler
+        now = time.time()
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        machine.daily_manager.is_demon_lords_available.return_value = (False, "已無次數")
+        machine.daily_manager.get_available_lord_bosses.return_value = []
+        machine.runtime_config_key = "daily"
+        daily_cfg = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "tier4_mode": "none",
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6],
+            "dungeon_entries": ["dungeons/Ice_entry.png"],
+            "dungeon_names": ["Ice"],
+        }
+        machine.primary_config = daily_cfg
+        machine.config = {"type": "collect_only"}
+        machine.current_state = machine.STATE_COLLECT_ONLY
+        machine.need_diamond_collection = False
+        machine.need_bread_collection = False
+        machine.enable_bread = False
+        # 地下城 6 冷卻已結束
+        machine.dungeon_cooldowns = {6: now - 10.0}
+        machine.matcher.match.return_value = (None, 0.0)
+
+        handler = CollectOnlyHandler(machine)
+        handler.handle(MagicMock(), {"left": 0, "top": 0, "width": 1920, "height": 1080})
+
+        self.assertEqual(machine.current_state, machine.STATE_NAVIGATING)
+        self.assertEqual(machine.config["type"], "mix")
+        self.assertTrue(machine.config["enable_dungeon"])
+
+    def test_navigation_enters_collect_only_after_dungeon_cooldown_when_tier4_none(self):
+        from states.handlers.navigation import NavigationHandler
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.daily_manager = MagicMock()
+        machine.runtime_config_key = "daily"
+        daily_cfg = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "tier4_mode": "none",
+            "enable_stage_farming": False,
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6],
+            "dungeon_entries": ["dungeons/Ice_entry.png"],
+            "dungeon_names": ["Ice"],
+        }
+        machine.primary_config = daily_cfg
+        machine.config = daily_cfg.copy()
+        machine.current_state = machine.STATE_NAVIGATING
+        machine.matcher.match.return_value = ((100, 100), 0.95)
+
+        handler = NavigationHandler(machine)
+        handler._switch_to_stage_or_back(
+            MagicMock(), {"left": 0, "top": 0, "width": 1920, "height": 1080}, "冷卻中"
+        )
+
+        self.assertEqual(machine.current_state, machine.STATE_COLLECT_ONLY)
+        self.assertEqual(machine.config["type"], "collect_only")
 
 
 if __name__ == "__main__":

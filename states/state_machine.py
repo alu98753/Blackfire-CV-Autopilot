@@ -7,6 +7,7 @@ from copy import deepcopy
 from config import (
     GAME_CONFIGS,
     TIER4_MODE_DOMAIN,
+    TIER4_MODE_NONE,
     TIER4_MODE_STAGE,
     get_navigation_progress_settings,
     get_stamina_retreat_settings,
@@ -1505,6 +1506,10 @@ class GameStateMachine:
             self.set_config(fallback_cfg)
             self.arm_daily_quest_preemption()
             logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
+            if fallback_cfg.get("tier4_mode") == TIER4_MODE_NONE or fallback_cfg.get("type") == "collect_only":
+                if not self.is_in_collect_only_mode():
+                    logging.info("💤 [GameStateMachine] Tier 4 長駐已停用 ➔ 自動轉入 COLLECT_ONLY 待機...")
+                    self.transition_to(self.STATE_COLLECT_ONLY)
         else:
             from config import PRIMARY_MODES
             mix_config = PRIMARY_MODES["mix"].copy()
@@ -2070,7 +2075,9 @@ class GameStateMachine:
                     return True
 
             # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4 長駐路由。
-            if self.is_daily_pipeline_active():
+            daily_policy = self._daily_activity_config()
+            tier4_mode = daily_policy.get("tier4_mode", cfg.get("tier4_mode"))
+            if self.is_daily_pipeline_active() and tier4_mode != TIER4_MODE_NONE:
                 self.apply_tier4_fallback_config()
                 return False
 
@@ -2079,13 +2086,13 @@ class GameStateMachine:
             default_stage_farm = True if (mode_type in ["mix", "stage", "daily"] or getattr(self, "is_tier4_fallback", False) or getattr(self, "daily_manager", None) is not None) else False
             is_stage_farming = cfg.get("enable_stage_farming", default_stage_farm)
 
-            if is_stage_farming:
+            if is_stage_farming and tier4_mode != TIER4_MODE_NONE:
                 self.apply_tier4_fallback_config()
                 return False
 
-            # 6. 兜底待機：所有啟用活動均在冷卻中，且未開啟普通關卡打怪 ➔ 切換至 COLLECT_ONLY 待機！
+            # 6. 兜底待機：所有啟用活動均在冷卻中，且未開啟長駐打怪 ➔ 切換至 COLLECT_ONLY 待機！
             if not self.is_in_collect_only_mode():
-                logging.info("💤 [Activity Scheduler] 所有啟用的週期性任務均在冷卻中且未開啟普通打怪 ➔ 轉入 COLLECT_ONLY 待機...")
+                logging.info("💤 [Activity Scheduler] 所有啟用的週期性任務均在冷卻中且未開啟 Tier 4 ➔ 轉入 COLLECT_ONLY 待機...")
                 self.transition_to(self.STATE_COLLECT_ONLY)
             return False
 

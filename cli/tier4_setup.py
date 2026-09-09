@@ -4,6 +4,7 @@ from config import (
     DEFAULT_TIER4_DOMAIN,
     TIER4_DOMAIN_OPTIONS,
     TIER4_MODE_DOMAIN,
+    TIER4_MODE_NONE,
     TIER4_MODE_OPTIONS,
     TIER4_MODE_STAGE,
 )
@@ -55,19 +56,26 @@ def setup_daily_tier4_config(config, interactive=True):
         config["name"] = f"每日懸賞任務 (Tier 4: {config.get('stage_name', '')})"
         return config
 
-    current_domain = config.get("tier4_domain", DEFAULT_TIER4_DOMAIN)
-    domain_key = _select_from_options(
-        "請選擇要探索的領地：",
-        TIER4_DOMAIN_OPTIONS,
-        current_domain,
-        interactive,
-    )
-    config["tier4_domain"] = domain_key
+    if tier4_mode == TIER4_MODE_DOMAIN:
+        current_domain = config.get("tier4_domain", DEFAULT_TIER4_DOMAIN)
+        domain_key = _select_from_options(
+            "請選擇要探索的領地：",
+            TIER4_DOMAIN_OPTIONS,
+            current_domain,
+            interactive,
+        )
+        config["tier4_domain"] = domain_key
+        config["enable_stage_farming"] = False
+        updates.update({"tier4_domain": domain_key, "enable_stage_farming": False})
+        _persist_changed(config, original, updates)
+        domain_label = dict(TIER4_DOMAIN_OPTIONS)[domain_key]
+        config["name"] = f"每日懸賞任務 (Tier 4: {domain_label})"
+        return config
+
     config["enable_stage_farming"] = False
-    updates.update({"tier4_domain": domain_key, "enable_stage_farming": False})
+    updates["enable_stage_farming"] = False
     _persist_changed(config, original, updates)
-    domain_label = dict(TIER4_DOMAIN_OPTIONS)[domain_key]
-    config["name"] = f"每日懸賞任務 (Tier 4: {domain_label})"
+    config["name"] = "每日懸賞任務 (無 Tier 4 長駐 / 純定時待機)"
     return config
 
 

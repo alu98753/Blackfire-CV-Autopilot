@@ -203,7 +203,7 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 enable_stage_farming = true
-tier4_mode = "stage"  # 可選: "stage", "domain"
+tier4_mode = "stage"  # 可選: "stage", "domain", "none" (停用長駐)
 tier4_domain = "golden_empire"  # tier4_mode="domain" 時目前支援黃金古國
 tier4_stage_level = 6  # 大關數字 1~7 (6 代表 冰凍峽谷, 7 代表 遺忘荒地)
 tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (魔王關)
