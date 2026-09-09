@@ -68,9 +68,6 @@ def setup_log_level_config(
     """
     prof = (profile_name or get_active_profile()).strip().lower()
     explicit_level = getattr(args, "log_level", None)
-    if not explicit_level and getattr(args, "debug", False):
-        explicit_level = "DEBUG"
-
     if explicit_level:
         apply_log_level(explicit_level)
         init_file_logger(prof)

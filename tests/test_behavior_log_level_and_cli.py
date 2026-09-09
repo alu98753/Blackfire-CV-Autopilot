@@ -45,22 +45,9 @@ class TestBehaviorLogLevelAndCLI(unittest.TestCase):
             args = parse_arguments()
             self.assertEqual(args.log_level, "WARNING")
 
-        with patch("sys.argv", ["main.py", "--debug"]):
-            args = parse_arguments()
-            self.assertTrue(args.debug)
-
-    def test_setup_log_level_config_debug_flag_skips_prompt(self):
-        """--debug flag should automatically map to DEBUG level and skip prompt."""
-        args = argparse.Namespace(log_level=None, debug=True)
-        with patch("cli.log_setup.prompt_choice") as mock_prompt:
-            chosen = setup_log_level_config(args, is_resume=False)
-            self.assertEqual(chosen, "DEBUG")
-            self.assertEqual(logging.getLogger().level, logging.DEBUG)
-            mock_prompt.assert_not_called()
-
     def test_setup_log_level_config_explicit_cli_skips_prompt(self):
         """Explicit --log-level should immediately apply and return without prompting."""
-        args = argparse.Namespace(log_level="DEBUG", debug=False)
+        args = argparse.Namespace(log_level="DEBUG")
         with patch("cli.log_setup.prompt_choice") as mock_prompt:
             chosen = setup_log_level_config(args, is_resume=False)
             self.assertEqual(chosen, "DEBUG")

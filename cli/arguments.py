@@ -42,7 +42,5 @@ def parse_arguments():
     )
     parser.add_argument("--log-level", type=str.upper, choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                         default=None, help="設定終端機日誌顯示等級 (預設依 Profile TOML 偏好記憶)")
-    parser.add_argument("--debug", action="store_true", default=False,
-                        help="快速啟用除錯模式 (等同 --log-level DEBUG，顯示模板分數、像素差與微觀遙測)")
     parser.add_argument("--incident-session-id", type=str, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()
