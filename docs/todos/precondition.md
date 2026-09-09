@@ -273,7 +273,8 @@ Handler state 與「無紅點」的 outcome；共用 Router 不知道具體 flow
    Bread 視窗、Bag 視窗啟動時，chest pending 都不會遺失。
 2. 沒有 `TOWN` evidence 時絕不執行 chest building／red-dot 判定。
 3. 到達 Town 但沒有紅點時才允許建立 180 秒 defer；這不是完成。
-4. 只有領取後 free button 消失或出現 cooldown evidence 才標記完成。
+4. 只有領取後 free button 消失、出現 cooldown evidence，或完成離場驗證時紅點已消失，
+   才標記完成。
 5. Battle 中不強制退出；一般關卡 Result 安全點必須 exit，不得 retry。
 6. Dungeon Exploring 必須自然探索至完整結束，pending town subflow 不得觸發中途 leave。
 7. Dungeon 內部戰鬥的 Result 必須返回探索流程；不得誤套一般關卡 Result 的強制離場。
