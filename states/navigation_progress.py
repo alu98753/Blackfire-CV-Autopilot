@@ -28,6 +28,7 @@ class NavigationProgressSettings:
     action_max_attempts: int
     collection_backoff_seconds: float
     collection_recovery_failure_limit: int
+    town_entry_wait_max_observations: int = 5
 
     @classmethod
     def from_mapping(cls, values):
@@ -37,6 +38,9 @@ class NavigationProgressSettings:
             collection_backoff_seconds=float(values["collection_backoff_seconds"]),
             collection_recovery_failure_limit=int(
                 values["collection_recovery_failure_limit"]
+            ),
+            town_entry_wait_max_observations=int(
+                values.get("town_entry_wait_max_observations", 5)
             ),
         )
 

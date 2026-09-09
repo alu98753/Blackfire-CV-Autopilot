@@ -20,8 +20,9 @@ Exploring 與 `common/quit.png` 前景視窗；無法達成 navigation postcondi
 
 ### 評閱後補正（2026-09-10）
 
-- `TOWN` 已成立但入口建築未辨識，不再無限制 `WAIT`；連續 5 次觀察仍無入口 evidence
-  會 defer 180 秒，避免主迴圈靜默空轉。
+- `TOWN` 已成立但入口建築未辨識，不再無限制 `WAIT`；連續
+  `navigation.town_entry_wait_max_observations`（預設 5）次觀察仍無入口 evidence 會
+  defer 180 秒，避免主迴圈靜默空轉。
 - `task_complete` 與 `backpack_full` 是全域高優先 popup，先於 Town intent 處理，避免
   底層 Lobby／Town anchor 搶走點擊。
 - `bulletin_board` 的無紅點意義由其 Handler 判定；Router 只要求看見告示牌建築，不會
@@ -193,7 +194,7 @@ Town Subflow Registry：到 Town 後，這個任務的入口證據與 Handler �
 | 任一 Town Building + 無前景分頁 | 點擊 `town_building/exitfromhouse_and_to_town.png` | `TOWN` |
 | `TOWN` 且 chest building + red dot | delegate `ChestHandler` | handler phase 前進 |
 | `TOWN` 且 building 可見、紅點不存在 | defer chest，保留未完成事實 | `retry_at` 已建立 |
-| `TOWN` 但 building 尚未被可靠檢查 | 最多 WAIT 5 次，仍無 evidence 則 defer | `retry_at` 已建立 |
+| `TOWN` 但 building 尚未被可靠檢查 | 最多 WAIT 設定次數（預設 5），仍無 evidence 則 defer | `retry_at` 已建立 |
 | Lobby／Stage Select／Dungeon Select／Lord Select／Demon Lord Select | 點擊 `goback_town` | `TOWN` |
 | `DOMAIN_EXPLORE` | 點擊 `exit_to_lobby` | Lobby |
 | `BATTLE`／`LOADING` | 保留 intent，讓已提交活動繼續 | `RESULT` 或可退出場景 |
@@ -301,7 +302,8 @@ Handler state 與「無紅點」的 outcome；共用 Router 不知道具體 flow
 11. `UNKNOWN` 不猜座標；有界重試耗盡後才交給 recovery／relaunch。
 12. 五個 town subflow 共用唯一 `REACH_TOWN` route；新增任務不需在
     `navigation_table.py` 複製回城 edges。
-13. `TOWN` 已成立但入口建築連續 5 次未辨識時，必須 defer；不得以每幀 WAIT 阻塞主迴圈。
+13. `TOWN` 已成立但入口建築連續設定次數（預設 5）未辨識時，必須 defer；不得以每幀
+    WAIT 阻塞主迴圈。
 14. `task_complete` 與 `backpack_full` popup 必須先於 pending Town intent 處理。
 
 ## 8. 明確不採用的捷徑

@@ -19,7 +19,6 @@ from utils.scene_snapshot import ElementId, SceneId, SceneSnapshot
 
 
 TOWN_SUBFLOW_DEFER_SECONDS = 180
-TOWN_ENTRY_WAIT_MAX_OBSERVATIONS = 5
 
 
 class TownSubflowPolicy:
@@ -175,7 +174,8 @@ class TownSubflowPreconditionController:
             self._entry_wait_flow = flow_key
             self._entry_wait_count = 0
         self._entry_wait_count += 1
-        return self._entry_wait_count >= TOWN_ENTRY_WAIT_MAX_OBSERVATIONS
+        settings = self.machine.navigation_progress.settings
+        return self._entry_wait_count >= settings.town_entry_wait_max_observations
 
     def _reset_entry_wait(self):
         self._entry_wait_flow = None
