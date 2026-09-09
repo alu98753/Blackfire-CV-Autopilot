@@ -21,16 +21,24 @@ class TestDebugArtifacts(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     debug_artifacts.debug_image_path(filename)
 
-    @patch("utils.debug_artifacts.cv2.imwrite", return_value=True)
-    def test_write_debug_image_creates_directory_and_uses_managed_path(self, mock_imwrite):
+    def test_write_debug_image_creates_directory_and_uses_managed_path(self):
         with TemporaryDirectory() as directory:
             test_dir = Path(directory) / "debug"
             with patch.object(debug_artifacts, "DEBUG_ARTIFACT_DIR", test_dir):
-                image = np.zeros((1, 1), dtype=np.uint8)
+                image = np.zeros((10, 10, 3), dtype=np.uint8)
+                # 測試一般英文檔名
                 self.assertTrue(debug_artifacts.write_debug_image("debug_writer.png", image))
                 output_path = test_dir / "debug_writer.png"
                 self.assertTrue(test_dir.is_dir())
-                mock_imwrite.assert_called_once_with(str(output_path), ANY)
+                self.assertTrue(output_path.is_file())
+                self.assertGreater(output_path.stat().st_size, 0)
+
+                # 測試包含中文路徑檔名 (Windows cv2.imwrite 中文 bug 防護)
+                chinese_filename = "debug_task_complete_ocr_消滅蛛王與蛛後.png"
+                self.assertTrue(debug_artifacts.write_debug_image(chinese_filename, image))
+                chinese_output_path = test_dir / chinese_filename
+                self.assertTrue(chinese_output_path.is_file())
+                self.assertGreater(chinese_output_path.stat().st_size, 0)
 
     def test_prune_debug_images_keeps_only_newest_files(self):
         with TemporaryDirectory() as directory:

@@ -351,9 +351,12 @@ class QuestScheduler:
 
             from utils.quest_ocr_extractor import QuestOCRExtractor
             from utils.quest_mapper import normalize_quest_title
+            from utils.debug_artifacts import write_debug_image
 
             extractor = QuestOCRExtractor(ocr_reader=ocr_reader)
             title = extractor._ocr_crop(crop_roi)
+            clean_title = None
+
             if title:
                 clean_ocr_title = normalize_quest_title(title)
                 logging.info(f"🔍 [OCR 懸賞完成辨識] 成功從彈窗讀取原始標題: '{title}' ➔ 自動清洗正名: '{clean_ocr_title}'")
@@ -368,7 +371,38 @@ class QuestScheduler:
 
                 dm.remove_accepted_quest(clean_title)
                 self.remove_completed_quest(clean_title)
-                return clean_title
+
+            # 📸 自動儲存可視化偵錯圖片 debug_task_complete_ocr_{任務名稱}.png
+            try:
+                import cv2
+                import re
+                debug_img = screen_img.copy()
+                cv2.rectangle(debug_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                if pos_icon:
+                    cv2.circle(debug_img, pos_icon, 8, (255, 0, 0), -1)
+                elif pos_task:
+                    cv2.circle(debug_img, pos_task, 8, (0, 0, 255), -1)
+
+                label_text = clean_title or title or "unrecognized"
+                cv2.putText(
+                    debug_img,
+                    f"Task: {label_text}",
+                    (x1, max(30, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 0),
+                    2,
+                )
+                safe_name = re.sub(r'[^\w\u4e00-\u9fff\-]+', '_', label_text).strip('_')
+                if not safe_name:
+                    safe_name = "unrecognized"
+                debug_filename = f"debug_task_complete_ocr_{safe_name}.png"
+                write_debug_image(debug_filename, debug_img)
+                logging.info(f"📸 [OCR 懸賞完成辨識] 已將除錯可視化圖片寫入: {debug_filename}")
+            except Exception as ex_dbg:
+                logging.debug(f"[DebugArtifacts] 寫入任務完成除錯圖失敗: {ex_dbg}")
+
+            return clean_title
         except Exception as e:
             logging.error(f"⚠️ [OCR 懸賞完成辨識] 辨識過程發生例外: {e}")
         return None

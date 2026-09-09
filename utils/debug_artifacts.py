@@ -55,9 +55,13 @@ def write_debug_image(filename: str, image: np.ndarray) -> bool:
     try:
         output_path = debug_image_path(filename)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        if not cv2.imwrite(str(output_path), image):
-            logging.warning("[DebugArtifacts] OpenCV could not write debug image: %s", output_path)
+        ext = output_path.suffix if output_path.suffix else ".png"
+        is_success, buf = cv2.imencode(ext, image)
+        if not is_success:
+            logging.warning("[DebugArtifacts] OpenCV could not encode debug image: %s", output_path)
             return False
+        with open(output_path, "wb") as f:
+            f.write(buf)
         logging.info("[DebugArtifacts] Debug image written to: %s", output_path)
         prune_debug_images()
         return True

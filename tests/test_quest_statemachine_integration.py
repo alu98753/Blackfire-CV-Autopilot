@@ -338,6 +338,25 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertEqual(current_task.completed_count, 4)
         self.assertTrue(scheduler.is_current_task_batch_completed())
 
+    def test_process_task_complete_banner_writes_debug_image(self):
+        """驗證 process_task_complete_banner 會將標註裁切框與任務名稱的偵錯圖寫入 debug_task_complete_ocr_{任務名稱}.png"""
+        from unittest.mock import patch, MagicMock
+        fake_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+        scheduler = QuestScheduler()
+        task = TaskNode("消滅蛛王與蛛後", "dungeon", target_count=1, dungeon_index=2, counting_policy=TaskNode.POLICY_BANNER_VERIFY)
+        scheduler.add_task(task)
+
+        mock_matcher = MagicMock()
+        mock_matcher.match.return_value = ((200, 300), 0.88)
+
+        with patch("utils.quest_ocr_extractor.QuestOCRExtractor._ocr_crop", return_value="消滅蛛王與蛛後"), \
+             patch("utils.debug_artifacts.write_debug_image") as mock_write_debug:
+            res = scheduler.process_task_complete_banner(fake_img, pos_task=(640, 360), matcher=mock_matcher)
+            self.assertEqual(res, "消滅蛛王與蛛後")
+            mock_write_debug.assert_called_once()
+            called_filename = mock_write_debug.call_args[0][0]
+            self.assertEqual(called_filename, "debug_task_complete_ocr_消滅蛛王與蛛後.png")
+
 
 if __name__ == "__main__":
     unittest.main()
