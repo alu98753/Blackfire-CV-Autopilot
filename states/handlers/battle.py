@@ -90,7 +90,19 @@ class BattleHandler(BaseStateHandler):
 
         # 1.1 戰鬥血條靜止卡死檢測 (Health bar stall recovery check)
         stall_cfg = get_battle_stall_settings()
-        hp_sig = extract_health_bar_signature(screen_img)
+        save_debug = False
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            last_dbg = getattr(self, "_last_stall_debug_saved_time", 0.0)
+            if time.time() - last_dbg >= 5.0:
+                save_debug = True
+                self._last_stall_debug_saved_time = time.time()
+
+        hp_sig = extract_health_bar_signature(
+            screen_img,
+            top_ratio=stall_cfg["roi_top_ratio"],
+            bottom_ratio=stall_cfg["roi_bottom_ratio"],
+            save_debug=save_debug,
+        )
         now = self.machine.clock.monotonic() if getattr(self.machine, "clock", None) else time.monotonic()
         if self.machine.battle_session.is_hp_stalled(hp_sig, now, timeout_seconds=stall_cfg["timeout_seconds"]):
             max_retries = stall_cfg["max_retries"]

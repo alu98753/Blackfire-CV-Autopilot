@@ -214,10 +214,12 @@ def get_battle_max_duration_seconds() -> float:
 
 
 def get_battle_stall_settings() -> dict:
-    """Return TOML-configured battle stall detection limits and max retry count."""
+    """Return TOML-configured battle stall detection limits, retry count, and ROI ratios."""
     return {
         "timeout_seconds": float(GLOBAL_SETTINGS.get("battle_stall_timeout_sec", 30.0)),
         "max_retries": int(GLOBAL_SETTINGS.get("battle_stall_max_retries", 2)),
+        "roi_top_ratio": float(GLOBAL_SETTINGS.get("battle_hp_roi_top_ratio", 0.64)),
+        "roi_bottom_ratio": float(GLOBAL_SETTINGS.get("battle_hp_roi_bottom_ratio", 0.69)),
     }
 
 

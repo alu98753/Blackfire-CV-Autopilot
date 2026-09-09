@@ -13,14 +13,21 @@ import numpy as np
 from utils.debug_artifacts import write_debug_image
 
 
-def extract_health_bar_signature(screen_img: Any, save_debug: bool = False) -> int:
+def extract_health_bar_signature(
+    screen_img: Any,
+    top_ratio: float = 0.64,
+    bottom_ratio: float = 0.69,
+    save_debug: bool = False,
+) -> int:
     """Extract a lightweight red-pixel count signature from the battle health-bar ROI.
 
     In 1920x1080 (or any scaled game view), the combat health bars sit at
-    approximately 60% to 72% of the screen height across the horizontal width.
+    the specified height ratios (default 64% to 69% to isolate health bars from character bodies).
 
     Args:
         screen_img: Full screenshot image (numpy ndarray in BGR).
+        top_ratio: Top boundary ratio of screen height (default: 0.64).
+        bottom_ratio: Bottom boundary ratio of screen height (default: 0.69).
         save_debug: If True, writes annotated debug images under scratch/debug/:
                     - debug_battle_stall_roi.png (full screen with ROI bounding box)
                     - debug_battle_stall_mask.png (ROI, red mask, and overlay)
@@ -33,12 +40,12 @@ def extract_health_bar_signature(screen_img: Any, save_debug: bool = False) -> i
         return -1
 
     height, width = screen_img.shape[:2]
-    # Scoped ROI: bottom combat strip where health bars reside (60% to 72% height)
-    y_start = int(height * 0.60)
-    y_end = int(height * 0.72)
+    # Scoped ROI: narrow horizontal strip strictly isolating health bars
+    y_start = max(0, int(height * top_ratio))
+    y_end = min(height, int(height * bottom_ratio))
     roi = screen_img[y_start:y_end, :]
 
-    if roi.size == 0:
+    if roi.size == 0 or y_end <= y_start:
         return -1
 
     # Convert to HSV to isolate the characteristic combat health bar red
@@ -57,7 +64,9 @@ def extract_health_bar_signature(screen_img: Any, save_debug: bool = False) -> i
         red_count = int(cv2.countNonZero(red_mask))
 
         if save_debug:
-            _save_battle_stall_debug_artifacts(screen_img, roi, red_mask, y_start, y_end, red_count)
+            _save_battle_stall_debug_artifacts(
+                screen_img, roi, red_mask, y_start, y_end, top_ratio, bottom_ratio, red_count
+            )
 
         return red_count
     except Exception as exc:
@@ -71,6 +80,8 @@ def _save_battle_stall_debug_artifacts(
     red_mask: np.ndarray,
     y_start: int,
     y_end: int,
+    top_ratio: float,
+    bottom_ratio: float,
     red_count: int,
 ) -> None:
     """Generate semantic visual debug artifacts and route to scratch/debug/."""
@@ -82,7 +93,7 @@ def _save_battle_stall_debug_artifacts(
         box_color = (0, 255, 0)  # Bright green
         cv2.rectangle(roi_debug, (0, y_start), (width - 1, y_end - 1), box_color, 2)
 
-        label = f"Battle HP ROI: Y=[{y_start}:{y_end}] (60%-72%) | Red Pixels: {red_count}"
+        label = f"Battle HP ROI: Y=[{y_start}:{y_end}] ({top_ratio*100:.1f}%-{bottom_ratio*100:.1f}%) | Red: {red_count}px"
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.6
         thickness = 1
@@ -107,7 +118,7 @@ def _save_battle_stall_debug_artifacts(
         # Add section labels to each panel
         def _add_panel_title(img: np.ndarray, title: str) -> np.ndarray:
             labeled = img.copy()
-            cv2.rectangle(labeled, (0, 0), (320, 24), (20, 20, 20), -1)
+            cv2.rectangle(labeled, (0, 0), (360, 24), (20, 20, 20), -1)
             cv2.putText(labeled, title, (6, 17), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             return labeled
 
@@ -136,6 +147,11 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+    from config import get_battle_stall_settings
+    stall_cfg = get_battle_stall_settings()
+    top_r = stall_cfg["roi_top_ratio"]
+    bot_r = stall_cfg["roi_bottom_ratio"]
+
     sample_path = Path("tests/fixtures/battle_stall_sample.png")
     if len(sys.argv) > 1:
         sample_path = Path(sys.argv[1])
@@ -150,7 +166,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print(f"[TEST] Testing Battle Stall Detection on: {sample_path} ({test_img.shape[1]}x{test_img.shape[0]})")
-    sig = extract_health_bar_signature(test_img, save_debug=True)
+    print(f"[CONFIG] Active TOML Ratios: top={top_r*100:.1f}%, bottom={bot_r*100:.1f}%")
+    sig = extract_health_bar_signature(test_img, top_ratio=top_r, bottom_ratio=bot_r, save_debug=True)
     print(f"[SUCCESS] Extracted Health Bar Signature (Red Pixels): {sig}")
     print("[OUTPUT] Debug images written to scratch/debug/:")
     print("   - scratch/debug/debug_battle_stall_roi.png")
