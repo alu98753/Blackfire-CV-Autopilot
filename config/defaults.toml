@@ -9,7 +9,7 @@ default_town_subflow_order = ["blood_altar", "jewelry_workshop"]
 dry_run_bag_clean = false
 default_backpack_full_max_scroll = 5
 monitor_index = 1
-battle_max_defeat = 20 # 所有模式通用的連續戰敗重試上限；達到此次數後放棄當前關卡
+battle_max_defeat = 30 # 所有模式通用的連續戰敗重試上限；達到此次數後放棄當前關卡
 
 [navigation]
 action_timeout_seconds = 5.0
