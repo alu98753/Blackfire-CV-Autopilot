@@ -224,7 +224,7 @@
     },
     {
       "pattern": "(清除蜥蜴|蜥蜴)",
-      "stage_level": 4,
+      "stage_level": 2,
       "sub_stage": "middle",
       "policy": "deterministic_count"
     },
