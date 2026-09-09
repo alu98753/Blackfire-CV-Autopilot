@@ -99,10 +99,16 @@ def _save_battle_stall_debug_artifacts(
         thickness = 1
         (tw, th), baseline = cv2.getTextSize(label, font, font_scale, thickness)
 
-        label_y1 = max(0, y_start - th - baseline - 8)
-        label_y2 = y_start
-        cv2.rectangle(roi_debug, (0, label_y1), (tw + 16, label_y2), (0, 0, 0), -1)
-        cv2.putText(roi_debug, label, (8, y_start - 6), font, font_scale, (0, 255, 255), thickness, cv2.LINE_AA)
+        # 留出 16px 間隙，使文字標籤浮動在綠色框框上方，避免緊貼遮擋
+        gap = 16
+        label_y2 = max(th + baseline + 12, y_start - gap)
+        label_y1 = label_y2 - th - baseline - 8
+        text_y = label_y2 - baseline - 4
+
+        # 繪製獨立卡片背景與邊框
+        cv2.rectangle(roi_debug, (8, label_y1), (tw + 24, label_y2), (0, 0, 0), -1)
+        cv2.rectangle(roi_debug, (8, label_y1), (tw + 24, label_y2), (0, 255, 255), 1)
+        cv2.putText(roi_debug, label, (16, text_y), font, font_scale, (0, 255, 255), thickness, cv2.LINE_AA)
 
         write_debug_image("debug_battle_stall_roi.png", roi_debug)
 

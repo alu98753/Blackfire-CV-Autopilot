@@ -18,6 +18,7 @@ class BattleSession:
     last_diff: int = 0
     hp_stall_started_at: float | None = None
     restart_battle_attempts: int = 0
+    BLOOD_DIFF = 300
 
     @property
     def is_active(self) -> bool:
@@ -68,7 +69,7 @@ class BattleSession:
             self.hp_stall_started_at = now
             return False
 
-        # If pixel difference exceeds tolerance (e.g. at least 25 pixels change), progress is made
+        # If pixel difference exceeds tolerance (e.g. at least BLOOD_DIFF pixels change), progress is made
         diff = abs(current_signature - self.last_hp_signature)
         self.last_diff = diff
         stalled_duration = max(0.0, now - self.hp_stall_started_at) if self.hp_stall_started_at is not None else 0.0
@@ -81,10 +82,11 @@ class BattleSession:
             timeout_seconds,
         )
 
-        if diff >= 25:
+        if diff >= self.BLOOD_DIFF:
             logging.debug(
-                "[BattleStall] ⚔️ 戰鬥推進：血條像素變化 diff=%d >= 門檻 25 (前次: %s -> 當前: %d)，重置卡死計時 (先前停頓: %.1fs)",
+                "[BattleStall] ⚔️ 戰鬥推進：血條像素變化 diff=%d >= 門檻 %d (前次: %s -> 當前: %d)，重置卡死計時 (先前停頓: %.1fs)",
                 diff,
+                self.BLOOD_DIFF,
                 str(self.last_hp_signature),
                 current_signature,
                 stalled_duration,
