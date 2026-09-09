@@ -204,6 +204,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("main.get_monitor_index", return_value=3)
     @patch("main.setup_equipment_config")
     @patch("main.setup_mode_config")
+    @patch("main.setup_log_level_config")
     @patch("config.set_active_profile")
     @patch("main.select_game_window", return_value=(0x123, "[#] Blackfire Crusade"))
     @patch("main.parse_arguments")
@@ -214,6 +215,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         parse_args,
         select_window,
         set_active_profile,
+        setup_log_level,
         setup_mode,
         setup_equipment,
         get_monitor,
@@ -233,6 +235,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
 
         self.assertEqual(args.title, "[#] Blackfire Crusade")
         set_active_profile.assert_called_once_with("sandbox")
+        setup_log_level.assert_called_once_with(args, profile_name="sandbox", is_resume=False)
         setup_mode.assert_called_once_with(args)
         setup_equipment.assert_called_once_with(config)
         launcher_class.assert_called_once_with(
@@ -251,12 +254,13 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("main.SteamGameLauncher")
     @patch("main.setup_equipment_config")
     @patch("main.setup_mode_config", return_value={"name": "Stage", "type": "stage"})
+    @patch("main.setup_log_level_config")
     @patch("config.set_active_profile")
     @patch("main.select_game_window", return_value=(None, "Blackfire Crusade"))
     @patch("main.parse_arguments", return_value=make_args())
     @patch("main.setup_utf8_encoding")
     def test_main_fails_before_state_machine_initialization_when_game_is_not_ready(
-        self, _encoding, _arguments, _window, _profile, _mode, _equipment, launcher_class, init_system
+        self, _encoding, _arguments, _window, _profile, _log_level, _mode, _equipment, launcher_class, init_system
     ):
         launcher_class.return_value.ensure_game_ready.return_value = False
 
