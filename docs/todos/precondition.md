@@ -18,6 +18,21 @@
 Exploring 與 `common/quit.png` 前景視窗；無法達成 navigation postcondition 時採有界重試，
 耗盡後 defer 180 秒，不會無限重點或把任務標成完成。
 
+### 評閱後補正（2026-09-10）
+
+- `TOWN` 已成立但入口建築未辨識，不再無限制 `WAIT`；連續 5 次觀察仍無入口 evidence
+  會 defer 180 秒，避免主迴圈靜默空轉。
+- `task_complete` 與 `backpack_full` 是全域高優先 popup，先於 Town intent 處理，避免
+  底層 Lobby／Town anchor 搶走點擊。
+- `bulletin_board` 的無紅點意義由其 Handler 判定；Router 只要求看見告示牌建築，不會
+  因無紅點先行 defer。
+- 當一項 Town subflow 結束而下一項僅被選中時，FSM 先恢復 `NAVIGATING` 與
+  `primary_config`，避免保留上一個 Handler 的 state／config 身分。
+- 目前已登錄的通用前景關閉證據為 `common/confirm.png`、`common/ok.png`、
+  `common/cancel.png`、`common/quit.png`。倉庫目前沒有 `bag/close.png` 或
+  `common/close.png` 資產；新增該類 template 時必須加入同一個 registry，不能在
+  Handler 內私自處理。
+
 ## 1. 問題不是 Chest INIT 本身，而是過早派發
 
 目前啟動 Daily 的實際路徑：
@@ -174,11 +189,11 @@ Town Subflow Registry：到 Town 後，這個任務的入口證據與 Handler �
 
 | 已確認場景 | 決策 | 下一個 postcondition |
 | --- | --- | --- |
-| 任一場景 + 已登錄的 Bread／Bag／Diamond／其他前景分頁 | 優先點擊該分頁的 close／`common/quit.png` | overlay 消失；重新觀察底層 scene |
+| 任一場景 + 已登錄的 Bread／Bag／Diamond／其他前景分頁 | 優先點擊已登錄的 confirm／ok／cancel／quit | overlay 消失；重新觀察底層 scene |
 | 任一 Town Building + 無前景分頁 | 點擊 `town_building/exitfromhouse_and_to_town.png` | `TOWN` |
 | `TOWN` 且 chest building + red dot | delegate `ChestHandler` | handler phase 前進 |
 | `TOWN` 且 building 可見、紅點不存在 | defer chest，保留未完成事實 | `retry_at` 已建立 |
-| `TOWN` 但 building 尚未被可靠檢查 | WAIT／重新觀察 | 新 snapshot evidence |
+| `TOWN` 但 building 尚未被可靠檢查 | 最多 WAIT 5 次，仍無 evidence 則 defer | `retry_at` 已建立 |
 | Lobby／Stage Select／Dungeon Select／Lord Select／Demon Lord Select | 點擊 `goback_town` | `TOWN` |
 | `DOMAIN_EXPLORE` | 點擊 `exit_to_lobby` | Lobby |
 | `BATTLE`／`LOADING` | 保留 intent，讓已提交活動繼續 | `RESULT` 或可退出場景 |
@@ -260,7 +275,7 @@ precondition。即使玩家在 Building 內打開 Bread／Bag／Diamond 分頁�
 chest             -> handler state + building evidence + red-dot policy
 hero_draw         -> handler state + tavern evidence + red-dot policy
 blood_altar       -> handler state + altar evidence + red-dot policy
-bulletin_board    -> handler state + board evidence + red-dot policy
+bulletin_board    -> handler state + board evidence；無紅點 outcome 由 Handler 判定
 jewelry_workshop  -> handler state + workshop evidence + 專屬入口政策
 ```
 
@@ -286,6 +301,8 @@ Handler state 與「無紅點」的 outcome；共用 Router 不知道具體 flow
 11. `UNKNOWN` 不猜座標；有界重試耗盡後才交給 recovery／relaunch。
 12. 五個 town subflow 共用唯一 `REACH_TOWN` route；新增任務不需在
     `navigation_table.py` 複製回城 edges。
+13. `TOWN` 已成立但入口建築連續 5 次未辨識時，必須 defer；不得以每幀 WAIT 阻塞主迴圈。
+14. `task_complete` 與 `backpack_full` popup 必須先於 pending Town intent 處理。
 
 ## 8. 明確不採用的捷徑
 

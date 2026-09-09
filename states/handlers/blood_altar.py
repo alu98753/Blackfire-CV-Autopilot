@@ -136,9 +136,11 @@ class BloodAltarHandler(BaseStateHandler):
         if now - self.last_action_time < 0.5:
             return False
 
-        # 優先導航防護：若處於大廳選單，先退回城鎮
-        if not self._ensure_in_town(screen_img, rect):
-            return True
+        # Queue-driven runs already passed the shared REACH_TOWN controller.
+        # Preserve the legacy route only for direct/standalone invocation.
+        if getattr(self.machine, "current_town_subflow", None) != "blood_altar":
+            if not self._ensure_in_town(screen_img, rect):
+                return True
 
         left = rect["left"] if rect else 0
         top = rect["top"] if rect else 0

@@ -791,6 +791,15 @@ class GameStateMachine:
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
 
+        # Completion and inventory-blocking overlays have a higher business
+        # priority than a pending Town destination.  A background lobby or
+        # Town anchor must never cause REACH_TOWN navigation to click through
+        # them.
+        if self._handle_priority_global_overlays(
+            screen_img, rect, should_check_low_freq
+        ):
+            return
+
         # Town subflows are requests for a destination, not permission to run
         # their Handler from an arbitrary screen.  This shared controller owns
         # the precondition route until Town evidence is verified.
@@ -806,26 +815,7 @@ class GameStateMachine:
 
         # 3. 全域彈窗與任務完成處理 (低頻率檢測)
         if should_check_low_freq:
-            # 3.1 檢查「任務完成」彈窗 (task_complete.png)
-            if os.path.exists(os.path.join("templates", "task_complete.png")):
-                pos, conf = self.matcher.match(screen_img, "task_complete.png", threshold=0.8)
-                if pos:
-                    logging.info(f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，啟動「領取任務獎勵」子流程進行 OCR 辨識與核銷。")
-                    self._run_task_complete_subflow(rect)
-                    return
-
-
-            # 3.2 檢查「無法容納的物品 (背包滿)」彈窗 (backpack_full.png)
-            if os.path.exists(os.path.join("templates", "backpack_full.png")):
-                # 調高門檻至 0.80 以避免大廳背景等介面產生虛假誤判，真實彈窗特徵明顯，信心度極高
-                pos, conf = self.matcher.match(screen_img, "backpack_full.png", threshold=0.80)
-                if pos:
-                    if self.current_state != self.STATE_BACKPACK_FULL_SORTING:
-                        logging.warning(f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 (信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。")
-                        self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
-                        return
-
-            # 3.3 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認，排除背包清理狀態自身處理)
+            # 3.1 在大廳或需要清理背包狀態下，若看見通用確認按鈕，點擊以關閉彈窗 (如領取獎勵/關閉背包滿後續確認，排除背包清理狀態自身處理)
             if (self.current_state == self.STATE_LOBBY or self.need_bag_cleaning) and self.current_state not in [self.STATE_BAG_CLEANING, self.STATE_BACKPACK_FULL_SORTING]:
                 for conf_btn in ["common/confirm.png", "common/ok.png"]:
                     if os.path.exists(os.path.join("templates", conf_btn)):
@@ -843,6 +833,36 @@ class GameStateMachine:
         else:
             # 預設未知狀態下，進行全域掃描定位當前狀態
             self.detect_current_state(screen_img, rect)
+
+    def _handle_priority_global_overlays(self, screen_img, rect, should_check):
+        """Handle overlays that must preempt a pending Town navigation intent."""
+        if not should_check:
+            return False
+
+        if os.path.exists(os.path.join("templates", "task_complete.png")):
+            pos, conf = self.matcher.match(
+                screen_img, "task_complete.png", threshold=0.8
+            )
+            if pos:
+                logging.info(
+                    f"🎉 偵測到【任務完成】彈窗 (信心度: {conf:.4f})，"
+                    "啟動「領取任務獎勵」子流程進行 OCR 辨識與核銷。"
+                )
+                self._run_task_complete_subflow(rect)
+                return True
+
+        if os.path.exists(os.path.join("templates", "backpack_full.png")):
+            pos, conf = self.matcher.match(
+                screen_img, "backpack_full.png", threshold=0.80
+            )
+            if pos and self.current_state != self.STATE_BACKPACK_FULL_SORTING:
+                logging.warning(
+                    f"🎒 全域偵測到【無法容納的物品 (背包已滿)】畫面 "
+                    f"(信心度: {conf:.4f})，切換至 BACKPACK_FULL_SORTING 狀態進行自適應分選。"
+                )
+                self.transition_to(self.STATE_BACKPACK_FULL_SORTING)
+                return True
+        return False
 
     def detect_current_state(self, screen_img, rect):
         """
@@ -1841,6 +1861,13 @@ class GameStateMachine:
         self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
+
+        # A selected successor is only an intent, not the previous Handler.
+        # Restore the baseline identity so monitoring, recovery, and scene
+        # detection cannot observe a stale CHEST/HERO/etc. during REACH_TOWN.
+        if getattr(self, "primary_config", None):
+            self.set_config(self.primary_config.copy())
+        self.transition_to(self.STATE_NAVIGATING)
 
         if completed_flow:
             logging.info(

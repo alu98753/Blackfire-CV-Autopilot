@@ -93,9 +93,11 @@ class BulletinBoardHandler(BaseStateHandler):
         if now - self.last_action_time < 0.8:
             return
 
-        # 優先檢查是否需要從小圖示大廳退回城鎮 (Return to Town)
-        if not self._ensure_in_town(screen_img, rect):
-            return
+        # Queue-driven runs already passed the shared REACH_TOWN controller.
+        # Preserve the legacy route only for direct/standalone invocation.
+        if getattr(self.machine, "current_town_subflow", None) != "bulletin_board":
+            if not self._ensure_in_town(screen_img, rect):
+                return
 
         left = rect["left"] if rect else 0
         top = rect["top"] if rect else 0

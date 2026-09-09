@@ -9,6 +9,12 @@ from utils.town_building_detector import detect_building_with_red_dot
 
 
 EXIT_BUILDING_TEMPLATE = "town_building/exitfromhouse_and_to_town.png"
+OVERLAY_CLOSE_TEMPLATES = (
+    "common/confirm.png",
+    "common/ok.png",
+    "common/cancel.png",
+    "common/quit.png",
+)
 
 
 class TownSubflowPerception:
@@ -23,7 +29,9 @@ class TownSubflowPerception:
 
         elements = {}
         matches = {
-            ElementId.CLOSE_OVERLAY: self._match(screen_img, "common/quit.png", 0.80),
+            ElementId.CLOSE_OVERLAY: self._match_first(
+                screen_img, OVERLAY_CLOSE_TEMPLATES, 0.80
+            ),
             ElementId.EXIT_BUILDING_TO_TOWN: self._match(
                 screen_img, EXIT_BUILDING_TEMPLATE, 0.75
             ),
@@ -115,6 +123,13 @@ class TownSubflowPerception:
             float(result[1] or 0.0),
             template_name,
         )
+
+    def _match_first(self, screen_img, template_names, threshold):
+        for template_name in template_names:
+            match = self._match(screen_img, template_name, threshold)
+            if match:
+                return match
+        return None
 
     @staticmethod
     def _classify_scene(elements):

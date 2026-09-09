@@ -19,6 +19,7 @@ from utils.scene_snapshot import ElementId, SceneId, SceneSnapshot
 
 
 TOWN_SUBFLOW_DEFER_SECONDS = 180
+TOWN_ENTRY_WAIT_MAX_OBSERVATIONS = 5
 
 
 class TownSubflowPolicy:
@@ -74,6 +75,8 @@ class TownSubflowPreconditionController:
         self.machine = machine
         self.perception = TownSubflowPerception(machine)
         self.policy = TownSubflowPolicy()
+        self._entry_wait_flow = None
+        self._entry_wait_count = 0
 
     def handle(self, screen_img, rect) -> bool:
         flow_key = getattr(self.machine, "current_town_subflow", None)
@@ -107,7 +110,13 @@ class TownSubflowPreconditionController:
         self.machine.active_navigation_intent = ActiveIntent(IntentId.TOWN_SUBFLOW)
         decision = self.policy.resolve(scene, flow_key)
         if decision.kind == DecisionKind.WAIT:
+            if self._entry_wait_exhausted(scene, flow_key):
+                self.machine.defer_current_town_subflow(
+                    TOWN_SUBFLOW_DEFER_SECONDS
+                )
+                return True
             return scene.scene != SceneId.UNKNOWN
+        self._reset_entry_wait()
         if decision.action == ActionId.DISPATCH_TOWN_SUBFLOW:
             self.machine.dispatch_current_town_subflow()
             return True
@@ -156,3 +165,18 @@ class TownSubflowPreconditionController:
             self.machine.need_diamond_collection
             or (self.machine.enable_bread and self.machine.need_bread_collection)
         )
+
+    def _entry_wait_exhausted(self, scene, flow_key):
+        """Bound Town-only entry discovery; UNKNOWN remains non-destructive."""
+        if scene.scene != SceneId.TOWN:
+            self._reset_entry_wait()
+            return False
+        if self._entry_wait_flow != flow_key:
+            self._entry_wait_flow = flow_key
+            self._entry_wait_count = 0
+        self._entry_wait_count += 1
+        return self._entry_wait_count >= TOWN_ENTRY_WAIT_MAX_OBSERVATIONS
+
+    def _reset_entry_wait(self):
+        self._entry_wait_flow = None
+        self._entry_wait_count = 0

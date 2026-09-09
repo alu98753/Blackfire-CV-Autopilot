@@ -349,9 +349,11 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.machine.pop_and_next_town_subflow()
                 return
 
-        # 優先檢查是否需要從小圖示大廳退回城鎮
-        if not self._ensure_in_town(screen_img, rect):
-            return
+        # Queue-driven runs already passed the shared REACH_TOWN controller.
+        # Preserve the legacy route only for direct/standalone invocation.
+        if getattr(self.machine, "current_town_subflow", None) != "jewelry_workshop":
+            if not self._ensure_in_town(screen_img, rect):
+                return
 
 
         left = rect["left"] if rect else 0

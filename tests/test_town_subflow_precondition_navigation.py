@@ -111,6 +111,32 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.assertEqual(action.expected, PostconditionId.OVERLAY_CLOSED)
 
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_registered_confirm_overlay_precedes_navigation(self, mock_building):
+        self.machine.start_subflow_queue(["chest"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        mock_building.return_value = BuildingCheckResult(False, False)
+
+        def match(_screen, template, **_kwargs):
+            matches = {
+                "common/ok.png": ((300, 100), 0.95),
+                "goback_town.png": ((50, 500), 0.92),
+            }
+            return matches.get(template, (None, 0.0))
+
+        self.matcher.match.side_effect = match
+
+        handled = self.machine.handle_town_subflow_precondition(
+            self.screen, self.rect
+        )
+
+        self.assertTrue(handled)
+        self.mouse.click.assert_called_once_with(310, 120)
+        self.assertEqual(
+            self.machine.navigation_progress.in_flight.action_id,
+            ActionId.DISMISS_OVERLAY,
+        )
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
     def test_building_uses_exit_house_after_overlay_is_absent(self, mock_building):
         self.machine.start_subflow_queue(["hero_draw"])
         self.machine.current_state = self.machine.STATE_NAVIGATING
@@ -254,6 +280,113 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         )
         self.machine.daily_manager.record_subflow_completed.assert_not_called()
         self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_missing_town_entry_is_bounded_and_deferred(self, mock_building):
+        self.machine.daily_manager = MagicMock()
+        self.machine.start_subflow_queue(["chest", "hero_draw"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((200, 550), 0.95)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        mock_building.return_value = BuildingCheckResult(False, False)
+
+        for _ in range(4):
+            self.assertTrue(
+                self.machine.handle_town_subflow_precondition(
+                    self.screen, self.rect
+                )
+            )
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
+        self.assertTrue(
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        )
+
+        self.machine.daily_manager.defer_subflow.assert_called_once_with(
+            "chest", 180
+        )
+        self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_bulletin_board_dispatches_when_building_is_visible_without_red_dot(
+        self, mock_building
+    ):
+        self.machine.daily_manager = MagicMock()
+        self.machine.start_subflow_queue(["bulletin_board"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((200, 550), 0.95)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        mock_building.return_value = BuildingCheckResult(
+            True, False, building_pos=(250, 300), confidence_building=0.9
+        )
+
+        handled = self.machine.handle_town_subflow_precondition(
+            self.screen, self.rect
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            self.machine.current_state, self.machine.STATE_BULLETIN_BOARD
+        )
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
+    def test_next_town_subflow_restores_navigation_identity_before_dispatch(self):
+        self.machine.primary_config = {"type": "daily", "name": "Daily"}
+        self.machine.start_subflow_queue(["chest", "hero_draw"])
+        self.machine.current_state = self.machine.STATE_CHEST
+        self.machine.config = {"type": "chest", "name": "Chest"}
+
+        self.machine.pop_and_next_town_subflow()
+
+        self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertEqual(self.machine.config, self.machine.primary_config)
+
+    def test_dispatched_hero_handler_does_not_reclaim_lobby_navigation(self):
+        self.machine.current_town_subflow = "hero_draw"
+        self.machine.current_state = self.machine.STATE_HERO_DRAW
+        self.machine.config = {"type": "hero_draw", "name": "Hero"}
+        handler = self.machine.handlers[self.machine.STATE_HERO_DRAW]
+
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((100, 200), 0.95)
+            if name == "goback_town.png"
+            else (None, 0.0)
+        )
+
+        handler.handle(self.screen, self.rect)
+
+        self.mouse.click.assert_not_called()
+
+    @patch("states.state_machine.os.path.exists", return_value=True)
+    def test_task_complete_popup_preempts_town_return(self, _mock_exists):
+        self.machine.start_subflow_queue(["chest"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        self.machine.capturer.get_window_rect.return_value = self.rect
+        self.machine.capturer.capture.return_value = self.screen
+
+        def match(_img, template, **_kwargs):
+            if template == "task_complete.png":
+                return (300, 100), 0.95
+            if template == "goback_town.png":
+                return (100, 200), 0.95
+            return None, 0.0
+
+        self.matcher.match.side_effect = match
+        with (
+            patch.object(self.machine.exception_watchdog, "check", return_value=False),
+            patch.object(self.machine, "_run_task_complete_subflow") as task_flow,
+        ):
+            self.machine.step()
+
+        task_flow.assert_called_once_with(self.rect)
+        self.mouse.click.assert_not_called()
 
     def test_repeated_navigation_timeout_defers_instead_of_clicking_forever(self):
         self.machine.daily_manager = MagicMock()
