@@ -59,6 +59,8 @@ class PauseController:
         self.toggle_event_pending = False
         self.manual_exit_event_pending = False
         self.manual_exit_key_pressed = False
+        self.manual_restart_event_pending = False
+        self.manual_restart_key_pressed = False
         self._lock = threading.Lock()
         self._running = True
 
@@ -393,6 +395,35 @@ class PauseController:
                 return True
             return False
 
+    def check_manual_restart_triggered(self) -> bool:
+        """Consume the high-frequency Ctrl+Q fast-resume restart event."""
+        with self._lock:
+            if self.manual_restart_event_pending:
+                self.manual_restart_event_pending = False
+                return True
+            return False
+
+    def _poll_manual_restart(self) -> None:
+        """Detect Ctrl+Q (without Shift) for fast restart with resume."""
+        try:
+            if not self.is_target_window_active():
+                self.manual_restart_key_pressed = False
+                return
+            user32 = ctypes.windll.user32
+            ctrl_down = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+            shift_down = bool(user32.GetAsyncKeyState(VK_SHIFT) & 0x8000)
+            q_down = bool(user32.GetAsyncKeyState(VK_Q) & 0x8000)
+
+            # 僅在按下 Ctrl+Q 且沒有按下 Shift 時觸發 (避免與 Ctrl+Shift+Q 完全退出衝突)
+            pressed = ctrl_down and q_down and not shift_down
+            if pressed and not self.manual_restart_key_pressed:
+                with self._lock:
+                    self.manual_restart_event_pending = True
+                print("\n[Manual Restart] Ctrl+Q received; initiating fast-resume restart.", flush=True)
+            self.manual_restart_key_pressed = pressed
+        except Exception:
+            self.manual_restart_key_pressed = False
+
     def _poll_manual_exit(self) -> None:
         """Detect a deliberate exit without relying on the slow bot loop."""
         try:
@@ -446,6 +477,7 @@ class PauseController:
         if now is None:
             now = time.time()
 
+        self._poll_manual_restart()
         self._poll_manual_exit()
 
         strategy_func = self._strategies.get(self.trigger_mode, self._poll_ctrl_space)

@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, patch
 
 from runtime.supervisor import (
     MANUAL_EXIT_CODE,
+    MANUAL_RESTART_EXIT_CODE,
     is_manual_exit,
+    is_manual_restart,
     prepare_resume_command,
     supervise,
 )
@@ -178,6 +180,13 @@ class TestBehaviorSupervisorLifecycle(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             mock_incident.assert_called_once()
             self.assertEqual(mock_incident.call_args[0][2], "manual_exit_hotkey")
+
+    def test_scenario_manual_restart_fast_resumes_without_delay(self):
+        """Manual restart (Exit 42 via Ctrl+Q) triggers immediate fast resume without delay."""
+        self.assertTrue(is_manual_restart(MANUAL_RESTART_EXIT_CODE))
+        self.assertTrue(is_manual_restart(42))
+        self.assertFalse(is_manual_restart(MANUAL_EXIT_CODE))
+        self.assertFalse(is_manual_restart(0))
 
     # -------------------------------------------------------------------------
     # Single-use Consumption Protection for --restart-game

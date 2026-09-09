@@ -38,6 +38,26 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertTrue(pause_controller.check_manual_exit_triggered())
         self.assertFalse(pause_controller.check_manual_exit_triggered())
 
+    def test_manual_restart_hotkey_requires_target_focus_and_ctrl_q_without_shift(self):
+        pause_controller = PauseController(start_thread=False)
+        pause_controller.is_target_window_active = MagicMock(return_value=True)
+        
+        # 1. Ctrl + Q (無 Shift) 觸發 manual_restart，不觸發 manual_exit
+        def mock_get_async_key_state(key):
+            from utils.keyboard_listener import VK_CONTROL, VK_Q, VK_SHIFT
+            if key in (VK_CONTROL, VK_Q):
+                return 0x8000
+            if key == VK_SHIFT:
+                return 0
+            return 0
+
+        with patch("utils.keyboard_listener.ctypes.windll.user32.GetAsyncKeyState", side_effect=mock_get_async_key_state):
+            pause_controller._poll_once()
+
+        self.assertTrue(pause_controller.check_manual_restart_triggered())
+        self.assertFalse(pause_controller.check_manual_restart_triggered())
+        self.assertFalse(pause_controller.check_manual_exit_triggered())
+
     def test_prompt_choice_returns_default_for_empty_input_or_terminal_interrupt(self):
         with patch("builtins.input", return_value="   "):
             self.assertEqual(prompt_choice("choice: ", "default"), "default")
@@ -319,3 +339,21 @@ class TestMainEntrypointBehavior(unittest.TestCase):
             state_machine.mock_calls.index(call.refresh_config_at_safe_point()),
             state_machine.mock_calls.index(call.step()),
         )
+
+    @patch("runtime.loop.record_manual_restart")
+    @patch("builtins.print")
+    @patch("runtime.loop.PauseController")
+    def test_runtime_loop_exits_with_restart_code_on_ctrl_q(
+        self, pause_controller_class, _print, mock_record_restart
+    ):
+        from runtime.loop import MANUAL_RESTART_EXIT_CODE
+        state_machine = MagicMock()
+        pause_controller_mock = pause_controller_class.return_value
+        pause_controller_mock.check_manual_exit_triggered.return_value = False
+        pause_controller_mock.check_manual_restart_triggered.return_value = True
+
+        with self.assertRaises(SystemExit) as cm:
+            run_main_loop(state_machine, interval=0.5)
+
+        self.assertEqual(cm.exception.code, MANUAL_RESTART_EXIT_CODE)
+        mock_record_restart.assert_called_once_with(state_machine, "manual_restart_hotkey")

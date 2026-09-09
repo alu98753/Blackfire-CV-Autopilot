@@ -25,6 +25,7 @@ from runtime.incident_journal import (
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 MANUAL_EXIT_CODE = 75
+MANUAL_RESTART_EXIT_CODE = 42
 DEFAULT_DAILY_RESTART_HOUR = 8
 
 
@@ -100,6 +101,11 @@ def prepare_resume_command(
 def is_manual_exit(exit_code: int | None) -> bool:
     """Only the dedicated in-app hotkey may stop the supervisor cleanly."""
     return exit_code == MANUAL_EXIT_CODE
+
+
+def is_manual_restart(exit_code: int | None) -> bool:
+    """True when child exited via Ctrl+Q for deliberate fast-resume restart."""
+    return exit_code == MANUAL_RESTART_EXIT_CODE
 
 
 def fallback_child_exit_reason(
@@ -309,19 +315,23 @@ def supervise(
                     "last_heartbeat": last_heartbeat.get("timestamp"),
                 },
             )
+        manual_restart = is_manual_restart(exit_code)
         need_restart_game = scheduled_restart or (termination_reason == "heartbeat_stale")
         launch_command = prepare_resume_command(
             launch_command,
             read_heartbeat(heartbeat_path),
             restart_game=need_restart_game,
         )
-        restart_count = 0 if scheduled_restart else restart_count + 1
-        delay = min(60.0, 2.0 ** min(restart_count, 5))
+        restart_count = 0 if (scheduled_restart or manual_restart) else restart_count + 1
+        delay = 0.0 if manual_restart else min(60.0, 2.0 ** min(restart_count, 5))
         if scheduled_restart:
             logging.warning("[Supervisor] Daily maintenance restart prepared; restarting in %.0fs.", delay)
+        elif manual_restart:
+            logging.warning("[Supervisor] Manual restart requested via Ctrl+Q; restarting immediately with saved settings.")
         else:
             logging.warning("[Supervisor] Bot exited (%s); restart #%d in %.0fs.", exit_code, restart_count, delay)
-        time.sleep(delay)
+        if delay > 0:
+            time.sleep(delay)
 
 
 def main() -> int:
