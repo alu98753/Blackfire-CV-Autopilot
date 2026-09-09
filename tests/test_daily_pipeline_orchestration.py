@@ -202,6 +202,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         sm.daily_manager = self.daily_mgr
         sm.evaluate_and_schedule_daily_pipeline()
         self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop", "bulletin_board"])
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_BLOOD_ALTAR)
 
     def test_tier2_boss_preemption_over_tier3_and_tier4(self):
@@ -603,6 +604,7 @@ class TestTierConfigMatrix(unittest.TestCase):
         sm.daily_manager = self.daily_mgr
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_CHEST)
         self.assertEqual(sm.config["type"], "chest")
 

@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import GAME_CONFIGS
 from states.state_machine import GameStateMachine
+from utils.town_building_detector import BuildingCheckResult
 
 from tests._legacy_state_machine_test_support import BehavioralScenarioTestCase
 
@@ -493,6 +494,24 @@ class TestBagScenarios(BehavioralScenarioTestCase):
 
         # Step 1: 關閉背包 ➔ 觸發流水線
         bag_handler.handle(fake_img, rect)
+        self.assertEqual(
+            self.state_machine.current_town_subflow, "blood_altar"
+        )
+        self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((74, 744), 0.90)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        with patch(
+            "states.town_subflow_perception.detect_building_with_red_dot",
+            return_value=BuildingCheckResult(
+                True,
+                True,
+                building_pos=(200, 200),
+                confidence_building=0.9,
+            ),
+        ):
+            self.state_machine.handle_town_subflow_precondition(fake_img, rect)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
         self.assertTrue(self.state_machine.need_blood_altar)
         self.assertEqual(self.state_machine.town_subflow_queue, ["jewelry_workshop"])
@@ -501,7 +520,14 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         altar_handler.reset_state()
         altar_handler.step_phase = "ALL_DONE_EXITING"
+        self.mock_matcher.match.side_effect = mock_match_quit
         altar_handler.handle(fake_img, rect)
+        self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((74, 744), 0.90)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        self.state_machine.handle_town_subflow_precondition(fake_img, rect)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
         self.assertTrue(self.state_machine.need_jewelry_workshop)
         self.assertEqual(self.state_machine.town_subflow_queue, [])

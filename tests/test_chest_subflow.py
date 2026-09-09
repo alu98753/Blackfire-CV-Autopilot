@@ -193,7 +193,7 @@ class TestChestSubflow(unittest.TestCase):
             self.mock_daily_manager.record_subflow_completed.assert_not_called()
 
     def test_handler_pops_subflow_when_chest_not_found(self):
-        """測試：當連續 5 輪未發現寶箱建築時，彈出下一個任務（絕不標記完成，亦不 defer）"""
+        """連續找不到已驗證過的入口時必須 defer，不能靜默遺失任務。"""
         mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
@@ -207,7 +207,9 @@ class TestChestSubflow(unittest.TestCase):
 
         self.assertTrue(res_last)
         self.mock_daily_manager.record_subflow_completed.assert_not_called()
-        self.mock_daily_manager.defer_subflow.assert_not_called()
+        self.mock_daily_manager.defer_subflow.assert_called_once_with(
+            "chest", CHEST_DEFER_SECONDS
+        )
         self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
     def test_daily_manager_chest_completion_and_reset(self):

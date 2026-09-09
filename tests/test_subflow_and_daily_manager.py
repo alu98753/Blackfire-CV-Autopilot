@@ -141,12 +141,14 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
         # 第一次彈出 ➔ 應切換至 STATE_BLOOD_ALTAR
         sm.pop_and_next_town_subflow()
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_BLOOD_ALTAR)
         self.assertTrue(sm.need_blood_altar)
         self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop"])
 
         # 第二次彈出 ➔ 應切換至 STATE_JEWELRY_WORKSHOP
         sm.pop_and_next_town_subflow()
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
         self.assertTrue(sm.need_jewelry_workshop)
         self.assertEqual(sm.town_subflow_queue, [])
@@ -185,6 +187,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
         # 斷言 1: 首個任務已被彈出，佇列剩餘 ['jewelry_workshop']
         self.assertEqual(sm.town_subflow_queue, ["jewelry_workshop"])
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_BLOOD_ALTAR)
         self.assertTrue(sm.need_blood_altar)
         self.assertFalse(sm.need_jewelry_workshop)
@@ -194,6 +197,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
         # 斷言 2: 佇列已無血之祭壇，切換至 JEWELRY_WORKSHOP，且 config 100% 同步更新為珠寶店配置！
         self.assertEqual(sm.town_subflow_queue, [])
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
         self.assertFalse(sm.need_blood_altar) # need_blood_altar 必須已被重置為 False！
         self.assertTrue(sm.need_jewelry_workshop)
@@ -230,6 +234,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         sm.primary_config = {"name": "測試懸賞關卡", "type": "stage"}
         sm.town_subflow_queue = ["jewelry_workshop"]
         sm.pop_and_next_town_subflow()
+        sm.dispatch_current_town_subflow()
 
         # 斷言 1: 切換至 JEWELRY_WORKSHOP，旗標被立起
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
