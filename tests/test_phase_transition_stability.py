@@ -85,7 +85,19 @@ class TestPhaseTransitionStability(unittest.TestCase):
         self.state_machine.matcher.match.side_effect = mock_match
         self.state_machine.click_and_wait_until_gone = MagicMock()
 
-        with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
+        from utils.town_building_detector import BuildingCheckResult
+
+        check_res = BuildingCheckResult(
+            found_building=True,
+            has_red_dot=True,
+            building_pos=(500, 500),
+            confidence_building=0.85,
+            confidence_red_dot=0.85,
+        )
+
+        with patch('os.path.exists', return_value=True), \
+             patch('utils.town_building_detector.detect_building_with_red_dot', return_value=check_res), \
+             patch('time.sleep', return_value=None):
             handler.handle(None, rect)
 
         # 斷言: 使用 click_and_wait_until_gone 閉環確認 Tavern.png 消失後切換至 ENTERED_TAVERN
@@ -121,7 +133,8 @@ class TestPhaseTransitionStability(unittest.TestCase):
     def test_chest_click_free_chest_phase_verifies_treasure_window_template(self):
         """
         [過早切換狀態防護斷言 4: 神秘寶箱]
-        驗證神秘寶箱在 CLICK_FREE_CHEST 階段，必須驗證 free_treasure.png 大彈窗登場後才執行點擊。
+        驗證神秘寶箱在 CLICK_FREE_CHEST 階段，必須同時驗證 free_treasure.png 大彈窗與 free.png 按鈕登場後才執行點擊。
+        若僅有大彈窗但無 free.png 按鈕，不得擅自進入 WAITING_CONFIRM。
         """
         handler = ChestHandler(self.state_machine)
         rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
@@ -129,17 +142,30 @@ class TestPhaseTransitionStability(unittest.TestCase):
         self.state_machine.need_chest = True
         handler.step_phase = "CLICK_FREE_CHEST"
 
-        def mock_match(img, template, **kwargs):
+        # 1. 僅有大彈窗，無 free.png -> 不應進入 WAITING_CONFIRM
+        def mock_match_only_dialog(img, template, **kwargs):
             if template == "town_building/mysterious_treasure/free_treasure.png":
                 return (500, 500), 0.85
             return None, 0.0
 
-        self.state_machine.matcher.match.side_effect = mock_match
+        self.state_machine.matcher.match.side_effect = mock_match_only_dialog
+        with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
+            handler.handle(None, rect)
+        self.assertEqual(handler.step_phase, "CLICK_FREE_CHEST")
 
+        # 2. 同時識別到大彈窗與 free.png 按鈕 (唯一標準) -> 轉移至 WAITING_CONFIRM
+        handler.last_action_time = 0.0
+        def mock_match_with_free(img, template, **kwargs):
+            if template == "town_building/mysterious_treasure/free_treasure.png":
+                return (500, 500), 0.85
+            if template == "free.png":
+                return (200, 300), 0.90
+            return None, 0.0
+
+        self.state_machine.matcher.match.side_effect = mock_match_with_free
         with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
             handler.handle(None, rect)
 
-        # 斷言: 成功識別 free_treasure.png 並轉移至 WAITING_CONFIRM
         self.assertEqual(handler.step_phase, "WAITING_CONFIRM")
 
 if __name__ == '__main__':
