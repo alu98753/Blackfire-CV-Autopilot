@@ -57,7 +57,7 @@ class TownSubflowPolicy:
         if spec.requires_red_dot and not scene.has(ElementId.TOWN_SUBFLOW_RED_DOT):
             return ActionDecision.delegate(
                 ReasonCode.TOWN_SUBFLOW_NO_RED_DOT,
-                ActionId.DEFER_TOWN_SUBFLOW,
+                ActionId.COMPLETE_TOWN_SUBFLOW,
                 PostconditionId.PRIMARY_ROUTE_PROGRESS,
             )
         return ActionDecision.delegate(
@@ -118,6 +118,9 @@ class TownSubflowPreconditionController:
         self._reset_entry_wait()
         if decision.action == ActionId.DISPATCH_TOWN_SUBFLOW:
             self.machine.dispatch_current_town_subflow()
+            return True
+        if decision.action == ActionId.COMPLETE_TOWN_SUBFLOW:
+            self.machine.complete_current_town_subflow()
             return True
         if decision.action == ActionId.DEFER_TOWN_SUBFLOW:
             self.machine.defer_current_town_subflow(TOWN_SUBFLOW_DEFER_SECONDS)

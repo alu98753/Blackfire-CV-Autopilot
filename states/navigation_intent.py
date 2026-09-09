@@ -33,6 +33,7 @@ class ActionId(str, Enum):
     EXIT_DOMAIN_TO_LOBBY = "exit_domain_to_lobby"
     DISPATCH_TOWN_SUBFLOW = "dispatch_town_subflow"
     DEFER_TOWN_SUBFLOW = "defer_town_subflow"
+    COMPLETE_TOWN_SUBFLOW = "complete_town_subflow"
 
 
 class PostconditionId(str, Enum):

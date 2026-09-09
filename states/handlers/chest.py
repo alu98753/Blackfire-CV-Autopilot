@@ -140,7 +140,8 @@ class ChestHandler(BaseStateHandler):
             if check.found_building:
                 is_dev = getattr(self.machine, "is_dev_subflow_run", False)
                 if not check.has_red_dot and not is_dev:
-                    self._defer_subflow("建築下方無紅點，當前無視覺待領取狀態")
+                    logging.info("🎁 [神秘寶箱 INIT] 寶箱下方無驚嘆號紅點，代表今日免費寶箱已領取！標記完成並推進下一任務...")
+                    self._complete_subflow()
                     self.machine.pop_and_next_town_subflow()
                     return True
 

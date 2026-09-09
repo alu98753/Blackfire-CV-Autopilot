@@ -1951,6 +1951,18 @@ class GameStateMachine:
         self.transition_to(target_state)
         return True
 
+    def complete_current_town_subflow(self):
+        """Mark a verified red-dot-exhausted Town entry as completed today."""
+        flow_key = self.current_town_subflow
+        manager = getattr(self, "daily_manager", None)
+        if flow_key and manager and hasattr(manager, "record_subflow_completed"):
+            manager.record_subflow_completed(flow_key)
+        logging.info(
+            "✅ [城鎮流水線] [%s] 入口無紅點，確認今日已完成，標記 completed_today = True。",
+            flow_key,
+        )
+        self.pop_and_next_town_subflow()
+
     def defer_current_town_subflow(self, defer_seconds=180):
         """Defer a verified unavailable Town entry without marking it complete."""
         flow_key = self.current_town_subflow

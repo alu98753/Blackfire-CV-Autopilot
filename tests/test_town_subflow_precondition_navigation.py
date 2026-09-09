@@ -257,7 +257,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.mouse.click.assert_not_called()
 
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
-    def test_missing_red_dot_defers_without_marking_complete(self, mock_building):
+    def test_missing_red_dot_completes_subflow_without_defer(self, mock_building):
         self.machine.daily_manager = MagicMock()
         self.machine.start_subflow_queue(["chest", "hero_draw"])
         self.machine.current_state = self.machine.STATE_NAVIGATING
@@ -275,10 +275,10 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         )
 
         self.assertTrue(handled)
-        self.machine.daily_manager.defer_subflow.assert_called_once_with(
-            "chest", 180
+        self.machine.daily_manager.record_subflow_completed.assert_called_once_with(
+            "chest"
         )
-        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+        self.machine.daily_manager.defer_subflow.assert_not_called()
         self.assertEqual(self.machine.current_town_subflow, "hero_draw")
 
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
@@ -311,7 +311,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.assertEqual(self.machine.current_town_subflow, "hero_draw")
 
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
-    def test_bulletin_board_dispatches_when_building_is_visible_without_red_dot(
+    def test_bulletin_board_completes_when_building_is_visible_without_red_dot(
         self, mock_building
     ):
         self.machine.daily_manager = MagicMock()
@@ -331,10 +331,38 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         )
 
         self.assertTrue(handled)
+        self.machine.daily_manager.record_subflow_completed.assert_called_once_with(
+            "bulletin_board"
+        )
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.assertNotEqual(
+            self.machine.current_state, self.machine.STATE_BULLETIN_BOARD
+        )
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_bulletin_board_dispatches_when_building_has_red_dot(
+        self, mock_building
+    ):
+        self.machine.daily_manager = MagicMock()
+        self.machine.start_subflow_queue(["bulletin_board"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((200, 550), 0.95)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        mock_building.return_value = BuildingCheckResult(
+            True, True, building_pos=(250, 300), confidence_building=0.9, confidence_red_dot=0.9
+        )
+
+        handled = self.machine.handle_town_subflow_precondition(
+            self.screen, self.rect
+        )
+
+        self.assertTrue(handled)
         self.assertEqual(
             self.machine.current_state, self.machine.STATE_BULLETIN_BOARD
         )
-        self.machine.daily_manager.defer_subflow.assert_not_called()
 
     def test_next_town_subflow_restores_navigation_identity_before_dispatch(self):
         self.machine.primary_config = {"type": "daily", "name": "Daily"}

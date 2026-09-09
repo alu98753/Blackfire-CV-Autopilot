@@ -33,10 +33,7 @@ TOWN_SUBFLOW_SPECS = {
     "bulletin_board": TownSubflowSpec(
         "bulletin_board",
         building_template="town_building/bulletin_board/bulletin_board.png",
-        # The board Handler owns the no-red-dot outcome (it may mean the
-        # daily board is already exhausted), so routing must not defer before
-        # that Handler can inspect the board.
-        requires_red_dot=False,
+        requires_red_dot=True,
     ),
     "jewelry_workshop": TownSubflowSpec(
         "jewelry_workshop",
