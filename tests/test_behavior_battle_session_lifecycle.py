@@ -120,6 +120,28 @@ class TestBattleSessionLifecycle(unittest.TestCase):
 
         self.process_port.relaunch.assert_called_once_with(self.machine, "battle_stall_max_retries_exceeded")
 
+    def test_extract_health_bar_signature_from_fixture_sample(self):
+        """Extract health bar signature from a real fixture image and verify debug output."""
+        import cv2
+        from pathlib import Path
+        from utils.battle_stall_detector import extract_health_bar_signature
+
+        fixture_path = Path("tests/fixtures/battle_stall_sample.png")
+        if not fixture_path.exists():
+            self.skipTest("Fixture image not found")
+
+        img = cv2.imread(str(fixture_path))
+        self.assertIsNotNone(img)
+
+        # 驗證能正確提取血條特徵（大於 0）且產生 debug 圖片
+        sig = extract_health_bar_signature(img, save_debug=True)
+        self.assertGreater(sig, 1000)
+
+        roi_debug_path = Path("scratch/debug/debug_battle_stall_roi.png")
+        mask_debug_path = Path("scratch/debug/debug_battle_stall_mask.png")
+        self.assertTrue(roi_debug_path.exists())
+        self.assertTrue(mask_debug_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
