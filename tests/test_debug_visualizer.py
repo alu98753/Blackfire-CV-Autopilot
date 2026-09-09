@@ -67,8 +67,28 @@ class TestDebugVisualizer(unittest.TestCase):
         self.assertGreater(np.sum(saved_img[:, :, 2]), 0)  # R Channel > 0
 
 
+    def test_draw_with_ocr_box_and_status_banner(self):
+        """[測試 4] 驗證包含 OCR 區域框與頂部狀態橫幅的繪製"""
+        screen_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        res = DebugVisualizer.draw_detection(
+            screen_img,
+            click_pos=(400, 300),
+            matched_bbox=(350, 280, 100, 40),
+            roi_box=(200, 150, 400, 300),
+            ocr_box=(350, 280, 100, 40),
+            status_text="[AFTER: SUCCESS] Cooldown: 23:59:59",
+            labels={"ocr": "Cooldown OCR (23:59:59)", "status": "Success"},
+            filename=self.test_filename
+        )
+        self.assertTrue(res)
+        self.assertTrue(self.test_path.exists())
+        saved_img = cv2.imread(str(self.test_path))
+        self.assertIsNotNone(saved_img)
+        # 斷言綠色 Channel (黃色框 BGR:(0,255,255) 與綠色文字 (0,255,0)) 具非零像素
+        self.assertGreater(np.sum(saved_img[:, :, 1]), 0)
+
     def test_mouse_draw_debug_click_delegation(self):
-        """[測試 4] 驗證 MouseController._draw_debug_click 完整委派 DebugVisualizer.draw_detection"""
+        """[測試 5] 驗證 MouseController._draw_debug_click 完整委派 DebugVisualizer.draw_detection"""
         mock_capturer = MagicMock()
         mock_screen = np.zeros((500, 500, 3), dtype=np.uint8)
         mock_capturer.capture.return_value = mock_screen

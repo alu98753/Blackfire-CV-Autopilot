@@ -24,18 +24,23 @@ class DebugVisualizer:
         click_pos: Optional[Tuple[int, int]] = None,
         matched_bbox: Optional[Tuple[int, int, int, int]] = None,
         roi_box: Optional[Tuple[int, int, int, int]] = None,
+        ocr_box: Optional[Tuple[int, int, int, int]] = None,
+        status_text: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         filename: str = "debug_click.png"
     ) -> bool:
         """
-        統一在畫面繪製 ROI 框、匹配 Bounding Box 與點擊座標標記，並保存圖檔。
-        所有方框統一採用使用者指定的【紅色空心方框】(Red Hollow Rectangle, BGR: (0, 0, 255), thickness=2)。
+        統一在畫面繪製 ROI 框、匹配 Bounding Box、OCR 區域框與點擊座標標記，並保存圖檔。
+        - 模板與 ROI 方框採用【紅色空心方框】(BGR: (0, 0, 255), thickness=2)
+        - OCR 區域框採用【黃色空心方框】(BGR: (0, 255, 255), thickness=2)
         
         :param screen_img: 原始螢幕或截圖影像 (BGR 格式)
         :param click_pos: 點擊目標相對/絕對座標 (x, y)
         :param matched_bbox: 模板匹配成功的 Bounding Box (x, y, width, height)
         :param roi_box: 搜尋/裁切的 ROI 區域框 (x, y, width, height)
-        :param labels: 標籤字典 {"click": "...", "match": "...", "roi": "..."}
+        :param ocr_box: 送入 OCR 辨識的精確區域框 (x, y, width, height)
+        :param status_text: 頂部狀態橫幅文字 (可選)
+        :param labels: 標籤字典 {"click": "...", "match": "...", "roi": "...", "ocr": "...", "status": "..."}
         :param filename: 存檔檔名 (預設 debug_click.png)
         :return: True 代表寫入成功
         """
@@ -44,7 +49,8 @@ class DebugVisualizer:
 
         canvas = screen_img.copy()
         labels = labels or {}
-        RED_COLOR = (0, 0, 255)  # BGR 格式：純正紅色
+        RED_COLOR = (0, 0, 255)      # BGR: 純正紅色
+        YELLOW_COLOR = (0, 255, 255) # BGR: 醒目黃色 (專用於 OCR 區域標定)
 
         # 1. 繪製 ROI 搜尋範圍框 (紅色空心矩形框 / Red Hollow Box)
         if roi_box:
@@ -60,20 +66,39 @@ class DebugVisualizer:
             match_label = labels.get("match", "Matched BBox")
             cv2.putText(canvas, f"[Match] {match_label}", (mx, max(15, my - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, RED_COLOR, 1, cv2.LINE_AA)
 
-        # 3. 繪製點擊座標標靶與紅圈 (紅色 / Red Target Circle & Crosshair)
+        # 3. 繪製 OCR 區域框 (黃色空心矩形框 / Yellow Hollow Box，專門標註送入 OCR 辨識的文字區域)
+        if ocr_box:
+            ox, oy, ow, oh = ocr_box
+            cv2.rectangle(canvas, (ox, oy), (ox + ow, oy + oh), YELLOW_COLOR, 2)
+            ocr_label = labels.get("ocr", "OCR Target Region")
+            cv2.putText(canvas, f"[OCR] {ocr_label}", (ox + 5, max(20, oy - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, YELLOW_COLOR, 1, cv2.LINE_AA)
+
+        # 4. 繪製點擊座標標靶與紅圈 (紅色 / Red Target Circle & Crosshair)
         if click_pos:
             cx, cy = click_pos
             cv2.circle(canvas, (cx, cy), 15, RED_COLOR, 2)
             cv2.circle(canvas, (cx, cy), 3, RED_COLOR, -1)
-            # 十字標靶線
             cv2.line(canvas, (cx - 20, cy), (cx + 20, cy), RED_COLOR, 1)
             cv2.line(canvas, (cx, cy - 20), (cx, cy + 20), RED_COLOR, 1)
             click_label = labels.get("click", f"Click ({cx}, {cy})")
             cv2.putText(canvas, f"[Click] {click_label}", (cx + 20, cy + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, RED_COLOR, 1, cv2.LINE_AA)
 
+        # 5. 繪製頂部狀態橫幅 (Status Banner)
+        banner_text = status_text or labels.get("status")
+        if banner_text:
+            h, w = canvas.shape[:2]
+            bar_height = 36
+            overlay = canvas.copy()
+            cv2.rectangle(overlay, (0, 0), (w, bar_height), (30, 30, 30), -1)
+            cv2.addWeighted(overlay, 0.75, canvas, 0.25, 0, canvas)
+            color = (0, 255, 0) if any(kw in banner_text.upper() for kw in ["SUCCESS", "PASS"]) else (
+                (0, 0, 255) if any(kw in banner_text.upper() for kw in ["FAIL", "DEFER", "WARN"]) else (255, 255, 255)
+            )
+            cv2.putText(canvas, banner_text, (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
+
         try:
             saved = write_debug_image(filename, canvas)
-            logging.info(f"🎯 [DebugVisualizer] 已成功將紅色空心診斷標記 (ROI/BBox/Click) 寫入 {filename}")
+            logging.info(f"🎯 [DebugVisualizer] 已成功將診斷標記 (ROI/BBox/OCR/Click) 寫入 {filename}")
             return saved
         except Exception as e:
             logging.debug(f"無法寫入 {filename}: {e}")
