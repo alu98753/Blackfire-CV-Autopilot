@@ -264,20 +264,11 @@ def supervise(
                     break
                 time.sleep(5.0)
         except KeyboardInterrupt:
-            # Ctrl+C is treated as child recovery, not supervisor shutdown.
-            # The user can use Ctrl+Shift+Q inside the bot for a deliberate exit.
-            logging.warning("[Supervisor] Ctrl+C received; restarting bot with saved settings.")
-            termination_reason = "interrupt_recovery_requested"
-            last_heartbeat = read_heartbeat(heartbeat_path)
-            write_incident(
-                profile,
-                SCHEDULED_MAINTENANCE,
-                termination_reason,
-                pid=getattr(child, "pid", None),
-                **heartbeat_incident_context(last_heartbeat, getattr(child, "pid", None), heartbeat_is_current(heartbeat_path, started_at), session_id),
-                details={"restart_number": restart_count + 1},
-            )
+            # Ctrl+C is treated as clean supervisor shutdown by user in console.
+            # Fast restart is exclusively handled by Ctrl+Q in game/terminal.
+            logging.info("[Supervisor] KeyboardInterrupt (Ctrl+C) received; stopping supervisor and terminating bot.")
             _stop_child(child)
+            return 0
 
         exit_code = child.poll()
         if is_manual_exit(exit_code):

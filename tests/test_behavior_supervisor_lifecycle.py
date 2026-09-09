@@ -149,16 +149,20 @@ class TestBehaviorSupervisorLifecycle(unittest.TestCase):
         self.assertIn("--resume", resumed)
 
     # -------------------------------------------------------------------------
-    # Scenario S6: KeyboardInterrupt (Ctrl+C) Fast-Resume
+    # Scenario S6: KeyboardInterrupt (Ctrl+C) Clean Shutdown
     # -------------------------------------------------------------------------
-    def test_scenario_s6_keyboard_interrupt_fast_resumes_without_restart_game(self):
-        """S6: Ctrl+C initiates child restart with fast resume (no game restart)."""
-        base_cmd = ["python", "main.py", "--profile", "native"]
-        heartbeat = {"profile": "native"}
+    def test_scenario_s6_keyboard_interrupt_stops_supervisor_cleanly(self):
+        """S6: Ctrl+C in supervisor terminates child and cleanly exits with 0."""
+        mock_child = MagicMock()
+        mock_child.poll.return_value = None
 
-        resumed = prepare_resume_command(base_cmd, heartbeat, restart_game=False)
-        self.assertNotIn("--restart-game", resumed)
-        self.assertIn("--resume", resumed)
+        with patch("subprocess.Popen", return_value=mock_child), \
+             patch("runtime.supervisor._stop_child") as mock_stop:
+            # 模擬在 supervisor 迴圈等待中觸發 KeyboardInterrupt
+            mock_child.poll.side_effect = KeyboardInterrupt
+            exit_code = supervise(["python", "main.py", "--profile", "native"], Path("dummy.json"), timeout_seconds=180.0)
+            self.assertEqual(exit_code, 0)
+            mock_stop.assert_called_once_with(mock_child)
 
     # -------------------------------------------------------------------------
     # Scenario S7: Dedicated Manual Exit (Ctrl+Shift+Q -> Exit 75)
