@@ -82,6 +82,19 @@ class BattleSession:
         )
 
         if diff >= 25:
+            logging.debug(
+                "[BattleStall] ⚔️ 戰鬥推進：血條像素變化 diff=%d >= 門檻 25 (前次: %s -> 當前: %d)，重置卡死計時 (先前停頓: %.1fs)",
+                diff,
+                str(self.last_hp_signature),
+                current_signature,
+                stalled_duration,
+            )
+            if stalled_duration >= 5.0:
+                logging.info(
+                    "⚔️ [戰鬥進展] 偵測到血條產生顯著變化 (diff=%d, 停滯 %.1fs 解除)，戰鬥正常推進中！",
+                    diff,
+                    stalled_duration,
+                )
             self.last_hp_signature = current_signature
             self.hp_stall_started_at = now
             return False

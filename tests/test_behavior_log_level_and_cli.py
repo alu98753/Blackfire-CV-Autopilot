@@ -45,9 +45,22 @@ class TestBehaviorLogLevelAndCLI(unittest.TestCase):
             args = parse_arguments()
             self.assertEqual(args.log_level, "WARNING")
 
+        with patch("sys.argv", ["main.py", "--debug"]):
+            args = parse_arguments()
+            self.assertTrue(args.debug)
+
+    def test_setup_log_level_config_debug_flag_skips_prompt(self):
+        """--debug flag should automatically map to DEBUG level and skip prompt."""
+        args = argparse.Namespace(log_level=None, debug=True)
+        with patch("cli.log_setup.prompt_choice") as mock_prompt:
+            chosen = setup_log_level_config(args, is_resume=False)
+            self.assertEqual(chosen, "DEBUG")
+            self.assertEqual(logging.getLogger().level, logging.DEBUG)
+            mock_prompt.assert_not_called()
+
     def test_setup_log_level_config_explicit_cli_skips_prompt(self):
         """Explicit --log-level should immediately apply and return without prompting."""
-        args = argparse.Namespace(log_level="DEBUG")
+        args = argparse.Namespace(log_level="DEBUG", debug=False)
         with patch("cli.log_setup.prompt_choice") as mock_prompt:
             chosen = setup_log_level_config(args, is_resume=False)
             self.assertEqual(chosen, "DEBUG")
@@ -109,6 +122,11 @@ class TestBehaviorLogLevelAndCLI(unittest.TestCase):
             self.assertFalse(is_stalled)
             self.assertEqual(session.last_diff, 54)
             self.assertEqual(session.last_hp_signature, 1746)
+
+            # Verify progress telemetry log was emitted
+            progress_logs = [log for log in cm.output if "戰鬥推進" in log or "戰鬥進展" in log]
+            self.assertTrue(len(progress_logs) > 0)
+            self.assertIn("diff=54", progress_logs[-1])
 
     def test_get_log_retention_days(self):
         """Retention days should default to 7."""
