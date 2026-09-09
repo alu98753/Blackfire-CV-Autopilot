@@ -541,6 +541,58 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         self.assertFalse(self.state_machine.need_blood_altar)
         self.assertFalse(self.state_machine.need_jewelry_workshop)
 
+    @patch('os.path.exists')
+    def test_bag_cleaning_exit_hands_off_state_to_navigating_preventing_reopen_loop(self, mock_exists):
+        """
+        驗證防迴圈回歸：背包清理關閉背包後，current_state 必須交給 STATE_NAVIGATING。
+        即使下一幀畫面只看到 common/bag_text.png 且無城鎮特徵，絕不重複觸發 BagCleaningHandler 重新開包。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(bag_handler, 'reset_state'):
+            bag_handler.reset_state()
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_tidied = True
+        self.state_machine.need_bag_cleaning = True
+
+        def mock_match_quit(img, name, **kw):
+            if name == "common/quit.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_quit
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        # 關閉背包完成清理
+        bag_handler.handle(fake_img, rect)
+
+        # 斷言 1: 狀態機立刻切出 BAG_CLEANING，進入 NAVIGATING 進行 REACH_TOWN 前置導航
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertFalse(self.state_machine.need_bag_cleaning)
+        self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
+
+        # 模擬下一幀：畫面只有物品欄文字 (common/bag_text.png)，無其他城鎮證據
+        self.mock_mouse.click.reset_mock()
+        self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((1687, 968), 0.98) if name == "common/bag_text.png" else (None, 0.0)
+        )
+
+        # 執行主迴圈 step
+        self.state_machine.step()
+
+        # 斷言 2: 絕對沒有點擊 bag_text.png 重新打開背包
+        for call_args in self.mock_mouse.click.call_args_list:
+            clicked_x, clicked_y = call_args[0]
+            self.assertNotEqual(
+                (clicked_x, clicked_y),
+                (rect["left"] + 1687, rect["top"] + 968),
+                "致命回歸：背包清理完成後，不應再次點擊 bag_text.png 重新打開背包！"
+            )
+        self.assertNotEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+
 
 if __name__ == "__main__":
     unittest.main()

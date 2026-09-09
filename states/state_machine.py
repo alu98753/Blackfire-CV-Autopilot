@@ -1239,7 +1239,7 @@ class GameStateMachine:
         config = self.config or {}
 
         # 以下模式不參與自動領取
-        if self.config is not None and self.config["type"] in ["bag_clean", "blood_altar", "jewelry_workshop"]:
+        if self.config is not None and self.config.get("type") in ["bag_clean", "blood_altar", "jewelry_workshop"]:
             return
 
         from config import GLOBAL_SETTINGS
@@ -1850,6 +1850,8 @@ class GameStateMachine:
         order = cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_town_subflow_order", ["blood_altar", "jewelry_workshop"]))
         logging.info("🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列...")
         self.start_subflow_queue(order)
+        if self.current_state == self.STATE_BAG_CLEANING:
+            self.transition_to(self.STATE_NAVIGATING)
 
     def pop_and_next_town_subflow(self):
         """
