@@ -222,11 +222,11 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1000, 1000)
         
-        # 3. 驗證標記重置與轉移至血之祭壇獻祭
+        # 3. 驗證標記重置與轉移至城鎮流水線 (進入 STATE_NAVIGATING 待命 REACH_TOWN 前置導航)
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
-        self.assertTrue(self.state_machine.need_blood_altar)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
 
     @patch('os.path.exists')
     def test_bag_cleaning_only_opens_bag_when_not_opened(self, mock_exists):
@@ -542,10 +542,11 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         self.assertFalse(self.state_machine.need_jewelry_workshop)
 
     @patch('os.path.exists')
-    def test_bag_cleaning_exit_hands_off_state_to_navigating_preventing_reopen_loop(self, mock_exists):
+    def test_bag_cleaning_completion_hands_off_to_town_subflow_and_reaches_altar(self, mock_exists):
         """
-        驗證防迴圈回歸：背包清理關閉背包後，current_state 必須交給 STATE_NAVIGATING。
-        即使下一幀畫面只看到 common/bag_text.png 且無城鎮特徵，絕不重複觸發 BagCleaningHandler 重新開包。
+        驗證正向業務交接全流程：
+        背包清理完成退出後，狀態機移交給 STATE_NAVIGATING 並啟動城鎮流水線 (blood_altar)；
+        在主迴圈 step() 中自然觸發城鎮前置導航，識別到城鎮門與血之祭壇紅點後，順利派發至 STATE_BLOOD_ALTAR。
         """
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["mix"].copy()
@@ -566,33 +567,36 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = self.mock_capturer.get_window_rect()
 
-        # 關閉背包完成清理
+        # 1. 關閉背包完成清理
         bag_handler.handle(fake_img, rect)
 
-        # 斷言 1: 狀態機立刻切出 BAG_CLEANING，進入 NAVIGATING 進行 REACH_TOWN 前置導航
+        # 斷言：清理標記重置，交接給 STATE_NAVIGATING，啟動城鎮流水線首項 blood_altar
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
 
-        # 模擬下一幀：畫面只有物品欄文字 (common/bag_text.png)，無其他城鎮證據
-        self.mock_mouse.click.reset_mock()
+        # 2. 模擬主迴圈 step() 自然推進：畫面呈現城鎮入口特徵與血之祭壇紅點
         self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
-            ((1687, 968), 0.98) if name == "common/bag_text.png" else (None, 0.0)
+            ((74, 744), 0.90) if name == "common/door.png" else (None, 0.0)
         )
+        with patch(
+            "states.town_subflow_perception.detect_building_with_red_dot",
+            return_value=BuildingCheckResult(
+                True,
+                True,
+                building_pos=(200, 200),
+                confidence_building=0.9,
+            ),
+        ):
+            # 透過狀態機主迴圈 step() 驅動正常業務推進
+            self.state_machine.step()
 
-        # 執行主迴圈 step
-        self.state_machine.step()
-
-        # 斷言 2: 絕對沒有點擊 bag_text.png 重新打開背包
-        for call_args in self.mock_mouse.click.call_args_list:
-            clicked_x, clicked_y = call_args[0]
-            self.assertNotEqual(
-                (clicked_x, clicked_y),
-                (rect["left"] + 1687, rect["top"] + 968),
-                "致命回歸：背包清理完成後，不應再次點擊 bag_text.png 重新打開背包！"
-            )
-        self.assertNotEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+        # 斷言：主迴圈正常推進城鎮前置導航，派發進入 STATE_BLOOD_ALTAR
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.town_subflow_queue, ["jewelry_workshop"])
 
 
 if __name__ == "__main__":
     unittest.main()
+
