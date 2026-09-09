@@ -186,14 +186,14 @@ class CollectOnlyHandler(BaseStateHandler):
         # 3.5.1 檢查每日城鎮速領 (enable_town_daily)
         if policy_cfg.get("enable_town_daily", False) and dm:
             pending_town = dm.get_pending_town_subflows()
-            if pending_town and not getattr(self.machine, "town_subflow_queue", []):
+            if pending_town and not self.machine.has_pending_town_subflow():
                 logging.info(f"🏛️ [定時待機喚醒] 偵測到有待執行的每日城鎮速領任務: {pending_town} ➔ 喚醒發起城鎮佇列！")
                 self.machine.start_subflow_queue(pending_town)
                 return
 
         # 3.5.1.5 檢查深淵魔王 (enable_demon_lords)
         if hasattr(self.machine, "has_available_demon_lords") and self.machine.has_available_demon_lords():
-            if not getattr(self.machine, "town_subflow_queue", []):
+            if not self.machine.has_pending_town_subflow():
                 res = dm.is_demon_lords_available() if dm and hasattr(dm, "is_demon_lords_available") else None
                 reason = res[1] if isinstance(res, (tuple, list)) and len(res) > 1 else ""
                 logging.info(f"👑 [定時待機喚醒] 偵測到深淵魔王次數可用 ({reason}) ➔ 喚醒轉入 DEMON_LORDS！")

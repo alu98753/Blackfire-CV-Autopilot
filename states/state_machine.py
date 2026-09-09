@@ -42,6 +42,7 @@ from states.handlers import (
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 from states.navigation_intent import ActionId, IntentId
 from states.navigation_progress import NavigationProgress, NavigationProgressSettings
+from states.town_subflow_navigation import TownSubflowPreconditionController
 from states.battle_session import BattleSession
 from states.stamina_retreat import StaminaRetreatRecovery, StaminaRetreatSettings
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
@@ -163,6 +164,7 @@ class GameStateMachine:
         self.current_lord_boss_key = None
         self.current_demon_lord_key = None
         self.town_subflow_queue = []
+        self.current_town_subflow = None
         self.quest_scheduler = None
         self.daily_manager = None
         self.config = {}
@@ -177,6 +179,7 @@ class GameStateMachine:
                 get_navigation_progress_settings()
             )
         )
+        self.town_subflow_precondition = TownSubflowPreconditionController(self)
         self.stamina_recovery = StaminaRetreatRecovery(
             StaminaRetreatSettings.from_mapping(get_stamina_retreat_settings())
         )
@@ -788,6 +791,12 @@ class GameStateMachine:
         # 3. 僅有在大門 common/door.png 可見時，才觸發自動領鑽石/領麵包定時檢查
         self.check_collection_trigger(screen_img)
 
+        # Town subflows are requests for a destination, not permission to run
+        # their Handler from an arbitrary screen.  This shared controller owns
+        # the precondition route until Town evidence is verified.
+        if self.handle_town_subflow_precondition(screen_img, rect):
+            return
+
         # A. 狀態持續計數 (consecutive_stuck_count 供 ExceptionWatchdog 與排程追蹤)
         if self.current_state not in [self.STATE_BATTLE, self.STATE_DUNGEON_EXPLORING, self.STATE_UNKNOWN, self.STATE_COLLECT_ONLY, self.STATE_LOADING]:
             self.consecutive_stuck_count += 1
@@ -872,6 +881,31 @@ class GameStateMachine:
         if os.path.exists(os.path.join("templates", "defeat.png")):
             pos, _ = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
             if pos:
+                self.transition_to(self.STATE_RESULT)
+                return
+
+        # A daily Town intent can be created before the first screenshot.  If the
+        # process starts on a victory/result page, preserve that owner and let the
+        # ResultHandler finish the battle before Town navigation begins.
+        result_anchors = [
+            "common/continue.png",
+            "common/continue1.png",
+            "common/continue2.png",
+            "common/continue_gray.png",
+            "stages/retry.png",
+            "exit_battle.png",
+        ]
+        for result_anchor in result_anchors:
+            if not os.path.exists(os.path.join("templates", result_anchor)):
+                continue
+            threshold = 0.88 if result_anchor == "common/continue_gray.png" else 0.80
+            pos_result, _ = self.matcher.match(
+                screen_img,
+                result_anchor,
+                threshold=threshold,
+                quiet=True,
+            )
+            if pos_result:
                 self.transition_to(self.STATE_RESULT)
                 return
 
@@ -1772,6 +1806,7 @@ class GameStateMachine:
         """
         from config import SUBFLOW_CONFIGS
         self.town_subflow_queue = list(queue)
+        self.current_town_subflow = None
 
         logging.info("=" * 60)
         logging.info("🏛️ 【城鎮任務流水線 - 任務總覽儀表板】 🏛️")
@@ -1784,7 +1819,7 @@ class GameStateMachine:
             logging.info(f"  {idx}. [{flow_key}] {name:<12} : {status_str}")
         logging.info("=" * 60)
 
-        self.pop_and_next_town_subflow()
+        self._select_next_town_subflow()
 
     def trigger_town_subflow_chain(self):
         """
@@ -1798,16 +1833,32 @@ class GameStateMachine:
 
     def pop_and_next_town_subflow(self):
         """
-        彈出並執行佇列中的下一個城鎮任務。若佇列已空，則回復 STATE_NAVIGATING。
+        結束目前子流程並選取下一個城鎮任務。只有入口 precondition
+        成立後，才由共用 controller 派發對應 Handler。
         """
-        # 切換任務前先重置舊標記，防止舊標記優先權高於新標記
+        completed_flow = self.current_town_subflow
+        self.current_town_subflow = None
+        self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
 
+        if completed_flow:
+            logging.info(
+                "✅ [城鎮流水線] 子流程 [%s] 已離開 active slot。",
+                completed_flow,
+            )
+
+        if self._select_next_town_subflow():
+            return
+
+        self._finish_town_subflow_queue()
+
+    def _select_next_town_subflow(self):
+        """Latch one queue head without applying its config or Handler state."""
+        from config import SUBFLOW_CONFIGS
+
         while self.town_subflow_queue:
             next_flow = self.town_subflow_queue.pop(0)
-
-            from config import SUBFLOW_CONFIGS, GAME_CONFIGS
             flow_cfg = SUBFLOW_CONFIGS.get(next_flow, {})
             if not self.is_dev_subflow_run and not flow_cfg.get("enabled", True):
                 logging.info(f"⏭️ [城鎮流水線] 子流程 [{next_flow}] 設定為停用 (enabled=False) ➔ 自動跳過！剩餘佇列 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
@@ -1816,32 +1867,79 @@ class GameStateMachine:
                     dm.record_subflow_completed(next_flow)
                 continue
 
+            self.current_town_subflow = next_flow
             flow_name = flow_cfg.get("name", next_flow)
             logging.info("=" * 60)
             logging.info(f"🎯 [城鎮流水線進度] 彈出並切換至任務: [{next_flow}] ({flow_name})")
             logging.info(f"📌 剩餘待執行子流程 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
             logging.info("=" * 60)
 
-            if next_flow in GAME_CONFIGS:
-                self.set_config(GAME_CONFIGS[next_flow].copy())
+            # This rollout intentionally covers only the five Town-building
+            # workflows. Boss/dev subflows keep their existing immediate
+            # dispatch behavior until they define a destination contract.
+            from states.town_subflow_navigation import TOWN_SUBFLOW_SPECS
+            if next_flow not in TOWN_SUBFLOW_SPECS:
+                return self.dispatch_current_town_subflow()
 
-            if next_flow == "bag_clean":
-                self.need_bag_cleaning = True
-                self.transition_to(self.STATE_BAG_CLEANING)
-                return
-            elif next_flow == "blood_altar":
-                self.need_blood_altar = True
-            elif next_flow == "jewelry_workshop":
-                self.need_jewelry_workshop = True
+            logging.info(
+                "🧭 [城鎮流水線] 已建立 REACH_TOWN precondition intent；"
+                "入口成立前保留目前活動 config。"
+            )
+            return True
 
+        return False
 
+    def state_for_town_subflow(self, flow_key):
+        config_to_state = {v: k for k, v in self.TOWN_SUBFLOW_CONFIG_MAP.items()}
+        if flow_key == "bag_clean":
+            return self.STATE_BAG_CLEANING
+        return config_to_state.get(flow_key)
 
-            # 🏛️ 資料驅動動態派發：依據 TOWN_SUBFLOW_CONFIG_MAP 反向比對目標狀態
-            config_to_state = {v: k for k, v in self.TOWN_SUBFLOW_CONFIG_MAP.items()}
-            target_state = config_to_state.get(next_flow)
-            if target_state:
-                self.transition_to(target_state)
-                return
+    def has_pending_town_subflow(self):
+        return bool(self.current_town_subflow or self.town_subflow_queue)
+
+    def dispatch_current_town_subflow(self):
+        """Enter a town Handler only after REACH_TOWN evidence was verified."""
+        flow_key = self.current_town_subflow
+        target_state = self.state_for_town_subflow(flow_key)
+        if not flow_key or target_state is None:
+            logging.error(
+                "❌ [城鎮流水線] 子流程 [%s] 未登錄 Handler state，安全跳過。",
+                flow_key,
+            )
+            self.pop_and_next_town_subflow()
+            return False
+
+        self.need_bag_cleaning = flow_key == "bag_clean"
+        self.need_blood_altar = flow_key == "blood_altar"
+        self.need_jewelry_workshop = flow_key == "jewelry_workshop"
+        self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
+        logging.info(
+            "🎯 [城鎮流水線] Town precondition 已成立，派發 [%s] -> [%s]。",
+            flow_key,
+            target_state,
+        )
+        self.transition_to(target_state)
+        return True
+
+    def defer_current_town_subflow(self, defer_seconds=180):
+        """Defer a verified unavailable Town entry without marking it complete."""
+        flow_key = self.current_town_subflow
+        manager = getattr(self, "daily_manager", None)
+        if flow_key and manager and hasattr(manager, "defer_subflow"):
+            manager.defer_subflow(flow_key, defer_seconds)
+        logging.warning(
+            "⏳ [城鎮流水線] [%s] 入口已確認無可執行 evidence，暫緩 %d 秒。",
+            flow_key,
+            defer_seconds,
+        )
+        self.pop_and_next_town_subflow()
+
+    def handle_town_subflow_precondition(self, screen_img, rect):
+        return self.town_subflow_precondition.handle(screen_img, rect)
+
+    def _finish_town_subflow_queue(self):
+        """Restore the long-running route after every selected subflow ended."""
 
         # 若佇列已空！無條件強制重置所有城鎮子流程旗標，防止殘留旗標導致死循環
         self.need_blood_altar = False
@@ -2016,13 +2114,13 @@ class GameStateMachine:
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
             if activity_cfg.get("enable_town_daily", True) and dm:
                 pending_town = dm.get_pending_town_subflows()
-                if pending_town and not self.town_subflow_queue:
+                if pending_town and not self.has_pending_town_subflow():
                     logging.info(f"🏛️ [Activity Scheduler] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
                     self.start_subflow_queue(pending_town)
                     return True
 
             # 1.5. 檢查 Tier 1.5 深淵魔王 (demon_lords) - 在城鎮速領之後，Lord Boss 之前
-            if self.has_available_demon_lords() and not self.town_subflow_queue:
+            if self.has_available_demon_lords() and not self.has_pending_town_subflow():
                 subflows = cfg.get("subflow_configs") if isinstance(cfg.get("subflow_configs"), dict) else {}
                 sub_cfg = (subflows or {}).get("demon_lords", {})
                 targets = sub_cfg.get("targets") or [sub_cfg.get("target_boss", "voidborn_elres")]

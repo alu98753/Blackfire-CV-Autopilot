@@ -271,6 +271,10 @@ class ResultHandler(BaseStateHandler):
         daily_quest_ready_to_preempt_tier4 = (
             is_in_tier4 and self.machine.has_ready_daily_quest_preemption()
         )
+        pending_town_subflow_exit = (
+            self.machine.has_pending_town_subflow()
+            and not getattr(self.machine, "is_in_dungeon", False)
+        )
         if daily_quest_ready_to_preempt_tier4:
             logging.info("📋 [Tier 4 插隊] 偵測到 Daily 懸賞任務冷卻結束；本場結算後離場並切回懸賞任務。")
         elif is_daily and demon_available:
@@ -289,6 +293,7 @@ class ResultHandler(BaseStateHandler):
             self.machine.need_bag_cleaning or 
             self.machine.need_diamond_collection or 
             (self.machine.enable_bread and self.machine.need_bread_collection) or
+            pending_town_subflow_exit or
             (self.machine.config.get("type") == "mix" and self.machine.has_available_dungeon()) or
             (is_daily and demon_available) or
             (is_daily and boss_available) or
