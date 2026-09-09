@@ -28,7 +28,10 @@ class CollectOnlyHandler(BaseStateHandler):
                     logging.info("[Dungeon cooldown resume] bread collection is pending; resumption deferred.")
                 else:
                     logging.warning("[Dungeon cooldown resume] cooldown complete; returning to dungeon mode.")
-                    self.machine.config = cooldown_return_config
+                    if cooldown_return_config.get("type") == "domain" or cooldown_return_config.get("tier4_mode") == "domain":
+                        self.machine.config = self.machine.build_dungeon_resume_route(cooldown_return_config)
+                    else:
+                        self.machine.config = cooldown_return_config
                     self.machine.dungeon_cooldown_return_config = None
                     self.machine.transition_to(self.machine.STATE_UNKNOWN)
                     return
@@ -82,15 +85,24 @@ class CollectOnlyHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_UNKNOWN)
                 return
 
-            # 檢查是否啟用【體力退避期間地下城冷卻結束自動復歸】
-            auto_resume = self.machine.original_config.get("auto_resume_dungeon_on_cd", False)
+            # 地下城喚醒屬於長期活動策略，不屬於被中斷的臨時任務 route。
+            # Daily 的 stage 懸賞不會攜帶 greedy / auto-resume 設定，因此必須
+            # 優先讀取 primary policy；獨立 dungeon / mix 模式才回退 original_config。
+            activity_policy = self.machine._daily_activity_config()
+            resume_policy = (
+                activity_policy
+                if activity_policy.get("enable_dungeon", False)
+                else self.machine.original_config
+            )
+            auto_resume = resume_policy.get("auto_resume_dungeon_on_cd", False)
             if auto_resume and not just_entered_collect_only and not self.machine.need_diamond_collection:
                 dungeon_ready = False
                 try:
                     dungeon_ready = self.machine.has_available_dungeon(
-                        target_config=self.machine.original_config
+                        target_config=resume_policy
                     )
-                except Exception:
+                except Exception as exc:
+                    logging.warning("[冷卻結束復歸] 地下城可用性檢查失敗: %s", exc)
                     dungeon_ready = False
 
                 if dungeon_ready:
@@ -99,7 +111,16 @@ class CollectOnlyHandler(BaseStateHandler):
                         logging.info("🍞 [冷卻結束復歸] 偵測到地下城冷卻結束，先執行體力領取...")
                     else:
                         logging.warning(f"🔄 [冷卻結束復歸] 偵測到地下城冷卻結束，暫時離開 collect_only 切回刷地下城！(退避總剩餘時間持續倒數中...)")
-                        self.machine.config = self.machine.original_config
+                        use_policy_route = resume_policy is not self.machine.original_config
+                        original_is_domain = (
+                            self.machine.original_config.get("type") == "domain"
+                            or self.machine.original_config.get("tier4_mode") == "domain"
+                        )
+                        if use_policy_route or original_is_domain:
+                            dungeon_route = self.machine.build_dungeon_resume_route(resume_policy)
+                            self.machine.set_config(dungeon_route)
+                        else:
+                            self.machine.config = self.machine.original_config
                         # 保持 self.machine.original_config 與 self.machine.stamina_retreat_start_time 不變
                         self.machine.transition_to(self.machine.STATE_UNKNOWN)
                         return
@@ -158,8 +179,12 @@ class CollectOnlyHandler(BaseStateHandler):
 
         # 3.5 [模組化活動主動喚醒] 當無領取任務時，檢查啟用的週期性活動是否已冷卻結束就緒
         dm = getattr(self.machine, "daily_manager", None)
+        policy = self.machine._daily_activity_config()
+        active_cfg = self.machine.config or {}
+        policy_cfg = policy if policy else active_cfg
+
         # 3.5.1 檢查每日城鎮速領 (enable_town_daily)
-        if self.machine.config.get("enable_town_daily", False) and dm:
+        if policy_cfg.get("enable_town_daily", False) and dm:
             pending_town = dm.get_pending_town_subflows()
             if pending_town and not getattr(self.machine, "town_subflow_queue", []):
                 logging.info(f"🏛️ [定時待機喚醒] 偵測到有待執行的每日城鎮速領任務: {pending_town} ➔ 喚醒發起城鎮佇列！")
@@ -185,15 +210,22 @@ class CollectOnlyHandler(BaseStateHandler):
 
         # 3.5.3 檢查地下城探索 (enable_dungeon)
         pending_quests = getattr(self.machine, "quest_scheduler", None)
-        has_pending_quests = bool(pending_quests and pending_quests.get_pending_tasks())
-        if self.machine.config.get("enable_dungeon", False) and not has_pending_quests:
+        has_ready_quest = False
+        if pending_quests and hasattr(pending_quests, "get_next_action_node"):
+            ready_task, _ = pending_quests.get_next_action_node(
+                dungeon_cooldowns=self.machine.dungeon_cooldowns
+            )
+            has_ready_quest = bool(ready_task)
+
+        if policy_cfg.get("enable_dungeon", False) and not has_ready_quest:
             dungeon_ready = False
             try:
-                dungeon_ready = self.machine.has_available_dungeon()
+                dungeon_ready = self.machine.has_available_dungeon(target_config=policy_cfg)
             except Exception:
                 dungeon_ready = False
             if dungeon_ready:
                 logging.info("🏰 [定時待機喚醒] 偵測到地下城冷卻結束 ➔ 喚醒轉入 NAVIGATING 前往地下城！")
+                self.machine.config = self.machine.build_dungeon_resume_route(policy_cfg)
                 self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return
 
@@ -258,7 +290,7 @@ class CollectOnlyHandler(BaseStateHandler):
                         extra_status.append(f"👑 Boss: {format_time(min_boss_rem)}")
                     else:
                         extra_status.append("👑 Boss: 今日已滿")
-            if self.machine.config.get("enable_dungeon", False) and self.machine.has_dungeon_status_context():
+            if policy_cfg.get("enable_dungeon", False) and self.machine.has_dungeon_status_context():
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()
                 if avail_names:
                     extra_status.append(f"🏰 地下城: 就緒 ({', '.join(avail_names)})")

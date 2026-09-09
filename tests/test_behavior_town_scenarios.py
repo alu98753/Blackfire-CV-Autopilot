@@ -113,11 +113,13 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
 
         handler.last_action_time = 0.0
+        step4_calls = [0]
         def mock_match_step4(img, name, **kw):
             if kw.get("quiet"):
                 return (None, 0.0)
             if name == "common/quit.png":
-                return ((1200, 100), 0.9)
+                step4_calls[0] += 1
+                return ((1200, 100), 0.9) if step4_calls[0] <= 1 else (None, 0.0)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_step4
@@ -130,7 +132,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         handler.last_action_time = 0.0
         step5_calls = [0]
         def mock_match_step5(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 step5_calls[0] += 1
                 return ((50, 50), 0.9) if step5_calls[0] <= 1 else (None, 0.0)
             return (None, 0.0)
@@ -296,7 +298,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         def mock_match_exit_building(img, name, **kw):
             if kw.get("quiet"):
                 return (None, 0.0)
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 return ((74, 744), 0.90)
             return (None, 0.0)
 
@@ -507,7 +509,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         altar_handler.step_phase = "ALL_DONE_EXITING"
         
         def mock_match_exit(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 return ((74, 744), 0.90)
             return (None, 0.0)
 
@@ -558,7 +560,7 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         altar_handler.step_phase = "ALL_DONE_EXITING"
         
         def mock_match_exit(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
                 return ((74, 744), 0.90)
             return (None, 0.0)
 
@@ -791,6 +793,37 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         handler.handle(fake_img, rect)
         self.assertEqual(handler.current_goods_idx, 1)  # 第二堆售罄後進位至商品 1
         self.assertEqual(handler.repeat_sell_count, 0)
+
+    def test_jewelry_workshop_log_settlement_summary(self):
+        """驗證商店出售結算 Summary 的語意輸出與狀態記錄"""
+        handler = self.state_machine.handlers[self.state_machine.STATE_JEWELRY_WORKSHOP]
+        handler.reset_state()
+
+        # 情境 1: 有商品賣出
+        handler.sold_summary = {
+            "gray": {"Sandworm_scales", "Spider_silk"},
+            "green": {"Toad_Venom"},
+        }
+        with self.assertLogs(level='INFO') as log_ctx:
+            handler._log_settlement_summary()
+            self.assertTrue(handler.summary_logged)
+            logs_str = "\n".join(log_ctx.output)
+            self.assertIn("商店出售結算清單", logs_str)
+            self.assertIn("品質 [gray]：已賣出", logs_str)
+            self.assertIn("Sandworm_scales", logs_str)
+            self.assertIn("Spider_silk", logs_str)
+            self.assertIn("品質 [green]：已賣出", logs_str)
+            self.assertIn("Toad_Venom", logs_str)
+            self.assertIn("3 種商品品項全數成功賣出！", logs_str)
+
+        # 情境 2: 重置後無任何商品賣出
+        handler.reset_state()
+        self.assertFalse(handler.summary_logged)
+        with self.assertLogs(level='INFO') as log_ctx:
+            handler._log_settlement_summary()
+            self.assertTrue(handler.summary_logged)
+            logs_str = "\n".join(log_ctx.output)
+            self.assertIn("背包無商品需要出售", logs_str)
 
 
 if __name__ == "__main__":

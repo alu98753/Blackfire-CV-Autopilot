@@ -14,10 +14,12 @@ WINDOW_TITLE = "Blackfire Crusade"
 STEAM_APP_ID = "1765770"
 TIER4_MODE_STAGE = "stage"
 TIER4_MODE_DOMAIN = "domain"
+TIER4_MODE_NONE = "none"
 DEFAULT_TIER4_DOMAIN = "golden_empire"
 TIER4_MODE_OPTIONS = (
     (TIER4_MODE_STAGE, "普通關卡 (Stage)"),
     (TIER4_MODE_DOMAIN, "領地探索 (Domain)"),
+    (TIER4_MODE_NONE, "停用 (全冷卻時collect only)"),
 )
 TIER4_DOMAIN_OPTIONS = (
     (DEFAULT_TIER4_DOMAIN, "黃金古國"),
@@ -47,6 +49,7 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("catalog", "stage_templates"),
     ("ocr", "task_banner"),
     ("ocr", "bulletin_board"),
+    ("ocr", "merchant_gold"),
     ("defaults", "disassemble_colors"),
     ("defaults", "keep_colors"),
     ("defaults", "activities"),
@@ -169,6 +172,7 @@ STAGE_TEMPLATES = _SETTINGS["catalog"]["stage_templates"]
 
 TASK_BANNER_OCR_OFFSET = _SETTINGS["ocr"]["task_banner"]
 BULLETIN_BOARD_OCR_OFFSET = _SETTINGS["ocr"]["bulletin_board"]
+MERCHANT_GOLD_OCR_ROI = _SETTINGS["ocr"]["merchant_gold"]
 
 PRIMARY_MODES = _restore_mode_key_types(_SETTINGS["primary_modes"])
 SUBFLOW_CONFIGS = _SETTINGS["subflow_configs"]
@@ -193,7 +197,7 @@ def get_template_threshold(template_name: str, default: float | None = None) -> 
         return float(TEMPLATE_THRESHOLDS[template_name])
     if default is not None:
         return float(default)
-    is_sub_stage = any(k in template_name for k in ["final", "first", "middle", "six"])
+    is_sub_stage = any(k in template_name for k in ["final", "first", "middle", "six", "boss_skull", "skull"])
     if is_sub_stage:
         return float(SUB_STAGE_THRESHOLD)
     return float(DEFAULT_THRESHOLD)
@@ -207,6 +211,43 @@ def get_monitor_index() -> int:
 def get_battle_max_duration_seconds() -> float:
     """Return the TOML-configured hard cap for one continuous battle."""
     return float(GLOBAL_SETTINGS.get("battle_max_duration_sec", 900.0))
+
+
+def get_battle_stall_settings() -> dict:
+    """Return TOML-configured battle stall detection limits, retry count, and ROI ratios."""
+    return {
+        "timeout_seconds": float(GLOBAL_SETTINGS.get("battle_stall_timeout_sec", 30.0)),
+        "max_retries": int(GLOBAL_SETTINGS.get("battle_stall_max_retries", 2)),
+        "roi_top_ratio": float(GLOBAL_SETTINGS.get("battle_hp_roi_top_ratio", 0.64)),
+        "roi_bottom_ratio": float(GLOBAL_SETTINGS.get("battle_hp_roi_bottom_ratio", 0.69)),
+    }
+
+
+def get_log_level() -> str:
+    """Return the active profile's configured log level, falling back to global TOML defaults."""
+    level = GLOBAL_SETTINGS.get("log_level", "INFO")
+    if isinstance(level, str) and level.strip():
+        return level.strip().upper()
+    return "INFO"
+
+
+def apply_log_level(level_name: str | None = None) -> str:
+    """Apply the specified (or profile configured) log level to the root logger and its handlers."""
+    target_level_str = (level_name or get_log_level()).strip().upper()
+    numeric_level = getattr(logging, target_level_str, logging.INFO)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(numeric_level)
+    for handler in root_logger.handlers:
+        handler.setLevel(numeric_level)
+    return target_level_str
+
+
+def get_log_retention_days() -> int:
+    """Return configured daily log retention days from profile or global settings."""
+    try:
+        return int(GLOBAL_SETTINGS.get("log_retention_days", 7))
+    except (ValueError, TypeError):
+        return 7
 
 
 def get_navigation_progress_settings() -> dict:

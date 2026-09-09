@@ -8,6 +8,9 @@ from config import (
 )
 from utils.dungeon_catalog import DungeonCatalog
 
+TIER4_STAGE_SELECTION_KEYS = ("tier4_stage_level", "tier4_sub_stage")
+
+
 class TaskNode:
     """
     懸賞任務節點資料結構。
@@ -83,9 +86,11 @@ class TaskNode:
             "dungeons/Forest_entry.png",
             "dungeons/Ruins_entry.png",
             "dungeons/dark_prison.png",
-            "dungeons/Ice_entry.png"
+            "dungeons/Ice_entry.png",
+            "dungeons/orc_bunker.png"
         ]
-        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
+        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
+
 
         stage_entries = {
             1: "stages/level1_sky_plains.png",
@@ -93,11 +98,21 @@ class TaskNode:
             3: "stages/level3_ancient_forest.png",
             4: "stages/level4_desert_ruins.png",
             5: "stages/level5_gloomy_swamp.png",
-            6: "stages/level6_ice_cave.png"
+            6: "stages/level6_ice_cave.png",
+            7: "stages/level7_forgotten_wasteland.png"
         }
         stage_names = {
-            1: "蒼穹平原", 2: "荒蕪岩地", 3: "古樹森林", 4: "沙漠廢墟", 5: "幽暗沼澤", 6: "冰凍峽谷"
+            1: "蒼穹平原", 2: "荒蕪岩地", 3: "古樹森林", 4: "沙漠廢墟", 5: "幽暗沼澤", 6: "冰凍峽谷", 7: "遺忘荒地"
         }
+        try:
+            from config import BASE_STAGE_LEVELS
+            for k, v in BASE_STAGE_LEVELS.items():
+                k_int = int(k)
+                stage_entries[k_int] = v["entry"]
+                stage_names[k_int] = v["name"]
+        except Exception:
+            pass
+
         stage_targets = {
             "first": "stages/first_stage.png",
             "middle": "stages/middle_stage.png",
@@ -141,31 +156,31 @@ class TaskNode:
             cfg = PRIMARY_MODES["dungeon"].copy()
             cfg["enable_dungeon"] = True
             cfg["dungeon_index"] = idx
+            cfg["tier4_dungeon_index"] = idx
             cfg["name"] = f"懸賞任務 - {dname} (任務: {self.quest_title})"
             cfg["greedy_dungeon"] = False
             cfg["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", entry_img]
             return _apply_base_preferences(cfg)
 
         elif self.mode_type == "stage" and self.stage_level is not None:
-            import os
             lvl = self.stage_level
             sub = self.sub_stage or "first"
             entry_img = stage_entries.get(lvl, "stages/level6_ice_cave.png")
             sname = stage_names.get(lvl, f"關卡 Lvl {lvl}")
 
-            # 動態匹配各關卡專屬的中間關/魔王關圖檔 (如 level4_middle.png, level4_final.png)
-            if sub == "middle":
-                candidate = f"stages/level{lvl}_middle.png"
-                target_img = candidate if os.path.exists(os.path.join("templates", candidate)) else "stages/first_stage.png"
-            elif sub in ["final", "boss"]:
-                candidate = f"stages/level{lvl}_final.png"
-                target_img = candidate if os.path.exists(os.path.join("templates", candidate)) else "stages/first_stage.png"
+            # 核心通用子關卡模板對應
+            if sub in ["middle", "final", "boss"]:
+                target_img = "stages/boss_skull.png"
             elif sub == "six":
                 target_img = "stages/six_stage.png"
             else:
                 target_img = "stages/first_stage.png"
 
             cfg = PRIMARY_MODES["stage"].copy()
+            # Tier 4 values are fallback farming policy, not part of a concrete
+            # bounty route. Keeping them would override this task's stage choice.
+            for policy_key in TIER4_STAGE_SELECTION_KEYS:
+                cfg.pop(policy_key, None)
             cfg["enable_stage_farming"] = True
             cfg["stage_level"] = lvl
             cfg["sub_stage"] = sub

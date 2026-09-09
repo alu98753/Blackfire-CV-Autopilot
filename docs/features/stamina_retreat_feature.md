@@ -45,7 +45,7 @@
    * 每 60 秒於城鎮地圖執行微幅拖曳（心跳機制）防止閒置斷線。
 2. **時間監測與恢復**：
    * 每次執行 `handle()` 時，計算累積退避時間：`elapsed = time.time() - stamina_retreat_start_time`。
-   * 退避目標時間由配置檔 `stamina_retreat_duration` 決定（預設 4.0 小時）。
+   * 退避目標時間由配置檔 `stamina_retreat_duration` 決定（`collect_only` 預設 7 小時）。
 3. **恢復執行**：
    * 當 `elapsed >= retreat_seconds` 時，觸發恢復。
    * 還原原配置：`state_machine.config = state_machine.original_config`。
@@ -63,14 +63,16 @@
 * 退避恢復後，自動進入地下城選單，繼續進行地下城探索。
 
 ### 5.3 混合模式 (`mix`) / 每日任務 (`daily`)
-* 退避啟動時，完整備份全量配置（含 `dungeon_names`, `greedy_dungeon`, `stage_target`）。
+* `original_config` 保存體力耗盡當下被中斷的執行路由；若當時正在跑 Stage 懸賞，它可以是沒有地下城策略欄位的臨時 Stage 配置。
+* Daily 的長期活動策略持續保存在 `primary_config`。`CollectOnlyHandler` 判斷 `auto_resume_dungeon_on_cd`、`greedy_dungeon` 與允許副本時，以這份策略為準，不會被臨時懸賞路由遮蔽。
+* 地下城冷卻結束後建立獨立的 active dungeon route；`original_config`、未完成懸賞排程器與 `stamina_retreat_start_time` 均保持不變。
 * 退避恢復後，`mix` / `daily` 導航邏輯會重新檢測全地下城 CD：
   * 若有可刷地下城（`has_available_dungeon()` 為 True），優先前往地下城。
   * 若地下城全在冷卻中，自動進入 Stage 普通關卡。
 
 ### 5.4 安全防呆過濾 (`has_available_dungeon`)
 * 支援 `has_available_dungeon(target_config=...)` 帶入評估配置。
-* **智慧自動備援**：當處於體力退避狀態 (`stamina_retreat_start_time` 存在) 且未傳參數時，自動讀取 `original_config` 進行評估。
+* **智慧自動備援**：仍停在 `collect_only` 且處於體力退避狀態時，未傳參數會回退讀取 `original_config`；scheduler 提交 dungeon resume route 後，改以 active route 評估，避免被中斷前的 Stage 配置遮蔽。
 * **非地下城模式隔離**：若評估配置之 `type` 為非地下城模式（如純 `collect_only` 或 `stage`），安全回傳 `False`，避免誤拋 `ValueError` 中斷程式。
 
 ### 5.5 純領取模式 (`collect_only`) 大廳退回城鎮修復
@@ -87,4 +89,4 @@
 | **恢復與待機** | `states/handlers/collect_only.py` | 監測退避時間、冷卻結束自動切回 (`auto_resume_dungeon_on_cd`) 與還原配置 |
 | **導航與再退避** | `states/handlers/navigation.py` | 全冷卻再退避轉移、大廳退回城鎮離場 |
 | **全域配置** | `config.py` | 定義 `stamina_retreat_duration` 與 `auto_resume_dungeon_on_cd` 參數 |
-| **單元測試** | `tests/test_state_machine_logic.py` | 驗證觸發、備份、定時恢復、冷卻開關與模式切換 |
+| **單元測試** | `tests/test_daily_pipeline_stamina_retreat.py` | 驗證觸發、備份、Daily policy 喚醒、定時恢復與模式切換 |

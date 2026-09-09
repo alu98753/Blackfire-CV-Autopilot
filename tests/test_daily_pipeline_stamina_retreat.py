@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from utils.daily_manager import DailyManager
 from utils.quest_scheduler import QuestScheduler, TaskNode
+from states.handlers.collect_only import CollectOnlyHandler
 from states.state_machine import GameStateMachine
 from config import GAME_CONFIGS
 
@@ -106,6 +107,100 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         self.assertTrue(scheduled)
         self.assertEqual(self.state_machine.config["dungeon_index"], 6)
         self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
+
+    def test_navigating_hook_keeps_dungeon_resume_route_when_fallback_is_domain(self):
+        """A committed cooldown resume must not be rewritten to the Domain fallback."""
+        daily_cfg = GAME_CONFIGS["daily"].copy()
+        daily_cfg.update({
+            "_config_mode_key": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6],
+            "auto_resume_dungeon_on_cd": True,
+        })
+        self.state_machine.runtime_config_key = "daily"
+        self.state_machine.primary_config = daily_cfg
+        self.state_machine.dungeon_cooldowns = {6: time.time() - 1.0}
+        self.state_machine.original_config = self.state_machine._build_tier4_fallback_config()
+        self.state_machine.stamina_retreat_start_time = time.time() - 600.0
+        self.state_machine.config = self.state_machine.build_dungeon_resume_route(daily_cfg)
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+
+        self.state_machine.transition_to(self.state_machine.STATE_NAVIGATING)
+
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertEqual(self.state_machine.config["type"], "mix")
+        self.assertEqual(
+            self.state_machine.config["navigation_path"],
+            ["common/door.png", "dungeons/dungeon.png"],
+        )
+        self.assertEqual(self.state_machine.original_config["type"], "domain")
+
+    def test_collect_only_resumes_daily_dungeon_when_interrupted_quest_is_stage(self):
+        """Daily policy must wake a ready dungeon while a stage quest remains deferred."""
+        now = time.time()
+        daily_cfg = GAME_CONFIGS["daily"].copy()
+        daily_cfg.update({
+            "_config_mode_key": "daily",
+            "enable_dungeon": True,
+            "auto_resume_dungeon_on_cd": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6, 7],
+        })
+        interrupted_task = TaskNode(
+            "擊敗冰元素",
+            "stage",
+            stage_level=6,
+            sub_stage="first",
+        )
+        scheduler = QuestScheduler()
+        scheduler.add_task(interrupted_task)
+        interrupted_cfg = interrupted_task.to_config_dict(base_config=daily_cfg)
+
+        self.assertNotIn("auto_resume_dungeon_on_cd", interrupted_cfg)
+        self.assertNotIn("greedy_dungeon", interrupted_cfg)
+
+        self.state_machine.daily_manager = None
+        self.state_machine.runtime_config_key = "daily"
+        self.state_machine.primary_config = daily_cfg
+        self.state_machine.quest_scheduler = scheduler
+        self.state_machine.original_config = interrupted_cfg
+        retreat_start = now - 300.0
+        self.state_machine.stamina_retreat_start_time = retreat_start
+        self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_COLLECT_ONLY
+        self.state_machine.last_state_change = now - 1.0
+        self.state_machine.need_diamond_collection = False
+        self.state_machine.need_bread_collection = False
+        self.state_machine.enable_bread = False
+        self.state_machine.dungeon_cooldowns = {
+            6: now - 1.0,
+            7: now + 600.0,
+        }
+        self.state_machine.matcher.match.return_value = (None, 0.0)
+
+        CollectOnlyHandler(self.state_machine).handle(
+            MagicMock(),
+            {"left": 0, "top": 0, "width": 1920, "height": 1080},
+        )
+
+        self.assertEqual(
+            self.state_machine.current_state,
+            self.state_machine.STATE_UNKNOWN,
+        )
+        self.assertEqual(self.state_machine.config["type"], "mix")
+        self.assertEqual(
+            self.state_machine.config["navigation_path"],
+            ["common/door.png", "dungeons/dungeon.png"],
+        )
+        self.assertTrue(self.state_machine.config["greedy_dungeon"])
+        self.assertEqual(self.state_machine.config["greedy_allowed_indices"], [6, 7])
+        self.assertTrue(self.state_machine.has_available_dungeon())
+        self.assertIs(self.state_machine.quest_scheduler, scheduler)
+        self.assertIs(self.state_machine.original_config, interrupted_cfg)
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, retreat_start)
 
     def test_stamina_retreat_timestamp_preserved_across_re_retreat(self):
         """

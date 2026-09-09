@@ -28,6 +28,26 @@ class TemplateMatcher:
             return screen_width / BASE_RESOLUTION_WIDTH
         return self.template_scale
 
+    def compute_candidate_scales(self, screen_width: int, delta_range: float = 0.04, step: float = 0.02) -> list[float]:
+        """
+        依目前畫面寬度計算基準自動縮放比例與周邊候選尺度清單。
+        交替由近至遠加入上下微幅偏移比例 (例如 [base, base-0.02, base+0.02, base-0.04, base+0.04])。
+        
+        :param screen_width: 畫面寬度 (像素)
+        :param delta_range: 向上與向下擴展之最大偏移量 (預設 0.04 即 +/-4%)
+        :param step: 步進量 (預設 0.02 即 2%)
+        :return: 去重且按優先級排序的候選比例清單
+        """
+        base_scale = round(float(self._compute_auto_scale(screen_width)), 4)
+        candidates = [base_scale]
+        offset = step
+        while offset <= delta_range + 1e-6:
+            for s in (round(base_scale - offset, 4), round(base_scale + offset, 4)):
+                if s > 0.1 and not any(abs(s - c) < 1e-4 for c in candidates):
+                    candidates.append(s)
+            offset += step
+        return candidates
+
     def _nms(self, raw_candidates, min_dist_x: int, min_dist_y: int):
         """
         Non-Maximum Suppression：從按信心度由高到低排序的候選點中，
@@ -170,20 +190,38 @@ class TemplateMatcher:
         is_b_active = (c_b >= threshold and c_b > c_a + margin)
         return is_a_active, is_b_active, c_a, c_b
 
-    def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0, quiet=False, scale=None):
+    def match(self, screen_img, template_name, threshold=0.8, brightness_threshold=0.0, quiet=False, scale=None, scales=None):
         """
         在 screen_img 中尋找與 template_name 匹配度最高的位置。
-        支援 auto_scale 自動依據畫面解析度換算縮放因子。
+        支援 auto_scale 自動依據畫面解析度換算縮放因子，亦支援傳入 scales 多尺度候選清單。
         
         :param screen_img: 來源畫面 (numpy array)
         :param template_name: 模板檔名或路徑
         :param threshold: 信心度閥值 (0.0 ~ 1.0)
         :param brightness_threshold: 亮度比例門檻 (0.0代表不啟用，大於0代表低於此比例則過濾，並進行最亮點選擇)
-        :param scale: 指定縮放比例 (若為 None 且 auto_scale=True 則自動以 screen_width / 1920 計算)
+        :param scale: 指定單一縮放比例 (若為 None 且 auto_scale=True 則自動以 screen_width / 1920 計算)
+        :param scales: 指定多尺度候選清單 (Sequence[float])，傳入時遍歷選取最佳信心度並具早退保護
         :return: (center_x, center_y), confidence. 若未達閥值，回傳 None, confidence
         """
         if screen_img is None:
             return None, 0.0
+
+        # 多尺度候選遍歷 (若提供 scales 清單)
+        if scales is not None:
+            best_pos, best_conf = None, 0.0
+            for s in scales:
+                pos, conf = self.match(
+                    screen_img, template_name, threshold=threshold,
+                    brightness_threshold=brightness_threshold, quiet=quiet, scale=s
+                )
+                if conf > best_conf:
+                    best_conf = conf
+                    if pos is not None:
+                        best_pos = pos
+                # 低負載早退原則 (Greenfield-lite v1 第 4.2 節)：若已達到極高信心度，直接返回
+                if best_conf >= 0.95 and best_pos is not None:
+                    break
+            return best_pos, best_conf
 
         # 1. Scale 計算
         if scale is None:

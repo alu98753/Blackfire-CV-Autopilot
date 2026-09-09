@@ -760,8 +760,8 @@ class TestTierConfigMatrix(unittest.TestCase):
         setup_stage_config(config, stage_level=6, sub_stage_type="final")
         self.assertEqual(config["stage_name"], "冰凍峽谷 (final)")
         self.assertEqual(config["stage_entry"], "stages/level6_ice_cave.png")
-        self.assertEqual(config["stage_target"], "stages/level6_final.png")
-        self.assertIn("stages/level6_final.png", config["stage_navigation_path"])
+        self.assertEqual(config["stage_target"], "stages/boss_skull.png")
+        self.assertIn("stages/boss_skull.png", config["stage_navigation_path"])
 
     @patch('cli.stage_setup.persist_mode_updates')
     @patch('cli.tier4_setup.persist_mode_updates')
@@ -784,11 +784,10 @@ class TestTierConfigMatrix(unittest.TestCase):
             sub=None
         )
         from config import PRIMARY_MODES, GAME_CONFIGS
-        expected_sub = PRIMARY_MODES["daily"].get("tier4_sub_stage", "first")
-        with patch.dict(PRIMARY_MODES["daily"], {"tier4_mode": "stage"}), \
-             patch.dict(GAME_CONFIGS["daily"], {"tier4_mode": "stage", "enable_stage_farming": True}):
+        with patch.dict(PRIMARY_MODES["daily"], {"tier4_mode": "stage", "tier4_stage_level": 6, "tier4_sub_stage": "first"}), \
+             patch.dict(GAME_CONFIGS["daily"], {"tier4_mode": "stage", "enable_stage_farming": True, "tier4_stage_level": 6, "tier4_sub_stage": "first"}):
             cfg = setup_mode_config(args)
-            self.assertEqual(cfg["stage_name"], f"冰凍峽谷 ({expected_sub})")
+            self.assertEqual(cfg["stage_name"], "冰凍峽谷 (first)")
             self.assertEqual(cfg["stage_entry"], "stages/level6_ice_cave.png")
             self.assertTrue(os.path.exists(os.path.join("templates", cfg["stage_target"])))
 

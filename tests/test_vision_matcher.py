@@ -92,5 +92,55 @@ class TestVisionMatcher(unittest.TestCase):
         self.assertGreaterEqual(conf_1536, 0.95)
         self.assertEqual(pos_1536, (420, 180))
 
+    def test_compute_candidate_scales(self):
+        """
+        測試 compute_candidate_scales 能正確依畫面寬度生成基準與鄰近候選尺度。
+        """
+        # 1920 寬度 -> 基準 1.0，候選 [1.0, 0.98, 1.02, 0.96, 1.04]
+        scales_1920 = self.matcher.compute_candidate_scales(1920, delta_range=0.04, step=0.02)
+        self.assertEqual(scales_1920[0], 1.0)
+        self.assertIn(0.98, scales_1920)
+        self.assertIn(1.02, scales_1920)
+
+        # 1536 寬度 -> 基準 0.8，候選 [0.8, 0.78, 0.82, 0.76, 0.84]
+        scales_1536 = self.matcher.compute_candidate_scales(1536, delta_range=0.04, step=0.02)
+        self.assertEqual(scales_1536[0], 0.8)
+        self.assertIn(0.78, scales_1536)
+        self.assertIn(0.82, scales_1536)
+
+    def test_multi_scale_matching_with_scales(self):
+        """
+        測試傳入 scales 候選清單時，TemplateMatcher 能自動從多個尺度中挑出最高信心度者。
+        """
+        template_w, template_h = 60, 60
+        template_img = np.zeros((template_h, template_w, 3), dtype=np.uint8)
+        cv2.rectangle(template_img, (0, 0), (60, 60), (40, 80, 160), -1)
+        cv2.circle(template_img, (30, 30), 15, (0, 255, 120), -1)
+
+        template_name = "multiscale_icon.png"
+        cv2.imwrite(os.path.join(self.templates_dir, template_name), template_img)
+
+        # 建立非基準縮放尺度 (例如 0.82x，尺寸為 49x49) 的畫面
+        target_scale = 0.82
+        nw, nh = int(round(60 * target_scale)), int(round(60 * target_scale))
+        scaled_icon = cv2.resize(template_img, (nw, nh), interpolation=cv2.INTER_AREA)
+
+        screen_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        screen_img[100:100+nh, 200:200+nw] = scaled_icon
+
+        # 若僅使用錯誤的單一尺度 0.70，信心度會較低
+        pos_wrong, conf_wrong = self.matcher.match(screen_img, template_name, threshold=0.90, scale=0.70)
+        self.assertIsNone(pos_wrong)
+
+        # 提供 candidate scales [0.70, 0.76, 0.82, 0.88]，應成功以 0.82 命中
+        candidate_scales = [0.70, 0.76, 0.82, 0.88]
+        pos_multi, conf_multi = self.matcher.match(
+            screen_img, template_name, threshold=0.90, scales=candidate_scales
+        )
+        self.assertIsNotNone(pos_multi)
+        self.assertGreaterEqual(conf_multi, 0.95)
+        self.assertAlmostEqual(pos_multi[0], 200 + nw // 2, delta=2)
+        self.assertAlmostEqual(pos_multi[1], 100 + nh // 2, delta=2)
+
 if __name__ == "__main__":
     unittest.main()

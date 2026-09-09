@@ -198,7 +198,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         target_idx = self.state_machine.config["dungeon_entries"].index("dungeons/Ice_entry.png") + 1
         expected_cd = self.state_machine.config.get("cooldown_map", {}).get(target_idx, 900.0)
         self.state_machine.current_dungeon_index = target_idx  # 冰雪洞窟
-        self.state_machine.dungeon_defeat_count = 0
+        self.state_machine.defeat_count = 0
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
         # Mock exists 都返回 True
@@ -229,21 +229,23 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
             
         self.mock_matcher.match.side_effect = mock_match
              
-        # 第一次戰敗 (設定為第 19 次戰敗: count=18)
-        self.state_machine.dungeon_defeat_count = 18
+        # 第一次戰敗 (設定為上限倒數第 2 次戰敗: count = max_defeat - 2)
+        from config import BATTLE_MAX_DEFEAT
+        max_defeat = self.state_machine.config.get("battle_max_defeat", BATTLE_MAX_DEFEAT)
+        self.state_machine.defeat_count = max_defeat - 2
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
-        self.assertEqual(self.state_machine.dungeon_defeat_count, 19)
+        self.assertEqual(self.state_machine.defeat_count, max_defeat - 1)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         
-        # 回歸到結算狀態準備第 20 次戰敗 (達到 20 次上限)
+        # 回歸到結算狀態準備最後一次戰敗 (達到上限)
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
-        # 第 20 次戰敗：這次因為 count=19 >= 20-1，會點選放棄與確認退出
+        # 最後一次戰敗：這次因為 count >= max_defeat - 1，會點選放棄與確認退出
         self.mock_mouse.click.reset_mock()
         self.state_machine.step()
         # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了對應的冷卻
-        self.assertEqual(self.state_machine.dungeon_defeat_count, 0)
+        self.assertEqual(self.state_machine.defeat_count, 0)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         self.assertGreater(self.state_machine.dungeon_cooldowns[target_idx], time.time() + expected_cd - 10.0)
 

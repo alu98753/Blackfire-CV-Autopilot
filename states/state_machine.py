@@ -7,6 +7,7 @@ from copy import deepcopy
 from config import (
     GAME_CONFIGS,
     TIER4_MODE_DOMAIN,
+    TIER4_MODE_NONE,
     TIER4_MODE_STAGE,
     get_navigation_progress_settings,
     get_stamina_retreat_settings,
@@ -1047,7 +1048,14 @@ class GameStateMachine:
         """檢查記憶體中是否有冷卻已結束且允許打的地下城"""
         if target_config is not None:
             cfg = target_config
-        elif getattr(self, "stamina_retreat_start_time", None) is not None and getattr(self, "original_config", None) is not None:
+        elif (
+            (not self.config or self.config.get("type") == "collect_only")
+            and getattr(self, "stamina_retreat_start_time", None) is not None
+            and getattr(self, "original_config", None) is not None
+        ):
+            # COLLECT_ONLY 沒有地下城路由資訊，保留舊有的退避備援；一旦
+            # scheduler 已提交 dungeon resume route，必須改以 active config
+            # 判斷，不能再被中斷前的 stage quest route 遮蔽。
             cfg = self.original_config
         else:
             cfg = self.config
@@ -1062,7 +1070,16 @@ class GameStateMachine:
         # 如果模式類型不是地下城/mix/daily，直接傳回 False（防呆非地下城模式）
         cfg_type = cfg.get("type")
         if cfg_type not in ["dungeon", "mix", "daily"]:
-            return False
+            has_domain_dungeon = (
+                cfg.get("enable_dungeon", False)
+                and (
+                    cfg.get("tier4_mode") == TIER4_MODE_DOMAIN
+                    or cfg.get("is_tier4_fallback", False)
+                    or "greedy_allowed_indices" in cfg
+                )
+            )
+            if not has_domain_dungeon:
+                return False
 
         # 如果先前已確認所有地下城皆在冷卻中，且尚未超過暫存冷卻時間，直接傳回 False
         all_cd_until = getattr(self, "all_dungeons_on_cooldown_until", 0.0)
@@ -1073,6 +1090,14 @@ class GameStateMachine:
         is_greedy = cfg.get("greedy_dungeon", False)
 
         explicit_target_idx = cfg.get("dungeon_index")
+        if explicit_target_idx is None:
+            explicit_target_idx = cfg.get("tier4_dungeon_index")
+        if explicit_target_idx is not None:
+            try:
+                explicit_target_idx = int(explicit_target_idx)
+            except (ValueError, TypeError):
+                explicit_target_idx = None
+
         if explicit_target_idx is None and not is_greedy:
             entry_templates = cfg.get("dungeon_entries") or []
             nav_path = cfg.get("navigation_path") or []
@@ -1308,9 +1333,32 @@ class GameStateMachine:
 
     def _daily_activity_config(self):
         """Return the persistent Daily scheduling policy, not a temporary route."""
-        if self.is_daily_pipeline_active() and getattr(self, "primary_config", None):
-            return self.primary_config
+        primary = getattr(self, "primary_config", None)
+        if primary and (
+            getattr(self, "runtime_config_key", None) in ["daily", "mix"]
+            or primary.get("_config_mode_key") in ["daily", "mix"]
+            or primary.get("type") in ["daily", "mix"]
+            or primary.get("enable_dungeon")
+            or self.is_daily_pipeline_active()
+        ):
+            return primary
         return self.config or {}
+
+    def build_dungeon_resume_route(self, source_config=None):
+        """Build an executable dungeon route from policy/source when resuming from collect_only."""
+        policy = self._daily_activity_config()
+        base = policy if (policy and policy.get("enable_dungeon")) else (source_config or self.config or {})
+        route = deepcopy(base)
+        route["type"] = "mix"
+        route["enable_dungeon"] = True
+        route["is_tier4_fallback"] = True
+        route["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+        if "dungeon_entries" not in route and "daily" in GAME_CONFIGS:
+            route["dungeon_entries"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_entries", []))
+            route["dungeon_names"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_names", []))
+        self._apply_tier4_stage_selection(route)
+        self._apply_tier4_dungeon_selection(route)
+        return route
 
     def has_available_daily_dungeon(self):
         """Check the timed dungeon policy even while Tier 4 is a domain route."""
@@ -1458,6 +1506,10 @@ class GameStateMachine:
             self.set_config(fallback_cfg)
             self.arm_daily_quest_preemption()
             logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
+            if fallback_cfg.get("tier4_mode") == TIER4_MODE_NONE or fallback_cfg.get("type") == "collect_only":
+                if not self.is_in_collect_only_mode():
+                    logging.info("💤 [GameStateMachine] Tier 4 長駐已停用 ➔ 自動轉入 COLLECT_ONLY 待機...")
+                    self.transition_to(self.STATE_COLLECT_ONLY)
         else:
             from config import PRIMARY_MODES
             mix_config = PRIMARY_MODES["mix"].copy()
@@ -1938,14 +1990,27 @@ class GameStateMachine:
         try:
             cfg = self.config or {}
             activity_cfg = self._daily_activity_config()
-            # 0. 體力退避期間冷卻復歸
+            # 0. 體力退避期間只允許已就緒的地下城暫時喚醒。
+            #    Tier 4 fallback 可能是 domain；此處若呼叫 apply_tier4_fallback_config()
+            #    會覆蓋 CollectOnlyHandler 剛提交的地下城 route，形成
+            #    COLLECT_ONLY -> NAVIGATING -> DOMAIN_EXPLORE -> COLLECT_ONLY 迴圈。
             if getattr(self, "stamina_retreat_start_time", None) is not None:
-                if cfg.get("enable_dungeon", True):
-                    logging.info("🔄 [Activity Scheduler] 處於體力退避冷卻復歸期間 ➔ 嘗試執行退守地下城！")
-                    self.apply_tier4_fallback_config()
-                    return True
-                else:
+                dungeon_enabled = activity_cfg.get(
+                    "enable_dungeon", cfg.get("enable_dungeon", True)
+                )
+                if not dungeon_enabled:
                     return False
+
+                if not self.has_available_dungeon(target_config=activity_cfg):
+                    return False
+
+                dungeon_route = self.build_dungeon_resume_route(activity_cfg)
+                self.set_config(dungeon_route)
+                logging.info(
+                    "🔄 [Activity Scheduler] 體力退避期間地下城冷卻已結束 "
+                    "➔ 保留地下城復歸路由，不套用 Tier 4 Domain fallback。"
+                )
+                return True
 
             dm = getattr(self, "daily_manager", None)
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
@@ -1990,9 +2055,10 @@ class GameStateMachine:
                     # ResultHandler will preempt Tier 4 at the next safe result
                     # screen as soon as any Daily quest becomes runnable.
                     if self.quest_scheduler.get_pending_tasks():
-                        logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
-                        self.apply_tier4_fallback_config()
-                        return False
+                        if not (activity_cfg.get("enable_dungeon", False) and self.has_available_dungeon(target_config=activity_cfg)):
+                            logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
+                            self.apply_tier4_fallback_config()
+                            return False
 
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
             if activity_cfg.get("enable_dungeon", False):
@@ -2009,7 +2075,9 @@ class GameStateMachine:
                     return True
 
             # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4 長駐路由。
-            if self.is_daily_pipeline_active():
+            daily_policy = self._daily_activity_config()
+            tier4_mode = daily_policy.get("tier4_mode", cfg.get("tier4_mode"))
+            if self.is_daily_pipeline_active() and tier4_mode != TIER4_MODE_NONE:
                 self.apply_tier4_fallback_config()
                 return False
 
@@ -2018,13 +2086,13 @@ class GameStateMachine:
             default_stage_farm = True if (mode_type in ["mix", "stage", "daily"] or getattr(self, "is_tier4_fallback", False) or getattr(self, "daily_manager", None) is not None) else False
             is_stage_farming = cfg.get("enable_stage_farming", default_stage_farm)
 
-            if is_stage_farming:
+            if is_stage_farming and tier4_mode != TIER4_MODE_NONE:
                 self.apply_tier4_fallback_config()
                 return False
 
-            # 6. 兜底待機：所有啟用活動均在冷卻中，且未開啟普通關卡打怪 ➔ 切換至 COLLECT_ONLY 待機！
+            # 6. 兜底待機：所有啟用活動均在冷卻中，且未開啟長駐打怪 ➔ 切換至 COLLECT_ONLY 待機！
             if not self.is_in_collect_only_mode():
-                logging.info("💤 [Activity Scheduler] 所有啟用的週期性任務均在冷卻中且未開啟普通打怪 ➔ 轉入 COLLECT_ONLY 待機...")
+                logging.info("💤 [Activity Scheduler] 所有啟用的週期性任務均在冷卻中且未開啟 Tier 4 ➔ 轉入 COLLECT_ONLY 待機...")
                 self.transition_to(self.STATE_COLLECT_ONLY)
             return False
 

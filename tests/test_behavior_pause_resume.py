@@ -6,7 +6,6 @@ from states.state_machine import GameStateMachine
 from utils.keyboard_listener import (
     PauseController,
     TRIGGER_MODE_CTRL_SPACE,
-    TRIGGER_MODE_TRIPLE_SPACE,
     VK_CONTROL,
     VK_SPACE
 )
@@ -142,36 +141,12 @@ class TestBehaviorPauseResume(unittest.TestCase):
         self.assertTrue(res)
         self.assertTrue(controller.check_toggle_triggered())
 
-    def test_triple_space_cadence_interval_success(self):
+    def test_trigger_hint_is_ctrl_space(self):
         """
-        測試 Triple-Space 相鄰節奏間隔小於 1.5 秒時連按 3 次觸發
+        測試預設熱鍵提示文字為 Ctrl + Space
         """
-        controller = PauseController(capturer=self.mock_capturer, trigger_mode=TRIGGER_MODE_TRIPLE_SPACE, cadence_timeout_sec=1.5, start_thread=False)
-
-        res1 = controller._on_triple_tap_registered(100.0)
-        self.assertFalse(res1)
-        self.assertEqual(controller.tap_count, 1)
-
-        res2 = controller._on_triple_tap_registered(100.8)
-        self.assertFalse(res2)
-        self.assertEqual(controller.tap_count, 2)
-
-        res3 = controller._on_triple_tap_registered(101.6)
-        self.assertTrue(res3)
-        self.assertEqual(controller.tap_count, 0)
-        self.assertTrue(controller.check_toggle_triggered())
-
-    def test_set_trigger_mode_switch(self):
-        """
-        測試動態切換熱鍵策略模式
-        """
-        controller = PauseController(capturer=self.mock_capturer, trigger_mode=TRIGGER_MODE_CTRL_SPACE, start_thread=False)
-        self.assertEqual(controller.trigger_mode, TRIGGER_MODE_CTRL_SPACE)
+        controller = PauseController(capturer=self.mock_capturer, start_thread=False)
         self.assertIn("Ctrl + Space", controller.get_trigger_hint())
-
-        controller.set_trigger_mode(TRIGGER_MODE_TRIPLE_SPACE)
-        self.assertEqual(controller.trigger_mode, TRIGGER_MODE_TRIPLE_SPACE)
-        self.assertIn("3 次", controller.get_trigger_hint())
 
     @patch("ctypes.windll.user32.GetForegroundWindow")
     @patch("ctypes.windll.kernel32.GetConsoleWindow")

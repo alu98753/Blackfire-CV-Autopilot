@@ -10,10 +10,103 @@
 dengeon同理
 
 ## 📌 一、 進行中與待開發項目 (Active TODOs)
+要讓我可以安心整天不用看的前提
 
-TODO : 關卡等沒看到 要向左滑動到底 直到看到第一關
+1. daily 四個都做得好
+  目前blood ok
+  抽英雄ok
+
+  chest 不知為何會假裝完成
+  ```
+
+關於這個 目前修正後的做法是什麼? 我發現他chest不知道為何會假裝完成 但實際上並沒有 並且也不會再次被檢查到(紅點)
+
+:神秘寶箱點擊偏差：修復免費寶箱按鈕點擊落點偏下問題，並繼承視窗縮放比例（scale_x）。
+
+
+實際上具體而言他就是有點到寶箱 但沒有成功點到免費就退出 導致沒有完成 實際上他可以採取的作法可以像是領寶石那樣 領完免費後用ocr 判斷是不是有冷卻時間 來當完成的標準 思考根據 [project_arch_greenfield_lite_v1.md](file;file:///e%3A/Side_Project/BlackfireCrusade_tool/docs/architecture/project_arch_greenfield_lite_v1.md)  這個部分應該怎麼做
+```
+  
+  任務版會被 blood連帶珠寶店的流程影響 他會先開背包然後又卡死中斷珠寶店的任務 導致背包沒關掉  然後沒有先把背包關掉就去跑任務流程 所以任務接取的前置條件為滿足 因此後續辨識與點擊reset失敗
+
+2. lord, demon lord 不備其他形成搶掉 可以正常打完 正常買材料(demon lord要買材料才能打)
+
+以上做完應該就可以掛機個兩天 接著會遇到的問題是 商人也會沒錢
+所以要跟他買東西 以及製作東西(大宗)
+
+
+
+- []懸賞告示牌的流程不用改 只是要確認有進去才可以開始跑
+目前的問題是他還沒進去 如debug 圖片所示 他還在背包 當人不能判斷有懸賞任務 同時珠寶店跟blood有連帶性 這個也要拔除 把兩者分開 這樣應該就可以了
+
+- [] 然後朱王與朱厚的問題是 判斷任務完成的部分的ocr可能框框太小沒有正確識別任務 (暫時完成 有加入debug圖片 待觀察)
+
+- []向右滑動的時候明明一直做就好 且只要比對現在在的位置({}_after 和目標圖片)共兩章 但她卻每次都等很久 比對很多圖片
+```
+
+2026-09-09 20:47:05,310 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
+2026-09-09 20:47:05,310 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
+2026-09-09 20:47:09,852 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:11,975 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:12,460 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
+2026-09-09 20:47:13,889 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
+2026-09-09 20:47:14,432 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
+2026-09-09 20:47:14,538 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
+2026-09-09 20:47:18,037 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
+2026-09-09 20:47:18,039 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
+2026-09-09 20:47:22,880 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:25,275 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:25,795 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
+2026-09-09 20:47:27,277 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
+2026-09-09 20:47:27,946 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
+2026-09-09 20:47:28,091 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
+2026-09-09 20:47:31,891 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
+2026-09-09 20:47:31,892 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
+2026-09-09 20:47:36,576 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:38,419 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:38,798 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
+2026-09-09 20:47:39,920 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
+2026-09-09 20:47:40,409 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
+2026-09-09 20:47:40,495 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
+2026-09-09 20:47:43,564 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
+2026-09-09 20:47:43,564 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
+2026-09-09 20:47:48,241 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:50,674 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:47:51,123 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
+2026-09-09 20:47:52,454 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
+2026-09-09 20:47:53,030 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
+2026-09-09 20:47:53,129 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
+2026-09-09 20:47:56,330 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
+2026-09-09 20:47:56,330 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
+2026-09-09 20:48:01,041 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:48:03,496 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
+2026-09-09 20:48:03,944 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
+2026-09-09 20:48:05,322 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
+2026-09-09 20:48:05,937 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
+2026-09-09 20:48:06,061 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
+2026-09-09 20:48:09,023 [INFO] 🧭 貪婪地下城：偵測到
+```
+
+- [x]關卡等沒看到 要向左滑動到底 直到看到第一關
+
+- [x] 現在商人適用次數 應該改成金錢擁有數 (已完成)
+
+- [x] 驚嘆號排除橘色的任務點 只接受紅色的每日領取點 (已完成)
+
+- [x] 關卡小關卡 (1, 5/mid, 6, 10/final) 通用化與零截圖擴充：以通用 `boss_skull.png` 與頂部 (`first_stage.png`) / 底部 (`six_stage.png`) 視覺閉環，實現全章節（含 Stage 7+）全量子關卡免截圖支援，並將防抖冷卻縮短至 0.25s 達成極速選關 (已完成)
+
+[Tier 4 長駐關卡] 請選擇 [冰凍峽谷] 要打的小關卡類型 (當前 Profile TOML 設定: first)：
+ 1) 第一小關 (First Stage) - 當前預設
+ 2) 中間小關 (Middle Stage)
+ 3) 第六小關 (Six Stage)
+ 4) 魔王關 (Boss / Final)
+
+ 
+- [] 現在模式mix 應該不需要 而是應該由場警驅動,但現在daily 是夠健在mix之上 也不好拆 要一個一個來
 
 因為我有所有角色的資料 所以實際上我可以做戰鬥系統 因為點擊是固定位置就不需要cv, 只需要專注在戰鬥
+
+- [x] ~~血角終結者 這個任務幫我加到 可做的任務中( 目的地是 獸人地堡 orc_bunker)~~ *(已於 `feat(dungeon)` 實作完成)*
 
 ### 1. 🔔 異常暫停與中斷即時通知 (Discord / LINE Webhook Notification)
 - **需求背景**：當腳本在長掛機或黃金古國領地探索中進入手動暫停（Manual Pause）、觸發 Watchdog 卡死救援、或體力耗盡轉入退避模式時，能夠第一時間通報使用者。

@@ -6,8 +6,8 @@ import logging
 
 from utils import PauseController
 from runtime.heartbeat import touch_heartbeat
-from runtime.incident_journal import record_unhandled_exception
-from runtime.supervisor import MANUAL_EXIT_CODE
+from runtime.incident_journal import record_unhandled_exception, record_manual_restart
+from runtime.supervisor import MANUAL_EXIT_CODE, MANUAL_RESTART_EXIT_CODE
 
 def run_main_loop(state_machine, interval):
     pause_controller = None
@@ -43,6 +43,11 @@ def run_main_loop(state_machine, interval):
             if pause_controller.check_manual_exit_triggered() is True:
                 print("\n[Manual Exit] Ctrl+Shift+Q received; supervisor will return to the restart menu.")
                 raise SystemExit(MANUAL_EXIT_CODE)
+
+            if pause_controller.check_manual_restart_triggered() is True:
+                print("\n[Manual Restart] Ctrl+Q received; restarting bot via supervisor fast-resume...")
+                record_manual_restart(state_machine, "manual_restart_hotkey")
+                raise SystemExit(MANUAL_RESTART_EXIT_CODE)
             
             # 1. 檢測熱鍵事件標記 (若為非執行緒模式之備用輪詢)
             if pause_controller.check_toggle_triggered() and not pause_controller._thread:

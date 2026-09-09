@@ -4,12 +4,18 @@ config_version = 1
 default_diamond_cd = 7200.0
 default_bread_cd = 1800.0
 battle_max_duration_sec = 900.0 # Hard BATTLE cap; timeout relaunches the game for recovery.
+battle_stall_timeout_sec = 30.0 # 戰鬥血條無變化卡死上限 (秒)
+battle_stall_max_retries = 2    # 單場戰鬥血條卡死最多重新開始次數，超過則重開遊戲
+battle_hp_roi_top_ratio = 0.66  # 戰鬥血條檢測 ROI 上邊界比例 (0.0~1.0，排除上方角色身體)
+battle_hp_roi_bottom_ratio = 0.67 # 戰鬥血條檢測 ROI 下邊界比例 (0.0~1.0，排除下方無效地磚)
 default_bless_mode = "combat"
 default_town_subflow_order = ["blood_altar", "jewelry_workshop"]
 dry_run_bag_clean = false
 default_backpack_full_max_scroll = 5
 monitor_index = 1
-battle_max_defeat = 20 # 所有模式通用的連續戰敗重試上限；達到此次數後放棄當前關卡
+battle_max_defeat = 30 # 所有模式通用的連續戰敗重試上限；達到此次數後放棄當前關卡
+log_level = "INFO" # 終端機日誌顯示等級: "DEBUG", "INFO", "WARNING", "ERROR"
+log_retention_days = 7 # 每日日誌檔案保留天數 (超過 7 天自動清理)
 
 [navigation]
 action_timeout_seconds = 5.0
@@ -27,12 +33,12 @@ dungeon_batch_size = 1
 
 [bounty_quests]
 max_stage = 6
-max_dungeon = 6
+max_dungeon = 7
 
 [catalog]
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
-dungeon_entry_templates = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
-stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
+dungeon_entry_templates = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png", "dungeons/orc_bunker.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png", "stages/level6_ice_cave.png", "stages/level7_forgotten_wasteland.png"]
 
 [ocr]
 
@@ -47,6 +53,12 @@ offset_x = 5
 offset_y = -10
 box_width = 360
 box_height = 57
+
+[ocr.merchant_gold]
+relative_x_min = 0.35
+relative_x_max = 0.90
+relative_y_min = 0.25
+relative_y_max = 0.65
 
 [vision]
 default_threshold = 0.80
@@ -105,9 +117,9 @@ name = "普通關卡"
 type = "stage"
 stage_reset_max_attempts = 7
 sub_stage_scroll_max_attempts = 5
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
-stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png", "dungeons/orc_bunker.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png", "stages/level6_ice_cave.png", "stages/level7_forgotten_wasteland.png"]
 navigation_path = ["common/door.png", "exit_battle.png", "common/select_stage.png", "stages/level6_ice_cave.png", "stages/stage_label.png", "stages/first_stage.png"]
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
@@ -117,12 +129,12 @@ result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gr
 name = "地下城"
 type = "dungeon"
 dungeon_reset_max_attempts = 7
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
-stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png", "dungeons/orc_bunker.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png", "stages/level6_ice_cave.png", "stages/level7_forgotten_wasteland.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [1, 2, 3, 4, 5, 6]
+greedy_allowed_indices = [1, 2, 3, 4, 5, 6, 7]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -136,16 +148,17 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 4 = 1200.0
 5 = 1500.0
 6 = 1800.0
+7 = 2100.0
 
 [primary_modes.mix]
 name = "混合模式"
 type = "mix"
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
-stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png", "dungeons/orc_bunker.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png", "stages/level6_ice_cave.png", "stages/level7_forgotten_wasteland.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [1, 2, 3, 4, 5, 6]
+greedy_allowed_indices = [1, 2, 3, 4, 5, 6, 7]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -166,6 +179,7 @@ result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gr
 4 = 1200.0
 5 = 1500.0
 6 = 1800.0
+7 = 2100.0
 
 [primary_modes.collect_only]
 name = "定時領取麵包與鑽石"
@@ -181,12 +195,12 @@ type = "mix"
 # 週期活動預設啟用；每位玩家可在 user_data/<profile>/config.toml 覆蓋為 false。
 enable_dungeon = true
 enable_lord_boss = true
-dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟"]
-dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png"]
-stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png"]
+dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
+dungeon_entries = ["dungeons/Slime_entry.png", "dungeons/Ghost_entry.png", "dungeons/Forest_entry.png", "dungeons/Ruins_entry.png", "dungeons/dark_prison.png", "dungeons/Ice_entry.png", "dungeons/orc_bunker.png"]
+stage_templates = ["stages/level1_sky_plains.png", "stages/level2_Barren_Rocky_Ground.png", "stages/level2_barren_rocks.png", "stages/level3_ancient_forest.png", "stages/level4_desert_ruins.png", "stages/level5_gloomy_swamp.png", "stages/level6_ice_cave.png", "stages/level7_forgotten_wasteland.png"]
 bless_mode = "combat"
 greedy_dungeon = true
-greedy_allowed_indices = [1, 2, 3, 4, 5, 6]
+greedy_allowed_indices = [1, 2, 3, 4, 5, 6, 7]
 auto_resume_dungeon_on_cd = false
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -195,9 +209,9 @@ explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "c
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 enable_stage_farming = true
-tier4_mode = "stage"  # 可選: "stage", "domain"
+tier4_mode = "stage"  # 可選: "stage", "domain", "none" (停用長駐)
 tier4_domain = "golden_empire"  # tier4_mode="domain" 時目前支援黃金古國
-tier4_stage_level = 6  # 大關數字 1~6 (6 代表 冰凍峽谷)
+tier4_stage_level = 6  # 大關數字 1~7 (6 代表 冰凍峽谷, 7 代表 遺忘荒地)
 tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (魔王關)
 
 
@@ -208,6 +222,7 @@ tier4_sub_stage = "first"  # 小關類型: "first", "middle", "six", "final" (�
 4 = 1200.0
 5 = 1500.0
 6 = 1800.0
+7 = 2100.0
 
 [subflow_configs]
 
@@ -235,7 +250,7 @@ lobby_start_btn = "stages/start.png"
 [subflow_configs.blood_altar.sacrifice_settings]
 gray = false
 green = false
-blue = false
+blue = true
 purple = false
 
 [subflow_configs.blood_altar.blood_templates]
@@ -285,7 +300,7 @@ template = "town_building/grocery_store/grocery_store.png"
 Sandworm_scales = true
 Spider_silk = true
 Spider_venom_glands = true
-Warcraft_Fang = false
+Warcraft_Fang = true
 lizard_skin = true
 scrap = true
 Frog_Skin = true
@@ -293,12 +308,13 @@ Purple_Spore = true
 Slime_Mucus = true
 Bat_wings = true
 Wolf_skin = true
+rough_linen = true
 monster_blood_1 = true
 
 [subflow_configs.jewelry_workshop.sell_goods.green]
 The_cloth_wrapped_around_the_dead = true
 Giant_Beast_Gold_Tooth = true
-Toad_Venom = true
+Toad_Venom = false
 Dead_Soul_Core = true
 Wild_boar_tusk = true
 Scorpion_Shell = true
@@ -460,3 +476,7 @@ entry = "stages/level5_gloomy_swamp.png"
 [base_stage_levels.6]
 name = "冰凍峽谷"
 entry = "stages/level6_ice_cave.png"
+
+[base_stage_levels.7]
+name = "遺忘荒地"
+entry = "stages/level7_forgotten_wasteland.png"

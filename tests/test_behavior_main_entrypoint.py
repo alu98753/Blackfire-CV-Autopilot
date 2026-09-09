@@ -38,6 +38,26 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertTrue(pause_controller.check_manual_exit_triggered())
         self.assertFalse(pause_controller.check_manual_exit_triggered())
 
+    def test_manual_restart_hotkey_requires_target_focus_and_ctrl_q_without_shift(self):
+        pause_controller = PauseController(start_thread=False)
+        pause_controller.is_target_window_active = MagicMock(return_value=True)
+        
+        # 1. Ctrl + Q (無 Shift) 觸發 manual_restart，不觸發 manual_exit
+        def mock_get_async_key_state(key):
+            from utils.keyboard_listener import VK_CONTROL, VK_Q, VK_SHIFT
+            if key in (VK_CONTROL, VK_Q):
+                return 0x8000
+            if key == VK_SHIFT:
+                return 0
+            return 0
+
+        with patch("utils.keyboard_listener.ctypes.windll.user32.GetAsyncKeyState", side_effect=mock_get_async_key_state):
+            pause_controller._poll_once()
+
+        self.assertTrue(pause_controller.check_manual_restart_triggered())
+        self.assertFalse(pause_controller.check_manual_restart_triggered())
+        self.assertFalse(pause_controller.check_manual_exit_triggered())
+
     def test_prompt_choice_returns_default_for_empty_input_or_terminal_interrupt(self):
         with patch("builtins.input", return_value="   "):
             self.assertEqual(prompt_choice("choice: ", "default"), "default")
@@ -85,7 +105,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         )
 
     @patch("cli.dungeon_setup.persist_mode_updates")
-    @patch("builtins.input", side_effect=["7", "113", "1"])
+    @patch("builtins.input", side_effect=["8", "113", "1"])
     def test_greedy_dungeon_deduplicates_targets_and_persists_only_changed_policy(
         self, _input, persist
     ):
@@ -184,6 +204,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("main.get_monitor_index", return_value=3)
     @patch("main.setup_equipment_config")
     @patch("main.setup_mode_config")
+    @patch("main.setup_log_level_config")
     @patch("config.set_active_profile")
     @patch("main.select_game_window", return_value=(0x123, "[#] Blackfire Crusade"))
     @patch("main.parse_arguments")
@@ -194,6 +215,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         parse_args,
         select_window,
         set_active_profile,
+        setup_log_level,
         setup_mode,
         setup_equipment,
         get_monitor,
@@ -213,6 +235,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
 
         self.assertEqual(args.title, "[#] Blackfire Crusade")
         set_active_profile.assert_called_once_with("sandbox")
+        setup_log_level.assert_called_once_with(args, profile_name="sandbox", is_resume=False)
         setup_mode.assert_called_once_with(args)
         setup_equipment.assert_called_once_with(config)
         launcher_class.assert_called_once_with(
@@ -231,12 +254,13 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("main.SteamGameLauncher")
     @patch("main.setup_equipment_config")
     @patch("main.setup_mode_config", return_value={"name": "Stage", "type": "stage"})
+    @patch("main.setup_log_level_config")
     @patch("config.set_active_profile")
     @patch("main.select_game_window", return_value=(None, "Blackfire Crusade"))
     @patch("main.parse_arguments", return_value=make_args())
     @patch("main.setup_utf8_encoding")
     def test_main_fails_before_state_machine_initialization_when_game_is_not_ready(
-        self, _encoding, _arguments, _window, _profile, _mode, _equipment, launcher_class, init_system
+        self, _encoding, _arguments, _window, _profile, _log_level, _mode, _equipment, launcher_class, init_system
     ):
         launcher_class.return_value.ensure_game_ready.return_value = False
 
@@ -319,3 +343,21 @@ class TestMainEntrypointBehavior(unittest.TestCase):
             state_machine.mock_calls.index(call.refresh_config_at_safe_point()),
             state_machine.mock_calls.index(call.step()),
         )
+
+    @patch("runtime.loop.record_manual_restart")
+    @patch("builtins.print")
+    @patch("runtime.loop.PauseController")
+    def test_runtime_loop_exits_with_restart_code_on_ctrl_q(
+        self, pause_controller_class, _print, mock_record_restart
+    ):
+        from runtime.loop import MANUAL_RESTART_EXIT_CODE
+        state_machine = MagicMock()
+        pause_controller_mock = pause_controller_class.return_value
+        pause_controller_mock.check_manual_exit_triggered.return_value = False
+        pause_controller_mock.check_manual_restart_triggered.return_value = True
+
+        with self.assertRaises(SystemExit) as cm:
+            run_main_loop(state_machine, interval=0.5)
+
+        self.assertEqual(cm.exception.code, MANUAL_RESTART_EXIT_CODE)
+        mock_record_restart.assert_called_once_with(state_machine, "manual_restart_hotkey")

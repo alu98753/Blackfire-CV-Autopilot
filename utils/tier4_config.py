@@ -5,6 +5,7 @@ from copy import deepcopy
 from config import (
     DEFAULT_TIER4_DOMAIN,
     TIER4_MODE_DOMAIN,
+    TIER4_MODE_NONE,
     TIER4_MODE_STAGE,
 )
 
@@ -26,6 +27,15 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
     """Resolve the player's Daily policy into one executable Tier 4 route."""
     fallback = deepcopy(primary_config)
     tier4_mode = fallback.get("tier4_mode", TIER4_MODE_STAGE)
+    if tier4_mode == TIER4_MODE_NONE:
+        fallback["type"] = "collect_only"
+        fallback["tier4_mode"] = TIER4_MODE_NONE
+        fallback["enable_stage_farming"] = False
+        fallback["enable_golden_empire"] = False
+        fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
+        fallback["name"] = "每日懸賞任務 (定時待機 collect_only)"
+        return fallback
+
     if tier4_mode != TIER4_MODE_DOMAIN:
         fallback["type"] = "stage"
         fallback["tier4_mode"] = TIER4_MODE_STAGE

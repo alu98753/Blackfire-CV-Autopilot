@@ -4,6 +4,7 @@ The game state machine owns this object.  Handlers may identify a scene change,
 but must not keep their own copy of the battle timeout clock.
 """
 
+import logging
 from dataclasses import dataclass
 
 
@@ -13,6 +14,11 @@ class BattleSession:
 
     started_at: float | None = None
     entry_state: str | None = None
+    last_hp_signature: int | None = None
+    last_diff: int = 0
+    hp_stall_started_at: float | None = None
+    restart_battle_attempts: int = 0
+    BLOOD_DIFF = 300
 
     @property
     def is_active(self) -> bool:
@@ -21,10 +27,18 @@ class BattleSession:
     def begin(self, now: float, entry_state: str) -> None:
         self.started_at = now
         self.entry_state = entry_state
+        self.last_hp_signature = None
+        self.last_diff = 0
+        self.hp_stall_started_at = None
+        self.restart_battle_attempts = 0
 
     def clear(self) -> None:
         self.started_at = None
         self.entry_state = None
+        self.last_hp_signature = None
+        self.last_diff = 0
+        self.hp_stall_started_at = None
+        self.restart_battle_attempts = 0
 
     def elapsed_seconds(self, now: float) -> float:
         if self.started_at is None:
@@ -34,3 +48,70 @@ class BattleSession:
     def compensate_pause(self, pause_duration: float) -> None:
         if self.started_at is not None:
             self.started_at += pause_duration
+        if self.hp_stall_started_at is not None:
+            self.hp_stall_started_at += pause_duration
+
+    def is_hp_stalled(self, current_signature: int, now: float, timeout_seconds: float = 30.0) -> bool:
+        """Check if health bar signature has remained statically unchanged for >= timeout_seconds.
+        
+        Args:
+            current_signature: Pixel count of red health bar in the ROI (-1 if invalid).
+            now: Current monotonic timestamp.
+            timeout_seconds: Bounded timeout in seconds to declare a stall.
+        """
+        if current_signature <= 0:
+            # ROI not visible or invalid frame, do not stall on empty frame
+            return False
+
+        if self.last_hp_signature is None:
+            self.last_hp_signature = current_signature
+            self.last_diff = 0
+            self.hp_stall_started_at = now
+            return False
+
+        # If pixel difference exceeds tolerance (e.g. at least BLOOD_DIFF pixels change), progress is made
+        diff = abs(current_signature - self.last_hp_signature)
+        self.last_diff = diff
+        stalled_duration = max(0.0, now - self.hp_stall_started_at) if self.hp_stall_started_at is not None else 0.0
+        logging.debug(
+            "[BattleStall] HP sig: %d (prev: %s, diff: %d, stalled: %.1fs/%.1fs)",
+            current_signature,
+            str(self.last_hp_signature),
+            diff,
+            stalled_duration,
+            timeout_seconds,
+        )
+
+        if diff >= self.BLOOD_DIFF:
+            logging.debug(
+                "[BattleStall] ⚔️ 戰鬥推進：血條像素變化 diff=%d >= 門檻 %d (前次: %s -> 當前: %d)，重置卡死計時 (先前停頓: %.1fs)",
+                diff,
+                self.BLOOD_DIFF,
+                str(self.last_hp_signature),
+                current_signature,
+                stalled_duration,
+            )
+            if stalled_duration >= 5.0:
+                logging.info(
+                    "⚔️ [戰鬥進展] 偵測到血條產生顯著變化 (diff=%d, 停滯 %.1fs 解除)，戰鬥正常推進中！",
+                    diff,
+                    stalled_duration,
+                )
+            self.last_hp_signature = current_signature
+            self.hp_stall_started_at = now
+            return False
+
+        # HP has not changed significantly
+        if self.hp_stall_started_at is None:
+            self.hp_stall_started_at = now
+            return False
+
+        return stalled_duration >= timeout_seconds
+
+    def reset_after_restart(self, now: float) -> None:
+        """Reset battle clock and health stall tracking after in-battle restart."""
+        self.started_at = now
+        self.last_hp_signature = None
+        self.last_diff = 0
+        self.hp_stall_started_at = None
+        self.restart_battle_attempts += 1

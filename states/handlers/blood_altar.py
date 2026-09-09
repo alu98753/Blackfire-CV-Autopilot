@@ -60,6 +60,64 @@ class BloodAltarHandler(BaseStateHandler):
             return dm.is_subflow_completed("blood_altar") is True
         return False
 
+    def _handle_all_done_exiting(
+        self, screen_img, rect, left, top, now, building_btn, exit_building_btn, cancel_btn, quit_btn
+    ):
+        """
+        ALL_DONE_EXITING 階段 (三層門禁設計)：
+        1. Scene Check：檢查是否已退回城鎮大門 (common/door.png / Blood_Altar.png)，核驗紅點消除與結算。
+        2. Overlay Dismiss Gate：檢查前景阻擋浮層 (common/cancel.png, common/quit.png)，
+           以 click_and_wait_until_gone 閉環確認徹底消失後才放行。
+        3. Scene Navigation Edge：唯有前景確認清空無浮層時，才允許點擊 exitfromhouse_and_to_town.png 返回城鎮。
+        """
+        # 1. 第一優先：城鎮大門/建築終態判定 (Scene Check)
+        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+        pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.65, quiet=True)
+        if pos_door or pos_building:
+            from utils.town_building_detector import detect_building_with_red_dot
+            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="blood_altar")
+            if check.found_building and check.has_red_dot:
+                logging.warning("⚠️ [血之祭壇] 退出後檢查：血之祭壇下方仍有驚嘆號紅點！判定領取未成功，不標記 completed_today，進入 180 秒冷卻退避。")
+                self.reset_state()
+                self.machine.need_blood_altar = False
+                dm = getattr(self.machine, "daily_manager", None)
+                if dm and hasattr(dm, "defer_subflow"):
+                    dm.defer_subflow("blood_altar", 180)
+                self.machine.pop_and_next_town_subflow()
+                return True
+            else:
+                logging.info("✅ [血之祭壇] 偵測到已處於城鎮畫面且已無紅點，完成領血與獻祭流程！")
+                self._record_completion()
+                self.last_action_time = now
+                return True
+
+        # 2. 第二優先：前景浮層清理門禁 (Overlay Dismiss Gate)
+        # 2.1 優先清理取消按鈕 (如獻祭子面板中的 common/cancel.png)
+        pos_cancel, _ = self.matcher.match(screen_img, cancel_btn, threshold=0.80)
+        if pos_cancel:
+            logging.info(f"🩸 [血之祭壇] 前景偵測到浮層取消按鈕 [{cancel_btn}]，啟動配對消失閉環...")
+            self.click_and_wait_until_gone(cancel_btn, left + pos_cancel[0], top + pos_cancel[1], rect, threshold=0.80)
+            self.last_action_time = now
+            return True
+
+        # 2.2 清理關閉按鈕 (common/quit.png)
+        pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.80)
+        if pos_quit:
+            logging.info(f"🩸 [血之祭壇] 前景偵測到浮層關閉按鈕 [{quit_btn}]，啟動配對消失閉環...")
+            self.click_and_wait_until_gone(quit_btn, left + pos_quit[0], top + pos_quit[1], rect, threshold=0.80)
+            self.last_action_time = now
+            return True
+
+        # 3. 第三優先：底層場景導航 (Scene Navigation Edge - 唯有前景已無阻擋浮層時才放行)
+        pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+        if pos_exit:
+            logging.info(f"🩸 [血之祭壇] 前景已確認清空，點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
+            self.mouse.click(left + pos_exit[0], top + pos_exit[1])
+            self.last_action_time = now
+            return True
+
+        return False
+
     def handle(self, screen_img=None, rect=None):
         if screen_img is None and self.capturer:
             rect = rect or self.capturer.get_window_rect()
@@ -92,6 +150,8 @@ class BloodAltarHandler(BaseStateHandler):
         sacrifice_btn = cfg.get("sacrifice_btn", "town_building/Blood_Altar/Sacrifice.png")
         alter_btn = cfg.get("alter_btn", "town_building/Blood_Altar/alter.png")
         exit_building_btn = cfg.get("exit_building_btn", "town_building/exitfromhouse_and_to_town.png")
+        cancel_btn = cfg.get("cancel_btn", "common/cancel.png")
+        quit_btn = cfg.get("quit_btn", "common/quit.png")
         sacrifice_settings = cfg.get("sacrifice_settings")
         if sacrifice_settings is None:
             from config import GAME_CONFIGS
@@ -298,30 +358,11 @@ class BloodAltarHandler(BaseStateHandler):
                 return True
 
         # =========================================================================
-        # 6. ALL_DONE_EXITING 階段：離開建築返回城鎮
+        # 6. ALL_DONE_EXITING 階段：委託 _handle_all_done_exiting 執行三層門禁
         # =========================================================================
         elif self.step_phase == "ALL_DONE_EXITING":
-            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-            pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.75)
-            if pos_door or pos_building:
-                logging.info("✅ [血之祭壇] 偵測到已處於城鎮畫面，完成領血與獻祭流程！")
-                self._record_completion()
-                self.last_action_time = now
-                return True
-
-            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
-            if pos_quit:
-                logging.info("🩸 [血之祭壇] 點擊關閉視窗 [common/quit.png]...")
-                self.mouse.click(left + pos_quit[0], top + pos_quit[1])
-                self.last_action_time = now
-                return True
-
-            pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
-            if pos_exit:
-                logging.info(f"🩸 [血之祭壇] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
-                self.mouse.click(left + pos_exit[0], top + pos_exit[1])
-                self._record_completion()
-                self.last_action_time = now
-                return True
+            return self._handle_all_done_exiting(
+                screen_img, rect, left, top, now, building_btn, exit_building_btn, cancel_btn, quit_btn
+            )
 
         return False

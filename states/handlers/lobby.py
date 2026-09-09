@@ -120,6 +120,12 @@ class LobbyHandler(BaseStateHandler):
                 self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
                 time.sleep(0.5)
             self.reset_state()
+            current_config = self.machine.config or {}
+            if current_config.get("auto_resume_dungeon_on_cd", False):
+                from copy import deepcopy
+                self.machine.dungeon_cooldown_return_config = deepcopy(current_config)
+            from config import GAME_CONFIGS
+            self.machine.config = GAME_CONFIGS["collect_only"].copy()
             self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
             return True
 

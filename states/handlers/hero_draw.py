@@ -65,26 +65,34 @@ class HeroDrawHandler(BaseStateHandler):
                 self.not_found_count = 0
                 return True
 
-            # 2.2 在城鎮尋找並點擊酒館建築 (Tavern.png)
+            # 2.2 在城鎮尋找並點擊酒館建築 (Tavern.png，前置紅點預檢)
             if os.path.exists(os.path.join("templates", building_btn)):
-                pos_tavern, conf_tavern = self.matcher.match(screen_img, building_btn, threshold=0.75)
-                if pos_tavern:
-                    logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築 [{building_btn}] [{conf_tavern:.4f}]，點擊進入...")
-                    self.machine.click_and_wait_until_gone(
-                        building_btn, left + pos_tavern[0], top + pos_tavern[1], rect,
-                        timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
-                    )
-                    self.last_action_time = now
-                    self.step_phase = "ENTERED_TAVERN"
-                    self.not_found_count = 0
-                    return True
+                from utils.town_building_detector import detect_building_with_red_dot
+                check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
+                if check.found_building:
+                    if not check.has_red_dot:
+                        logging.info("🍺 [抽英雄 INIT] 酒館下方無驚嘆號紅點，判定今日招募已完成！標記完成並彈出下一任務...")
+                        dm = getattr(self.machine, "daily_manager", None)
+                        if dm and hasattr(dm, "record_subflow_completed"):
+                            dm.record_subflow_completed("hero_draw")
+                        self.machine.pop_and_next_town_subflow()
+                        return True
+                    else:
+                        pos_tavern = check.building_pos
+                        conf_tavern = check.confidence_building
+                        logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築且帶有紅點 [{building_btn}] [{conf_tavern:.4f}]，點擊進入...")
+                        self.machine.click_and_wait_until_gone(
+                            building_btn, left + pos_tavern[0], top + pos_tavern[1], rect,
+                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                        )
+                        self.last_action_time = now
+                        self.step_phase = "ENTERED_TAVERN"
+                        self.not_found_count = 0
+                        return True
 
             self.not_found_count += 1
             if self.not_found_count >= 3:
-                logging.info("🍺 [抽英雄] 畫面上未發現酒館建築，標記完成並彈出下一個城鎮任務...")
-                dm = getattr(self.machine, "daily_manager", None)
-                if dm and hasattr(dm, "record_subflow_completed"):
-                    dm.record_subflow_completed("hero_draw")
+                logging.info("🍺 [抽英雄] 畫面上未發現酒館建築，彈出下一個城鎮任務（不標記完成）...")
                 self.machine.pop_and_next_town_subflow()
                 return True
 
@@ -217,12 +225,36 @@ class HeroDrawHandler(BaseStateHandler):
                     )
                     exit_clicked = True
 
-            dm = getattr(self.machine, "daily_manager", None)
-            if dm and hasattr(dm, "record_subflow_completed"):
-                dm.record_subflow_completed("hero_draw")
-
-            logging.info("🍺 [抽英雄] 招募流程完成，彈出下一個城鎮任務...")
-            self.machine.pop_and_next_town_subflow()
+            logging.info("🍺 [抽英雄] 退出酒館按鈕已觸發，轉入 VERIFY_EXIT 階段進行城鎮紅點驗證...")
+            self.step_phase = "VERIFY_EXIT"
+            self.not_found_count = 0
+            self.last_action_time = now
             return True
+
+        # 7. VERIFY_EXIT 階段：退出後在城鎮再次檢查酒館下方紅點 (有檢查到紅點 vs 沒檢查到紅點)
+        elif self.step_phase == "VERIFY_EXIT":
+            from utils.town_building_detector import detect_building_with_red_dot
+            check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
+            if check.found_building:
+                if check.has_red_dot:
+                    logging.warning("⚠️ [抽英雄 VERIFY_EXIT] 退出後檢查：酒館下方仍有驚嘆號紅點！判定招募未成功，不標記 completed_today，進入 180 秒冷卻退避。")
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm and hasattr(dm, "defer_subflow"):
+                        dm.defer_subflow("hero_draw", 180)
+                    self.machine.pop_and_next_town_subflow()
+                    return True
+                else:
+                    logging.info("🎉 [抽英雄 VERIFY_EXIT] 退出後檢查：酒館下方已無紅點！確認招募成功，標記 completed_today = True。")
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm and hasattr(dm, "record_subflow_completed"):
+                        dm.record_subflow_completed("hero_draw")
+                    self.machine.pop_and_next_town_subflow()
+                    return True
+            else:
+                self.not_found_count += 1
+                if self.not_found_count >= 3:
+                    logging.info("🍺 [抽英雄 VERIFY_EXIT] 退出後暫未看見酒館建築，安全推進下一個任務...")
+                    self.machine.pop_and_next_town_subflow()
+                    return True
 
         return False

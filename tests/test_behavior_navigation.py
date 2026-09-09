@@ -468,8 +468,8 @@ class TestBehaviorNavigation(unittest.TestCase):
 
         self.handler.handle(mock_img, self.rect)
 
-        # 驗證發射 mouse.drag 向下滾動 (手勢向上拖曳：960, 640 -> 960, 440)
-        self.mock_machine.mouse.drag.assert_called_once_with(960, 640, 960, 440)
+        # 驗證發射 mouse.drag 向下滾動 (手勢向上拖曳：960, 740 -> 960, 340)
+        self.mock_machine.mouse.drag.assert_called_once_with(960, 740, 960, 340)
 
     @patch("os.path.exists")
     def test_1_9_diamond_collection_closes_sub_modal_first_when_retreating(self, mock_exists):
@@ -592,8 +592,8 @@ class TestBehaviorNavigation(unittest.TestCase):
 
         self.handler.handle(mock_img, self.rect)
 
-        # 驗證自適應發射 mouse.drag 向上滾動 (手勢向下拖曳：960, 440 -> 960, 640)
-        self.mock_machine.mouse.drag.assert_called_once_with(960, 440, 960, 640)
+        # 驗證自適應發射 mouse.drag 向上滾動 (手勢向下拖曳：960, 340 -> 960, 740)
+        self.mock_machine.mouse.drag.assert_called_once_with(960, 340, 960, 740)
 
     @patch("os.path.exists")
     def test_1_13_sub_stage_scroll_exhausted_triggers_recovery(self, mock_exists):
@@ -629,6 +629,148 @@ class TestBehaviorNavigation(unittest.TestCase):
 
         self.mock_machine.request_relaunch.assert_called_once_with("sub_stage_scroll_exhausted")
         self.assertEqual(self.handler.sub_stage_scroll_attempts, 0)
+
+    @patch("os.path.exists")
+    def test_boss_skull_rejected_on_top_page_when_target_is_final(self, mock_exists):
+        """
+        [Regression Test: Final clicks Middle on Top Page fix]
+        Given: 使用者目標為 'final' (stages/boss_skull.png)，且當前在頂部頁面 (Page 1: first_stage at Y=269, boss_skull at Y=570, six_stage 假配對 at Y=422)
+        When: 執行 NavigationHandler.handle()
+        Then: 拒絕點擊 boss_skull (因為那是 Stage 5 middle boss)，並執行向上拖曳向下滾動至 Page 2 (960, 740 -> 960, 340)
+        """
+        import time
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        self.mock_machine.config = {
+            "name": "遺忘荒原",
+            "type": "stage",
+            "sub_stage": "final",
+            "navigation_path": ["common/door.png", "stages/boss_skull.png"]
+        }
+        setattr(self.mock_machine, "missing_time_stages/boss_skull.png", time.time() - 2.0)
+        self.mock_machine.last_stage_scroll_time = 0.0
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/stage_label.png":
+                return ((100, 200), 0.85)
+            if template == "stages/first_stage.png":
+                # 第一行頂部小關 (Row 1)
+                return ((100, 269), 0.98)
+            if template == "stages/six_stage.png":
+                # 即使 threshold 很低給了 false match，但在 Y=422 不屬於第一行頂部
+                return ((100, 422), 0.90)
+            if template == "stages/boss_skull.png":
+                # 這是 Page 1 的中間小關骷髏頭 (Stage 5)
+                return ((500, 570), 0.96)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        # 驗證沒有去點骷髏頭 (500, 570)
+        self.mock_machine.mouse.click.assert_not_called()
+        # 驗證執行滾動向下 (手勢向上拖曳：960, 740 -> 960, 340)
+        self.mock_machine.mouse.drag.assert_called_once_with(960, 740, 960, 340)
+
+    @patch("os.path.exists")
+    def test_boss_skull_accepted_on_bottom_page_when_target_is_final(self, mock_exists):
+        """
+        [SubStage Boss Skull Match Test]
+        Given: 使用者目標為 'final' (stages/boss_skull.png)，且當前在底部頁面 (Page 2: six_stage at Y=269, boss_skull at Y=570)
+        When: 執行 NavigationHandler.handle()
+        Then: 成功配對 boss_skull 並點擊其中心座標 (500, 570)
+        """
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        self.mock_machine.config = {
+            "name": "遺忘荒原",
+            "type": "stage",
+            "sub_stage": "final",
+            "navigation_path": ["common/door.png", "stages/boss_skull.png"]
+        }
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/stage_label.png":
+                return ((100, 200), 0.85)
+            if template == "stages/six_stage.png":
+                # Page 2 頂部第六關 (Row 1)
+                return ((100, 269), 0.98)
+            if template == "stages/boss_skull.png":
+                # Page 2 的 final boss 骷髏頭 (Stage 10)
+                return ((500, 570), 0.96)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, self.rect)
+
+        # 驗證成功點擊骷髏頭 (500, 570)
+        self.mock_machine.mouse.click.assert_called_once_with(500, 570)
+
+    @patch("os.path.exists")
+    def test_boss_skull_accepted_on_top_page_when_target_is_middle_with_scaled_window(self, mock_exists):
+        """
+        [SubStage Middle Skull Match Test on Non-1080p Window]
+        Given: 使用者目標為 'middle' (stages/boss_skull.png)，視窗高度為 793 (非 1080p)
+               畫面在頂部頁面 (first_stage at Y=269, false six_stage at Y=422, boss_skull at Y=570)
+        When: 執行 NavigationHandler.handle()
+        Then: 成功辨識第一頁頂部邊界，不誤判為底部頁面，並直接點擊中間小關骷髏頭 (570, 570)
+        """
+        mock_img = MagicMock()
+        mock_exists.return_value = True
+
+        scaled_rect = {"left": 0, "top": 0, "width": 1536, "height": 793}
+        self.mock_machine.config = {
+            "name": "沙漠遺跡",
+            "type": "stage",
+            "sub_stage": "middle",
+            "navigation_path": ["common/door.png", "stages/stage_label.png", "stages/boss_skull.png"]
+        }
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+
+        def fake_match(img, template, threshold=0.8, *args, **kwargs):
+            if template == "stages/stage_label.png":
+                return ((610, 370), 0.9331)
+            if template == "stages/first_stage.png":
+                # Page 1 頂部第一關 (Row 1, Y=269)
+                return ((604, 269), 0.9786)
+            if template == "stages/six_stage.png":
+                # 關卡III干擾項 (Row 3, Y=422)
+                return ((600, 422), 0.9082)
+            if template == "stages/boss_skull.png":
+                # Page 1 的 middle boss 骷髏頭 (Stage 5)
+                return ((570, 570), 0.9587)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        self.handler.handle(mock_img, scaled_rect)
+
+        # 驗證精確點擊骷髏頭 (570, 570)，未觸發拖曳滾動
+        self.mock_machine.mouse.click.assert_called_once_with(570, 570)
+        self.mock_machine.mouse.drag.assert_not_called()
+
+    def test_is_top_sub_stage_row_multi_resolution_boundary(self):
+        """驗證 _is_top_sub_stage_row 在 720p, 793p, 1080p 下均能穩健區分 Row 1 與 Row 3。"""
+        # 1. 793p: Row 1 (269) 為 True, Row 3 (422) 為 False
+        rect_793 = {"height": 793}
+        self.assertTrue(NavigationHandler._is_top_sub_stage_row((604, 269), rect_793))
+        self.assertFalse(NavigationHandler._is_top_sub_stage_row((600, 422), rect_793))
+
+        # 2. 1080p: Row 1 (~360) 為 True, Row 3 (~575) 為 False
+        rect_1080 = {"height": 1080}
+        self.assertTrue(NavigationHandler._is_top_sub_stage_row((604, 360), rect_1080))
+        self.assertFalse(NavigationHandler._is_top_sub_stage_row((600, 575), rect_1080))
+
+        # 3. 720p: Row 1 (~245) 為 True, Row 3 (~385) 為 False
+        rect_720 = {"height": 720}
+        self.assertTrue(NavigationHandler._is_top_sub_stage_row((604, 245), rect_720))
+        self.assertFalse(NavigationHandler._is_top_sub_stage_row((600, 385), rect_720))
 
 
 if __name__ == "__main__":

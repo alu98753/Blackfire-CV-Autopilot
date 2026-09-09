@@ -195,6 +195,22 @@ def record_unhandled_exception(machine: Any, exc: BaseException) -> dict[str, ob
     return event
 
 
+def record_manual_restart(machine: Any, reason_code: str = "manual_restart_hotkey") -> dict[str, object] | None:
+    """Persist deliberate child restart before exiting with a non-zero code for supervisor fast-resume."""
+    profile = getattr(machine, "restart_profile", None)
+    context = _machine_context(machine)
+    event = write_incident(
+        profile,
+        SCHEDULED_MAINTENANCE,
+        reason_code,
+        **context,
+        details={"initiated_by": "user_hotkey_ctrl_q"},
+    )
+    if event is not None:
+        write_child_termination(profile, event)
+    return event
+
+
 def record_recovery(machine: Any, reason_code: str, details: Mapping[str, Any] | None = None) -> dict[str, object] | None:
     profile = getattr(machine, "restart_profile", None)
     session_id = getattr(machine, "incident_session_id", None)

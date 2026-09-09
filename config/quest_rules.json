@@ -6,11 +6,11 @@
     "typo_groups": "常見 EasyOCR 繁體中文錯別字自動清洗/容錯對照表 (正確字為 Key -> 錯字陣列為 Value)",
     "dungeon_rules_info": {
       "note": "2. 地下城關鍵字規則字典 (語意標題/描述 -> 地下城索引 1~6, counting_policy)。註記：dungeon_rules 要記錄的是「完整的官方任務全名」或「特有地圖名」",
-      "dungeon_index_map": "1: 黏糊糊的石窟, 2: 幽影地穴, 3: 森林迷宮, 4: 神秘遺跡, 5: 幽暗監獄, 6: 冰雪洞窟"
+      "dungeon_index_map": "1: 黏糊糊的石窟, 2: 幽影地穴, 3: 森林迷宮, 4: 神秘遺跡, 5: 幽暗監獄, 6: 冰雪洞窟, 7: 獸人地堡"
     },
     "stage_rules_info": {
-      "note": "3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~6, 子關卡類型, counting_policy)。註記：stage_rules 要記錄的是「完整的官方任務全名」",
-      "stage_level_map": "Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷",
+      "note": "3. 普通關卡怪物關鍵字字典 (語意標題/描述 -> 關卡等級 1~7, 子關卡類型, counting_policy)。註記：stage_rules 要記錄的是「完整的官方任務全名」",
+      "stage_level_map": "Level 1: 蒼穹平原, Level 2: 荒蕪岩地, Level 3: 古樹森林, Level 4: 沙漠廢墟, Level 5: 幽暗沼澤, Level 6: 冰凍峽谷, Level 7: 遺忘荒地",
       "sub_stage_map": "first: 第一關, middle: 中間關, six: 第六關, final: 魔王關"
     }
   },
@@ -35,7 +35,8 @@
     "史萊姆王的毀滅",
     "破除森林的枷鎖",
     "消滅蛛王與蛛後",
-    "蛛後之死"
+    "蛛後之死",
+    "血角終結者"
   ],
   "ignored_quests": [
     "獵金之蟲",
@@ -195,6 +196,11 @@
       "pattern": "(冰雪洞窟)",
       "dungeon_index": 6,
       "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(血角終結者|獸人地堡)",
+      "dungeon_index": 7,
+      "policy": "banner_verify_only"
     }
   ],
   "stage_rules": [
@@ -218,7 +224,7 @@
     },
     {
       "pattern": "(清除蜥蜴|蜥蜴)",
-      "stage_level": 4,
+      "stage_level": 2,
       "sub_stage": "middle",
       "policy": "deterministic_count"
     },

@@ -9,6 +9,23 @@ class SubStageDirection(str, Enum):
     EXHAUSTED = "exhausted"    # 達到最大重試次數，進入恢復流程
 
 
+# 通用子關卡候選範本清單 (Single Source of Truth，保序供視覺掃描與候選比對使用)
+UNIVERSAL_CANDIDATE_TEMPLATES: tuple[str, ...] = (
+    "stages/first_stage.png",
+    "stages/six_stage.png",
+    "stages/boss_skull.png",
+)
+
+# 核心子關卡範本映射 (Single Source of Truth)
+# 鍵名為語意名稱 (first, middle, six, final)，值為通用範本路徑
+UNIVERSAL_SUB_STAGES: dict[str, str] = {
+    "first": "stages/first_stage.png",
+    "middle": "stages/boss_skull.png",
+    "six": "stages/six_stage.png",
+    "final": "stages/boss_skull.png",
+}
+
+
 class SubStageListNavigator:
     """
     普通關卡子關卡清單自適應導航器 (Sub-stage Adaptive Navigator)
@@ -25,18 +42,39 @@ class SubStageListNavigator:
     }
 
     # 所有已知子關卡關鍵字，用於從目前視野提取可見關卡
-    SUB_STAGE_KEYWORDS = ("first", "middle", "six", "final")
+    SUB_STAGE_KEYWORDS = tuple(UNIVERSAL_SUB_STAGES.keys())
+
+    UNIVERSAL_SUB_STAGES = UNIVERSAL_SUB_STAGES
+    UNIVERSAL_CANDIDATE_TEMPLATES = UNIVERSAL_CANDIDATE_TEMPLATES
 
     @classmethod
-    def get_stage_key(cls, template_name: str) -> str | None:
+    def is_sub_stage_target(cls, template_name: str) -> bool:
+        """
+        判斷給定範本名稱是否為子關卡目標 (first, middle, six, final 或 boss_skull)。
+        """
+        if not template_name:
+            return False
+        if template_name in cls.UNIVERSAL_CANDIDATE_TEMPLATES:
+            return True
+        lower = template_name.lower()
+        if "label" in lower:
+            return False
+        return any(kw in lower for kw in ("boss_skull", "skull", "final", "first", "middle", "six"))
+
+    @classmethod
+    def get_stage_key(cls, template_name: str, sub_stage_hint: str | None = None) -> str | None:
         """
         從範本名稱中解析所屬子關卡關鍵字 (first, middle, six, final)
         """
+        if sub_stage_hint and sub_stage_hint in cls.SUB_STAGE_KEYWORDS:
+            return sub_stage_hint
         if not template_name:
             return None
         lower_name = template_name.lower()
+        if "label" in lower_name:
+            return None
         for kw in cls.SUB_STAGE_KEYWORDS:
-            if kw in lower_name and "label" not in lower_name:
+            if kw in lower_name:
                 return kw
         return None
 
@@ -44,26 +82,9 @@ class SubStageListNavigator:
     def get_candidate_sub_stage_templates(cls, nav_path: list[str] | None = None) -> list[str]:
         """
         取得子關卡候選範本清單。
-        若 nav_path 中含有 level{X}，優先回傳該關卡對應的 first, middle, six, final 範本。
+        全關卡統一使用核心通用範本：first_stage, six_stage, boss_skull。
         """
-        level_id = None
-        if nav_path:
-            import re
-            for item in nav_path:
-                match = re.search(r"level(\d+)", item)
-                if match:
-                    level_id = match.group(1)
-                    break
-
-        candidates = ["stages/first_stage.png", "stages/six_stage.png"]
-        if level_id:
-            candidates.append(f"stages/level{level_id}_middle.png")
-            candidates.append(f"stages/level{level_id}_final.png")
-        else:
-            for lvl in range(1, 7):
-                candidates.append(f"stages/level{lvl}_middle.png")
-                candidates.append(f"stages/level{lvl}_final.png")
-        return candidates
+        return list(cls.UNIVERSAL_CANDIDATE_TEMPLATES)
 
     @classmethod
     def evaluate(
@@ -72,6 +93,7 @@ class SubStageListNavigator:
         target_template: str,
         attempts: int,
         max_attempts: int = 5,
+        sub_stage_hint: str | None = None,
     ) -> tuple[SubStageDirection, int]:
         """
         依據當前畫面可見子關卡與目標子關卡的相對垂直次序，計算滑動方向。
@@ -80,46 +102,61 @@ class SubStageListNavigator:
         :param target_template: 目標子關卡範本名稱 (例如: stages/first_stage.png)
         :param attempts: 目前已嘗試滑動次數
         :param max_attempts: 最大允許滑動次數
+        :param sub_stage_hint: 目標子關卡語意提示 (first, middle, six, final)
         :return: (SubStageDirection, next_attempts)
         """
-        target_key = cls.get_stage_key(target_template)
+        target_key = cls.get_stage_key(target_template, sub_stage_hint=sub_stage_hint)
         if not target_key:
             return SubStageDirection.NONE, attempts
 
-        # 1. 若目標子關卡已經出現在畫面上，無需滑動，重置計數
-        if any(cls.get_stage_key(t) == target_key for t in visible_templates):
-            return SubStageDirection.NONE, 0
-
-        # 2. 超過最大嘗試上限 ➔ 回傳 EXHAUSTED 進入恢復模式
-        normalized_attempts = max(0, int(attempts))
-        if normalized_attempts >= max_attempts:
-            return SubStageDirection.EXHAUSTED, normalized_attempts
-
-        target_rank = cls.SUB_STAGE_RANKS[target_key]
-
-        # 3. 解析畫面上目前能看見的所有其他子關卡
+        # 1. 解析畫面上能辨識的標準子關卡 (first, middle, six, final)
         visible_keys = [
             cls.get_stage_key(t)
             for t in visible_templates
             if cls.get_stage_key(t) is not None
         ]
+        has_skull = any("skull" in t.lower() for t in visible_templates)
+
+        # 2. 若畫面上已有明確的目標關鍵字 (例如 level6_final.png 匹配到 final)
+        if any(cls.get_stage_key(t) == target_key for t in visible_templates):
+            return SubStageDirection.NONE, 0
+
+        # 通用骷髏頭雙重判定：
+        if target_key == "middle" and has_skull and "first" in visible_keys:
+            return SubStageDirection.NONE, 0
+        if target_key == "final" and has_skull and "six" in visible_keys:
+            return SubStageDirection.NONE, 0
+
+        # 3. 超過最大嘗試上限 ➔ 回傳 EXHAUSTED 進入恢復模式
+        normalized_attempts = max(0, int(attempts))
+        if normalized_attempts >= max_attempts:
+            return SubStageDirection.EXHAUSTED, normalized_attempts
+
+        # 4. 跨頁雙向邊界引導：
+        # (A) 目標為頂部組 (first 或 middle)
+        if target_key in ("first", "middle"):
+            if "six" in visible_keys:
+                return SubStageDirection.SCROLL_UP, normalized_attempts + 1
+
+        # (B) 目標為底部組 (six 或 final)
+        if target_key in ("six", "final"):
+            if "first" in visible_keys:
+                return SubStageDirection.SCROLL_DOWN, normalized_attempts + 1
+
+        target_rank = cls.SUB_STAGE_RANKS[target_key]
 
         if visible_keys:
             # 取畫面上任一可見關卡的 rank 進行相對比較
             visible_rank = cls.SUB_STAGE_RANKS[visible_keys[0]]
             if target_rank > visible_rank:
-                # 目標在下方 ➔ 需向上拖曳手勢以向下拉動清單
                 return SubStageDirection.SCROLL_DOWN, normalized_attempts + 1
             else:
-                # 目標在上方 ➔ 需向下拖曳手勢以向上拉動清單
                 return SubStageDirection.SCROLL_UP, normalized_attempts + 1
 
-        # 4. 畫面未偵測到任何子關卡（可能處於過渡滾動或特殊位置）：依目標階層提供安全預設
+        # 5. 畫面未偵測到任何子關卡：依目標階層提供安全預設
         if target_rank == 0:
-            # 目標是最頂層的 first ➔ 預設向上拉回頂端
             return SubStageDirection.SCROLL_UP, normalized_attempts + 1
         else:
-            # 其他目標預設向下拉動
             return SubStageDirection.SCROLL_DOWN, normalized_attempts + 1
 
     @staticmethod

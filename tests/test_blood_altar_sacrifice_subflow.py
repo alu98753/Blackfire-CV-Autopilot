@@ -85,7 +85,43 @@ class TestBloodAltarSacrificeSubflow(unittest.TestCase):
         self.mock_matcher.match.side_effect = fake_match_step4
         handler.handle()
 
+        # Step 5: 退回城鎮，檢驗血之祭壇紅點已消除 (沒檢查到紅點 ➔ 記錄完成)
+        handler.last_action_time = 0.0
+
+        def fake_match_step5(img, name, **kw):
+            if name in ["common/door.png", "town_building/Blood_Altar/Blood_Altar.png"]:
+                return ((100, 200), 0.9)
+            # 紅點已消除
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match_step5
+        handler.handle()
+
         self.mock_daily_manager.record_subflow_completed.assert_called_once_with("blood_altar")
+
+    @patch('os.path.exists')
+    def test_blood_altar_exit_with_red_dot_still_present(self, mock_exists):
+        """測試：退出後在城鎮再次檢查紅點 (有檢查到紅點 ➔ 判定領血未成功，不標記 completed_today)"""
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["blood_altar"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BLOOD_ALTAR
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
+        handler.step_phase = "ALL_DONE_EXITING"
+        handler.last_action_time = 0.0
+
+        def fake_match(img, name, **kw):
+            if name in ["common/door.png", "town_building/Blood_Altar/Blood_Altar.png"]:
+                return ((100, 200), 0.9)
+            if name == "town_building/red_dot.png":
+                return ((100, 280), 0.85)  # 仍然有紅點！
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        handler.handle()
+
+        # 斷言：有紅點時絕不可標記完成！
+        self.mock_daily_manager.record_subflow_completed.assert_not_called()
 
 
 if __name__ == "__main__":

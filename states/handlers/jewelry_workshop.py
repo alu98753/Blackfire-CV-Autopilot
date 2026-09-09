@@ -23,6 +23,10 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.last_action_time = 0.0
         self.current_goods_idx = 0
         self.goods_scroll_state = "TOP"  # TOP, SCROLLED_DOWN
+        self.sell_scan_stage = "PAGE_TOP"  # PAGE_TOP, PAGE_BOTTOM, PAGE_TOP_FINAL
+        self.current_selling_item = None
+        self.sold_summary = {}  # {"gray": set(), "green": set(), ...}
+        self.summary_logged = False
         self.item_sub_step = "SEARCH"    # SEARCH, CLICKED_ITEM, CLICKED_SELL, CLICKED_MAX
         self.repeat_sell_count = 0
         self.pre_tidy_done = False
@@ -33,12 +37,18 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.bag_handler.matcher = self.matcher
         self.bag_handler.mouse = self.mouse
         self.bag_handler.capturer = self.capturer
+        from utils.merchant_gold_detector import MerchantGoldDetector
+        self.gold_detector = MerchantGoldDetector()
 
     def reset_state(self):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
         self.current_goods_idx = 0
         self.goods_scroll_state = "TOP"
+        self.sell_scan_stage = "PAGE_TOP"
+        self.current_selling_item = None
+        self.sold_summary = {}
+        self.summary_logged = False
         self.item_sub_step = "SEARCH"
         self.repeat_sell_count = 0
         self.pre_tidy_done = False
@@ -47,12 +57,36 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
     def _record_completion(self):
         """記錄 DailyManager 珠寶加工廠今日已完成，並累加該商店造訪次數"""
+        self._log_settlement_summary()
         dm = getattr(self.machine, "daily_manager", None)
         if dm:
             if hasattr(dm, "record_subflow_completed"):
                 dm.record_subflow_completed("jewelry_workshop")
             if hasattr(dm, "record_shop_visit") and self.current_shop_id:
                 dm.record_shop_visit(self.current_shop_id)
+
+    def _log_settlement_summary(self):
+        """輸出高語意之結構化商店出售結算日誌"""
+        if self.summary_logged:
+            return
+        self.summary_logged = True
+
+        if not self.sold_summary or not any(self.sold_summary.values()):
+            logging.info("💎 [商店出售結算] 經全頁面雙向掃描，背包無商品需要出售。")
+            return
+
+        total_types = sum(len(items) for items in self.sold_summary.values())
+
+        logging.info("💎 =================== [商店出售結算清單] ===================")
+        for q_key in ["gray", "green", "blue", "purple"]:
+            items = sorted(list(self.sold_summary.get(q_key, set())))
+            if items:
+                items_str = ", ".join(items)
+                logging.info(f"💎 品質 [{q_key}]：已賣出 [{items_str}] 皆已處置完畢")
+            else:
+                logging.info(f"💎 品質 [{q_key}]：(無符合或未持有)")
+        logging.info(f"💎 總計出售：{total_types} 種商品品項全數成功賣出！")
+        logging.info("💎 =========================================================")
 
     def _get_enabled_goods(self, goods_dir, goods_settings):
         """
@@ -98,6 +132,192 @@ class JewelryWorkshopHandler(BaseStateHandler):
             self.last_action_time = time.time()
             return False
         return True
+
+    def _find_visible_good(self, screen_img, enabled_goods, goods_dir, goods_threshold=0.75, max_repeat=5):
+        """
+        在當前畫面中尋找可售商品。
+        若有當前連續出售之品項且未達重複次數上限，優先檢查是否仍在畫面中；
+        若無或已售罄，依序在畫面中比對所有授權商品。
+        """
+        # 1. 優先檢查是否在同一商品多堆連續出售中
+        if self.current_selling_item and self.repeat_sell_count < max_repeat:
+            template_path = os.path.join(goods_dir, f"{self.current_selling_item}.png")
+            if os.path.exists(os.path.join("templates", template_path)):
+                pos, conf = self.matcher.match(screen_img, template_path, threshold=goods_threshold)
+                if pos:
+                    return self.current_selling_item, pos, conf
+
+        # 若原商品已售罄或達上限，重置計數
+        self.current_selling_item = None
+        self.repeat_sell_count = 0
+
+        # 2. 遍歷授權商品清單，尋找當前畫面中可見的第一個商品
+        for goods_name in enabled_goods:
+            template_path = os.path.join(goods_dir, f"{goods_name}.png")
+            if not os.path.exists(os.path.join("templates", template_path)):
+                continue
+            pos, conf = self.matcher.match(screen_img, template_path, threshold=goods_threshold)
+            if pos:
+                return goods_name, pos, conf
+
+        return None, None, 0.0
+
+    def _execute_sell_sequence(self, rect, pos_goods, sell_btn, sell_max_btn, screen_img=None):
+        """
+        執行點選商品 ➔ sell ➔ sell_max ➔ ok/confirm 彈窗消失閉環。
+        """
+        left = rect["left"] if rect else 0
+        top = rect["top"] if rect else 0
+
+        # 點擊選擇商品
+        self.mouse.click(left + pos_goods[0], top + pos_goods[1])
+        time.sleep(0.3)
+
+        latest_img = self.capturer.capture(rect) if (self.capturer and rect) else screen_img
+        if latest_img is None:
+            return
+
+        # 點擊 sell.png
+        pos_sell, _ = self.matcher.match(latest_img, sell_btn, threshold=0.75)
+        if pos_sell:
+            logging.debug(f"💎 [珠寶加工廠] 點擊出售按鈕 [{sell_btn}]...")
+            self.mouse.click(left + pos_sell[0], top + pos_sell[1])
+            time.sleep(0.2)
+            latest_img = self.capturer.capture(rect) if (self.capturer and rect) else latest_img
+
+        # 點擊 sell_max.png
+        if latest_img is not None:
+            pos_max, _ = self.matcher.match(latest_img, sell_max_btn, threshold=0.75)
+            if pos_max:
+                logging.debug(f"💎 [珠寶加工廠] 點擊 MAX 數量按鈕 [{sell_max_btn}]...")
+                self.mouse.click(left + pos_max[0], top + pos_max[1])
+                time.sleep(0.2)
+                latest_img = self.capturer.capture(rect) if (self.capturer and rect) else latest_img
+
+        # 點擊 confirm/ok (配對確認直到彈窗徹底消失)
+        for conf_btn in ["common/ok.png", "common/confirm.png"]:
+            if latest_img is not None and os.path.exists(os.path.join("templates", conf_btn)):
+                pos_c, _ = self.matcher.match(latest_img, conf_btn, threshold=0.75)
+                if pos_c:
+                    logging.debug(f"💎 [珠寶加工廠] 點擊確認出售按鈕 [{conf_btn}] (配對確認直到消失)...")
+                    self.click_and_wait_until_gone(conf_btn, left + pos_c[0], top + pos_c[1], rect, post_delay=0.3)
+                    time.sleep(0.3)
+                    latest_img = self.capturer.capture(rect) if (self.capturer and rect) else latest_img
+                    break
+
+        # 二次防呆：若出現第二層 confirm/ok 彈窗
+        for conf_btn in ["common/confirm.png", "common/ok.png"]:
+            if latest_img is not None and os.path.exists(os.path.join("templates", conf_btn)):
+                pos_c2, _ = self.matcher.match(latest_img, conf_btn, threshold=0.75)
+                if pos_c2:
+                    logging.debug(f"💎 [珠寶加工廠] 點擊二次確認按鈕 [{conf_btn}] (配對確認直到消失)...")
+                    self.click_and_wait_until_gone(conf_btn, left + pos_c2[0], top + pos_c2[1], rect, post_delay=0.3)
+                    time.sleep(0.3)
+
+        # 沉澱等待動畫結束
+        time.sleep(0.4)
+
+    def _scroll_sell_menu(self, rect, direction="down"):
+        """
+        平滑拖曳出售選單列表 (down: 向下滾動檢視底部, up: 向上滾動還原頂部)。
+        """
+        left = rect["left"] if rect else 0
+        top = rect["top"] if rect else 0
+        center_x = left + (rect["width"] // 2 if rect and "width" in rect else 960)
+        height = rect["height"] if rect and "height" in rect else 1080
+        drag_start_y = top + int(height * 0.75)
+        drag_end_y = top + int(height * 0.25)
+
+        if direction == "down":
+            self.mouse.drag(center_x, drag_start_y, center_x, drag_end_y, duration=0.5, inertia=False)
+        else:
+            self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
+        time.sleep(0.8)
+
+    def _handle_sell_menu(self, screen_img, rect, cfg, enabled_goods, goods_dir, sell_btn, sell_max_btn, now):
+        """
+        SELL_MENU_OPEN 階段：雙頁式畫面驅動 (Vision-Driven) 批次收割流轉。
+        PAGE_TOP ➔ PAGE_BOTTOM ➔ PAGE_TOP_FINAL ➔ ALL_DONE_EXITING
+        """
+        goods_threshold = cfg.get("goods_threshold", 0.75)
+        max_repeat = cfg.get("max_repeat_per_item", 5)
+
+        # 1. 嘗試在當前畫面比對可售商品
+        goods_name, pos_goods, conf_goods = self._find_visible_good(
+            screen_img, enabled_goods, goods_dir, goods_threshold, max_repeat
+        )
+
+        # 若當前畫面有商品，執行出售閉環
+        if pos_goods:
+            self.current_selling_item = goods_name
+            self.repeat_sell_count += 1
+            if goods_name in enabled_goods:
+                self.current_goods_idx = enabled_goods.index(goods_name)
+
+            parts = goods_name.replace("\\", "/").split("/")
+            quality = parts[0] if len(parts) >= 2 else "gray"
+            item_name = parts[1] if len(parts) >= 2 else parts[0]
+
+            if quality not in self.sold_summary:
+                self.sold_summary[quality] = set()
+            self.sold_summary[quality].add(item_name)
+
+            logging.info(f"💎 [商店出售] 賣出 [{quality}: {item_name}]")
+            self._execute_sell_sequence(rect, pos_goods, sell_btn, sell_max_btn, screen_img)
+            self.last_action_time = now
+            self.machine.notify_ui_progress()
+
+            # 出售後二次確認：若該品項已售罄或達上限，及時重置並推進索引
+            template_path = os.path.join(goods_dir, f"{goods_name}.png")
+            post_img = self.capturer.capture(rect) if (self.capturer and rect) else None
+            still_exists = False
+            if post_img is not None and os.path.exists(os.path.join("templates", template_path)):
+                pos_again, _ = self.matcher.match(post_img, template_path, threshold=goods_threshold)
+                if pos_again:
+                    still_exists = True
+
+            if not still_exists or self.repeat_sell_count >= max_repeat:
+                self.current_selling_item = None
+                self.repeat_sell_count = 0
+                if goods_name in enabled_goods:
+                    self.current_goods_idx = enabled_goods.index(goods_name) + 1
+            return
+
+        # 2. 當前畫面無任何可售商品，依階段切換
+        if self.sell_scan_stage == "PAGE_TOP":
+            logging.info("💎 [商店出售] 頂部畫面可售商品已全數清空，向下滑動檢視底部...")
+            self._scroll_sell_menu(rect, direction="down")
+            self.sell_scan_stage = "PAGE_BOTTOM"
+            self.goods_scroll_state = "SCROLLED_DOWN"
+            self.current_selling_item = None
+            self.repeat_sell_count = 0
+            self.last_action_time = now
+            self.machine.notify_ui_progress()
+            return
+
+        if self.sell_scan_stage == "PAGE_BOTTOM":
+            logging.info("💎 [商店出售] 底部畫面可售商品已全數清空，向上滑動還原頂部進行二次複查...")
+            self._scroll_sell_menu(rect, direction="up")
+            self.sell_scan_stage = "PAGE_TOP_FINAL"
+            self.goods_scroll_state = "TOP"
+            self.current_selling_item = None
+            self.repeat_sell_count = 0
+            self.last_action_time = now
+            self.machine.notify_ui_progress()
+            return
+
+        if self.sell_scan_stage == "PAGE_TOP_FINAL":
+            self._log_settlement_summary()
+            self.step_phase = "ALL_DONE_EXITING"
+            self.sell_scan_stage = "PAGE_TOP"
+            self.goods_scroll_state = "TOP"
+            self.current_selling_item = None
+            self.repeat_sell_count = 0
+            if enabled_goods:
+                self.current_goods_idx = len(enabled_goods)
+            self.last_action_time = now
+            self.machine.notify_ui_progress()
+            return
 
     def handle(self, screen_img=None, rect=None):
         if screen_img is None and self.capturer:
@@ -176,146 +396,12 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 return
 
         # =========================================================================
-        # 1. 出售選單開啟狀態 (SELL_MENU_OPEN) - Goods 滑動搜尋與出售閉環
+        # 1. 出售選單開啟狀態 (SELL_MENU_OPEN) - 雙頁畫面驅動批次出售閉環
         # =========================================================================
         if self.step_phase == "SELL_MENU_OPEN":
-            if self.current_goods_idx >= len(enabled_goods):
-                logging.info("💎 [珠寶加工廠] 所有指定商品清單比對與出售處理完畢！進入退出階段...")
-                # 若當前仍處於向下滾動狀態，平滑拖曳滾回頂端
-                if self.goods_scroll_state == "SCROLLED_DOWN":
-                    center_x = left + (rect["width"] // 2 if rect and "width" in rect else 960)
-                    height = rect["height"] if rect and "height" in rect else 1080
-                    drag_start_y = top + int(height * 0.75)
-                    drag_end_y = top + int(height * 0.25)
-                    self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
-                    self.goods_scroll_state = "TOP"
-                    time.sleep(0.3)
-                self.step_phase = "ALL_DONE_EXITING"
-                self.last_action_time = now
-                self.machine.notify_ui_progress()
-
-                return
-
-            goods_name = enabled_goods[self.current_goods_idx]
-            template_path = os.path.join(goods_dir, f"{goods_name}.png")
-
-            # 滾動與拖曳座標計算 (由畫面 60% 高度拖曳至 40% 高度)
-            center_x = left + (rect["width"] // 2 if rect and "width" in rect else 960)
-            height = rect["height"] if rect and "height" in rect else 1080
-            drag_start_y = top + int(height * 0.75)
-            drag_end_y = top + int(height * 0.25)
-
-            # 步驟 A: 嘗試在當前畫面匹配目標商品
-            pos_goods = None
-            conf_goods = 0.0
-            goods_threshold = cfg.get("goods_threshold", 0.75)
-            if os.path.exists(os.path.join("templates", template_path)):
-                pos_goods, conf_goods = self.matcher.match(screen_img, template_path, threshold=goods_threshold)
-
-            # 若未找到商品且當前在頂部，執行向下滑動 (向上拖曳 200 像素)
-            if not pos_goods and self.goods_scroll_state == "TOP":
-                logging.info(f"💎 [珠寶加工廠] 頂層未找到商品 [{goods_name}] (門檻: {goods_threshold})，執行平滑拖曳向下滑動再次搜尋...")
-                self.mouse.drag(center_x, drag_start_y, center_x, drag_end_y, duration=0.5, inertia=False)
-                self.goods_scroll_state = "SCROLLED_DOWN"
-                time.sleep(0.8)
-                self.last_action_time = now
-                self.machine.notify_ui_progress()
-
-                return
-
-            # 若向下滑動後仍未找到商品 ➔ 認定背包無此商品 ➔ 向上滑動還原高度 (向下拖曳 200 像素) ➔ 繼續下一個商品
-            if not pos_goods and self.goods_scroll_state == "SCROLLED_DOWN":
-                logging.info(f"💎 [珠寶加工廠] 滑動後仍未發現商品 [{goods_name}]，判定未持有。平滑拖曳還原原位高度並比對下一個商品...")
-                self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
-                self.goods_scroll_state = "TOP"
-                self.repeat_sell_count = 0
-                self.current_goods_idx += 1
-                time.sleep(0.8)
-                self.last_action_time = now
-                self.machine.notify_ui_progress()
-
-                return
-
-            # 若找到商品，執行出售流程
-            if pos_goods:
-                logging.info(f"💎 [珠寶加工廠] 發現可出售商品 [{goods_name}] (信心度: {conf_goods:.4f})，點擊選擇該商品...")
-                self.mouse.click(left + pos_goods[0], top + pos_goods[1])
-                time.sleep(0.3)
-
-                latest_img = self.capturer.capture(rect) if (self.capturer and rect) else screen_img
-                if latest_img is not None:
-                    # 點擊 sell.png
-                    pos_sell, _ = self.matcher.match(latest_img, sell_btn, threshold=0.75)
-                    if pos_sell:
-                        logging.info(f"💎 [珠寶加工廠] 點擊出售按鈕 [{sell_btn}]...")
-                        self.mouse.click(left + pos_sell[0], top + pos_sell[1])
-                        time.sleep(0.2)
-                        latest_img = self.capturer.capture(rect) if (self.capturer and rect) else latest_img
-
-                    # 點擊 sell_max.png
-                    pos_max, _ = self.matcher.match(latest_img, sell_max_btn, threshold=0.75)
-                    if pos_max:
-                        logging.info(f"💎 [珠寶加工廠] 點擊 MAX 數量按鈕 [{sell_max_btn}]...")
-                        self.mouse.click(left + pos_max[0], top + pos_max[1])
-                        time.sleep(0.2)
-                        latest_img = self.capturer.capture(rect) if (self.capturer and rect) else latest_img
-
-                    # 點擊 confirm/ok (配對確認直到彈窗徹底消失)
-                    for conf_btn in ["common/ok.png", "common/confirm.png"]:
-                        if os.path.exists(os.path.join("templates", conf_btn)):
-                            pos_c, _ = self.matcher.match(latest_img, conf_btn, threshold=0.75)
-                            if pos_c:
-                                logging.info(f"💎 [珠寶加工廠] 點擊確認出售按鈕 [{conf_btn}] (配對確認直到消失)...")
-                                self.click_and_wait_until_gone(conf_btn, left + pos_c[0], top + pos_c[1], rect, post_delay=0.3)
-                                time.sleep(0.3)
-                                latest_img = self.capturer.capture(rect) if (self.capturer and rect) else latest_img
-                                break
-
-                    # 二次防呆：若出現第二層 confirm/ok 彈窗 (如 ok 點完後又彈 confirm)，連續清理
-                    for conf_btn in ["common/confirm.png", "common/ok.png"]:
-                        if latest_img is not None and os.path.exists(os.path.join("templates", conf_btn)):
-                            pos_c2, _ = self.matcher.match(latest_img, conf_btn, threshold=0.75)
-                            if pos_c2:
-                                logging.info(f"💎 [珠寶加工廠] 點擊二次確認按鈕 [{conf_btn}] (配對確認直到消失)...")
-                                self.click_and_wait_until_gone(conf_btn, left + pos_c2[0], top + pos_c2[1], rect, post_delay=0.3)
-                                time.sleep(0.3)
-
-                # 賣完一次後，確保彈窗與動畫已完全消失沉澱，再重新擷取畫面二次比對
-                time.sleep(0.4)
-                self.repeat_sell_count += 1
-                max_repeat = cfg.get("max_repeat_per_item", 5)
-
-                post_sell_img = self.capturer.capture(rect) if (self.capturer and rect) else None
-                still_has_goods = False
-                if post_sell_img is not None and os.path.exists(os.path.join("templates", template_path)):
-                    pos_goods_again, conf_again = self.matcher.match(post_sell_img, template_path, threshold=goods_threshold)
-                    if pos_goods_again:
-                        still_has_goods = True
-
-                if still_has_goods and self.repeat_sell_count < max_repeat:
-                    logging.info(f"💎 [珠寶加工廠] 同一商品 [{goods_name}] 畫面中仍有可出售項目 (第 {self.repeat_sell_count} 次出售)，繼續對該商品執行出售...")
-                    self.last_action_time = now
-                    self.machine.notify_ui_progress()
-                    return
-
-
-                # 若畫面不再有該商品，或達到最大重複次數 (max_repeat)
-                if still_has_goods and self.repeat_sell_count >= max_repeat:
-                    logging.warning(f"💎 [珠寶加工廠] 商品 [{goods_name}] 已連續出售 {self.repeat_sell_count} 次，達到安全上限 {max_repeat} 次，進行換項...")
-
-                # 若有向下滾動，賣完後向上還原滾動高度
-                if self.goods_scroll_state == "SCROLLED_DOWN":
-                    self.mouse.drag(center_x, drag_end_y, center_x, drag_start_y, duration=0.5, inertia=False)
-                    self.goods_scroll_state = "TOP"
-                    time.sleep(0.2)
-
-                self.repeat_sell_count = 0
-                self.current_goods_idx += 1
-                self.last_action_time = now
-                self.machine.notify_ui_progress()
-
-                return
-
+            self._handle_sell_menu(
+                screen_img, rect, cfg, enabled_goods, goods_dir, sell_btn, sell_max_btn, now
+            )
             return
 
         # =========================================================================
@@ -347,6 +433,16 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
             pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
             if pos_exit:
+                # 離店前更新商人扣減後的最新金幣
+                ocr_reader = getattr(self.machine, "get_ocr_reader", lambda: None)
+                final_gold = self.gold_detector.detect_merchant_gold(
+                    screen_img, ocr_reader=ocr_reader, debug_tag=f"{self.current_shop_id}_exit"
+                )
+                if final_gold is not None:
+                    dm = getattr(self.machine, "daily_manager", None)
+                    if dm and hasattr(dm, "record_shop_gold"):
+                        dm.record_shop_gold(self.current_shop_id, final_gold)
+
                 logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
                 self._record_completion()
@@ -378,6 +474,16 @@ class JewelryWorkshopHandler(BaseStateHandler):
         pos_sell_out, conf_so = self.matcher.match(screen_img, sell_out_btn, threshold=0.80)
         pos_exit_init, conf_exit = self.matcher.match(screen_img, exit_building_btn, threshold=0.80)
         if pos_sell_out and pos_exit_init:
+            # 進入房間時先辨識商人頭頂看板金幣
+            ocr_reader = getattr(self.machine, "get_ocr_reader", lambda: None)
+            init_gold = self.gold_detector.detect_merchant_gold(
+                screen_img, ocr_reader=ocr_reader, debug_tag=f"{self.current_shop_id}_init"
+            )
+            if init_gold is not None:
+                dm = getattr(self.machine, "daily_manager", None)
+                if dm and hasattr(dm, "record_shop_gold"):
+                    dm.record_shop_gold(self.current_shop_id, init_gold)
+
             logging.info(f"💎 [珠寶加工廠] 辨識到已在建築物內部 (sell_out.png 可見)，點擊開啟出售選單...")
             self.mouse.click(left + pos_sell_out[0], top + pos_sell_out[1])
             self.step_phase = "SELL_MENU_OPEN"
@@ -415,30 +521,45 @@ class JewelryWorkshopHandler(BaseStateHandler):
                         self.last_action_time = now
                         return
 
-                # 依造訪次數由少至多排序候選商店，並於畫面中尋找可見建築
+                # 依商人持有金幣由多至少貪婪排序 (未探勘者優先)，並於畫面中尋找可見建築
                 dm = getattr(self.machine, "daily_manager", None)
-                visit_counts = dm.get_shop_visit_counts() if (dm and hasattr(dm, "get_shop_visit_counts")) else {}
-                from utils.shop_selector import sort_shops_by_visit_count
-                sorted_shops = sort_shops_by_visit_count(shops_cfg, visit_counts)
+                gold_balances = dm.get_shop_gold_balances() if (dm and hasattr(dm, "get_shop_gold_balances")) else {}
+                from utils.shop_selector import sort_shops_by_gold_balance
+                sorted_shops = sort_shops_by_gold_balance(shops_cfg, gold_balances)
 
                 matched_shop = None
                 matched_pos = None
                 matched_conf = 0.0
 
+                screen_w = screen_img.shape[1] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else 1920
+                candidate_scales = (
+                    self.matcher.compute_candidate_scales(screen_w)
+                    if hasattr(self.matcher, "compute_candidate_scales")
+                    else None
+                )
+
                 for s in sorted_shops:
                     tmpl = s.get("template", building_btn)
                     if not tmpl:
                         continue
-                    pos_b, conf_b = self.matcher.match(screen_img, tmpl, threshold=0.65, brightness_threshold=0.70, quiet=True)
+                    pos_b, conf_b = self.matcher.match(
+                        screen_img, tmpl, threshold=0.65, brightness_threshold=0.0,
+                        scales=candidate_scales, quiet=True
+                    )
                     if pos_b:
                         matched_shop = s
                         matched_pos = pos_b
                         matched_conf = conf_b
                         break
+                    else:
+                        logging.debug(f"💎 [城鎮商店] 候選商店 [{s.get('name')}] 未達標 (信心度: {conf_b:.4f} < 0.65)")
 
                 # 相容性 fallback：若未比對到任何輪換商店，比對預設 building_btn
                 if not matched_shop:
-                    pos_b, conf_b = self.matcher.match(screen_img, building_btn, threshold=0.65, brightness_threshold=0.70, quiet=True)
+                    pos_b, conf_b = self.matcher.match(
+                        screen_img, building_btn, threshold=0.65, brightness_threshold=0.0,
+                        scales=candidate_scales, quiet=True
+                    )
                     if pos_b:
                         matched_shop = {"id": "jewelry_workshop", "name": "珠寶加工廠", "template": building_btn}
                         matched_pos = pos_b
@@ -448,8 +569,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                     self.current_shop_id = matched_shop.get("id", "jewelry_workshop")
                     self.current_building_btn = matched_shop.get("template", building_btn)
                     shop_name = matched_shop.get("name", self.current_shop_id)
-                    cur_visits = visit_counts.get(self.current_shop_id, 0)
-                    logging.info(f"💎 [城鎮商店] 於城鎮發現目標商店 [{shop_name}] ({self.current_building_btn}) (歷史訪問: {cur_visits}次, 信心度: {matched_conf:.4f})，點擊進入...")
+                    cur_gold = gold_balances.get(self.current_shop_id, "未探勘")
+                    logging.info(f"💎 [城鎮商店] 於城鎮發現目標商店 [{shop_name}] ({self.current_building_btn}) (記錄金幣: {cur_gold}, 信心度: {matched_conf:.4f})，點擊進入...")
                     self.mouse.click(left + matched_pos[0], top + matched_pos[1])
                     self.step_phase = "ENTERED_BUILDING"
                     self.last_action_time = now

@@ -19,12 +19,12 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
     is_dungeon_enabled = config.get("enable_dungeon", True)
     configured_index = config.get("tier4_dungeon_index", 6)
     if allow_disable and not is_dungeon_enabled:
-        default_dungeon_choice = "8"
+        default_dungeon_choice = "9"
     elif config.get("greedy_dungeon", False):
-        default_dungeon_choice = "7"
+        default_dungeon_choice = "8"
     else:
         default_dungeon_choice = str(configured_index)
-    valid_choices = {"1", "2", "3", "4", "5", "6", "7", "8"} if allow_disable else {"1", "2", "3", "4", "5", "6", "7"}
+    valid_choices = {"1", "2", "3", "4", "5", "6", "7", "8", "9"} if allow_disable else {"1", "2", "3", "4", "5", "6", "7", "8"}
     if default_dungeon_choice not in valid_choices:
         default_dungeon_choice = "6"
 
@@ -35,13 +35,14 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
     print(f" 4) 神秘遺跡 (Ruins_entry)")
     print(f" 5) 幽暗監獄 (dark_prison) {'- 當前預設' if default_dungeon_choice == '5' else ''}")
     print(f" 6) 冰雪洞窟 (Ice_entry) {'- 當前預設' if default_dungeon_choice == '6' else ''}")
-    print(f" 7) 自動貪婪挑選 (Greedy Select) {'- 當前預設' if default_dungeon_choice == '7' else ''}")
+    print(f" 7) 獸人地堡 (orc_bunker) {'- 當前預設' if default_dungeon_choice == '7' else ''}")
+    print(f" 8) 自動貪婪挑選 (Greedy Select) {'- 當前預設' if default_dungeon_choice == '8' else ''}")
     if allow_disable:
-        print(f" 8) 不打地下城 (停用) {'- 當前預設' if default_dungeon_choice == '8' else ''}")
-    prompt_range = "[1-8]" if allow_disable else "[1-7]"
+        print(f" 9) 不打地下城 (停用) {'- 當前預設' if default_dungeon_choice == '9' else ''}")
+    prompt_range = "[1-9]" if allow_disable else "[1-8]"
     choice = prompt_choice(f"請輸入地下城數字 {prompt_range} (直接 Enter 鍵保持為 {default_dungeon_choice}): ", default_dungeon_choice)
 
-    if allow_disable and choice == "8":
+    if allow_disable and choice == "9":
         config["enable_dungeon"] = False
         if original_settings.get("enable_dungeon", True) is not False:
             persist_mode_updates(config, {"enable_dungeon": False})
@@ -58,7 +59,8 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
         "4": ("dungeons/Ruins_entry.png", "神秘遺跡", False),
         "5": ("dungeons/dark_prison.png", "幽暗監獄", False),
         "6": ("dungeons/Ice_entry.png", "冰雪洞窟", False),
-        "7": (None, "自動貪婪挑選", True)
+        "7": ("dungeons/orc_bunker.png", "獸人地堡", False),
+        "8": (None, "自動貪婪挑選", True)
     }
     if choice not in dungeon_map:
         print(f"[!] 無效選擇 '{choice}'，已自動使用預設的第六關 [冰雪洞窟]...")
@@ -80,21 +82,22 @@ def setup_dungeon_config(config, args, interactive=True, allow_disable=False):
         print(" 4) 神秘遺跡 (Ruins)")
         print(" 5) 幽暗監獄 (Prison)")
         print(" 6) 冰雪洞窟 (Ice)")
-        configured_allowed = config.get("greedy_allowed_indices", [1, 2, 3, 4, 5, 6])
-        default_allowed = "".join(str(index) for index in configured_allowed if 1 <= index <= 6)
+        print(" 7) 獸人地堡 (Orc)")
+        configured_allowed = config.get("greedy_allowed_indices", [1, 2, 3, 4, 5, 6, 7])
+        default_allowed = "".join(str(index) for index in configured_allowed if 1 <= index <= 7)
         if not default_allowed:
-            default_allowed = "123456"
+            default_allowed = "1234567"
         allowed_input = prompt_choice(
-            f"👉 請輸入 [1-6] (直接 Enter 保留 {default_allowed}): ", default_allowed
+            f"👉 請輸入 [1-7] (直接 Enter 保留 {default_allowed}): ", default_allowed
         )
         allowed_indices = []
         for char in allowed_input:
-            if char in "123456":
+            if char in "1234567":
                 idx = int(char)
                 if idx not in allowed_indices:
                     allowed_indices.append(idx)
         if not allowed_indices:
-            allowed_indices = [1, 2, 3, 4, 5, 6]
+            allowed_indices = [1, 2, 3, 4, 5, 6, 7]
             
         config["greedy_allowed_indices"] = allowed_indices
         allowed_names = [dungeon_map[str(idx)][1] for idx in allowed_indices]

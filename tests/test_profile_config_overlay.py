@@ -225,7 +225,7 @@ sub_stage_threshold = 0.94
             set_active_profile("sandbox")
             self.assertEqual(get_template_threshold("stages/six_stage.png"), 0.96)
             self.assertEqual(get_template_threshold("stages/first_stage.png"), 0.92)
-            self.assertEqual(get_template_threshold("stages/level6_final.png"), 0.94)
+            self.assertEqual(get_template_threshold("stages/boss_skull.png"), 0.94)
 
             # 切回 native
             set_active_profile("native")
