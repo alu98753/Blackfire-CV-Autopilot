@@ -213,6 +213,14 @@ def get_battle_max_duration_seconds() -> float:
     return float(GLOBAL_SETTINGS.get("battle_max_duration_sec", 900.0))
 
 
+def get_battle_stall_settings() -> dict:
+    """Return TOML-configured battle stall detection limits and max retry count."""
+    return {
+        "timeout_seconds": float(GLOBAL_SETTINGS.get("battle_stall_timeout_sec", 30.0)),
+        "max_retries": int(GLOBAL_SETTINGS.get("battle_stall_max_retries", 2)),
+    }
+
+
 def get_navigation_progress_settings() -> dict:
     """Return required TOML-only action timeout and collection backoff settings."""
     settings = get_defaults_config()["navigation"]

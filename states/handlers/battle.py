@@ -1,9 +1,10 @@
 import time
 import os
 import logging
-from config import get_battle_max_duration_seconds
+from config import get_battle_max_duration_seconds, get_battle_stall_settings
 from states.handlers.base import BaseStateHandler
 from utils.dungeon_catalog import DungeonCatalog
+from utils.battle_stall_detector import extract_health_bar_signature
 
 class BattleHandler(BaseStateHandler):
     def __init__(self, machine):
@@ -86,6 +87,30 @@ class BattleHandler(BaseStateHandler):
             )
             self.machine.request_relaunch("battle_max_duration_exceeded")
             return
+
+        # 1.1 戰鬥血條靜止卡死檢測 (Health bar stall recovery check)
+        stall_cfg = get_battle_stall_settings()
+        hp_sig = extract_health_bar_signature(screen_img)
+        now = self.machine.clock.monotonic() if getattr(self.machine, "clock", None) else time.monotonic()
+        if self.machine.battle_session.is_hp_stalled(hp_sig, now, timeout_seconds=stall_cfg["timeout_seconds"]):
+            max_retries = stall_cfg["max_retries"]
+            curr_attempts = getattr(self.machine.battle_session, "restart_battle_attempts", 0)
+            if curr_attempts < max_retries:
+                logging.warning(
+                    "🚨 [戰鬥卡死自癒] 偵測到血條連續 %.1f 秒無任何變化！執行原地「重新開始戰鬥」子流程 (第 %d/%d 次)...",
+                    stall_cfg["timeout_seconds"],
+                    curr_attempts + 1,
+                    max_retries,
+                )
+                self._run_restart_battle_subflow(rect)
+                return
+            else:
+                logging.error(
+                    "🚨 [戰鬥卡死自癒超限] 單場戰鬥已連續重新開始 %d 次依然卡死，升級為重啟遊戲！",
+                    curr_attempts,
+                )
+                self.machine.request_relaunch("battle_stall_max_retries_exceeded")
+                return
 
         # 2. 檢查是否需要啟動自動戰鬥 (common/auto.png)
         if os.path.exists(os.path.join("templates", "common/auto.png")) and (time.time() - self.machine.last_auto_click_time > 0.5):
@@ -427,6 +452,43 @@ class BattleHandler(BaseStateHandler):
                 "👉 [領域強敵撤退] 遇強敵已主動放棄戰鬥，不計入單場戰敗次數，切換至 NAVIGATING 重新進場探索。"
             )
             self.machine.transition_to(self.machine.STATE_NAVIGATING)
+        return True
+
+    def _run_restart_battle_subflow(self, rect) -> bool:
+        """
+        執行戰鬥卡死自癒：原地「重新開始戰鬥」具體步驟：
+        1. 點擊 battle/setting.png (等待選單彈出)
+        2. 點擊 battle/restart_battle.png
+        3. 重置 BattleSession 狀態並準備下一輪由 auto.png 重新啟用
+        """
+        self.notify_ui_progress()
+
+        # 1. 點擊設定按鈕
+        setting_temp = "battle/setting.png"
+        if os.path.exists(os.path.join("templates", setting_temp)):
+            cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else None
+            if cap_img is not None:
+                pos_s, _ = self.matcher.match(cap_img, setting_temp, threshold=0.75)
+                if pos_s:
+                    self.mouse.click(rect["left"] + pos_s[0], rect["top"] + pos_s[1])
+                    time.sleep(0.3)
+
+        # 2. 點擊「重新開始」按鈕
+        restart_temp = "battle/restart_battle.png"
+        if os.path.exists(os.path.join("templates", restart_temp)):
+            cap_img = self.machine.capturer.capture(rect) if self.machine.capturer else None
+            if cap_img is not None:
+                pos_r, _ = self.matcher.match(cap_img, restart_temp, threshold=0.80)
+                if pos_r:
+                    self.mouse.click(rect["left"] + pos_r[0], rect["top"] + pos_r[1])
+                    time.sleep(0.5)
+
+        # 3. 狀態重置與時鐘重置
+        now = self.machine.clock.monotonic() if getattr(self.machine, "clock", None) else time.monotonic()
+        self.machine.battle_session.reset_after_restart(now)
+        self.non_battle_feature_start_time = None
+        self.machine.last_auto_click_time = 0.0
+        logging.info("🔄 [戰鬥卡死自癒] 已點擊「重新開始」，重置單場戰鬥計時器，等待遊戲重整開局！")
         return True
 
 
