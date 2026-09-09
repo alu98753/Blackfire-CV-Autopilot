@@ -128,7 +128,19 @@
   - 視窗控制代碼 (hwnd) 查詢統一使用 [`utils/window.py`](../utils/window.py) 的 `WindowHandle` 類別，禁止各模組自行實作。
   - 跨模組共用的常數（視窗標題、基準解析度、安全區座標）統一定義於 [`config.py`](../config.py)。
 
-### 10. 提交前自審清單 (Pre-Commit Self-Review) ✅
+### 10. 日誌分級與終端潔淨規範 (Logging Hygiene & Level Guidelines) 📜
+- **門檻過濾原則**：系統預設 `logging.INFO`，僅輸出 `INFO`、`WARNING`、`ERROR`。
+- **高頻遙測入 `DEBUG`**：
+  - 凡每幀執行、迴圈內部（頻率高於 1 秒一次）之數據（模板比對最高相似度、血條紅色像素數量、像素差異 diff、InFlightAction 等待後置條件確認、DetectorRegistry 指標、OCR 邊界計算），**一律使用 `logging.debug()`**。
+  - 🚫 **嚴禁在 `INFO` 輸出每秒重複日誌造成終端洗屏**。
+- **關鍵決策與狀態轉移入 `INFO`**：
+  - 狀態機狀態跳轉（`STATE_NAVIGATING -> STATE_BATTLE`）、點擊後置條件驗證確認（Postcondition satisfied）、重大業務完成（日常子流程完成、任務獎勵領取、Intent 完成）、定時器事件（08:05 重置、定時領體力/鑽石）使用 `logging.info()`。
+- **可自癒異常與警示入 `WARNING` (有界復原階梯 1~5)**：
+  - 遮擋彈窗攔截點擊（Dismiss Overlay）、連續截圖失敗重試中、找不到視窗重試、背包已滿、門票耗盡、體力退避暫緩工作（Intent Defer）、戰鬥血條卡死觸發**原地重新開始**（<= 2 次）等自癒/保護性退避，使用 `logging.warning()`。
+- **嚴重故障與不可逆中斷入 `ERROR` (有界復原階梯 6~7)**：
+  - 戰鬥卡死原地重試超限升級殺進程重開（`ProcessPort.relaunch`）、連續截圖失敗超限重開、戰鬥超過 Hard Timeout、OCR 模型檔案損毀、未捕獲例外拋出，使用 `logging.error()`。
+
+### 11. 提交前自審清單 (Pre-Commit Self-Review) ✅
 > [!IMPORTANT]
 > AI 在提交任何新增或修改的程式碼前，必須對照以下清單自審：
 
@@ -138,3 +150,4 @@
 4. ☐ 是否有底層模組直接引用上層物件？→ 改為 callback 注入
 5. ☐ 是否有重構後遺留的無人呼叫方法？→ 當次刪除
 6. ☐ 座標計算是否統一使用 Client 座標系？→ 禁用 GetWindowRect
+7. ☐ 日誌層級審查：高頻比對/像素差異/每幀運算是否使用 `logging.debug`？（嚴禁在 `INFO` 輸出高頻重複日誌）

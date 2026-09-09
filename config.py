@@ -221,6 +221,25 @@ def get_battle_stall_settings() -> dict:
     }
 
 
+def get_log_level() -> str:
+    """Return the active profile's configured log level, falling back to global TOML defaults."""
+    level = GLOBAL_SETTINGS.get("log_level", "INFO")
+    if isinstance(level, str) and level.strip():
+        return level.strip().upper()
+    return "INFO"
+
+
+def apply_log_level(level_name: str | None = None) -> str:
+    """Apply the specified (or profile configured) log level to the root logger and its handlers."""
+    target_level_str = (level_name or get_log_level()).strip().upper()
+    numeric_level = getattr(logging, target_level_str, logging.INFO)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(numeric_level)
+    for handler in root_logger.handlers:
+        handler.setLevel(numeric_level)
+    return target_level_str
+
+
 def get_navigation_progress_settings() -> dict:
     """Return required TOML-only action timeout and collection backoff settings."""
     settings = get_defaults_config()["navigation"]

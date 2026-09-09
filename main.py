@@ -15,6 +15,7 @@ from utils.game_process import is_window_hung
 from utils.steam_launcher import SteamGameLauncher
 from utils.window import select_game_window
 from cli.arguments import parse_arguments
+from cli.log_setup import setup_log_level_config
 from cli.mode_setup import setup_equipment_config, setup_mode_config
 from cli.profiles import resolve_profile_name
 from runtime.bootstrap import init_state_machine_system
@@ -47,6 +48,9 @@ def main():
     from config import set_active_profile
     set_active_profile(profile_name)
     clear_child_termination(profile_name)
+
+    # 套用日誌等級設定 (支援 Profile 偏好記憶與互動選單)
+    setup_log_level_config(args, is_resume=is_resume)
 
     # 2. 處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)

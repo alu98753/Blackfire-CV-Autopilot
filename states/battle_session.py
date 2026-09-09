@@ -4,6 +4,7 @@ The game state machine owns this object.  Handlers may identify a scene change,
 but must not keep their own copy of the battle timeout clock.
 """
 
+import logging
 from dataclasses import dataclass
 
 
@@ -14,6 +15,7 @@ class BattleSession:
     started_at: float | None = None
     entry_state: str | None = None
     last_hp_signature: int | None = None
+    last_diff: int = 0
     hp_stall_started_at: float | None = None
     restart_battle_attempts: int = 0
 
@@ -25,6 +27,7 @@ class BattleSession:
         self.started_at = now
         self.entry_state = entry_state
         self.last_hp_signature = None
+        self.last_diff = 0
         self.hp_stall_started_at = None
         self.restart_battle_attempts = 0
 
@@ -32,6 +35,7 @@ class BattleSession:
         self.started_at = None
         self.entry_state = None
         self.last_hp_signature = None
+        self.last_diff = 0
         self.hp_stall_started_at = None
         self.restart_battle_attempts = 0
 
@@ -60,11 +64,23 @@ class BattleSession:
 
         if self.last_hp_signature is None:
             self.last_hp_signature = current_signature
+            self.last_diff = 0
             self.hp_stall_started_at = now
             return False
 
         # If pixel difference exceeds tolerance (e.g. at least 25 pixels change), progress is made
         diff = abs(current_signature - self.last_hp_signature)
+        self.last_diff = diff
+        stalled_duration = max(0.0, now - self.hp_stall_started_at) if self.hp_stall_started_at is not None else 0.0
+        logging.debug(
+            "[BattleStall] HP sig: %d (prev: %s, diff: %d, stalled: %.1fs/%.1fs)",
+            current_signature,
+            str(self.last_hp_signature),
+            diff,
+            stalled_duration,
+            timeout_seconds,
+        )
+
         if diff >= 25:
             self.last_hp_signature = current_signature
             self.hp_stall_started_at = now
@@ -75,12 +91,12 @@ class BattleSession:
             self.hp_stall_started_at = now
             return False
 
-        stalled_duration = max(0.0, now - self.hp_stall_started_at)
         return stalled_duration >= timeout_seconds
 
     def reset_after_restart(self, now: float) -> None:
         """Reset battle clock and health stall tracking after in-battle restart."""
         self.started_at = now
         self.last_hp_signature = None
+        self.last_diff = 0
         self.hp_stall_started_at = None
         self.restart_battle_attempts += 1

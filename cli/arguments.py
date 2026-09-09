@@ -40,5 +40,7 @@ def parse_arguments():
         "--restart-game", action="store_true", default=False,
         help="強制關閉現有遊戲視窗並由 Steam 重新拉起遊戲 (用於定時維護或嚴重卡死自癒)",
     )
+    parser.add_argument("--log-level", type=str.upper, choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                        default=None, help="設定終端機日誌顯示等級 (預設依 Profile TOML 偏好記憶)")
     parser.add_argument("--incident-session-id", type=str, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()

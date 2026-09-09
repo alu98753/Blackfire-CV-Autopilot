@@ -96,9 +96,12 @@ class BattleHandler(BaseStateHandler):
             max_retries = stall_cfg["max_retries"]
             curr_attempts = getattr(self.machine.battle_session, "restart_battle_attempts", 0)
             if curr_attempts < max_retries:
+                last_diff = getattr(self.machine.battle_session, "last_diff", 0)
                 logging.warning(
-                    "🚨 [戰鬥卡死自癒] 偵測到血條連續 %.1f 秒無任何變化！執行原地「重新開始戰鬥」子流程 (第 %d/%d 次)...",
+                    "🚨 [戰鬥卡死自癒] 偵測到血條連續 %.1f 秒無顯著變化 (當前紅血像素: %d, 最後 diff: %d < 門檻 25)！執行原地「重新開始戰鬥」子流程 (第 %d/%d 次)...",
                     stall_cfg["timeout_seconds"],
+                    hp_sig,
+                    last_diff,
                     curr_attempts + 1,
                     max_retries,
                 )
