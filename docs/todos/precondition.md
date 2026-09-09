@@ -25,8 +25,8 @@ Exploring 與 `common/quit.png` 前景視窗；無法達成 navigation postcondi
   defer 180 秒，避免主迴圈靜默空轉。
 - `task_complete` 與 `backpack_full` 是全域高優先 popup，先於 Town intent 處理，避免
   底層 Lobby／Town anchor 搶走點擊。
-- `bulletin_board` 的無紅點意義由其 Handler 判定；Router 只要求看見告示牌建築，不會
-  因無紅點先行 defer。
+- `TOWN` 建築無紅點（`requires_red_dot=True` 且未發現紅點，適用於 `chest`、`hero_draw`、`blood_altar`、`bulletin_board`）視為今日福利已領取/任務已接滿（明確結束條件），由 Precondition 控制器直接判定 `COMPLETE_TOWN_SUBFLOW` 標記 `completed_today = True` 並切換下一任務；若為連續未找到建築則維持 defer 180 秒。
+- `bulletin_board` 領取獎勵為全域彈窗，進告示牌僅為接取新任務；有新任務可接必有紅點，無紅點代表今日任務已接滿/已完成，同樣在門禁處直接簽核完成。
 - 當一項 Town subflow 結束而下一項僅被選中時，FSM 先恢復 `NAVIGATING` 與
   `primary_config`，避免保留上一個 Handler 的 state／config 身分。
 - 目前已登錄的通用前景關閉證據為 `common/confirm.png`、`common/ok.png`、
@@ -276,7 +276,7 @@ precondition。即使玩家在 Building 內打開 Bread／Bag／Diamond 分頁�
 chest             -> handler state + building evidence + red-dot policy
 hero_draw         -> handler state + tavern evidence + red-dot policy
 blood_altar       -> handler state + altar evidence + red-dot policy
-bulletin_board    -> handler state + board evidence；無紅點 outcome 由 Handler 判定
+bulletin_board    -> handler state + board evidence + red-dot policy
 jewelry_workshop  -> handler state + workshop evidence + 專屬入口政策
 ```
 
@@ -288,7 +288,7 @@ Handler state 與「無紅點」的 outcome；共用 Router 不知道具體 flow
 1. Daily 從 Town、Lobby、Battle、Battle Result、Domain、Demon Lord、Lord、Dungeon、
    Bread 視窗、Bag 視窗啟動時，chest pending 都不會遺失。
 2. 沒有 `TOWN` evidence 時絕不執行 chest building／red-dot 判定。
-3. 到達 Town 但沒有紅點時才允許建立 180 秒 defer；這不是完成。
+3. 到達 Town 且看見建築但沒有紅點時，代表今日福利已領取完畢，直接標記 completed_today 並前進下一個任務；只有在連續 5 次未識別到建築時才建立 180 秒 defer。
 4. 只有領取後 free button 消失、出現 cooldown evidence，或完成離場驗證時紅點已消失，
    才標記完成。
 5. Battle 中不強制退出；一般關卡 Result 安全點必須 exit，不得 retry。
