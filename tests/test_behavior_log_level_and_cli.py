@@ -104,16 +104,18 @@ class TestBehaviorLogLevelAndCLI(unittest.TestCase):
             self.assertTrue(is_stalled)
             self.assertEqual(session.last_diff, 4)
 
-            # 4. Significant change (diff = 54 >= threshold 25), progress made, stall reset
-            is_stalled = session.is_hp_stalled(current_signature=1746, now=131.0, timeout_seconds=30.0)
+            # 4. Significant change (diff >= BLOOD_DIFF), progress made, stall reset
+            progress_diff = session.BLOOD_DIFF + 50
+            sig_progress = 1800 - progress_diff
+            is_stalled = session.is_hp_stalled(current_signature=sig_progress, now=131.0, timeout_seconds=30.0)
             self.assertFalse(is_stalled)
-            self.assertEqual(session.last_diff, 54)
-            self.assertEqual(session.last_hp_signature, 1746)
+            self.assertEqual(session.last_diff, progress_diff)
+            self.assertEqual(session.last_hp_signature, sig_progress)
 
             # Verify progress telemetry log was emitted
             progress_logs = [log for log in cm.output if "戰鬥推進" in log or "戰鬥進展" in log]
             self.assertTrue(len(progress_logs) > 0)
-            self.assertIn("diff=54", progress_logs[-1])
+            self.assertIn(f"diff={progress_diff}", progress_logs[-1])
 
     def test_get_log_retention_days(self):
         """Retention days should default to 7."""

@@ -302,7 +302,7 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertIsNone(sm.quest_scheduler)
         
         from config import PRIMARY_MODES
-        expected_sub = PRIMARY_MODES["daily"].get("tier4_sub_stage", "first")
+        expected_sub = PRIMARY_MODES["mix"].get("tier4_sub_stage", "final")
 
         # 測試由 evaluate_and_schedule_daily_pipeline 統一將配置切換至動態/預設 Tier 4 關卡退守模式
         sm.evaluate_and_schedule_daily_pipeline()

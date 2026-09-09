@@ -533,8 +533,8 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
 
         self.state_machine.step()
         
-        # 驗證觸發了向下的拖曳 (center_x = 600, center_y = 500)
-        self.mock_mouse.drag.assert_called_with(600, 600, 600, 400)
+        # 驗證觸發了向下的拖曳 (center_x = 600, center_y = 500, offset_y = 200)
+        self.mock_mouse.drag.assert_called_with(600, 700, 600, 300)
 
     @patch('os.path.exists')
     def test_dungeon_navigation_anti_reentry(self, mock_exists):

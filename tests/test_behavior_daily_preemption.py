@@ -117,11 +117,11 @@ class TestDailyQuestPreemptionBehavior(unittest.TestCase):
         scheduler.add_task(task)
         machine.attach_quest_scheduler(scheduler)
 
-        # 模擬已切換到該任務的專屬關卡配置 (例如沙漠廢墟 middle)
+        # 模擬已切換到該任務的專屬關卡配置 (例如荒蕪岩地 middle)
         quest_cfg = task.to_config_dict(base_config=self.primary_config)
         machine.set_config(quest_cfg)
         self.assertFalse(machine.config.get("is_tier4_fallback", False))
-        self.assertIn("沙漠廢墟", machine.config.get("name", ""))
+        self.assertIn("荒蕪岩地", machine.config.get("name", ""))
 
         # 標記任務完成
         task.completed_count = task.target_count

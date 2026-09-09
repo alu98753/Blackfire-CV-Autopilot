@@ -2,6 +2,7 @@ import os
 import time
 import unittest
 from unittest.mock import MagicMock, patch
+import numpy as np
 from states.handlers.hero_draw import HeroDrawHandler
 from utils.daily_manager import DailyManager
 
@@ -51,7 +52,7 @@ class TestHeroDrawSubflow(unittest.TestCase):
 
     def test_handler_full_recruitment_flow(self):
         """測試：完整的進入酒館 ➔ 免費招募 ➔ 點擊招募 (RECRUITED.png) ➔ 點擊確認 ➔ 點擊退出 ➔ 寫入 DailyManager"""
-        mock_img = MagicMock()
+        mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
         ok_clicked = [False]
