@@ -49,8 +49,8 @@ def main():
     set_active_profile(profile_name)
     clear_child_termination(profile_name)
 
-    # 套用日誌等級設定 (支援 Profile 偏好記憶與互動選單)
-    setup_log_level_config(args, is_resume=is_resume)
+    # 套用日誌等級設定 (支援 Profile 偏好記憶、檔案輪轉與互動選單)
+    setup_log_level_config(args, profile_name=profile_name, is_resume=is_resume)
 
     # 2. 處理模式設定選單 (避免遊戲開啟後停留在 CLI 輸入視窗造成阻塞)
     config = setup_mode_config(args)

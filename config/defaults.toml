@@ -13,6 +13,7 @@ default_backpack_full_max_scroll = 5
 monitor_index = 1
 battle_max_defeat = 30 # 所有模式通用的連續戰敗重試上限；達到此次數後放棄當前關卡
 log_level = "INFO" # 終端機日誌顯示等級: "DEBUG", "INFO", "WARNING", "ERROR"
+log_retention_days = 7 # 每日日誌檔案保留天數 (超過 7 天自動清理)
 
 [navigation]
 action_timeout_seconds = 5.0

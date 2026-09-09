@@ -5,9 +5,9 @@ import logging
 import unittest
 from unittest.mock import MagicMock, patch
 
-from config import apply_log_level, get_log_level
+from config import apply_log_level, get_log_level, get_log_retention_days
 from cli.arguments import parse_arguments
-from cli.log_setup import setup_log_level_config
+from cli.log_setup import init_file_logger, setup_log_level_config
 from states.battle_session import BattleSession
 
 
@@ -109,6 +109,49 @@ class TestBehaviorLogLevelAndCLI(unittest.TestCase):
             self.assertFalse(is_stalled)
             self.assertEqual(session.last_diff, 54)
             self.assertEqual(session.last_hp_signature, 1746)
+
+    def test_get_log_retention_days(self):
+        """Retention days should default to 7."""
+        days = get_log_retention_days()
+        self.assertEqual(days, 7)
+
+    def test_init_file_logger_attaches_rotating_handler(self):
+        """init_file_logger should create log file and attach TimedRotatingFileHandler."""
+        from logging.handlers import TimedRotatingFileHandler
+        import shutil
+        test_prof = "test_profile_logger"
+        try:
+            log_path = init_file_logger(test_prof)
+            self.assertTrue(log_path.parent.exists())
+            self.assertEqual(log_path.name, "app.log")
+
+            root_logger = logging.getLogger()
+            rotating_handlers = [
+                h for h in root_logger.handlers
+                if isinstance(h, TimedRotatingFileHandler) and getattr(h, "_app_log_profile", None) == test_prof
+            ]
+            self.assertEqual(len(rotating_handlers), 1)
+            self.assertEqual(rotating_handlers[0].backupCount, 7)
+            self.assertEqual(rotating_handlers[0].when, "MIDNIGHT")
+
+            # Calling it again shouldn't duplicate the handler
+            init_file_logger(test_prof)
+            rotating_handlers_2 = [
+                h for h in root_logger.handlers
+                if isinstance(h, TimedRotatingFileHandler) and getattr(h, "_app_log_profile", None) == test_prof
+            ]
+            self.assertEqual(len(rotating_handlers_2), 1)
+        finally:
+            root_logger = logging.getLogger()
+            for h in list(root_logger.handlers):
+                if isinstance(h, TimedRotatingFileHandler) and getattr(h, "_app_log_profile", None) == test_prof:
+                    h.close()
+                    root_logger.removeHandler(h)
+            from config import USER_DATA_DIR
+            from pathlib import Path
+            test_dir = Path(USER_DATA_DIR) / test_prof
+            if test_dir.exists():
+                shutil.rmtree(test_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

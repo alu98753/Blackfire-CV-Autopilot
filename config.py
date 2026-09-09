@@ -240,6 +240,14 @@ def apply_log_level(level_name: str | None = None) -> str:
     return target_level_str
 
 
+def get_log_retention_days() -> int:
+    """Return configured daily log retention days from profile or global settings."""
+    try:
+        return int(GLOBAL_SETTINGS.get("log_retention_days", 7))
+    except (ValueError, TypeError):
+        return 7
+
+
 def get_navigation_progress_settings() -> dict:
     """Return required TOML-only action timeout and collection backoff settings."""
     settings = get_defaults_config()["navigation"]
