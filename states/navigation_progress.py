@@ -105,12 +105,13 @@ class NavigationProgress:
         self.in_flight = None
         failures = self._failure_counts.get(action.intent_id, 0) + 1
         self._failure_counts[action.intent_id] = failures
-        if (
-            action.intent_id in self.COLLECTION_INTENTS
-            and failures >= self.settings.action_max_attempts
-        ):
-            self.defer(action.intent_id, now)
-            return ProgressStatus.DEFERRED
+        if failures >= self.settings.action_max_attempts:
+            if action.intent_id in self.COLLECTION_INTENTS:
+                self.defer(action.intent_id, now)
+                return ProgressStatus.DEFERRED
+            if action.intent_id == IntentId.TOWN_SUBFLOW:
+                self._failure_counts.pop(action.intent_id, None)
+                return ProgressStatus.DEFERRED
         return ProgressStatus.TIMED_OUT
 
     def complete(self, intent_id: IntentId, outcome: CollectionOutcome):

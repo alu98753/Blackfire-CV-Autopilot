@@ -9,6 +9,7 @@ from utils.scene_snapshot import ElementId, SceneId, SceneSnapshot
 class IntentId(str, Enum):
     COLLECT_DIAMOND = "collect_diamond"
     COLLECT_BREAD = "collect_bread"
+    TOWN_SUBFLOW = "town_subflow"
     PRIMARY_NAVIGATION = "primary_navigation"
 
 
@@ -28,6 +29,10 @@ class ActionId(str, Enum):
     START_PRIMARY = "start_primary"
     CONTINUE_PRIMARY = "continue_primary"
     DISMISS_OVERLAY = "dismiss_overlay"
+    EXIT_BUILDING_TO_TOWN = "exit_building_to_town"
+    EXIT_DOMAIN_TO_LOBBY = "exit_domain_to_lobby"
+    DISPATCH_TOWN_SUBFLOW = "dispatch_town_subflow"
+    DEFER_TOWN_SUBFLOW = "defer_town_subflow"
 
 
 class PostconditionId(str, Enum):
@@ -56,6 +61,12 @@ class ReasonCode(str, Enum):
     IN_FLIGHT_ACTION_WAITING = "in_flight_action_waiting"
     ACTION_TIMEOUT_RETRY = "action_timeout_retry"
     DIAMOND_CLOSE_OVERLAY = "diamond_close_overlay"
+    TOWN_SUBFLOW_CLOSE_OVERLAY = "town_subflow_close_overlay"
+    TOWN_SUBFLOW_EXIT_BUILDING = "town_subflow_exit_building"
+    TOWN_SUBFLOW_RETURN_TO_TOWN = "town_subflow_return_to_town"
+    TOWN_SUBFLOW_EXIT_DOMAIN = "town_subflow_exit_domain"
+    TOWN_SUBFLOW_READY = "town_subflow_ready"
+    TOWN_SUBFLOW_NO_RED_DOT = "town_subflow_no_red_dot"
 
 
 @dataclass(frozen=True)
