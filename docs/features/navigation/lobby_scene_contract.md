@@ -33,9 +33,11 @@
 
 任何未來的程式碼重構或新增功能，**必須永久滿足以下 4 大核心不變量**，違反任一項皆視為系統性退化 (Regression)：
 
-### Invariant 1：成對差值主導保證 (Active-Dominance Invariant)
-- **原則**：大廳按鈕具有選中態 (`Active / After`) 與未選中態 (`Inactive`)。選中態圖標常因光暈相似而在未選中畫面上產生高信心度假陽性（幽靈匹配）。
-- **保證**：任何頁籤欲被判定為選中 (`Active`)，其 $c_{\text{active}}$ 必須**嚴格顯著高於**未選中態 $c_{\text{inactive}}$。若未選中態分數高於選中態，系統**保證堅決撤銷選中態**，絕不產生幽靈假陽性。
+### Invariant 1：成對差值主導與二維色相光環消歧保證 (Active-Dominance & Chromatic Disambiguation Invariant)
+- **原則**：大廳按鈕具有選中態 (`Active / After`) 與未選中態 (`Inactive`)。選中態圖標與未選中態中央紋理高度一致（匹配度常皆高達 0.90+），其唯一物理正交特徵為外環是否亮起紅色發光光環 (Red Halo Ring)。
+- **保證**：
+  1. **顯著差值快速裁決**：當 $c_{\text{active}} - c_{\text{inactive}} \ge \text{CLEAR\_MARGIN} (0.025)$，確鑿判定為選中態；當 $\le -0.025$，確鑿判定為未選中態。
+  2. **微差模糊區間物理色相消歧**：當差值處於微差模糊區間時，系統**保證在按鈕歸一化外環半徑 $[0.75, 1.05]$ 區間內檢驗 HSV 紅色高飽和像素比例**（門檻 $\ge 7.0\%$）。外環具備紅光者確鑿判定為 Active，否則堅決撤銷選中態，杜絕幽靈假陽性與切頁死循環。
 
 ### Invariant 2：保守仲裁保證 (Conservative Disambiguation Invariant)
 - **原則**：畫面可能受切換動畫、光影特效或外部干擾。

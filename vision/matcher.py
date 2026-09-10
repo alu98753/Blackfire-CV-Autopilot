@@ -3,7 +3,8 @@ import os
 import logging
 import numpy as np
 
-BASE_RESOLUTION_WIDTH = 1920.0
+from config import BASE_RESOLUTION_WIDTH, compute_screen_scale
+
 MIN_AUTO_SCALE_WIDTH = 1200
 
 # 預設多尺度掃描比例清單：
@@ -25,7 +26,7 @@ class TemplateMatcher:
     def _compute_auto_scale(self, screen_width):
         """依目前畫面寬度計算模板自動縮放比例。"""
         if self.auto_scale and screen_width >= MIN_AUTO_SCALE_WIDTH:
-            return screen_width / BASE_RESOLUTION_WIDTH
+            return compute_screen_scale(screen_width)
         return self.template_scale
 
     def compute_candidate_scales(self, screen_width: int, delta_range: float = 0.04, step: float = 0.02) -> list[float]:

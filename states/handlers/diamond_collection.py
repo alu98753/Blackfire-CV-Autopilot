@@ -4,6 +4,7 @@ import logging
 from states.handlers.base import BaseStateHandler
 from states.handlers.collection_progress import complete_collection, defer_collection
 from states.navigation_intent import IntentId
+from config import compute_screen_scale
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
 
 class DiamondCollectionHandler(BaseStateHandler):
@@ -69,9 +70,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                         # 開始精確讀取冷卻時間
                         try:
                             import cv2
-                            # 計算 scale (以 1920 寬度為基準)
-                            w_img = screen_img.shape[1]
-                            scale = w_img / 1920.0
+                            scale = compute_screen_scale(screen_img)
                             
                             # 退出按鈕頂點
                             qx, qy = pos_quit

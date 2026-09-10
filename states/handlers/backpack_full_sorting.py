@@ -3,6 +3,7 @@ import time
 import logging
 import cv2
 import numpy as np
+from config import compute_screen_scale, compute_screen_scale_y
 from states.handlers.base import BaseStateHandler
 from utils.debug_artifacts import write_debug_image
 
@@ -230,8 +231,8 @@ class BackpackFullSortingHandler(BaseStateHandler):
 
         # 計算當前畫面相對於設計解析度 (1920x1080) 的比例因子
         real_h, real_w = screen_img.shape[:2]
-        scale_x = real_w / 1920.0
-        scale_y = real_h / 1080.0
+        scale_x = compute_screen_scale(real_w)
+        scale_y = compute_screen_scale_y(real_h)
 
         # 設計網格相對偏移與常數設定 (已由使用者手動校準微調)
         left_start_dx = -589

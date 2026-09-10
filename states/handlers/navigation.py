@@ -11,6 +11,9 @@ from config import (
     ENTRY_THRESHOLD,
     TIER4_MODE_DOMAIN,
     TIER4_MODE_NONE,
+    BASE_RESOLUTION_WIDTH,
+    BASE_RESOLUTION_HEIGHT,
+    compute_screen_scale,
     get_template_threshold
 )
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
@@ -630,10 +633,10 @@ class NavigationHandler(BaseStateHandler):
         尋路導航與自動領體力邏輯。
         """
         if rect is None:
-            rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+            rect = {"left": 0, "top": 0, "width": int(BASE_RESOLUTION_WIDTH), "height": int(BASE_RESOLUTION_HEIGHT)}
             
-        width = rect.get("width") or (rect.get("right", 0) - rect.get("left", 0)) or 1920
-        height = rect.get("height") or (rect.get("bottom", 0) - rect.get("top", 0)) or 1080
+        width = rect.get("width") or (rect.get("right", 0) - rect.get("left", 0)) or int(BASE_RESOLUTION_WIDTH)
+        height = rect.get("height") or (rect.get("bottom", 0) - rect.get("top", 0)) or int(BASE_RESOLUTION_HEIGHT)
         rect["width"] = width
         rect["height"] = height
 
@@ -795,7 +798,7 @@ class NavigationHandler(BaseStateHandler):
                 if abs(w_img - sw) <= 30:
                     matched_width = sw
                     break
-            scale = matched_width / 1920.0
+            scale = compute_screen_scale(matched_width)
             
             dungeon_names = self.machine.config.get("dungeon_names")
             if dungeon_names is None:
@@ -1032,9 +1035,15 @@ class NavigationHandler(BaseStateHandler):
             if has_dungeon:
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()
                 avail_str = ", ".join(avail_names) if avail_names else "無"
+                now = time.time()
+                raw_switch = getattr(self.machine, "_last_mix_tab_switch_time", 0.0)
+                last_switch = raw_switch if isinstance(raw_switch, (int, float)) else 0.0
                 # 若地下城有空位且頁籤尚未開啟，點擊切換至地下城頁籤
                 pos_dg, conf_dg = self.matcher.match(screen_img, "dungeons/dungeon.png", threshold=0.60)
                 if pos_dg and not dungeon_select_open:
+                    if now - last_switch < 1.2:
+                        return
+                    self.machine._last_mix_tab_switch_time = now
                     logging.info(f"🧭 混合模式：地下城已就緒 (冷卻情形: {status_str} | 判定可挑戰: [{avail_str}])，在活動大廳點擊 [dungeons/dungeon.png] ({conf_dg:.4f}) 切換至地下城頁籤！")
                     self.mouse.click(rect["left"] + pos_dg[0], rect["top"] + pos_dg[1])
                     time.sleep(0.3)
@@ -1051,9 +1060,15 @@ class NavigationHandler(BaseStateHandler):
                     return
 
                 # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤，點擊 select_stage.png 切換！
+                now = time.time()
+                raw_switch = getattr(self.machine, "_last_mix_tab_switch_time", 0.0)
+                last_switch = raw_switch if isinstance(raw_switch, (int, float)) else 0.0
                 status_str, _ = self.machine.get_dungeon_cooldown_status()
                 pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
                 if pos_st and not stage_select_open:
+                    if now - last_switch < 1.2:
+                        return
+                    self.machine._last_mix_tab_switch_time = now
                     logging.info(f"🧭 混合模式：地下城全冷卻 (冷卻情形: {status_str})，在活動大廳點擊 [common/select_stage.png] ({conf_st:.4f}) 切換至普通關卡頁籤！")
                     self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
                     time.sleep(0.3)

@@ -3,6 +3,7 @@ import time
 import logging
 import cv2
 import numpy as np
+from config import compute_screen_scale, compute_screen_scale_y
 from states.handlers.base import BaseStateHandler
 from utils.debug_artifacts import write_debug_image
 
@@ -134,8 +135,8 @@ class BagCleaningHandler(BaseStateHandler):
         """
         btn_cx, btn_cy = None, None
         h_limit, w_limit = screen_img.shape[:2]
-        scale_x = w_limit / 1920.0
-        scale_y = h_limit / 1080.0
+        scale_x = compute_screen_scale(w_limit)
+        scale_y = compute_screen_scale_y(h_limit)
 
         if os.path.exists(os.path.join("templates", "common/quit.png")):
             pos, conf = self.matcher.match(screen_img, "common/quit.png", threshold=0.6, brightness_threshold=0.70)

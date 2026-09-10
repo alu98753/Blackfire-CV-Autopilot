@@ -1,6 +1,7 @@
 """Compatibility exports backed by the declarative config/defaults.toml file."""
-
 from __future__ import annotations
+
+from typing import Tuple
 
 import logging
 from copy import deepcopy
@@ -12,6 +13,58 @@ from utils.config_manager import JsonConfigManager, TomlConfigManager, dump_toml
 
 WINDOW_TITLE = "Blackfire Crusade"
 STEAM_APP_ID = "1765770"
+
+# 基準設計解析度 (1080p SSOT) 與等比縮放工具函式
+BASE_RESOLUTION_WIDTH: float = 1920.0
+BASE_RESOLUTION_HEIGHT: float = 1080.0
+BASE_RESOLUTION: Tuple[int, int] = (1920, 1080)
+
+
+def compute_screen_scale(
+    screen_or_width=None,
+    base_width: float = BASE_RESOLUTION_WIDTH,
+    min_scale: float = 0.1,
+) -> float:
+    """計算畫面寬度相對於設計基準寬度的自適應縮放比例。
+
+    支援傳入影像物件 (具備 .shape 的 ndarray)、數值 (int/float) 或 None。
+    若數值非正或物件異常，安全回傳 1.0；下限保護為 min_scale。
+    """
+    if screen_or_width is None:
+        return 1.0
+    if isinstance(screen_or_width, (int, float)):
+        return max(min_scale, float(screen_or_width) / base_width) if screen_or_width > 0 else 1.0
+    if hasattr(screen_or_width, "shape") and len(screen_or_width.shape) >= 2:
+        try:
+            w = screen_or_width.shape[1]
+            return max(min_scale, float(w) / base_width) if w > 0 else 1.0
+        except Exception:
+            return 1.0
+    return 1.0
+
+
+def compute_screen_scale_y(
+    screen_or_height=None,
+    base_height: float = BASE_RESOLUTION_HEIGHT,
+    min_scale: float = 0.1,
+) -> float:
+    """計算畫面高度相對於設計基準高度的自適應縮放比例。
+
+    支援傳入影像物件 (具備 .shape 的 ndarray)、數值 (int/float) 或 None。
+    若數值非正或物件異常，安全回傳 1.0；下限保護為 min_scale。
+    """
+    if screen_or_height is None:
+        return 1.0
+    if isinstance(screen_or_height, (int, float)):
+        return max(min_scale, float(screen_or_height) / base_height) if screen_or_height > 0 else 1.0
+    if hasattr(screen_or_height, "shape") and len(screen_or_height.shape) >= 2:
+        try:
+            h = screen_or_height.shape[0]
+            return max(min_scale, float(h) / base_height) if h > 0 else 1.0
+        except Exception:
+            return 1.0
+    return 1.0
+
 TIER4_MODE_STAGE = "stage"
 TIER4_MODE_DOMAIN = "domain"
 TIER4_MODE_NONE = "none"

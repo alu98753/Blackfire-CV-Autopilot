@@ -2,6 +2,7 @@ import time
 import os
 import sys
 import logging
+from config import BASE_RESOLUTION_WIDTH
 from states.handlers.base import BaseStateHandler
 
 class JewelryWorkshopHandler(BaseStateHandler):
@@ -533,7 +534,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 matched_pos = None
                 matched_conf = 0.0
 
-                screen_w = screen_img.shape[1] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else 1920
+                screen_w = screen_img.shape[1] if hasattr(screen_img, "shape") and len(screen_img.shape) >= 2 else int(BASE_RESOLUTION_WIDTH)
                 candidate_scales = (
                     self.matcher.compute_candidate_scales(screen_w)
                     if hasattr(self.matcher, "compute_candidate_scales")
