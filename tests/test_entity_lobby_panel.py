@@ -159,6 +159,44 @@ class TestEntityLobbyPanel(unittest.TestCase):
             self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
             self.assertEqual(scene.active_tabs, [])
 
+    def test_tab_disambiguation_conflict_remains_lobby_other(self):
+        """
+        [測試案例 6] 多個頁籤同時滿足門檻但差距過小時，視為真衝突，退回 LOBBY_OTHER 不盲猜
+        - 情境描述：禁域 (0.92) 與領主 (0.91) 同時滿足 Active 門檻，但兩者差值 0.01 < 0.05
+        - 預期動作：標記衝突，場景判定為 LOBBY_OTHER，active_tabs 為空。
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.scene_detector import SceneDetector, SceneType
+
+        mock_matcher = MagicMock()
+        detector = SceneDetector(matcher=mock_matcher)
+        mock_machine = MagicMock()
+        mock_machine.config = {"type": "mix", "stage_templates": [], "dungeon_entries": []}
+        mock_machine.diamond_window_opened = False
+        mock_machine.bread_window_opened = False
+
+        with patch("os.path.exists", return_value=True):
+            def match_side_effect(_img, template, threshold=0.8):
+                if template == "goback_town.png":
+                    return ((64, 726), 0.95)
+                # 禁域 Active 0.92, Inactive 0.40
+                if template == "domains/Domains_entry_after.png":
+                    return ((965, 930), 0.92)
+                if template == "domains/Domains_entry.png":
+                    return ((967, 936), 0.40)
+                # 領主 Active 0.91, Inactive 0.40
+                if template == "load/Lord_entry_after.png":
+                    return ((500, 930), 0.91)
+                if template == "load/Lord_entry.png":
+                    return ((502, 936), 0.40)
+                return (None, 0.0)
+
+            mock_matcher.match.side_effect = match_side_effect
+
+            scene = detector.detect("mock_screen", machine=mock_machine)
+            self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
+            self.assertEqual(scene.active_tabs, [])
+
 
 if __name__ == "__main__":
     unittest.main()

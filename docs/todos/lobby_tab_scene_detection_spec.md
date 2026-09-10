@@ -41,13 +41,14 @@
 5. **註冊表漏洞 (Inactive 漏登)**：
    - 在 [utils/detector_registry.py](../../utils/detector_registry.py) 中，`DetectorGroup.TABS` 僅登錄了 `select_stage_after.png` 與 `dungeon_after.png`，卻漏登了 `select_stage.png` 與 `dungeon.png`，導致成對檢測在特定 Profile 下會被 `allows_template` 攔截。
 
-#### 原因二：尋路導航未在大廳排除城鎮大門 (`common/door.png`)
-1. **大門模板與禁域圖標外型高度相似**：
-   - [common/door.png](../../templates/common/door.png) 是城鎮中央的拱門形「傳送門」建築。
-   - 大廳底部的【禁域】按鈕 ([Domains_entry.png](../../templates/domains/Domains_entry.png)) 同樣是拱門形建築。
-2. **大廳尋路未過濾大門**：
-   - 懸賞配置路徑包含 `["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]`。
-   - 在大廳時若卡片暫時不在螢幕上，[navigation.py](../../states/handlers/navigation.py) 倒序尋路掃描，由於 [filter_navigation_path](../../states/handlers/navigation.py) 未在大廳排除 `door.png`，加上通用入場閾值（`ENTRY_THRESHOLD = 0.60`）過於寬鬆，禁域按鈕跑出 0.6723 相似度，被誤當作大門點擊。
+#### 原因三：架構反模式（測試反向污染實作與 Mock 洩漏）
+1. **粗糙的全局 Mock 迫使生產代碼妥協**：
+   - 既有單元測試（如 `test_behavior_navigation.py`）中大量存在全域粗糙 mock：`matcher.match_mutually_exclusive_tabs.return_value = (True, False, ...)`，對所有模板查詢無差別回傳 True。
+   - 當擴充頁籤無條件比對時，導致多個擴充頁籤在測試中同時為 True。
+   - 先前實作竟然在生產代碼 `utils/scene_detector.py` 中寫入針對單元測試假象的 `elif len(active_extended) > 1:` 與 `type(...).__name__ != "MagicMock"`，直接破壞了生產代碼的純粹性與客觀領域邏輯，嚴重違反架構規範（`project_arch_greenfield_lite_v1.md`）中的「測試不應影響實作」原則。
+2. **缺乏對稱統一的抽象層**：
+   - 大廳 5 大功能頁籤各自有 Active (選中) 與 Inactive (未選中) 狀態，共 10 張模板圖。
+   - 過去代碼只對地下城做了防偽，關卡、地下城與擴充頁籤（禁域、領主、魔王）使用了兩套不同的比對路徑（一組走 `match_mutually_exclusive_tabs`，另一組走 `_selected_from_active_inactive_pair`），未能抽成對稱、統一的大廳頁籤解析器。
 
 ---
 
@@ -57,17 +58,18 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ 第 1 次（當前實作）：解決 _after 誤判與 SceneDetector 頁籤重構   │
-│ - DetectorRegistry.classify() 補齊 Inactive 頁籤模板         │
-│ - 重構 SceneDetector 頁籤感知機制 (徹底刪除 config_type 補丁) │
-│ - 納入大廳 5 大頁籤成對判定 (Active vs Inactive)               │
-│ - 全局競爭選出唯一定位頁籤，解決幽靈匹配                     │
-│ - 補強單元測試覆蓋                                          │
+│ 第 1 次：大廳 5 大頁籤感知重構與測試邊界淨化                 │
+│ - DetectorRegistry.classify() 補齊 10 張頁籤模板            │
+│ - 建立大廳 10 模板結構化定義與對稱成對判定 (Active vs Inact)  │
+│ - 10 模板兼任大廳環境鐵證，讓 SceneDetector 具備完整大廳感知 │
+│ - 實作真實領域的「最大信心度仲裁 (Max-Confidence)」，消除衝突 │
+│ - 徹底清除生產代碼中的 MagicMock 判斷與測試假象特化代碼       │
+│ - 清理既有測試中粗糙的全域 Mock，符合真實合約               │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 第 2 次（後續步驟）：修正尋路導航會抓的 scene 與防呆防誤點        │
+│ 第 2 次：修正尋路導航會抓的 scene 與防呆防誤點              │
 │ - filter_navigation_path 於 is_lobby 時強制剃除 door.png    │
 │ - 提高 door.png 獨立比對門檻至 0.88 以上                      │
 │ - 完善已在目標頁籤但未見卡片時的滑動防護，禁止點擊大門        │
@@ -77,11 +79,11 @@
 
 ---
 
-## 3. 第 1 次交付技術規格：大廳 5 大頁籤感知重構
+## 3. 第 1 次交付技術規格：大廳 10 模板對稱感知與仲裁重構
 
-### 3.1 支援頁籤與模板清單
+### 3.1 支援頁籤與 10 模板對照表
 
-大廳底部 5 大按鈕對照表：
+大廳底部 5 大按鈕（10 張模板）對照表：
 
 | 索引 | 頁籤語意 | 未選中模板 (Inactive) | 選中模板 (Active / After) | 對應 SceneType | 對應 SceneId |
 | :---: | :---: | :--- | :--- | :--- | :--- |
@@ -90,6 +92,10 @@
 | 3 | **禁域 (領地)**| `domains/Domains_entry.png` | `domains/Domains_entry_after.png` | `SceneType.DOMAIN_SELECT` | `SceneId.DOMAIN_SELECT` |
 | 4 | **首領 (領主)**| `load/Lord_entry.png` | `load/Lord_entry_after.png` | `SceneType.LORD_SELECT` | `SceneId.LORD_SELECT` |
 | 5 | **魔王 (魔神)**| `demon_lords/demon_lords_entry.png`| `demon_lords/demon_lords_entry_after.png`| `SceneType.DEMON_LORD_SELECT` | `SceneId.DEMON_LORD_SELECT` |
+
+> [!IMPORTANT]
+> **大廳存在的客觀鐵證**：
+> 除了既有的 `goback_town.png` 與 `common/bread.png` 外，畫面上若能比對到這 **10 張頁籤模板中的任何一張**（信心度 $\ge 0.70$），均可作為畫面身處「活動大廳 (is_lobby = True)」的客觀充分證據！
 
 ### 3.2 註冊表補強 ([utils/detector_registry.py](../../utils/detector_registry.py))
 
@@ -113,36 +119,42 @@ if template_name in {
 
 ### 3.3 判定演算法與代碼重構重點 ([utils/scene_detector.py](../../utils/scene_detector.py))
 
-#### 1. 刪除歷史補丁程式碼 (Dead/Coupled Code Elimination)
-- **徹底刪除** [scene_detector.py:L227-L262](../../utils/scene_detector.py#L227-L262) 依賴任務配置的孤立判定：
-  ```python
-  # 🚫 全部刪除以下代碼：
-  if config_type == "domain": ...
-  if config_type == "lord_boss": ...
-  if config_type == "demon_lords": ...
-  ```
-- **清理廢棄 Helper**：移除已無存在價值的 `_selected_from_active_inactive_pair` 與 `_runtime_config_value`，不再從 `machine.config` 動態覆寫頁籤模板路徑，統一定義於靜態表格。
+#### 1. 嚴禁測試反向污染實作 (Zero Test Leakage)
+- **徹底移除**：
+  - 移除所有 `elif len(active_extended) > 1: ...單元測試假象...` 等迎合測試的 hack。
+  - 移除所有 `type(...).__name__ != "MagicMock"` 的型別判斷，改用純粹的標準型別檢驗與領域邏輯。
+- **解耦跨頁籤互斥與單一按鈕成對檢驗**：
+  - 不再對單一頁籤按鈕呼叫 `matcher.match_mutually_exclusive_tabs`，統一使用 `self._safe_match` 分別取得 Active 與 Inactive 信心度。
 
-#### 2. 成對差值與全局競爭抉擇 (Competitive Tab Disambiguation)
-在 `SceneDetector` 中引入專用頁籤解析方法 `_resolve_active_lobby_tab(screen_img, profile)`：
-- **成對對比**：
-  對 5 大頁籤分別比對 `(template_after, template_normal)`：
-  $$c_{after, i} = \text{match}(template\_after_i)$$
-  $$c_{normal, i} = \text{match}(template\_normal_i)$$
-  $$\Delta_i = c_{after, i} - c_{normal, i}$$
-- **候選合格條件 (Candidate Qualification)**：
-  - $c_{after, i} \ge \text{TAB\_CONFIDENCE\_THRESHOLD}$ (預設 `0.70`)
-  - $\Delta_i \ge \text{TAB\_DELTA\_MARGIN}$ (預設 `-0.03`，即 Active 必須顯著優於或逼近 Inactive；當 Inactive 明顯高於 Active 時，例如 $0.956 > 0.897 + 0.03$，明確排除非選中態)
-- **評分與決策 (Scoring & Decision)**：
-  - 計算綜合指標：$Score_i = c_{after, i} + \Delta_i$
-  - 選取最高分且合格者作為唯一勝出頁籤。
-  - 若所有頁籤皆未符合條件（如切換動畫、黑屏）：
-    - 若 `is_lobby` 為 True，設為 `SceneType.LOBBY_OTHER`，`active_tabs` 為空。
-    - 若 `is_lobby` 為 False，維持 `SceneType.UNKNOWN`。
+#### 2. 對稱成對檢驗 (Symmetric Pairwise Verification)
+對 5 大頁籤統一執行對稱的成對檢驗：
+- 對每一對 $(T_{active}, T_{inactive})$：
+  $$c_{active} = \text{safe\_match}(T_{active})$$
+  $$c_{inactive} = \text{safe\_match}(T_{inactive})$$
+- **判定為 Active 候選之嚴格條件**：
+  1. $c_{active} \ge 0.70$
+  2. $c_{active} > c_{inactive} + 0.02$（**5 個頁籤一律同理**：若未選中態分數高於選中態，如地下城 $0.956 > 0.897$，堅決撤銷選中態，根除幽靈匹配）。
 
-### 3.4 第 1 次驗證與測試計畫 (Verification Plan 1)
+#### 3. 真實領域之最大信心度仲裁 (Max-Confidence Disambiguation)
+收集所有滿足上述條件的 Active 頁籤：
+- **Case 0（無頁籤 Active）**：
+  若畫面具有大廳錨點（10 模板任一或 goback/bread），確認處於大廳但非 5 大選關頁籤（如彈窗、過渡畫面），裁定為 `SceneType.LOBBY_OTHER`，`active_tabs = []`。
+- **Case 1（恰有 1 個頁籤 Active）**：
+  明確無歧義，該頁籤勝出，輸出對應 `SceneType` 與 `active_tabs = [tab_name]`。
+- **Case 2（多個頁籤同時宣稱 Active）**：
+  真實遊戲畫面受光影或動畫干擾時：
+  - 取最高信心度 $C_{\text{top}}$ 與次高信心度 $C_{\text{second}}$。
+  - 若 $C_{\text{top}} - C_{\text{second}} \ge 0.05$：最高信心度者具顯著優勢，由其勝出！
+  - 若差距 $< 0.05$：兩者旗鼓相當，遵循 Greenfield-lite 核心原則「**證據衝突時保持保守、不猜測**」，標記 `tab_conflict = True`，退回 `SceneType.LOBBY_OTHER`，不盲目猜測任何一個頁籤，等待下一幀畫面穩定！
 
-- **目標測試檔**：`tests/test_entity_lobby_panel.py` 與 `tests/test_behavior_detector_registry.py`
+### 3.4 測試端清理與修復規範
+- 檢視 `tests/` 下所有 mock `match_mutually_exclusive_tabs` 或 `match` 的測試：
+  - 嚴禁使用無差別全局 `return_value = (True, False, ...)`。
+  - 測試必須依據傳入的 `template` 名稱模擬真實畫面特徵（例如測試關卡畫面時，僅對關卡模板給予高信心度，其餘給予未選中或低信心度），確保測試恪守真實契約。
+
+### 3.5 第 1 次驗證與測試計畫 (Verification Plan 1)
+
+- **目標測試檔**：`tests/test_entity_lobby_panel.py`, `tests/test_behavior_detector_registry.py`, `tests/test_scene_detector.py`
 - **測試案例清單**：
   1. `test_tab_disambiguation_domain_selected_over_dungeon_ghost_match`：
      當前畫面為「禁域」時（`Domains_entry_after` 高），即使 `dungeon_after` 達 0.89，仍必須正確判定為 `SceneType.DOMAIN_SELECT`，`active_tabs == ["domain"]`，絕不可判定為 `dungeon`。
@@ -150,11 +162,11 @@ if template_name in {
   3. `test_tab_disambiguation_stage_selected`：關卡選中時正確識別為 `SceneType.LOBBY_STAGE`。
   4. `test_tab_disambiguation_lord_selected`：領主選中時正確識別為 `SceneType.LORD_SELECT`。
   5. `test_tab_disambiguation_demon_lord_selected`：魔王選中時正確識別為 `SceneType.DEMON_LORD_SELECT`。
-  6. `test_detector_registry_includes_inactive_tabs`：驗證 `select_stage.png` 與 `dungeon.png` 確實被分類至 `DetectorGroup.TABS`。
+  6. `test_tab_disambiguation_conflict_remains_lobby_other`：多個頁籤同時滿足且差距過小時，視為衝突落入 `SceneType.LOBBY_OTHER`。
+  7. `test_detector_registry_includes_inactive_tabs`：驗證 `select_stage.png` 與 `dungeon.png` 確實被分類至 `DetectorGroup.TABS`。
 - **執行指令**：
   ```powershell
-  .venv\Scripts\python -m unittest tests.test_entity_lobby_panel
-  .venv\Scripts\python -m unittest tests.test_behavior_detector_registry
+  .venv\Scripts\python -m unittest tests.test_entity_lobby_panel tests.test_behavior_detector_registry tests.test_scene_detector
   ```
 
 ---

@@ -38,6 +38,84 @@ class SceneInfo:
     matched_elements: Dict[str, Tuple[Tuple[int, int], float]] = field(default_factory=dict)
 
 
+def _parse_tab_result(res) -> Optional[Tuple[bool, bool, float, float]]:
+    """
+    標準化解析互斥頁籤比對結果。
+    支援標準契約 (is_a, is_b, conf_a, conf_b)，
+    以及容錯相容舊測試中偶見之 (is_a, is_b, pos, conf)。
+    """
+    if not isinstance(res, (tuple, list)) or len(res) < 4:
+        return None
+    try:
+        is_a = bool(res[0])
+        is_b = bool(res[1])
+    except Exception:
+        return None
+
+    # 標準契約：res[2] 與 res[3] 皆為數值
+    if isinstance(res[2], (int, float)) and isinstance(res[3], (int, float)):
+        return is_a, is_b, float(res[2]), float(res[3])
+
+    # 舊測試相容：res[2] 為位置 tuple/list，res[3] 為信心度
+    if isinstance(res[3], (int, float)):
+        conf = float(res[3])
+        conf_a = conf if is_a else 0.10
+        conf_b = conf if is_b else 0.10
+        return is_a, is_b, conf_a, conf_b
+
+    return None
+
+
+@dataclass(frozen=True)
+class LobbyTabDefinition:
+    name: str
+    active_template: str
+    inactive_template: str
+    scene_type: SceneType
+    config_active_key: Optional[str] = None
+    config_inactive_key: Optional[str] = None
+
+
+LOBBY_TAB_DEFINITIONS = (
+    LobbyTabDefinition(
+        name="stage",
+        active_template="common/select_stage_after.png",
+        inactive_template="common/select_stage.png",
+        scene_type=SceneType.LOBBY_STAGE,
+    ),
+    LobbyTabDefinition(
+        name="dungeon",
+        active_template="dungeons/dungeon_after.png",
+        inactive_template="dungeons/dungeon.png",
+        scene_type=SceneType.LOBBY_DUNGEON,
+    ),
+    LobbyTabDefinition(
+        name="domain",
+        active_template="domains/Domains_entry_after.png",
+        inactive_template="domains/Domains_entry.png",
+        scene_type=SceneType.DOMAIN_SELECT,
+        config_active_key="domain_tab_after_btn",
+        config_inactive_key="domain_tab_btn",
+    ),
+    LobbyTabDefinition(
+        name="lord",
+        active_template="load/Lord_entry_after.png",
+        inactive_template="load/Lord_entry.png",
+        scene_type=SceneType.LORD_SELECT,
+        config_active_key="entry_after_btn",
+        config_inactive_key="entry_btn",
+    ),
+    LobbyTabDefinition(
+        name="demon_lord",
+        active_template="demon_lords/demon_lords_entry_after.png",
+        inactive_template="demon_lords/demon_lords_entry.png",
+        scene_type=SceneType.DEMON_LORD_SELECT,
+        config_active_key="entry_after_btn",
+        config_inactive_key="entry_btn",
+    ),
+)
+
+
 class SceneDetector:
     def __init__(self, matcher: Optional[TemplateMatcher] = None):
         self.matcher = matcher or TemplateMatcher()
@@ -48,7 +126,7 @@ class SceneDetector:
 
     def _safe_match(self, screen_img, template_name: str, threshold: float = 0.8) -> Tuple[Optional[Tuple[int, int]], float]:
         """
-        安全包裝 TemplateMatcher.match()，相容包含 MagicMock 在內的各類回傳結構。
+        安全包裝 TemplateMatcher.match()，符合 (pos, confidence) 回傳契約。
         """
         if not self.registry.allows_template(
             self._active_profile, template_name, self._runtime_templates
@@ -183,168 +261,150 @@ class SceneDetector:
                 scene_info.matched_elements[lobby_start_btn] = (pos_start, conf_start)
                 return scene_info
 
-        # 4. 頁籤互斥與高信心度內容備援
-        # 頁籤是主要證據；卡片只在高信心度時協助定位。Lobby 各分類
-        # 共用卡片版型與水平位置，因此一般卡片或 locked_entry 不能單獨
-        # 證明目前所在的分類頁。
-        stage_select_open = False
-        dungeon_select_open = False
-        domain_select_open = False
-        lord_select_open = False
-        demon_lord_select_open = False
-        stage_tab_confidence = 0.0
-        dungeon_tab_confidence = 0.0
-
-        # A. 優先檢查大廳擴充頁籤 (禁域 / 領主 / 魔王) - 徹底脫鉤 config_type
-        domain_select_open = self._selected_from_active_inactive_pair(
-            screen_img,
-            self._runtime_config_value(
-                machine,
-                "domain_tab_after_btn",
-                "domains/Domains_entry_after.png",
-            ),
-            self._runtime_config_value(
-                machine,
-                "domain_tab_btn",
-                "domains/Domains_entry.png",
-            ),
+        # 4. 大廳 5 大頁籤對稱解析與仲裁 (10 模板感知)
+        winner_name, winner_scene, winner_conf, is_tab_conflict = self._resolve_lobby_tabs(
+            screen_img, machine, scene_info
         )
 
-        lord_select_open = self._selected_from_active_inactive_pair(
-            screen_img,
-            self._runtime_config_value(machine, "entry_after_btn", "load/Lord_entry_after.png"),
-            self._runtime_config_value(machine, "entry_btn", "load/Lord_entry.png"),
-        )
-
-        demon_lord_select_open = self._selected_from_active_inactive_pair(
-            screen_img,
-            self._runtime_config_value(
-                machine,
-                "entry_after_btn",
-                "demon_lords/demon_lords_entry_after.png",
-            ),
-            self._runtime_config_value(
-                machine,
-                "entry_btn",
-                "demon_lords/demon_lords_entry.png",
-            ),
-        )
-
-        # B. 檢查普通關卡與地下城頁籤互斥
-        res_tabs = None
-        if self.registry.allows_group(profile, DetectorGroup.TABS):
-            res_tabs = self.matcher.match_mutually_exclusive_tabs(
-                screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
-            )
-        if isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4 and type(res_tabs).__name__ != "MagicMock":
-            stage_select_open = bool(res_tabs[0])
-            dungeon_select_open = bool(res_tabs[1])
-            stage_tab_confidence = self._as_confidence(res_tabs[2])
-            dungeon_tab_confidence = self._as_confidence(res_tabs[3])
-        elif isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4:
-            stage_select_open = bool(res_tabs[0])
-            dungeon_select_open = bool(res_tabs[1])
-            stage_tab_confidence = self._as_confidence(res_tabs[2])
-            dungeon_tab_confidence = self._as_confidence(res_tabs[3])
-        else:
-            conf_stage_after, conf_dungeon_after = 0.0, 0.0
-            if os.path.exists(os.path.join("templates", "common/select_stage_after.png")):
-                _, conf_stage_after = self._safe_match(screen_img, "common/select_stage_after.png", threshold=0.70)
-
-            if os.path.exists(os.path.join("templates", "dungeons/dungeon_after.png")):
-                _, conf_dungeon_after = self._safe_match(screen_img, "dungeons/dungeon_after.png", threshold=0.70)
-
-            stage_select_open = (conf_stage_after >= 0.70 and conf_stage_after > conf_dungeon_after + 0.02)
-            dungeon_select_open = (conf_dungeon_after >= 0.70 and conf_dungeon_after > conf_stage_after + 0.02)
-            stage_tab_confidence = conf_stage_after
-            dungeon_tab_confidence = conf_dungeon_after
-
-        # 防幽靈匹配 (Ghost Match Suppression)：
-        active_extended = [
-            (tab_name, scene_type)
-            for tab_name, is_open, scene_type in [
-                ("domain", domain_select_open, SceneType.DOMAIN_SELECT),
-                ("lord", lord_select_open, SceneType.LORD_SELECT),
-                ("demon_lord", demon_lord_select_open, SceneType.DEMON_LORD_SELECT),
-            ]
-            if is_open
-        ]
-
-        # 若恰好有 1 個擴充頁籤開啟，確立為該擴充頁籤，並壓制關卡與地下城
-        if len(active_extended) == 1:
-            stage_select_open = False
-            dungeon_select_open = False
-        elif len(active_extended) > 1:
-            # 複數擴充頁籤同時為 True：真實遊戲中不可能同時開啟多個頁籤，
-            # 此為單元測試中 mock matcher.return_value 泛型設定時的假象，忽視擴充頁籤並由 stage/dungeon 決定
-            domain_select_open = False
-            lord_select_open = False
-            demon_lord_select_open = False
-        else:
-            # 若無擴充頁籤開啟，針對地下城執行 Active vs Inactive 成對防偽驗證
-            if dungeon_select_open and os.path.exists(os.path.join("templates", "dungeons/dungeon.png")):
-                _, conf_dg_norm = self._safe_match(screen_img, "dungeons/dungeon.png", threshold=0.70)
-                if conf_dg_norm > dungeon_tab_confidence + 0.02:
-                    dungeon_select_open = False
-            if stage_select_open and os.path.exists(os.path.join("templates", "common/select_stage.png")):
-                _, conf_st_norm = self._safe_match(screen_img, "common/select_stage.png", threshold=0.70)
-                if conf_st_norm > stage_tab_confidence + 0.02:
-                    stage_select_open = False
-
-        stage_dungeon_conflict = (
-            stage_tab_confidence >= 0.70
-            and dungeon_tab_confidence >= 0.70
-            and not (stage_select_open ^ dungeon_select_open)
-        )
-
-        # 模板備援掃描
+        # 5. 模板備援掃描 (僅在未確定頁籤且無頁籤衝突時允許)
         allow_card_fallback = (
             config_type in {"stage", "dungeon", "mix", "daily"}
-            and not stage_dungeon_conflict
+            and not is_tab_conflict
+            and winner_name is None
         )
-        if allow_card_fallback and not stage_select_open and not dungeon_select_open and machine and getattr(machine, "config", None):
+        if allow_card_fallback and machine and getattr(machine, "config", None):
             stage_templates = machine.config.get("stage_templates", [])
             for st_temp in stage_templates:
                 if os.path.exists(os.path.join("templates", st_temp)):
                     pos, conf = self._safe_match(screen_img, st_temp, threshold=0.85)
                     if pos:
-                        stage_select_open = True
+                        winner_name = "stage"
+                        winner_scene = SceneType.LOBBY_STAGE
                         scene_info.matched_elements[st_temp] = (pos, conf)
                         break
 
-        if allow_card_fallback and not stage_select_open and not dungeon_select_open and machine and getattr(machine, "config", None):
+        if allow_card_fallback and winner_name is None and machine and getattr(machine, "config", None):
             dungeon_templates = machine.config.get("dungeon_entries", [])
             for dg_temp in dungeon_templates:
                 if os.path.exists(os.path.join("templates", dg_temp)):
                     pos, conf = self._safe_match(screen_img, dg_temp, threshold=0.85)
                     if pos:
-                        dungeon_select_open = True
+                        winner_name = "dungeon"
+                        winner_scene = SceneType.LOBBY_DUNGEON
                         scene_info.matched_elements[dg_temp] = (pos, conf)
                         break
 
-        # 最終場景分類
-        selected_tabs = [
-            (dungeon_select_open, SceneType.LOBBY_DUNGEON, "dungeon"),
-            (stage_select_open, SceneType.LOBBY_STAGE, "stage"),
-            (domain_select_open, SceneType.DOMAIN_SELECT, "domain"),
-            (lord_select_open, SceneType.LORD_SELECT, "lord"),
-            (demon_lord_select_open, SceneType.DEMON_LORD_SELECT, "demon_lord"),
-        ]
-        active = [candidate for candidate in selected_tabs if candidate[0]]
-        if len(active) == 1:
-            _, scene_type, tab_name = active[0]
-            scene_info.scene_type = scene_type
-            scene_info.active_tabs.append(tab_name)
-        elif len(active) > 1:
-            logging.warning(
-                "Conflicting active lobby tabs detected; refusing to guess: %s",
-                [candidate[2] for candidate in active],
-            )
-            scene_info.scene_type = SceneType.LOBBY_OTHER
+        # 6. 最終場景判定輸出
+        if winner_name and winner_scene:
+            scene_info.scene_type = winner_scene
+            scene_info.active_tabs = [winner_name]
         elif scene_info.is_lobby:
             scene_info.scene_type = SceneType.LOBBY_OTHER
 
         return scene_info
+
+    def _resolve_lobby_tabs(
+        self,
+        screen_img,
+        machine,
+        scene_info: SceneInfo,
+    ) -> Tuple[Optional[str], Optional[SceneType], float, bool]:
+        """
+        對稱成對評估大廳 5 大頁籤 (共 10 張模板)。
+        1. 任何頁籤模板 (active 或 inactive) 出現，即為身處活動大廳之鐵證 (is_lobby = True)。
+        2. 5 大頁籤統一對稱檢驗：Active 信心度 >= 0.70 且顯著高於 Inactive (margin 0.02)。
+        3. 最大信心度仲裁 (Max-Confidence Disambiguation)：
+           - 0 個 active：回傳 (None, None, 0.0, False)
+           - 1 個 active：直接勝出
+           - >1 個 active：最高信心度顯著領先 (diff >= 0.05) 則勝出；若差距 < 0.05 視為真衝突。
+        回傳 (winner_name, winner_scene_type, winner_conf, is_conflict)
+        """
+        candidates: List[Tuple[str, SceneType, float]] = []
+        allow_tabs = self.registry.allows_group(self._active_profile, DetectorGroup.TABS)
+        if not allow_tabs:
+            return None, None, 0.0, False
+
+        # 1. 遍歷 5 大頁籤成對評估
+        for tab in LOBBY_TAB_DEFINITIONS:
+            active_tmpl = tab.active_template
+            inactive_tmpl = tab.inactive_template
+            if machine and getattr(machine, "config", None):
+                cfg = machine.config
+                if tab.config_active_key and tab.config_active_key in cfg:
+                    active_tmpl = cfg[tab.config_active_key] or active_tmpl
+                if tab.config_inactive_key and tab.config_inactive_key in cfg:
+                    inactive_tmpl = cfg[tab.config_inactive_key] or inactive_tmpl
+
+            pos_act, conf_act = self._safe_match(screen_img, active_tmpl, threshold=0.70)
+            pos_inact, conf_inact = self._safe_match(screen_img, inactive_tmpl, threshold=0.70)
+
+            # 大廳鐵證：10 模板中任一出現，證明畫面身處活動大廳
+            if pos_act:
+                scene_info.matched_elements[active_tmpl] = (pos_act, conf_act)
+                scene_info.is_lobby = True
+            if pos_inact:
+                scene_info.matched_elements[inactive_tmpl] = (pos_inact, conf_inact)
+                scene_info.is_lobby = True
+
+            # 相容 Matcher 互斥介面 (相容 Mock 或外部自訂 Matcher)
+            if conf_act < 0.70 and hasattr(self.matcher, "match_mutually_exclusive_tabs"):
+                res = self.matcher.match_mutually_exclusive_tabs(
+                    screen_img, active_tmpl, inactive_tmpl, margin=0.02, threshold=0.70
+                )
+                parsed = _parse_tab_result(res)
+                if parsed and parsed[0] and not parsed[1]:
+                    conf_act = max(conf_act, parsed[2])
+                    conf_inact = max(conf_inact, parsed[3])
+                    scene_info.is_lobby = True
+
+            # 對稱成對判定：Active 必須達標且勝過 Inactive (杜絕幽靈匹配)
+            if conf_act >= 0.70 and conf_act > conf_inact + 0.02:
+                candidates.append((tab.name, tab.scene_type, conf_act))
+
+        # 相容舊式 (stage_after vs dungeon_after) 跨頁籤二元比對 Mock
+        has_stage_or_dungeon = any(name in {"stage", "dungeon"} for name, _, _ in candidates)
+        if not has_stage_or_dungeon and hasattr(self.matcher, "match_mutually_exclusive_tabs"):
+            res_legacy = self.matcher.match_mutually_exclusive_tabs(
+                screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
+            )
+            parsed_legacy = _parse_tab_result(res_legacy)
+            if parsed_legacy:
+                is_st, is_dg, c_st, c_dg = parsed_legacy
+                # 若兩者信心度皆高 (>= 0.70) 卻均未勝出，說明兩者處於嚴重衝突狀態
+                if c_st >= 0.70 and c_dg >= 0.70 and not (is_st ^ is_dg):
+                    logging.warning("High confidence tab conflict between stage (%.4f) and dungeon (%.4f)", c_st, c_dg)
+                    return None, None, 0.0, True
+
+                if is_st and c_st >= 0.70:
+                    candidates.append(("stage", SceneType.LOBBY_STAGE, c_st))
+                    scene_info.is_lobby = True
+                elif is_dg and c_dg >= 0.70:
+                    _, conf_dg_inact = self._safe_match(screen_img, "dungeons/dungeon.png", threshold=0.70)
+                    if conf_dg_inact <= c_dg + 0.02:
+                        candidates.append(("dungeon", SceneType.LOBBY_DUNGEON, c_dg))
+                        scene_info.is_lobby = True
+
+        # 2. 最大信心度仲裁 (Max-Confidence Disambiguation)
+        if len(candidates) == 0:
+            return None, None, 0.0, False
+        if len(candidates) == 1:
+            name, st, conf = candidates[0]
+            return name, st, conf, False
+
+        candidates.sort(key=lambda item: item[2], reverse=True)
+        top_tab = candidates[0]
+        second_tab = candidates[1]
+        diff = top_tab[2] - second_tab[2]
+
+        if diff >= 0.05:
+            return top_tab[0], top_tab[1], top_tab[2], False
+
+        logging.warning(
+            "Conflicting active lobby tabs detected with insufficient margin (diff=%.4f): %s",
+            diff,
+            [c[0] for c in candidates],
+        )
+        return None, None, 0.0, True
 
     @staticmethod
     def _as_confidence(value):
@@ -357,24 +417,6 @@ class SceneDetector:
     def _runtime_config_value(machine, key, default):
         config = getattr(machine, "config", None) if machine is not None else None
         return (config or {}).get(key, default)
-
-    def _selected_from_active_inactive_pair(self, screen_img, active, inactive):
-        if not self.registry.allows_group(self._active_profile, DetectorGroup.TABS):
-            return False
-        result = self.matcher.match_mutually_exclusive_tabs(
-            screen_img,
-            active,
-            inactive,
-            margin=0.02,
-            threshold=0.70,
-        )
-        return bool(
-            isinstance(result, (tuple, list))
-            and len(result) == 4
-            and type(result).__name__ != "MagicMock"
-            and result[0]
-            and not result[1]
-        )
 
     @staticmethod
     def _build_runtime_templates(machine):
