@@ -57,7 +57,8 @@
 
 ### 3. 開發故事與契約收斂規範 (PARS & Contract Archival) 📝
 - 功能/修復收尾時於 `docs/storys/` 建立 PARS 文檔 (`Purpose`, `Action`, `Result`, `So What`, `Influence`)。
-- **文件收斂與契約歸檔**：若分支涉及核心不變量或新架構，遵循 `canonical_contract_archival` 規範：
+- **文件收斂與契約歸檔**：若分支涉及核心不變量或新架構，遵循 `canonical_contract_archival` 與 `branch_completion_workflow` 規範：
+  - 🛑 **收尾硬性狀態閘門 (Two-Phase Gated Invariant)**：當使用者發出「跑merge」、「準備merge」等收尾指令時，若本次分支涉及 Spec/TODO 變更，AI **絕對禁止直接輸出 `git merge` 指令**！必須先進入 Phase 1 停下並向使用者發起收斂清單確認；待使用者確認並完成契約升格與清理後，方可進入 Phase 2 交付合併指令。
   - ⚠️ **嚴禁 AI 自行決定清理範圍**：必須先列出候選清單向使用者顯式確認後方可執行。
   - **刪除是預設；封存是例外**：永久約束升格至 Canonical Contract，未完成事項獨立至 TODO/RFC，已完成的原始任務 spec 預設刪除，嚴防 Doc Drift。
 
