@@ -68,7 +68,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         """Dungeon completion/downstairs anchors must win over a false auto.png match."""
         mock_exists.return_value = True
         self.machine.config = {"name": "relaunch", "type": "stage", "explore_priorities": []}
-        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8: (
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
             ((100, 100), 0.95)
             if tpl in {"dungeons/dungeons_complete.png", "common/auto.png"}
             else (None, 0.0)
@@ -115,7 +115,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         }
 
         mock_exists.return_value = True
-        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8: ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
 
         handler.handle(self.fake_img, self.rect)
 
@@ -128,6 +128,74 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         self.assertEqual(handler.no_explore_match_count, 0)
         # 斷言 leave.png 為錨點，絕不點擊 exit 按鈕
         self.mock_mouse.click.assert_not_called()
+
+    @patch("os.path.exists")
+    def test_4_dungeon_complete_intent_latching_and_restoration(self, mock_exists):
+        """
+        測試 4：關卡模式 (stage) 下掉入 dungeons_complete.png 時，系統鎖定原 stage 配置、
+        注入地下城離場前置路徑，並在通關確鑿離場後還原原 stage 配置並轉移至 NAVIGATING。
+        """
+        mock_exists.return_value = True
+        # 初始意圖為 stage 關卡模式，無 explore_priorities
+        stage_cfg = {"name": "普通關卡測試", "type": "stage", "stage_name": "Stage 1-1"}
+        self.machine.config = stage_cfg.copy()
+        self.machine.current_state = self.machine.STATE_UNKNOWN
+
+        # 模擬 detect_current_state 辨識到 dungeons_complete.png
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((200, 200), 0.95) if tpl == "dungeons/dungeons_complete.png" else (None, 0.0)
+        )
+
+        self.machine.detect_current_state(self.fake_img, self.rect)
+
+        # 斷言轉移至 STATE_DUNGEON_EXPLORING
+        self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+        # 斷言原 stage 配置已被鎖定至 dungeon_recovery_return_config
+        self.assertEqual(self.machine.dungeon_recovery_return_config, stage_cfg)
+        # 斷言當前配置被注入了 emergency priorities
+        self.assertIn("dungeons/dungeons_complete.png", self.machine.config.get("explore_priorities", []))
+
+        # 模擬 ExploreHandler 處理 dungeons/dungeons_complete.png
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+        explore_handler.handle(self.fake_img, self.rect)
+
+        self.assertTrue(self.machine.dungeon_completing)
+        self.mock_mouse.click.assert_called_with(self.rect["left"] + 200, self.rect["top"] + 200)
+
+        # 模擬下一幀：dungeons_complete 消失，出現大廳錨點 goback_town.png
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.75, **kwargs: (
+            ((300, 300), 0.90) if tpl == "goback_town.png" else (None, 0.0)
+        )
+
+        explore_handler.handle(self.fake_img, self.rect)
+
+        # 斷言通關標記已重置，且原 stage 配置已被完全還原
+        self.assertFalse(self.machine.dungeon_completing)
+        self.assertIsNone(self.machine.dungeon_recovery_return_config)
+        self.assertEqual(self.machine.config["type"], "stage")
+        self.assertEqual(self.machine.config["name"], "普通關卡測試")
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+
+    @patch("states.login_flow.handle_global_login")
+    @patch("os.path.exists")
+    def test_5_login_guard_takes_precedence_over_dungeon_complete(self, mock_exists, mock_login):
+        """
+        測試 5：登入守護優先權 (Login-Before-Scene Guard)：
+        若畫面上同時存在 login/login.png 與 dungeons/dungeons_complete.png，
+        全域狀態檢測必須優先調用 handle_global_login，嚴禁跳過登入直接進入 EXPLORING 或點擊通關。
+        """
+        mock_exists.return_value = True
+        self.machine.current_state = self.machine.STATE_UNKNOWN
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((100, 100), 0.95) if tpl in {"login/login.png", "dungeons/dungeons_complete.png"} else (None, 0.0)
+        )
+
+        self.machine.detect_current_state(self.fake_img, self.rect)
+
+        # 斷言調用了 handle_global_login
+        mock_login.assert_called_once()
+        # 斷言並未轉移至 EXPLORING，維持在 UNKNOWN
+        self.assertNotEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
 
 
 if __name__ == "__main__":

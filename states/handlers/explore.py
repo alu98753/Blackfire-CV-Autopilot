@@ -18,7 +18,15 @@ class ExploreHandler(BaseStateHandler):
         """
         [地下城專屬] 依照優先級掃描探險事件。
         """
-        # 0. 如果背包滿了，優先轉移至 BAG_CLEANING 狀態進行清理，暫停探索
+        # 0. 登入防護：若在地下城畫面中偵測到登入按鈕，代表斷線或尚未完成登入，退回 UNKNOWN 觸發登入守護
+        if os.path.exists(os.path.join("templates", "login/login.png")):
+            pos_login, conf_login = self.matcher.match(screen_img, "login/login.png", threshold=0.75, quiet=True)
+            if pos_login:
+                logging.info(f"🔑 [ExploreHandler] 偵測到登入按鈕 'login/login.png' (相似度: {conf_login:.4f})，畫面尚未完成登入，轉移至 UNKNOWN 優先執行登入流程。")
+                self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                return
+
+        # 0.1 如果背包滿了，優先轉移至 BAG_CLEANING 狀態進行清理，暫停探索
         if self.machine.need_bag_cleaning:
             logging.info("🎒 地下城：偵測到需要清理背包，優先轉移至 BAG_CLEANING 狀態。")
             self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
@@ -50,11 +58,21 @@ class ExploreHandler(BaseStateHandler):
         # 3. 依優先級處理探險事件
         explore_priorities = (self.machine.config or {}).get("explore_priorities")
         if not isinstance(explore_priorities, list):
-            logging.error(
-                "[ExploreHandler] missing explore_priorities after EXPLORING transition; returning to UNKNOWN for recovery."
+            logging.warning(
+                "[ExploreHandler] missing explore_priorities in config; falling back to emergency dungeon exit priorities."
             )
-            self.machine.transition_to(self.machine.STATE_UNKNOWN)
-            return
+            explore_priorities = getattr(
+                self.machine,
+                "EMERGENCY_DUNGEON_EXIT_PRIORITIES",
+                [
+                    "dungeons/dungeons_complete.png",
+                    "dungeons/leave.png",
+                    "dungeons/gungeon_godown.png",
+                    "common/confirm.png",
+                    "common/ok.png",
+                    "common/quit.png",
+                ],
+            )
 
         for btn_name in explore_priorities:
             # 檢查模板檔案是否存在
@@ -598,6 +616,13 @@ class ExploreHandler(BaseStateHandler):
         self.machine.is_in_dungeon = False
         self.machine.run_count += 1
         logging.info(f"📊 已完成第 {self.machine.run_count} 次地下城通關！")
+
+        # 恢復暫存的目標意圖配置 (Intent Latching recovery)
+        if getattr(self.machine, "dungeon_recovery_return_config", None):
+            return_cfg = self.machine.dungeon_recovery_return_config
+            self.machine.dungeon_recovery_return_config = None
+            logging.info(f"🎯 [意圖恢復] 地下城離場前置路徑完成，還原目標意圖配置: type={return_cfg.get('type')}")
+            self.machine.set_config(return_cfg)
 
         # 動態設定當前地下城的冷卻時間（從 config 配置中動態獲取）
         if hasattr(self.machine, "current_dungeon_index") and self.machine.current_dungeon_index is not None:
