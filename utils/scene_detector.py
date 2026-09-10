@@ -235,14 +235,17 @@ class SceneDetector:
         if machine and getattr(machine, "config", None):
             config_type = machine.config.get("type", "stage")
 
-        # 1. 地下城內部檢測 (leave.png / dungeon_bless.png 等)
-        if config_type in ["dungeon", "mix"]:
-            dungeon_inner_btns = [
-                "dungeons/leave.png",
-                "dungeons/dungeon_bless.png",
-                "dungeons/Treasure.png",
-                "dungeons/gungeon_godown.png"
-            ]
+        dungeon_inner_btns = [
+            "dungeons/leave.png",
+            "dungeons/dungeons_complete.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/Treasure.png",
+            "dungeons/gungeon_godown.png"
+        ]
+
+        # 1. 地下城內部檢測 (主動路徑：dungeon / mix 模式，或狀態機當前已處於地下城)
+        is_dungeon_mode = config_type in ["dungeon", "mix"] or bool(getattr(machine, "is_in_dungeon", False))
+        if is_dungeon_mode:
             for check_btn in dungeon_inner_btns:
                 if os.path.exists(os.path.join("templates", check_btn)):
                     pos, conf = self._safe_match(screen_img, check_btn, threshold=0.8)
@@ -294,6 +297,19 @@ class SceneDetector:
         if scene_info.is_town:
             scene_info.scene_type = SceneType.TOWN
             return scene_info
+
+        # 3.5 被動地下城感知防禦 (非大廳亦非城鎮時，如實回報地下城客觀特徵，不受預期頁籤 Profile 限制)
+        if not scene_info.is_lobby and not is_dungeon_mode:
+            for check_btn in dungeon_inner_btns:
+                if os.path.exists(os.path.join("templates", check_btn)):
+                    res = self.matcher.match(screen_img, check_btn, threshold=0.8)
+                    pos = res[0] if (isinstance(res, (tuple, list)) and len(res) >= 2) else None
+                    conf = float(res[1]) if (isinstance(res, (tuple, list)) and len(res) >= 2 and res[1] is not None) else 0.0
+                    if pos:
+                        scene_info.scene_type = SceneType.IN_DUNGEON
+                        scene_info.is_in_dungeon = True
+                        scene_info.matched_elements[check_btn] = (pos, conf)
+                        return scene_info
 
         lobby_start_btn = "stages/start.png"
         if machine and getattr(machine, "config", None):

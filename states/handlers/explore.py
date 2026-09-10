@@ -11,6 +11,8 @@ class ExploreHandler(BaseStateHandler):
         "dungeons/dungeons_complete.png",
     )
     TREASURE_TERMINAL_THRESHOLD = 0.80
+    DUNGEON_EXIT_RETRY_INTERVAL = 1.5
+    DUNGEON_EXIT_TIMEOUT = 4.0
 
     def handle(self, screen_img, rect):
         """
@@ -21,6 +23,11 @@ class ExploreHandler(BaseStateHandler):
             logging.info("🎒 地下城：偵測到需要清理背包，優先轉移至 BAG_CLEANING 狀態。")
             self.machine.transition_to(self.machine.STATE_BAG_CLEANING)
             return
+
+        # 0.5 檢查通關退出後置條件 (Postcondition Verification)：若正在通關離場中
+        if getattr(self.machine, "dungeon_completing", False):
+            if self._check_dungeon_complete_postcondition(screen_img, rect):
+                return
 
         # 1. 檢查是否已過下樓冷卻時間，若是，則重設本層探索記憶
         if self.machine.dungeon_floor_transitioning and self.machine.last_godown_click_time:
@@ -79,36 +86,12 @@ class ExploreHandler(BaseStateHandler):
             pos, conf = self.matcher.match(screen_img, btn_name, threshold=thresh)
             if pos:
                 if btn_name == "dungeons/dungeons_complete.png":
-                    logging.info(f"🎉 偵測到【地下城通關結束】({btn_name})，信心度: {conf:.4f}，點擊退出。")
+                    logging.info(f"🎉 偵測到【地下城通關結束】({btn_name})，信心度: {conf:.4f}，點擊退出並啟動離場後置驗證。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                    self.machine.run_count += 1
-                    logging.info(f"📊 已完成第 {self.machine.run_count} 次地下城通關！")
-                    
-                    # 動態設定當前地下城的冷卻時間（從 config 配置中動態獲取）
-                    if hasattr(self.machine, "current_dungeon_index") and self.machine.current_dungeon_index is not None:
-                        cooldown_map = self.machine.config.get("cooldown_map", {})
-                        cd_seconds = cooldown_map.get(self.machine.current_dungeon_index, 900.0)
-                        self.machine.dungeon_cooldowns[self.machine.current_dungeon_index] = time.time() + cd_seconds
-                        dname = DungeonCatalog.get_name(self.machine.current_dungeon_index)
-                        logging.info(f"⏳ 貪婪地下城：設定 [{dname}] (#{self.machine.current_dungeon_index}) 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
-                        if self.machine.config.get("type") == "mix":
-                            status_str, avail_names = self.machine.get_dungeon_cooldown_status()
-                            avail_str = ", ".join(avail_names) if avail_names else "無"
-                            if not avail_names:
-                                is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
-                                is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
-                                if is_in_retreat or is_temp_resume:
-                                    logging.info(f"⏳ [體力退避] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將返回城鎮繼續維持體力退避待機 (COLLECT_ONLY)。")
-                                else:
-                                    logging.info(f"⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。")
-                            else:
-                                logging.info(f"⏳ [混合模式] 地下城通關！各副本冷卻情形: {status_str} ➔ 剩餘可挑戰地下城: [{avail_str}]。")
-                        
-                    # 通關後回到最外層大廳，轉移至尋路導航狀態重新進副本
-                    self.machine.is_in_dungeon = False
-                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
-                    time.sleep(0.2)
-                    
+                    self.machine.dungeon_completing = True
+                    self.machine.last_dungeon_complete_click_time = time.time()
+                    time.sleep(0.04)
+                    return
 
                 elif btn_name == "dungeons/Treasure.png":
                     if self.machine.dungeon_floor_transitioning:
@@ -564,3 +547,80 @@ class ExploreHandler(BaseStateHandler):
         self.machine.bless_received_this_floor = False
         self.machine.dungeon_floor_transitioning = False
         self.machine.last_godown_click_time = None
+
+    def _check_dungeon_complete_postcondition(self, screen_img, rect) -> bool:
+        """
+        驗證地下城通關點擊後的離場後置條件 (Postcondition)。
+        依據 Greenfield-lite Scoped Perception 原則，使用極速大廳/城鎮錨點進行非阻塞每幀裁決。
+        """
+        # 1. 檢查通關按鈕是否依然存在
+        pos_comp = None
+        conf_comp = 0.0
+        if os.path.exists(os.path.join("templates", "dungeons/dungeons_complete.png")):
+            pos_comp, conf_comp = self.matcher.match(screen_img, "dungeons/dungeons_complete.png", threshold=0.80)
+
+        # 2. 檢查大廳與城鎮客觀錨點 (goback_town, door, select_stage, dungeon 等)
+        lobby_anchor = None
+        for anchor in ["goback_town.png", "common/door.png", "stages/start.png", "common/select_stage.png", "dungeons/dungeon.png"]:
+            if os.path.exists(os.path.join("templates", anchor)):
+                pos_a, _ = self.matcher.match(screen_img, anchor, threshold=0.75)
+                if pos_a:
+                    lobby_anchor = anchor
+                    break
+
+        if lobby_anchor and not pos_comp:
+            logging.info(f"🟢 [地下城通關] 離場後置條件已驗證（發現大廳/城鎮錨點 [{lobby_anchor}] 且通關圖標已消失），正式結束探索流程。")
+            self._finalize_dungeon_completion()
+            return True
+
+        if pos_comp:
+            last_click = getattr(self.machine, "last_dungeon_complete_click_time", 0.0)
+            if time.time() - last_click > self.DUNGEON_EXIT_RETRY_INTERVAL:
+                logging.info(f"🔁 [地下城通關] 通關圖標依然存在 (信心度: {conf_comp:.4f})，再次發送退出點擊...")
+                self.mouse.click(rect["left"] + pos_comp[0], rect["top"] + pos_comp[1])
+                self.machine.last_dungeon_complete_click_time = time.time()
+            return True
+
+        # 既無通關按鈕也未見大廳錨點（可能正在黑屏淡出過渡）
+        elapsed = time.time() - getattr(self.machine, "last_dungeon_complete_click_time", 0.0)
+        if elapsed > self.DUNGEON_EXIT_TIMEOUT:
+            logging.warning("⚠️ [地下城通關] 等待離場逾時 (4.0s)，轉移至 STATE_UNKNOWN 交由全域掃描重新定位。")
+            self._finalize_dungeon_completion(target_state=self.machine.STATE_UNKNOWN)
+            return True
+
+        return True
+
+    def _finalize_dungeon_completion(self, target_state=None):
+        """
+        地下城通關確鑿離場後的結算、冷卻設置與狀態轉移閉環。
+        """
+        self.machine.dungeon_completing = False
+        self.machine.is_in_dungeon = False
+        self.machine.run_count += 1
+        logging.info(f"📊 已完成第 {self.machine.run_count} 次地下城通關！")
+
+        # 動態設定當前地下城的冷卻時間（從 config 配置中動態獲取）
+        if hasattr(self.machine, "current_dungeon_index") and self.machine.current_dungeon_index is not None:
+            cooldown_map = self.machine.config.get("cooldown_map", {})
+            cd_seconds = cooldown_map.get(self.machine.current_dungeon_index, 900.0)
+            self.machine.dungeon_cooldowns[self.machine.current_dungeon_index] = time.time() + cd_seconds
+            dname = DungeonCatalog.get_name(self.machine.current_dungeon_index)
+            logging.info(f"⏳ 貪婪地下城：設定 [{dname}] (#{self.machine.current_dungeon_index}) 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+            if self.machine.config.get("type") == "mix":
+                status_str, avail_names = self.machine.get_dungeon_cooldown_status()
+                avail_str = ", ".join(avail_names) if avail_names else "無"
+                if not avail_names:
+                    is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
+                    is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
+                    if is_in_retreat or is_temp_resume:
+                        logging.info(f"⏳ [體力退避] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將返回城鎮繼續維持體力退避待機 (COLLECT_ONLY)。")
+                    else:
+                        logging.info(f"⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。")
+                else:
+                    logging.info(f"⏳ [混合模式] 地下城通關！各副本冷卻情形: {status_str} ➔ 剩餘可挑戰地下城: [{avail_str}]。")
+
+        if target_state:
+            self.machine.transition_to(target_state)
+        else:
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
+

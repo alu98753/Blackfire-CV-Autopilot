@@ -26,6 +26,8 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.mock_machine.is_daily_pipeline_active.return_value = False
         self.mock_machine.has_available_dungeon.return_value = False
         self.mock_machine.dungeon_cooldowns = {}
+        self.mock_machine.stamina_retreat_start_time = None
+        self.mock_machine.primary_config = None
         
         self.mock_machine.config = {
             "name": "測試模式",
@@ -1032,6 +1034,42 @@ class TestBehaviorNavigation(unittest.TestCase):
         # 斷言：點擊切換地下城頁籤 (648, 715)
         self.mock_machine.mouse.click.assert_called_with(648, 715)
 
+    @patch("os.path.exists", return_value=True)
+    def test_ac4_navigation_auto_corrects_to_dungeon_exploring_when_dungeons_complete_visible(self, _mock_exists):
+        """
+        [AC 4 契約驗收] 驗證若狀態機處於 NAVIGATING 且已切換為 stage 配置，
+        但畫面實際出現 dungeons/dungeons_complete.png 時，NavigationHandler 透過
+        SceneDetector 的客觀感知，能在首幀立即自癒轉移回 STATE_DUNGEON_EXPLORING，
+        嚴禁觸發大廳尋路點擊或陷入等待。
+        """
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.current_state = "NAVIGATING"
+        self.mock_machine.is_in_dungeon = False
+        self.mock_machine.config = {
+            "name": "普通關卡模式",
+            "type": "stage",
+            "navigation_path": ["common/select_stage.png", "stages/first_stage.png"],
+        }
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+        self.mock_machine.need_bag_cleaning = False
+
+        def match_side_effect(_screen, template, **kwargs):
+            if template == "dungeons/dungeons_complete.png":
+                return ((958, 920), 0.95)
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：首幀自癒轉移回 DUNGEON_EXPLORING，不點擊任何尋路按鈕
+        self.mock_machine.transition_to.assert_called_once_with(self.mock_machine.STATE_DUNGEON_EXPLORING)
+        self.mock_machine.mouse.click.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
+
