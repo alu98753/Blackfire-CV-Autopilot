@@ -167,15 +167,23 @@ flowchart TD
 
 ## 8. 活契約驗收標準 (Acceptance Criteria)
 
-- [ ] **AC 1 (點擊不等於完成)**：`ExploreHandler` 點擊 `dungeons_complete.png` 後，若下一幀模擬畫面仍為通關畫面，狀態機必須保持在 `EXPLORING`，且不得切換 `config` 或呼叫 `transition_to(NAVIGATING)`。
-- [ ] **AC 2 (確鑿離場才轉移)**：當且僅當新畫面驗證無通關特徵且出現大廳/大門特徵時，狀態機才標記離場並轉移至 `NAVIGATING`。
-- [ ] **AC 3 (感知客觀性)**：即使 `machine.config["type"] == "stage"`，當畫面傳入包含 `dungeons_complete.png` 的影像時，`SceneDetector.detect()` 必須精準回傳 `SceneType.IN_DUNGEON`。
-- [ ] **AC 4 (導航自癒)**：若狀態機處於 `NAVIGATING` 但畫面為地下城特徵，`NavigationHandler` 必須在首幀立刻轉移回 `STATE_DUNGEON_EXPLORING`，嚴禁觸發 `LobbyTabUpgrade` 或等待超時。
+- [x] **AC 1 (點擊不等於完成)**：`ExploreHandler` 點擊 `dungeons_complete.png` 後，若下一幀模擬畫面仍為通關畫面，狀態機必須保持在 `EXPLORING`，且不得切換 `config` 或呼叫 `transition_to(NAVIGATING)`。
+- [x] **AC 2 (確鑿離場才轉移)**：當且僅當新畫面驗證無通關特徵且出現大廳/大門特徵時，狀態機才標記離場並轉移至 `NAVIGATING`。
+- [x] **AC 3 (感知客觀性)**：即使 `machine.config["type"] == "stage"`，當畫面傳入包含 `dungeons_complete.png` 的影像時，`SceneDetector.detect()` 必須精準回傳 `SceneType.IN_DUNGEON`。
+- [x] **AC 4 (導航自癒)**：若狀態機處於 `NAVIGATING` 但畫面為地下城特徵，`NavigationHandler` 必須在首幀立刻轉移回 `STATE_DUNGEON_EXPLORING`，嚴禁觸發 `LobbyTabUpgrade` 或等待超時。
 
 ---
 
 ## 9. 未來優化規劃 (Future Work)
 
 - **[FW-NAV-01] 推進 Scoped Perception (`DetectorRegistry`) 全面遷移，根除 `SceneDetector` 中所有殘留的 `config_type` 硬特判**：
-  - **背景**：本次修復在 `SceneDetector` 改善了地下城守護，但根本解法是落實 [Greenfield-lite Architecture v1 Section 4.2](../architecture/project_arch_greenfield_lite_v1.md#42-範圍化感知與低負載排程)。
-  - **目標**：依狀態機生命週期宣告 `DetectionProfile`（如 `UNKNOWN`, `TOWN`, `LOBBY`, `STAGE_SELECT`, `DUNGEON_SELECT`, `BATTLE`, `RESULT`），由 Profile 決定允許執行的 Detector 集合，徹底拔除 `SceneDetector` 對 `machine.config["type"]` 的逆向依賴。
+  - **相關檔案與具體位置**：
+    - [`utils/scene_detector.py:246-266`](../../utils/scene_detector.py#L246-L266)：步驟 1 主動路徑目前仍以 `is_dungeon_mode = config_type in ["dungeon", "mix"]` 進行硬特判守衛。
+    - [`utils/scene_detector.py:301-313`](../../utils/scene_detector.py#L301-L313)：步驟 3.5 過渡期後備感知防禦，在排除城鎮與大廳後執行地下城內部特徵匹配。
+  - **架構關鍵洞見**：
+    - ⚠️ **「非城鎮且非大廳」絕不代表必然處於地下城**：客觀畫面在此時可能處於戰鬥（BATTLE）、載入中（LOADING）、戰鬥結算（RESULT）、各類獨立玩法（Domain/Lord Boss）或各種彈窗（告示牌/祭壇/抽卡/背包清理）。
+    - 目前全域 `detect_scene` 在排除城鎮與大廳後檢測地下城，僅是過渡期的防衛性補救；若長期讓全域盲目輪詢地下城模板，會造成不必要的 CPU 消耗與誤匹配風險。
+  - **長效重構目標**：
+    - 依據 [Greenfield-lite Architecture v1 Section 4.2](../architecture/project_arch_greenfield_lite_v1.md#42-範圍化感知與低負載排程) 落地 `DetectorRegistry`。
+    - 全域 `SceneDetector` 嚴格僅負責 `TOWN` 與 `LOBBY` 頂層拓撲第一階段識別；
+    - 所有地下城探索與通關特徵比對完全下放至 `ExploreHandler` / `DungeonScope` 專屬的 Scoped Detector，隨狀態生命週期調度，徹底解耦業務配置與全域感知。

@@ -76,8 +76,17 @@ dengeon同理
 ### Navigation
 
 - [ ] 地下城狀態識別與定位異常([navigation_dungeon_status_bug.md](navigation_dungeon_status_bug.md))
-- [ ] **推進 Scoped Perception (`DetectorRegistry`) 全面遷移，根除 `SceneDetector` 中所有殘留的 `config_type` 硬特判** ([navigation_dungeon_status_bug.md](navigation_dungeon_status_bug.md#9-未來優化規劃-future-work))
-  - 徹底貫徹 [Greenfield-lite Architecture v1 Section 4.2](../architecture/project_arch_greenfield_lite_v1.md#42-範圍化感知與低負載排程)，由各狀態 Profile 集中宣告該階段允許調用的 Detector 清單，徹底解耦業務配置與視覺感知，避免以 config 遮蔽客觀世界。
+- [ ] **[FW-NAV-01] 推進 Scoped Perception (`DetectorRegistry`) 全面遷移，根除 `SceneDetector` 中所有殘留的 `config_type` 硬特判** ([navigation_dungeon_status_bug.md](navigation_dungeon_status_bug.md#9-未來優化規劃-future-work))
+  - **相關檔案與位置**：
+    - [`utils/scene_detector.py:246-266`](../../utils/scene_detector.py#L246-L266)：步驟 1 主動路徑仍以 `is_dungeon_mode = config_type in ["dungeon", "mix"]` 進行硬特判守衛。
+    - [`utils/scene_detector.py:301-313`](../../utils/scene_detector.py#L301-L313)：步驟 3.5 過渡期後備防禦，在排除城鎮與大廳後執行地下城模板匹配。
+  - **核心架構問題分析（為何需要重構）**：
+    - ⚠️ **「非城鎮且非大廳」絕不代表必然處於地下城**：客觀畫面在此時可能處於戰鬥（BATTLE）、載入中（LOADING）、戰鬥結算（RESULT）、各類玩法（Domain/Lord Boss）或各種獨立彈窗（告示牌/祭壇/抽卡/背包清理）。
+    - 若在全域 `detect_scene` 每幀非城鎮非大廳時盲目輪詢 5 個地下城模板，既浪費 CPU 算力，又存在非地下城場景誤匹配的潛在風險。
+  - **長效重構目標**：
+    - 徹底貫徹 [Greenfield-lite Architecture v1 Section 4.2](../architecture/project_arch_greenfield_lite_v1.md#42-範圍化感知與低負載排程)。
+    - **感知職責分層**：全域 `SceneDetector` 僅負責第一階段頂層拓撲錨點（`TOWN` 與 `LOBBY`），不再進行任何地下城或業務細節比對。
+    - **Scoped Detector 下放**：將地下城探索、通關特徵（`dungeons_complete.png`、`leave.png`）完全下放至 `ExploreHandler` / `DungeonScope` 的專屬 Detector，依狀態機生命週期按需調度，徹底根除全域猜測與對 `config["type"]` 的逆向依賴。
 
 - [ ] **2. 導航 90 秒逾時觸發 Watchdog 強制殺進程重開，且重啟後反覆卡死陷入死循環** ([watchdog.md](watchdog.md))
 - 模式 `mix` 解耦

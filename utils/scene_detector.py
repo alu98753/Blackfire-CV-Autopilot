@@ -298,13 +298,13 @@ class SceneDetector:
             scene_info.scene_type = SceneType.TOWN
             return scene_info
 
-        # 3.5 被動地下城感知防禦 (非大廳亦非城鎮時，如實回報地下城客觀特徵，不受預期頁籤 Profile 限制)
+        # 3.5 過渡期後備感知防禦 (排除城鎮與大廳後，若畫面仍殘留地下城特徵如通關畫面，如實回報 IN_DUNGEON 避免誤判卡死)
+        # ⚠️ 架構注意：「非城鎮且非大廳」絕不代表必然處於地下城（可能在戰鬥、載入、結算或彈窗）；
+        # 此處僅作為過渡期防禦，徹底根除方案請參閱 docs/todos/future_work.md 之 [FW-NAV-01] Scoped Perception 遷移。
         if not scene_info.is_lobby and not is_dungeon_mode:
             for check_btn in dungeon_inner_btns:
                 if os.path.exists(os.path.join("templates", check_btn)):
-                    res = self.matcher.match(screen_img, check_btn, threshold=0.8)
-                    pos = res[0] if (isinstance(res, (tuple, list)) and len(res) >= 2) else None
-                    conf = float(res[1]) if (isinstance(res, (tuple, list)) and len(res) >= 2 and res[1] is not None) else 0.0
+                    pos, conf = self._safe_match(screen_img, check_btn, threshold=0.8)
                     if pos:
                         scene_info.scene_type = SceneType.IN_DUNGEON
                         scene_info.is_in_dungeon = True
