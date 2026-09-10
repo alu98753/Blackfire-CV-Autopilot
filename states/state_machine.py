@@ -1404,18 +1404,34 @@ class GameStateMachine:
         return self.config or {}
 
     def build_dungeon_resume_route(self, source_config=None):
-        """Build an executable dungeon route from policy/source when resuming from collect_only."""
+        """Build an ephemeral, sanitized dungeon execution route when resuming from standby/retreat.
+
+        Contract & Architectural Invariants:
+        1. Ephemeral Scope: The returned route is strictly restricted to executing
+           ready timed dungeons while preserving the underlying retreat or standby context.
+        2. Prohibit Stage Farming: Explicitly sets enable_stage_farming=False and
+           tier4_mode=TIER4_MODE_NONE to strictly bar stage farming leakage.
+        3. Strip Stage Navigation: Completely removes stage entries and stage navigation paths,
+           retaining only common and dungeon navigation elements.
+        4. Explicit Semantic Tagging: Marks is_dungeon_temporary_resume=True to signal
+           downstream handlers that the system must return to town and standby immediately
+           upon dungeon exhaustion.
+        """
         policy = self._daily_activity_config()
         base = policy if (policy and policy.get("enable_dungeon")) else (source_config or self.config or {})
         route = deepcopy(base)
         route["type"] = "mix"
         route["enable_dungeon"] = True
+        route["enable_stage_farming"] = False
+        route["tier4_mode"] = TIER4_MODE_NONE
         route["is_tier4_fallback"] = True
+        route["is_dungeon_temporary_resume"] = True
         route["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+        route.pop("stage_entry", None)
+        route.pop("stage_navigation_path", None)
         if "dungeon_entries" not in route and "daily" in GAME_CONFIGS:
             route["dungeon_entries"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_entries", []))
             route["dungeon_names"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_names", []))
-        self._apply_tier4_stage_selection(route)
         self._apply_tier4_dungeon_selection(route)
         return route
 
@@ -2143,9 +2159,25 @@ class GameStateMachine:
                     "enable_dungeon", cfg.get("enable_dungeon", True)
                 )
                 if not dungeon_enabled:
+                    if self.current_state != self.STATE_COLLECT_ONLY:
+                        logging.info(
+                            "⏳ [Activity Scheduler] 體力退避期間地下城未啟用 "
+                            "➔ 恢復城鎮待機與 COLLECT_ONLY 狀態。"
+                        )
+                        if "collect_only" in GAME_CONFIGS:
+                            self.config = GAME_CONFIGS["collect_only"].copy()
+                        self.transition_to(self.STATE_COLLECT_ONLY)
                     return False
 
                 if not self.has_available_dungeon(target_config=activity_cfg):
+                    if self.current_state != self.STATE_COLLECT_ONLY:
+                        logging.info(
+                            "⏳ [Activity Scheduler] 體力退避期間地下城已全冷卻 "
+                            "➔ 恢復城鎮待機與 COLLECT_ONLY 狀態。"
+                        )
+                        if "collect_only" in GAME_CONFIGS:
+                            self.config = GAME_CONFIGS["collect_only"].copy()
+                        self.transition_to(self.STATE_COLLECT_ONLY)
                     return False
 
                 dungeon_route = self.build_dungeon_resume_route(activity_cfg)

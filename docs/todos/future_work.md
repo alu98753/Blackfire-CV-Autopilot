@@ -31,6 +31,10 @@ dengeon同理
   chest ok
   任務版 ok
 
+### Navigation
+
+- [x] 選關與地下城向右翻頁/滑動過慢且比對過多無關圖片 ([navigation_slow_bug.md](navigation_slow_bug.md)) 以在6cea216ce112f0b584c0f3c1efde22b81bb38811 完成
+
 ## 📌 一、 進行中與待開發項目 (Active TODOs)
 
 ### Daily
@@ -45,8 +49,8 @@ dengeon同理
 - [ ] **4. 定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖** ([daily_quest_dungeon_priority_spec.md](daily_quest_dungeon_priority_spec.md))
 - [ ] **5. Daily 模式退避進入 `COLLECT_ONLY` 後，地下城冷卻結束無法定時回歸** ([state_machine_bug.md](state_machine_bug.md))
   - 待機喚醒機制與型態判斷缺陷導致地下城冷卻就緒後無法自動喚醒復歸。
-- [ ] **6. `COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
-  - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡。
+- [x] **6. `COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
+  - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡；地下城喚醒路由純潔化與冷卻復歸閉環已於 fix/stamina-retreat-dungeon-resume 完成。
 - [ ] **7. 領主 Boss(Lord) 與深淵魔王(Demon Lord) 穩定運行與材料防護**
   - lord, demon lord 不被其他activity搶掉，可以正常打完。
   - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
@@ -65,17 +69,18 @@ dengeon同理
 
 ### 資源與模板路徑重構 (Template Assets Reorganization)
 
-- [ ] **11. 安全移動關卡頁籤模板至 `templates/stages/` 並更新引用路徑**
+- [ ] 安全移動關卡頁籤模板至 `templates/stages/` 並更新引用路徑**
   - 將 [common/select_stage.png](../templates/common/select_stage.png) 與 [common/select_stage_after.png](../templates/common/select_stage_after.png) 安全移動至 `templates/stages/`（與 `dungeons/`、`domains/`、`load/`、`demon_lords/` 保持一致的目錄結構）。
   - 同步更新 `utils/scene_types.py` (`LOBBY_TAB_DEFINITIONS`)、相關 Handler 與所有測試案例中的引用路徑。
 
 ### Navigation
 
 - [ ] **2. 導航 90 秒逾時觸發 Watchdog 強制殺進程重開，且重啟後反覆卡死陷入死循環** ([watchdog.md](watchdog.md))
-- [ ] **11. 選關與地下城向右翻頁/滑動過慢且比對過多無關圖片** ([navigation_slow_bug.md](navigation_slow_bug.md))
-  - 向右滑動的時候明明一直做就好，且只要比對現在在的位置 ({}_after 和目標圖片) 共兩張，但目前每次都等很久、比對很多圖片。
 - 模式 `mix` 解耦
   - 現在模式 `mix` 應該不需要，而是應該由場景驅動；但現在 `daily` 是構建在 `mix` 之上，不好拆，要一個一個來。
+
+- navigation, state machine都超過千行 且有多處邏輯一樣。
+  - 分析原因並思考怎麼用BDI重構 以達到300行
 
 ### .agent
 
@@ -84,8 +89,7 @@ dengeon同理
 
 ### Battle & Result
 
-- [ ] **9. 戰鬥血條靜止卡死自癒重啟機制** ([battle_stall_recovery_spec.md](battle_stall_recovery_spec.md))
-  - 當人物模型技能互卡或動畫死鎖時，血條完全不動；目前戰鬥僅有 900 秒（15 分鐘）的 hard timeout。沒有原地「設定 ➔ 重新開始戰鬥」的快速自癒，導致一旦發生死鎖，整整 15 分鐘掛機進度全停，嚴重消耗 24/7 的實質運行時間。
+- [x] 戰鬥血條靜止卡死自癒重啟機制 ([battle_stall_recovery_spec.md](battle_stall_recovery_spec.md))已完成「設定 ➔ 重新開始戰鬥」的快速自癒, 尚未更新文件 應刪除 該spe.md視情況納入contract
 
 - 戰鬥結算與地下城通關閉環重構 ([result_todo.md](result_todo.md) / [RFC: 重構 Result 為 BattleResult](rfc_rename_result_to_battle_result.md))
   - 釐清並對齊架構語意：`STATE_RESULT` 實質為專屬戰鬥結算的 `STATE_BATTLE_RESULT`。

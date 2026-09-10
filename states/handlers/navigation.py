@@ -481,6 +481,21 @@ class NavigationHandler(BaseStateHandler):
         self.machine.config = GAME_CONFIGS["collect_only"].copy()
         self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
 
+    def _is_stage_farming_allowed(self) -> bool:
+        """Check if stage farming is permitted when dungeons are on cooldown.
+
+        Contract: Strictly prohibits stage farming during stamina retreat or temporary dungeon resume.
+        """
+        if getattr(self.machine, "stamina_retreat_start_time", None) is not None:
+            return False
+        if self.machine.config.get("is_dungeon_temporary_resume", False):
+            return False
+        mode_type = self.machine.config.get("type")
+        default_farm = bool(
+            mode_type in ["mix", "stage", "daily"]
+            or self.machine.config.get("is_tier4_fallback", False)
+        )
+        return bool(self.machine.config.get("enable_stage_farming", default_farm))
 
     def _switch_to_stage_or_back(self, screen_img, rect, reason):
         """
@@ -532,15 +547,16 @@ class NavigationHandler(BaseStateHandler):
             )
             return
 
-        # 若未啟用普通關卡打怪 (enable_stage_farming == False)，直接返回城鎮轉入 COLLECT_ONLY 待機
-        mode_type = self.machine.config.get("type")
-        default_stage_farm = True if (mode_type in ["mix", "stage", "daily"] or self.machine.config.get("is_tier4_fallback", False)) else False
-        is_stage_farming = self.machine.config.get("enable_stage_farming", default_stage_farm)
-
-        if not is_stage_farming:
-            self._enter_collect_only_after_dungeon_cooldown(
-                screen_img, rect, "地下城冷卻中且未啟用普通關卡打怪 (enable_stage_farming=False)"
+        # 若未啟用普通關卡打怪 (enable_stage_farming == False) 或處於體力退避/臨時地下城喚醒，直接返回城鎮轉入 COLLECT_ONLY 待機
+        if not self._is_stage_farming_allowed():
+            is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
+            is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
+            reason = (
+                "體力退避或臨時地下城喚醒期間地下城全冷卻，禁止切換至普通關卡"
+                if (is_in_retreat or is_temp_resume)
+                else "地下城冷卻中且未啟用普通關卡打怪 (enable_stage_farming=False)"
             )
+            self._enter_collect_only_after_dungeon_cooldown(screen_img, rect, reason)
             return
 
         pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
@@ -747,10 +763,9 @@ class NavigationHandler(BaseStateHandler):
                         dungeon_avail = False
 
                     if not dungeon_avail:
-                        logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
-                        from config import GAME_CONFIGS
-                        self.machine.config = GAME_CONFIGS["collect_only"].copy()
-                        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                        self._enter_collect_only_after_dungeon_cooldown(
+                            screen_img, rect, "體力退避期間所有地下城皆已進入冷卻"
+                        )
                         return
 
         # B. 原本的尋路導航邏輯
@@ -980,11 +995,15 @@ class NavigationHandler(BaseStateHandler):
                                 return
                             
                 if target_idx is None:
-                    if getattr(self.machine, "stamina_retreat_start_time", None) is not None and getattr(self.machine, "original_config", None) is not None:
-                        logging.warning("🔄 [冷卻再觸發] 所有地下城皆已進入冷卻，自動切回 [collect_only] 待機！(退避總剩餘時間持續倒數中...)")
-                        from config import GAME_CONFIGS
-                        self.machine.config = GAME_CONFIGS["collect_only"].copy()
-                        self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
+                    is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
+                    is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
+                    if is_in_retreat or is_temp_resume or not self._is_stage_farming_allowed():
+                        reason = (
+                            "體力退避或臨時地下城喚醒期間所有地下城皆已進入冷卻"
+                            if (is_in_retreat or is_temp_resume)
+                            else "所有地下城皆已進入冷卻且未啟用普通關卡打怪"
+                        )
+                        self._enter_collect_only_after_dungeon_cooldown(screen_img, rect, reason)
                         return
                     if self.machine.config.get("type") == "dungeon":
                         self._enter_collect_only_after_dungeon_cooldown(
@@ -1050,13 +1069,16 @@ class NavigationHandler(BaseStateHandler):
                     return
                 nav_path = ["common/door.png", "dungeons/dungeon.png"]
             else:
-                # 若未啟用普通關卡打怪 (enable_stage_farming == False)，直接轉入 COLLECT_ONLY 待機
-                mode_t = self.machine.config.get("type")
-                default_farm = True if (mode_t in ["mix", "stage", "daily"] or self.machine.config.get("is_tier4_fallback", False)) else False
-                if not self.machine.config.get("enable_stage_farming", default_farm):
-                    self._enter_collect_only_after_dungeon_cooldown(
-                        screen_img, rect, "地下城全冷卻且未啟用普通關卡打怪 (enable_stage_farming=False)"
+                # 若未啟用普通關卡打怪 (enable_stage_farming == False) 或處於體力退避/臨時地下城喚醒，直接轉入 COLLECT_ONLY 待機
+                if not self._is_stage_farming_allowed():
+                    is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
+                    is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
+                    reason = (
+                        "體力退避或臨時地下城喚醒期間地下城全冷卻，禁止切換至普通關卡"
+                        if (is_in_retreat or is_temp_resume)
+                        else "地下城全冷卻且未啟用普通關卡打怪 (enable_stage_farming=False)"
                     )
+                    self._enter_collect_only_after_dungeon_cooldown(screen_img, rect, reason)
                     return
 
                 # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤，點擊 select_stage.png 切換！

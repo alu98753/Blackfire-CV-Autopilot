@@ -224,5 +224,65 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         self.assertEqual(self.state_machine.stamina_retreat_start_time, original_ts)
         self.assertTrue(self.state_machine.stamina_recovery.is_active)
 
+    def test_evaluate_next_activity_returns_to_collect_only_when_all_dungeons_cooldown_in_retreat(self):
+        """
+        [體力退避冷卻復歸斷言] 驗證處於體力退避期間 (stamina_retreat_start_time 設定)，
+        當前狀態為 STATE_NAVIGATING (模擬打完地下城結算回到大廳)，
+        若所有允許之地下城均在冷卻中，evaluate_next_activity() 必定轉移至 STATE_COLLECT_ONLY
+        並回傳 False，將 config 設為 collect_only，且不破壞退避計時。
+        """
+        now = time.time()
+        retreat_start = now - 600.0
+        self.state_machine.stamina_retreat_start_time = retreat_start
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.config = {
+            "name": "地下城結算後臨時路由",
+            "type": "mix",
+            "enable_dungeon": True,
+            "is_dungeon_temporary_resume": True,
+        }
+        # 模擬所有地下城均處於冷卻
+        self.state_machine.has_available_dungeon = MagicMock(return_value=False)
+
+        scheduled = self.state_machine.evaluate_next_activity()
+
+        self.assertFalse(scheduled)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_COLLECT_ONLY)
+        self.assertEqual(self.state_machine.config["type"], "collect_only")
+        self.assertEqual(self.state_machine.stamina_retreat_start_time, retreat_start)
+
+    def test_build_dungeon_resume_route_sanitization(self):
+        """
+        [路由純潔性斷言] 驗證 build_dungeon_resume_route 產生的路由：
+        - 明確禁用普通關卡打怪 (enable_stage_farming=False)
+        - 明確將 tier4_mode 設為 none
+        - 標記 is_dungeon_temporary_resume=True
+        - 剝除任何 stage_entry 與 stage_navigation_path 尋路路徑
+        - 僅保留地下城尋路路徑 common/door.png -> dungeons/dungeon.png
+        """
+        dirty_source = {
+            "name": "每日懸賞任務 - 荒地 (第 7 關)",
+            "type": "mix",
+            "enable_dungeon": True,
+            "enable_stage_farming": True,
+            "tier4_mode": "stage",
+            "is_tier4_fallback": True,
+            "stage_entry": "stages/level7_forgotten_wasteland.png",
+            "stage_navigation_path": ["common/door.png", "stages/level7_forgotten_wasteland.png"],
+            "greedy_allowed_indices": [6, 7],
+        }
+        route = self.state_machine.build_dungeon_resume_route(dirty_source)
+
+        self.assertFalse(route["enable_stage_farming"])
+        self.assertEqual(route["tier4_mode"], "none")
+        self.assertTrue(route["is_dungeon_temporary_resume"])
+        self.assertTrue(route["is_tier4_fallback"])
+        self.assertNotIn("stage_entry", route)
+        self.assertNotIn("stage_navigation_path", route)
+        self.assertIn("common/door.png", route["navigation_path"])
+        self.assertIn("dungeons/dungeon.png", route["navigation_path"])
+        self.assertNotIn("stages/level7_forgotten_wasteland.png", route["navigation_path"])
+        self.assertTrue(route["enable_dungeon"])
+
 if __name__ == '__main__':
     unittest.main()

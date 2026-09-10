@@ -1,6 +1,6 @@
 # Spec / Bug Analysis: 體力退避 (COLLECT_ONLY) 期間地下城冷卻結束喚醒後誤入 Tier 4 Stage 刷怪問題分析與修復規格
 
-- **狀態**：分析完畢 / 待實作修復 (Ready for Implementation)
+- **狀態**：修復完畢 / 待驗證合併 (Fixed & Verified in fix/stamina-retreat-dungeon-resume)
 - **類別**：Bug Fix / Architecture Invariant Alignment
 - **影響範圍**：體力退避機制 (`stamina_retreat`)、定時待機處理器 (`CollectOnlyHandler`)、全域活動調度器 (`evaluate_next_activity`)、導航處理器 (`NavigationHandler`)、探索處理器 (`ExploreHandler`)
 - **相關核心檔案**：
