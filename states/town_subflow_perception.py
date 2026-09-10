@@ -2,7 +2,7 @@
 
 import time
 
-from config import GAME_CONFIGS
+from config import GAME_CONFIGS, TOWN_ANCHOR_BRIGHTNESS_THRESHOLD
 from states.town_subflow_registry import spec_for
 from utils.scene_snapshot import (ElementId, ElementMatch, SceneId, SceneSnapshot, next_navigation_frame_id)
 from utils.town_building_detector import detect_building_with_red_dot
@@ -15,7 +15,6 @@ OVERLAY_CLOSE_TEMPLATES = (
     "common/cancel.png",
     "common/quit.png",
 )
-TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.50
 
 
 class TownSubflowPerception:

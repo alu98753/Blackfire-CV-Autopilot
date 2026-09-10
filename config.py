@@ -24,6 +24,8 @@ TIER4_MODE_OPTIONS = (
 TIER4_DOMAIN_OPTIONS = (
     (DEFAULT_TIER4_DOMAIN, "黃金古國"),
 )
+TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.35
+TOWN_BUILDING_BRIGHTNESS_THRESHOLD = 0.35
 CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
