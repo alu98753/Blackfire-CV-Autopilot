@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, Optional
 
 from utils.scene_types import SceneId
 
@@ -36,6 +36,11 @@ class TabId(str, Enum):
     DEMON_LORD = "demon_lord"
 
 
+class LobbyTabScope(str, Enum):
+    FULL_RELOCALIZE = "full_relocalize"
+    EXPECTED_TAB = "expected_tab"
+
+
 class DetectionProfileId(str, Enum):
     UNKNOWN = "unknown"
     TOWN = "town"
@@ -49,6 +54,14 @@ class DetectionProfileId(str, Enum):
     BATTLE = "battle"
     RESULT = "result"
     DOMAIN = "domain"
+
+
+@dataclass(frozen=True)
+class SceneDetectionRequest:
+    profile: DetectionProfileId = DetectionProfileId.UNKNOWN
+    expected_tab: Optional[TabId] = None
+    tab_scope: LobbyTabScope = LobbyTabScope.FULL_RELOCALIZE
+    reason: str = "default"
 
 
 @dataclass(frozen=True)

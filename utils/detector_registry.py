@@ -25,29 +25,51 @@ class DetectorRegistry:
         DetectionProfileId.LOBBY: frozenset(
             {
                 DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
                 DetectorGroup.LOBBY,
                 DetectorGroup.TABS,
             }
         ),
         DetectionProfileId.STAGE_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.DUNGEON_SELECT: frozenset(
             {
                 DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
                 DetectorGroup.LOBBY,
                 DetectorGroup.TABS,
                 DetectorGroup.DUNGEON,
             }
         ),
         DetectionProfileId.DOMAIN_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.LORD_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.DEMON_LORD_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.LOADING: frozenset({DetectorGroup.SAFETY}),
         DetectionProfileId.BATTLE: frozenset({DetectorGroup.SAFETY}),

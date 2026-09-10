@@ -98,6 +98,10 @@ LOBBY_TAB_DEFINITIONS: Tuple[LobbyTabDefinition, ...] = (
     ),
 )
 
+LOBBY_TAB_BY_NAME: Dict[str, LobbyTabDefinition] = {
+    tab.name: tab for tab in LOBBY_TAB_DEFINITIONS
+}
+
 
 @dataclass(frozen=True)
 class SceneAnchorSpec:

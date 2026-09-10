@@ -3,6 +3,7 @@
 from dataclasses import dataclass, replace
 import logging
 import time
+from typing import Optional
 
 from states.navigation_intent import (
     ActionDecision,
@@ -20,7 +21,11 @@ from states.navigation_progress import (
     ProgressStatus,
 )
 from utils.scene_snapshot import (
+    DetectionProfileId,
+    LobbyTabScope,
+    SceneDetectionRequest,
     SceneSnapshot,
+    TabId,
     next_navigation_frame_id,
     snapshot_from_scene_info,
 )
@@ -47,6 +52,92 @@ def build_intent_snapshot(machine) -> IntentSnapshot:
         stamina_retreat_active=(
             getattr(machine, "stamina_retreat_start_time", None) is not None
         ),
+    )
+
+
+def resolve_expected_tab_from_machine(machine) -> Optional[TabId]:
+    """
+    從當前已提交之導航意圖、in-flight action 或 route decision 解析目標頁籤。
+    遵循規格 nav_slow_bug2 第 4 節來源對照。
+    """
+    if machine is None:
+        return None
+    progress = getattr(machine, "navigation_progress", None)
+    if isinstance(progress, NavigationProgress) and progress.in_flight:
+        if progress.in_flight.expected_tab is not None:
+            return progress.in_flight.expected_tab
+
+    config = getattr(machine, "config", None) or {}
+    config_type = config.get("type")
+
+    # 檢查是否有正在進行的 activity intent (如首領或魔王討伐)
+    active_intent = getattr(machine, "active_navigation_intent", None)
+    if active_intent and getattr(active_intent, "intent_id", None) == IntentId.TOWN_SUBFLOW:
+        payload = getattr(active_intent, "payload", {}) or {}
+        subflow = payload.get("flow_type") or payload.get("subflow")
+        if subflow == "lord_boss":
+            return TabId.LORD
+        if subflow == "demon_lord":
+            return TabId.DEMON_LORD
+
+    _CONFIG_TYPE_TO_TAB: dict[str, TabId] = {
+        "stage": TabId.STAGE,
+        "dungeon": TabId.DUNGEON,
+        "domain": TabId.DOMAIN,
+        "lord": TabId.LORD,
+        "demon_lord": TabId.DEMON_LORD,
+    }
+    if config_type in _CONFIG_TYPE_TO_TAB:
+        return _CONFIG_TYPE_TO_TAB[config_type]
+    if config_type in {"mix", "daily"}:
+        has_dg = False
+        try:
+            has_dg = machine.has_available_dungeon()
+        except Exception:
+            has_dg = False
+        return TabId.DUNGEON if has_dg else TabId.STAGE
+
+    return None
+
+
+TAB_ID_TO_PROFILE: dict[TabId, DetectionProfileId] = {
+    TabId.STAGE: DetectionProfileId.STAGE_SELECT,
+    TabId.DUNGEON: DetectionProfileId.DUNGEON_SELECT,
+    TabId.DOMAIN: DetectionProfileId.DOMAIN_SELECT,
+    TabId.LORD: DetectionProfileId.LORD_SELECT,
+    TabId.DEMON_LORD: DetectionProfileId.DEMON_LORD_SELECT,
+}
+
+
+def resolve_detection_request(machine) -> SceneDetectionRequest:
+    """
+    依據當前狀態機狀態產出感知請求 (SceneDetectionRequest)。
+    已知目標時以 EXPECTED_TAB 限制頁籤感知為一對 active/inactive 模板；
+    無明確目標或異常時回傳 FULL_RELOCALIZE。
+    """
+    if machine is None:
+        return SceneDetectionRequest(
+            profile=DetectionProfileId.UNKNOWN,
+            expected_tab=None,
+            tab_scope=LobbyTabScope.FULL_RELOCALIZE,
+            reason="machine_none",
+        )
+
+    expected_tab = resolve_expected_tab_from_machine(machine)
+    if expected_tab is None:
+        return SceneDetectionRequest(
+            profile=DetectionProfileId.UNKNOWN,
+            expected_tab=None,
+            tab_scope=LobbyTabScope.FULL_RELOCALIZE,
+            reason="uncommitted_route",
+        )
+
+    profile = TAB_ID_TO_PROFILE.get(expected_tab, DetectionProfileId.LOBBY)
+    return SceneDetectionRequest(
+        profile=profile,
+        expected_tab=expected_tab,
+        tab_scope=LobbyTabScope.EXPECTED_TAB,
+        reason="navigation_steady",
     )
 
 
@@ -239,10 +330,12 @@ class NavigationDecisionExecutor:
             or decision.expected is None
         ):
             return
+        expected_tab = resolve_expected_tab_from_machine(self.machine)
         progress.begin(
             context.active_intent.intent_id,
             decision.action,
             decision.expected,
             context.scene.frame_id,
             _monotonic_now(self.machine),
+            expected_tab=expected_tab,
         )

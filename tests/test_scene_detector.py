@@ -137,6 +137,14 @@ class TestSceneDetector(unittest.TestCase):
         def match_side_effect(_img, template, threshold=0.8):
             if template == "goback_town.png":
                 return ((64, 726), 0.95)
+            if template == "common/select_stage_after.png":
+                return ((531, 712), 0.91)
+            if template == "common/select_stage.png":
+                return ((526, 715), 0.40)
+            if template == "dungeons/dungeon_after.png":
+                return ((648, 713), 0.90)
+            if template == "dungeons/dungeon.png":
+                return ((648, 715), 0.40)
             if template == "stages/level1_sky_plains.png":
                 return ((300, 400), 0.97)
             return (None, 0.0)
@@ -277,6 +285,41 @@ class TestSceneDetector(unittest.TestCase):
         ]
         self.assertEqual(len(start_calls), 2)
         self.assertEqual([call.args[0] for call in start_calls], ["first_frame", "second_frame"])
+
+    @patch("os.path.exists", return_value=True)
+    def test_expected_tab_never_matches_other_four_tabs(self, mock_exists):
+        """EXPECTED_TAB mode restricts pairwise evaluation to the requested tab only."""
+        from utils.scene_snapshot import DetectionProfileId, LobbyTabScope, SceneDetectionRequest, TabId
+        from utils.scene_types import LOBBY_TAB_BY_NAME
+
+        self.mock_machine.config = {"type": "dungeon"}
+        queried_templates = []
+
+        def match_side_effect(_img, template, threshold=0.8):
+            queried_templates.append(template)
+            if template == "dungeons/dungeon_after.png":
+                return ((648, 713), 0.95)
+            if template == "dungeons/dungeon.png":
+                return ((648, 715), 0.40)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        req = SceneDetectionRequest(
+            profile=DetectionProfileId.DUNGEON_SELECT,
+            expected_tab=TabId.DUNGEON,
+            tab_scope=LobbyTabScope.EXPECTED_TAB,
+            reason="navigation_steady",
+        )
+        scene = self.detector.detect("frame", machine=self.mock_machine, request=req)
+
+        self.assertEqual(scene.scene_type, SceneType.DUNGEON_SELECT)
+        self.assertEqual(scene.active_tabs, ["dungeon"])
+
+        for tab_name, tab_def in LOBBY_TAB_BY_NAME.items():
+            if tab_name != "dungeon":
+                self.assertNotIn(tab_def.active_template, queried_templates)
+                self.assertNotIn(tab_def.inactive_template, queried_templates)
 
 
 if __name__ == "__main__":
