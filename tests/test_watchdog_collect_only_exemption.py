@@ -84,5 +84,31 @@ class TestWatchdogCollectOnlyExemption(unittest.TestCase):
         self.assertTrue(triggered_battle)
         self.assertEqual(self.state_machine.stashed_state, self.state_machine.STATE_BATTLE)
 
+    def test_watchdog_demon_lords_has_90s_timeout(self):
+        """
+        [深淵魔王 90s 寬鬆門檻斷言] 驗證 STATE_DEMON_LORDS 享有 90 秒寬鬆門檻：
+        35s 時不觸發逾時，>90s (如 95s) 時才觸發 Watchdog。
+        """
+        self.state_machine.current_state = self.state_machine.STATE_DEMON_LORDS
+        self.state_machine.last_state_change = time.time() - 35.0
+        self.state_machine.stashed_state = None
+
+        mock_handler = MagicMock()
+        mock_handler.subflows_map = {}
+        self.state_machine.handlers[self.state_machine.STATE_POPUP_RECOVERY] = mock_handler
+
+        # 35s: 未達 90s 門檻，不觸發
+        triggered_35s = self.watchdog.check(screen_img=None)
+        self.assertFalse(triggered_35s)
+        self.assertIsNone(self.state_machine.stashed_state)
+
+        # 95s: 超過 90s 門檻，觸發 Watchdog
+        self.state_machine.last_state_change = time.time() - 95.0
+        with patch('states.exceptions.watchdog.safe_match', return_value=(None, 0.0)):
+            triggered_95s = self.watchdog.check(screen_img=None)
+
+        self.assertTrue(triggered_95s)
+        self.assertEqual(self.state_machine.stashed_state, self.state_machine.STATE_DEMON_LORDS)
+
 if __name__ == '__main__':
     unittest.main()

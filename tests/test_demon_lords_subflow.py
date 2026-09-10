@@ -528,3 +528,47 @@ class TestDemonLordsSubflow(unittest.TestCase):
         self.assertIn("result_buttons", dl_cfg)
         self.assertIn("common/continue.png", dl_cfg["result_buttons"])
 
+    def test_demon_lords_handler_calls_notify_ui_progress_on_valid_actions(self):
+        """[心跳規範] 驗證 DemonLordsHandler 於進門、切分頁、選卡片、點插槽、確認選石、開始戰鬥時調用 notify_ui_progress()"""
+        handler = DemonLordsHandler(self.state_machine)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+        dummy_screen = np.zeros((800, 1000, 3), dtype=np.uint8)
+
+        with patch.object(self.state_machine, "notify_ui_progress") as mock_notify:
+            # 1. 點擊大廳門
+            with patch.object(self.mock_matcher, "match", return_value=((100, 200), 0.90)):
+                handler._step_enter_lobby(dummy_screen, rect)
+                mock_notify.assert_called_once()
+
+            mock_notify.reset_mock()
+            # 2. 點擊魔王頁籤
+            with patch.object(self.mock_matcher, "match", return_value=((200, 300), 0.90)):
+                handler._step_switch_to_demon_tab(dummy_screen, rect)
+                mock_notify.assert_called_once()
+
+            mock_notify.reset_mock()
+            # 3. 點擊魔王卡片
+            with patch.object(self.mock_matcher, "match", return_value=((250, 350), 0.90)):
+                with patch("os.path.exists", return_value=True):
+                    handler._step_select_boss_card(dummy_screen, rect)
+                    mock_notify.assert_called_once()
+
+            mock_notify.reset_mock()
+            # 4. 點擊空插槽
+            with patch.object(handler, "_find_empty_slot", return_value=((300, 400), 0.90)):
+                handler._step_handle_prepare_modal(dummy_screen, rect)
+                mock_notify.assert_called_once()
+
+            mock_notify.reset_mock()
+            # 5. 確認選石
+            with patch.object(self.mock_matcher, "match", return_value=((400, 500), 0.95)):
+                with patch("os.path.exists", return_value=True):
+                    handler.pending_stone_queue = ["1"]
+                    handler._step_handle_stone_dialog(dummy_screen, rect)
+                    mock_notify.assert_called_once()
+
+            mock_notify.reset_mock()
+            # 6. 開始戰鬥
+            with patch("time.monotonic", return_value=100.0):
+                handler._launch_demon_battle(rect, (500, 600), 0.95)
+                mock_notify.assert_called_once()

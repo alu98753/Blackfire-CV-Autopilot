@@ -105,6 +105,7 @@ class DemonLordsHandler(BaseStateHandler):
         if pos_door:
             logging.info(f"🚪 [深淵魔王] 城鎮點擊大廳門入口 [{conf:.4f}]...")
             self.mouse.click(rect["left"] + pos_door[0], rect["top"] + pos_door[1])
+            self.notify_ui_progress()
             time.sleep(0.4)
             return True
         return False
@@ -115,6 +116,7 @@ class DemonLordsHandler(BaseStateHandler):
         if pos_entry:
             logging.info(f"👑 [深淵魔王] 點擊魔王頁籤入口 [{conf:.4f}]...")
             self.mouse.click(rect["left"] + pos_entry[0], rect["top"] + pos_entry[1])
+            self.notify_ui_progress()
             time.sleep(0.4)
             return True
         return False
@@ -140,6 +142,7 @@ class DemonLordsHandler(BaseStateHandler):
                 self.stone_insert_completed = False
                 self.slot_no_reaction_count = 0
                 logging.info(f"📋 [深淵魔王] 初始化鑲嵌計畫: {self.pending_stone_queue}")
+                self.notify_ui_progress()
                 time.sleep(0.6)
                 return True
 
@@ -215,6 +218,7 @@ class DemonLordsHandler(BaseStateHandler):
             self.slot_no_reaction_count += 1
             logging.info(f"👉 [深淵魔王] 點擊空插槽 (第 {self.slot_no_reaction_count}/2 次, 信心度: {conf_slot:.4f})...")
             self.mouse.click(rect["left"] + pos_slot[0], rect["top"] + pos_slot[1])
+            self.notify_ui_progress()
             time.sleep(0.5)
             return True
 
@@ -286,6 +290,7 @@ class DemonLordsHandler(BaseStateHandler):
                 logging.info(f"✅ [深淵魔王] 點擊確認選擇 [{choose_btn}] ({conf_choose:.4f})...")
                 self.mouse.click(rect["left"] + pos_choose[0], rect["top"] + pos_choose[1])
                 self.slot_no_reaction_count = 0
+                self.notify_ui_progress()
                 if self.pending_stone_queue:
                     self.pending_stone_queue.pop(0)
                     if len(self.pending_stone_queue) == 0:
@@ -335,6 +340,7 @@ class DemonLordsHandler(BaseStateHandler):
         self.slot_no_reaction_count = 0
         self.launch_pending = True
         self.launch_started_at = time.monotonic()
+        self.notify_ui_progress()
         logging.info("[DemonLords] Start committed; awaiting BATTLE or stamina-overlay observation.")
         return True
 
