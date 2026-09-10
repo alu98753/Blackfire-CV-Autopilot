@@ -77,12 +77,10 @@ dengeon同理
 
 ### Navigation
 
-- [x] **[FW-NAV-01] 推進 Scoped Perception 全面遷移，根除 `SceneDetector` 中所有殘留的 `config_type` 硬特判與後備防禦 (已於 fix/login-flow-dungeon-handover 完成)** ([scoped_perception_migration.md](scoped_perception_migration.md))
-  - **相關檔案與位置**：
-    - [`utils/scene_detector.py:246-266`](../../utils/scene_detector.py#L246-L266)：原步驟 1 主動路徑 `is_dungeon_mode = config_type in ["dungeon", "mix"]` 硬特判守衛已徹底刪除。
-    - [`utils/scene_detector.py:301-313`](../../utils/scene_detector.py#L301-L313)：原步驟 3.5 過渡期後備防禦已徹底刪除。
-  - **架構成果**：
-    - 已將地下城、戰鬥與結算特徵提升為客觀 Mode-Agnostic 檢測，並登錄至 `SCENE_ANCHOR_SPECS`，徹底消除對 `config["type"]` 的逆向依賴。
+- [ ] **[FW-NAV-01] 推進 Scoped Perception (`DetectorRegistry`) 全面遷移，根除 `SceneDetector` 中所有殘留的 `config_type` 硬特判** ([scoped_perception_migration.md](scoped_perception_migration.md))
+  - **當前進度與階段成果**：
+    - ✅ **已完成 (fix/login-flow-dungeon-handover)**：徹底刪除原步驟 1 主動路徑 `is_dungeon_mode = config_type in ["dungeon", "mix"]` 硬特判與步驟 3.5 過渡期後備防禦；將地下城、戰鬥與結算客觀特徵登錄至 `SCENE_ANCHOR_SPECS`。
+    - ⏳ **待完成殘留**：[`utils/scene_detector.py:326-328, 393-420`](../../utils/scene_detector.py#L393-L420) 仍有 `config_type` 與步驟 5 的「大廳卡片模板備援掃描 (`allow_card_fallback`)」，需待獨立議題將卡片與玩法感知徹底移出全域感知並封裝入 `ScopedDetector`。
 
 - [ ] **2. 導航 90 秒逾時觸發 Watchdog 強制殺進程重開，且重啟後反覆卡死陷入死循環** ([watchdog.md](watchdog.md))
 - 模式 `mix` 解耦
