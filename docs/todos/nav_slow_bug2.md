@@ -1,6 +1,9 @@
 # Lobby 導航感知最小化規格（nav_slow_bug2）
 
-**狀態：Proposed**
+**狀態：Implemented (2026-09-10)**  
+**實作分支：** `feat/lobby-expected-tab-minimal-perception`  
+**開發故事：** [docs/storys/2026-09-10_lobby_expected_tab_minimal_perception_story.md](../storys/2026-09-10_lobby_expected_tab_minimal_perception_story.md)  
+**核心契約：** [docs/features/navigation/lobby_scene_contract.md](../features/navigation/lobby_scene_contract.md)  
 
 **範圍：** 大廳五頁籤（關卡、地下城、界域、領主、深淵魔王）的導航、換頁與卡片清單左右拖曳。
 **不改變：** 頁籤判定的正確性、安全優先序、既有 `SceneSnapshot` / `NavigationIntent` / `NavigationProgress` 的責任歸屬。

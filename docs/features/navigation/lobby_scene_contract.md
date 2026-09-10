@@ -55,6 +55,13 @@
   1. **`SceneId` 是全系統唯一 Canonical Truth**。
   2. 領域契約模組 [utils/scene_types.py](../../../utils/scene_types.py) **保證零 OpenCV、零 Matcher 依賴**，可被任何上層決策模組安全引用。
 
+### Invariant 5：兩階段感知與預期頁籤最小化保證 (Two-Tier Perception & Expected Tab Invariant)
+- **原則**：大廳穩態導航、卡片拖曳與頁籤滑動過程中，系統已由導航決策層明確獲知當前目標頁籤。
+- **保證**：
+  1. 當導航請求提供明確的 `expected_tab` 時，系統**保證僅比對該目標頁籤之一對 active/inactive 模板**（TemplateMatcher 呼叫次數 $\le 2$），嚴禁在穩態下重複掃描全量 10 模板造成畫面嚴重停頓。
+  2. 若目標頁籤之成對檢驗未命中（兩者皆 miss），系統**保證自動升級至有界全局重定位 (`FULL_RELOCALIZE`)**，重新掃描 5 大頁籤並進行最大信心度仲裁，杜絕迷航。
+  3. 頁籤感知與卡片 fallback 行為解耦：僅在全局重定位下允許降級至卡片推斷，在已知頁籤的快速感知下不執行多餘卡片推斷。
+
 ---
 
 ## 3. 領域對稱規格：大廳 5 大頁籤對照表
