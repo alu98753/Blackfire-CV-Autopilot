@@ -66,6 +66,15 @@ class SceneCatalog:
             SceneId.DOMAIN_EXPLORE: SceneDefinition(
                 SceneId.DOMAIN_EXPLORE, DetectionProfileId.DOMAIN
             ),
+            SceneId.TOWN_BUILDING: SceneDefinition(
+                SceneId.TOWN_BUILDING, DetectionProfileId.TOWN
+            ),
+            SceneId.POPUP_TASK_COMPLETE: SceneDefinition(
+                SceneId.POPUP_TASK_COMPLETE, DetectionProfileId.UNKNOWN
+            ),
+            SceneId.POPUP_UNEXPECTED: SceneDefinition(
+                SceneId.POPUP_UNEXPECTED, DetectionProfileId.UNKNOWN
+            ),
         }
     )
 
@@ -80,3 +89,12 @@ class SceneCatalog:
     @classmethod
     def registered_scenes(cls):
         return frozenset(cls._DEFINITIONS)
+
+    @classmethod
+    def is_known_world_scene(cls, scene_id):
+        """Return True if scene_id is a recognized, non-transitional game world scene."""
+        return scene_id in cls._DEFINITIONS and scene_id not in (
+            SceneId.UNKNOWN,
+            SceneId.LOADING,
+            SceneId.POPUP_UNEXPECTED,
+        )

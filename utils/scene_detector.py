@@ -69,6 +69,7 @@ SCENE_ANCHOR_SPECS: Tuple[SceneAnchorSpec, ...] = (
     SceneAnchorSpec(
         scene_id=SceneId.DUNGEON_EXPLORING,
         required_any=(
+            "dungeons/dungeons_complete.png",
             "dungeons/leave.png",
             "dungeons/dungeon_bless.png",
             "dungeons/Treasure.png",
@@ -80,6 +81,28 @@ SCENE_ANCHOR_SPECS: Tuple[SceneAnchorSpec, ...] = (
         scene_id=SceneId.DUNGEON_LOBBY,
         required_any=("dungeons/dungeon_fight.png",),
         min_confidence=0.80,
+    ),
+    SceneAnchorSpec(
+        scene_id=SceneId.RESULT,
+        required_any=(
+            "defeat.png",
+            "common/continue.png",
+            "common/continue1.png",
+            "common/continue2.png",
+            "common/continue_gray.png",
+            "stages/retry.png",
+            "exit_battle.png",
+        ),
+        min_confidence=0.80,
+    ),
+    SceneAnchorSpec(
+        scene_id=SceneId.BATTLE,
+        required_any=(
+            "common/auto.png",
+            "battle/battle_features_1.png",
+            "battle/battle_features_2.png",
+        ),
+        min_confidence=0.70,
     ),
     SceneAnchorSpec(
         scene_id=SceneId.TOWN,
@@ -188,6 +211,75 @@ class SceneDetector:
         self._frame_match_cache[cache_key] = match
         return match
 
+    def _check_dungeon_scene(self, screen_img, scene_info: SceneInfo) -> bool:
+        """客觀檢測地下城內部探索與備戰特徵 (包含通關 dungeons_complete、leave、下樓、寶箱、祝福)。"""
+        dungeon_inner_btns = (
+            "dungeons/dungeons_complete.png",
+            "dungeons/leave.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/Treasure.png",
+            "dungeons/gungeon_godown.png",
+        )
+        for check_btn in dungeon_inner_btns:
+            if os.path.exists(os.path.join("templates", check_btn)):
+                pos, conf = self._safe_match(screen_img, check_btn, threshold=0.80)
+                if pos:
+                    scene_info.scene_type = SceneType.IN_DUNGEON
+                    scene_info.is_in_dungeon = True
+                    scene_info.matched_elements[check_btn] = (pos, conf)
+                    return True
+
+        if os.path.exists(os.path.join("templates", "dungeons/dungeon_fight.png")):
+            pos_fight, conf_fight = self._safe_match(screen_img, "dungeons/dungeon_fight.png", threshold=0.80)
+            if pos_fight:
+                scene_info.scene_type = SceneType.DUNGEON_PREPARE
+                scene_info.is_dungeon_prepare = True
+                scene_info.matched_elements["dungeons/dungeon_fight.png"] = (pos_fight, conf_fight)
+                return True
+        return False
+
+    def _check_result_scene(self, screen_img, scene_info: SceneInfo) -> bool:
+        """客觀檢測戰鬥失敗或結算畫面特徵 (defeat、continue、retry、exit_battle)。"""
+        result_anchors = (
+            "defeat.png",
+            "common/continue.png",
+            "common/continue1.png",
+            "common/continue2.png",
+            "common/continue_gray.png",
+            "stages/retry.png",
+            "exit_battle.png",
+        )
+        for anchor in result_anchors:
+            if os.path.exists(os.path.join("templates", anchor)):
+                thresh = 0.88 if anchor in ("common/continue_gray.png", "exit_battle.png") else 0.80
+                pos, conf = self._safe_match(screen_img, anchor, threshold=thresh)
+                if pos:
+                    # 排除城鎮大門誤判：戰鬥結算畫面上絕不可能出現城鎮大門
+                    if os.path.exists(os.path.join("templates", "common/door.png")):
+                        pos_door, _ = self._safe_match(screen_img, "common/door.png", threshold=0.85)
+                        if pos_door:
+                            return False
+                    scene_info.scene_type = SceneId.RESULT
+                    scene_info.matched_elements[anchor] = (pos, conf)
+                    return True
+        return False
+
+    def _check_battle_scene(self, screen_img, scene_info: SceneInfo) -> bool:
+        """客觀檢測戰鬥進行中特徵 (auto 按鈕、戰鬥場景特徵)。"""
+        battle_anchors = (
+            "common/auto.png",
+            "battle/battle_features_1.png",
+            "battle/battle_features_2.png",
+        )
+        for anchor in battle_anchors:
+            if os.path.exists(os.path.join("templates", anchor)):
+                pos, conf = self._safe_match(screen_img, anchor, threshold=0.70)
+                if pos:
+                    scene_info.scene_type = SceneId.BATTLE
+                    scene_info.matched_elements[anchor] = (pos, conf)
+                    return True
+        return False
+
     def detect(
         self,
         screen_img,
@@ -235,36 +327,19 @@ class SceneDetector:
         if machine and getattr(machine, "config", None):
             config_type = machine.config.get("type", "stage")
 
-        dungeon_inner_btns = [
-            "dungeons/leave.png",
-            "dungeons/dungeons_complete.png",
-            "dungeons/dungeon_bless.png",
-            "dungeons/Treasure.png",
-            "dungeons/gungeon_godown.png"
-        ]
+        # 1. 客觀地下城場景檢測 (通關/下樓/留存/寶箱/祝福/備戰，客觀特徵且不限模式)
+        if self._check_dungeon_scene(screen_img, scene_info):
+            return scene_info
 
-        # 1. 地下城內部檢測 (主動路徑：dungeon / mix 模式，或狀態機當前已處於地下城)
-        is_dungeon_mode = config_type in ["dungeon", "mix"] or bool(getattr(machine, "is_in_dungeon", False))
-        if is_dungeon_mode:
-            for check_btn in dungeon_inner_btns:
-                if os.path.exists(os.path.join("templates", check_btn)):
-                    pos, conf = self._safe_match(screen_img, check_btn, threshold=0.8)
-                    if pos:
-                        scene_info.scene_type = SceneType.IN_DUNGEON
-                        scene_info.is_in_dungeon = True
-                        scene_info.matched_elements[check_btn] = (pos, conf)
-                        return scene_info
+        # 2. 戰鬥結算與失敗場景檢測 (defeat/continue/retry/exit)
+        if self._check_result_scene(screen_img, scene_info):
+            return scene_info
 
-            # 2. 地下城備戰檢測 (dungeon_fight.png)
-            if os.path.exists(os.path.join("templates", "dungeons/dungeon_fight.png")):
-                pos_fight, conf_fight = self._safe_match(screen_img, "dungeons/dungeon_fight.png", threshold=0.8)
-                if pos_fight:
-                    scene_info.scene_type = SceneType.DUNGEON_PREPARE
-                    scene_info.is_dungeon_prepare = True
-                    scene_info.matched_elements["dungeons/dungeon_fight.png"] = (pos_fight, conf_fight)
-                    return scene_info
+        # 3. 戰鬥進行中檢測 (auto/battle_features)
+        if self._check_battle_scene(screen_img, scene_info):
+            return scene_info
 
-        # 3. 城鎮與大廳指標檢測
+        # 4. 城鎮與大廳指標檢測
         pos_door, conf_door = self._safe_match(screen_img, "common/door.png", threshold=0.8)
         pos_diamond, conf_diamond = self._safe_match(screen_img, "diamond.png", threshold=0.8)
         if pos_door:
@@ -297,19 +372,6 @@ class SceneDetector:
         if scene_info.is_town:
             scene_info.scene_type = SceneType.TOWN
             return scene_info
-
-        # 3.5 過渡期後備感知防禦 (排除城鎮與大廳後，若畫面仍殘留地下城特徵如通關畫面，如實回報 IN_DUNGEON 避免誤判卡死)
-        # ⚠️ 架構注意：「非城鎮且非大廳」絕不代表必然處於地下城（可能在戰鬥、載入、結算或彈窗）；
-        # 此處僅作為過渡期防禦，徹底根除方案請參閱 docs/architecture/project_arch_greenfield_lite_v1.md Section 4.2 (Scoped Perception)。
-        if not scene_info.is_lobby and not is_dungeon_mode:
-            for check_btn in dungeon_inner_btns:
-                if os.path.exists(os.path.join("templates", check_btn)):
-                    pos, conf = self._safe_match(screen_img, check_btn, threshold=0.8)
-                    if pos:
-                        scene_info.scene_type = SceneType.IN_DUNGEON
-                        scene_info.is_in_dungeon = True
-                        scene_info.matched_elements[check_btn] = (pos, conf)
-                        return scene_info
 
         lobby_start_btn = "stages/start.png"
         if machine and getattr(machine, "config", None):
@@ -364,6 +426,9 @@ class SceneDetector:
             scene_info.scene_type = SceneType.LOBBY_OTHER
 
         return scene_info
+
+    # 語意別名：全景偵測 detect_scene 指向 detect
+    detect_scene = detect
 
     def _resolve_lobby_tabs(
         self,

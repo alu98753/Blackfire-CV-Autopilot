@@ -67,6 +67,8 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         machine.bread_window_opened = False
         machine.diamond_window_opened = False
         machine.task_complete_phase = 'INIT_BANNER_CHECK'
+        machine.last_state_change = time.time()
+        machine.consecutive_stuck_count = 0
         if hasattr(machine, 'exception_watchdog'):
             machine.exception_watchdog.consecutive_stuck_count = 0
             machine.exception_watchdog.last_stuck_state = None

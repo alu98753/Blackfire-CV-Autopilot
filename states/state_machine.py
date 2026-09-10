@@ -97,6 +97,21 @@ class GameStateMachine:
     DUNGEON_RECOVERY_MODE_TYPES = frozenset(
         {"dungeon", "mix", "stage", "daily"}
     )
+    EMERGENCY_DUNGEON_EXIT_PRIORITIES = (
+        "dungeons/dungeons_complete.png",
+        "common/confirm.png",
+        "common/continue.png",
+        "common/continue_gray.png",
+        "dungeons/gungeon_godown_confirm.png",
+        "common/ok.png",
+        "dungeons/dungeon_fight.png",
+        "common/quit.png",
+        "dungeons/Treasure.png",
+        "dungeons/skill_event.png",
+        "dungeons/dungeon_bless.png",
+        "dungeons/gungeon_godown.png",
+        "dungeons/leave.png",
+    )
     UNKNOWN_SCENE_RELAUNCH_ATTEMPTS = 5
 
 
@@ -215,6 +230,7 @@ class GameStateMachine:
         # deliberately separate from stamina retreat, whose timer has a
         # different lifecycle.
         self.dungeon_cooldown_return_config = None
+        self.dungeon_recovery_return_config = None
         self.is_dev_subflow_run = False
         self.last_lobby_start_click_time = 0.0
         self.last_result_retry_click_time = 0.0
@@ -585,10 +601,25 @@ class GameStateMachine:
                 self.set_config(candidate.copy())
                 return True
 
-        logging.error(
-            "[Explore config recovery] no config with explore_priorities is available; using ExploreHandler safe fallback."
+        # 若候選配置皆無 explore_priorities (例如當前意圖為普通關卡 stage 或城鎮任務)：
+        # 依據 Precondition Contracts：角色肉身處於地下城，目標意圖的 dispatch precondition (AtLobby/AtTown) 未成立！
+        # 系統保留原目標意圖 (Intent Latching)，注入最小前置離場配置供 ExploreHandler 執行通關退出。
+        self.dungeon_recovery_return_config = (self.config or {}).copy()
+        fallback_cfg = (self.config or {}).copy()
+        fallback_cfg["explore_priorities"] = list(self.EMERGENCY_DUNGEON_EXIT_PRIORITIES)
+        fallback_cfg["dungeon_battle_results"] = [
+            "common/continue.png",
+            "common/continue1.png",
+            "common/continue2.png",
+            "common/continue_gray.png",
+            "stages/retry.png",
+            "exit_battle.png",
+        ]
+        self.set_config(fallback_cfg)
+        logging.warning(
+            "🏰 [探索前置路徑] 當前配置缺少探索優先級（非地下城意圖），已鎖定目標意圖並啟用地下城離場前置路徑配置。"
         )
-        return False
+        return True
 
     def notify_ui_progress(self):
         """
@@ -879,6 +910,15 @@ class GameStateMachine:
 
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
+        # 0.0 登入優先守護：若畫面處於未登入狀態 (看見 login/login.png)，嚴禁直接比對業務場景，優先觸發登入
+        if os.path.exists(os.path.join("templates", "login/login.png")):
+            pos_login, conf_login = self.matcher.match(screen_img, "login/login.png", threshold=0.80)
+            if pos_login:
+                logging.info(f"🔑 [全域狀態定位] 偵測到遊戲處於未登入主畫面 [login.png] (信心度: {conf_login:.4f})，優先觸發登入流程...")
+                from states.login_flow import handle_global_login
+                handle_global_login(self, screen_img, rect)
+                return
+
         # 0.0 全域防護：若畫面上存在歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防遮擋導航與領取
         for popup_btn in ["common/confirm.png", "common/ok.png"]:
             if os.path.exists(os.path.join("templates", popup_btn)):

@@ -81,6 +81,18 @@ class TestSceneCatalog(unittest.TestCase):
                 self.assertEqual(snapshot.scene, scene_id)
                 self.assertEqual(snapshot.detection_profile, profile)
 
+    def test_is_known_world_scene(self):
+        self.assertTrue(SceneCatalog.is_known_world_scene(SceneId.TOWN))
+        self.assertTrue(SceneCatalog.is_known_world_scene(SceneId.LOBBY))
+        self.assertTrue(SceneCatalog.is_known_world_scene(SceneId.STAGE_SELECT))
+        self.assertTrue(SceneCatalog.is_known_world_scene(SceneId.DUNGEON_SELECT))
+        self.assertTrue(SceneCatalog.is_known_world_scene(SceneId.DUNGEON_EXPLORING))
+        self.assertTrue(SceneCatalog.is_known_world_scene(SceneId.BATTLE))
+        self.assertTrue(SceneCatalog.is_known_world_scene(SceneId.RESULT))
+        self.assertFalse(SceneCatalog.is_known_world_scene(SceneId.UNKNOWN))
+        self.assertFalse(SceneCatalog.is_known_world_scene(SceneId.LOADING))
+        self.assertFalse(SceneCatalog.is_known_world_scene(SceneId.POPUP_UNEXPECTED))
+
 
 if __name__ == "__main__":
     unittest.main()

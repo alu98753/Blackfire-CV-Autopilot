@@ -27,13 +27,18 @@ class TestLoginFlowPopupDismissal(unittest.TestCase):
         self.mock_capturer.get_window_rect.return_value = self.rect
         self.mock_capturer.capture.return_value = self.fake_img
 
-        match_responses = [
-            # 1. 第一輪：比對 confirm.png 成功 (765, 452)
-            ((765, 452), 0.95),
-            # 2. 第二輪：無彈窗，比對 door.png 成功 (68, 720)
-            (None, 0.0), (None, 0.0), (None, 0.0), ((68, 720), 0.95)
-        ]
-        self.mock_matcher.match.side_effect = match_responses
+        dismissed = False
+
+        def mock_match(img, tpl, threshold=0.8, **kwargs):
+            nonlocal dismissed
+            if tpl == "common/confirm.png" and not dismissed:
+                dismissed = True
+                return ((765, 452), 0.95)
+            if tpl == "common/door.png" and dismissed:
+                return ((68, 720), 0.95)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match
 
         with patch("time.sleep", return_value=None):
             _wait_for_town(self.mock_machine, self.rect)

@@ -40,21 +40,21 @@ def _wait_for_town(state_machine, rect):
         if dismissed_popup:
             continue
             
-        # 2. 只有在無任何彈窗按鈕時，判定遊戲畫面是否已載入 (城鎮大門 door.png、自動戰鬥 auto.png、選關大廳、或地下城內部 leave.png)
+        # 2. 判定遊戲畫面是否已載入 (透過 SceneDetector 與 SceneCatalog 全域感知)
         ready_found = False
-        for ready_feature in [
-            "common/door.png", "common/auto.png", "common/select_stage.png", "dungeons/dungeon.png",
-            "dungeons/leave.png", "dungeons/dungeon_fight.png", "dungeons/gungeon_godown.png"
-        ]:
-            if os.path.exists(os.path.join("templates", ready_feature)):
-                pos_ready, conf_ready = state_machine.matcher.match(screen_img, ready_feature, threshold=0.75)
-                if pos_ready:
-                    logging.info(f"🟢 [登入流程] 登入後畫面載入完成！偵測到畫面特徵 [{ready_feature}] (相似度: {conf_ready:.4f})，準備進入全域狀態定位！")
-                    if ready_feature.startswith("dungeons/"):
-                        state_machine.is_in_dungeon = True
-                    door_found = True
-                    ready_found = True
-                    break
+        try:
+            from utils.scene_detector import SceneDetector, SceneType
+            from utils.scene_catalog import SceneCatalog
+            detector = SceneDetector(matcher=state_machine.matcher)
+            scene_info = detector.detect(screen_img, machine=state_machine)
+            if SceneCatalog.is_known_world_scene(scene_info.scene_type):
+                logging.info(f"🟢 [登入流程] 登入後畫面載入完成！全域感知識別世界場景 [{scene_info.scene_type}]，交由主狀態機接管！")
+                if getattr(scene_info, "is_in_dungeon", False) or scene_info.scene_type == SceneType.IN_DUNGEON:
+                    state_machine.is_in_dungeon = True
+                door_found = True
+                ready_found = True
+        except Exception as e:
+            logging.debug(f"[LoginFlow] SceneDetector global check error: {e}")
         if ready_found:
             logging.info("🔄 [登入流程] 畫面載入完畢，立即發起全域狀態定位 (detect_current_state)...")
             state_machine.transition_to(state_machine.STATE_UNKNOWN)
@@ -148,3 +148,6 @@ def handle_global_login(state_machine, screen_img, rect):
         state_machine.consecutive_stuck_count = 0
         return True
     return False
+
+# 語意別名導出：向後相容 _wait_for_town，上位語意為 _wait_for_world_ready
+_wait_for_world_ready = _wait_for_town

@@ -148,6 +148,20 @@ Intent commitment 不代表立即搶占所有流程。下列 maintenance ownersh
    - 若下一幀仍可見通關標記，在擁有權內進行有界間隔重試（如每 1.5 秒重試）；
    - 若逾時未果（如超過 4.0 秒仍未見大廳/城鎮），安全退避至 `STATE_UNKNOWN` 交由全域仲裁，嚴禁盲目進入導航。
 
+### 7.2 重開登入全域感知解耦與前置離場路由契約 (Game Relaunch World Perception & Prerequisite Route Injection Contract)
+
+在處理遊戲重開（`GameRelaunchSubflow`）、斷線重連或登入流程時，嚴格遵守下列感知解耦與前置路由不變量：
+
+1. **全域感知單一真相原則 (Single Source of Truth for World Scenes)**：
+   - 登入流程之就緒判定（`LoginFlow._wait_for_game_ready`）完全委託全域客觀感知層（`SceneDetector.detect` 與 `SceneCatalog.is_known_world_scene`）。
+   - **嚴禁在業務流程中自建私有 fallback 模板白名單**。凡畫面上呈現任何非載入中的已註冊世界場景（包含 `TOWN`、`LOBBY`、`IN_DUNGEON`、`BATTLE`、`RESULT`），即代表登入載入閉環，必須立即交棒給主狀態機。
+2. **前置離場路由注入與意圖鎖定 (Prerequisite Route Injection & Intent Latching)**：
+   - 當重啟恢復或意外掉入地下城內部（如 `dungeons_complete.png`），若當前主配置為普通關卡（Stage）或其他無地下城探索優先權之任務時，**目標意圖必須被鎖定（Latched）並暫緩派發**。
+   - 系統必須主動注入地下城離場前置路由（包含 `goback_town.png` 與 `leave.png` 必備尋路資產），將維護權移交 `ExploreHandler`，專注執行通關離場。
+   - 唯有在確鑿達成離場後置條件（滿足目標意圖之 `AtLobby` 或 `AtTown` 前置條件）後，方可派發目標意圖與套用其配置。
+3. **一級拓撲登入守護 (Login Guard Priority)**：
+   - `login.png` 作為遊戲世界的一級拓撲邊界，在全域狀態定位與探索處理器最前端具備最高優先權，絕不得視為未知遮擋彈窗或通用 Overlay。
+
 ## 8. 開發時必須回答的問題
 
 新增 operation、導航 edge 或 Handler phase 時，規格至少要回答：
