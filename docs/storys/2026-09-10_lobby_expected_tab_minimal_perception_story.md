@@ -2,7 +2,7 @@
 
 > 日期：2026-09-10  
 > 分支：`feat/lobby-expected-tab-minimal-perception`  
-> 規範來源：[nav_slow_bug2.md](../todos/nav_slow_bug2.md)  
+> 規範來源：nav_slow_bug2 (已升格收斂至下方成果契約)  
 > 成果契約：[Lobby Scene Contract](../features/navigation/lobby_scene_contract.md)  
 > 關鍵模組：[utils/scene_snapshot.py](../../utils/scene_snapshot.py), [utils/scene_detector.py](../../utils/scene_detector.py), [states/navigation_routing.py](../../states/navigation_routing.py)  
 
