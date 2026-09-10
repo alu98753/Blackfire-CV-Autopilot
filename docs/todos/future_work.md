@@ -45,18 +45,17 @@ dengeon同理
 ### Daily
 
 要讓我可以安心整天不用看的前提：
-- bag_bug,bag_jewelry_workshop_bug 的原因就是要把「背包後續子流程」與「每日子流程」徹底切分清楚
+- 規格書：[背包維護與每日子流程解耦規格書](../features/town_building/bag_and_daily_subflow_decoupling_spec.md) (已完成同源分析與完整架構設計)
 - [ ] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
-  - 核心原因為「背包後續子流程」與「每日子流程」未徹底切分清楚；珠寶店與 blood 的連帶性必須拔除，分開處理。背包滿觸發城鎮流水線時打開背包，卻因畫面邊緣誤判大門 door.png 而觸發防護攔截跳過；背包視窗仍維持開啟未關閉，狀態機即強行轉移回 NAVIGATING 去做懸賞，大門被背包阻擋無法點擊，導致點擊逾時超限重試，全域卡死在城鎮畫面。
+  - 核心原因為「背包後續子流程」與「每日子流程」未徹底切分清楚；珠寶店與 blood 的連帶性必須拔除，分開處理。背包滿觸發城鎮流水線時打開背包，卻因畫面邊緣誤判大門 door.png 而觸發防護攔截跳過；背包視窗仍維持開啟未關閉，狀態機即強行轉移回 NAVIGATING 去做懸賞，大門被背包阻擋無法點擊，導致點擊逾時超限重試，全域卡死在城鎮畫面。詳細架構解耦詳見 [bag_and_daily_subflow_decoupling_spec.md](../features/town_building/bag_and_daily_subflow_decoupling_spec.md)。
 - [ ] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務**
-  - 懸賞告示牌的流程不用改，只是要確認有進去才可以開始跑。
-目前的問題是他還沒進去 如debug 圖片所示 他還在背包 當人不能判斷有懸賞任務 同時珠寶店跟blood有連帶性 這個也要拔除 把兩者分開 這樣應該就可以了
+  - 懸賞告示牌的流程不用改，只是要確認有進去才可以開始跑。目前問題是因殘留未關閉背包上的 `quit.png` 被誤當作進入告示牌憑證，在背包畫面誤跑任務 OCR，因無任務誤判今日已全完成。修復方案：增加告示牌專屬正交錨點 (`reset.png` / `task.png`) 門禁，無專屬錨點嚴禁開跑任務。詳細規格見 [bag_and_daily_subflow_decoupling_spec.md](../features/town_building/bag_and_daily_subflow_decoupling_spec.md)。
 - [ ] **4. 定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖** ([daily_quest_dungeon_priority_spec.md](daily_quest_dungeon_priority_spec.md))
 - [ ] **7. 領主 Boss(Lord) 與深淵魔王(Demon Lord) 穩定運行與材料防護**
   - lord, demon lord 不被其他activity搶掉，可以正常打完。
   - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
 - [ ] **8. 血之祭壇 (Blood Altar) 判定被紅點掠過問題** ([bag_bug.md](bag_bug.md))
-  - blood building 應該分成日常任務速領 (Tier 1) 與 日常背包滿了的獻祭，避免已無紅點時獻祭被意外跳過。
+  - blood building 徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與 戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)，避免已無紅點時獻祭被意外跳過。規格詳見 [bag_and_daily_subflow_decoupling_spec.md](../features/town_building/bag_and_daily_subflow_decoupling_spec.md)。
 - 釐清 Daily Complete 與 Defer 的判斷依據
   - daily complete 的條件寫好了，那現在 defer 判斷的依據有哪些？
 
@@ -75,6 +74,10 @@ dengeon同理
   - 同步更新 `utils/scene_types.py` (`LOBBY_TAB_DEFINITIONS`)、相關 Handler 與所有測試案例中的引用路徑。
 
 ### Navigation
+
+- [ ] 地下城狀態識別與定位異常([navigation_dungeon_status_bug.md](navigation_dungeon_status_bug.md))
+- [ ] **推進 Scoped Perception (`DetectorRegistry`) 全面遷移，根除 `SceneDetector` 中所有殘留的 `config_type` 硬特判** ([navigation_dungeon_status_bug.md](navigation_dungeon_status_bug.md#9-未來優化規劃-future-work))
+  - 徹底貫徹 [Greenfield-lite Architecture v1 Section 4.2](../architecture/project_arch_greenfield_lite_v1.md#42-範圍化感知與低負載排程)，由各狀態 Profile 集中宣告該階段允許調用的 Detector 清單，徹底解耦業務配置與視覺感知，避免以 config 遮蔽客觀世界。
 
 - [ ] **2. 導航 90 秒逾時觸發 Watchdog 強制殺進程重開，且重啟後反覆卡死陷入死循環** ([watchdog.md](watchdog.md))
 - 模式 `mix` 解耦
