@@ -1,6 +1,7 @@
 """Shared precondition navigation for workflows whose destination is Town."""
 
 import logging
+import time
 
 from states.navigation_intent import (
     ActionDecision,
@@ -180,10 +181,22 @@ class TownSubflowPreconditionController:
         }
 
     def _collection_pending(self):
-        return bool(
-            self.machine.need_diamond_collection
-            or (self.machine.enable_bread and self.machine.need_bread_collection)
+        """
+        Transitional compatibility logic:
+        Check whether diamond or bread collection is actively pending and not deferred.
+        Prevent blocking Town precondition during temporary deferrals.
+        Do NOT pack additional lifecycle management into this method.
+        """
+        progress = getattr(self.machine, "navigation_progress", None)
+        clock = getattr(self.machine, "clock", None)
+        now = clock.monotonic() if clock is not None else time.monotonic()
+        diamond_pending = self.machine.need_diamond_collection and (
+            progress is None or not progress.is_deferred(IntentId.COLLECT_DIAMOND, now)
         )
+        bread_pending = self.machine.enable_bread and self.machine.need_bread_collection and (
+            progress is None or not progress.is_deferred(IntentId.COLLECT_BREAD, now)
+        )
+        return bool(diamond_pending or bread_pending)
 
     def _entry_wait_exhausted(self, scene, flow_key):
         """Bound Town-only entry discovery; UNKNOWN remains non-destructive."""

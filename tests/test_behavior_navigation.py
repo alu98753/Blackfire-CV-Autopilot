@@ -907,6 +907,37 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.assertEqual(filtered_town, ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"])
         self.assertIn("common/door.png", filtered_town)
 
+    def test_managed_daily_without_fallback_suppresses_mix_tab_switching(self):
+        """驗證在 Daily 大流水線受管模式下且非 Tier 4 退守時，NavigationHandler 絕不越權點擊地下城頁籤切換"""
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.is_daily_pipeline_active.return_value = True
+        self.mock_machine.config = {
+            "name": "每日模式",
+            "type": "mix",
+            "is_tier4_fallback": False,
+            "navigation_path": ["goback_town.png"],
+            "dungeon_names": ["Dungeon 1"],
+            "dungeon_entries": ["dungeons/Ice_entry.png"],
+        }
+        self.mock_machine.has_dungeon_status_context.return_value = True
+        self.mock_machine.has_available_dungeon.return_value = True
+        self.mock_machine.get_dungeon_cooldown_status.return_value = ("可用", ["Dungeon 1"])
+
+        def fake_match(_screen, template, **_kwargs):
+            if template == "dungeons/dungeon.png":
+                return (500, 300), 0.90
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        # 執行導航 handle
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：絕不點擊 dungeons/dungeon.png (500, 300)
+        self.mock_machine.mouse.click.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

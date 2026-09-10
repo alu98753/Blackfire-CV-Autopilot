@@ -1015,7 +1015,15 @@ class NavigationHandler(BaseStateHandler):
 
         # Global activity switches are inherited by quest-specific stage/dungeon
         # routes. They must not turn a single-route quest into a mix route.
-        if self.machine.config.get("type") == "mix" and self.machine.has_dungeon_status_context():
+        is_managed_daily = self.machine.is_daily_pipeline_active()
+        is_tier4_fallback = bool(self.machine.config.get("is_tier4_fallback", False))
+        allow_mix_tab_switching = (not is_managed_daily) or is_tier4_fallback
+
+        if (
+            allow_mix_tab_switching
+            and self.machine.config.get("type") == "mix"
+            and self.machine.has_dungeon_status_context()
+        ):
             has_dungeon = self.machine.has_available_dungeon()
             if has_dungeon:
                 status_str, avail_names = self.machine.get_dungeon_cooldown_status()

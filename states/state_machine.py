@@ -2158,12 +2158,14 @@ class GameStateMachine:
 
             dm = getattr(self, "daily_manager", None)
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
+            if self.has_pending_town_subflow():
+                return True
+
             if activity_cfg.get("enable_town_daily", True) and dm:
                 pending_town = dm.get_pending_town_subflows()
                 if pending_town:
-                    if not self.has_pending_town_subflow():
-                        logging.info(f"🏛️ [Activity Scheduler] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
-                        self.start_subflow_queue(pending_town)
+                    logging.info(f"🏛️ [Activity Scheduler] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
+                    self.start_subflow_queue(pending_town)
                     return True
 
             # 1.5. 檢查 Tier 1.5 深淵魔王 (demon_lords) - 在城鎮速領之後，Lord Boss 之前
@@ -2200,22 +2202,22 @@ class GameStateMachine:
                     # ResultHandler will preempt Tier 4 at the next safe result
                     # screen as soon as any Daily quest becomes runnable.
                     if self.quest_scheduler.get_pending_tasks():
-                        if not (activity_cfg.get("enable_dungeon", False) and self.has_available_dungeon(target_config=activity_cfg)):
-                            logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
-                            self.apply_tier4_fallback_config()
-                            return False
+                        logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
+                        self.apply_tier4_fallback_config()
+                        return False
 
             # 4. 檢查 Tier 4 地下城探索 (dungeon)
             if activity_cfg.get("enable_dungeon", False):
                 if self.has_available_dungeon(target_config=activity_cfg):
-                    if cfg.get("type") in ["domain", "stage"]:
-                        dungeon_route = activity_cfg.copy()
-                        self._apply_tier4_stage_selection(dungeon_route)
-                        self._apply_tier4_dungeon_selection(dungeon_route)
-                        dungeon_route["is_tier4_fallback"] = True
-                        self.set_config(dungeon_route)
+                    dungeon_route = activity_cfg.copy()
+                    self._apply_tier4_stage_selection(dungeon_route)
+                    self._apply_tier4_dungeon_selection(dungeon_route)
+                    dungeon_route["is_tier4_fallback"] = True
+                    self.set_config(dungeon_route)
+                    if self.quest_scheduler:
+                        self.arm_daily_quest_preemption()
                     if self.current_state not in [self.STATE_NAVIGATING, self.STATE_DUNGEON_EXPLORING, self.STATE_BATTLE]:
-                        logging.info("🏰 [Activity Scheduler] 偵測到地下城就緒 ➔ 轉移至 NAVIGATING 前往地下城！")
+                        logging.info("🏰 [Activity Scheduler] 偵測到地下城就緒 ➔ 轉移至 NAVIGATING 前往 Tier 4 地下城！")
                         self.transition_to(self.STATE_NAVIGATING)
                     return True
 
