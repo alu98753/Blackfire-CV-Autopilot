@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from states.handlers.navigation import NavigationHandler
+from states.handlers.navigation import NavigationHandler, filter_navigation_path
 from utils.scene_detector import SceneInfo, SceneType
 
 class TestBehaviorNavigation(unittest.TestCase):
@@ -853,6 +853,20 @@ class TestBehaviorNavigation(unittest.TestCase):
             mock_write_debug.assert_not_called()
         finally:
             logging.getLogger().setLevel(prev_level)
+
+    def test_filter_navigation_path_excludes_door_in_lobby(self):
+        """驗證在大廳環境下 (is_lobby=True)，導航路徑自動剔除 common/door.png，非大廳則保留。"""
+        raw_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"]
+        
+        # 1. 大廳中：應剔除 common/door.png
+        filtered_lobby = filter_navigation_path(raw_path, is_lobby=True)
+        self.assertEqual(filtered_lobby, ["dungeons/dungeon.png", "dungeons/slime.png"])
+        self.assertNotIn("common/door.png", filtered_lobby)
+
+        # 2. 城鎮或非大廳：應保留 common/door.png
+        filtered_town = filter_navigation_path(raw_path, is_lobby=False)
+        self.assertEqual(filtered_town, ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"])
+        self.assertIn("common/door.png", filtered_town)
 
 
 if __name__ == "__main__":

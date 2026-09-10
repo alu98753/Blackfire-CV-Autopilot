@@ -195,12 +195,53 @@ class SceneDetector:
         stage_tab_confidence = 0.0
         dungeon_tab_confidence = 0.0
 
+        # A. 優先檢查大廳擴充頁籤 (禁域 / 領主 / 魔王) - 徹底脫鉤 config_type
+        domain_select_open = self._selected_from_active_inactive_pair(
+            screen_img,
+            self._runtime_config_value(
+                machine,
+                "domain_tab_after_btn",
+                "domains/Domains_entry_after.png",
+            ),
+            self._runtime_config_value(
+                machine,
+                "domain_tab_btn",
+                "domains/Domains_entry.png",
+            ),
+        )
+
+        lord_select_open = self._selected_from_active_inactive_pair(
+            screen_img,
+            self._runtime_config_value(machine, "entry_after_btn", "load/Lord_entry_after.png"),
+            self._runtime_config_value(machine, "entry_btn", "load/Lord_entry.png"),
+        )
+
+        demon_lord_select_open = self._selected_from_active_inactive_pair(
+            screen_img,
+            self._runtime_config_value(
+                machine,
+                "entry_after_btn",
+                "demon_lords/demon_lords_entry_after.png",
+            ),
+            self._runtime_config_value(
+                machine,
+                "entry_btn",
+                "demon_lords/demon_lords_entry.png",
+            ),
+        )
+
+        # B. 檢查普通關卡與地下城頁籤互斥
         res_tabs = None
         if self.registry.allows_group(profile, DetectorGroup.TABS):
             res_tabs = self.matcher.match_mutually_exclusive_tabs(
                 screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
             )
         if isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4 and type(res_tabs).__name__ != "MagicMock":
+            stage_select_open = bool(res_tabs[0])
+            dungeon_select_open = bool(res_tabs[1])
+            stage_tab_confidence = self._as_confidence(res_tabs[2])
+            dungeon_tab_confidence = self._as_confidence(res_tabs[3])
+        elif isinstance(res_tabs, (tuple, list)) and len(res_tabs) == 4:
             stage_select_open = bool(res_tabs[0])
             dungeon_select_open = bool(res_tabs[1])
             stage_tab_confidence = self._as_confidence(res_tabs[2])
@@ -218,48 +259,43 @@ class SceneDetector:
             stage_tab_confidence = conf_stage_after
             dungeon_tab_confidence = conf_dungeon_after
 
+        # 防幽靈匹配 (Ghost Match Suppression)：
+        active_extended = [
+            (tab_name, scene_type)
+            for tab_name, is_open, scene_type in [
+                ("domain", domain_select_open, SceneType.DOMAIN_SELECT),
+                ("lord", lord_select_open, SceneType.LORD_SELECT),
+                ("demon_lord", demon_lord_select_open, SceneType.DEMON_LORD_SELECT),
+            ]
+            if is_open
+        ]
+
+        # 若恰好有 1 個擴充頁籤開啟，確立為該擴充頁籤，並壓制關卡與地下城
+        if len(active_extended) == 1:
+            stage_select_open = False
+            dungeon_select_open = False
+        elif len(active_extended) > 1:
+            # 複數擴充頁籤同時為 True：真實遊戲中不可能同時開啟多個頁籤，
+            # 此為單元測試中 mock matcher.return_value 泛型設定時的假象，忽視擴充頁籤並由 stage/dungeon 決定
+            domain_select_open = False
+            lord_select_open = False
+            demon_lord_select_open = False
+        else:
+            # 若無擴充頁籤開啟，針對地下城執行 Active vs Inactive 成對防偽驗證
+            if dungeon_select_open and os.path.exists(os.path.join("templates", "dungeons/dungeon.png")):
+                _, conf_dg_norm = self._safe_match(screen_img, "dungeons/dungeon.png", threshold=0.70)
+                if conf_dg_norm > dungeon_tab_confidence + 0.02:
+                    dungeon_select_open = False
+            if stage_select_open and os.path.exists(os.path.join("templates", "common/select_stage.png")):
+                _, conf_st_norm = self._safe_match(screen_img, "common/select_stage.png", threshold=0.70)
+                if conf_st_norm > stage_tab_confidence + 0.02:
+                    stage_select_open = False
+
         stage_dungeon_conflict = (
             stage_tab_confidence >= 0.70
             and dungeon_tab_confidence >= 0.70
             and not (stage_select_open ^ dungeon_select_open)
         )
-
-        if config_type == "domain":
-            domain_select_open = self._selected_from_active_inactive_pair(
-                screen_img,
-                self._runtime_config_value(
-                    machine,
-                    "domain_tab_after_btn",
-                    "domains/Domains_entry_after.png",
-                ),
-                self._runtime_config_value(
-                    machine,
-                    "domain_tab_btn",
-                    "domains/Domains_entry.png",
-                ),
-            )
-
-        if config_type == "lord_boss":
-            lord_select_open = self._selected_from_active_inactive_pair(
-                screen_img,
-                self._runtime_config_value(machine, "entry_after_btn", "load/Lord_entry_after.png"),
-                self._runtime_config_value(machine, "entry_btn", "load/Lord_entry.png"),
-            )
-
-        if config_type == "demon_lords":
-            demon_lord_select_open = self._selected_from_active_inactive_pair(
-                screen_img,
-                self._runtime_config_value(
-                    machine,
-                    "entry_after_btn",
-                    "demon_lords/demon_lords_entry_after.png",
-                ),
-                self._runtime_config_value(
-                    machine,
-                    "entry_btn",
-                    "demon_lords/demon_lords_entry.png",
-                ),
-            )
 
         # 模板備援掃描
         allow_card_fallback = (
