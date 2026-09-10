@@ -2,6 +2,7 @@
 
 > 狀態：v1 共用路由核心 M1–M6 已實作；legacy Handler 感知遷移持續進行
 > 上位標準：[Greenfield-lite Architecture v1](project_arch_greenfield_lite_v1.md)
+> 條件術語：[Precondition Contracts](precondition_contracts.md)
 > 範圍：Diamond、Bread、Primary Navigation、Start commitment、未知 Quest fallback，以及 `NAVIGATING`／`LOBBY` 的相容遷移。
 > 固定限制：任務順序由使用者寫死；不做戰鬥策略；timeout／retry／backoff 只由 TOML defaults 設定，不提供 CLI 覆寫。
 
@@ -16,7 +17,10 @@
 5. Collection action 如何驗證、timeout、defer、backoff 與升級 recovery。
 6. 現有 Handler 如何逐步遷移且不形成兩個決策 owner。
 
-本文件不重新定義 `SceneSnapshot`、Detector profile、Ports 或整體 recovery 階層；若有衝突，以上位文件為準。
+本文件不重新定義 `SceneSnapshot`、Detector profile、Ports 或整體 recovery 階層；也不把
+Diamond／Bread／Primary 的固定 routing 擴張成全域 precondition framework。selection、
+dispatch readiness、maintenance、postcondition 與 completion 的用詞以
+[Precondition Contracts](precondition_contracts.md) 為準；若有衝突，以上位文件為準。
 
 ## 2. 事故與必須消失的路徑
 

@@ -9,8 +9,8 @@
 | 檔案名稱 | 內容摘要與維護目的 | 當前狀態 |
 | :--- | :--- | :--- |
 | [future_work.md](future_work.md) | **待辦事項與未來規劃**：包含長掛機注意事項、高/低優先度優化、已解決但觀察中項目與暫時擱置需求。 | 📌 長期維護 |
+| [precondition_contracts_todo.md](precondition_contracts_todo.md) | **條件契約現況與未完成事項**：盤點 selection、dispatch、maintenance、postcondition、completion、recovery 與 `REACH_TOWN` 情境分類。 | 📌 專題 inventory／TODO |
 | [test_dev_temp.md](test_dev_temp.md) | **輕量化行為測試防護網建構計畫**：依 Google 軟體工程標準定義的 5 大領域行為測試開發矩陣與勾選清單。 | 🧪 測試開發計畫 |
-| [resource_record.md](resource_record.md) | **資源變化草稿**：紀錄鑽石、抽卡或特定活動的即時消耗草稿。 | 📋 臨時草稿 |
 
 ---
 

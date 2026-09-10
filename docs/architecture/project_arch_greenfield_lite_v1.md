@@ -2,6 +2,7 @@
 
 > 狀態：v1 核心骨架 M1–M6 已實作；全場景感知遷移與 metrics 仍依第 9 節追蹤
 > 完整理想版本：[Greenfield Architecture](project_arch_greenfield.md)
+> 條件語意與開發規範：[Precondition Contracts](precondition_contracts.md)
 > 關係：本文件是完整版本的可交付子集，不取代、不刪除完整版本；未納入 v1 的設計只是延後。
 > 範圍：導航、行動確認、最低必要復原，以及支撐低 CPU 長時間運作的感知排程。
 > 固定限制：任務順序由使用者寫死；不做戰鬥策略。
@@ -158,6 +159,35 @@ RESULT → LOADING / LOBBY
 
 Router 只回答「已知目的地的下一步」，不選任務。多條合法 edge 以宣告順序決定；可用小型 deterministic BFS，不做成本評分或路徑學習。既有城鎮建築與特殊子流程先留在原 Handler，經明確入口／出口 scene 與新骨幹共存，不一次重寫。
 
+#### 4.4.1 Dispatch readiness 與 prerequisite satisfaction
+
+`ActiveIntent` 表示目前承諾的目標，不表示任一 Handler 已可立即執行。當具體 operation
+的 execution／dispatch precondition 尚未成立時：
+
+```text
+ActiveIntent（保留）
+  -> 由 SceneSnapshot 判斷 dispatch readiness
+  -> 若條件可達成，沿既有 Navigation Table／固定流程滿足 prerequisite
+  -> 以新 snapshot 驗證 prerequisite action 的 postcondition
+  -> 重新判斷 readiness
+  -> READY 才 dispatch Handler
+```
+
+- 不滿足但可達成的 precondition 不得清除 intent；`DEFER` 也不得冒充 completion。
+- Scheduler 擁有 selection／eligibility；Navigation／prerequisite layer 擁有跨場景抵達；
+  Handler FSM 擁有派發後的 phase guard 與 domain completion。
+- 已提交 `InFlightAction`、Battle／Dungeon 等不可安全中斷 workflow 仍保有 maintenance
+  ownership；等待中的 intent 到 safe point 才繼續。
+- Scene、overlay、entry、availability 與 completion evidence 必須分開；本 profile 未檢查的
+  evidence 不得當成不存在。
+- v1 只使用現有小型 table、registry、policy 與 Handler phase，不建立通用
+  `PreconditionRegistry`、planner、graph 或 workflow DSL。
+
+條件類型（selection、dispatch、maintenance、postcondition、completion、recovery）、
+evidence 規則與 owner 邊界以 [Precondition Contracts](precondition_contracts.md) 為準；
+Town subflow 的已落地範例見
+[`REACH_TOWN` Contract](../features/navigation/reach_town_contract.md)。
+
 ### 4.5 單一 InFlightAction 與畫面驗證
 
 v1 不建立完整 transaction framework，只建立最小待確認動作：
@@ -278,6 +308,8 @@ dismiss overlay → verify disappeared → quit once → verify scene
 10. **Action is business-blind**：輸入層不知道 Bread、Diamond 或 Quest。
 11. **Recovery is bounded**：每一層 retry 都有 TOML default 上限與下一級處置。
 12. **Unknown never guesses**：證據不足時等待、重新定位或復原，不猜座標。
+13. **Intent is not readiness**：持有 intent 不表示 Handler 可派發；dispatch precondition 必須由目前 evidence 證明。
+14. **Prerequisite preserves commitment**：可滿足的前置條件產生前置工作與 postcondition 驗證，不會自動清除原 intent。
 
 ## 7. 第一版實作切片
 
