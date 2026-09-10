@@ -130,6 +130,24 @@ Intent commitment 不代表立即搶占所有流程。下列 maintenance ownersh
 因此「Chest intent 在 Battle 中仍存在」與「Battle 中立刻回城」是兩件不同的事。正確行為
 是保留 intent，讓既有 workflow 到達安全點，再沿已登錄路徑滿足前置條件。
 
+### 7.1 活動與地下城通關離場後置條件閉環契約 (Activity & Dungeon Exit Postcondition Contract)
+
+在任何地下城、活動關卡或副本探索的通關與離場流程中，嚴格遵守下列生命週期不變量：
+
+1. **Click ≠ Completion 禁令**：
+   - 點擊通關寶箱或退出確認按鈕（如 `dungeons/dungeons_complete.png`）僅代表提交離場請求，**絕不等於離場完成**。
+2. **維護擁有權 (Maintenance Ownership) 不可早產釋放**：
+   - 在下一幀未確鑿觀測到世界拓撲轉移前，當前 Handler（如 `ExploreHandler`）必須保留維護擁有權。
+   - **嚴禁在點擊當下立即切換狀態至 `STATE_NAVIGATING`**，且**嚴禁在未確認離場前提前切換業務退守配置**（如切換至普通關卡 Tier 4 Stage 模式）。
+3. **確鑿離場證據 (Definitive Exit Evidence)**：
+   - 必須同時滿足雙重後置條件：
+     - **負向證據**：通關特徵（`dungeons_complete.png`）完全消失；
+     - **正向證據**：觀測到大廳錨點（`goback_town.png`、頂部頁籤）或城鎮錨點（`common/door.png`）。
+   - 唯有上述兩者兼具時，方可進行冷卻結算、退守配置套用，並轉移狀態至 `STATE_NAVIGATING`。
+4. **有界等待與重試防呆 (Bounded Retry & Unknown Fallback)**：
+   - 若下一幀仍可見通關標記，在擁有權內進行有界間隔重試（如每 1.5 秒重試）；
+   - 若逾時未果（如超過 4.0 秒仍未見大廳/城鎮），安全退避至 `STATE_UNKNOWN` 交由全域仲裁，嚴禁盲目進入導航。
+
 ## 8. 開發時必須回答的問題
 
 新增 operation、導航 edge 或 Handler phase 時，規格至少要回答：
