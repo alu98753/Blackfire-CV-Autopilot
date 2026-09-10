@@ -37,7 +37,11 @@
 4. **決策層防抖治理**：
    - 在 [states/handlers/navigation.py](../../states/handlers/navigation.py) 的頁籤點擊前注入 `_last_mix_tab_switch_time` 防抖（1.2 秒冷卻視窗）。
    - 增加動態屬性型別防護 (`isinstance(..., (int, float))`)，徹底杜絕 Mock 物件型別比較異常。
-5. **契約升格與 Future Work 登錄**：
+5. **基準解析度單一事實來源 (SSOT) 與自適應縮放工具抽離**：
+   - 於 [config.py](../../config.py) 定義 `BASE_RESOLUTION_WIDTH = 1920.0` 與 `BASE_RESOLUTION_HEIGHT = 1080.0`。
+   - 實作防禦性共用工具函式 `compute_screen_scale` 與 `compute_screen_scale_y`，全面替換 `vision/matcher.py`、`utils/scene_detector.py`、`states/handlers/navigation.py`、`diamond_collection.py`、`bag_cleaning.py`、`backpack_full_sorting.py`、`jewelry_workshop.py` 各處裸寫的 `1920` 與 `1080`。
+   - 於 [tests/test_vision_matcher.py](../../tests/test_vision_matcher.py) 增加縮放工具的跨解析度與異常邊界測試。
+6. **契約升格與 Future Work 登錄**：
    - 升格 [docs/features/navigation/lobby_scene_contract.md](../features/navigation/lobby_scene_contract.md) Invariant 1 為「成對差值主導與二維色相光環消歧保證」。
    - 於 [docs/todos/future_work.md](../todos/future_work.md) 登錄 Item 11：安全移動關卡頁籤模板至 `templates/stages/` 並更新路徑。
 
@@ -47,11 +51,15 @@
 
 - **微差邊界場景 100% 精準消歧**：
   - 在 $\Delta c = 0.0163$ 的微差情境下，紅光光環成功斷言 Active，無紅光精準斷言 Inactive，切頁死循環被徹底瓦解。
+- **Magic Number 零容忍全面落地**：
+  - 全專案 7 大核心模組徹底消滅 1920 裸數字，統一受 `config.compute_screen_scale` 約束與守護。
 - **單元測試全數綠燈**：
-  - [tests/test_entity_lobby_panel.py](../../tests/test_entity_lobby_panel.py) 新增 Test Case 10 驗證二維色相消歧行為，10 個測試 0.5s 全數通過。
+  - [tests/test_vision_matcher.py](../../tests/test_vision_matcher.py) 5 個測試全數通過（含自適應縮放邊界防護測試）。
+  - [tests/test_entity_lobby_panel.py](../../tests/test_entity_lobby_panel.py) 10 個測試全數通過。
   - [tests/test_scene_detector.py](../../tests/test_scene_detector.py) 13 個測試全數通過。
   - [tests/test_behavior_navigation.py](../../tests/test_behavior_navigation.py) 28 個測試全數通過。
-  - 聚焦領域測試共 51 個測試全數 PASS。
+  - [tests/test_behavior_bag_cleaning.py](../../tests/test_behavior_bag_cleaning.py) 6 個測試全數通過。
+  - 聚焦領域測試共 62 個測試全數 PASS。
 
 ---
 

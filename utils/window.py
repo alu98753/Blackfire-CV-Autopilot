@@ -7,7 +7,13 @@ from typing import Optional, List, Dict, Any, Tuple
 import win32gui
 import win32process
 
-from config import WINDOW_TITLE
+from config import (
+    WINDOW_TITLE,
+    BASE_RESOLUTION_WIDTH,
+    BASE_RESOLUTION_HEIGHT,
+    compute_screen_scale,
+    compute_screen_scale_y,
+)
 
 DESKTOP_READOBJECTS = 0x0001
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)

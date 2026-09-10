@@ -142,5 +142,42 @@ class TestVisionMatcher(unittest.TestCase):
         self.assertAlmostEqual(pos_multi[0], 200 + nw // 2, delta=2)
         self.assertAlmostEqual(pos_multi[1], 100 + nh // 2, delta=2)
 
+    def test_compute_screen_scale_utility(self):
+        """驗證 config.compute_screen_scale 與 compute_screen_scale_y 的自適應縮放計算與邊界安全。"""
+        from config import (
+            BASE_RESOLUTION_WIDTH,
+            BASE_RESOLUTION_HEIGHT,
+            compute_screen_scale,
+            compute_screen_scale_y,
+        )
+
+        # 1. 基準解析度影像 (1920x1080) -> 比例 1.0
+        img_1080p = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.assertAlmostEqual(compute_screen_scale(img_1080p), 1.0)
+        self.assertAlmostEqual(compute_screen_scale_y(img_1080p), 1.0)
+
+        # 2. 縮放影像 (1280x720)
+        img_720p = np.zeros((720, 1280, 3), dtype=np.uint8)
+        self.assertAlmostEqual(compute_screen_scale(img_720p), 1280.0 / BASE_RESOLUTION_WIDTH)
+        self.assertAlmostEqual(compute_screen_scale_y(img_720p), 720.0 / BASE_RESOLUTION_HEIGHT)
+
+        # 3. 傳入數值 (int / float)
+        self.assertAlmostEqual(compute_screen_scale(1600), 1600.0 / BASE_RESOLUTION_WIDTH)
+        self.assertAlmostEqual(compute_screen_scale_y(900.0), 900.0 / BASE_RESOLUTION_HEIGHT)
+
+        # 4. 邊界異常防禦：None、0、負數安全回傳 1.0
+        self.assertEqual(compute_screen_scale(None), 1.0)
+        self.assertEqual(compute_screen_scale_y(None), 1.0)
+        self.assertEqual(compute_screen_scale(0), 1.0)
+        self.assertEqual(compute_screen_scale(-100), 1.0)
+
+        # 5. 極小寬度下限保護 (min_scale=0.1)
+        self.assertAlmostEqual(compute_screen_scale(50), 0.1)
+
+        # 6. 驗證 TemplateMatcher._compute_auto_scale 委派結果
+        self.assertAlmostEqual(self.matcher._compute_auto_scale(1440), 1440.0 / BASE_RESOLUTION_WIDTH)
+
+
 if __name__ == "__main__":
     unittest.main()
+

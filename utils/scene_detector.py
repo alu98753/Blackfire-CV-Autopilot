@@ -3,6 +3,7 @@ import os
 import time
 from typing import Dict, List, Optional, Tuple
 
+from config import compute_screen_scale
 from utils.detector_registry import DetectorGroup, DetectorRegistry
 from utils.scene_snapshot import DetectionProfileId, LobbyTabScope, SceneDetectionRequest, TabId
 from vision.matcher import TemplateMatcher
@@ -437,7 +438,7 @@ class SceneDetector:
             scene_info.is_lobby = True
 
         elapsed = time.monotonic() - t0
-        scale = (screen_img.shape[1] / 1920.0) if (screen_img is not None and hasattr(screen_img, "shape") and len(screen_img.shape) >= 2) else 1.0
+        scale = compute_screen_scale(screen_img)
 
         # 1. Active dominance (二維色相光環與差值分級消歧)
         if self._evaluate_tab_active(screen_img, tab.name, conf_act, pos_act, conf_inact, pos_inact, scale=scale):
@@ -528,7 +529,7 @@ class SceneDetector:
         expected_tab_name: Optional[str] = None,
     ) -> Tuple[Optional[str], Optional[SceneType], float, bool]:
         t0 = time.monotonic()
-        scale = (screen_img.shape[1] / 1920.0) if (screen_img is not None and hasattr(screen_img, "shape") and len(screen_img.shape) >= 2) else 1.0
+        scale = compute_screen_scale(screen_img)
         candidates: List[Tuple[str, SceneType, float]] = []
 
         for tab in LOBBY_TAB_DEFINITIONS:

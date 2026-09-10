@@ -11,6 +11,9 @@ from config import (
     ENTRY_THRESHOLD,
     TIER4_MODE_DOMAIN,
     TIER4_MODE_NONE,
+    BASE_RESOLUTION_WIDTH,
+    BASE_RESOLUTION_HEIGHT,
+    compute_screen_scale,
     get_template_threshold
 )
 from utils.time_parser import parse_time_to_seconds, format_seconds_to_readable
@@ -630,10 +633,10 @@ class NavigationHandler(BaseStateHandler):
         尋路導航與自動領體力邏輯。
         """
         if rect is None:
-            rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+            rect = {"left": 0, "top": 0, "width": int(BASE_RESOLUTION_WIDTH), "height": int(BASE_RESOLUTION_HEIGHT)}
             
-        width = rect.get("width") or (rect.get("right", 0) - rect.get("left", 0)) or 1920
-        height = rect.get("height") or (rect.get("bottom", 0) - rect.get("top", 0)) or 1080
+        width = rect.get("width") or (rect.get("right", 0) - rect.get("left", 0)) or int(BASE_RESOLUTION_WIDTH)
+        height = rect.get("height") or (rect.get("bottom", 0) - rect.get("top", 0)) or int(BASE_RESOLUTION_HEIGHT)
         rect["width"] = width
         rect["height"] = height
 
@@ -795,7 +798,7 @@ class NavigationHandler(BaseStateHandler):
                 if abs(w_img - sw) <= 30:
                     matched_width = sw
                     break
-            scale = matched_width / 1920.0
+            scale = compute_screen_scale(matched_width)
             
             dungeon_names = self.machine.config.get("dungeon_names")
             if dungeon_names is None:
