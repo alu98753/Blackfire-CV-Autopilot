@@ -176,6 +176,7 @@ class DiamondCollectionHandler(BaseStateHandler):
                 self.machine.diamond_window_opened = False
                 self.machine.diamond_window_missing_count = 0
                 self.machine.diamond_free_clicked = False
+                self.machine.need_diamond_collection = False
                 if defer_collection(self.machine, IntentId.COLLECT_DIAMOND):
                     return
                 next_state = (

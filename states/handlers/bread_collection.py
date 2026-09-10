@@ -160,6 +160,7 @@ class BreadCollectionHandler(BaseStateHandler):
                 self.machine.bread_window_opened = False
                 self.machine.bread_window_missing_count = 0
                 self.machine.bread_click_attempted = False
+                self.machine.need_bread_collection = False
                 if defer_collection(self.machine, IntentId.COLLECT_BREAD):
                     return
                 next_state = (

@@ -899,6 +899,70 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(machine.current_state, machine.STATE_COLLECT_ONLY)
         self.assertEqual(machine.config["type"], "collect_only")
 
+    def test_evaluate_next_activity_pending_town_subflow_blocks_tier4(self):
+        """驗證當存在待辦城鎮子流程時，evaluate_next_activity 立即回傳 True，不洩漏至 Tier 4 或懸賞"""
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.current_town_subflow = "chest"
+        machine.town_subflow_queue = ["hero_draw"]
+        machine.config = {
+            "type": "mix",
+            "name": "Daily Base",
+            "enable_town_daily": True,
+            "enable_dungeon": True,
+        }
+        machine.primary_config = machine.config.copy()
+
+        result = machine.evaluate_next_activity()
+
+        self.assertTrue(result)
+        # config 應保持原樣，絕未切換至 Tier 4
+        self.assertFalse(machine.config.get("is_tier4_fallback", False))
+
+    def test_evaluate_next_activity_prefers_quest_scheduler_over_tier4_dungeon(self):
+        """驗證只要懸賞任務排程器有可用任務，evaluate_next_activity 優先排程懸賞任務，不退守 Tier 4 地下城"""
+        from utils.quest_scheduler import QuestScheduler, TaskNode
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.current_town_subflow = None
+        machine.town_subflow_queue = []
+        
+        # 建立一個地下城懸賞任務 (Dungeon #2)
+        task = TaskNode(
+            quest_title="冰雪懸賞",
+            mode_type="dungeon",
+            counting_policy="banner_verify_only",
+            target_count=20,
+            dungeon_index=2,
+        )
+        scheduler = QuestScheduler()
+        scheduler.add_task(task)
+        machine.quest_scheduler = scheduler
+
+        machine.config = {
+            "type": "mix",
+            "name": "Daily Base",
+            "enable_town_daily": False,
+            "enable_dungeon": True,
+            "dungeon_entries": ["dungeons/Ice_entry.png", "dungeons/cave_entry.png"],
+            "dungeon_names": ["Ice", "Cave"],
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [1, 2],
+        }
+        machine.primary_config = machine.config.copy()
+        machine.has_available_dungeon = MagicMock(return_value=True)
+
+        result = machine.evaluate_next_activity()
+
+        self.assertTrue(result)
+        # config 應切換為該懸賞任務，而非 Tier 4 fallback
+        self.assertFalse(machine.config.get("is_tier4_fallback", False))
+        self.assertIn("冰雪懸賞", machine.config.get("name", ""))
+        self.assertEqual(machine.config.get("type"), "dungeon")
+        self.assertEqual(machine.config.get("dungeon_index"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

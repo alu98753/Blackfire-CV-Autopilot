@@ -503,11 +503,13 @@ class TownSubflowResultBoundaryTestCase(unittest.TestCase):
         self.matcher = MagicMock()
         self.matcher.templates_dir = "templates"
         self.mouse = MagicMock()
+        self.clock = FakeClock()
         self.machine = GameStateMachine(
             capturer=MagicMock(),
             matcher=self.matcher,
             mouse=self.mouse,
             preload_ocr=False,
+            clock=self.clock,
         )
         self.machine.config = {
             "type": "stage",
@@ -635,6 +637,62 @@ class TownSubflowResultBoundaryTestCase(unittest.TestCase):
 
         # 佇列頭部應保持為 blood_altar，未被 lord_boss 覆蓋
         self.assertEqual(self.machine.current_town_subflow, "blood_altar")
+
+    def test_deferred_bread_collection_does_not_block_town_precondition(self):
+        """驗證領體力進入 DEFER 退避期間，不視為 pending，不阻塞城鎮前置條件"""
+        controller = self.machine.town_subflow_precondition
+        self.machine.enable_bread = True
+        self.machine.need_bread_collection = True
+
+        # 未被 defer 時，_collection_pending 應為 True
+        self.assertTrue(controller._collection_pending())
+
+        # 模擬領體力 defer
+        self.machine.navigation_progress.defer(IntentId.COLLECT_BREAD, self.clock.monotonic())
+
+        # 處於 defer 期間，_collection_pending 應為 False
+        self.assertFalse(controller._collection_pending())
+
+    def test_bread_collection_handler_clears_flag_on_timeout_defer(self):
+        """驗證 BreadCollectionHandler 在連續 3 幀未見元素逾時退避時，清除 need_bread_collection"""
+        self.machine.current_state = self.machine.STATE_BREAD_COLLECTION
+        self.machine.enable_bread = True
+        self.machine.need_bread_collection = True
+        self.machine.bread_window_opened = True
+        self.matcher.match.return_value = (None, 0.0)
+
+        handler = self.machine.handlers[self.machine.STATE_BREAD_COLLECTION]
+
+        # 前 2 幀：累計未發現次數
+        handler.handle(self.screen, self.rect)
+        handler.handle(self.screen, self.rect)
+        self.assertTrue(self.machine.need_bread_collection)
+
+        # 第 3 幀：觸發逾時退避
+        handler.handle(self.screen, self.rect)
+        self.assertFalse(self.machine.need_bread_collection)
+        self.assertFalse(self.machine.bread_window_opened)
+        self.assertTrue(self.machine.navigation_progress.is_deferred(IntentId.COLLECT_BREAD, self.clock.monotonic()))
+
+    def test_diamond_collection_handler_clears_flag_on_timeout_defer(self):
+        """驗證 DiamondCollectionHandler 在連續 3 幀未見元素逾時退避時，清除 need_diamond_collection"""
+        self.machine.current_state = self.machine.STATE_DIAMOND_COLLECTION
+        self.machine.need_diamond_collection = True
+        self.machine.diamond_window_opened = True
+        self.matcher.match.return_value = (None, 0.0)
+
+        handler = self.machine.handlers[self.machine.STATE_DIAMOND_COLLECTION]
+
+        # 前 2 幀
+        handler.handle(self.screen, self.rect)
+        handler.handle(self.screen, self.rect)
+        self.assertTrue(self.machine.need_diamond_collection)
+
+        # 第 3 幀：觸發逾時退避
+        handler.handle(self.screen, self.rect)
+        self.assertFalse(self.machine.need_diamond_collection)
+        self.assertFalse(self.machine.diamond_window_opened)
+        self.assertTrue(self.machine.navigation_progress.is_deferred(IntentId.COLLECT_DIAMOND, self.clock.monotonic()))
 
 
 if __name__ == "__main__":

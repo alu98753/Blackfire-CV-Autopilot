@@ -18,11 +18,17 @@ description: 當 Feature/Fix/Spec/TODO 已完成，準備把已驗證且應長�
 
 | 問題 | 權威來源 |
 | --- | --- |
-| 未來「應該」遵守什麼行為／架構約束 | Canonical Contract |
+| 未來「應該」遵守什麼行為／架構約束 | Canonical Contract (`docs/architecture/` 或 `docs/features/`) |
 | 現在「實際怎麼做」、精確參數／模板／資料結構 | Production code / config |
 | 關鍵行為是否仍被自動驗證 | Focused behavior / contract tests |
-| 當初為什麼做這個決策、取捨與歷史 | ADR / PARS story / archived spec |
+| 當初為什麼做這個決策、取捨與歷史過程 | ADR / PARS story (`docs/storys/`) / archived spec |
 | 還沒做、尚待決定的工作 | TODO / RFC |
+
+> [!CRITICAL]
+> **【PARS 開發故事定性禁令：非架構文件，不可當作證據】**
+> - **PARS 開發故事 (`docs/storys/`) 僅為開發歷程的敘事故事 (Narrative Log)**：記錄當時問題脈絡、執行的修復行動與除錯統計，供團隊複盤回溯。
+> - **PARS 故事不是架構規範，絕不可作為未來開發或架構設計的依據或證據**。
+> - **嚴禁以「PARS 已記載」為由略過契約升格**：Spec 中只要含有「行為不變量、排程階梯、責任邊界、禁止模式」，**必須且只能**提煉升格至 `docs/architecture/` 或 `docs/features/<domain>/` 的 Canonical Contract。若未完成升格，原始 Spec 絕不可視為「已被承接」，更嚴禁直接刪除！
 
 Tests 是 **executable verification**，不是天然的絕對 SSOT；測試也可能不完整或寫錯。
 
@@ -129,7 +135,7 @@ Tests 是 **executable verification**，不是天然的絕對 SSOT；測試也�
      ├─ 還包含無法在其他地方保存的獨特歷史／設計演進價值？
      │      └─ YES ──> ARCHIVED / SUPERSEDED (標註後封存)
      │
-     └─ Contract、TODO、ADR/PARS/Git 已完整承接？
+     └─ 不變量已升格至 Contract、未完成事項已移至 TODO、歷史過程已留存於 PARS/Git？
             └─ YES (預設 Default) ──> DELETE (果斷刪除，不留過期副本)
      ```
 
