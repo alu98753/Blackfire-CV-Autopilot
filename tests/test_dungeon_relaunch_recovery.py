@@ -37,7 +37,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
 
         # 模擬只對 dungeons/leave.png 存在且匹配成功
         mock_exists.side_effect = lambda path: "dungeons/leave.png" in path.replace("\\", "/")
-        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.75: ((100, 100), 0.92) if tpl == "dungeons/leave.png" else (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.75, **kwargs: ((100, 100), 0.92) if tpl == "dungeons/leave.png" else (None, 0.0)
 
         with patch.object(self.machine, "detect_current_state") as mock_detect:
             _wait_for_town(self.machine, self.rect)
@@ -50,7 +50,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         測試 2：不限模式 (Mode-Agnostic)：無論 config 為 dungeon, mix, stage, 還是 daily，全域定位遇到 dungeons/leave.png 均鎖定 is_in_dungeon = True 並轉移至 STATE_DUNGEON_EXPLORING
         """
         mock_exists.side_effect = lambda path: "dungeons/leave.png" in path.replace("\\", "/")
-        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8: ((100, 100), 0.90) if tpl == "dungeons/leave.png" else (None, 0.0)
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: ((100, 100), 0.90) if tpl == "dungeons/leave.png" else (None, 0.0)
 
         modes = ["dungeon", "mix", "stage", "daily"]
         for mode in modes:

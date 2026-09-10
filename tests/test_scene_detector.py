@@ -346,6 +346,38 @@ class TestSceneDetector(unittest.TestCase):
         self.assertTrue(scene.is_in_dungeon)
         self.assertIn("dungeons/dungeons_complete.png", scene.matched_elements)
 
+    @patch("os.path.exists", return_value=True)
+    def test_detect_battle_auto(self, _mock_exists):
+        """驗證畫面出現 common/auto.png 時，感知層客觀識別為 SceneId.BATTLE。"""
+        self.mock_matcher.match.side_effect = lambda img, tmpl, threshold=0.7: (
+            ((100, 100), 0.92) if tmpl == "common/auto.png" else (None, 0.0)
+        )
+        scene = self.detector.detect("battle_frame", machine=self.mock_machine)
+        self.assertEqual(scene.scene_type, SceneType.BATTLE)
+        self.assertIn("common/auto.png", scene.matched_elements)
+
+    @patch("os.path.exists", return_value=True)
+    def test_detect_result_settlement(self, _mock_exists):
+        """驗證畫面出現 common/continue.png 且無 door.png 時，感知層客觀識別為 SceneId.RESULT。"""
+        self.mock_matcher.match.side_effect = lambda img, tmpl, threshold=0.8: (
+            ((200, 200), 0.90) if tmpl == "common/continue.png" else (None, 0.0)
+        )
+        scene = self.detector.detect("result_frame", machine=self.mock_machine)
+        self.assertEqual(scene.scene_type, SceneType.RESULT)
+        self.assertIn("common/continue.png", scene.matched_elements)
+
+    @patch("os.path.exists", return_value=True)
+    def test_dungeon_complete_beats_battle_auto(self, _mock_exists):
+        """驗證地下城通關畫面若同時有 auto.png 殘留或誤比對，DUNGEON_EXPLORING 優先於 BATTLE。"""
+        self.mock_matcher.match.side_effect = lambda img, tmpl, threshold=0.8: (
+            ((958, 920), 0.95)
+            if tmpl in ("dungeons/dungeons_complete.png", "common/auto.png")
+            else (None, 0.0)
+        )
+        scene = self.detector.detect("dungeon_complete_frame", machine=self.mock_machine)
+        self.assertEqual(scene.scene_type, SceneType.IN_DUNGEON)
+        self.assertTrue(scene.is_in_dungeon)
+
 
 if __name__ == "__main__":
     unittest.main()
