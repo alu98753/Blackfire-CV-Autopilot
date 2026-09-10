@@ -40,10 +40,13 @@ class CollectOnlyHandler(BaseStateHandler):
             logging.info("🌅 [定時領取待機] 偵測到 08:05 跨日重置標誌！結束體力退避，啟動新一日城鎮任務流水線...")
             self.machine.pending_daily_reset_exit = False
             self.machine.stamina_retreat_start_time = None
-            if getattr(self.machine, "original_config", None):
-                self.machine.config = self.machine.original_config
+            if getattr(self.machine, "primary_config", None):
+                self.machine.set_config(self.machine.primary_config.copy())
                 self.machine.original_config = None
-            self.machine.trigger_town_subflow_chain()
+            elif getattr(self.machine, "original_config", None):
+                self.machine.set_config(self.machine.original_config)
+                self.machine.original_config = None
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return
 
         # 0. 檢查體力不足退避恢復機制
@@ -203,7 +206,7 @@ class CollectOnlyHandler(BaseStateHandler):
         # 3.5.2 檢查目前 Profile 選取且可討伐的首領
         if dm:
             avail_bosses = self.machine.get_available_selected_lord_bosses()
-            if avail_bosses:
+            if avail_bosses and not self.machine.has_pending_town_subflow():
                 logging.info(f"👑 [定時待機喚醒] 偵測到首領 Boss 冷卻結束 (可用: {avail_bosses}) ➔ 喚醒轉入 LORD_BOSS！")
                 self.machine.start_subflow_queue(["lord_boss"])
                 return

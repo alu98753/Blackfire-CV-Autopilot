@@ -532,6 +532,70 @@ class TownSubflowResultBoundaryTestCase(unittest.TestCase):
             "stages/retry.png",
         )
 
+    def test_town_anchors_exclude_exit_battle_false_positive(self):
+        """驗證當畫面存在城鎮大門時，排斥 exit_battle (0.8038) 誤匹配，正確識別為 TOWN"""
+        perception = self.machine.town_subflow_precondition.perception
+
+        def match(_screen, template, threshold=0.8, **_kwargs):
+            if template == "common/door.png":
+                return (68, 719), 0.9543
+            if template == "diamond.png":
+                return (1107, 52), 0.9750
+            if template == "exit_battle.png":
+                # 模擬背景暗處誤匹配
+                return (1115, 764), 0.8038 if threshold <= 0.8038 else 0.0
+            return None, 0.0
+
+        self.matcher.match.side_effect = match
+        snapshot = perception.observe(self.screen, "chest")
+        self.assertEqual(snapshot.scene, SceneId.TOWN)
+
+    def test_activity_scheduler_does_not_fall_back_to_collect_only_when_town_subflow_pending(self):
+        """驗證當有待辦城鎮子流程時，調度器不會穿透進入 COLLECT_ONLY 兜底待機"""
+        self.machine.start_subflow_queue(["hero_draw"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        # 模擬所有週期性活動 (Boss, Dungeon) 均在冷卻中
+        self.machine.daily_manager = MagicMock()
+        self.machine.daily_manager.get_pending_town_subflows.return_value = []
+        self.machine.get_available_selected_lord_bosses = MagicMock(return_value=[])
+        self.machine.has_available_dungeon = MagicMock(return_value=False)
+
+        scheduled = self.machine.evaluate_next_activity()
+        self.assertTrue(scheduled)
+        self.assertNotEqual(self.machine.current_state, self.machine.STATE_COLLECT_ONLY)
+
+    def test_collect_only_daily_reset_resumes_navigating_with_primary_config(self):
+        """驗證 08:05 跨日重置時，CollectOnlyHandler 正確還原 primary_config 並切換至 NAVIGATING"""
+        self.machine.current_state = self.machine.STATE_COLLECT_ONLY
+        self.machine.pending_daily_reset_exit = True
+        self.machine.stamina_retreat_start_time = 12345.0
+        self.machine.primary_config = {"type": "daily", "name": "Daily"}
+        self.machine.config = {"type": "collect_only", "name": "Collect"}
+
+        handler = self.machine.handlers[self.machine.STATE_COLLECT_ONLY]
+        handler.handle(self.screen, self.rect)
+
+        self.assertFalse(self.machine.pending_daily_reset_exit)
+        self.assertIsNone(self.machine.stamina_retreat_start_time)
+        self.assertEqual(self.machine.config.get("type"), "daily")
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+
+    def test_collect_only_boss_wake_guarded_by_pending_town_subflow(self):
+        """驗證待辦城鎮任務存在時，Boss 冷卻結束不會抹殺城鎮佇列"""
+        self.machine.current_state = self.machine.STATE_COLLECT_ONLY
+        self.machine.start_subflow_queue(["blood_altar"])
+        self.machine.daily_manager = MagicMock()
+        self.machine.get_available_selected_lord_bosses = MagicMock(return_value=["lord_spider"])
+        self.machine.config = {"type": "collect_only", "name": "Collect"}
+        self.matcher.match.return_value = (None, 0.0)
+
+        handler = self.machine.handlers[self.machine.STATE_COLLECT_ONLY]
+        handler.handle(self.screen, self.rect)
+
+        # 佇列頭部應保持為 blood_altar，未被 lord_boss 覆蓋
+        self.assertEqual(self.machine.current_town_subflow, "blood_altar")
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -23,10 +23,6 @@ class TownSubflowPerception:
         self.matcher = machine.matcher
 
     def observe(self, screen_img, flow_key: str) -> SceneSnapshot:
-        scene, confidence = self._observe_committed_scene(screen_img)
-        if scene != SceneId.UNKNOWN:
-            return self._snapshot(scene, {}, confidence)
-
         elements = {}
         matches = {
             ElementId.CLOSE_OVERLAY: self._match_first(
@@ -35,7 +31,7 @@ class TownSubflowPerception:
             ElementId.EXIT_BUILDING_TO_TOWN: self._match(
                 screen_img, EXIT_BUILDING_TEMPLATE, 0.75
             ),
-            ElementId.GOBACK_TOWN: self._match(screen_img, "goback_town.png", 0.80),
+            ElementId.GOBACK_TOWN: self._match(screen_img, "goback_town.png", 0.85),
             ElementId.EXIT_TO_LOBBY: self._match(
                 screen_img, "domains/common/exit_to_lobby.png", 0.80
             ),
@@ -43,6 +39,15 @@ class TownSubflowPerception:
             ElementId.DIAMOND_ENTRY: self._match(screen_img, "diamond.png", 0.80),
         }
         elements.update({key: value for key, value in matches.items() if value})
+
+        # 城鎮核心錨點排除結算誤判：若已有明確城鎮大門或鑽石入口，畫面必為城鎮，排斥 RESULT 偽陽性
+        if ElementId.DOOR in elements or ElementId.DIAMOND_ENTRY in elements:
+            self._observe_entry(screen_img, flow_key, elements)
+            return self._snapshot(SceneId.TOWN, elements)
+
+        scene, confidence = self._observe_committed_scene(screen_img)
+        if scene != SceneId.UNKNOWN:
+            return self._snapshot(scene, elements, confidence)
 
         scene = self._classify_scene(elements)
         if scene == SceneId.TOWN:
@@ -60,7 +65,7 @@ class TownSubflowPerception:
             "exit_battle.png",
         )
         for template in result_templates:
-            threshold = 0.88 if template == "common/continue_gray.png" else 0.80
+            threshold = 0.88 if template in ("common/continue_gray.png", "exit_battle.png") else 0.80
             match = self._match(screen_img, template, threshold)
             if match:
                 return SceneId.RESULT, match.confidence

@@ -918,7 +918,7 @@ class GameStateMachine:
         for result_anchor in result_anchors:
             if not os.path.exists(os.path.join("templates", result_anchor)):
                 continue
-            threshold = 0.88 if result_anchor == "common/continue_gray.png" else 0.80
+            threshold = 0.88 if result_anchor in ["common/continue_gray.png", "exit_battle.png"] else 0.80
             pos_result, _ = self.matcher.match(
                 screen_img,
                 result_anchor,
@@ -926,6 +926,11 @@ class GameStateMachine:
                 quiet=True,
             )
             if pos_result:
+                # 排除城鎮大門誤判：戰鬥結算畫面上絕不可能出現城鎮大門
+                if os.path.exists(os.path.join("templates", "common/door.png")):
+                    pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.85, quiet=True)
+                    if pos_door:
+                        break
                 self.transition_to(self.STATE_RESULT)
                 return
 
@@ -2155,9 +2160,10 @@ class GameStateMachine:
             # 1. 檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
             if activity_cfg.get("enable_town_daily", True) and dm:
                 pending_town = dm.get_pending_town_subflows()
-                if pending_town and not self.has_pending_town_subflow():
-                    logging.info(f"🏛️ [Activity Scheduler] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
-                    self.start_subflow_queue(pending_town)
+                if pending_town:
+                    if not self.has_pending_town_subflow():
+                        logging.info(f"🏛️ [Activity Scheduler] 觸發 Tier 1 每日城鎮速領子流程: {pending_town}")
+                        self.start_subflow_queue(pending_town)
                     return True
 
             # 1.5. 檢查 Tier 1.5 深淵魔王 (demon_lords) - 在城鎮速領之後，Lord Boss 之前
@@ -2212,6 +2218,10 @@ class GameStateMachine:
                         logging.info("🏰 [Activity Scheduler] 偵測到地下城就緒 ➔ 轉移至 NAVIGATING 前往地下城！")
                         self.transition_to(self.STATE_NAVIGATING)
                     return True
+
+            # 4.5. 若已有進行中或待辦之城鎮子流程，優先維持活躍導航，不退守 Tier 4 或兜底待機
+            if self.has_pending_town_subflow():
+                return True
 
             # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4 長駐路由。
             daily_policy = self._daily_activity_config()
