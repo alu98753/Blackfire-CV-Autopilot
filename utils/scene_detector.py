@@ -300,7 +300,7 @@ class SceneDetector:
 
         # 3.5 過渡期後備感知防禦 (排除城鎮與大廳後，若畫面仍殘留地下城特徵如通關畫面，如實回報 IN_DUNGEON 避免誤判卡死)
         # ⚠️ 架構注意：「非城鎮且非大廳」絕不代表必然處於地下城（可能在戰鬥、載入、結算或彈窗）；
-        # 此處僅作為過渡期防禦，徹底根除方案請參閱 docs/todos/future_work.md 之 [FW-NAV-01] Scoped Perception 遷移。
+        # 此處僅作為過渡期防禦，徹底根除方案請參閱 docs/architecture/project_arch_greenfield_lite_v1.md Section 4.2 (Scoped Perception)。
         if not scene_info.is_lobby and not is_dungeon_mode:
             for check_btn in dungeon_inner_btns:
                 if os.path.exists(os.path.join("templates", check_btn)):
