@@ -940,7 +940,7 @@ class TestBehaviorNavigation(unittest.TestCase):
 
     def test_dungeon_navigation_expected_tab_scans_only_target_pair(self):
         """
-        [規格驗證 nav_slow_bug2]
+        [行為驗證：大廳預期頁籤最小化感知]
         Given: 處於地下城導航 (config type='dungeon')
         When: 執行 NavigationHandler.handle()
         Then: 頁籤比對只呼叫 dungeons/dungeon_after.png 與 dungeons/dungeon.png，其餘 4 個頁籤模板完全不被比對
@@ -996,7 +996,7 @@ class TestBehaviorNavigation(unittest.TestCase):
 
     def test_target_inactive_clicks_tab_before_card_operations(self):
         """
-        [規格驗證 nav_slow_bug2]
+        [行為驗證：大廳預期頁籤最小化感知]
         Given: 處於地下城導航，但地下城頁籤未開啟 (inactive 命中)
         When: 執行 NavigationHandler.handle()
         Then: 判定在 lobby 但 active_tabs 為空，僅點擊切頁按鈕，絕不進行卡片操作

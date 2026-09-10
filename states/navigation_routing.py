@@ -56,9 +56,9 @@ def build_intent_snapshot(machine) -> IntentSnapshot:
 
 
 def resolve_expected_tab_from_machine(machine) -> Optional[TabId]:
-    """
-    從當前已提交之導航意圖、in-flight action 或 route decision 解析目標頁籤。
-    遵循規格 nav_slow_bug2 第 4 節來源對照。
+    """從當前已提交之導航意圖、in-flight action 或 route decision 解析目標頁籤。
+
+    Contract: docs/features/navigation/lobby_scene_contract.md
     """
     if machine is None:
         return None
