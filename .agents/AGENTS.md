@@ -55,8 +55,12 @@
 - `mouseDown`/`mouseUp` 間隔 `40ms` (`time.sleep(0.04)`)，釋放後至少等 `40ms`。
 - 主迴圈 `--interval` 預設 `0.05` 秒 (50ms)；常規按鈕點擊後等待 `30ms`，跨場景/下樓等待 `40ms`。
 
-### 3. 開發故事規範 (PARS Framework) 📝
+### 3. 開發故事與契約收斂規範 (PARS & Contract Archival) 📝
 - 功能/修復收尾時於 `docs/storys/` 建立 PARS 文檔 (`Purpose`, `Action`, `Result`, `So What`, `Influence`)。
+- **文件收斂與契約歸檔**：若分支涉及核心不變量或新架構，遵循 `canonical_contract_archival` 規範：
+  - ⚠️ **嚴禁 AI 自行決定清理範圍**：必須先列出候選清單向使用者顯式確認後方可執行。
+  - **刪除是預設；封存是例外**：永久約束升格至 Canonical Contract，未完成事項獨立至 TODO/RFC，已完成的原始任務 spec 預設刪除，嚴防 Doc Drift。
+
 
 ### 4. 局部比對與 Scale 視務規範 🎯
 - **Scoped Crop Only**：卡片/彈窗內部比對禁止全螢幕掃描，必須先切割 `crop` 區域再比對。
