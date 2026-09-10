@@ -321,6 +321,32 @@ class TestSceneDetector(unittest.TestCase):
                 self.assertNotIn(tab_def.active_template, queried_templates)
                 self.assertNotIn(tab_def.inactive_template, queried_templates)
 
+    @patch("os.path.exists", return_value=True)
+    def test_ac3_dungeons_complete_detected_even_in_stage_mode(self, _mock_exists):
+        """
+        [AC 3 契約驗收] 驗證即使 machine.config["type"] == "stage" (例如 Tier 4 退守)，
+        當畫面上出現 dungeons/dungeons_complete.png 時，感知層能客觀識別為 SceneType.IN_DUNGEON。
+        """
+        self.mock_machine.config = {
+            "type": "stage",
+            "stage_templates": [],
+            "dungeon_entries": [],
+        }
+        self.mock_machine.is_in_dungeon = False
+
+        def match_side_effect(_img, template, threshold=0.8):
+            if template == "dungeons/dungeons_complete.png":
+                return ((958, 920), 0.95)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = match_side_effect
+
+        scene = self.detector.detect("dungeon_complete_frame", machine=self.mock_machine)
+        self.assertEqual(scene.scene_type, SceneType.IN_DUNGEON)
+        self.assertTrue(scene.is_in_dungeon)
+        self.assertIn("dungeons/dungeons_complete.png", scene.matched_elements)
+
 
 if __name__ == "__main__":
     unittest.main()
+

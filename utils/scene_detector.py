@@ -235,14 +235,17 @@ class SceneDetector:
         if machine and getattr(machine, "config", None):
             config_type = machine.config.get("type", "stage")
 
-        # 1. 地下城內部檢測 (leave.png / dungeon_bless.png 等)
-        if config_type in ["dungeon", "mix"]:
-            dungeon_inner_btns = [
-                "dungeons/leave.png",
-                "dungeons/dungeon_bless.png",
-                "dungeons/Treasure.png",
-                "dungeons/gungeon_godown.png"
-            ]
+        dungeon_inner_btns = [
+            "dungeons/leave.png",
+            "dungeons/dungeons_complete.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/Treasure.png",
+            "dungeons/gungeon_godown.png"
+        ]
+
+        # 1. 地下城內部檢測 (主動路徑：dungeon / mix 模式，或狀態機當前已處於地下城)
+        is_dungeon_mode = config_type in ["dungeon", "mix"] or bool(getattr(machine, "is_in_dungeon", False))
+        if is_dungeon_mode:
             for check_btn in dungeon_inner_btns:
                 if os.path.exists(os.path.join("templates", check_btn)):
                     pos, conf = self._safe_match(screen_img, check_btn, threshold=0.8)
@@ -294,6 +297,19 @@ class SceneDetector:
         if scene_info.is_town:
             scene_info.scene_type = SceneType.TOWN
             return scene_info
+
+        # 3.5 過渡期後備感知防禦 (排除城鎮與大廳後，若畫面仍殘留地下城特徵如通關畫面，如實回報 IN_DUNGEON 避免誤判卡死)
+        # ⚠️ 架構注意：「非城鎮且非大廳」絕不代表必然處於地下城（可能在戰鬥、載入、結算或彈窗）；
+        # 此處僅作為過渡期防禦，徹底根除方案請參閱 docs/architecture/project_arch_greenfield_lite_v1.md Section 4.2 (Scoped Perception)。
+        if not scene_info.is_lobby and not is_dungeon_mode:
+            for check_btn in dungeon_inner_btns:
+                if os.path.exists(os.path.join("templates", check_btn)):
+                    pos, conf = self._safe_match(screen_img, check_btn, threshold=0.8)
+                    if pos:
+                        scene_info.scene_type = SceneType.IN_DUNGEON
+                        scene_info.is_in_dungeon = True
+                        scene_info.matched_elements[check_btn] = (pos, conf)
+                        return scene_info
 
         lobby_start_btn = "stages/start.png"
         if machine and getattr(machine, "config", None):

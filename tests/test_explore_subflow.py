@@ -294,6 +294,88 @@ class TestExploreSubflow(unittest.TestCase):
         self.mock_mouse.click.assert_any_call(150, 260)  # 10 + 140, 20 + 240
         self.mock_mouse.click.assert_any_call(200, 310)  # 10 + 190, 20 + 290
         self.mock_mouse.click.assert_any_call(340, 150)  # 10 + 330, 20 + 130
-        
+
+    @patch("states.handlers.explore.os.path.exists", return_value=True)
+    def test_ac1_dungeon_complete_click_does_not_prematurely_transition_to_navigating(
+        self, _mock_exists
+    ):
+        """
+        [AC 1 契約驗收] 驗證點擊 dungeons_complete.png 後，若下一幀仍為通關畫面，
+        狀態機必須保持在 EXPLORING，絕不提前跳轉至 NAVIGATING 或切換 config。
+        """
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.mock_machine.need_bag_cleaning = False
+        self.mock_machine.dungeon_floor_transitioning = False
+        self.mock_machine.current_state = "DUNGEON_EXPLORING"
+        self.mock_machine.is_in_dungeon = True
+        self.mock_machine.dungeon_completing = False
+        self.mock_machine.config = {
+            "type": "dungeon",
+            "explore_priorities": ["dungeons/dungeons_complete.png"],
+        }
+
+        # 第 1 幀：畫面上出現 dungeons_complete.png
+        def side_effect_frame1(_img, name, threshold, **_kw):
+            if name == "dungeons/dungeons_complete.png":
+                return (400, 500), 0.95
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = side_effect_frame1
+        with patch("states.handlers.explore.time.sleep"):
+            self.handler.handle(MagicMock(), rect)
+
+        # 斷言：發送了點擊，標記了 dungeon_completing，但絕不呼叫 transition_to("NAVIGATING")
+        self.mock_mouse.click.assert_called_once_with(400, 500)
+        self.assertTrue(self.mock_machine.dungeon_completing)
+        self.mock_machine.transition_to.assert_not_called()
+
+        # 第 2 幀：畫面依然是 dungeons_complete.png (未消失)
+        self.mock_mouse.click.reset_mock()
+        with patch("states.handlers.explore.time.sleep"):
+            self.handler.handle(MagicMock(), rect)
+
+        # 斷言：依然維持在 EXPLORING，絕不跳轉 NAVIGATING
+        self.assertTrue(self.mock_machine.dungeon_completing)
+        self.mock_machine.transition_to.assert_not_called()
+
+    @patch("states.handlers.explore.os.path.exists", return_value=True)
+    def test_ac2_dungeon_complete_transitions_only_after_lobby_verified(
+        self, _mock_exists
+    ):
+        """
+        [AC 2 契約驗收] 當且僅當新畫面驗證無通關特徵且出現大廳錨點 (goback_town.png) 時，
+        狀態機才正式完成通關結算並轉移至 NAVIGATING。
+        """
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+        self.mock_machine.need_bag_cleaning = False
+        self.mock_machine.dungeon_floor_transitioning = False
+        self.mock_machine.current_state = "DUNGEON_EXPLORING"
+        self.mock_machine.is_in_dungeon = True
+        self.mock_machine.dungeon_completing = True
+        self.mock_machine.last_dungeon_complete_click_time = time.time()
+        self.mock_machine.run_count = 0
+        self.mock_machine.config = {
+            "type": "dungeon",
+            "explore_priorities": ["dungeons/dungeons_complete.png"],
+        }
+
+        # 新畫面：dungeons_complete 消失，看見 goback_town.png
+        def side_effect_exit(_img, name, threshold, **_kw):
+            if name == "goback_town.png":
+                return (50, 750), 0.92
+            return None, 0.0
+
+        self.mock_matcher.match.side_effect = side_effect_exit
+        with patch("states.handlers.explore.time.sleep"):
+            self.handler.handle(MagicMock(), rect)
+
+        # 斷言：Postcondition 成立，通關計數增加，轉移至 NAVIGATING，標記解除
+        self.assertEqual(self.mock_machine.run_count, 1)
+        self.assertFalse(self.mock_machine.dungeon_completing)
+        self.assertFalse(self.mock_machine.is_in_dungeon)
+        self.mock_machine.transition_to.assert_called_once_with(self.mock_machine.STATE_NAVIGATING)
+
+
 if __name__ == '__main__':
     unittest.main()
+

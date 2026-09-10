@@ -254,12 +254,22 @@ class TestCollectionStateMachine(StateMachineLogicTestCase):
         
         self.assertTrue(self.state_machine.need_bread_collection)
         
-        # 2. 地下城結束，點擊 dungeons_complete.png ➔ 應轉移至 STATE_NAVIGATING
+        # 2. 地下城結束：
+        # 2a. 點擊 dungeons_complete.png ➔ 啟動離場後置驗證，狀態機維持 EXPLORING
         self.mock_matcher.match.side_effect = lambda img, name, threshold: (
             ((200, 200), 0.9) if name == "dungeons/dungeons_complete.png" else (None, 0.0)
         )
         self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_DUNGEON_EXPLORING)
+        self.assertTrue(getattr(self.state_machine, "dungeon_completing", False))
+
+        # 2b. 模擬畫面已離開地下城回到大廳 (看到 goback_town.png 且無 dungeons_complete.png) ➔ 確鑿離場轉移至 STATE_NAVIGATING
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 100), 0.9) if name == "goback_town.png" else (None, 0.0)
+        )
+        self.state_machine.step()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertFalse(getattr(self.state_machine, "dungeon_completing", False))
         
         # 3. 在 NAVIGATING 狀態下：
         # - 因為 need_bread_collection 為 True，在大廳看到 common/bread.png ➔ 應點擊打開體力視窗並跳轉至 BREAD_COLLECTION
@@ -552,9 +562,10 @@ class TestCollectionStateMachine(StateMachineLogicTestCase):
         
         self.state_machine.step()
         
-        # 預期：動態偵測到地下城冷卻結束，恢復配置為 orig_config，並轉移至 STATE_UNKNOWN
+        # 預期：動態偵測到地下城冷卻結束，恢復為安全地下城臨時路由，並轉移至 STATE_UNKNOWN
+        expected_route = self.state_machine.build_dungeon_resume_route(orig_config)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_UNKNOWN)
-        self.assertEqual(self.state_machine.config, orig_config)
+        self.assertEqual(self.state_machine.config, expected_route)
         # 斷言：original_config 與 initial_retreat_start 絕不被重置清空！
         self.assertEqual(self.state_machine.original_config, orig_config)
         self.assertEqual(self.state_machine.stamina_retreat_start_time, initial_retreat_start)
