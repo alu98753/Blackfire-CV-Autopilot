@@ -43,6 +43,8 @@ dengeon同理
 
 - [] state_machine_development 這個skill 再說甚麼 有沒有違反 [project_arch_greenfield_lite_v1.md](file;file:///e%3A/Side_Project/BlackfireCrusade_tool/docs/architecture/project_arch_greenfield_lite_v1.md) 的? 要同步
 
+- [] daily complete的條件寫好了 那現在defer判斷的依據有哪些
+
 - []向右滑動的時候明明一直做就好 且只要比對現在在的位置({}_after 和目標圖片)共兩章 但她卻每次都等很久 比對很多圖片
 ```
 
