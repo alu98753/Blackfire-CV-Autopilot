@@ -130,6 +130,37 @@ PRIMARY_NAVIGATION
 - 未知 quest 降級 Tier 4 只影響 primary workflow，不得修改 collection pending 狀態。
 - v1 可從既有 machine flags 建立不可變 `IntentSnapshot`，不建立第二份多 writer queue。
 
+### 4.3.1 全域活動排程階梯與 Tier 優先級契約 (Activity Tier Hierarchy Contract)
+
+受管 Daily 大流水線 (`is_daily_pipeline_active()`) 之工作選擇 (Task Selection) 由高層狀態機之 `evaluate_next_activity()` 集中裁決，嚴格遵循下列單向絕對優先級階梯：
+
+```text
+Tier 1: 每日城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop)
+  ↓ (城鎮子流程佇列推進完成)
+Tier 1.5: 深淵魔王討伐 (demon_lords 門票討伐)
+  ↓ (深淵魔王次數耗盡或門票不足)
+Tier 2: 首領 Boss 討伐 (lord_boss)
+  ↓ (首領次數耗盡或無可用門票)
+Tier 3: 每日懸賞任務 (QuestScheduler: TaskNode 佇列)
+  ↓ (8 項懸賞全數完成，或全數處於冷卻中)
+Tier 4: 常規長駐退守 (自選貪婪地下城 / 普通關卡 / 領地探索)
+  ↓ (地下城全冷卻且未開啟關卡掛機)
+Tier 0: 基底定時待機 (STATE_COLLECT_ONLY)
+```
+
+#### 核心架構約束與不變量 (Scheduling Invariants)
+1. **單向階梯不變量 (Strict Top-Down Precedence)**：
+   - 只要高層級活動（如 Tier 1 城鎮子流程或 Tier 3 懸賞任務）尚有未完成"且"可執行的工作，系統的唯一承諾即為推進該活動，**嚴禁提前流向或洩漏至 Tier 4 常規退守**。
+2. **退守顯式標記與搶佔武裝 (Explicit Fallback & Preemption Invariant)**：
+   - 僅當懸賞任務全數完成或全處於冷卻中時，方允許調用 `apply_tier4_fallback_config()` 切換至 Tier 4。
+   - 進入 Tier 4 必須明確標記 `is_tier4_fallback = True`，並於懸賞任務未全完成時武裝 `arm_daily_quest_preemption()`，保證在戰鬥結算安全點 (Result Safe Point) 優先插隊切回懸賞任務。
+3. **導航層剝離任務選擇 (Strip Selection from Navigation)**：
+   - 底層 `NavigationHandler` 僅專注於執行已下發 `navigation_path` 的畫面元素比對與點擊，**嚴禁在底層查詢 `quest_scheduler` 或 `daily_manager` 做反向任務選擇**。
+   - 在受管 Daily 流程下，非 Tier 4 退守模式 (`not is_tier4_fallback`) 嚴禁在活動大廳擅自點擊地下城或普通關卡頁籤切換（禁止未受管的 legacy `type="mix"` 旁路搶跑）。
+4. **過渡期退避相容約束 (Deferral Compatibility Constraint)**：
+   - 城鎮領體力/鑽石逾時退避時必須同步清除請求旗標 (`need_bread_collection = False`)。
+   - `_collection_pending()` 的 `is_deferred` 感知僅作為過渡期相容邏輯，嚴禁繼續往該函式中堆疊更多業務生命週期狀態。
+
 ### 4.4 簡單 Navigation Table
 
 使用資料化 adjacency table，不建立通用 graph framework 或 DSL：

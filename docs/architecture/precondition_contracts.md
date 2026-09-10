@@ -92,10 +92,10 @@ Intent: CLAIM_CHEST（保留）
 
 | 層級 | 擁有的責任 | 不得承擔的責任 |
 | --- | --- | --- |
-| `DailyManager`／Scheduler／`QuestScheduler` | eligibility、cooldown、pending、固定順序與候選工作 | 用 FSM state／config 假裝 dispatch 已就緒；直接操作跨場景 UI |
+| `DailyManager`／Scheduler／`QuestScheduler` | eligibility、cooldown、pending、固定順序與候選工作；落實 Tier 1 (城鎮) > Tier 1.5 (魔王) > Tier 2 (首領) > Tier 3 (懸賞) > Tier 4 (退守) 排程階梯 | 用 FSM state／config 假裝 dispatch 已就緒；直接操作跨場景 UI |
 | Intent owner | latch 唯一目前 commitment；在 completion、cancel 或 defer 邊界更新 | 因 scene 暫時不合就清除 intent |
 | Perception／`SceneSnapshot` | 回報本 frame、目前 profile 實際檢查到的 evidence | 點擊、transition、修改 pending fact |
-| Navigation／prerequisite layer | 依目的地選一個安全 edge；驗證 prerequisite action postcondition | 選擇業務任務；宣告 domain completion |
+| Navigation／prerequisite layer | 依目的地選一個安全 edge；驗證 prerequisite action postcondition | 選擇業務任務；宣告 domain completion；在受管流程非 Tier 4 退守時擅自切換頁籤 |
 | Dispatcher | 在 dispatch precondition 完整成立後切入對應 Handler | 在 evidence 不足時猜測入口或提前換 config |
 | Handler／FSM | 已派發 operation 的 phase、maintenance guard、內部 postcondition 與 domain outcome | 重做全域任務優先序或世界級回城導航 |
 | Progress／Recovery | action timeout、bounded retry、defer、relocalize、relaunch escalation | 將 recovery 成功當成原業務 intent 完成 |
