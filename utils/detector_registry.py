@@ -81,7 +81,9 @@ class DetectorRegistry:
         if template_name in runtime_templates:
             return runtime_templates[template_name]
         if template_name in {
+            "common/select_stage.png",
             "common/select_stage_after.png",
+            "dungeons/dungeon.png",
             "dungeons/dungeon_after.png",
             "domains/Domains_entry.png",
             "domains/Domains_entry_after.png",

@@ -60,7 +60,12 @@ class TestSceneDetector(unittest.TestCase):
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = match_side_effect
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.85, 0.40)
+        def tab_stage_effect(_img, template_a, _template_b, **_kwargs):
+            if template_a == "common/select_stage_after.png":
+                return (True, False, 0.85, 0.40)
+            return (False, False, 0.40, 0.40)
+
+        self.mock_matcher.match_mutually_exclusive_tabs.side_effect = tab_stage_effect
 
         scene = self.detector.detect("dummy_img", machine=self.mock_machine)
         self.assertEqual(scene.scene_type, SceneType.LOBBY_STAGE)
@@ -68,7 +73,14 @@ class TestSceneDetector(unittest.TestCase):
         self.assertEqual(scene.active_tabs, ["stage"])
 
         # Test Lobby Dungeon
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.85)
+        def tab_dungeon_effect(_img, template_a, _template_b, **_kwargs):
+            if template_a == "common/select_stage_after.png":
+                return (False, True, 0.40, 0.85)
+            if template_a == "dungeons/dungeon_after.png":
+                return (True, False, 0.85, 0.40)
+            return (False, False, 0.40, 0.40)
+
+        self.mock_matcher.match_mutually_exclusive_tabs.side_effect = tab_dungeon_effect
         scene = self.detector.detect("dummy_img", machine=self.mock_machine)
         self.assertEqual(scene.scene_type, SceneType.LOBBY_DUNGEON)
         self.assertEqual(scene.active_tabs, ["dungeon"])

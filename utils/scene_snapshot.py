@@ -5,26 +5,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Mapping
 
+from utils.scene_types import SceneId
 
-class SceneId(str, Enum):
-    UNKNOWN = "unknown"
-    TOWN = "town"
-    TOWN_BUILDING = "town_building"
-    LOBBY = "lobby"
-    DIAMOND_WINDOW = "diamond_window"
-    BREAD_WINDOW = "bread_window"
-    STAGE_SELECT = "stage_select"
-    DUNGEON_SELECT = "dungeon_select"
-    DOMAIN_SELECT = "domain_select"
-    LORD_SELECT = "lord_select"
-    DEMON_LORD_SELECT = "demon_lord_select"
-    STAGE_LOBBY = "stage_lobby"
-    DUNGEON_LOBBY = "dungeon_lobby"
-    DUNGEON_EXPLORING = "dungeon_exploring"
-    LOADING = "loading"
-    BATTLE = "battle"
-    RESULT = "result"
-    DOMAIN_EXPLORE = "domain_explore"
 
 
 class ElementId(str, Enum):
@@ -100,15 +82,22 @@ class SceneSnapshot:
 _SCENE_TYPE_MAP = {
     "TOWN": SceneId.TOWN,
     "LOBBY_STAGE": SceneId.STAGE_SELECT,
+    "STAGE_SELECT": SceneId.STAGE_SELECT,
     "LOBBY_DUNGEON": SceneId.DUNGEON_SELECT,
+    "DUNGEON_SELECT": SceneId.DUNGEON_SELECT,
     "DOMAIN_SELECT": SceneId.DOMAIN_SELECT,
     "LORD_SELECT": SceneId.LORD_SELECT,
     "DEMON_LORD_SELECT": SceneId.DEMON_LORD_SELECT,
     "LOBBY_OTHER": SceneId.LOBBY,
+    "LOBBY": SceneId.LOBBY,
     "WINDOW_DIAMOND": SceneId.DIAMOND_WINDOW,
+    "DIAMOND_WINDOW": SceneId.DIAMOND_WINDOW,
     "WINDOW_BREAD": SceneId.BREAD_WINDOW,
+    "BREAD_WINDOW": SceneId.BREAD_WINDOW,
     "IN_DUNGEON": SceneId.DUNGEON_EXPLORING,
+    "DUNGEON_EXPLORING": SceneId.DUNGEON_EXPLORING,
     "DUNGEON_PREPARE": SceneId.DUNGEON_LOBBY,
+    "DUNGEON_LOBBY": SceneId.DUNGEON_LOBBY,
     "DOMAIN_EXPLORE": SceneId.DOMAIN_EXPLORE,
 }
 
@@ -131,8 +120,13 @@ def snapshot_from_scene_info(
     start_template: str | None = None,
 ) -> SceneSnapshot:
     """Adapt legacy SceneInfo without giving it decision responsibilities."""
-    scene_type_name = getattr(getattr(scene_info, "scene_type", None), "name", "UNKNOWN")
-    scene_id = _SCENE_TYPE_MAP.get(scene_type_name, SceneId.UNKNOWN)
+    scene_val = getattr(scene_info, "scene_type", None)
+    if isinstance(scene_val, SceneId):
+        scene_id = scene_val
+        scene_type_name = getattr(scene_val, "name", str(scene_val))
+    else:
+        scene_type_name = getattr(scene_val, "name", str(scene_val))
+        scene_id = _SCENE_TYPE_MAP.get(scene_type_name, SceneId.UNKNOWN)
     template_map = dict(_ELEMENT_TEMPLATE_MAP)
     if start_template:
         template_map[start_template] = ElementId.START
@@ -158,7 +152,7 @@ def snapshot_from_scene_info(
         if tab in {item.value for item in TabId}
     }
     overlays = set()
-    if scene_type_name == "POPUP_TASK_COMPLETE":
+    if scene_id == SceneId.POPUP_TASK_COMPLETE or scene_type_name == "POPUP_TASK_COMPLETE":
         overlays.add(OverlayId.TASK_COMPLETE)
 
     from utils.scene_catalog import SceneCatalog

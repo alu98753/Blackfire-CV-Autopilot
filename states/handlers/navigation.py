@@ -25,20 +25,26 @@ from states.navigation_routing import (
 )
 
 
-def filter_navigation_path(nav_path, active_tabs=None):
+def filter_navigation_path(nav_path, active_tabs=None, is_lobby=False):
     """
     動態過濾導航路徑中已被已開啟 UI 頁籤涵蓋的父階按鈕（防重入跳過）。
     :param nav_path: 導航路徑按鈕列表
     :param active_tabs: 已開啟頁籤名稱列表，如 ["stage"], ["dungeon"]
+    :param is_lobby: 是否已身處活動大廳內部 (若在大廳內，剔除 common/door.png)
     """
-    if not active_tabs:
+    skip_btns = set()
+    if is_lobby:
+        skip_btns.add("common/door.png")
+
+    if active_tabs:
+        skip_map = {
+            "stage": "common/select_stage.png",
+            "dungeon": "dungeons/dungeon.png"
+        }
+        skip_btns.update({skip_map[tab] for tab in active_tabs if tab in skip_map})
+
+    if not skip_btns:
         return list(nav_path)
-    
-    skip_map = {
-        "stage": "common/select_stage.png",
-        "dungeon": "dungeons/dungeon.png"
-    }
-    skip_btns = {skip_map[tab] for tab in active_tabs if tab in skip_map}
     return [btn for btn in nav_path if btn not in skip_btns]
 
 class NavigationHandler(BaseStateHandler):
@@ -1170,8 +1176,8 @@ class NavigationHandler(BaseStateHandler):
                         time.sleep(1.2)
                         return
 
-        # 優先檢查：若人在城鎮大門 (common/door.png 相似度 >= 0.90)，且尚未開啟關卡/地下城選單，優先點擊大門進入
-        if "common/door.png" in nav_path and not stage_select_open and not dungeon_select_open and not in_detail_screen:
+        # 優先檢查：若人在城鎮大門 (common/door.png 相似度 >= 0.90)，且尚未開啟關卡/地下城選單且未在大廳，優先點擊大門進入
+        if "common/door.png" in nav_path and not stage_select_open and not dungeon_select_open and not in_detail_screen and not scene.is_lobby:
             pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.90, brightness_threshold=0.70)
             if pos_door:
                 click_x = rect["left"] + pos_door[0]
@@ -1188,7 +1194,7 @@ class NavigationHandler(BaseStateHandler):
         if dungeon_select_open:
             active_tabs.append("dungeon")
 
-        filtered_nav_path = filter_navigation_path(nav_path, active_tabs)
+        filtered_nav_path = filter_navigation_path(nav_path, active_tabs, is_lobby=scene.is_lobby)
 
         clicked_any = False
         for btn in reversed(filtered_nav_path):
@@ -1205,7 +1211,10 @@ class NavigationHandler(BaseStateHandler):
             elif btn == "exit_battle.png":
                 thresh = get_template_threshold(btn, default=EXIT_BATTLE_THRESHOLD)  # 0.88 防範城鎮背景產生虛假誤匹配
                 b_thresh = 0.70
-            elif "door" in btn or "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
+            elif "door" in btn:
+                thresh = get_template_threshold(btn, default=0.88)  # 0.88 防範大廳拱門按鈕誤匹配
+                b_thresh = 0.70
+            elif "dungeon" in btn or "select_stage" in btn or "entry" in btn or "stage_label" in btn or "level" in btn:
                 thresh = get_template_threshold(btn, default=ENTRY_THRESHOLD)
                 b_thresh = 0.70
             else:

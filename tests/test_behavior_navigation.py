@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from states.handlers.navigation import NavigationHandler
+from states.handlers.navigation import NavigationHandler, filter_navigation_path
 from utils.scene_detector import SceneInfo, SceneType
 
 class TestBehaviorNavigation(unittest.TestCase):
@@ -42,6 +42,45 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.handler = NavigationHandler(self.mock_machine)
         self.handler.card_alignment_tab = "stage"
         self.rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        def default_tab_matcher(_img, tmpl_a, tmpl_b, **kwargs):
+            res_a = self.mock_machine.matcher.match(None, tmpl_a)
+            res_b = self.mock_machine.matcher.match(None, tmpl_b)
+            c_a = res_a[1] if (isinstance(res_a, (tuple, list)) and len(res_a) >= 2 and res_a[1] is not None) else 0.0
+            c_b = res_b[1] if (isinstance(res_b, (tuple, list)) and len(res_b) >= 2 and res_b[1] is not None) else 0.0
+            is_a = (c_a >= 0.70 and c_a > c_b + 0.02)
+            is_b = (c_b >= 0.70 and c_b > c_a + 0.02)
+            return (is_a, is_b, c_a, c_b)
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.side_effect = default_tab_matcher
+
+    def _set_active_tab_mock(self, active_tab: str = "stage"):
+        """符合真實契約之互斥頁籤 Mock Helper，防止全域粗糙 Mock 污染其他頁籤判定。"""
+        def fake_tabs(_img, tmpl_a, tmpl_b, **kwargs):
+            is_a = False
+            is_b = False
+            if active_tab == "stage":
+                if "select_stage_after" in tmpl_a:
+                    is_a = True
+                elif "select_stage_after" in tmpl_b:
+                    is_b = True
+            elif active_tab == "dungeon":
+                if "dungeon_after" in tmpl_a:
+                    is_a = True
+                elif "dungeon_after" in tmpl_b:
+                    is_b = True
+            elif active_tab == "domain":
+                if "Domains_entry_after" in tmpl_a:
+                    is_a = True
+            elif active_tab == "lord":
+                if "Lord_entry_after" in tmpl_a:
+                    is_a = True
+            elif active_tab == "demon_lord":
+                if "demon_lords_entry_after" in tmpl_a:
+                    is_a = True
+            c_a = 0.95 if is_a else 0.10
+            c_b = 0.95 if is_b else 0.10
+            return (is_a, is_b, c_a, c_b)
+        self.mock_machine.matcher.match_mutually_exclusive_tabs.side_effect = fake_tabs
 
     # =========================================================================
     # 1.1 城鎮畫面識別與導航行為測試
@@ -195,7 +234,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         }
         self.mock_machine.has_available_dungeon.return_value = True
         self.mock_machine.get_dungeon_cooldown_status.return_value = ("黏糊糊: 就緒", ["黏糊糊的石窟"])
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.85, 0.10)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "goback_town.png":
@@ -226,7 +265,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         }
         self.mock_machine.has_available_dungeon.return_value = False
         self.mock_machine.get_dungeon_cooldown_status.return_value = ("全冷卻", [])
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.10, 0.85)
+        self._set_active_tab_mock("dungeon")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "goback_town.png":
@@ -380,7 +419,7 @@ class TestBehaviorNavigation(unittest.TestCase):
             "sub_stage": None,
             "navigation_path": ["common/door.png", "stages/first_stage.png"]
         }
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "stages/first_stage.png":
@@ -418,7 +457,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.mock_machine.last_stage_scroll_time = 0.0
         import time
         setattr(self.mock_machine, "missing_time_stages/level1_boss.png", time.time() - 2.0)
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "goback_town.png":
@@ -457,7 +496,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         }
         setattr(self.mock_machine, "missing_time_stages/level1_final.png", time.time() - 2.0)
         self.mock_machine.last_stage_scroll_time = 0.0
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "stages/stage_label.png":
@@ -529,7 +568,7 @@ class TestBehaviorNavigation(unittest.TestCase):
                 "stages/six_stage.png"
             ]
         }
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         # 1. 模擬關卡I干擾項 (信心度 0.9082，在 0.93 門檻下判定為未命中)
         def match_interference(img, template, threshold=0.8, *args, **kwargs):
@@ -579,7 +618,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         }
         setattr(self.mock_machine, "missing_time_stages/first_stage.png", time.time() - 2.0)
         self.mock_machine.last_stage_scroll_time = 0.0
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "stages/stage_label.png":
@@ -615,7 +654,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         }
         setattr(self.mock_machine, "missing_time_stages/first_stage.png", time.time() - 2.0)
         self.mock_machine.last_stage_scroll_time = 0.0
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
         self.handler.sub_stage_scroll_attempts = 5
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
@@ -650,7 +689,7 @@ class TestBehaviorNavigation(unittest.TestCase):
         }
         setattr(self.mock_machine, "missing_time_stages/boss_skull.png", time.time() - 2.0)
         self.mock_machine.last_stage_scroll_time = 0.0
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "stages/stage_label.png":
@@ -692,7 +731,7 @@ class TestBehaviorNavigation(unittest.TestCase):
             "sub_stage": "final",
             "navigation_path": ["common/door.png", "stages/boss_skull.png"]
         }
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "stages/stage_label.png":
@@ -731,7 +770,7 @@ class TestBehaviorNavigation(unittest.TestCase):
             "sub_stage": "middle",
             "navigation_path": ["common/door.png", "stages/stage_label.png", "stages/boss_skull.png"]
         }
-        self.mock_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, False, (0, 0), 0.95)
+        self._set_active_tab_mock("stage")
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
             if template == "stages/stage_label.png":
@@ -853,6 +892,20 @@ class TestBehaviorNavigation(unittest.TestCase):
             mock_write_debug.assert_not_called()
         finally:
             logging.getLogger().setLevel(prev_level)
+
+    def test_filter_navigation_path_excludes_door_in_lobby(self):
+        """驗證在大廳環境下 (is_lobby=True)，導航路徑自動剔除 common/door.png，非大廳則保留。"""
+        raw_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"]
+        
+        # 1. 大廳中：應剔除 common/door.png
+        filtered_lobby = filter_navigation_path(raw_path, is_lobby=True)
+        self.assertEqual(filtered_lobby, ["dungeons/dungeon.png", "dungeons/slime.png"])
+        self.assertNotIn("common/door.png", filtered_lobby)
+
+        # 2. 城鎮或非大廳：應保留 common/door.png
+        filtered_town = filter_navigation_path(raw_path, is_lobby=False)
+        self.assertEqual(filtered_town, ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"])
+        self.assertIn("common/door.png", filtered_town)
 
 
 if __name__ == "__main__":

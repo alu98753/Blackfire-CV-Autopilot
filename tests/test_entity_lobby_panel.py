@@ -70,6 +70,133 @@ class TestEntityLobbyPanel(unittest.TestCase):
         """
         pass
 
+    def test_domain_selected_suppresses_dungeon_ghost_match(self):
+        """
+        [測試案例 4] 禁域頁籤選中時，徹底壓制地下城幽靈高信心度匹配
+        - 情境描述：大廳中【禁域】已被點選 (Domains_entry_after 0.94)，
+          但地下城圖標因外型近似也產生了 dungeon_after 0.8974 的假陽性匹配。
+        - 預期動作：SceneDetector 必須判定為 DOMAIN_SELECT，active_tabs == ['domain']，
+          絕不可誤判為 LOBBY_DUNGEON。
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.scene_detector import SceneDetector, SceneType
+
+        mock_matcher = MagicMock()
+        detector = SceneDetector(matcher=mock_matcher)
+        mock_machine = MagicMock()
+        # 即使當前任務配置為地下城 (type="dungeon")，感知層也必須能看見禁域
+        mock_machine.config = {"type": "dungeon", "stage_templates": [], "dungeon_entries": []}
+        mock_machine.diamond_window_opened = False
+        mock_machine.bread_window_opened = False
+
+        with patch("os.path.exists", return_value=True):
+            def match_side_effect(_img, template, threshold=0.8):
+                if template == "goback_town.png":
+                    return ((64, 726), 0.95)
+                if template == "dungeons/dungeon.png":
+                    return ((816, 928), 0.9563)
+                if template == "dungeons/dungeon_after.png":
+                    return ((815, 926), 0.8974)
+                if template == "domains/Domains_entry.png":
+                    return ((967, 936), 0.9278)
+                if template == "domains/Domains_entry_after.png":
+                    return ((965, 930), 0.9487)
+                return (None, 0.0)
+
+            mock_matcher.match.side_effect = match_side_effect
+
+            def tab_side_effect(_img, template_a, template_b, **_kwargs):
+                if template_a == "domains/Domains_entry_after.png":
+                    return (True, False, 0.9487, 0.9278)
+                if template_a == "common/select_stage_after.png" and template_b == "dungeons/dungeon_after.png":
+                    # 模擬舊邏輯中 dungeon_after (0.897) 壓過 select_stage_after (0.846)
+                    return (False, True, 0.8463, 0.8974)
+                return (False, False, 0.0, 0.0)
+
+            mock_matcher.match_mutually_exclusive_tabs.side_effect = tab_side_effect
+
+            scene = detector.detect("mock_screen", machine=mock_machine)
+            self.assertEqual(scene.scene_type, SceneType.DOMAIN_SELECT)
+            self.assertEqual(scene.active_tabs, ["domain"])
+
+    def test_dungeon_ghost_match_rejected_when_inactive_dungeon_dominates(self):
+        """
+        [測試案例 5] 地下城未選中態 (dungeon.png) 信心度高於選中態時，拒絕幽靈開啟
+        - 情境描述：dungeon_after 跑出 0.89，但未選中態 dungeon.png 跑出 0.9563，
+          且無其他頁籤開啟。
+        - 預期動作：撤銷地下城選中態，保持為 LOBBY_OTHER，active_tabs 為空。
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.scene_detector import SceneDetector, SceneType
+
+        mock_matcher = MagicMock()
+        detector = SceneDetector(matcher=mock_matcher)
+        mock_machine = MagicMock()
+        mock_machine.config = {"type": "mix", "stage_templates": [], "dungeon_entries": []}
+        mock_machine.diamond_window_opened = False
+        mock_machine.bread_window_opened = False
+
+        with patch("os.path.exists", return_value=True):
+            def match_side_effect(_img, template, threshold=0.8):
+                if template == "goback_town.png":
+                    return ((64, 726), 0.95)
+                if template == "dungeons/dungeon.png":
+                    return ((816, 928), 0.9563)
+                if template == "dungeons/dungeon_after.png":
+                    return ((815, 926), 0.8974)
+                return (None, 0.0)
+
+            mock_matcher.match.side_effect = match_side_effect
+
+            def tab_side_effect(_img, template_a, template_b, **_kwargs):
+                if template_a == "common/select_stage_after.png" and template_b == "dungeons/dungeon_after.png":
+                    return (False, True, 0.8463, 0.8974)
+                return (False, False, 0.0, 0.0)
+
+            mock_matcher.match_mutually_exclusive_tabs.side_effect = tab_side_effect
+
+            scene = detector.detect("mock_screen", machine=mock_machine)
+            self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
+            self.assertEqual(scene.active_tabs, [])
+
+    def test_tab_disambiguation_conflict_remains_lobby_other(self):
+        """
+        [測試案例 6] 多個頁籤同時滿足門檻但差距過小時，視為真衝突，退回 LOBBY_OTHER 不盲猜
+        - 情境描述：禁域 (0.92) 與領主 (0.91) 同時滿足 Active 門檻，但兩者差值 0.01 < 0.05
+        - 預期動作：標記衝突，場景判定為 LOBBY_OTHER，active_tabs 為空。
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.scene_detector import SceneDetector, SceneType
+
+        mock_matcher = MagicMock()
+        detector = SceneDetector(matcher=mock_matcher)
+        mock_machine = MagicMock()
+        mock_machine.config = {"type": "mix", "stage_templates": [], "dungeon_entries": []}
+        mock_machine.diamond_window_opened = False
+        mock_machine.bread_window_opened = False
+
+        with patch("os.path.exists", return_value=True):
+            def match_side_effect(_img, template, threshold=0.8):
+                if template == "goback_town.png":
+                    return ((64, 726), 0.95)
+                # 禁域 Active 0.92, Inactive 0.40
+                if template == "domains/Domains_entry_after.png":
+                    return ((965, 930), 0.92)
+                if template == "domains/Domains_entry.png":
+                    return ((967, 936), 0.40)
+                # 領主 Active 0.91, Inactive 0.40
+                if template == "load/Lord_entry_after.png":
+                    return ((500, 930), 0.91)
+                if template == "load/Lord_entry.png":
+                    return ((502, 936), 0.40)
+                return (None, 0.0)
+
+            mock_matcher.match.side_effect = match_side_effect
+
+            scene = detector.detect("mock_screen", machine=mock_machine)
+            self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
+            self.assertEqual(scene.active_tabs, [])
+
 
 if __name__ == "__main__":
     unittest.main()
