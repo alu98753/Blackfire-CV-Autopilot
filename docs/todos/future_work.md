@@ -25,11 +25,16 @@ dengeon同理
 
 要讓我可以安心整天不用看的前提
 
-1. daily 四個都做得好
+- [x] daily 四個都做得好
   目前blood ok
   抽英雄ok
   chest ok
   任務版 ok
+
+- [x] **Daily 模式退避進入 `COLLECT_ONLY` 後，地下城冷卻結束無法定時回歸** ([state_machine_bug.md](state_machine_bug.md))
+  - 待機喚醒機制與型態判斷缺陷導致地下城冷卻就緒後無法自動喚醒復歸；已由 commit 8d4ce03、0626e03 搭配本次 fix/stamina-retreat-dungeon-resume 閉環驗證完成。
+- [x] **`COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
+  - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡；地下城喚醒路由純潔化與冷卻復歸閉環已於 fix/stamina-retreat-dungeon-resume 完成。
 
 ### Navigation
 
@@ -47,10 +52,6 @@ dengeon同理
   - 懸賞告示牌的流程不用改，只是要確認有進去才可以開始跑。
 目前的問題是他還沒進去 如debug 圖片所示 他還在背包 當人不能判斷有懸賞任務 同時珠寶店跟blood有連帶性 這個也要拔除 把兩者分開 這樣應該就可以了
 - [ ] **4. 定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖** ([daily_quest_dungeon_priority_spec.md](daily_quest_dungeon_priority_spec.md))
-- [ ] **5. Daily 模式退避進入 `COLLECT_ONLY` 後，地下城冷卻結束無法定時回歸** ([state_machine_bug.md](state_machine_bug.md))
-  - 待機喚醒機制與型態判斷缺陷導致地下城冷卻就緒後無法自動喚醒復歸。
-- [x] **6. `COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
-  - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡；地下城喚醒路由純潔化與冷卻復歸閉環已於 fix/stamina-retreat-dungeon-resume 完成。
 - [ ] **7. 領主 Boss(Lord) 與深淵魔王(Demon Lord) 穩定運行與材料防護**
   - lord, demon lord 不被其他activity搶掉，可以正常打完。
   - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
