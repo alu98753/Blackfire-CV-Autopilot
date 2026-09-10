@@ -1,11 +1,13 @@
 import logging
 import os
+import time
 from typing import Dict, List, Optional, Tuple
 
 from utils.detector_registry import DetectorGroup, DetectorRegistry
-from utils.scene_snapshot import DetectionProfileId
+from utils.scene_snapshot import DetectionProfileId, LobbyTabScope, SceneDetectionRequest, TabId
 from vision.matcher import TemplateMatcher
 from utils.scene_types import (
+    LOBBY_TAB_BY_NAME,
     LOBBY_TAB_DEFINITIONS,
     LobbyTabDefinition,
     SceneAnchorSpec,
@@ -22,6 +24,9 @@ __all__ = [
     "LobbyTabDefinition",
     "SceneAnchorSpec",
     "LOBBY_TAB_DEFINITIONS",
+    "LOBBY_TAB_BY_NAME",
+    "LobbyTabScope",
+    "SceneDetectionRequest",
     "SceneDetector",
 ]
 
@@ -83,6 +88,11 @@ SCENE_ANCHOR_SPECS: Tuple[SceneAnchorSpec, ...] = (
 )
 
 
+LOBBY_TAB_THRESHOLD: float = 0.70
+LOBBY_TAB_MARGIN: float = 0.02
+LOBBY_TAB_CONFLICT_DIFF: float = 0.05
+
+
 class SceneDetector:
     def __init__(self, matcher: Optional[TemplateMatcher] = None):
         self.matcher = matcher or TemplateMatcher()
@@ -90,6 +100,7 @@ class SceneDetector:
         self._active_profile = DetectionProfileId.UNKNOWN
         self._runtime_templates = {}
         self._frame_match_cache = {}
+        self._last_tab_was_full_relocalize = False
 
     def _safe_match(self, screen_img, template_name: str, threshold: float = 0.8) -> Tuple[Optional[Tuple[int, int]], float]:
         """
@@ -116,26 +127,26 @@ class SceneDetector:
         machine_state=None,
         machine=None,
         profile=DetectionProfileId.UNKNOWN,
+        request: Optional[SceneDetectionRequest] = None,
     ) -> SceneInfo:
         """
         偵測傳入畫面 screen_img 之完整場景資訊與 UI 頁籤狀態。
         嚴格遵循 階段0 ➔ 階段1 ➔ 階段2 ➔ 階段3 ➔ 階段4 之優先順序。
         """
-        self._active_profile = profile
+        if request is not None:
+            effective_profile = request.profile
+        else:
+            effective_profile = profile
+            request = SceneDetectionRequest(
+                profile=profile,
+                expected_tab=None,
+                tab_scope=LobbyTabScope.FULL_RELOCALIZE,
+                reason="legacy_or_unspecified",
+            )
+        self._active_profile = effective_profile
         self._frame_match_cache = {}
         self._runtime_templates = self._build_runtime_templates(machine)
         scene_info = SceneInfo(scene_type=SceneType.UNKNOWN)
-        if profile == DetectionProfileId.TOWN:
-            scene_info.is_town = True
-        elif profile in {
-            DetectionProfileId.LOBBY,
-            DetectionProfileId.STAGE_SELECT,
-            DetectionProfileId.DUNGEON_SELECT,
-            DetectionProfileId.DOMAIN_SELECT,
-            DetectionProfileId.LORD_SELECT,
-            DetectionProfileId.DEMON_LORD_SELECT,
-        }:
-            scene_info.is_lobby = True
 
         # 0. 全域最高優先防護與視窗狀態
         if os.path.exists(os.path.join("templates", "task_complete.png")):
@@ -228,16 +239,17 @@ class SceneDetector:
                 scene_info.matched_elements[lobby_start_btn] = (pos_start, conf_start)
                 return scene_info
 
-        # 4. 大廳 5 大頁籤對稱解析與仲裁 (10 模板感知)
+        # 4. 大廳頁籤解析與消歧 (支援 EXPECTED_TAB fast path 與 FULL_RELOCALIZE 仲裁)
         winner_name, winner_scene, winner_conf, is_tab_conflict = self._resolve_lobby_tabs(
-            screen_img, machine, scene_info
+            screen_img, machine, scene_info, request=request
         )
 
-        # 5. 模板備援掃描 (僅在未確定頁籤且無頁籤衝突時允許)
+        # 5. 模板備援掃描 (僅在未確定頁籤、無衝突且非明確 target inactive 狀態時允許)
         allow_card_fallback = (
             config_type in {"stage", "dungeon", "mix", "daily"}
             and not is_tab_conflict
             and winner_name is None
+            and self._last_tab_was_full_relocalize
         )
         if allow_card_fallback and machine and getattr(machine, "config", None):
             stage_templates = machine.config.get("stage_templates", [])
@@ -275,23 +287,132 @@ class SceneDetector:
         screen_img,
         machine,
         scene_info: SceneInfo,
+        request: Optional[SceneDetectionRequest] = None,
     ) -> Tuple[Optional[str], Optional[SceneType], float, bool]:
+
+        """調度大廳頁籤（Lobby Tabs）的感知策略並解析當前啟動的分頁。
+        依據當前感知 Profile 權限與請求範疇（Tab Scope）進行分流：
+        1. 權限檢查：若當前 Profile 未啟用 DetectorGroup.TABS，則直接跳過分頁辨識。
+        2. 最小感知（Minimal Perception）：若請求指定 EXPECTED_TAB，僅針對預期頁籤進行
+           快速比對驗證，避免非必要全量比對。
+        3. 全量重定位（Full Relocalization）：若未指定預期頁籤或要求完整掃描，比對所有
+           可用頁籤並記錄 _last_tab_was_full_relocalize 標記供遙測追蹤。
+        Args:
+            screen_img: 當前截圖影像。
+            machine: 遊戲狀態機實例。
+            scene_info: 當前幀累積的場景資訊物件。
+            request: 可選的場景偵測請求，包含 tab_scope 與 expected_tab。
+        Returns:
+            Tuple[Optional[str], Optional[SceneType], float, bool]:
+                - winner_name: 最佳匹配的分頁名稱（若未匹配成功則為 None）。
+                - scene_type: 對應解析出的場景類型（如 SceneType.STAGE_SELECT）。
+                - best_val: 匹配相似度分數。
+                - is_lobby: 是否確認處於大廳分頁結構中。
         """
-        對稱成對評估大廳 5 大頁籤 (共 10 張模板)。
-        1. 任何頁籤模板 (active 或 inactive) 出現，即為身處活動大廳之鐵證 (is_lobby = True)。
-        2. 5 大頁籤統一對稱檢驗：Active 信心度 >= 0.70 且顯著高於 Inactive (margin 0.02)。
-        3. 最大信心度仲裁 (Max-Confidence Disambiguation)：
-           - 0 個 active：回傳 (None, None, 0.0, False)
-           - 1 個 active：直接勝出
-           - >1 個 active：最高信心度顯著領先 (diff >= 0.05) 則勝出；若差距 < 0.05 視為真衝突。
-        回傳 (winner_name, winner_scene_type, winner_conf, is_conflict)
-        """
-        candidates: List[Tuple[str, SceneType, float]] = []
         allow_tabs = self.registry.allows_group(self._active_profile, DetectorGroup.TABS)
         if not allow_tabs:
+            self._last_tab_was_full_relocalize = False
             return None, None, 0.0, False
 
-        # 1. 遍歷 5 大頁籤成對評估
+        if request and request.tab_scope == LobbyTabScope.EXPECTED_TAB and request.expected_tab:
+            return self._resolve_expected_lobby_tab(screen_img, machine, scene_info, request)
+
+        self._last_tab_was_full_relocalize = True
+        reason = request.reason if request else "default"
+        return self._resolve_full_relocalize(screen_img, machine, scene_info, reason=reason)
+
+    def _resolve_expected_lobby_tab(
+        self,
+        screen_img,
+        machine,
+        scene_info: SceneInfo,
+        request: SceneDetectionRequest,
+    ) -> Tuple[Optional[str], Optional[SceneType], float, bool]:
+        t0 = time.monotonic()
+        tab_key = (
+            request.expected_tab.value
+            if hasattr(request.expected_tab, "value")
+            else str(request.expected_tab)
+        )
+        tab = LOBBY_TAB_BY_NAME.get(tab_key)
+        if not tab:
+            logging.warning("[LobbyTabFastPath] Unknown expected tab '%s'; upgrading to full relocalize", tab_key)
+            self._last_tab_was_full_relocalize = True
+            return self._resolve_full_relocalize(
+                screen_img, machine, scene_info, reason="unknown_expected_tab"
+            )
+
+        active_tmpl = tab.active_template
+        inactive_tmpl = tab.inactive_template
+        if machine and getattr(machine, "config", None):
+            cfg = machine.config
+            if tab.config_active_key and tab.config_active_key in cfg:
+                active_tmpl = cfg[tab.config_active_key] or active_tmpl
+            if tab.config_inactive_key and tab.config_inactive_key in cfg:
+                inactive_tmpl = cfg[tab.config_inactive_key] or inactive_tmpl
+
+        pos_act, conf_act = self._safe_match(screen_img, active_tmpl, threshold=LOBBY_TAB_THRESHOLD)
+        pos_inact, conf_inact = self._safe_match(screen_img, inactive_tmpl, threshold=LOBBY_TAB_THRESHOLD)
+
+        if conf_act < LOBBY_TAB_THRESHOLD and hasattr(self.matcher, "match_mutually_exclusive_tabs"):
+            res = self.matcher.match_mutually_exclusive_tabs(
+                screen_img, active_tmpl, inactive_tmpl, margin=LOBBY_TAB_MARGIN, threshold=LOBBY_TAB_THRESHOLD
+            )
+            parsed = _parse_tab_result(res)
+            if parsed and parsed[0] and not parsed[1]:
+                conf_act = max(conf_act, parsed[2])
+                conf_inact = max(conf_inact, parsed[3])
+
+        if pos_act:
+            scene_info.matched_elements[active_tmpl] = (pos_act, conf_act)
+            scene_info.is_lobby = True
+        if pos_inact:
+            scene_info.matched_elements[inactive_tmpl] = (pos_inact, conf_inact)
+            scene_info.is_lobby = True
+
+        elapsed = time.monotonic() - t0
+
+        # 1. Active dominance
+        if conf_act >= LOBBY_TAB_THRESHOLD and conf_act > conf_inact + LOBBY_TAB_MARGIN:
+            self._last_tab_was_full_relocalize = False
+            logging.debug(
+                "[LobbyTabFastPath] tab=%s active_conf=%.4f inactive_conf=%.4f elapsed=%.3fs upgrade=False",
+                tab.name, conf_act, conf_inact, elapsed
+            )
+            return tab.name, tab.scene_type, conf_act, False
+
+        # 2. Inactive confirmed or active not dominant
+        if conf_inact >= LOBBY_TAB_THRESHOLD or (
+            conf_act >= LOBBY_TAB_THRESHOLD and conf_act <= conf_inact + LOBBY_TAB_MARGIN
+        ):
+            self._last_tab_was_full_relocalize = False
+            logging.debug(
+                "[LobbyTabFastPath] tab=%s target_inactive active_conf=%.4f inactive_conf=%.4f elapsed=%.3fs upgrade=False",
+                tab.name, conf_act, conf_inact, elapsed
+            )
+            return None, None, 0.0, False
+
+        # 3. Both missed: upgrade to bounded full relocalize
+        self._last_tab_was_full_relocalize = True
+        logging.info(
+            "[LobbyTabUpgrade] Expected tab '%s' missed (act=%.4f, inact=%.4f, elapsed=%.3fs); upgrading to FULL_RELOCALIZE",
+            tab.name, conf_act, conf_inact, elapsed
+        )
+        return self._resolve_full_relocalize(
+            screen_img, machine, scene_info, reason="expected_tab_miss", expected_tab_name=tab.name
+        )
+
+    def _resolve_full_relocalize(
+        self,
+        screen_img,
+        machine,
+        scene_info: SceneInfo,
+        reason: str = "default",
+        expected_tab_name: Optional[str] = None,
+    ) -> Tuple[Optional[str], Optional[SceneType], float, bool]:
+        t0 = time.monotonic()
+        candidates: List[Tuple[str, SceneType, float]] = []
+
         for tab in LOBBY_TAB_DEFINITIONS:
             active_tmpl = tab.active_template
             inactive_tmpl = tab.inactive_template
@@ -302,10 +423,9 @@ class SceneDetector:
                 if tab.config_inactive_key and tab.config_inactive_key in cfg:
                     inactive_tmpl = cfg[tab.config_inactive_key] or inactive_tmpl
 
-            pos_act, conf_act = self._safe_match(screen_img, active_tmpl, threshold=0.70)
-            pos_inact, conf_inact = self._safe_match(screen_img, inactive_tmpl, threshold=0.70)
+            pos_act, conf_act = self._safe_match(screen_img, active_tmpl, threshold=LOBBY_TAB_THRESHOLD)
+            pos_inact, conf_inact = self._safe_match(screen_img, inactive_tmpl, threshold=LOBBY_TAB_THRESHOLD)
 
-            # 大廳鐵證：10 模板中任一出現，證明畫面身處活動大廳
             if pos_act:
                 scene_info.matched_elements[active_tmpl] = (pos_act, conf_act)
                 scene_info.is_lobby = True
@@ -313,10 +433,9 @@ class SceneDetector:
                 scene_info.matched_elements[inactive_tmpl] = (pos_inact, conf_inact)
                 scene_info.is_lobby = True
 
-            # 相容 Matcher 互斥介面 (相容 Mock 或外部自訂 Matcher)
-            if conf_act < 0.70 and hasattr(self.matcher, "match_mutually_exclusive_tabs"):
+            if conf_act < LOBBY_TAB_THRESHOLD and hasattr(self.matcher, "match_mutually_exclusive_tabs"):
                 res = self.matcher.match_mutually_exclusive_tabs(
-                    screen_img, active_tmpl, inactive_tmpl, margin=0.02, threshold=0.70
+                    screen_img, active_tmpl, inactive_tmpl, margin=LOBBY_TAB_MARGIN, threshold=LOBBY_TAB_THRESHOLD
                 )
                 parsed = _parse_tab_result(res)
                 if parsed and parsed[0] and not parsed[1]:
@@ -324,38 +443,24 @@ class SceneDetector:
                     conf_inact = max(conf_inact, parsed[3])
                     scene_info.is_lobby = True
 
-            # 對稱成對判定：Active 必須達標且勝過 Inactive (杜絕幽靈匹配)
-            if conf_act >= 0.70 and conf_act > conf_inact + 0.02:
+            if conf_act >= LOBBY_TAB_THRESHOLD and conf_act > conf_inact + LOBBY_TAB_MARGIN:
                 candidates.append((tab.name, tab.scene_type, conf_act))
 
-        # 相容舊式 (stage_after vs dungeon_after) 跨頁籤二元比對 Mock
-        has_stage_or_dungeon = any(name in {"stage", "dungeon"} for name, _, _ in candidates)
-        if not has_stage_or_dungeon and hasattr(self.matcher, "match_mutually_exclusive_tabs"):
-            res_legacy = self.matcher.match_mutually_exclusive_tabs(
-                screen_img, "common/select_stage_after.png", "dungeons/dungeon_after.png", margin=0.02, threshold=0.70
-            )
-            parsed_legacy = _parse_tab_result(res_legacy)
-            if parsed_legacy:
-                is_st, is_dg, c_st, c_dg = parsed_legacy
-                # 若兩者信心度皆高 (>= 0.70) 卻均未勝出，說明兩者處於嚴重衝突狀態
-                if c_st >= 0.70 and c_dg >= 0.70 and not (is_st ^ is_dg):
-                    logging.warning("High confidence tab conflict between stage (%.4f) and dungeon (%.4f)", c_st, c_dg)
-                    return None, None, 0.0, True
+        elapsed = time.monotonic() - t0
 
-                if is_st and c_st >= 0.70:
-                    candidates.append(("stage", SceneType.LOBBY_STAGE, c_st))
-                    scene_info.is_lobby = True
-                elif is_dg and c_dg >= 0.70:
-                    _, conf_dg_inact = self._safe_match(screen_img, "dungeons/dungeon.png", threshold=0.70)
-                    if conf_dg_inact <= c_dg + 0.02:
-                        candidates.append(("dungeon", SceneType.LOBBY_DUNGEON, c_dg))
-                        scene_info.is_lobby = True
-
-        # 2. 最大信心度仲裁 (Max-Confidence Disambiguation)
         if len(candidates) == 0:
+            logging.info(
+                "[FullRelocalize] reason=%s expected_tab=%s candidates=[] winner=None is_conflict=False elapsed=%.3fs",
+                reason, expected_tab_name, elapsed
+            )
             return None, None, 0.0, False
+
         if len(candidates) == 1:
             name, st, conf = candidates[0]
+            logging.info(
+                "[FullRelocalize] reason=%s expected_tab=%s candidates=[('%s', '%.4f')] winner=%s is_conflict=False elapsed=%.3fs",
+                reason, expected_tab_name, name, conf, name, elapsed
+            )
             return name, st, conf, False
 
         candidates.sort(key=lambda item: item[2], reverse=True)
@@ -363,13 +468,19 @@ class SceneDetector:
         second_tab = candidates[1]
         diff = top_tab[2] - second_tab[2]
 
-        if diff >= 0.05:
+        cand_summary = [(c[0], round(c[2], 4)) for c in candidates]
+        if diff >= LOBBY_TAB_CONFLICT_DIFF:
+            logging.info(
+                "[FullRelocalize] reason=%s expected_tab=%s candidates=%s winner=%s is_conflict=False elapsed=%.3fs",
+                reason, expected_tab_name, cand_summary, top_tab[0], elapsed
+            )
             return top_tab[0], top_tab[1], top_tab[2], False
 
         logging.warning(
-            "Conflicting active lobby tabs detected with insufficient margin (diff=%.4f): %s",
+            "[FullRelocalize] Conflicting active lobby tabs with insufficient margin (diff=%.4f): %s (elapsed=%.3fs)",
             diff,
-            [c[0] for c in candidates],
+            cand_summary,
+            elapsed,
         )
         return None, None, 0.0, True
 

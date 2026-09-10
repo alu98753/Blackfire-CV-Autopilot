@@ -21,6 +21,7 @@ from utils.scene_detector import SceneDetector, SceneType
 from utils.dungeon_catalog import DungeonCatalog
 from states.navigation_routing import (
     NavigationDecisionExecutor,
+    resolve_detection_request,
     resolve_navigation_context,
 )
 
@@ -651,7 +652,8 @@ class NavigationHandler(BaseStateHandler):
         if not hasattr(self, "scene_detector") or self.scene_detector is None or self.scene_detector.matcher != self.matcher:
             self.scene_detector = SceneDetector(self.matcher)
 
-        scene = self.scene_detector.detect(screen_img, machine=self.machine)
+        detection_req = resolve_detection_request(self.machine)
+        scene = self.scene_detector.detect(screen_img, machine=self.machine, request=detection_req)
         frame_matches = {}
 
         def match_current_frame(template_name, **match_options):
@@ -779,6 +781,8 @@ class NavigationHandler(BaseStateHandler):
             import sys
             is_testing = "unittest" in sys.modules
             last_scroll = getattr(self.machine, "last_dungeon_scroll_time", 0.0)
+            if not isinstance(last_scroll, (int, float)):
+                last_scroll = 0.0
             time_diff = time.time() - last_scroll
             if time_diff < 2.2 and not is_testing:
                 logging.info(f"⌛ 剛執行過地下城水平滑動 (僅過 {time_diff:.1f} 秒)，等待地圖滾動完全靜止後再進行圖像辨識...")

@@ -15,7 +15,14 @@ class DetectorGroup(str, Enum):
 
 
 class DetectorRegistry:
-    """Resolve the bounded detector groups allowed for one control phase."""
+    """管理並解析不同感知場景（DetectionProfileId）所允許啟用的偵測器群組（DetectorGroup）。
+    透過選擇性感知（Selective Perception）機制，在特定控制階段或導航場景下
+    僅執行必要的 Detector 白名單群組，避免全量模板比對造成的 FPS 損耗與誤判。
+    職責邊界：
+    - 維護 Profile 與 DetectorGroup 集合的靜態對應關係。
+    - 提供以 Profile 或其別名查詢允許群組集合的介面。
+    - 不持有 Detector 實例，亦不介入具體比對執行。
+    """
 
     _PROFILE_GROUPS = {
         DetectionProfileId.UNKNOWN: frozenset(DetectorGroup),
@@ -25,29 +32,51 @@ class DetectorRegistry:
         DetectionProfileId.LOBBY: frozenset(
             {
                 DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
                 DetectorGroup.LOBBY,
                 DetectorGroup.TABS,
             }
         ),
         DetectionProfileId.STAGE_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.DUNGEON_SELECT: frozenset(
             {
                 DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
                 DetectorGroup.LOBBY,
                 DetectorGroup.TABS,
                 DetectorGroup.DUNGEON,
             }
         ),
         DetectionProfileId.DOMAIN_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.LORD_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.DEMON_LORD_SELECT: frozenset(
-            {DetectorGroup.SAFETY, DetectorGroup.LOBBY, DetectorGroup.TABS}
+            {
+                DetectorGroup.SAFETY,
+                DetectorGroup.TOWN,
+                DetectorGroup.LOBBY,
+                DetectorGroup.TABS,
+            }
         ),
         DetectionProfileId.LOADING: frozenset({DetectorGroup.SAFETY}),
         DetectionProfileId.BATTLE: frozenset({DetectorGroup.SAFETY}),

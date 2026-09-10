@@ -197,6 +197,148 @@ class TestEntityLobbyPanel(unittest.TestCase):
             self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
             self.assertEqual(scene.active_tabs, [])
 
+    def test_expected_tab_fast_path_all_five_tabs(self):
+        """
+        [測試案例 7] 五大頁籤在 EXPECTED_TAB 模式下，斷言只比對目標 pair 且呼叫次數 <= 2
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.scene_detector import SceneDetector, SceneType
+        from utils.scene_snapshot import DetectionProfileId, LobbyTabScope, SceneDetectionRequest, TabId
+        from utils.scene_types import LOBBY_TAB_BY_NAME
+
+        profile_map = {
+            TabId.STAGE: (DetectionProfileId.STAGE_SELECT, SceneType.STAGE_SELECT),
+            TabId.DUNGEON: (DetectionProfileId.DUNGEON_SELECT, SceneType.DUNGEON_SELECT),
+            TabId.DOMAIN: (DetectionProfileId.DOMAIN_SELECT, SceneType.DOMAIN_SELECT),
+            TabId.LORD: (DetectionProfileId.LORD_SELECT, SceneType.LORD_SELECT),
+            TabId.DEMON_LORD: (DetectionProfileId.DEMON_LORD_SELECT, SceneType.DEMON_LORD_SELECT),
+        }
+
+        for tab_id, (profile, expected_scene) in profile_map.items():
+            with self.subTest(tab=tab_id.value):
+                mock_matcher = MagicMock()
+                detector = SceneDetector(matcher=mock_matcher)
+                mock_machine = MagicMock()
+                mock_machine.config = {"type": tab_id.value}
+                mock_machine.diamond_window_opened = False
+                mock_machine.bread_window_opened = False
+
+                tab_def = LOBBY_TAB_BY_NAME[tab_id.value]
+                act_tmpl = tab_def.active_template
+                inact_tmpl = tab_def.inactive_template
+
+                matched_templates = []
+
+                def match_side_effect(_img, template, threshold=0.8):
+                    matched_templates.append(template)
+                    if template == act_tmpl:
+                        return ((500, 500), 0.95)
+                    if template == inact_tmpl:
+                        return ((500, 500), 0.40)
+                    return (None, 0.0)
+
+                mock_matcher.match.side_effect = match_side_effect
+
+                with patch("os.path.exists", return_value=True):
+                    request = SceneDetectionRequest(
+                        profile=profile,
+                        expected_tab=tab_id,
+                        tab_scope=LobbyTabScope.EXPECTED_TAB,
+                        reason="navigation_steady",
+                    )
+                    scene = detector.detect("mock_screen", machine=mock_machine, request=request)
+
+                    self.assertEqual(scene.scene_type, expected_scene)
+                    self.assertEqual(scene.active_tabs, [tab_id.value])
+
+                    # 驗證所有其他頁籤模板絕對沒有被呼叫
+                    for other_name, other_def in LOBBY_TAB_BY_NAME.items():
+                        if other_name != tab_id.value:
+                            self.assertNotIn(other_def.active_template, matched_templates)
+                            self.assertNotIn(other_def.inactive_template, matched_templates)
+
+    def test_expected_tab_inactive_confirmed_returns_lobby_other(self):
+        """
+        [測試案例 8] EXPECTED_TAB 模式下目標 inactive 命中時，判定在 lobby 但 active_tabs 為空
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.scene_detector import SceneDetector, SceneType
+        from utils.scene_snapshot import DetectionProfileId, LobbyTabScope, SceneDetectionRequest, TabId
+
+        mock_matcher = MagicMock()
+        detector = SceneDetector(matcher=mock_matcher)
+        mock_machine = MagicMock()
+        mock_machine.config = {"type": "dungeon"}
+        mock_machine.diamond_window_opened = False
+        mock_machine.bread_window_opened = False
+
+        matched_templates = []
+
+        def match_side_effect(_img, template, threshold=0.8):
+            matched_templates.append(template)
+            if template == "dungeons/dungeon.png":
+                return ((648, 715), 0.95)
+            if template == "dungeons/dungeon_after.png":
+                return ((648, 713), 0.40)
+            return (None, 0.0)
+
+        mock_matcher.match.side_effect = match_side_effect
+
+        with patch("os.path.exists", return_value=True):
+            request = SceneDetectionRequest(
+                profile=DetectionProfileId.DUNGEON_SELECT,
+                expected_tab=TabId.DUNGEON,
+                tab_scope=LobbyTabScope.EXPECTED_TAB,
+                reason="navigation_steady",
+            )
+            scene = detector.detect("mock_screen", machine=mock_machine, request=request)
+
+            self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
+            self.assertEqual(scene.active_tabs, [])
+            self.assertTrue(scene.is_lobby)
+
+            # 其餘頁籤未被掃描
+            self.assertNotIn("common/select_stage.png", matched_templates)
+            self.assertNotIn("common/select_stage_after.png", matched_templates)
+
+    def test_expected_tab_miss_upgrades_to_full_relocalize(self):
+        """
+        [測試案例 9] EXPECTED_TAB miss (active 與 inactive 均未命中) 時，升級為 full relocalize
+        """
+        from unittest.mock import MagicMock, patch
+        from utils.scene_detector import SceneDetector, SceneType
+        from utils.scene_snapshot import DetectionProfileId, LobbyTabScope, SceneDetectionRequest, TabId
+
+        mock_matcher = MagicMock()
+        detector = SceneDetector(matcher=mock_matcher)
+        mock_machine = MagicMock()
+        mock_machine.config = {"type": "stage"}
+        mock_machine.diamond_window_opened = False
+        mock_machine.bread_window_opened = False
+
+        # 預期 stage，但畫面上其實是 lord 頁籤開啟
+        def match_side_effect(_img, template, threshold=0.8):
+            if template == "load/Lord_entry_after.png":
+                return ((888, 717), 0.96)
+            if template == "load/Lord_entry.png":
+                return ((885, 714), 0.40)
+            return (None, 0.0)
+
+        mock_matcher.match.side_effect = match_side_effect
+
+        with patch("os.path.exists", return_value=True):
+            request = SceneDetectionRequest(
+                profile=DetectionProfileId.STAGE_SELECT,
+                expected_tab=TabId.STAGE,
+                tab_scope=LobbyTabScope.EXPECTED_TAB,
+                reason="navigation_steady",
+            )
+            scene = detector.detect("mock_screen", machine=mock_machine, request=request)
+
+            # 升級 full relocalize 後成功辨識出 lord
+            self.assertEqual(scene.scene_type, SceneType.LORD_SELECT)
+            self.assertEqual(scene.active_tabs, ["lord"])
+
 
 if __name__ == "__main__":
     unittest.main()

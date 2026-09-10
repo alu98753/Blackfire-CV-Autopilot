@@ -3,9 +3,10 @@
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
+from typing import Optional
 
 from states.navigation_intent import ActionId, IntentId, PostconditionId
-from utils.scene_snapshot import SceneId, SceneSnapshot
+from utils.scene_snapshot import SceneId, SceneSnapshot, TabId
 
 
 class CollectionOutcome(str, Enum):
@@ -58,6 +59,7 @@ class InFlightAction:
     issued_at: float
     deadline: float
     attempt: int
+    expected_tab: Optional[TabId] = None
 
 
 class NavigationProgress:
@@ -84,7 +86,7 @@ class NavigationProgress:
     def outcomes(self):
         return MappingProxyType(dict(self._outcomes))
 
-    def begin(self, intent_id, action_id, expected, frame_id, now):
+    def begin(self, intent_id, action_id, expected, frame_id, now, expected_tab: Optional[TabId] = None):
         failures = self._failure_counts.get(intent_id, 0)
         self.in_flight = InFlightAction(
             intent_id=intent_id,
@@ -94,6 +96,7 @@ class NavigationProgress:
             issued_at=now,
             deadline=now + self.settings.action_timeout_seconds,
             attempt=failures + 1,
+            expected_tab=expected_tab,
         )
         return self.in_flight
 

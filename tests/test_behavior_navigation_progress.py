@@ -186,6 +186,23 @@ class TestBehaviorNavigationProgress(unittest.TestCase):
         self.assertTrue(machine.need_diamond_collection)
         self.assertTrue(machine.need_bread_collection)
 
+    def test_in_flight_action_preserves_expected_tab(self):
+        from utils.scene_snapshot import TabId
+        action = self.progress.begin(
+            IntentId.PRIMARY_NAVIGATION,
+            ActionId.CONTINUE_PRIMARY,
+            PostconditionId.PRIMARY_ROUTE_PROGRESS,
+            frame_id=1,
+            now=10.0,
+            expected_tab=TabId.DUNGEON,
+        )
+        self.assertEqual(action.expected_tab, TabId.DUNGEON)
+        self.assertIsNotNone(self.progress.in_flight)
+        self.assertEqual(self.progress.in_flight.expected_tab, TabId.DUNGEON)
+
+        self.progress.clear(IntentId.PRIMARY_NAVIGATION)
+        self.assertIsNone(self.progress.in_flight)
+
 
 if __name__ == "__main__":
     unittest.main()

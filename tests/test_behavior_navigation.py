@@ -938,6 +938,100 @@ class TestBehaviorNavigation(unittest.TestCase):
         # 斷言：絕不點擊 dungeons/dungeon.png (500, 300)
         self.mock_machine.mouse.click.assert_not_called()
 
+    def test_dungeon_navigation_expected_tab_scans_only_target_pair(self):
+        """
+        [行為驗證：大廳預期頁籤最小化感知]
+        Given: 處於地下城導航 (config type='dungeon')
+        When: 執行 NavigationHandler.handle()
+        Then: 頁籤比對只呼叫 dungeons/dungeon_after.png 與 dungeons/dungeon.png，其餘 4 個頁籤模板完全不被比對
+        """
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.is_daily_pipeline_active.return_value = False
+        self.mock_machine.config = {
+            "name": "地下城模式",
+            "type": "dungeon",
+            "navigation_path": ["dungeons/dungeon.png", "dungeons/Slime_entry.png"],
+            "dungeon_names": ["Slime Cave"],
+            "dungeon_entries": ["dungeons/Slime_entry.png"],
+            "dungeon_first_card_btn": "dungeons/Slime_entry.png",
+        }
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+
+        checked_templates = []
+
+        def match_side_effect(_screen, template, **kwargs):
+            checked_templates.append(template)
+            if template == "goback_town.png":
+                return ((64, 726), 0.95)
+            if template == "dungeons/dungeon_after.png":
+                return ((648, 713), 0.94)
+            if template == "dungeons/dungeon.png":
+                return ((648, 715), 0.40)
+            if template == "dungeons/Slime_entry.png":
+                return ((283, 344), 0.98)
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：目標地下城頁籤比對過
+        self.assertIn("dungeons/dungeon_after.png", checked_templates)
+        # 斷言：其餘 4 大頁籤的 8 張模板絕對未被呼叫！
+        forbidden_templates = [
+            "common/select_stage.png",
+            "common/select_stage_after.png",
+            "domains/Domains_entry.png",
+            "domains/Domains_entry_after.png",
+            "load/Lord_entry.png",
+            "load/Lord_entry_after.png",
+            "demon_lords/demon_lords_entry.png",
+            "demon_lords/demon_lords_entry_after.png",
+        ]
+        for forbidden in forbidden_templates:
+            self.assertNotIn(forbidden, checked_templates, f"Forbidden template {forbidden} was checked in fast path!")
+
+    def test_target_inactive_clicks_tab_before_card_operations(self):
+        """
+        [行為驗證：大廳預期頁籤最小化感知]
+        Given: 處於地下城導航，但地下城頁籤未開啟 (inactive 命中)
+        When: 執行 NavigationHandler.handle()
+        Then: 判定在 lobby 但 active_tabs 為空，僅點擊切頁按鈕，絕不進行卡片操作
+        """
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.is_daily_pipeline_active.return_value = False
+        self.mock_machine.config = {
+            "name": "地下城模式",
+            "type": "dungeon",
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"],
+            "dungeon_names": ["Slime Cave"],
+            "dungeon_entries": ["dungeons/Slime_entry.png"],
+        }
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+
+        def match_side_effect(_screen, template, **kwargs):
+            if template == "goback_town.png":
+                return ((64, 726), 0.95)
+            # 地下城 Inactive 命中 (0.95)，Active 未命中 (0.40)
+            if template == "dungeons/dungeon.png":
+                return ((648, 715), 0.95)
+            if template == "dungeons/dungeon_after.png":
+                return ((648, 713), 0.40)
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：點擊切換地下城頁籤 (648, 715)
+        self.mock_machine.mouse.click.assert_called_with(648, 715)
+
 
 if __name__ == "__main__":
     unittest.main()
