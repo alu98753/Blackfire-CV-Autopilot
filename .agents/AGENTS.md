@@ -60,7 +60,7 @@
 - **文件收斂與契約歸檔**：遵循 `canonical_contract_archival` 與 `branch_completion_workflow` 規範：
   - 🛑 **收尾三階段硬性狀態閘門 (Three-Phase Gated Invariant)**：當使用者發出「跑merge」、「準備merge」等收尾指令時，AI **絕對禁止直接輸出 `git merge` 指令**！必須依序完成：
     1. **Phase 1 (程式碼潔淨度與 Docstring 審計閘門)**：
-       - **Pre-Merge Cleanup Acceptance Criterion**：暫時 Spec / Issue 代號（如 todo文件名稱 `、task ID、分支名、階段編號）可協助開發，但**嚴禁遺留在 production code 的 docstrings 或註解中進入 main**。Merge 前必須重寫為穩定的行為／架構語意契約描述，若需指涉架構來源，僅限引用長效 Canonical Contract。
+       - **Pre-Merge Cleanup Acceptance Criterion**：暫時 Spec / Issue 代號（如 todo文件名稱、task ID、分支名、階段編號）可協助開發，但**嚴禁遺留在 production code 的 docstrings 或註解中進入 main**。Merge 前必須重寫為穩定的行為／架構語意契約描述，若需指涉架構來源，僅限引用長效 Canonical Contract。
     2. **Phase 2 (收尾驗證與文件契約收斂閘門)**：
        - 若涉及 Spec/TODO 變更，AI 必須先列出候選清單向使用者顯式確認後，方可執行契約升格與清理。
        - **刪除是預設；封存是例外**：永久約束升格至 Canonical Contract，未完成事項獨立至 TODO/RFC，已完成的原始任務 spec 預設刪除，嚴防 Doc Drift。
