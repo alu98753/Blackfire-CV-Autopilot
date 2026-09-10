@@ -175,3 +175,11 @@ def snapshot_from_scene_info(
         active_tabs=frozenset(tabs),
         detection_profile=profile,
     )
+
+
+def next_navigation_frame_id(machine) -> int:
+    current = getattr(machine, "_navigation_frame_id", 0)
+    next_id = int(current) + 1
+    machine._navigation_frame_id = next_id
+    return next_id
+

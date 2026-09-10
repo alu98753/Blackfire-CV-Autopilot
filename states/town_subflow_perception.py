@@ -4,7 +4,7 @@ import time
 
 from config import GAME_CONFIGS
 from states.town_subflow_registry import spec_for
-from utils.scene_snapshot import ElementId, ElementMatch, SceneId, SceneSnapshot
+from utils.scene_snapshot import (ElementId, ElementMatch, SceneId, SceneSnapshot, next_navigation_frame_id)
 from utils.town_building_detector import detect_building_with_red_dot
 
 
@@ -144,8 +144,7 @@ class TownSubflowPerception:
         return SceneId.UNKNOWN
 
     def _snapshot(self, scene, elements, confidence=None):
-        frame_id = int(getattr(self.machine, "_town_navigation_frame_id", 0)) + 1
-        self.machine._town_navigation_frame_id = frame_id
+        frame_id = next_navigation_frame_id(self.machine)
         if confidence is None:
             confidence = max(
                 (match.confidence for match in elements.values()), default=0.0

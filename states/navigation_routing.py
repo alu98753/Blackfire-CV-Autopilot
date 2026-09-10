@@ -19,7 +19,11 @@ from states.navigation_progress import (
     NavigationProgress,
     ProgressStatus,
 )
-from utils.scene_snapshot import SceneSnapshot, snapshot_from_scene_info
+from utils.scene_snapshot import (
+    SceneSnapshot,
+    next_navigation_frame_id,
+    snapshot_from_scene_info,
+)
 
 
 @dataclass(frozen=True)
@@ -30,13 +34,6 @@ class NavigationRoutingContext:
     decision: ActionDecision
     progress_status: ProgressStatus = ProgressStatus.IDLE
     observed_action: InFlightAction | None = None
-
-
-def _next_frame_id(machine) -> int:
-    current = machine.__dict__.get("_navigation_frame_id", 0)
-    next_id = int(current) + 1
-    machine._navigation_frame_id = next_id
-    return next_id
 
 
 def build_intent_snapshot(machine) -> IntentSnapshot:
@@ -58,7 +55,7 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
     now = _monotonic_now(machine)
     scene = snapshot_from_scene_info(
         scene_info,
-        frame_id=_next_frame_id(machine),
+        frame_id=next_navigation_frame_id(machine),
         captured_at=now,
         start_template=start_template,
     )
