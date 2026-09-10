@@ -79,6 +79,11 @@
 * 於 `--mode collect_only` 領完體力視窗關閉後（狀態轉為 `NAVIGATING`）：
 * 因為 `collect_only` 配置之 `navigation_path` 為空 `[]`，系統會自動在畫面上搜尋 `goback_town.png`（返回城鎮按鈕），點擊退回城鎮並轉移至 `STATE_COLLECT_ONLY` 待機，避免在 `NAVIGATING ↔ LOBBY` 之間發生死迴圈跳轉。
 
+### 5.6 體力退避期間常規關卡禁絕律與地下城喚醒契約 (Stamina Retreat Supremacy Invariant)
+* **常規關卡絕對禁用**：當系統處於體力退避期間 (`stamina_retreat_start_time is not None`)，常規關卡打怪 (`enable_stage_farming`) 必須被絕對禁用 (`False`)。
+* **臨時喚醒路由純潔性 (`build_dungeon_resume_route`)**：從 `COLLECT_ONLY` 因地下城冷卻結束而喚醒的執行路由，其能力邊界僅限於該特定地下城本身。路由明確設定 `enable_stage_farming = False`、`tier4_mode = "none"`、`is_dungeon_temporary_resume = True`，並完全移除普通關卡尋路路徑 (`stage_entry`, `stage_navigation_path`)。
+* **冷卻耗盡即時歸位律**：當臨時喚醒之地下城通關或所有允許之地下城再度進入冷卻時，活動調度器 (`evaluate_next_activity`) 與導航器 (`NavigationHandler`) 必定點擊 `goback_town.png` 返回城鎮並轉移至 `STATE_COLLECT_ONLY`，絕不切換至普通關卡頁籤。
+
 
 ## 6. 模組關聯與組件索引
 

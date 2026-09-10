@@ -95,7 +95,12 @@ class ExploreHandler(BaseStateHandler):
                             status_str, avail_names = self.machine.get_dungeon_cooldown_status()
                             avail_str = ", ".join(avail_names) if avail_names else "無"
                             if not avail_names:
-                                logging.info(f"⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。")
+                                is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
+                                is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
+                                if is_in_retreat or is_temp_resume:
+                                    logging.info(f"⏳ [體力退避] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將返回城鎮繼續維持體力退避待機 (COLLECT_ONLY)。")
+                                else:
+                                    logging.info(f"⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: {status_str} ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。")
                             else:
                                 logging.info(f"⏳ [混合模式] 地下城通關！各副本冷卻情形: {status_str} ➔ 剩餘可挑戰地下城: [{avail_str}]。")
                         
