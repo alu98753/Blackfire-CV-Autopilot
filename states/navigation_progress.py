@@ -29,6 +29,7 @@ class NavigationProgressSettings:
     collection_backoff_seconds: float
     collection_recovery_failure_limit: int
     town_entry_wait_max_observations: int = 5
+    town_no_red_dot_confirm_frames: int = 2
 
     @classmethod
     def from_mapping(cls, values):
@@ -41,6 +42,9 @@ class NavigationProgressSettings:
             ),
             town_entry_wait_max_observations=int(
                 values.get("town_entry_wait_max_observations", 5)
+            ),
+            town_no_red_dot_confirm_frames=int(
+                values.get("town_no_red_dot_confirm_frames", 2)
             ),
         )
 

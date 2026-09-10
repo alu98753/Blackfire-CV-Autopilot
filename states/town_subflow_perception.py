@@ -15,6 +15,7 @@ OVERLAY_CLOSE_TEMPLATES = (
     "common/cancel.png",
     "common/quit.png",
 )
+TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.50
 
 
 class TownSubflowPerception:
@@ -29,14 +30,35 @@ class TownSubflowPerception:
                 screen_img, OVERLAY_CLOSE_TEMPLATES, 0.80
             ),
             ElementId.EXIT_BUILDING_TO_TOWN: self._match(
-                screen_img, EXIT_BUILDING_TEMPLATE, 0.75
+                screen_img,
+                EXIT_BUILDING_TEMPLATE,
+                0.75,
+                brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
             ),
-            ElementId.GOBACK_TOWN: self._match(screen_img, "goback_town.png", 0.85),
+            ElementId.GOBACK_TOWN: self._match(
+                screen_img,
+                "goback_town.png",
+                0.85,
+                brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
+            ),
             ElementId.EXIT_TO_LOBBY: self._match(
-                screen_img, "domains/common/exit_to_lobby.png", 0.80
+                screen_img,
+                "domains/common/exit_to_lobby.png",
+                0.80,
+                brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
             ),
-            ElementId.DOOR: self._match(screen_img, "common/door.png", 0.80),
-            ElementId.DIAMOND_ENTRY: self._match(screen_img, "diamond.png", 0.80),
+            ElementId.DOOR: self._match(
+                screen_img,
+                "common/door.png",
+                0.80,
+                brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
+            ),
+            ElementId.DIAMOND_ENTRY: self._match(
+                screen_img,
+                "diamond.png",
+                0.80,
+                brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
+            ),
         }
         elements.update({key: value for key, value in matches.items() if value})
 
@@ -97,6 +119,7 @@ class TownSubflowPerception:
             building_template,
             self.matcher,
             debug_tag=flow_key,
+            brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
         )
         if not result.found_building or result.building_pos is None:
             return
@@ -113,10 +136,14 @@ class TownSubflowPerception:
                 "town_building/red_dot.png",
             )
 
-    def _match(self, screen_img, template_name, threshold):
+    def _match(self, screen_img, template_name, threshold, brightness_threshold=0.0):
         try:
             result = self.matcher.match(
-                screen_img, template_name, threshold=threshold, quiet=True
+                screen_img,
+                template_name,
+                threshold=threshold,
+                brightness_threshold=brightness_threshold,
+                quiet=True,
             )
         except (OSError, TypeError, ValueError):
             return None

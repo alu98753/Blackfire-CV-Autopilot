@@ -54,7 +54,13 @@ class TownSubflowPolicy:
             )
         if not scene.has(ElementId.TOWN_SUBFLOW_ENTRY):
             return ActionDecision.wait()
-        if spec.requires_red_dot and not scene.has(ElementId.TOWN_SUBFLOW_RED_DOT):
+        if spec.requires_red_dot:
+            if scene.has(ElementId.TOWN_SUBFLOW_RED_DOT):
+                return ActionDecision.delegate(
+                    ReasonCode.TOWN_SUBFLOW_READY,
+                    ActionId.DISPATCH_TOWN_SUBFLOW,
+                    PostconditionId.PRIMARY_ROUTE_PROGRESS,
+                )
             return ActionDecision.delegate(
                 ReasonCode.TOWN_SUBFLOW_NO_RED_DOT,
                 ActionId.COMPLETE_TOWN_SUBFLOW,
@@ -76,17 +82,20 @@ class TownSubflowPreconditionController:
         self.policy = TownSubflowPolicy()
         self._entry_wait_flow = None
         self._entry_wait_count = 0
+        self._no_red_dot_flow = None
+        self._no_red_dot_count = 0
+
+    def _should_skip_handle(self, flow_key, progress) -> bool:
+        if not flow_key or self._committed_workflow_owns_frame(flow_key):
+            return True
+        if isinstance(progress, NavigationProgress) and progress.in_flight:
+            return progress.in_flight.intent_id != IntentId.TOWN_SUBFLOW
+        return self._collection_pending()
 
     def handle(self, screen_img, rect) -> bool:
         flow_key = getattr(self.machine, "current_town_subflow", None)
-        if not flow_key or self._committed_workflow_owns_frame(flow_key):
-            return False
-
         progress = getattr(self.machine, "navigation_progress", None)
-        if isinstance(progress, NavigationProgress) and progress.in_flight:
-            if progress.in_flight.intent_id != IntentId.TOWN_SUBFLOW:
-                return False
-        elif self._collection_pending():
+        if self._should_skip_handle(flow_key, progress):
             return False
 
         scene = self.perception.observe(screen_img, flow_key)
@@ -109,6 +118,7 @@ class TownSubflowPreconditionController:
         self.machine.active_navigation_intent = ActiveIntent(IntentId.TOWN_SUBFLOW)
         decision = self.policy.resolve(scene, flow_key)
         if decision.kind == DecisionKind.WAIT:
+            self._reset_no_red_dot()
             if self._entry_wait_exhausted(scene, flow_key):
                 self.machine.defer_current_town_subflow(
                     TOWN_SUBFLOW_DEFER_SECONDS
@@ -116,12 +126,19 @@ class TownSubflowPreconditionController:
                 return True
             return scene.scene != SceneId.UNKNOWN
         self._reset_entry_wait()
+        return self._execute_decision(decision, scene, flow_key, rect, progress)
+
+    def _execute_decision(self, decision, scene, flow_key, rect, progress) -> bool:
         if decision.action == ActionId.DISPATCH_TOWN_SUBFLOW:
+            self._reset_no_red_dot()
             self.machine.dispatch_current_town_subflow()
             return True
         if decision.action == ActionId.COMPLETE_TOWN_SUBFLOW:
-            self.machine.complete_current_town_subflow()
+            if self._no_red_dot_confirmed(scene, flow_key):
+                self.machine.complete_current_town_subflow()
+                return True
             return True
+        self._reset_no_red_dot()
         if decision.action == ActionId.DEFER_TOWN_SUBFLOW:
             self.machine.defer_current_town_subflow(TOWN_SUBFLOW_DEFER_SECONDS)
             return True
@@ -183,3 +200,21 @@ class TownSubflowPreconditionController:
     def _reset_entry_wait(self):
         self._entry_wait_flow = None
         self._entry_wait_count = 0
+
+    def _no_red_dot_confirmed(self, scene, flow_key):
+        """Bound Town-only completion confirmation; requires consecutive observations."""
+        if scene.scene != SceneId.TOWN or not scene.has(ElementId.TOWN_SUBFLOW_ENTRY):
+            self._reset_no_red_dot()
+            return False
+        if self._no_red_dot_flow != flow_key:
+            self._no_red_dot_flow = flow_key
+            self._no_red_dot_count = 0
+        self._no_red_dot_count += 1
+        progress = getattr(self.machine, "navigation_progress", None)
+        settings = getattr(progress, "settings", None)
+        max_obs = getattr(settings, "town_no_red_dot_confirm_frames", 2)
+        return self._no_red_dot_count >= max_obs
+
+    def _reset_no_red_dot(self):
+        self._no_red_dot_flow = None
+        self._no_red_dot_count = 0

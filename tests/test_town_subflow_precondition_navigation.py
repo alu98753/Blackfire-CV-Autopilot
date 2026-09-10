@@ -270,16 +270,51 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
             True, False, building_pos=(250, 300), confidence_building=0.9
         )
 
-        handled = self.machine.handle_town_subflow_precondition(
-            self.screen, self.rect
+        # 第 1 幀：防抖確認中，吞下幀不提前結案
+        self.assertTrue(
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
         )
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+        self.assertEqual(self.machine.current_town_subflow, "chest")
 
-        self.assertTrue(handled)
+        # 第 2 幀：連續確認無紅點達標，標記完成並前進下一任務
+        self.assertTrue(
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        )
         self.machine.daily_manager.record_subflow_completed.assert_called_once_with(
             "chest"
         )
         self.machine.daily_manager.defer_subflow.assert_not_called()
         self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_missing_red_dot_resets_debounce_if_red_dot_appears(self, mock_building):
+        self.machine.daily_manager = MagicMock()
+        self.machine.start_subflow_queue(["chest"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((200, 550), 0.95)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        # 第 1 幀：看見建築但無紅點
+        mock_building.return_value = BuildingCheckResult(
+            True, False, building_pos=(250, 300), confidence_building=0.9
+        )
+        self.assertTrue(
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        )
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # 第 2 幀：紅點出現！防抖計數重置，立即派發進入 chest 子流程
+        mock_building.return_value = BuildingCheckResult(
+            True, True, building_pos=(250, 300), confidence_building=0.9, confidence_red_dot=0.95
+        )
+        self.assertTrue(
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        )
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+        self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
 
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
     def test_missing_town_entry_is_bounded_and_deferred(self, mock_building):
@@ -326,11 +361,17 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
             True, False, building_pos=(250, 300), confidence_building=0.9
         )
 
-        handled = self.machine.handle_town_subflow_precondition(
-            self.screen, self.rect
+        # 第 1 幀防抖
+        self.assertTrue(
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        )
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # 第 2 幀確認完成
+        self.assertTrue(
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
         )
 
-        self.assertTrue(handled)
         self.machine.daily_manager.record_subflow_completed.assert_called_once_with(
             "bulletin_board"
         )

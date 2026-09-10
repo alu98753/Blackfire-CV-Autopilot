@@ -38,6 +38,7 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("navigation", "collection_backoff_seconds"),
     ("navigation", "collection_recovery_failure_limit"),
     ("navigation", "town_entry_wait_max_observations"),
+    ("navigation", "town_no_red_dot_confirm_frames"),
     ("navigation", "stamina_retreat_quit_max_attempts"),
     ("quest", "max_run_limit"),
     ("quest", "target_count"),
