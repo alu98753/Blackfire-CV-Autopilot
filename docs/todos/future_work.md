@@ -59,14 +59,15 @@ dengeon同理
 
 - [ ] **10. 珠寶店商人金幣耗盡防護與通知**
 
+  - 假設大家的金錢"都"低於某個數值 (預設 1000)，則珠寶店不開放進入 (不可以賣東西，可用 `shop_money_notenough` 的 flag 標註)。
+  - 此時發送訊息給使用者 (哪個帳號、商店目前剩餘金額、請盡速回來買賣等訊息，通訊方式待定)。
+  - 以上做完應該就可以掛機個兩天；接著會遇到商人沒錢的問題，所以要跟他買東西以及製作東西 (大宗)。
+
 ### 資源與模板路徑重構 (Template Assets Reorganization)
 
 - [ ] **11. 安全移動關卡頁籤模板至 `templates/stages/` 並更新引用路徑**
   - 將 [common/select_stage.png](../templates/common/select_stage.png) 與 [common/select_stage_after.png](../templates/common/select_stage_after.png) 安全移動至 `templates/stages/`（與 `dungeons/`、`domains/`、`load/`、`demon_lords/` 保持一致的目錄結構）。
   - 同步更新 `utils/scene_types.py` (`LOBBY_TAB_DEFINITIONS`)、相關 Handler 與所有測試案例中的引用路徑。
-  - 假設大家的金錢"都"低於某個數值 (預設 1000)，則珠寶店不開放進入 (不可以賣東西，可用 `shop_money_notenough` 的 flag 標註)。
-  - 此時發送訊息給使用者 (哪個帳號、商店目前剩餘金額、請盡速回來買賣等訊息，通訊方式待定)。
-  - 以上做完應該就可以掛機個兩天；接著會遇到商人沒錢的問題，所以要跟他買東西以及製作東西 (大宗)。
 
 ### Navigation
 

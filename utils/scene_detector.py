@@ -89,8 +89,74 @@ SCENE_ANCHOR_SPECS: Tuple[SceneAnchorSpec, ...] = (
 
 
 LOBBY_TAB_THRESHOLD: float = 0.70
+LOBBY_TAB_CLEAR_MARGIN: float = 0.025
 LOBBY_TAB_MARGIN: float = 0.02
 LOBBY_TAB_CONFLICT_DIFF: float = 0.05
+LOBBY_TAB_RED_HALO_THRESHOLD: float = 0.07
+
+
+def verify_tab_red_halo(
+    screen_img,
+    pos: Tuple[int, int],
+    btn_size: Tuple[int, int] = (160, 160),
+    inner_ratio: float = 0.75,
+    outer_ratio: float = 1.05,
+    threshold_ratio: float = 0.07,
+) -> bool:
+    """
+    向量化計算大廳按鈕匹配位置外環的紅色發光光環 (Red Halo Ring) 比例。
+    大廳 5 大頁籤選中態皆具備顯著的高飽和紅色圓環 (H in [0, 12] or [165, 180], S>=70, V>=70)，
+    未選中態為灰黑金屬環。在歸一化半徑 [0.75, 1.05] 區間進行二維物理特徵消歧。
+    """
+    if screen_img is None or not hasattr(screen_img, "shape") or len(screen_img.shape) < 3:
+        return False
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return False
+
+    cx, cy = int(pos[0]), int(pos[1])
+    bw, bh = int(btn_size[0]), int(btn_size[1])
+    img_h, img_w = screen_img.shape[:2]
+
+    half_w, half_h = max(10, bw // 2), max(10, bh // 2)
+    x1 = max(0, cx - half_w)
+    y1 = max(0, cy - half_h)
+    x2 = min(img_w, cx + half_w)
+    y2 = min(img_h, cy + half_h)
+
+    if x2 <= x1 or y2 <= y1:
+        return False
+
+    roi = screen_img[y1:y2, x1:x2]
+    roi_h, roi_w = roi.shape[:2]
+    if roi_h < 10 or roi_w < 10:
+        return False
+
+    roi_cx, roi_cy = cx - x1, cy - y1
+    y_idx, x_idx = np.indices((roi_h, roi_w))
+    norm_x = (x_idx - roi_cx) / float(half_w)
+    norm_y = (y_idx - roi_cy) / float(half_h)
+    dist = np.sqrt(norm_x**2 + norm_y**2)
+
+    ring_mask = (dist >= inner_ratio) & (dist <= outer_ratio)
+    total_ring_pixels = np.count_nonzero(ring_mask)
+    if total_ring_pixels < 20:
+        return False
+
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    h_chan, s_chan, v_chan = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+
+    red_pixels = (
+        ((h_chan <= 12) | (h_chan >= 165))
+        & (s_chan >= 70)
+        & (v_chan >= 70)
+        & ring_mask
+    )
+    red_count = np.count_nonzero(red_pixels)
+    ratio = red_count / float(total_ring_pixels)
+    return ratio >= threshold_ratio
 
 
 class SceneDetector:
@@ -371,9 +437,10 @@ class SceneDetector:
             scene_info.is_lobby = True
 
         elapsed = time.monotonic() - t0
+        scale = (screen_img.shape[1] / 1920.0) if (screen_img is not None and hasattr(screen_img, "shape") and len(screen_img.shape) >= 2) else 1.0
 
-        # 1. Active dominance
-        if conf_act >= LOBBY_TAB_THRESHOLD and conf_act > conf_inact + LOBBY_TAB_MARGIN:
+        # 1. Active dominance (二維色相光環與差值分級消歧)
+        if self._evaluate_tab_active(screen_img, tab.name, conf_act, pos_act, conf_inact, pos_inact, scale=scale):
             self._last_tab_was_full_relocalize = False
             logging.debug(
                 "[LobbyTabFastPath] tab=%s active_conf=%.4f inactive_conf=%.4f elapsed=%.3fs upgrade=False",
@@ -382,9 +449,7 @@ class SceneDetector:
             return tab.name, tab.scene_type, conf_act, False
 
         # 2. Inactive confirmed or active not dominant
-        if conf_inact >= LOBBY_TAB_THRESHOLD or (
-            conf_act >= LOBBY_TAB_THRESHOLD and conf_act <= conf_inact + LOBBY_TAB_MARGIN
-        ):
+        if conf_inact >= LOBBY_TAB_THRESHOLD or pos_inact is not None or conf_act >= LOBBY_TAB_THRESHOLD:
             self._last_tab_was_full_relocalize = False
             logging.debug(
                 "[LobbyTabFastPath] tab=%s target_inactive active_conf=%.4f inactive_conf=%.4f elapsed=%.3fs upgrade=False",
@@ -402,6 +467,58 @@ class SceneDetector:
             screen_img, machine, scene_info, reason="expected_tab_miss", expected_tab_name=tab.name
         )
 
+    def _evaluate_tab_active(
+        self,
+        screen_img,
+        tab_name: str,
+        conf_act: float,
+        pos_act: Optional[Tuple[int, int]],
+        conf_inact: float,
+        pos_inact: Optional[Tuple[int, int]],
+        scale: float = 1.0,
+    ) -> bool:
+        """結合模板置信度差值分級與按鈕外環色相光環 (Red Halo Ring) 向量化檢驗，判定單一頁籤是否處於 Active 態。
+
+        Contract: docs/features/navigation/lobby_scene_contract.md
+        """
+        if conf_act < LOBBY_TAB_THRESHOLD and conf_inact < LOBBY_TAB_THRESHOLD:
+            return False
+
+        diff = conf_act - conf_inact
+
+        if diff >= LOBBY_TAB_CLEAR_MARGIN:
+            return True
+        if diff <= -LOBBY_TAB_CLEAR_MARGIN:
+            return False
+
+        # 微差模糊邊界區間
+        pos = pos_act or pos_inact
+        if pos is not None and screen_img is not None and hasattr(screen_img, "shape") and len(screen_img.shape) >= 3:
+            bw = int(160 * scale)
+            bh = int(160 * scale)
+            has_red = verify_tab_red_halo(
+                screen_img,
+                pos,
+                btn_size=(bw, bh),
+                inner_ratio=0.75,
+                outer_ratio=1.05,
+                threshold_ratio=LOBBY_TAB_RED_HALO_THRESHOLD,
+            )
+            if has_red:
+                logging.debug(
+                    "[LobbyTabDisambiguation] tab=%s ambiguous diff=%.4f (act=%.4f, inact=%.4f) -> ACTIVE via red halo",
+                    tab_name, diff, conf_act, conf_inact
+                )
+                return True
+            else:
+                logging.debug(
+                    "[LobbyTabDisambiguation] tab=%s ambiguous diff=%.4f (act=%.4f, inact=%.4f) -> INACTIVE via dark halo",
+                    tab_name, diff, conf_act, conf_inact
+                )
+                return False
+
+        return diff > LOBBY_TAB_MARGIN
+
     def _resolve_full_relocalize(
         self,
         screen_img,
@@ -411,6 +528,7 @@ class SceneDetector:
         expected_tab_name: Optional[str] = None,
     ) -> Tuple[Optional[str], Optional[SceneType], float, bool]:
         t0 = time.monotonic()
+        scale = (screen_img.shape[1] / 1920.0) if (screen_img is not None and hasattr(screen_img, "shape") and len(screen_img.shape) >= 2) else 1.0
         candidates: List[Tuple[str, SceneType, float]] = []
 
         for tab in LOBBY_TAB_DEFINITIONS:
@@ -443,7 +561,7 @@ class SceneDetector:
                     conf_inact = max(conf_inact, parsed[3])
                     scene_info.is_lobby = True
 
-            if conf_act >= LOBBY_TAB_THRESHOLD and conf_act > conf_inact + LOBBY_TAB_MARGIN:
+            if self._evaluate_tab_active(screen_img, tab.name, conf_act, pos_act, conf_inact, pos_inact, scale=scale):
                 candidates.append((tab.name, tab.scene_type, conf_act))
 
         elapsed = time.monotonic() - t0

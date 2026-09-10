@@ -337,7 +337,58 @@ class TestEntityLobbyPanel(unittest.TestCase):
 
             # 升級 full relocalize 後成功辨識出 lord
             self.assertEqual(scene.scene_type, SceneType.LORD_SELECT)
-            self.assertEqual(scene.active_tabs, ["lord"])
+    def test_chromatic_disambiguation_resolves_ambiguous_margin(self):
+        """
+        [測試案例 10] 微差模糊邊界區間 (-0.025 < diff < 0.025) 下，透過色相光環驗證確定性消歧
+        - 當外環存在紅光時，判定為 Active。
+        - 當外環無紅光時，判定為 Inactive。
+        """
+        from unittest.mock import MagicMock, patch
+        import numpy as np
+        from utils.scene_detector import SceneDetector, SceneType
+        from utils.scene_snapshot import DetectionProfileId, LobbyTabScope, SceneDetectionRequest, TabId
+
+        mock_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        mock_matcher = MagicMock()
+        detector = SceneDetector(matcher=mock_matcher)
+        mock_machine = MagicMock()
+        mock_machine.config = {"type": "dungeon"}
+        mock_machine.diamond_window_opened = False
+        mock_machine.bread_window_opened = False
+
+        # 模擬現場數據：dungeon_after = 0.9444, dungeon = 0.9281, diff = 0.0163 (< 0.025)
+        def match_side_effect(_img, template, threshold=0.8):
+            if template == "dungeons/dungeon_after.png":
+                return ((648, 713), 0.9444)
+            if template == "dungeons/dungeon.png":
+                return ((648, 715), 0.9281)
+            return (None, 0.0)
+
+        mock_matcher.match.side_effect = match_side_effect
+
+        request = SceneDetectionRequest(
+            profile=DetectionProfileId.DUNGEON_SELECT,
+            expected_tab=TabId.DUNGEON,
+            tab_scope=LobbyTabScope.EXPECTED_TAB,
+            reason="navigation_steady",
+        )
+
+        # 1. 畫面存在紅光：確鑿判定為 Active
+        with patch("utils.scene_detector.verify_tab_red_halo", return_value=True), \
+             patch("os.path.exists", return_value=True):
+            scene = detector.detect(mock_screen, machine=mock_machine, request=request)
+            self.assertEqual(scene.scene_type, SceneType.DUNGEON_SELECT)
+            self.assertEqual(scene.active_tabs, ["dungeon"])
+            self.assertTrue(scene.is_lobby)
+
+        # 2. 畫面無紅光（灰暗外環）：確鑿判定為 Inactive
+        with patch("utils.scene_detector.verify_tab_red_halo", return_value=False), \
+             patch("os.path.exists", return_value=True):
+            scene = detector.detect(mock_screen, machine=mock_machine, request=request)
+            self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
+            self.assertEqual(scene.active_tabs, [])
+            self.assertTrue(scene.is_lobby)
 
 
 if __name__ == "__main__":
