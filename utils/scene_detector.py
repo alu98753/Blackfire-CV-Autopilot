@@ -1,41 +1,29 @@
-import os
 import logging
-from enum import Enum, auto
-from dataclasses import dataclass, field
-from typing import List, Dict, Tuple, Optional
-from vision.matcher import TemplateMatcher
+import os
+from typing import Dict, List, Optional, Tuple
+
 from utils.detector_registry import DetectorGroup, DetectorRegistry
 from utils.scene_snapshot import DetectionProfileId
+from vision.matcher import TemplateMatcher
+from utils.scene_types import (
+    LOBBY_TAB_DEFINITIONS,
+    LobbyTabDefinition,
+    SceneAnchorSpec,
+    SceneId,
+    SceneInfo,
+    SceneType,
+)
 
-
-class SceneType(Enum):
-    TOWN = auto()                 # 城鎮主畫面
-    LOBBY_STAGE = auto()          # 活動大廳 - 普通關卡頁籤開啟
-    LOBBY_DUNGEON = auto()        # 活動大廳 - 地下城頁籤開啟
-    DOMAIN_SELECT = auto()        # 活動大廳 - 領地頁籤開啟
-    LORD_SELECT = auto()          # 活動大廳 - 領主頁籤開啟
-    DEMON_LORD_SELECT = auto()    # 活動大廳 - 魔王頁籤開啟
-    LOBBY_OTHER = auto()          # 活動大廳 - 其他頁籤
-    IN_DUNGEON = auto()           # 地下城內部戰鬥/探索中
-    DUNGEON_PREPARE = auto()      # 地下城備戰畫面 (戰鬥開始按鈕)
-    POPUP_TASK_COMPLETE = auto() # 任務完成彈窗
-    WINDOW_DIAMOND = auto()       # 鑽石領取視窗已開啟
-    WINDOW_BREAD = auto()         # 體力領取視窗已開啟
-    POPUP_UNEXPECTED = auto()     # 意外視窗/彈窗已開啟
-    DOMAIN_EXPLORE = auto()       # 領地探索主畫面 (例如黃金古國)
-    UNKNOWN = auto()              # 未知/切換中
-
-
-
-@dataclass
-class SceneInfo:
-    scene_type: SceneType
-    is_town: bool = False
-    is_lobby: bool = False
-    is_in_dungeon: bool = False
-    is_dungeon_prepare: bool = False
-    active_tabs: List[str] = field(default_factory=list)
-    matched_elements: Dict[str, Tuple[Tuple[int, int], float]] = field(default_factory=dict)
+# Re-export for 100% backward compatibility
+__all__ = [
+    "SceneId",
+    "SceneType",
+    "SceneInfo",
+    "LobbyTabDefinition",
+    "SceneAnchorSpec",
+    "LOBBY_TAB_DEFINITIONS",
+    "SceneDetector",
+]
 
 
 def _parse_tab_result(res) -> Optional[Tuple[bool, bool, float, float]]:
@@ -66,52 +54,31 @@ def _parse_tab_result(res) -> Optional[Tuple[bool, bool, float, float]]:
     return None
 
 
-@dataclass(frozen=True)
-class LobbyTabDefinition:
-    name: str
-    active_template: str
-    inactive_template: str
-    scene_type: SceneType
-    config_active_key: Optional[str] = None
-    config_inactive_key: Optional[str] = None
-
-
-LOBBY_TAB_DEFINITIONS = (
-    LobbyTabDefinition(
-        name="stage",
-        active_template="common/select_stage_after.png",
-        inactive_template="common/select_stage.png",
-        scene_type=SceneType.LOBBY_STAGE,
+SCENE_ANCHOR_SPECS: Tuple[SceneAnchorSpec, ...] = (
+    SceneAnchorSpec(
+        scene_id=SceneId.POPUP_TASK_COMPLETE,
+        required_any=("task_complete.png",),
+        min_confidence=0.75,
     ),
-    LobbyTabDefinition(
-        name="dungeon",
-        active_template="dungeons/dungeon_after.png",
-        inactive_template="dungeons/dungeon.png",
-        scene_type=SceneType.LOBBY_DUNGEON,
+    SceneAnchorSpec(
+        scene_id=SceneId.DUNGEON_EXPLORING,
+        required_any=(
+            "dungeons/leave.png",
+            "dungeons/dungeon_bless.png",
+            "dungeons/Treasure.png",
+            "dungeons/gungeon_godown.png",
+        ),
+        min_confidence=0.80,
     ),
-    LobbyTabDefinition(
-        name="domain",
-        active_template="domains/Domains_entry_after.png",
-        inactive_template="domains/Domains_entry.png",
-        scene_type=SceneType.DOMAIN_SELECT,
-        config_active_key="domain_tab_after_btn",
-        config_inactive_key="domain_tab_btn",
+    SceneAnchorSpec(
+        scene_id=SceneId.DUNGEON_LOBBY,
+        required_any=("dungeons/dungeon_fight.png",),
+        min_confidence=0.80,
     ),
-    LobbyTabDefinition(
-        name="lord",
-        active_template="load/Lord_entry_after.png",
-        inactive_template="load/Lord_entry.png",
-        scene_type=SceneType.LORD_SELECT,
-        config_active_key="entry_after_btn",
-        config_inactive_key="entry_btn",
-    ),
-    LobbyTabDefinition(
-        name="demon_lord",
-        active_template="demon_lords/demon_lords_entry_after.png",
-        inactive_template="demon_lords/demon_lords_entry.png",
-        scene_type=SceneType.DEMON_LORD_SELECT,
-        config_active_key="entry_after_btn",
-        config_inactive_key="entry_btn",
+    SceneAnchorSpec(
+        scene_id=SceneId.TOWN,
+        required_any=("common/door.png", "diamond.png"),
+        min_confidence=0.80,
     ),
 )
 
