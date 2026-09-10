@@ -289,6 +289,26 @@ class SceneDetector:
         scene_info: SceneInfo,
         request: Optional[SceneDetectionRequest] = None,
     ) -> Tuple[Optional[str], Optional[SceneType], float, bool]:
+
+        """調度大廳頁籤（Lobby Tabs）的感知策略並解析當前啟動的分頁。
+        依據當前感知 Profile 權限與請求範疇（Tab Scope）進行分流：
+        1. 權限檢查：若當前 Profile 未啟用 DetectorGroup.TABS，則直接跳過分頁辨識。
+        2. 最小感知（Minimal Perception）：若請求指定 EXPECTED_TAB，僅針對預期頁籤進行
+           快速比對驗證，避免非必要全量比對。
+        3. 全量重定位（Full Relocalization）：若未指定預期頁籤或要求完整掃描，比對所有
+           可用頁籤並記錄 _last_tab_was_full_relocalize 標記供遙測追蹤。
+        Args:
+            screen_img: 當前截圖影像。
+            machine: 遊戲狀態機實例。
+            scene_info: 當前幀累積的場景資訊物件。
+            request: 可選的場景偵測請求，包含 tab_scope 與 expected_tab。
+        Returns:
+            Tuple[Optional[str], Optional[SceneType], float, bool]:
+                - winner_name: 最佳匹配的分頁名稱（若未匹配成功則為 None）。
+                - scene_type: 對應解析出的場景類型（如 SceneType.STAGE_SELECT）。
+                - best_val: 匹配相似度分數。
+                - is_lobby: 是否確認處於大廳分頁結構中。
+        """
         allow_tabs = self.registry.allows_group(self._active_profile, DetectorGroup.TABS)
         if not allow_tabs:
             self._last_tab_was_full_relocalize = False
