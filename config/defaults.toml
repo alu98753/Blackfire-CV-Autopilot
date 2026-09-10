@@ -22,6 +22,8 @@ action_timeout_seconds = 5.0
 action_max_attempts = 3
 collection_backoff_seconds = 60.0
 collection_recovery_failure_limit = 3
+town_entry_wait_max_observations = 5
+town_no_red_dot_confirm_frames = 2
 stamina_retreat_quit_max_attempts = 3
 sub_stage_scroll_max_attempts = 5
 

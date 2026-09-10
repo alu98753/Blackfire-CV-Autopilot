@@ -33,6 +33,7 @@ RED_DOT_MIN_VALUE = 50
 RED_DOT_MIN_RG_RATIO = 2.2
 RED_DOT_MIN_RED_PIXEL_RATIO = 0.50
 RED_DOT_MIN_COLORED_PIXELS = 10
+from config import TOWN_BUILDING_BRIGHTNESS_THRESHOLD
 
 
 def is_true_red_dot(
@@ -172,7 +173,7 @@ def _verify_red_dot_color(
 def _locate_building(screen_img, building_template: str, matcher, threshold: float, candidate_scales, match_kwargs: dict):
     """建築物模板比對子步驟 (套用多尺度與亮度設定)。"""
     kwargs = dict(match_kwargs)
-    kwargs.setdefault("brightness_threshold", 0.0)
+    kwargs.setdefault("brightness_threshold", TOWN_BUILDING_BRIGHTNESS_THRESHOLD)
     if candidate_scales is not None and "scales" not in kwargs:
         kwargs["scales"] = candidate_scales
     return matcher.match(screen_img, building_template, threshold=threshold, **kwargs)

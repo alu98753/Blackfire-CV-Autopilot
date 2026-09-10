@@ -28,6 +28,8 @@ class NavigationProgressSettings:
     action_max_attempts: int
     collection_backoff_seconds: float
     collection_recovery_failure_limit: int
+    town_entry_wait_max_observations: int = 5
+    town_no_red_dot_confirm_frames: int = 2
 
     @classmethod
     def from_mapping(cls, values):
@@ -37,6 +39,12 @@ class NavigationProgressSettings:
             collection_backoff_seconds=float(values["collection_backoff_seconds"]),
             collection_recovery_failure_limit=int(
                 values["collection_recovery_failure_limit"]
+            ),
+            town_entry_wait_max_observations=int(
+                values.get("town_entry_wait_max_observations", 5)
+            ),
+            town_no_red_dot_confirm_frames=int(
+                values.get("town_no_red_dot_confirm_frames", 2)
             ),
         )
 
@@ -105,12 +113,13 @@ class NavigationProgress:
         self.in_flight = None
         failures = self._failure_counts.get(action.intent_id, 0) + 1
         self._failure_counts[action.intent_id] = failures
-        if (
-            action.intent_id in self.COLLECTION_INTENTS
-            and failures >= self.settings.action_max_attempts
-        ):
-            self.defer(action.intent_id, now)
-            return ProgressStatus.DEFERRED
+        if failures >= self.settings.action_max_attempts:
+            if action.intent_id in self.COLLECTION_INTENTS:
+                self.defer(action.intent_id, now)
+                return ProgressStatus.DEFERRED
+            if action.intent_id == IntentId.TOWN_SUBFLOW:
+                self._failure_counts.pop(action.intent_id, None)
+                return ProgressStatus.DEFERRED
         return ProgressStatus.TIMED_OUT
 
     def complete(self, intent_id: IntentId, outcome: CollectionOutcome):

@@ -165,6 +165,7 @@ class TestBehaviorNavigationProgress(unittest.TestCase):
         self.assertGreater(settings["action_max_attempts"], 0)
         self.assertGreater(settings["collection_backoff_seconds"], 0)
         self.assertGreater(settings["collection_recovery_failure_limit"], 0)
+        self.assertGreater(settings["town_entry_wait_max_observations"], 0)
 
     def test_tier4_fallback_does_not_destroy_pending_collection_intents(self):
         machine = GameStateMachine(

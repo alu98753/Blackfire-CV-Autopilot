@@ -76,11 +76,73 @@ class NavigationHandler(BaseStateHandler):
         """Resolve the active route before falling back to Tier 4 policy."""
         return config.get("sub_stage") or config.get("tier4_sub_stage")
 
+    @classmethod
+    def _save_boss_skull_debug_artifact(
+        cls,
+        screen_img,
+        pos: tuple[int, int] | None,
+        pos_first: tuple[int, int] | None,
+        pos_six: tuple[int, int] | None,
+        conf_first: float,
+        conf_six: float,
+        is_top: bool,
+        is_bottom: bool,
+        sub_stage_type: str,
+        accepted: bool,
+    ) -> None:
+        """在 debug 模式下繪製骷髏頭及頁面邊界標記並儲存診斷圖片。"""
+        if screen_img is None or getattr(screen_img, "size", 0) == 0:
+            return
+        try:
+            import cv2
+            import numpy as np
+            from utils.debug_artifacts import write_debug_image
+
+            if not isinstance(screen_img, np.ndarray):
+                return
+
+            canvas = screen_img.copy()
+            box_half = 30
+
+            # 1. 繪製 boss_skull 框框與語意
+            if pos:
+                bx, by = pos
+                color_skull = (0, 255, 0) if accepted else (0, 0, 255)
+                cv2.rectangle(canvas, (bx - box_half, by - box_half), (bx + box_half, by + box_half), color_skull, 2)
+                tag = f"[boss_skull] {'ACCEPTED' if accepted else 'REJECTED'}"
+                cv2.putText(canvas, tag, (bx - box_half, max(20, by - box_half - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_skull, 2)
+
+            # 2. 繪製 first_stage 框框與語意 (若有偵測到)
+            if pos_first:
+                fx, fy = pos_first
+                color_first = (255, 255, 0)
+                cv2.rectangle(canvas, (fx - box_half, fy - box_half), (fx + box_half, fy + box_half), color_first, 2)
+                cv2.putText(canvas, f"[first_stage] conf={conf_first:.2f}", (fx - box_half, max(20, fy - box_half - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_first, 2)
+
+            # 3. 繪製 six_stage 框框與語意 (若有偵測到)
+            if pos_six:
+                sx, sy = pos_six
+                color_six = (255, 0, 255)
+                cv2.rectangle(canvas, (sx - box_half, sy - box_half), (sx + box_half, sy + box_half), color_six, 2)
+                cv2.putText(canvas, f"[six_stage] conf={conf_six:.2f}", (sx - box_half, max(20, sy - box_half - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_six, 2)
+
+            # 4. 頂部狀態列橫幅
+            h, w = canvas.shape[:2]
+            cv2.rectangle(canvas, (0, 0), (w, 36), (30, 30, 30), -1)
+            banner = f"Target: {sub_stage_type} | conf_first: {conf_first:.4f}, conf_six: {conf_six:.4f} | top: {is_top}, bottom: {is_bottom} | {'PASS' if accepted else 'REJECT'}"
+            status_color = (0, 255, 0) if accepted else (0, 0, 255)
+            cv2.putText(canvas, banner, (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, status_color, 2)
+
+            write_debug_image("debug_boss_skull_validation.png", canvas)
+        except Exception as exc:
+            logging.debug(f"[DebugArtifacts] Failed to write boss skull debug artifact: {exc}")
+
     def _validate_boss_skull(
         self,
         pos: tuple[int, int] | None,
         rect: dict,
         match_current_frame,
+        screen_img=None,
     ) -> tuple[int, int] | None:
         """
         驗證通用骷髏頭 (boss_skull) 是否符合當前子關卡目標 (middle vs final) 所在的頁面邊界。
@@ -95,26 +157,51 @@ class NavigationHandler(BaseStateHandler):
             return pos
 
         thresh_boundary = self.SUB_STAGE_BOUNDARY_THRESHOLD
-        pos_six, _ = match_current_frame("stages/six_stage.png", threshold=thresh_boundary) if os.path.exists(os.path.join("templates", "stages/six_stage.png")) else (None, 0.0)
-        pos_first, _ = match_current_frame("stages/first_stage.png", threshold=thresh_boundary) if os.path.exists(os.path.join("templates", "stages/first_stage.png")) else (None, 0.0)
+        pos_six, conf_six = match_current_frame("stages/six_stage.png", threshold=thresh_boundary) if os.path.exists(os.path.join("templates", "stages/six_stage.png")) else (None, 0.0)
+        pos_first, conf_first = match_current_frame("stages/first_stage.png", threshold=thresh_boundary) if os.path.exists(os.path.join("templates", "stages/first_stage.png")) else (None, 0.0)
 
         is_top_page = self._is_top_sub_stage_row(pos_first, rect)
         is_bottom_page = self._is_top_sub_stage_row(pos_six, rect)
 
+        is_debug_mode = logging.getLogger().isEnabledFor(logging.DEBUG) or bool(config.get("debug", False))
+
+        if is_debug_mode:
+            logging.debug(
+                f"🛡️ [骷髏頭邊界判定] 目標: {sub_stage_type}, conf_first: {conf_first:.4f}, conf_six: {conf_six:.4f}"
+            )
+
         if sub_stage_type == "final" and (is_top_page or not is_bottom_page):
             page_desc = "頂部頁面" if is_top_page else "未確認為底部頁面"
-            logging.info(
-                f"🛡️ [骷髏頭防誤判] 目標為 final 但畫面處於{page_desc} (is_top={is_top_page}, is_bottom={is_bottom_page})，"
-                f"忽略座標 ({pos[0]}, {pos[1]}) 之 Stage 5 中間小關骷髏頭。"
+            logging.debug(
+                f"🛡️ [骷髏頭防誤判] 目標為 final 但畫面處於{page_desc} "
+                f"(conf_first: {conf_first:.4f}, conf_six: {conf_six:.4f})，"
+                f"忽略 Stage 5 中間小關骷髏頭,以儲存圖片:debug_boss_skull_validation.png。"
             )
+            if is_debug_mode:
+                self._save_boss_skull_debug_artifact(
+                    screen_img, pos, pos_first, pos_six, conf_first, conf_six,
+                    is_top_page, is_bottom_page, sub_stage_type, accepted=False
+                )
             return None
         elif sub_stage_type == "middle" and (is_bottom_page or not is_top_page):
             page_desc = "底部頁面" if is_bottom_page else "未確認為頂部頁面"
-            logging.info(
-                f"🛡️ [骷髏頭防誤判] 目標為 middle 但畫面處於{page_desc} (is_top={is_top_page}, is_bottom={is_bottom_page})，"
-                f"忽略座標 ({pos[0]}, {pos[1]}) 之 Stage 10 魔王骷髏頭。"
+            logging.debug(
+                f"🛡️ [骷髏頭防誤判] 目標為 middle 但畫面處於{page_desc} "
+                f"(conf_first: {conf_first:.4f}, conf_six: {conf_six:.4f})，"
+                f"忽略 Stage 10 魔王骷髏頭，以儲存圖片:debug_boss_skull_validation.png。"
             )
+            if is_debug_mode:
+                self._save_boss_skull_debug_artifact(
+                    screen_img, pos, pos_first, pos_six, conf_first, conf_six,
+                    is_top_page, is_bottom_page, sub_stage_type, accepted=False
+                )
             return None
+
+        if is_debug_mode:
+            self._save_boss_skull_debug_artifact(
+                screen_img, pos, pos_first, pos_six, conf_first, conf_six,
+                is_top_page, is_bottom_page, sub_stage_type, accepted=True
+            )
 
         return pos
 
@@ -261,6 +348,7 @@ class NavigationHandler(BaseStateHandler):
         target_sub_stage_btn: str,
         match_current_frame,
         filtered_nav_path: list[str],
+        screen_img=None,
     ) -> bool:
         """
         在普通關卡子關卡抽屜內，當目標子關卡尚未出現在畫面上時，執行自適應雙向滑動。
@@ -293,7 +381,7 @@ class NavigationHandler(BaseStateHandler):
                         if not self._is_top_sub_stage_row(pos_c, rect):
                             continue
                     elif "boss_skull" in cand or "skull" in cand:
-                        if not self._validate_boss_skull(pos_c, rect, match_current_frame):
+                        if not self._validate_boss_skull(pos_c, rect, match_current_frame, screen_img=screen_img):
                             continue
                     visible_sub_stages.append(cand)
 
@@ -996,7 +1084,7 @@ class NavigationHandler(BaseStateHandler):
                     pos_f, _ = match_current_frame(btn, threshold=thresh_btn)
                     if pos_f:
                         if "boss_skull" in btn or "skull" in btn:
-                            pos_f = self._validate_boss_skull(pos_f, rect, match_current_frame)
+                            pos_f = self._validate_boss_skull(pos_f, rect, match_current_frame, screen_img=screen_img)
                         if pos_f:
                             pos_final = pos_f
                             self.sub_stage_scroll_attempts = 0
@@ -1126,7 +1214,7 @@ class NavigationHandler(BaseStateHandler):
             pos, conf = match_current_frame(btn, threshold=thresh, brightness_threshold=b_thresh)
             if pos:
                 if "boss_skull" in btn or "skull" in btn:
-                    pos = self._validate_boss_skull(pos, rect, match_current_frame)
+                    pos = self._validate_boss_skull(pos, rect, match_current_frame, screen_img=screen_img)
             if pos:
                 if btn == "stages/stage_label.png":
                     if self._handle_sub_stage_scroll(
@@ -1134,6 +1222,7 @@ class NavigationHandler(BaseStateHandler):
                         target_final_btn,
                         match_current_frame,
                         filtered_nav_path,
+                        screen_img=screen_img,
                     ):
                         clicked_any = True
                         break

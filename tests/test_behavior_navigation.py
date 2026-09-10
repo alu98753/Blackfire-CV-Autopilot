@@ -773,5 +773,87 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.assertFalse(NavigationHandler._is_top_sub_stage_row((600, 385), rect_720))
 
 
+    @patch("utils.debug_artifacts.write_debug_image")
+    @patch("os.path.exists")
+    def test_boss_skull_debug_artifact_and_logging_in_debug_mode(self, mock_exists, mock_write_debug):
+        """
+        驗證在 debug 模式下：
+        1. 僅輸出 DEBUG 級別日誌，包含 conf_first, conf_six，且不輸出 pos 座標
+        2. 在 debug 圖片上畫框框並呼叫 write_debug_image("debug_boss_skull_validation.png", ...)
+        """
+        import numpy as np
+        import logging
+        mock_exists.return_value = True
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.config = {
+            "type": "stage",
+            "sub_stage": "final",
+            "debug": True,
+        }
+
+        def fake_match(template, threshold=0.8):
+            if template == "stages/first_stage.png":
+                return (None, 0.45)
+            if template == "stages/six_stage.png":
+                return (None, 0.55)
+            return (None, 0.0)
+
+        with self.assertLogs(level="DEBUG") as log_cm:
+            result = self.handler._validate_boss_skull(
+                pos=(712, 701),
+                rect=self.rect,
+                match_current_frame=fake_match,
+                screen_img=dummy_screen,
+            )
+
+        # 由於 is_bottom 為 False，final 目標應被拒絕 (回傳 None)
+        self.assertIsNone(result)
+
+        # 驗證 write_debug_image 有被呼叫，且檔名正確
+        mock_write_debug.assert_called_once()
+        call_args = mock_write_debug.call_args
+        self.assertEqual(call_args[0][0], "debug_boss_skull_validation.png")
+
+        # 驗證日誌內容：包含 conf_first 與 conf_six，但不含 (712, 701) 座標
+        joined_logs = " ".join(log_cm.output)
+        self.assertIn("conf_first: 0.4500", joined_logs)
+        self.assertIn("conf_six: 0.5500", joined_logs)
+        self.assertNotIn("(712, 701)", joined_logs)
+
+    @patch("utils.debug_artifacts.write_debug_image")
+    @patch("os.path.exists")
+    def test_boss_skull_debug_artifact_not_called_when_not_debug(self, mock_exists, mock_write_debug):
+        """驗證非 debug 模式下不呼叫 write_debug_image 儲存除錯圖片。"""
+        import numpy as np
+        import logging
+        mock_exists.return_value = True
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.config = {
+            "type": "stage",
+            "sub_stage": "final",
+            "debug": False,
+        }
+
+        # 確保 root logger 不處於 DEBUG
+        prev_level = logging.getLogger().level
+        logging.getLogger().setLevel(logging.INFO)
+        try:
+            def fake_match(template, threshold=0.8):
+                return (None, 0.50)
+
+            result = self.handler._validate_boss_skull(
+                pos=(712, 701),
+                rect=self.rect,
+                match_current_frame=fake_match,
+                screen_img=dummy_screen,
+            )
+            self.assertIsNone(result)
+            mock_write_debug.assert_not_called()
+        finally:
+            logging.getLogger().setLevel(prev_level)
+
+
 if __name__ == "__main__":
     unittest.main()

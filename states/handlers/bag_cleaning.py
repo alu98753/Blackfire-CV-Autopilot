@@ -376,6 +376,7 @@ class BagCleaningHandler(BaseStateHandler):
         else:
             logging.info("🏛️ [城鎮/關卡背包清理] 背包清理完成，立即觸發城鎮任務流水線佇列...")
             self.machine.trigger_town_subflow_chain()
+            self.machine.transition_to(self.machine.STATE_NAVIGATING)
 
     def handle(self, screen_img, rect):
         """

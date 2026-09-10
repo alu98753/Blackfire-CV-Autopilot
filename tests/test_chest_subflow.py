@@ -137,11 +137,11 @@ class TestChestSubflow(unittest.TestCase):
             self.assertTrue(res6)
             self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
-    def test_init_precheck_defers_when_no_red_dot(self):
+    def test_init_precheck_completes_when_no_red_dot(self):
         """
         測試：進入前預檢 (INIT 階段發現建築無紅點)
-        - 斷言：必須調用 defer_subflow("chest", 180) 暫緩冷卻！
-        - 關鍵防護：絕對不得呼叫 record_subflow_completed！
+        - 斷言：無紅點代表今日免費寶箱已領取，必須標記 record_subflow_completed("chest")！
+        - 關鍵防護：不得呼叫 defer_subflow，並彈出推進下一個任務。
         """
         mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
@@ -157,9 +157,9 @@ class TestChestSubflow(unittest.TestCase):
         with patch("os.path.exists", return_value=True):
             res = self.handler.handle(mock_img, rect)
             self.assertTrue(res)
-            # 斷言：必須暫緩退避，嚴禁誤標記完成
-            self.mock_daily_manager.defer_subflow.assert_called_once_with("chest", CHEST_DEFER_SECONDS)
-            self.mock_daily_manager.record_subflow_completed.assert_not_called()
+            # 斷言：無紅點代表已完成，標記 completed 並推進任務
+            self.mock_daily_manager.record_subflow_completed.assert_called_once_with("chest")
+            self.mock_daily_manager.defer_subflow.assert_not_called()
             self.mock_machine.pop_and_next_town_subflow.assert_called_once()
             # 斷言未點擊建築
             self.mock_machine.mouse.click.assert_not_called()
@@ -193,7 +193,7 @@ class TestChestSubflow(unittest.TestCase):
             self.mock_daily_manager.record_subflow_completed.assert_not_called()
 
     def test_handler_pops_subflow_when_chest_not_found(self):
-        """測試：當連續 5 輪未發現寶箱建築時，彈出下一個任務（絕不標記完成，亦不 defer）"""
+        """連續找不到已驗證過的入口時必須 defer，不能靜默遺失任務。"""
         mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
@@ -207,7 +207,9 @@ class TestChestSubflow(unittest.TestCase):
 
         self.assertTrue(res_last)
         self.mock_daily_manager.record_subflow_completed.assert_not_called()
-        self.mock_daily_manager.defer_subflow.assert_not_called()
+        self.mock_daily_manager.defer_subflow.assert_called_once_with(
+            "chest", CHEST_DEFER_SECONDS
+        )
         self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
     def test_daily_manager_chest_completion_and_reset(self):

@@ -105,5 +105,16 @@ class TestGearColorClassifier(unittest.TestCase):
         self.assertNotEqual(res["main_color"], "orange_yellow")
         self.assertNotEqual(res["main_color"], "red")
 
+    def test_cold_gray_stone_bevel_ignored(self):
+        """
+        測試蜘蛛絲等物品格子邊緣的冷灰板岩石框倒角 (BGR=[51, 42, 40], H=115, S=55, V=51)。
+        由於其飽和度與亮度較低，應被藍色門檻 (S>=75, V>=55) 有效過濾，判定為 gray_or_empty。
+        """
+        slot = self.create_mock_slot((51, 42, 40), width=10)
+        res = self.classifier.classify(slot)
+        
+        self.assertEqual(res["main_color"], "gray_or_empty")
+        self.assertFalse(res["is_rare"])
+
 if __name__ == "__main__":
     unittest.main()

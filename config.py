@@ -24,6 +24,8 @@ TIER4_MODE_OPTIONS = (
 TIER4_DOMAIN_OPTIONS = (
     (DEFAULT_TIER4_DOMAIN, "黃金古國"),
 )
+TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.35
+TOWN_BUILDING_BRIGHTNESS_THRESHOLD = 0.35
 CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
@@ -37,6 +39,8 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("navigation", "action_max_attempts"),
     ("navigation", "collection_backoff_seconds"),
     ("navigation", "collection_recovery_failure_limit"),
+    ("navigation", "town_entry_wait_max_observations"),
+    ("navigation", "town_no_red_dot_confirm_frames"),
     ("navigation", "stamina_retreat_quit_max_attempts"),
     ("quest", "max_run_limit"),
     ("quest", "target_count"),
@@ -261,6 +265,9 @@ def get_navigation_progress_settings() -> dict:
         ),
         "collection_recovery_failure_limit": int(
             settings["collection_recovery_failure_limit"]
+        ),
+        "town_entry_wait_max_observations": int(
+            settings["town_entry_wait_max_observations"]
         ),
     }
 

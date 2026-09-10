@@ -9,6 +9,7 @@ from typing import Mapping
 class SceneId(str, Enum):
     UNKNOWN = "unknown"
     TOWN = "town"
+    TOWN_BUILDING = "town_building"
     LOBBY = "lobby"
     DIAMOND_WINDOW = "diamond_window"
     BREAD_WINDOW = "bread_window"
@@ -35,6 +36,9 @@ class ElementId(str, Enum):
     CLOSE_OVERLAY = "close_overlay"
     EXIT_TO_LOBBY = "exit_to_lobby"
     DOMAIN_EXPLORE_BTN = "domain_explore_btn"
+    EXIT_BUILDING_TO_TOWN = "exit_building_to_town"
+    TOWN_SUBFLOW_ENTRY = "town_subflow_entry"
+    TOWN_SUBFLOW_RED_DOT = "town_subflow_red_dot"
 
 
 class OverlayId(str, Enum):
@@ -171,3 +175,11 @@ def snapshot_from_scene_info(
         active_tabs=frozenset(tabs),
         detection_profile=profile,
     )
+
+
+def next_navigation_frame_id(machine) -> int:
+    current = getattr(machine, "_navigation_frame_id", 0)
+    next_id = int(current) + 1
+    machine._navigation_frame_id = next_id
+    return next_id
+

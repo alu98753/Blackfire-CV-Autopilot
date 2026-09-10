@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import GAME_CONFIGS
 from states.state_machine import GameStateMachine
+from utils.town_building_detector import BuildingCheckResult
 
 from tests._legacy_state_machine_test_support import BehavioralScenarioTestCase
 
@@ -221,11 +222,11 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         self.state_machine.step()
         self.mock_mouse.click.assert_called_with(1000, 1000)
         
-        # 3. 驗證標記重置與轉移至血之祭壇獻祭
+        # 3. 驗證標記重置與轉移至城鎮流水線 (進入 STATE_NAVIGATING 待命 REACH_TOWN 前置導航)
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
-        self.assertTrue(self.state_machine.need_blood_altar)
-        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
 
     @patch('os.path.exists')
     def test_bag_cleaning_only_opens_bag_when_not_opened(self, mock_exists):
@@ -493,6 +494,24 @@ class TestBagScenarios(BehavioralScenarioTestCase):
 
         # Step 1: 關閉背包 ➔ 觸發流水線
         bag_handler.handle(fake_img, rect)
+        self.assertEqual(
+            self.state_machine.current_town_subflow, "blood_altar"
+        )
+        self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((74, 744), 0.90)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        with patch(
+            "states.town_subflow_perception.detect_building_with_red_dot",
+            return_value=BuildingCheckResult(
+                True,
+                True,
+                building_pos=(200, 200),
+                confidence_building=0.9,
+            ),
+        ):
+            self.state_machine.handle_town_subflow_precondition(fake_img, rect)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
         self.assertTrue(self.state_machine.need_blood_altar)
         self.assertEqual(self.state_machine.town_subflow_queue, ["jewelry_workshop"])
@@ -501,7 +520,14 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         altar_handler = self.state_machine.handlers[self.state_machine.STATE_BLOOD_ALTAR]
         altar_handler.reset_state()
         altar_handler.step_phase = "ALL_DONE_EXITING"
+        self.mock_matcher.match.side_effect = mock_match_quit
         altar_handler.handle(fake_img, rect)
+        self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((74, 744), 0.90)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        self.state_machine.handle_town_subflow_precondition(fake_img, rect)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)
         self.assertTrue(self.state_machine.need_jewelry_workshop)
         self.assertEqual(self.state_machine.town_subflow_queue, [])
@@ -515,6 +541,62 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         self.assertFalse(self.state_machine.need_blood_altar)
         self.assertFalse(self.state_machine.need_jewelry_workshop)
 
+    @patch('os.path.exists')
+    def test_bag_cleaning_completion_hands_off_to_town_subflow_and_reaches_altar(self, mock_exists):
+        """
+        驗證正向業務交接全流程：
+        背包清理完成退出後，狀態機移交給 STATE_NAVIGATING 並啟動城鎮流水線 (blood_altar)；
+        在主迴圈 step() 中自然觸發城鎮前置導航，識別到城鎮門與血之祭壇紅點後，順利派發至 STATE_BLOOD_ALTAR。
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(bag_handler, 'reset_state'):
+            bag_handler.reset_state()
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_tidied = True
+        self.state_machine.need_bag_cleaning = True
+
+        def mock_match_quit(img, name, **kw):
+            if name == "common/quit.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = mock_match_quit
+        import numpy as np
+        fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        rect = self.mock_capturer.get_window_rect()
+
+        # 1. 關閉背包完成清理
+        bag_handler.handle(fake_img, rect)
+
+        # 斷言：清理標記重置，交接給 STATE_NAVIGATING，啟動城鎮流水線首項 blood_altar
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        self.assertFalse(self.state_machine.need_bag_cleaning)
+        self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
+
+        # 2. 模擬主迴圈 step() 自然推進：畫面呈現城鎮入口特徵與血之祭壇紅點
+        self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((74, 744), 0.90) if name == "common/door.png" else (None, 0.0)
+        )
+        with patch(
+            "states.town_subflow_perception.detect_building_with_red_dot",
+            return_value=BuildingCheckResult(
+                True,
+                True,
+                building_pos=(200, 200),
+                confidence_building=0.9,
+            ),
+        ):
+            # 透過狀態機主迴圈 step() 驅動正常業務推進
+            self.state_machine.step()
+
+        # 斷言：主迴圈正常推進城鎮前置導航，派發進入 STATE_BLOOD_ALTAR
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
+        self.assertTrue(self.state_machine.need_blood_altar)
+        self.assertEqual(self.state_machine.town_subflow_queue, ["jewelry_workshop"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

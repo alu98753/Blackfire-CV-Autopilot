@@ -41,6 +41,7 @@ class ChestHandler(BaseStateHandler):
         self.last_action_time = 0.0
         self.not_found_count = 0
         self.verify_attempt_count = 0
+        self.claim_verified = False
         self._dialog_crop_rect = None
         self._cooldown_ocr_box = None
 
@@ -49,6 +50,7 @@ class ChestHandler(BaseStateHandler):
         self.last_action_time = 0.0
         self.not_found_count = 0
         self.verify_attempt_count = 0
+        self.claim_verified = False
         self._dialog_crop_rect = None
         self._cooldown_ocr_box = None
 
@@ -97,6 +99,9 @@ class ChestHandler(BaseStateHandler):
         logging.warning(f"⚠️ [神秘寶箱] {reason}，暫緩 {CHEST_DEFER_SECONDS} 秒。")
 
     def _complete_subflow(self):
+        if self.claim_verified:
+            return
+        self.claim_verified = True
         dm = getattr(self.machine, "daily_manager", None)
         if dm and hasattr(dm, "record_subflow_completed"):
             dm.record_subflow_completed("chest")
@@ -135,7 +140,8 @@ class ChestHandler(BaseStateHandler):
             if check.found_building:
                 is_dev = getattr(self.machine, "is_dev_subflow_run", False)
                 if not check.has_red_dot and not is_dev:
-                    self._defer_subflow("建築下方無紅點，當前無視覺待領取狀態")
+                    logging.info("🎁 [神秘寶箱 INIT] 寶箱下方無驚嘆號紅點，代表今日免費寶箱已領取！標記完成並推進下一任務...")
+                    self._complete_subflow()
                     self.machine.pop_and_next_town_subflow()
                     return True
 
@@ -153,6 +159,7 @@ class ChestHandler(BaseStateHandler):
 
         self.not_found_count += 1
         if self.not_found_count >= CHEST_MAX_NOT_FOUND_INIT:
+            self._defer_subflow("入口證據在 Handler 啟動後消失")
             logging.info("🎁 [神秘寶箱] 未發現寶箱建築，安全推進下一個任務...")
             self.machine.pop_and_next_town_subflow()
             return True
@@ -430,6 +437,11 @@ class ChestHandler(BaseStateHandler):
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", CHEST_BUILDING_TEMPLATE)
         check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="chest")
+
+        if check.found_building and check.has_red_dot:
+            self._defer_subflow("退出後寶箱仍有紅點，領取結果未成立")
+        elif check.found_building:
+            self._complete_subflow()
 
         if check.found_building or self.not_found_count >= 3:
             logging.info("🎁 [神秘寶箱 Step 6] 已確認回到城鎮，切換下一個任務...")

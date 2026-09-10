@@ -1,6 +1,7 @@
-"""Static v1 adjacency table for navigation actions."""
+"""Static v1 adjacency tables for intent actions and shared destinations."""
 
 from dataclasses import dataclass
+from enum import Enum
 
 from states.navigation_intent import (
     ActionId,
@@ -14,6 +15,23 @@ from utils.scene_snapshot import ElementId, SceneId
 @dataclass(frozen=True)
 class NavigationEdge:
     intent_id: IntentId
+    source: SceneId
+    target: SceneId
+    required_element: ElementId
+    action: ActionId
+    postcondition: PostconditionId
+    reason: ReasonCode
+
+
+class NavigationGoal(str, Enum):
+    """Task-agnostic destinations shared by multiple workflows."""
+
+    REACH_TOWN = "reach_town"
+
+
+@dataclass(frozen=True)
+class GoalNavigationEdge:
+    goal: NavigationGoal
     source: SceneId
     target: SceneId
     required_element: ElementId
@@ -143,16 +161,67 @@ V1_NAVIGATION_EDGES = (
 )
 
 
+REACH_TOWN_EDGES = (
+    GoalNavigationEdge(
+        NavigationGoal.REACH_TOWN,
+        SceneId.TOWN_BUILDING,
+        SceneId.TOWN,
+        ElementId.EXIT_BUILDING_TO_TOWN,
+        ActionId.EXIT_BUILDING_TO_TOWN,
+        PostconditionId.TOWN,
+        ReasonCode.TOWN_SUBFLOW_EXIT_BUILDING,
+    ),
+    *(
+        GoalNavigationEdge(
+            NavigationGoal.REACH_TOWN,
+            source,
+            SceneId.TOWN,
+            ElementId.GOBACK_TOWN,
+            ActionId.RETURN_TOWN,
+            PostconditionId.TOWN,
+            ReasonCode.TOWN_SUBFLOW_RETURN_TO_TOWN,
+        )
+        for source in (
+            SceneId.LOBBY,
+            SceneId.STAGE_SELECT,
+            SceneId.DUNGEON_SELECT,
+            SceneId.LORD_SELECT,
+            SceneId.DEMON_LORD_SELECT,
+        )
+    ),
+    GoalNavigationEdge(
+        NavigationGoal.REACH_TOWN,
+        SceneId.DOMAIN_EXPLORE,
+        SceneId.LOBBY,
+        ElementId.EXIT_TO_LOBBY,
+        ActionId.EXIT_DOMAIN_TO_LOBBY,
+        PostconditionId.LOBBY,
+        ReasonCode.TOWN_SUBFLOW_EXIT_DOMAIN,
+    ),
+)
+
+
 class NavigationTable:
     """Return the first declared edge satisfied by one immutable snapshot."""
 
-    def __init__(self, edges=V1_NAVIGATION_EDGES):
+    def __init__(self, edges=V1_NAVIGATION_EDGES, goal_edges=REACH_TOWN_EDGES):
         self.edges = tuple(edges)
+        self.goal_edges = tuple(goal_edges)
 
     def next_edge(self, scene, intent_id):
         for edge in self.edges:
             if (
                 edge.intent_id == intent_id
+                and edge.source == scene.scene
+                and scene.has(edge.required_element)
+            ):
+                return edge
+        return None
+
+    def next_goal_edge(self, scene, goal):
+        for edge in self.goal_edges:
+            if (
+                edge.goal == goal
                 and edge.source == scene.scene
                 and scene.has(edge.required_element)
             ):

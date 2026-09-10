@@ -40,13 +40,17 @@ class HeroDrawHandler(BaseStateHandler):
         left = rect["left"] if rect else 0
         top = rect["top"] if rect else 0
 
-        # 1. 優先檢查是否在關卡大廳/選關畫面 (有 goback_town.png)，點擊返回城鎮
-        pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80)
-        if pos_goback:
-            logging.info("🍺 [抽英雄] 偵測到目前處於大廳畫面，點擊 [goback_town.png] 返回城鎮...")
-            self.mouse.click(left + pos_goback[0], top + pos_goback[1])
-            self.last_action_time = now
-            return True
+        # Queue-driven runs reached this Handler only after REACH_TOWN.  Keep
+        # this legacy route solely for a direct/standalone Handler invocation.
+        if getattr(self.machine, "current_town_subflow", None) != "hero_draw":
+            pos_goback, _ = self.matcher.match(
+                screen_img, "goback_town.png", threshold=0.80
+            )
+            if pos_goback:
+                logging.info("🍺 [抽英雄] 獨立模式偵測到大廳，點擊 [goback_town.png] 返回城鎮...")
+                self.mouse.click(left + pos_goback[0], top + pos_goback[1])
+                self.last_action_time = now
+                return True
 
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", "town_building/Tavern/Tavern.png")
@@ -92,8 +96,11 @@ class HeroDrawHandler(BaseStateHandler):
 
             self.not_found_count += 1
             if self.not_found_count >= 3:
-                logging.info("🍺 [抽英雄] 畫面上未發現酒館建築，彈出下一個城鎮任務（不標記完成）...")
-                self.machine.pop_and_next_town_subflow()
+                logging.warning("⚠️ [抽英雄] 城鎮入口證據消失，暫緩而非靜默跳過任務。")
+                if getattr(self.machine, "current_town_subflow", None) == "hero_draw":
+                    self.machine.defer_current_town_subflow(180)
+                else:
+                    self.machine.pop_and_next_town_subflow()
                 return True
 
         # 3. ENTERED_TAVERN 階段：精確比對免費招募按鈕 (free_recruitment.png)
@@ -253,8 +260,11 @@ class HeroDrawHandler(BaseStateHandler):
             else:
                 self.not_found_count += 1
                 if self.not_found_count >= 3:
-                    logging.info("🍺 [抽英雄 VERIFY_EXIT] 退出後暫未看見酒館建築，安全推進下一個任務...")
-                    self.machine.pop_and_next_town_subflow()
+                    logging.warning("⚠️ [抽英雄 VERIFY_EXIT] 無法驗證紅點 outcome，暫緩而非標記完成。")
+                    if getattr(self.machine, "current_town_subflow", None) == "hero_draw":
+                        self.machine.defer_current_town_subflow(180)
+                    else:
+                        self.machine.pop_and_next_town_subflow()
                     return True
 
         return False
