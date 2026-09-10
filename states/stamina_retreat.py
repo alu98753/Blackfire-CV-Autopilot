@@ -107,6 +107,11 @@ class StaminaRetreatRecovery:
                 dismiss_candidates = candidates
                 break
 
+        # 惰性求值保護：若目前尚未處於退避流程且畫面上未見體力彈窗，
+        # 立即早退，絕不在正常掛機幀中多餘比對 quit、goback_town 與 door 等模板
+        if not self.is_active and overlay_template is None:
+            return StaminaRetreatObservation(overlay_template=None)
+
         dismiss_template, dismiss_position = self._first_match(
             machine, screen_img, dismiss_candidates, 0.80
         )
@@ -262,7 +267,9 @@ class StaminaRetreatRecovery:
     def _match(machine, screen_img, template, threshold):
         if not os.path.exists(os.path.join("templates", template)):
             return None
-        position, _ = machine.matcher.match(screen_img, template, threshold=threshold)
+        position, _ = machine.matcher.match(
+            screen_img, template, threshold=threshold, quiet=True
+        )
         return position
 
     def _first_match(self, machine, screen_img, templates, threshold):
