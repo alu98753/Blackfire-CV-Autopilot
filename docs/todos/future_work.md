@@ -35,92 +35,56 @@ dengeon同理
 
 ### Daily
 
-2. lord, demon lord 不備其他形成搶掉 可以正常打完 正常買材料(demon lord要買材料才能打)
-
-以上做完應該就可以掛機個兩天 接著會遇到的問題是 商人也會沒錢
-所以要跟他買東西 以及製作東西(大宗)
-
-- [ ] blood building的判定會被紅點掠過 blood building 應該分成日常任務速領(tier1) 與 日常背包滿了的獻祭
-
-
-- []懸賞告示牌的流程不用改 只是要確認有進去才可以開始跑
-目前的問題是他還沒進去 如debug 圖片所示 他還在背包 當人不能判斷有懸賞任務 同時珠寶店跟blood有連帶性 這個也要拔除 把兩者分開 這樣應該就可以了
-
-- demon 的石頭如果不夠 目前會怎麼做? 假設黃色的沒了 會都用紫色的?, 我在想要不要加入去商店買東西的功能(順便還能買競技場門票)
-
+要讓我可以安心整天不用看的前提：
 - bag_bug,bag_jewelry_workshop_bug 的原因就是要把「背包後續子流程」與「每日子流程」徹底切分清楚
-
-- [] daily complete的條件寫好了 那現在defer判斷的依據有哪些
+- [ ] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
+  - 核心原因為「背包後續子流程」與「每日子流程」未徹底切分清楚；珠寶店與 blood 的連帶性必須拔除，分開處理。背包滿觸發城鎮流水線時打開背包，卻因畫面邊緣誤判大門 door.png 而觸發防護攔截跳過；背包視窗仍維持開啟未關閉，狀態機即強行轉移回 NAVIGATING 去做懸賞，大門被背包阻擋無法點擊，導致點擊逾時超限重試，全域卡死在城鎮畫面。
+- [ ] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務**
+  - 懸賞告示牌的流程不用改，只是要確認有進去才可以開始跑。
+目前的問題是他還沒進去 如debug 圖片所示 他還在背包 當人不能判斷有懸賞任務 同時珠寶店跟blood有連帶性 這個也要拔除 把兩者分開 這樣應該就可以了
+- [ ] **4. 定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖** ([daily_quest_dungeon_priority_spec.md](daily_quest_dungeon_priority_spec.md))
+- [ ] **5. Daily 模式退避進入 `COLLECT_ONLY` 後，地下城冷卻結束無法定時回歸** ([state_machine_bug.md](state_machine_bug.md))
+  - 待機喚醒機制與型態判斷缺陷導致地下城冷卻就緒後無法自動喚醒復歸。
+- [ ] **6. `COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
+  - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡。
+- [ ] **7. 領主 Boss(Lord) 與深淵魔王(Demon Lord) 穩定運行與材料防護**
+  - lord, demon lord 不被其他activity搶掉，可以正常打完。
+  - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
+- [ ] **8. 血之祭壇 (Blood Altar) 判定被紅點掠過問題** ([bag_bug.md](bag_bug.md))
+  - blood building 應該分成日常任務速領 (Tier 1) 與 日常背包滿了的獻祭，避免已無紅點時獻祭被意外跳過。
+- 釐清 Daily Complete 與 Defer 的判斷依據
+  - daily complete 的條件寫好了，那現在 defer 判斷的依據有哪些？
 
 ### 商店
 
-假設大家的金錢"都"低於某個數值(預設1000)
-則珠寶店就會不開放進入(也就是不可以賣東西 可能用個shop_money_notenough 的flag標註)
-然後此時要發訊息給使用者(是哪個帳號 商店們目前剩餘的金額 請盡速回來買賣等訊息)(尚未決定通訊方式)
+- [ ] **10. 珠寶店商人金幣耗盡防護與通知**
+  - 假設大家的金錢"都"低於某個數值 (預設 1000)，則珠寶店不開放進入 (不可以賣東西，可用 `shop_money_notenough` 的 flag 標註)。
+  - 此時發送訊息給使用者 (哪個帳號、商店目前剩餘金額、請盡速回來買賣等訊息，通訊方式待定)。
+  - 以上做完應該就可以掛機個兩天；接著會遇到商人沒錢的問題，所以要跟他買東西以及製作東西 (大宗)。
 
 ### Navigation
 
-- []向右滑動的時候明明一直做就好 且只要比對現在在的位置({}_after 和目標圖片)共兩章 但她卻每次都等很久 比對很多圖片
-
-```
-2026-09-09 20:47:05,310 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
-2026-09-09 20:47:05,310 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
-2026-09-09 20:47:09,852 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:11,975 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:12,460 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
-2026-09-09 20:47:13,889 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
-2026-09-09 20:47:14,432 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
-2026-09-09 20:47:14,538 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
-2026-09-09 20:47:18,037 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
-2026-09-09 20:47:18,039 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
-2026-09-09 20:47:22,880 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:25,275 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:25,795 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
-2026-09-09 20:47:27,277 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
-2026-09-09 20:47:27,946 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
-2026-09-09 20:47:28,091 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
-2026-09-09 20:47:31,891 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
-2026-09-09 20:47:31,892 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
-2026-09-09 20:47:36,576 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:38,419 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:38,798 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
-2026-09-09 20:47:39,920 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
-2026-09-09 20:47:40,409 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
-2026-09-09 20:47:40,495 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
-2026-09-09 20:47:43,564 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
-2026-09-09 20:47:43,564 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
-2026-09-09 20:47:48,241 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:50,674 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:47:51,123 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
-2026-09-09 20:47:52,454 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
-2026-09-09 20:47:53,030 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
-2026-09-09 20:47:53,129 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
-2026-09-09 20:47:56,330 [INFO] 🧭 貪婪地下城：偵測到地下城選關介面，執行入口對齊與選關。
-2026-09-09 20:47:56,330 [INFO] 🧭 [卡片導航] 目標在右側，執行向左滑動翻頁...
-2026-09-09 20:48:01,041 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:48:03,496 [INFO] 成功匹配模板 'goback_town.png'！相似度: 0.9999，相對亮度比: 1.00，座標: (81, 925)
-2026-09-09 20:48:03,944 [INFO] 成功匹配模板 'common/bread.png'！相似度: 1.0000，相對亮度比: 1.00，座標: (1387, 67)
-2026-09-09 20:48:05,322 [INFO] 成功匹配模板 'common/select_stage_after.png'！相似度: 0.9220，相對亮度比: 0.93，座標: (664, 908)
-2026-09-09 20:48:05,937 [INFO] 成功匹配模板 'dungeons/dungeon_after.png'！相似度: 0.9768，相對亮度比: 1.01，座標: (810, 909)
-2026-09-09 20:48:06,061 [INFO] [IntentRouting] intent=primary_navigation scene=dungeon_select action=continue_primary reason=primary_route_delegated progress=idle
-2026-09-09 20:48:09,023 [INFO] 🧭 貪婪地下城：偵測到
-```
-
-
-
-- [] 現在模式mix 應該不需要 而是應該由場警驅動,但現在daily 是夠健在mix之上 也不好拆 要一個一個來
+- [ ] **2. 導航 90 秒逾時觸發 Watchdog 強制殺進程重開，且重啟後反覆卡死陷入死循環** ([watchdog.md](watchdog.md))
+- [ ] **11. 選關與地下城向右翻頁/滑動過慢且比對過多無關圖片** ([navigation_slow_bug.md](navigation_slow_bug.md))
+  - 向右滑動的時候明明一直做就好，且只要比對現在在的位置 ({}_after 和目標圖片) 共兩張，但目前每次都等很久、比對很多圖片。
+- 模式 `mix` 解耦
+  - 現在模式 `mix` 應該不需要，而是應該由場景驅動；但現在 `daily` 是構建在 `mix` 之上，不好拆，要一個一個來。
 
 ### .agent
 
-- [] state_machine_development 這個skill 再說甚麼 有沒有違反 [project_arch_greenfield_lite_v1.md](file;file:///e%3A/Side_Project/BlackfireCrusade_tool/docs/architecture/project_arch_greenfield_lite_v1.md) 的? 要同步
+- 審核 `state_machine_development` skill 規範對齊
+  - `state_machine_development` 這個 skill 在說什麼？有沒有違反 [project_arch_greenfield_lite_v1.md](file;file:///e%3A/Side_Project/BlackfireCrusade_tool/docs/architecture/project_arch_greenfield_lite_v1.md) 的？需要同步。
 
 ### Battle & Result
 
-- [ ] 因為我有所有角色的資料 所以實際上我可以做戰鬥系統 因為點擊是固定位置就不需要cv, 只需要專注在戰鬥
+- [ ] **9. 戰鬥血條靜止卡死自癒重啟機制** ([battle_stall_recovery_spec.md](battle_stall_recovery_spec.md))
+  - 當人物模型技能互卡或動畫死鎖時，血條完全不動；目前戰鬥僅有 900 秒（15 分鐘）的 hard timeout。沒有原地「設定 ➔ 重新開始戰鬥」的快速自癒，導致一旦發生死鎖，整整 15 分鐘掛機進度全停，嚴重消耗 24/7 的實質運行時間。
 
-- [ ] [RFC: 將 Result (ResultHandler) 重構為 BattleResult (BattleResultHandler) 之語意對齊與職責收斂](rfc_rename_result_to_battle_result.md)
+- 戰鬥結算與地下城通關閉環重構 ([result_todo.md](result_todo.md) / [RFC: 重構 Result 為 BattleResult](rfc_rename_result_to_battle_result.md))
   - 釐清並對齊架構語意：`STATE_RESULT` 實質為專屬戰鬥結算的 `STATE_BATTLE_RESULT`。
   - 解耦 `should_exit_battle` 複合條件，按「安全點搶佔、任務完成、資源退避、定時政策」分流維護。
+- 戰鬥系統固定點擊探索
+  - 因為已有所有角色的資料，實際上可以做戰鬥系統；因為點擊是固定位置就不需要 CV，只需要專注在戰鬥。
 
 
 

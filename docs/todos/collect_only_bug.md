@@ -1,7 +1,293 @@
-問題描述:我明明在collectonly 中 還有5個小時 但是我有設定打地下城沒錯 他定時去打地下城也是正確的,但是tier4  當collectonly 的時候 應該被disable
+# Spec / Bug Analysis: 體力退避 (COLLECT_ONLY) 期間地下城冷卻結束喚醒後誤入 Tier 4 Stage 刷怪問題分析與修復規格
 
-但為何她還去打tier4 的stage?
+- **狀態**：分析完畢 / 待實作修復 (Ready for Implementation)
+- **類別**：Bug Fix / Architecture Invariant Alignment
+- **影響範圍**：體力退避機制 (`stamina_retreat`)、定時待機處理器 (`CollectOnlyHandler`)、全域活動調度器 (`evaluate_next_activity`)、導航處理器 (`NavigationHandler`)、探索處理器 (`ExploreHandler`)
+- **相關核心檔案**：
+  - [states/state_machine.py](../../states/state_machine.py) (`evaluate_next_activity`, `build_dungeon_resume_route`)
+  - [states/handlers/navigation.py](../../states/handlers/navigation.py) (`handle`, `_switch_to_stage_or_back`, `_enter_collect_only_after_dungeon_cooldown`)
+  - [states/handlers/explore.py](../../states/handlers/explore.py) (`handle` 通關退出轉移邏輯)
+  - [states/handlers/collect_only.py](../../states/handlers/collect_only.py) (`handle` 地下城喚醒復歸)
+  - [tests/test_behavior_stamina_retreat.py](../../tests/test_behavior_stamina_retreat.py)
+  - [tests/test_daily_pipeline_stamina_retreat.py](../../tests/test_daily_pipeline_stamina_retreat.py)
 
+---
+
+## 1. 原始問題描述 (User Problem Statement)
+
+> **問題描述**：我明明在 collectonly 中 還有 5 個小時，但是我設定打地下城沒錯，他定時去打地下城也是正確的。但是 tier4 當 collectonly 的時候應該被 disable。
+> 
+> **但為何她還去打 tier4 的 stage？**
+
+---
+
+## 2. 核心結論與問題直答 (Executive Summary & Direct Answer)
+
+### Q: 為何在 `COLLECT_ONLY`（體力退避倒數中）還會去打 Tier 4 的 Stage？
+
+**A: 系統在「地下城冷卻結束臨時喚醒 ➔ 打完通關 ➔ 所有地下城再度全冷卻」的環節上，發生了嚴重的調度斷鏈與路由污染，導致系統誤以為自己處於常態混合掛機模式（Mix Mode），從而在活動大廳主動點擊切換至普通關卡頁籤並發起戰鬥。**
+
+具體發生的連環邏輯斷點如下：
+
+```text
+[體力退避中 5h40m (COLLECT_ONLY)]
+       │
+       ▼ (地下城 6 冰雪洞窟冷卻結束)
+[CollectOnlyHandler.handle()]
+       │ 呼叫 build_dungeon_resume_route()
+       ▼
+【斷點 1：路由污染】臨時路由被錯誤蓋上 type="mix"、is_tier4_fallback=True，
+                  更注入了 Tier 4 關卡路徑 (第 7 關遺忘荒地)，且未顯式關閉 enable_stage_farming=False！
+       │
+       ▼ (轉移至 NAVIGATING ➔ 進入地下城 6 戰鬥並通關)
+[ExploreHandler 通關結算 (13:34:09)]
+       │ 冰雪洞窟進入 30m 冷卻，獸人地堡仍在冷卻中 ➔ 地下城全冷卻！
+       ▼
+【斷點 2：調度死巷】轉入 STATE_NAVIGATING 觸發 evaluate_next_activity()。
+                  調度器檢查 stamina_retreat_start_time 存在，但因 has_available_dungeon() 為 False，
+                  竟然直接 return False！既未切回 COLLECT_ONLY，亦未發起回城動作！
+       │
+       ▼ (狀態機被遺棄在 STATE_NAVIGATING 且身處活動大廳)
+[NavigationHandler.handle() (13:34:17)]
+       │ 讀取當前路由 (被污染的 mix + is_tier4_fallback)
+       ▼
+【斷點 3：導航退避盲目】NavigationHandler 發現是 mix 模式且全冷卻，
+                      enable_stage_farming 因 is_tier4_fallback 預設為 True (完全未檢查 stamina_retreat_start_time)，
+                      於是點擊 common/select_stage.png 切換普通關卡頁籤，並依據路由中的路徑直奔第 7 關魔王關！
+       │
+       ▼
+[無效戰鬥死循環 (13:37 ~ 13:41)]
+       進入 Stage 7 開打，結算退出後又被 NavigationHandler 送進 Stage 7，
+       直到 7 分鐘後地下城 7 (獸人地堡) 冷卻結束才觸發插隊，打完後又再度落回 Stage 7！
+```
+
+---
+
+## 3. 實機執行日誌還原與關鍵時間點剖析 (Execution Trace Timeline)
+
+對照本文件附錄之實機執行日誌，可清楚還原出事故的完整時間線：
+
+| 時間戳記 | 當前狀態與情境 | 關鍵日誌輸出 | 系統內部決策與行為分析 |
+|---|---|---|---|
+| **13:25:37** | `COLLECT_ONLY` | `⏳ [體力退避狀態] collect_only 模式已執行 79 分鐘。距離回到原掛機模式 [每日懸賞任務] 還剩: 5小時40分47秒。` | 體力退避機制運作正常，背景計時器持續倒數，原模式為每日懸賞任務。 |
+| **13:25:58** | `BREAD_COLLECTION` | `🍞 定時領取：在城鎮畫面，點擊入口 [common/door.png] 進入大廳以領取體力。` | 觸發每 5 分鐘一次的定時領取麵包子流程。 |
+| **13:26:17** | `COLLECT_ONLY` | `🍞 領體力：退出按鈕已消失，確認視窗已關閉。領取體力流程結束。` ➔ `🔄 狀態轉移: BREAD_COLLECTION -> COLLECT_ONLY` ➔ `點擊 [goback_town.png] 返回城鎮` | 領取完畢後，正確點擊 `goback_town.png` 退回城鎮，維繫 `COLLECT_ONLY`。 |
+| **13:31:55** | `COLLECT_ONLY` | `🔄 [冷卻結束復歸] 偵測到地下城冷卻結束，暫時離開 collect_only 切回刷地下城！` ➔ `🔄 狀態轉移: COLLECT_ONLY -> UNKNOWN` | 地下城 6（冰雪洞窟）冷卻結束。`CollectOnlyHandler` 呼叫 `build_dungeon_resume_route()` 建立執行路由並發起狀態轉移。 |
+| **13:31:58** | `NAVIGATING` | `🔄 [Activity Scheduler] 體力退避期間地下城冷卻已結束 ➔ 保留地下城復歸路由，不套用 Tier 4 Domain fallback。` | **【轉折點 A】** 進入導航，`evaluate_next_activity` 確認冰雪洞窟可打，保留了該 resume 路由。 |
+| **13:32:09 ~ 13:34:08** | `NAVIGATING` ➔ `EXPLORING` ➔ `BATTLE` | `🧭 混合模式：地下城已就緒... 點擊 [dungeons/dungeon.png]` ➔ `選擇進入 [冰雪洞窟]` ➔ 通關 `dungeons_complete.png` | 成功進入冰雪洞窟，領取祝福、開寶箱、戰鬥推進，並於 13:34:08 通關。 |
+| **13:34:09** | `EXPLORING` ➔ `NAVIGATING` | `⏳ 貪婪地下城：設定 [冰雪洞窟] (#6) 進入 30 分鐘冷卻期。`<br>`⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: [冰雪洞窟]: 冷卻中 (30 分 0 秒), [獸人地堡]: 冷卻中 (6 分 39 秒) ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。`<br>`🔄 狀態轉移: EXPLORING -> NAVIGATING` | **【致命轉折點 1】** 地下城全冷卻。`ExploreHandler` 輸出硬編碼之「將退守切換至普通關卡」，並將狀態機切至 `STATE_NAVIGATING`。 |
+| **13:34:09 ~ 13:34:10** | `NAVIGATING` | *(無進一步調度日誌)* | **【致命轉折點 2】** `transition_to(STATE_NAVIGATING)` 觸發 `evaluate_next_activity()`。但調度器在 `stamina_retreat_start_time` 存在且地下城全冷卻時，**直接 `return False`**，未切換回 `COLLECT_ONLY`，亦未點擊回城！ |
+| **13:34:17** | `NAVIGATING` | `🧭 混合模式：地下城全冷卻 (冷卻情形: [冰雪洞窟]: 冷卻中 (29 分 51 秒), [獸人地堡]: 冷卻中 (6 分 30 秒))，在活動大廳點擊 [common/select_stage.png] (0.9266) 切換至普通關卡頁籤！` | **【致命轉折點 3】** `NavigationHandler.handle()` 接手。因當前路由有 `type="mix"` 與 `is_tier4_fallback=True`，且未檢查體力退避狀態，直接點擊 `common/select_stage.png` 切換關卡頁籤！ |
+| **13:37:18 ~ 13:37:35** | `NAVIGATING` ➔ `LOBBY` ➔ `BATTLE` | `🧭 尋路中：在畫面中找到關卡小島按鈕 [stages/level7_forgotten_wasteland.png]` ➔ `點擊 [stages/boss_skull.png]` ➔ `Lobby start button [stages/start.png] detected; clicking.` ➔ `🔄 狀態轉移: LOBBY -> BATTLE` | 導航器依照路由中殘留的 Tier 4 關卡設定，一路導航至第 7 關荒地魔王關發起點擊並進入戰鬥！ |
+| **13:37:35 ~ 13:41:15** | `BATTLE` ➔ `RESULT` ➔ `NAVIGATING` | 戰鬥結束 ➔ 結算退出 ➔ 重新導航 ➔ 再次進 Stage 7 戰鬥 | 在體力退避期間陷入 Stage 7 刷怪死循環（甚至在無體力/低體力下嘗試點擊 start 戰鬥）。 |
+| **13:41:16** | `RESULT` | `🏰 [Tier 4 插隊] 偵測到週期地下城冷卻結束；本場結算後離場並切回地下城探索。` | 獸人地堡（#7）冷卻剛好結束，結算處理器觸發插隊退出，重新切回地下城。 |
+| **13:42:31 ~ 13:45:34** | `NAVIGATING` ➔ `EXPLORING` ➔ `BATTLE` | 成功進入獸人地堡並打完通關。 | 打完第 88 次地下城，獸人地堡進入 35 分鐘冷卻。 |
+| **13:45:34** | `EXPLORING` ➔ `NAVIGATING` | `⏳ [混合模式] 地下城全冷卻！各副本冷卻情形: [冰雪洞窟]: 冷卻中 (18 分 35 秒), [獸人地堡]: 冷卻中 (35 分 0 秒) ➔ 無可用地下城，將退守切換至普通關卡 (Stage)。` | 獸人地堡打完後再度全冷卻，**歷史完全重演**！ |
+| **13:45:43** | `NAVIGATING` | `🧭 混合模式：地下城全冷卻... 在活動大廳點擊 [common/select_stage.png] 切換至普通關卡頁籤！` | **再度點擊 `select_stage.png`，再度前往 Stage 7 打魔王關！** |
+
+---
+
+## 4. 深度根因分析 (Deep-Dive Root Causes)
+
+經程式碼追查，此問題由四層架構與邏輯缺陷疊加造成：
+
+### 根因 1：`evaluate_next_activity()` 的退避調度死巷 (Scheduler Dead-End)
+- **檔案位置**：[states/state_machine.py](../../states/state_machine.py#L2141-L2157)
+- **代碼現況**：
+  ```python
+  if getattr(self, "stamina_retreat_start_time", None) is not None:
+      dungeon_enabled = activity_cfg.get(
+          "enable_dungeon", cfg.get("enable_dungeon", True)
+      )
+      if not dungeon_enabled:
+          return False
+
+      if not self.has_available_dungeon(target_config=activity_cfg):
+          return False  # ⚠️ 致命問題點：直接 return False！
+  ```
+- **分析**：
+  在 commit `0626e03` 中，為了防止體力退避期間被 Tier 4 Domain 覆蓋，增加了上述判斷。
+  然而，作者僅考慮了「地下城可用時喚醒」，卻完全忽略了**「地下城打完／不可用時該去哪裡」**！
+  當 `not self.has_available_dungeon()` 時，它直接執行了 `return False`。
+  這意味著全域調度器宣告放棄決策，但**既沒有將狀態轉移至 `STATE_COLLECT_ONLY`，也沒有切回待機配置，更沒有點擊 `goback_town.png` 退回城鎮**。狀態機被赤裸裸地丟在 `STATE_NAVIGATING` 與活動大廳畫面中。
+
+### 根因 2：`build_dungeon_resume_route()` 路由污染與職責越權 (Route Contamination)
+- **檔案位置**：[states/state_machine.py](../../states/state_machine.py#L1406-L1420)
+- **代碼現況**：
+  ```python
+  def build_dungeon_resume_route(self, source_config=None):
+      policy = self._daily_activity_config()
+      base = policy if (policy and policy.get("enable_dungeon")) else (source_config or self.config or {})
+      route = deepcopy(base)
+      route["type"] = "mix"
+      route["enable_dungeon"] = True
+      route["is_tier4_fallback"] = True  # ⚠️ 混入 Tier 4 身分
+      route["navigation_path"] = ["common/door.png", "dungeons/dungeon.png"]
+      if "dungeon_entries" not in route and "daily" in GAME_CONFIGS:
+          route["dungeon_entries"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_entries", []))
+          route["dungeon_names"] = deepcopy(GAME_CONFIGS["daily"].get("dungeon_names", []))
+      self._apply_tier4_stage_selection(route)    # ⚠️ 注入 Tier 4 關卡路徑 (Level 7)！
+      self._apply_tier4_dungeon_selection(route)
+      return route
+  ```
+- **分析**：
+  此函式的唯一目標本應是：**「在待機或退避期間，臨時建立一份僅供探索地下城的乾淨單一執行路由」**。
+  但實作上卻做過了頭：
+  1. 將其類型設為 `"mix"`。
+  2. 將其標記為 `is_tier4_fallback = True`。
+  3. 呼叫 `_apply_tier4_stage_selection(route)`，主動把使用者的 Tier 4 關卡（如 Level 7 魔王關）塞進該路由的 `stage_entry` 與 `stage_navigation_path`。
+  4. 未顯式關閉 `enable_stage_farming`。
+  這份路由本質上是一顆「定時炸彈」：一旦地下城全冷卻，它立刻就會變身為 Tier 4 Stage 關卡刷怪路由！
+
+### 根因 3：`NavigationHandler` 關卡退守對體力退避狀態毫無感知 (Retreat-Blind Navigation)
+- **檔案位置**：[states/handlers/navigation.py](../../states/handlers/navigation.py#L532-L545, #L1040-L1056)
+- **代碼現況**：
+  ```python
+  # states/handlers/navigation.py:1042
+  mode_t = self.machine.config.get("type")
+  default_farm = True if (mode_t in ["mix", "stage", "daily"] or self.machine.config.get("is_tier4_fallback", False)) else False
+  if not self.machine.config.get("enable_stage_farming", default_farm):
+      self._enter_collect_only_after_dungeon_cooldown(...)
+      return
+
+  # 無可用地下城，退守普通關卡：若尚未處於普通關卡頁籤，點擊 select_stage.png 切換！
+  status_str, _ = self.machine.get_dungeon_cooldown_status()
+  pos_st, conf_st = self.matcher.match(screen_img, "common/select_stage.png", threshold=0.60)
+  if pos_st and not stage_select_open:
+      logging.info(f"🧭 混合模式：地下城全冷卻... 點擊 [common/select_stage.png] 切換至普通關卡頁籤！")
+      self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
+      time.sleep(0.3)
+      return
+  ```
+- **分析**：
+  在 `NavigationHandler` 的兩處全冷卻退守判定中（`handle` 與 `_switch_to_stage_or_back`）：
+  - 均以 `default_farm` 作為 `enable_stage_farming` 的 fallback。
+  - 因為當前路由被設為 `type="mix"` 且 `is_tier4_fallback=True`，`default_farm` 算出來必定為 `True`。
+  - **整段邏輯完全沒有檢查 `stamina_retreat_start_time` 是否存在！**
+  - 在體力退避期間，常規關卡打怪是必定需要消耗體力（麵包）的。體力不足時去打關卡本就是自相矛盾；但導航器卻盲目點擊 `select_stage.png` 啟動尋路。
+
+### 根因 4：`ExploreHandler` 通關結算時硬編碼之「無可用地下城將退守普通關卡」
+- **檔案位置**：[states/handlers/explore.py](../../states/handlers/explore.py#L94-L105)
+- **分析**：
+  通關結算時，`ExploreHandler` 只依據 `self.machine.config.get("type") == "mix"` 判定全冷卻時「無可用地下城，將退守切換至普通關卡 (Stage)」，完全無視這場戰鬥是否源自於體力退避期間的臨時喚醒，並無腦轉移至 `STATE_NAVIGATING`。
+
+---
+
+## 5. 架構契約與核心不變量 (System Invariants & Architectural Contract)
+
+依據專案全域架構指南 [project_arch_greenfield_lite_v1.md](../architecture/project_arch_greenfield_lite_v1.md) 與 [AGENTS.md](../../.agents/AGENTS.md)，確立下列三條不可動搖之核心契約：
+
+### 不變量 1：體力退避最高優先與常規關卡禁絕律 (Stamina Retreat Supremacy Invariant)
+> **當且僅當 `stamina_retreat_start_time is not None`（或系統處於體力退避期間），常規關卡刷怪 (`enable_stage_farming`) 必須被絕對禁用 (`False`)。**
+- 體力退避的唯一目的就是「體力不足，休眠回體」。
+- 退避期間僅允許執行**不消耗體力**的特定排程活動（如定時領體力/鑽石、無門票/獨立冷卻之地下城挑戰）。
+- 嚴禁在體力退避期間發起任何普通關卡（Stage）戰鬥。
+
+### 不變量 2：臨時喚醒路由職責有界律 (Bounded Scope for Temporary Resume Routes)
+> **從 `COLLECT_ONLY`（無論是純待機或體力退避）因特定冷卻活動就緒而喚醒的執行路由，其能力邊界僅限於該特定活動本身。**
+- `build_dungeon_resume_route()` 產生的路由，其目標唯有「挑戰可打的地下城」。
+- 該路由嚴禁攜帶普通關卡尋路設定 (`stage_entry`, `stage_navigation_path` 等必須為空或禁用)。
+- 該路由必須明確宣告 `enable_stage_farming = False` 與 `tier4_mode = "none"`。
+
+### 不變量 3：冷卻耗盡即時歸位律 (Instant Return on Cooldown Exhaustion)
+> **當臨時喚醒之地下城通關或所有允許之地下城再次進入冷卻時，系統必須立即發起城鎮返回閉環（點擊 `goback_town.png`）並轉移至 `STATE_COLLECT_ONLY`。**
+- 不得滯留在活動大廳。
+- 不得落入其他常態懸賞或 Tier 4 關卡退守。
+- 必須保留原本的 `stamina_retreat_start_time` 與 `original_config`，持續等待退避時間結束或下一個地下城冷卻結束。
+
+---
+
+## 6. 修復方案與模組實作規格 (Target Implementation Specifications)
+
+### 規格 1：重構 `build_dungeon_resume_route()` 確保路由純潔
+- **檔案**：[states/state_machine.py](../../states/state_machine.py)
+- **修正重點**：
+  1. 明確設定 `route["enable_stage_farming"] = False`。
+  2. 明確設定 `route["tier4_mode"] = "none"`。
+  3. 移除 `self._apply_tier4_stage_selection(route)`，嚴禁注入任何 Stage 關卡尋路目標。
+  4. 標記專屬屬性 `route["is_dungeon_temporary_resume"] = True`。
+  5. 僅保留地下城尋路與對齊相關參數 (`navigation_path = ["common/door.png", "dungeons/dungeon.png"]`)。
+
+### 規格 2：修復 `evaluate_next_activity()` 體力退避冷卻復歸死巷
+- **檔案**：[states/state_machine.py](../../states/state_machine.py)
+- **修正重點**：
+  在檢查 `stamina_retreat_start_time is not None` 的區塊中：
+  - 若 `self.has_available_dungeon(target_config=activity_cfg)` 為 `True`：
+    - 載入純淨的 `dungeon_route` 並回傳 `True`。
+  - 若 `not self.has_available_dungeon(...)`（無地下城可打或全冷卻）：
+    - **不可只單純 `return False`！**
+    - 檢查當前狀態，若不在 `COLLECT_ONLY`（例如剛從地下城通關出來進入 `NAVIGATING`）：
+      - 記錄日誌：`⏳ [Activity Scheduler] 體力退避期間地下城已全冷卻 ➔ 恢復城鎮待機與 COLLECT_ONLY 狀態。`
+      - 轉移至 `self.transition_to(self.STATE_COLLECT_ONLY)`。
+    - 回傳 `False`。
+
+### 規格 3：強化 `NavigationHandler` 全冷卻退守的體力退避防護網
+- **檔案**：[states/handlers/navigation.py](../../states/handlers/navigation.py)
+- **修正重點**：
+  在 `NavigationHandler.handle()` (約 L1040) 以及 `_switch_to_stage_or_back()` (約 L530) 的地下城全冷卻處理中：
+  1. 增加前置條件檢查：
+     ```python
+     is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
+     is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
+     ```
+  2. 若 `is_in_retreat or is_temp_resume`：
+     - 強制 `is_stage_farming = False`。
+     - 觸發 `self._enter_collect_only_after_dungeon_cooldown(screen_img, rect, "體力退避期間地下城全冷卻，禁止切換至普通關卡")`。
+     - 點擊 `goback_town.png` 返回城鎮並切入 `STATE_COLLECT_ONLY`。
+     - 立即 `return`，絕對不執行點擊 `common/select_stage.png`。
+
+### 規格 4：優化 `ExploreHandler` 通關後的語意日誌
+- **檔案**：[states/handlers/explore.py](../../states/handlers/explore.py)
+- **修正重點**：
+  在 `ExploreHandler.handle()` 偵測到通關（約 L95）時：
+  - 檢查若 `self.machine.stamina_retreat_start_time is not None` 且 `not avail_names`：
+    - 日誌輸出改為：`⏳ [體力退避] 地下城全冷卻！將返回城鎮繼續維持體力退避待機 (COLLECT_ONLY)。`
+    - 避免誤導性的「將退守切換至普通關卡 (Stage)」。
+
+---
+
+## 7. 測試規格與驗證矩陣 (Test Specifications & Verification Matrix)
+
+依據專案測試規範，修復後須由最小相關的單元測試檔案驗證下列行為，保持 100% 綠燈：
+
+### 測試群組 A：`tests/test_behavior_stamina_retreat.py`
+1. **`test_dungeon_cooldown_exhaustion_during_retreat_clicks_goback_town_and_enters_collect_only`**：
+   - **Given**：處於體力退避倒數中 (`stamina_retreat_start_time` 存在)，當前路由為地下城臨時喚醒路由 (`type="mix"` 或 `is_dungeon_temporary_resume=True`)，畫面上看到 `goback_town.png`。
+   - **When**：地下城全冷卻 (`has_available_dungeon() == False`)，觸發 `NavigationHandler.handle()`。
+   - **Then**：
+     - 斷言點擊 `goback_town.png` 座標。
+     - 斷言絕對未點擊 `common/select_stage.png`。
+     - 斷言狀態轉移至 `STATE_COLLECT_ONLY`。
+     - 斷言 `config["type"]` 被重設為 `collect_only`。
+
+2. **`test_stage_farming_strictly_prohibited_during_stamina_retreat`**：
+   - **Given**：`stamina_retreat_start_time` 設定，即使傳入之 config 包含 `enable_stage_farming=True` 與 `is_tier4_fallback=True`。
+   - **When**：觸發 `_switch_to_stage_or_back()` 或全冷卻檢查。
+   - **Then**：斷言不切換至 Stage 頁籤，而是呼叫 `_enter_collect_only_after_dungeon_cooldown`。
+
+### 測試群組 B：`tests/test_daily_pipeline_stamina_retreat.py`
+1. **`test_evaluate_next_activity_returns_to_collect_only_when_all_dungeons_cooldown_in_retreat`**：
+   - **Given**：`stamina_retreat_start_time` 設定，當前狀態為 `STATE_NAVIGATING`（模擬地下城打完剛回到大廳）。
+   - **When**：所有允許之地下城均在冷卻中，觸發 `evaluate_next_activity()`。
+   - **Then**：
+     - 斷言狀態機自動轉移至 `STATE_COLLECT_ONLY`。
+     - 斷言回傳 `False`（無活動可調度，退回待機）。
+     - 斷言原始 `stamina_retreat_start_time` 完全未受干擾。
+
+2. **`test_build_dungeon_resume_route_sanitization`**：
+   - **Given**：呼叫 `machine.build_dungeon_resume_route(daily_policy)`。
+   - **Then**：
+     - 斷言 `route["enable_stage_farming"] == False`。
+     - 斷言 `route["tier4_mode"] == "none"`。
+     - 斷言 `route` 不含普通關卡路徑或不執行 `_apply_tier4_stage_selection`。
+     - 斷言包含有效的地下城尋路與 entry 設定。
+
+---
+
+## 8. 附錄：原始重現執行日誌 (Raw Execution Trace)
+
+<details>
+<summary>點擊展開完整原始日誌 (1580+ Lines Trace)</summary>
 
 ```
 
@@ -1590,3 +1876,5 @@
 
 
 ```
+
+</details>
