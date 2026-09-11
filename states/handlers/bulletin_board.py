@@ -7,6 +7,11 @@ from states.handlers.base import BaseStateHandler
 from utils.quest_ocr_extractor import QuestOCRExtractor
 from utils.debug_artifacts import write_debug_image
 
+# 告示牌開窗動畫沉澱等待窗口 (秒) 與進店逾時
+BOARD_OPEN_SETTLE_TIMEOUT = 2.5
+BOARD_OPEN_HARD_TIMEOUT = 5.0
+
+
 class BulletinBoardHandler(BaseStateHandler):
     """
     每日懸賞告示牌 (Bulletin Board) 處理器：
@@ -14,7 +19,8 @@ class BulletinBoardHandler(BaseStateHandler):
        - 以 _ensure_in_town 確保在城鎮介面。
        - 專精限制於螢幕左上 1/4 區域 (screen_img[0:h//2, 0:w//2]) 匹配並點擊告示牌 (bulletin_board.png)。
     2. 等待開窗確認 (WAIT_BOARD_OPEN)：
-       - 必須先等待並確認 common/quit.png 出現，作為 100% 成功進入告示牌的憑據。
+       - 具有 2.5 秒開窗動畫沉澱等待窗口，避免過渡期誤關閉彈窗。
+       - 必須等待並確認告示牌專屬特徵出現，作為 100% 成功進入告示牌的憑據。
     3. 條件式重置檢查 (CHECK_RESET)：
        - 若看得到 reset.png 則點擊重置；若未看到則記錄日誌並跳過該步驟。
     4. 逐一接取懸賞任務與 OCR 標題記錄 (PROCESS_ACCEPT_QUESTS)：
@@ -35,6 +41,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.accept_sub_phase = "FIND_TOP_TASK"  # FIND_TOP_TASK, CLICK_CONFIRM_POPUP, WAIT_TASK_ACCEPT_DISMISS
         self.last_action_time = 0.0
         self.last_reset_click_time = 0.0
+        self.wait_board_open_start_time = 0.0
         self.accepted_quest_titles = []
         self.ocr_extractor = None
 
@@ -43,6 +50,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.accept_sub_phase = "FIND_TOP_TASK"
         self.last_action_time = 0.0
         self.last_reset_click_time = 0.0
+        self.wait_board_open_start_time = 0.0
         self.accepted_quest_titles = []
 
     def _get_ocr_extractor(self):
@@ -412,10 +420,32 @@ class BulletinBoardHandler(BaseStateHandler):
                 return
 
             if pos_quit:
-                logging.warning("⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到非告示牌干擾覆蓋層 (quit 可見但無告示牌特徵)，嘗試閉環關閉以利重試...")
+                elapsed = now - self.wait_board_open_start_time
+                if elapsed < BOARD_OPEN_SETTLE_TIMEOUT:
+                    logging.info(
+                        "⌛ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到 quit 按鈕但告示牌專屬特徵尚未穩定，等待 UI 動畫沉澱 (已等待 %.2f 秒 / %.1f 秒)...",
+                        elapsed,
+                        BOARD_OPEN_SETTLE_TIMEOUT,
+                    )
+                    return
+
+                logging.warning(
+                    "⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 等待超過 %.1f 秒仍無告示牌特徵 (僅見 quit)，判定為非告示牌之干擾覆蓋層，嘗試閉環關閉以利重試...",
+                    BOARD_OPEN_SETTLE_TIMEOUT,
+                )
                 self.click_and_wait_until_gone(quit_btn, left + pos_quit[0], top + pos_quit[1], rect, timeout=3.0, threshold=0.80)
                 self.step_phase = "INIT"
                 self.last_action_time = time.time()
+                return
+
+            elapsed = now - self.wait_board_open_start_time
+            if elapsed > BOARD_OPEN_HARD_TIMEOUT:
+                logging.warning(
+                    "⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 等待超過 %.1f 秒畫面未見任何彈窗，進店點擊可能遺失，退回 INIT 重新發起進店...",
+                    BOARD_OPEN_HARD_TIMEOUT,
+                )
+                self.step_phase = "INIT"
+                self.last_action_time = now
                 return
             return
 
@@ -450,5 +480,6 @@ class BulletinBoardHandler(BaseStateHandler):
                 logging.info(f"📋 [懸賞告示牌] 於城鎮發現告示牌建築且帶有紅點 [{building_btn}] (信心度: {conf_bb:.4f})，點擊進入...")
                 self.mouse.click(left + pos_bb[0], top + pos_bb[1])
                 self.step_phase = "WAIT_BOARD_OPEN"
+                self.wait_board_open_start_time = now
                 self.last_action_time = now
                 return
