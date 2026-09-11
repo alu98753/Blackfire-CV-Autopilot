@@ -37,7 +37,8 @@ from states.handlers import (
     HeroDrawHandler,
     BulletinBoardHandler,
     DomainExploreHandler,
-    DemonLordsHandler
+    DemonLordsHandler,
+    BagTidyHandler
 )
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 from states.navigation_intent import ActionId, IntentId
@@ -79,6 +80,7 @@ class GameStateMachine:
     STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
     STATE_DOMAIN_EXPLORE = "DOMAIN_EXPLORE"
     STATE_DEMON_LORDS = "DEMON_LORDS"                    # 深淵魔王討伐流程
+    STATE_BAG_TIDY = "BAG_TIDY"                          # 獨立背包整理流程
 
     DUNGEON_SCENE_FEATURES = (
         "dungeons/leave.png",
@@ -283,6 +285,7 @@ class GameStateMachine:
             self.STATE_POPUP_RECOVERY: UnexpectedPopupRecoveryHandler(self),
             self.STATE_DOMAIN_EXPLORE: DomainExploreHandler(self),
             self.STATE_DEMON_LORDS: DemonLordsHandler(self),
+            self.STATE_BAG_TIDY: BagTidyHandler(self),
         }
 
     def stash_current_state(self, reason="unexpected_popup"):
@@ -1920,7 +1923,7 @@ class GameStateMachine:
         # 統一讀取 bag_maintenance_order，相容舊 town_subflow_order 設定
         order = cfg.get(
             "bag_maintenance_order",
-            cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_bag_maintenance_order", ["blood_sacrifice", "jewelry_workshop"]))
+            cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_bag_maintenance_order", ["blood_sacrifice", "bag_tidy", "jewelry_workshop"]))
         )
         logging.info("🎒 [背包後續維護] 背包清理完成，構建維護任務佇列: %s", order)
         self.start_subflow_queue(order)
@@ -1998,6 +2001,8 @@ class GameStateMachine:
             return self.STATE_BAG_CLEANING
         if flow_key == "blood_sacrifice":
             return self.STATE_BLOOD_ALTAR
+        if flow_key == "bag_tidy":
+            return self.STATE_BAG_TIDY
         return config_to_state.get(flow_key)
 
     def has_pending_town_subflow(self):
@@ -2018,6 +2023,7 @@ class GameStateMachine:
         self.need_bag_cleaning = flow_key == "bag_clean"
         self.need_blood_altar = flow_key in {"blood_altar", "blood_sacrifice"}
         self.need_jewelry_workshop = flow_key == "jewelry_workshop"
+        self.need_bag_tidy = flow_key == "bag_tidy"
         self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
         logging.info(
             "🎯 [城鎮流水線] Town precondition 已成立，派發 [%s] -> [%s]。",

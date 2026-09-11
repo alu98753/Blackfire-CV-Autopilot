@@ -12,34 +12,29 @@ from states.handlers.jewelry_workshop import JewelryWorkshopHandler
 
 class TestJewelryWorkshopPreTidy(unittest.TestCase):
     """
-    珠寶加工廠進場前城鎮背包預先整理 (Pre-Tidy) 單元測試套件
+    珠寶加工廠純進店與場景防護 (Scene Guard / Pure Entry) 單元測試套件
+    驗證背包整理已徹底抽離為獨立子流程後，珠寶加工廠的進店行為與自癒能力。
     """
 
     def setUp(self):
         self.mock_machine = MagicMock()
         self.mock_machine.need_jewelry_workshop = True
-        self.mock_machine.bag_tidied = False
-        self.mock_machine.bag_opened_clicked = False
         self.mock_machine.config = {"type": "jewelry_workshop"}
 
         self.handler = JewelryWorkshopHandler(self.mock_machine)
         self.handler.matcher = MagicMock()
         self.handler.mouse = MagicMock()
-        self.handler.bag_handler.matcher = self.handler.matcher
-        self.handler.bag_handler.mouse = self.handler.mouse
         self.fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         self.rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
 
     @patch("os.path.exists", return_value=True)
-    def test_1_pre_tidy_open_backpack_first(self, mock_exists):
+    def test_1_pure_entry_when_town_is_clean(self, mock_exists):
         """
-        測試 1：處於城鎮且 pre_tidy_done = False 時，優先點擊開啟背包 (open_backpack)
+        測試 1：處於純淨城鎮 (door 可見，無 quit/tidy 覆蓋層) 時，直接點擊珠寶店建築進入 ENTERED_BUILDING
         """
         def mock_match(screen_img, template_name, **kw):
             if template_name in ["common/door.png", "town_building/Jewelry_workshop/Jewelry_workshop.png"]:
-                return ((100, 100), 0.90)
-            elif template_name == "common/bag_text.png":
-                return ((500, 200), 0.95)
+                return ((600, 400), 0.90)
             return (None, 0.0)
 
         self.handler.matcher.match.side_effect = mock_match
@@ -47,48 +42,22 @@ class TestJewelryWorkshopPreTidy(unittest.TestCase):
         with patch("states.handlers.jewelry_workshop.time.sleep"):
             self.handler.handle(self.fake_img, self.rect)
 
-        # 斷言點擊了背包入口，尚未點擊珠寶加工廠建築
-        self.assertTrue(self.mock_machine.bag_opened_clicked)
-        self.assertEqual(self.handler.step_phase, "INIT")
+        # 斷言點擊了珠寶加工廠建築，直接進入 ENTERED_BUILDING 階段，絕不點擊背包
+        self.assertEqual(self.handler.step_phase, "ENTERED_BUILDING")
+        self.handler.mouse.click.assert_called_once_with(600, 400)
 
     @patch("os.path.exists", return_value=True)
-    def test_2_pre_tidy_tidy_backpack_second(self, mock_exists):
+    def test_2_scene_guard_dismisses_residual_overlay(self, mock_exists):
         """
-        測試 2：當背包開啟後，優先點擊整理按鈕 (tidy_backpack)
+        測試 2：若城鎮殘留彈窗覆蓋層 (quit 可見)，Scene Guard 攔截並關閉覆蓋層，不盲目點擊建築
         """
-        self.mock_machine.bag_opened_clicked = True
-        self.mock_machine.bag_tidied = False
-
         def mock_match(screen_img, template_name, **kw):
-            # 模擬背包彈窗遮擋了城鎮大門與建築 (door, Jewelry_workshop 皆回傳 None)
-            if template_name in ["common/door.png", "town_building/Jewelry_workshop/Jewelry_workshop.png"]:
-                return (None, 0.0)
-            elif template_name == "common/tidy.png":
-                return ((300, 800), 0.92)
-            return (None, 0.0)
-
-        self.handler.matcher.match.side_effect = mock_match
-
-        with patch("states.handlers.jewelry_workshop.time.sleep"):
-            self.handler.handle(self.fake_img, self.rect)
-
-        # 斷言即使城鎮大門/建築被背包彈窗遮擋，依然成功點擊了整理按鈕，設定 bag_tidied = True
-        self.assertTrue(self.mock_machine.bag_tidied)
-        self.assertEqual(self.handler.step_phase, "INIT")
-
-    @patch("os.path.exists", return_value=True)
-    def test_3_pre_tidy_quit_and_enter_building_finally(self, mock_exists):
-        """
-        測試 3：當背包整理完畢後，點擊退出關閉背包並標記 pre_tidy_done = True；下一影格點擊珠寶加工廠進入建築。
-        """
-        self.mock_machine.bag_opened_clicked = True
-        self.mock_machine.bag_tidied = True
-
-        def mock_match(screen_img, template_name, **kw):
-            if template_name in ["common/door.png", "town_building/Jewelry_workshop/Jewelry_workshop.png"]:
+            if template_name == "common/door.png":
                 return ((100, 100), 0.90)
             elif template_name == "common/quit.png":
                 return ((900, 100), 0.90)
+            elif template_name == "town_building/Jewelry_workshop/Jewelry_workshop.png":
+                return ((600, 400), 0.90)
             return (None, 0.0)
 
         self.handler.matcher.match.side_effect = mock_match
@@ -97,21 +66,33 @@ class TestJewelryWorkshopPreTidy(unittest.TestCase):
              patch.object(self.handler, "click_and_wait_until_gone") as mock_wait:
             self.handler.handle(self.fake_img, self.rect)
 
-            # 斷言關閉了背包，並設定 pre_tidy_done = True
+            # 斷言觸發了覆蓋層關閉，且維持在 INIT 階段等待純淨城鎮
             mock_wait.assert_called_once()
-            self.assertTrue(self.handler.pre_tidy_done)
+            self.assertEqual(self.handler.step_phase, "INIT")
 
-        # 模擬下一影格 (背包已關閉，pre_tidy_done = True)
-        self.mock_machine.bag_opened_clicked = False
-        self.mock_machine.bag_tidied = False
-        self.handler.last_action_time = 0.0
+    @patch("os.path.exists", return_value=True)
+    def test_3_entered_building_timeout_recovery(self, mock_exists):
+        """
+        測試 3：若處於 ENTERED_BUILDING 且超過 4 秒畫面依然見到城門 door.png，自動退回 INIT 重新進店
+        """
+        self.handler.step_phase = "ENTERED_BUILDING"
+        self.handler.entered_building_time = 100.0
 
-        with patch("states.handlers.jewelry_workshop.time.sleep"):
+        def mock_match(screen_img, template_name, **kw):
+            if template_name == "common/door.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_match
+
+        with patch("states.handlers.jewelry_workshop.time.time", return_value=105.0), \
+             patch("states.handlers.jewelry_workshop.time.sleep"):
             self.handler.handle(self.fake_img, self.rect)
 
-            # 斷言點擊了珠寶加工廠建築，進入 ENTERED_BUILDING 階段
-            self.assertEqual(self.handler.step_phase, "ENTERED_BUILDING")
+            # 斷言進店逾時 5 秒後仍見城門，自動自癒退回 INIT 重新發起進店
+            self.assertEqual(self.handler.step_phase, "INIT")
 
 
 if __name__ == "__main__":
     unittest.main()
+

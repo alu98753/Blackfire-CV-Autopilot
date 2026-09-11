@@ -9,7 +9,7 @@ battle_stall_max_retries = 2    # 單場戰鬥血條卡死最多重新開始次�
 battle_hp_roi_top_ratio = 0.66  # 戰鬥血條檢測 ROI 上邊界比例 (0.0~1.0，排除上方角色身體)
 battle_hp_roi_bottom_ratio = 0.67 # 戰鬥血條檢測 ROI 下邊界比例 (0.0~1.0，排除下方無效地磚)
 default_bless_mode = "combat"
-default_bag_maintenance_order = ["blood_sacrifice", "jewelry_workshop"]
+default_bag_maintenance_order = ["blood_sacrifice", "bag_tidy", "jewelry_workshop"]
 dry_run_bag_clean = false
 default_backpack_full_max_scroll = 5
 monitor_index = 1
@@ -452,6 +452,13 @@ task_after_btn = "town_building/bulletin_board/task_after.png"
 task_already_full_btn = "town_building/bulletin_board/task_already_full.png"
 navigation_path = []
 lobby_start_btn = "stages/start.png"
+
+[subflow_configs.bag_tidy]
+enabled = true
+name = "背包整理"
+type = "bag_tidy"
+timeout_seconds = 20.0
+navigation_path = []
 
 [base_stage_levels]
 

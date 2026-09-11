@@ -44,6 +44,10 @@ TOWN_SUBFLOW_SPECS = {
         "jewelry_workshop",
         dispatch_on_town=True,
     ),
+    "bag_tidy": TownSubflowSpec(
+        "bag_tidy",
+        dispatch_on_town=True,
+    ),
 }
 
 
