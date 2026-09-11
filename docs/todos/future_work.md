@@ -63,19 +63,22 @@ dengeon同理
 
 ### Daily
 
+- [ ] 驗證橘紅雙點共存功能在daily正常
+- [ ] 基本上 我現在在逐漸重構成沒有while死等流程的方式,但當電腦或是遊戲本體較為卡頓的時候會導致腳本無效的推進流程(但之前while因為有等所以叫沒有觸發該問題) 要思考怎麼根本解決(所有流程都會遇到該問題)
+
 要讓我可以安心整天不用看的前提：
-- 規格書：[背包維護與每日子流程解耦規格書](bag_and_daily_subflow_decoupling_spec.md) (已完成同源分析與完整架構設計)
+- 核心契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md) (已完成雙軌解耦、獨立 bag_tidy 與後置條件驗證契約)
 - 長期架構 RFC：[模式與活動大一統規格書](activity_mode_consolidation_spec.md) (統一名詞為 ActivityPlan/Activity/Intent，徹底消除 Mode 與 Subflow 歷史割裂)
 - [x] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
-  - 核心原因為「背包後續子流程」與「每日子流程」未徹底切分清楚；已於 `fix/bag-and-daily-subflow-decoupling` 分支解耦，珠寶店進店前整理升格為獨立有界 Pre-Tidy 子流程並以消失閉環確認關閉；修復 Scene Guard 避免在城鎮過渡階段假陽性逃逸。詳細見 [bag_and_daily_subflow_decoupling_spec.md](bag_and_daily_subflow_decoupling_spec.md)。
+  - 核心原因為「背包後續維護」與「每日子流程」未徹底切分；已於 `fix/bag-and-daily-subflow-decoupling` 分支解耦，背包整理升格為一級獨立子流程 `BagTidyHandler` 並以消失閉環確認關閉；珠寶店具備 4 秒進店點擊遺失自癒與殘留覆蓋層清理。詳細見 [城鎮任務流水線佇列](../features/town_building/pipeline.md)。
 - [x] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務** ([bag_bug.md](bag_bug.md))
-  - 告示牌處理器增加 `_is_inside_bulletin_board` 排他性專屬正交錨點 (`reset.png` / `task.png` / `task_after.png`) 門禁；見 `quit.png` 但非告示牌時判定為干擾覆蓋層並點擊關閉自癒，絕不誤判任務與吞噬懸賞。詳細規格見 [bag_and_daily_subflow_decoupling_spec.md](bag_and_daily_subflow_decoupling_spec.md)。
+  - 告示牌處理器增加 `_is_inside_bulletin_board` 排他性專屬正交錨點 (`reset.png` / `task.png` / `task_after.png`) 門禁；見 `quit.png` 但非告示牌時判定為干擾覆蓋層並點擊關閉自癒，絕不誤判任務與吞噬懸賞。詳細見 [每日懸賞任務報告](../features/daily_task/daily_task_architecture_report.md#3-告示牌進場排他性正交錨點契約-building-entry-unique-anchor-invariant)。
 - [ ] **4. 定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖** ([daily_quest_dungeon_priority_spec.md](daily_quest_dungeon_priority_spec.md))
 - [ ] **7. 領主 Boss(Lord) 與深淵魔王(Demon Lord) 穩定運行與材料防護**
   - lord, demon lord 不被其他activity搶掉，可以正常打完。
   - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
 - [x] **8. 血之祭壇 (Blood Altar) 判定被紅點掠過問題** ([bag_bug.md](bag_bug.md))
-  - blood building 徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與 戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)，避免已無紅點時獻祭被意外跳過，且不污染 `daily_status.json`。規格詳見 [bag_and_daily_subflow_decoupling_spec.md](bag_and_daily_subflow_decoupling_spec.md)。
+  - blood building 徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與 戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)，避免已無紅點時獻祭被意外跳過，且不污染 `daily_status.json`。規格詳見 [城鎮任務流水線佇列](../features/town_building/pipeline.md)。
 - 釐清 Daily Complete 與 Defer 的判斷依據
   - daily complete 的條件寫好了，那現在 defer 判斷的依據有哪些？
 
@@ -114,7 +117,11 @@ dengeon同理
 
 ### Battle & Result
 
+- [ ] 緊急: fix_dungeon_go_town.md
+
 - [x] 戰鬥血條靜止卡死自癒重啟機制 ([battle_stall_recovery_spec.md](battle_stall_recovery_spec.md))已完成「設定 ➔ 重新開始戰鬥」的快速自癒, 尚未更新文件 應刪除 該spe.md視情況納入contract
+
+- [ ] refactor: 強敵比對退出戰鬥的功能現在寫的位置與名稱有誤導性,不應該限定為domains的強敵 而是所有的戰鬥都可以使用的功能
 
 - 戰鬥結算與地下城通關閉環重構 ([result_todo.md](result_todo.md) / [RFC: 重構 Result 為 BattleResult](rfc_rename_result_to_battle_result.md))
   - 釐清並對齊架構語意：`STATE_RESULT` 實質為專屬戰鬥結算的 `STATE_BATTLE_RESULT`。
@@ -126,6 +133,15 @@ dengeon同理
 
 - [ ] 在每天的最後一次開發後 檢驗當天的開發如果有錯誤遇到要重開 能否準確寫入具語意話的debug訊息到 各自的 user_data\<profile>\runtime\incidents
 
+### Town
+
+- [ ]對可合成之有價值材料 加入 bag maintenance 的流程中 在賣掉之前先做起來而不賣掉(subflow_configs.bag_maintenance)
+- [ ] 
+
+### DEV
+
+- [ ] RFC: 測試跑太慢且while部分不符合BDI架構 (docs/todos/test_redundent.md)
+  
 
 ### 1. 🔔 異常暫停與中斷即時通知 (Discord / LINE Webhook Notification)
 - **需求背景**：當腳本在長掛機或黃金古國領地探索中進入手動暫停（Manual Pause）、觸發 Watchdog 卡死救援、或體力耗盡轉入退避模式時，能夠第一時間通報使用者。

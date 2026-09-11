@@ -132,18 +132,16 @@ flowchart TD
   - **嚴禁自行使用 `reset --hard`、`clean`、force checkout 等破壞性操作**。
 
 #### 2. 一次性交付雙 Terminal 測試指令 (重定向至獨立 Log 檔案)
-*(注：為徹底防止終端緩衝區字元混疊錯位與截斷，全套測試統一重定向至主專案目錄下的獨立日誌檔)*
+*(注：為徹底防止 Windows PowerShell 因原生應用程式 stderr 重定向產生 NativeCommandError 與 CP950/Big5 亂碼，全套測試統一透過 `cmd.exe /c "chcp 65001 >nul && ... -X utf8 ..."` 執行，確保產生純淨 UTF-8 日誌檔)*
 *(注：`temp-main` 為 Git worktree，通常無獨立 `.venv`，兩組測試統一共用主專案之 Python 解譯器以保證相依套件環境 100% 一致)*
 - **Terminal 1 — Feature HEAD 測試**：
   ```powershell
-  cd E:\Side_Project\BlackfireCrusade_tool
-  .venv\Scripts\python -m unittest discover tests > head_test_output.log 2>&1
+  cmd.exe /c "chcp 65001 >nul && cd /d E:\Side_Project\BlackfireCrusade_tool && .venv\Scripts\python.exe -X utf8 -m unittest discover tests > head_test_output.log 2>&1"
   ```
 
 - **Terminal 2 — Main Baseline 測試**：
   ```powershell
-  cd E:\Side_Project\temp-main
-  E:\Side_Project\BlackfireCrusade_tool\.venv\Scripts\python.exe -m unittest discover tests > E:\Side_Project\BlackfireCrusade_tool\main_test_output.log 2>&1
+  cmd.exe /c "chcp 65001 >nul && cd /d E:\Side_Project\temp-main && E:\Side_Project\BlackfireCrusade_tool\.venv\Scripts\python.exe -X utf8 -m unittest discover tests > E:\Side_Project\BlackfireCrusade_tool\main_test_output.log 2>&1"
   ```
 
 > [!TIP]
@@ -209,7 +207,7 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
      - Characterization Tests（特徵描摹測試）
      - Behavioral Tests（業務行為測試）
      - Contract-Level Regression Tests（契約層級迴歸測試）
-   - 測試撰寫遵循 Google 軟體工程規範：**驗證可觀察行為，不依賴內部私有變數或 private helper**。
+   - 測試遵循 Google 軟體工程規範：**驗證可觀察行為，不依賴內部私有變數或 private helper**。
 3. **提早固化**：補齊測試後，以獨立 commit 提交（依 `precise_git_commit` 白名單 stage），方可推進。
 
 ---
@@ -254,8 +252,7 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
 2. **🛑 阻斷點 (Gate Invariant)**：
    - 請使用者在 Feature/Fix 工作樹再次執行全套測試套件並重定向至日誌：
      ```powershell
-     cd E:\Side_Project\BlackfireCrusade_tool
-     .venv\Scripts\python -m unittest discover tests > post_refactor_test_output.log 2>&1
+     cmd.exe /c "chcp 65001 >nul && cd /d E:\Side_Project\BlackfireCrusade_tool && .venv\Scripts\python.exe -X utf8 -m unittest discover tests > post_refactor_test_output.log 2>&1"
      ```
    - 停在此處，等待使用者回報執行完畢。
    - AI 讀取 `post_refactor_test_output.log` 比對確認。
@@ -283,23 +280,30 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
 
 ### Phase 7 — Contract / TODO / Spec Convergence (契約與文件收斂)
 
-**目標**：調用 [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) 技能，將完成任務的臨時文件提煉為長期標準，並徹底清理過期文件與暫存測試日誌，防止 Doc/Artifact Drift。
+**目標**：調用 [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) 技能，以 Production 代碼實作為唯一定本標準，將完成任務的臨時文件提煉為長期標準，更新 Canonical Contract 後再清理過期文件與暫存測試日誌，防止 Doc/Artifact Drift。
 
-1. **盤點候選文件與暫存測試日誌**：
-   - 檢查 `git diff main..HEAD --name-only` 涉及的 `docs/todos/`、臨時 Specs、RFCs、`future_work.md`。
-   - 納入收尾過程中產生的全套測試日誌暫存檔：`head_test_output.log`、`main_test_output.log`、`post_refactor_test_output.log`。
-2. **🛑 阻斷點 (Mandatory User Scope Confirmation)**：
-   - ⚠️ **嚴禁 AI 自行決定清理範圍**！
-   - AI 必須先列出候選清單（包含過期文件與暫存測試日誌），主動詢問使用者：
-     > 「請問本次分支要收斂／升格／刪除的文件與日誌是否為以下清單？是否有不可刪除或仍未完成的項目？」
-   - **停在此處等待使用者確認**，確認前不得動手修改或刪除文件。
-3. **執行分類與提煉（依 `canonical_contract_archival` 規範）**：
-   - `PROMOTE`：永久不變量升格至 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。
-   - `LINK`：程式碼與測試已有者，Contract 僅做參照。
-   - `HISTORY`：歷史脈絡留給 PARS 與 Git。
-   - `TODO`：搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO。
-   - `DROP`：**刪除是預設；封存是例外**。原始任務 Spec 提煉後預設刪除；**暫存測試日誌檔（`*.log`）於此階段與過期文件一併徹底清理刪除**，保證工作區無殘留雜檔。
-4. **獨立提交**：以 `docs: ...` 進行獨立精確 Commit。
+1. **仲裁不變量與五分流分類 (Arbitrate Invariants & Classification)**：
+   - 盤點 `git diff main..HEAD --name-only` 涉及的 `docs/todos/`、臨時 Specs、RFCs、`future_work.md`。
+   - 審查各份文件內容，依 `canonical_contract_archival` 規範執行結構化分類：
+     - `PROMOTE`：長效架構不變量 (Invariants)、職責邊界、後置條件驗證契約、異常自癒機制，升格至 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。
+     - `LINK`：程式碼、常數與測試已有具體實作者，Contract 僅做參照，不複製貼上代碼細節。
+     - `HISTORY`：歷史脈絡留給 PARS 與 Git。
+     - `TODO`：尚未完成的工作或後續規劃，搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO 清單。
+     - `DROP`：**刪除是預設；封存是例外**。原始任務 Spec 提煉後預設刪除；**暫存測試日誌檔（`*.log`）亦於收尾時一併徹底清理刪除**，保證工作區無殘留雜檔。
+   - **以當前 Production 代碼與測試實作為唯一定本標準**：逐一核驗標記為 `PROMOTE` 的不變量是否與實際代碼行為 100% 一致，嚴禁將過時假設、初期規格或未落地的設計寫入 Contract。
+
+2. **升格更新 Canonical Contract (Pre-convergence Contract Update)**：
+   - **針對 `PROMOTE` 項目**：AI 必須**先主動將其更新/補充至對應的 Canonical Contract**（如 `docs/features/` 或 `docs/architecture/`），並同步更新 `future_work.md` 中指向舊 spec 的超連結與完成狀態。
+   - **若無 `PROMOTE` 項目**（或已完整覆蓋）：確認無遺漏後記錄「經審查無新增長效不變量」。
+
+3. **🛑 阻斷點：文件／日誌收斂清理清單確認 (Mandatory User Scope Confirmation)**：
+   - ⚠️ **嚴禁 AI 自行決定清理範圍**！完成上述契約升格與實作核對後，**停在此處向使用者呈報**：
+     1. 【已升格更新之 Canonical Contract 清單與章節】（或說明經核對無需更新）；
+     2. 【已萃取完畢、建請刪除 (DROP) 的過期 Spec 清單與暫存測試日誌 (`*.log`)】（遵循「刪除是預設；封存是例外」原則）；
+     3. 【仍未完成需保留 (RETAIN) 的 TODO 清單】。
+   - **等待使用者確認**。經使用者同意後，方可執行檔案刪除 (`git rm`)。
+
+4. **獨立提交**：以 `docs: archive and converge <scope> contracts` 進行獨立精確 Commit。
 
 ---
 
