@@ -31,6 +31,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.item_sub_step = "SEARCH"    # SEARCH, CLICKED_ITEM, CLICKED_SELL, CLICKED_MAX
         self.repeat_sell_count = 0
         self.pre_tidy_done = False
+        self.pre_tidy_attempts = 0
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
         from states.handlers.bag_cleaning import BagCleaningHandler
@@ -53,6 +54,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.item_sub_step = "SEARCH"
         self.repeat_sell_count = 0
         self.pre_tidy_done = False
+        self.pre_tidy_attempts = 0
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
 
@@ -338,8 +340,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
         if now - self.last_action_time < 0.6:
             return
 
-        # 🛡️ 場景感知防護 (Scene Guard)：若非 INIT/EXITING 階段但畫面上已看見 common/door.png (確定在城鎮 Town)，代表已離場
-        if self.step_phase in ["SELL_MENU_OPEN", "ENTERED_BUILDING"]:
+        # 🛡️ 場景感知防護 (Scene Guard)：若處於 SELL_MENU_OPEN 階段但畫面上已看見 common/door.png (確定在城鎮 Town)，代表已離場
+        if self.step_phase == "SELL_MENU_OPEN":
             pos_door_chk, conf_door_chk = self.matcher.match(screen_img, "common/door.png", threshold=0.80)
             if pos_door_chk:
                 logging.warning(f"💎 [珠寶加工廠] 防護攔截 - 處於 [{self.step_phase}] 階段但畫面上已看見城鎮大門 [common/door.png] ({conf_door_chk:.4f})，結束出售流程。")
@@ -498,31 +500,37 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
         # 3.3 城鎮點擊珠寶加工廠建築 (Jewelry_workshop.png) (進場前優先發起城鎮背包預先整理)
         if is_needed:
-            # 3.3.1 若目前背包已處於開啟狀態（不受城鎮大門/建築被背包遮擋影響），優先執行「整理」與「退出」
-            if self.bag_handler.is_backpack_opened(screen_img):
-                if not getattr(self.machine, "bag_tidied", False):
-                    if self.bag_handler.tidy_backpack(screen_img, rect):
+            if not self.pre_tidy_done:
+                # 3.3.1 若目前背包已處於開啟狀態（不受城鎮大門/建築被背包遮擋影響），優先執行「整理」與「退出」
+                if self.bag_handler.is_backpack_opened(screen_img):
+                    if not getattr(self.machine, "bag_tidied", False):
+                        if self.bag_handler.tidy_backpack(screen_img, rect):
+                            self.machine.bag_tidied = True
+                            self.last_action_time = now
+                            return
+                    else:
+                        pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
+                        if pos_quit:
+                            logging.info("💎 [珠寶加工廠] 城鎮背包預先整理完畢，點擊關閉退出背包...")
+                            self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, threshold=0.7)
+                        self.machine.bag_tidied = False
+                        self.machine.bag_opened_clicked = False
+                        self.pre_tidy_done = True
                         self.last_action_time = now
                         return
-                else:
-                    pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
-                    if pos_quit:
-                        logging.info("💎 [珠寶加工廠] 城鎮背包預先整理完畢，點擊關閉退出背包...")
-                        self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, threshold=0.7)
-                    self.machine.bag_tidied = False
-                    self.machine.bag_opened_clicked = False
-                    self.pre_tidy_done = True
-                    self.last_action_time = now
-                    return
 
-            # 3.3.2 若背包未開啟，且處於城鎮 (pos_door 可見)
-            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-            if pos_door:
-                if not self.pre_tidy_done:
+                # 3.3.2 若背包未開啟，且處於城鎮 (pos_door 可見)
+                pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+                if pos_door:
                     logging.info("💎 [城鎮商店] 進入前執行城鎮背包預先整理，優先開啟背包...")
                     if self.bag_handler.open_backpack(screen_img, rect):
+                        self.machine.bag_opened_clicked = True
                         self.last_action_time = now
                         return
+
+            # 3.3.2 背包整理已完成或已跳過，尋找目標商店進入
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+            if pos_door and self.step_phase == "INIT":
 
                 # 依商人持有金幣由多至少貪婪排序 (未探勘者優先)，並於畫面中尋找可見建築
                 dm = getattr(self.machine, "daily_manager", None)

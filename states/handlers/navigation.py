@@ -1229,6 +1229,17 @@ class NavigationHandler(BaseStateHandler):
         if "common/door.png" in nav_path and not stage_select_open and not dungeon_select_open and not in_detail_screen and not scene.is_lobby:
             pos_door, conf_door = self.matcher.match(screen_img, "common/door.png", threshold=0.90, brightness_threshold=0.70)
             if pos_door:
+                # 🛡️ 覆蓋層門禁：若城鎮前景存在未關閉的模態覆蓋層（如背包、通用彈窗），嚴禁盲點城門，優先關閉覆蓋層
+                pos_tidy, _ = self.matcher.match(screen_img, "common/tidy.png", threshold=0.75, quiet=True)
+                pos_disasm, _ = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.75, quiet=True)
+                pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.75, quiet=True)
+                if pos_tidy or pos_disasm or pos_quit:
+                    logging.warning("🛡️ [尋路門禁] 偵測到城鎮畫面存在未關閉的模態覆蓋層/背包，優先關閉，禁止盲點城門！")
+                    if pos_quit:
+                        self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
+                        time.sleep(0.5)
+                    return
+
                 click_x = rect["left"] + pos_door[0]
                 click_y = rect["top"] + pos_door[1]
                 logging.info(f"🚪 [尋路] 偵測到城鎮大門 [common/door.png] (信心度: {conf_door:.4f})，優先點擊大門進入選單...")
