@@ -91,12 +91,14 @@ class BulletinBoardHandler(BaseStateHandler):
 
     def _is_inside_bulletin_board(self, screen_img, cfg=None) -> bool:
         """
-        排他性驗證是否身處告示牌介面：
+        排他性驗證是否身處告示牌介面（語意完全解耦的獨立 OR 通道）：
         必須滿足：
-        1. 看得到 quit_btn (threshold=0.80)；
-        2. 同時偵測到告示牌專屬特徵（reset.png、task.png、task_after.png，threshold=0.80）；
-        3. 不能有背包專屬特徵（tidy.png、Disassembly.png，threshold=0.80）。
-        門禁門檻全面調高至 0.80，杜絕背景雜訊誤判。
+        1. 基礎門禁：看得到 quit_btn (threshold=0.80)；
+        2. 負向排他：畫面絕無背包專屬特徵（tidy.png、Disassembly.png，threshold=0.80）；
+        3. 正向專屬特徵（三選一，OR 命中任一即確認為告示牌介面，門檻 0.70）：
+           - 通道 1【Before 待接取】：左側出現未接取任務捲軸 (task.png)
+           - 通道 2【After 已接取】：左側出現已接取任務捲軸 (task_after.png)
+           - 通道 3【Reset 控制項】：左下角出現重新整理按鈕 (reset.png)
         """
         cfg = cfg or (self.machine.config or {})
         quit_btn = cfg.get("quit_btn", "common/quit.png")
@@ -112,20 +114,27 @@ class BulletinBoardHandler(BaseStateHandler):
         if pos_disasm:
             return False
 
-        # 告示牌專屬特徵正向錨點 (threshold=0.80)
-        reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
-        pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.80, quiet=True)
-        if pos_reset:
-            return True
-
+        # 正向獨立通道 1：Before 待接取任務捲軸 (task.png, threshold=0.70)
+        # 只要有一項未接取任務存在，即 100% 證明為告示牌介面
         task_tpl = cfg.get("task_btn", "town_building/bulletin_board/task.png")
-        pos_task, _ = self.matcher.match(screen_img, task_tpl, threshold=0.80, quiet=True)
+        pos_task, conf_task = self.matcher.match(screen_img, task_tpl, threshold=0.70, quiet=True)
         if pos_task:
+            logging.debug("📋 [懸賞告示牌 介面驗證] 命中 Before 待接取任務圖示 (信心度: %.4f)", conf_task)
             return True
 
+        # 正向獨立通道 2：After 已接取任務捲軸 (task_after.png, threshold=0.70)
+        # 當所有任務皆已接取時，畫面上全為 task_after.png
         task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
-        pos_after, _ = self.matcher.match(screen_img, task_after_tpl, threshold=0.80, quiet=True)
+        pos_after, conf_after = self.matcher.match(screen_img, task_after_tpl, threshold=0.70, quiet=True)
         if pos_after:
+            logging.debug("📋 [懸賞告示牌 介面驗證] 命中 After 已接取任務圖示 (信心度: %.4f)", conf_after)
+            return True
+
+        # 正向獨立通道 3：Reset 重新整理按鈕 (reset.png, threshold=0.70)
+        reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
+        pos_reset, conf_reset = self.matcher.match(screen_img, reset_btn, threshold=0.70, quiet=True)
+        if pos_reset:
+            logging.debug("📋 [懸賞告示牌 介面驗證] 命中 Reset 重新整理按鈕 (信心度: %.4f)", conf_reset)
             return True
 
         return False

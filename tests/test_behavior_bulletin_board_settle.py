@@ -129,6 +129,38 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
             # 斷言：硬逾時退回 INIT 重新發起進店
             self.assertEqual(self.handler.step_phase, "INIT")
 
+    def test_is_inside_bulletin_board_with_before_only(self):
+        """
+        [契約 5 驗證] 驗證 Before 獨立通道：
+        當剛進告示牌且任務全未接取時，畫面上只有 task.png (Before)，無 reset 與 task_after。
+        只要 task.png 信心度 >= 0.70，單憑此特徵即可判定身處告示牌。
+        """
+        def mock_match(screen_img, template_name, **kw):
+            if template_name == "common/quit.png":
+                return ((700, 100), 0.90)
+            elif template_name == "town_building/bulletin_board/task.png":
+                return ((200, 300), 0.72)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_match
+        self.assertTrue(self.handler._is_inside_bulletin_board(self.fake_img, self.mock_machine.config))
+
+    def test_is_inside_bulletin_board_with_after_only(self):
+        """
+        [契約 6 驗證] 驗證 After 獨立通道：
+        當所有任務皆已接取時，畫面上只有 task_after.png (After)，無 reset 與 task.png。
+        只要 task_after.png 信心度 >= 0.70，單憑此特徵即可判定身處告示牌。
+        """
+        def mock_match(screen_img, template_name, **kw):
+            if template_name == "common/quit.png":
+                return ((700, 100), 0.90)
+            elif template_name == "town_building/bulletin_board/task_after.png":
+                return ((200, 300), 0.72)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_match
+        self.assertTrue(self.handler._is_inside_bulletin_board(self.fake_img, self.mock_machine.config))
+
 
 if __name__ == "__main__":
     unittest.main()
