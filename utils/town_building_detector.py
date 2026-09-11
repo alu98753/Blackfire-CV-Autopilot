@@ -193,8 +193,6 @@ def _verify_red_dot_color(
     """
     if candidate_pos is None or not isinstance(crop_roi, np.ndarray) or crop_roi.size == 0:
         return False, False, None
-    if int(np.max(crop_roi)) == 0:
-        return True, False, candidate_pos
 
     cx, cy = candidate_pos
     hw = max(4, int(round((dot_w * screen_scale) / 2)))
@@ -289,22 +287,22 @@ def _detect_and_verify_red_dot(
 
     for cx, cy, conf in candidates:
         cand_pos = (cx, cy)
-        is_valid, is_orange_ignored, _ = _verify_red_dot_color(
-            crop_roi, cand_pos, dot_w, dot_h, screen_scale, tag, conf, allow_orange=allow_orange
-        )
-        if is_orange_ignored:
-            any_orange_ignored = True
+        py1, py2 = max(0, cy - hh), min(crop_roi.shape[0], cy + hh)
+        px1, px2 = max(0, cx - hw), min(crop_roi.shape[1], cx + hw)
+        patch = crop_roi[py1:py2, px1:px2]
 
-        if is_valid:
-            py1, py2 = max(0, cy - hh), min(crop_roi.shape[0], cy + hh)
-            px1, px2 = max(0, cx - hw), min(crop_roi.shape[1], cx + hw)
-            patch = crop_roi[py1:py2, px1:px2]
-            is_red, _ = is_true_red_dot(patch)
-            if is_red:
-                valid_red = (cand_pos, conf)
-                break
-            elif allow_orange and valid_orange is None:
-                valid_orange = (cand_pos, conf)
+        is_red, _ = is_true_red_dot(patch)
+        if is_red:
+            valid_red = (cand_pos, conf)
+            break
+
+        is_orange, _ = is_true_orange_dot(patch)
+        if is_orange:
+            if allow_orange:
+                if valid_orange is None:
+                    valid_orange = (cand_pos, conf)
+            else:
+                any_orange_ignored = True
 
     chosen = valid_red or valid_orange
     if chosen is not None:

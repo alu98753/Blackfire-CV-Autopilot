@@ -247,7 +247,8 @@ class TestTownSubflowRedDotRetryLifecycle(unittest.TestCase):
             return (None, 0.0)
 
         mock_matcher.match.side_effect = fake_match_with_red_dot
-        chest_handler.handle(fake_screen, rect)
+        with patch("utils.town_building_detector.is_true_red_dot", return_value=(True, 1.0)):
+            chest_handler.handle(fake_screen, rect)
 
         # 斷言 1: 未標記 completed_today，且進入 180s 退避冷卻
         self.assertFalse(self.daily_mgr.is_subflow_completed("chest"))
@@ -342,7 +343,8 @@ class TestTownSubflowRedDotRetryLifecycle(unittest.TestCase):
             return (None, 0.0)
 
         mock_matcher.match.side_effect = fake_match_altar_with_red_dot
-        altar_handler.handle(fake_screen, rect)
+        with patch("utils.town_building_detector.is_true_red_dot", return_value=(True, 1.0)):
+            altar_handler.handle(fake_screen, rect)
 
         # 斷言 1: 未標記 completed_today，且處於 defer 退避中
         self.assertFalse(self.daily_mgr.is_subflow_completed("blood_altar"))

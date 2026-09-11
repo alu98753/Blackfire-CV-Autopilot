@@ -84,7 +84,8 @@ class TestChestSubflow(unittest.TestCase):
 
         self.mock_machine.matcher.match.side_effect = fake_match
 
-        with patch("os.path.exists", return_value=True):
+        with patch("os.path.exists", return_value=True), \
+             patch("utils.town_building_detector.is_true_red_dot", return_value=(True, 1.0)):
             # Step 1: INIT ➔ 發現建築與紅點 ➔ 點擊進入 ➔ CLICK_FREE_CHEST
             res1 = self.handler.handle(mock_img, rect)
             self.assertTrue(res1)

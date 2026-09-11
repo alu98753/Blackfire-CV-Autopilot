@@ -7,6 +7,9 @@ from config import GAME_CONFIGS
 class TestBloodAltarSacrificeSubflow(unittest.TestCase):
     def setUp(self):
         self.mock_capturer = MagicMock()
+        import numpy as np
+        self.mock_capturer.capture.return_value = np.zeros((600, 800, 3), dtype=np.uint8)
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 800, "height": 600}
         self.mock_mouse = MagicMock()
         self.mock_matcher = MagicMock()
 
@@ -118,7 +121,8 @@ class TestBloodAltarSacrificeSubflow(unittest.TestCase):
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = fake_match
-        handler.handle()
+        with patch("utils.town_building_detector.is_true_red_dot", return_value=(True, 1.0)):
+            handler.handle()
 
         # 斷言：有紅點時絕不可標記完成！
         self.mock_daily_manager.record_subflow_completed.assert_not_called()
