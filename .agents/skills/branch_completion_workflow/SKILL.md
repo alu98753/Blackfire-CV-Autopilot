@@ -53,6 +53,10 @@ E:\Side_Project\
 
 - `temp-main` 是長期存在的基準線工作樹，**不需要每次重新建立**。
 - **嚴禁假設 `temp-main` 一定已同步到最新 main**，在驗證前必須進行狀態檢查與安全同步。
+- **永久雙工作樹互斥與分工鐵律 (Permanent Dual-Worktree Invariant)**：
+  - **Git 限制**：同一分支（Branch Ref）在同一時間只能被一個工作樹 checkout。
+  - **`temp-main` 永久持有 `main`**：專職負責 Baseline 測試、執行 `--no-ff` 合併、以及 `git push origin main`。
+  - **`BlackfireCrusade_tool` 永久只持有 Feature/Fix 分支**：日常開發與單元測試。**嚴禁在此工作樹執行 `git checkout main`**（會遭 Git 拒絕）。合併完成後，直接在此目錄從最新 `main` 建立下一個 feature 分支（`git checkout -b <next_feature> main`），完全不需要切回 main！
 
 ---
 
@@ -380,14 +384,29 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
    - **Ready to merge**: YES
    ```
 
-2. **生成標準 `--no-ff` 合併指令（感應用戶 OS）**：
-   - **Windows (PowerShell / CMD)**：必須使用**多個 `-m` 參數**串聯，避免跨列換行造成 terminal 截斷：
+2. **生成標準 `--no-ff` 合併與後續分支管理指令（永久雙工作樹模型）**：
+   > [!IMPORTANT]
+   > **永久雙工作樹免切回原則 (Dual-Worktree Non-Checkout Rule)**：
+   > 因 `main` 分支已被 `temp-main` 永久 checkout，**嚴禁在 `BlackfireCrusade_tool` 執行 `git checkout main`**（Git 會直接拒絕）。
+   > 所有合併與遠端推送統一在 `temp-main` 進行；主專案開發工作樹在合併後，直接以最新 `main` 為基底建立下一個 feature 分支。
+
+   - **步驟一：於 `temp-main` 執行 `--no-ff` 合併與推送（感應用戶 OS）**：
+     - **Windows (PowerShell / CMD)**：必須使用**多個 `-m` 參數**串聯，避免跨列換行造成 terminal 截斷：
+       ```powershell
+       cd E:\Side_Project\temp-main
+       git merge --no-ff <branch_name> -m "Merge branch '<branch_name>' into main" -m "<簡短變更摘要>" -m "Verification: All unit tests verified against main baseline (0 regressions)."
+       git push origin main
+       ```
+     - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
+
+   - **步驟二：回到日常開發工作樹 `BlackfireCrusade_tool` 進入下一個任務（免切回 main）**：
      ```powershell
-     git checkout main
-     git pull origin main
-     git merge --no-ff <branch_name> -m "Merge branch '<branch_name>' into main" -m "<簡短變更摘要>" -m "Verification: All unit tests verified against main baseline (0 regressions)."
+     cd E:\Side_Project\BlackfireCrusade_tool
+     # 1. 刪除已完成合併的舊本機分支（可選）
+     git branch -d <branch_name>
+     # 2. 直接以最新 main 為基底開立並切換至下一個分支（共用 .git 物件庫已自動同步）
+     git checkout -b feat/<next_feature_name> main
      ```
-   - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
 
 ---
 
