@@ -33,6 +33,13 @@ RED_DOT_MIN_VALUE = 50
 RED_DOT_MIN_RG_RATIO = 2.2
 RED_DOT_MIN_RED_PIXEL_RATIO = 0.50
 RED_DOT_MIN_COLORED_PIXELS = 10
+
+# 橘色任務驚嘆號常數 (零容忍 Magic Number)
+ORANGE_DOT_HUE_MIN = 9
+ORANGE_DOT_HUE_MAX = 25
+ORANGE_DOT_MIN_RG_RATIO = 1.10
+ORANGE_DOT_MIN_ORANGE_PIXEL_RATIO = 0.50
+
 from config import TOWN_BUILDING_BRIGHTNESS_THRESHOLD
 
 
@@ -75,6 +82,45 @@ def is_true_red_dot(
     red_pixels = int(np.sum(red_mask))
     red_ratio = red_pixels / float(total_colored)
     return (red_ratio >= min_red_ratio), red_ratio
+
+
+def is_true_orange_dot(
+    patch_img: np.ndarray,
+    min_orange_ratio: float = ORANGE_DOT_MIN_ORANGE_PIXEL_RATIO,
+    rg_ratio_threshold: float = ORANGE_DOT_MIN_RG_RATIO,
+) -> Tuple[bool, float]:
+    """
+    檢驗影像區塊 (Patch) 是否為真實橘色任務驚嘆號 (適用於 bulletin_board 等重置後待接任務狀態)。
+    :param patch_img: BGR 格式之候選影像區塊
+    :param min_orange_ratio: 有效彩色像素中橘色像素之最低佔比
+    :param rg_ratio_threshold: R/G 通道比值之最低門檻
+    :return: (is_orange: bool, orange_ratio: float)
+    """
+    if not isinstance(patch_img, np.ndarray) or patch_img.size == 0 or len(patch_img.shape) < 3:
+        return False, 0.0
+    h, w = patch_img.shape[:2]
+    if h < 3 or w < 3:
+        return False, 0.0
+
+    b = patch_img[:, :, 0].astype(np.float32)
+    g = patch_img[:, :, 1].astype(np.float32)
+    r = patch_img[:, :, 2].astype(np.float32)
+
+    hsv = cv2.cvtColor(patch_img, cv2.COLOR_BGR2HSV)
+    hue, sat, val = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+
+    color_mask = (sat >= RED_DOT_MIN_SATURATION) & (val >= RED_DOT_MIN_VALUE)
+    total_colored = int(np.sum(color_mask))
+    if total_colored < RED_DOT_MIN_COLORED_PIXELS:
+        return False, 0.0
+
+    hue_orange_mask = (hue >= ORANGE_DOT_HUE_MIN) & (hue <= ORANGE_DOT_HUE_MAX)
+    rg_orange_mask = (r / np.maximum(1.0, g)) >= rg_ratio_threshold
+    orange_mask = color_mask & hue_orange_mask & rg_orange_mask
+
+    orange_pixels = int(np.sum(orange_mask))
+    orange_ratio = orange_pixels / float(total_colored)
+    return (orange_ratio >= min_orange_ratio), orange_ratio
 
 
 def _resolve_debug_tag(debug_tag: Optional[str], template_path: str) -> str:
@@ -142,9 +188,10 @@ def _verify_red_dot_color(
     screen_scale: float,
     tag: str,
     conf: float,
+    allow_orange: bool = False,
 ) -> Tuple[bool, bool, Optional[Tuple[int, int]]]:
     """
-    色彩門禁核驗：若候選點存在，切割 Patch 驗證是否為純紅驚嘆號。
+    色彩門禁核驗：若候選點存在，切割 Patch 驗證是否為可點擊驚嘆號 (純紅，或特定建築允許之橘色)。
     回傳: (has_red_dot: bool, ignored_orange: bool, final_pos: Optional[Tuple[int, int]])
     """
     if candidate_pos is None or not isinstance(crop_roi, np.ndarray) or crop_roi.size == 0:
@@ -161,6 +208,13 @@ def _verify_red_dot_color(
 
     is_red, red_ratio = is_true_red_dot(dot_patch)
     if is_red:
+        return True, False, candidate_pos
+
+    is_orange, orange_ratio = is_true_orange_dot(dot_patch)
+    if allow_orange and is_orange:
+        logging.info(
+            f"🟠 [RedDotColorGate] [{tag}] 檢測到合法橘色任務驚嘆號 (Conf: {conf:.2f}, OrangeRatio: {orange_ratio:.2f})，予以放行進入！"
+        )
         return True, False, candidate_pos
 
     logging.info(
@@ -193,7 +247,7 @@ def _get_building_crop_roi(screen_img, pos_building: Tuple[int, int], bw: int, b
 
 
 def _detect_and_verify_red_dot(
-    crop_roi, matcher, red_dot_template: str, threshold: float, candidate_scales, templates_dir: str, screen_scale: float, tag: str
+    crop_roi, matcher, red_dot_template: str, threshold: float, candidate_scales, templates_dir: str, screen_scale: float, tag: str, allow_orange: bool = False
 ):
     """比對驚嘆號形狀並執行色彩門禁核驗。"""
     raw_dot_pos, best_conf_dot = matcher.match(
@@ -201,7 +255,7 @@ def _detect_and_verify_red_dot(
     )
     dot_h, dot_w = _load_template_dims(templates_dir, red_dot_template, (24, 24))
     has_red_dot, ignored_orange, best_pos_dot = _verify_red_dot_color(
-        crop_roi, raw_dot_pos, dot_w, dot_h, screen_scale, tag, best_conf_dot
+        crop_roi, raw_dot_pos, dot_w, dot_h, screen_scale, tag, best_conf_dot, allow_orange=allow_orange
     )
     return has_red_dot, ignored_orange, best_pos_dot, raw_dot_pos, best_conf_dot
 
@@ -214,6 +268,7 @@ def detect_building_with_red_dot(
     building_threshold: float = 0.65,
     red_dot_threshold: float = 0.60,
     debug_tag: Optional[str] = None,
+    allow_orange: Optional[bool] = None,
     **match_kwargs,
 ) -> BuildingCheckResult:
     """城鎮建築與正下方驚嘆號紅點檢測器 (純感知觀察函式)。"""
@@ -231,6 +286,8 @@ def detect_building_with_red_dot(
         return BuildingCheckResult(found_building=False, has_red_dot=False)
 
     tag = _resolve_debug_tag(debug_tag, building_template)
+    effective_allow_orange = (tag == "bulletin_board") if allow_orange is None else allow_orange
+
     templates_dir = getattr(matcher, "templates_dir", "templates")
     if not isinstance(templates_dir, str):
         templates_dir = "templates"
@@ -246,7 +303,7 @@ def detect_building_with_red_dot(
 
     # 3. 比對與色彩門禁核驗
     has_red_dot, ignored_orange, best_pos_dot, raw_dot_pos, best_conf_dot = _detect_and_verify_red_dot(
-        crop_roi, matcher, red_dot_template, red_dot_threshold, candidate_scales, templates_dir, screen_scale, tag
+        crop_roi, matcher, red_dot_template, red_dot_threshold, candidate_scales, templates_dir, screen_scale, tag, allow_orange=effective_allow_orange
     )
 
     peak_crop_pos = None if has_red_dot else _find_peak_in_crop(matcher, crop_roi, red_dot_template, screen_scale)

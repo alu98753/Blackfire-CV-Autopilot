@@ -4,6 +4,7 @@ import numpy as np
 from utils.town_building_detector import (
     detect_building_with_red_dot,
     is_true_red_dot,
+    is_true_orange_dot,
     BuildingCheckResult,
 )
 
@@ -33,6 +34,22 @@ class TestTownBuildingDetector(unittest.TestCase):
         is_red, ratio = is_true_red_dot(orange_patch)
         self.assertFalse(is_red)
         self.assertLess(ratio, 0.1)
+
+    def test_is_true_orange_dot(self):
+        """測試：橘色 Patch 應被判定為真橘點，純紅或灰色則否"""
+        orange_patch = np.zeros((24, 24, 3), dtype=np.uint8)
+        orange_patch[:, :] = (20, 130, 240)  # BGR 格式
+        is_orange, ratio = is_true_orange_dot(orange_patch)
+        self.assertTrue(is_orange)
+        self.assertGreater(ratio, 0.8)
+
+        red_patch = np.zeros((24, 24, 3), dtype=np.uint8)
+        red_patch[:, :] = (30, 40, 230)
+        self.assertFalse(is_true_orange_dot(red_patch)[0])
+
+        gray_patch = np.full((24, 24, 3), 128, dtype=np.uint8)
+        self.assertFalse(is_true_orange_dot(gray_patch)[0])
+        self.assertFalse(is_true_orange_dot(None)[0])
 
     def test_is_true_red_dot_with_gray_or_empty(self):
         """測試：灰色、全黑、無效維度 Patch 應回傳 False 與 0.0"""
@@ -111,6 +128,26 @@ class TestTownBuildingDetector(unittest.TestCase):
         self.assertTrue(res.found_building)
         self.assertFalse(res.has_red_dot)  # 色彩門禁成功攔截
         self.assertIsNone(res.red_dot_pos)
+
+    def test_bulletin_board_allows_orange_dot(self):
+        """測試：當建築為 bulletin_board 時，橘色任務驚嘆號應被判定為 has_red_dot=True 進入子流程"""
+        screen = np.full((600, 800, 3), (20, 130, 240), dtype=np.uint8)  # 橘色畫面
+
+        def fake_match(img, template, threshold=0.75, **kwargs):
+            if "bulletin_board" in template:
+                return ((200, 300), 0.90)
+            elif template == "town_building/red_dot.png":
+                return ((50, 40), 0.89)  # 幾何模板相似度很高
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        res = detect_building_with_red_dot(
+            screen, "town_building/bulletin_board/bulletin_board.png", self.mock_matcher
+        )
+        self.assertTrue(res.found_building)
+        self.assertTrue(res.has_red_dot)  # bulletin_board 允許橘色點通過
+        self.assertIsNotNone(res.red_dot_pos)
+
 
     def test_debug_tag_and_tag_resolution(self):
         """測試：debug_tag 能正確推斷或手動指定"""
