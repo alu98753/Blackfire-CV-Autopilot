@@ -225,7 +225,7 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         # 3. 驗證標記重置與轉移至城鎮流水線 (進入 STATE_NAVIGATING 待命 REACH_TOWN 前置導航)
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
-        self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
+        self.assertEqual(self.state_machine.current_town_subflow, "blood_sacrifice")
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
 
     @patch('os.path.exists')

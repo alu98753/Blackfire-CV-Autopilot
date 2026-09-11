@@ -33,9 +33,6 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         self.handler.matcher = MagicMock()
         self.handler.mouse = MagicMock()
         self.handler.capturer = MagicMock()
-        self.handler.bag_handler.matcher = self.handler.matcher
-        self.handler.bag_handler.mouse = self.handler.mouse
-        self.handler.pre_tidy_done = True  # 跳過前置整理，直接測試選店進門
 
     def test_selects_highest_gold_shop_when_multiple_available(self):
         """
