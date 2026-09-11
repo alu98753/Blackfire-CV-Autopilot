@@ -61,21 +61,21 @@ E:\Side_Project\
 ```mermaid
 flowchart TD
     Start(["使用者觸發：請分支收尾 / 請 merge"]) --> P0["Phase 0: Closeout Context Audit<br>(審查變更範圍與模組邊界)"]
-    P0 --> P1["Phase 1: Dual-Worktree Baseline Verification<br>(AI 先查 temp-main；提供雙 Terminal 指令；<br>🛑 停下：等待使用者跑完全套測試並指示檢視輸出)"]
-    P1 --> P2{"Phase 2: Regression Classification<br>(比對 failures 分類)"}
+    P0 --> P1["Phase 1: Dual-Worktree Baseline Verification<br>(AI 先查 temp-main；交付重定向 log 指令；<br>🛑 停下：等待使用者跑完並指示讀取 log 檔)"]
+    P1 --> P2{"Phase 2: Regression Classification<br>(讀取 log 檔比對 failures 分類)"}
     
     P2 -- "存在 BRANCH_REGRESSION 或 UNCERTAIN" --> P2_Block["🛑 強制阻斷！<br>先修復測試或程式行為問題"]
     P2_Block -.-> P1
     
     P2 -- "無 Regression (僅 PRE_EXISTING 或 EXPECTED)" --> P3["Phase 3: Refactor Safety-Net Gate<br>(檢查行為測試覆蓋率，不足先補測)"]
     P3 --> P4["Phase 4: Behavior-Preserving Maintenance Refactor<br>(審計與重構：清理 dead code/glue，獨立 commit)"]
-    P4 --> P5["Phase 5: Post-Refactor Verification<br>(跑 focused test；🛑 停下：等待使用者重跑 full test)"]
+    P4 --> P5["Phase 5: Post-Refactor Verification<br>(跑 focused test；🛑 停下：等待使用者重跑 full test 並重定向 log)"]
     
     P5 -- "出現新 Failure 或行為改變" --> P5_Block["🛑 強制阻斷！修復重構問題"]
     P5_Block -.-> P4
     
     P5 -- "確認無新增 Failure" --> P6["Phase 6: Code & Docstring Hygiene<br>(清除臨時 spec/issue 代號，重寫為穩定契約)"]
-    P6 --> P7["Phase 7: Contract / TODO / Spec Convergence<br>(🛑 停下：列出清單等待使用者確認收斂範圍)"]
+    P6 --> P7["Phase 7: Contract / TODO / Spec Convergence<br>(🛑 停下：列出候選文件與日誌清單，等待使用者確認刪除範圍)"]
     P7 --> P8["Phase 8: PARS Development Story<br>(撰寫 docs/storys/ 開發故事)"]
     P8 --> P9["Phase 9: Final Branch Audit<br>(核對 git status, log, diff，確認乾淨)"]
     P9 --> P10["Phase 10: Merge Delivery<br>(輸出 Closeout Report 與結構化 Merge 指令)"]
@@ -131,27 +131,28 @@ flowchart TD
   - 立即停止流程並向使用者回報異常。
   - **嚴禁自行使用 `reset --hard`、`clean`、force checkout 等破壞性操作**。
 
-#### 2. 一次性交付雙 Terminal 測試指令
+#### 2. 一次性交付雙 Terminal 測試指令 (重定向至獨立 Log 檔案)
+*(注：為徹底防止終端緩衝區字元混疊錯位與截斷，全套測試統一重定向至主專案目錄下的獨立日誌檔)*
 *(注：`temp-main` 為 Git worktree，通常無獨立 `.venv`，兩組測試統一共用主專案之 Python 解譯器以保證相依套件環境 100% 一致)*
-
 - **Terminal 1 — Feature HEAD 測試**：
   ```powershell
   cd E:\Side_Project\BlackfireCrusade_tool
-  .venv\Scripts\python -m unittest discover tests
+  .venv\Scripts\python -m unittest discover tests > head_test_output.log 2>&1
   ```
 
 - **Terminal 2 — Main Baseline 測試**：
   ```powershell
   cd E:\Side_Project\temp-main
-  E:\Side_Project\BlackfireCrusade_tool\.venv\Scripts\python.exe -m unittest discover tests
+  E:\Side_Project\BlackfireCrusade_tool\.venv\Scripts\python.exe -m unittest discover tests > E:\Side_Project\BlackfireCrusade_tool\main_test_output.log 2>&1
   ```
 
 > [!TIP]
 > **執行順序守則**：兩組測試可以依序或平行執行；若測試涉及共享之 runtime resources（如遊戲處理序、`user_data/` 狀態檔、固定 debug 截圖/日誌等），**必須依序執行**以防互斥污染。
 
 #### 3. 🛑 阻斷點 (Gate Invariant)
-- 停在此處，**等待使用者在兩個 Terminal 完成全套測試並提供結果（或指示 AI 檢視終端輸出）**。
-- 收到雙邊測試結果前，**絕對不得進入下一階段**。
+- 停在此處，**等待使用者在兩個 Terminal 執行完畢並回報「已跑完」**。
+- AI 收到通知後，直接以 `view_file` 讀取 `head_test_output.log` 與 `main_test_output.log` 進行完整、零截斷之比對分析。
+- 收到雙邊測試完成通知前，**絕對不得進入下一階段**。
 
 #### 4. 結構化記錄
 ```text
@@ -251,12 +252,13 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
 1. **AI 執行聚焦測試**：
    - 優先執行與重構模組直接相關的聚焦單元測試，確保快速反饋。
 2. **🛑 阻斷點 (Gate Invariant)**：
-   - 請使用者在 Feature/Fix 工作樹再次執行全套測試套件：
+   - 請使用者在 Feature/Fix 工作樹再次執行全套測試套件並重定向至日誌：
      ```powershell
      cd E:\Side_Project\BlackfireCrusade_tool
-     .venv\Scripts\python -m unittest discover tests
+     .venv\Scripts\python -m unittest discover tests > post_refactor_test_output.log 2>&1
      ```
-   - 停在此處，等待使用者回報結果。
+   - 停在此處，等待使用者回報執行完畢。
+   - AI 讀取 `post_refactor_test_output.log` 比對確認。
 3. **比對確認**：
    - 比對 `HEAD BEFORE REFACTOR` vs `HEAD AFTER REFACTOR`。
    - 必須滿足：
@@ -281,21 +283,22 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
 
 ### Phase 7 — Contract / TODO / Spec Convergence (契約與文件收斂)
 
-**目標**：調用 [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) 技能，將完成任務的臨時文件提煉為長期標準，防止 Doc Drift。
+**目標**：調用 [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) 技能，將完成任務的臨時文件提煉為長期標準，並徹底清理過期文件與暫存測試日誌，防止 Doc/Artifact Drift。
 
-1. **盤點候選文件**：
+1. **盤點候選文件與暫存測試日誌**：
    - 檢查 `git diff main..HEAD --name-only` 涉及的 `docs/todos/`、臨時 Specs、RFCs、`future_work.md`。
+   - 納入收尾過程中產生的全套測試日誌暫存檔：`head_test_output.log`、`main_test_output.log`、`post_refactor_test_output.log`。
 2. **🛑 阻斷點 (Mandatory User Scope Confirmation)**：
    - ⚠️ **嚴禁 AI 自行決定清理範圍**！
-   - AI 必須先列出候選清單，主動詢問使用者：
-     > 「請問本次分支要收斂／升格／刪除的文件是否為以下清單？是否有不可刪除或仍未完成的項目？」
+   - AI 必須先列出候選清單（包含過期文件與暫存測試日誌），主動詢問使用者：
+     > 「請問本次分支要收斂／升格／刪除的文件與日誌是否為以下清單？是否有不可刪除或仍未完成的項目？」
    - **停在此處等待使用者確認**，確認前不得動手修改或刪除文件。
 3. **執行分類與提煉（依 `canonical_contract_archival` 規範）**：
    - `PROMOTE`：永久不變量升格至 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。
    - `LINK`：程式碼與測試已有者，Contract 僅做參照。
    - `HISTORY`：歷史脈絡留給 PARS 與 Git。
    - `TODO`：搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO。
-   - `DROP`：**刪除是預設；封存是例外**。原始任務 Spec 提煉後預設刪除，防止過期文件產生漂移。
+   - `DROP`：**刪除是預設；封存是例外**。原始任務 Spec 提煉後預設刪除；**暫存測試日誌檔（`*.log`）於此階段與過期文件一併徹底清理刪除**，保證工作區無殘留雜檔。
 4. **獨立提交**：以 `docs: ...` 進行獨立精確 Commit。
 
 ---
