@@ -6,6 +6,7 @@ import numpy as np
 from states.handlers.base import BaseStateHandler
 from utils.quest_ocr_extractor import QuestOCRExtractor
 from utils.debug_artifacts import write_debug_image
+from states.debug.visualizer import DebugVisualizer
 
 # 告示牌開窗動畫沉澱等待窗口 (秒) 與進店逾時
 BOARD_OPEN_SETTLE_TIMEOUT = 2.5
@@ -89,6 +90,41 @@ class BulletinBoardHandler(BaseStateHandler):
         logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
         self.machine.pop_and_next_town_subflow()
 
+    def _match_in_roi(self, screen_img, template_name, roi, threshold=0.70):
+        """
+        在指定 Scoped ROI 區域內執行模板比對，回傳全圖中心座標、全圖 BBox 與信心度。
+        :return: (pos_global, bbox_global, confidence)
+        """
+        if screen_img is None or not isinstance(screen_img, np.ndarray) or getattr(screen_img, "size", 0) == 0:
+            return None, None, 0.0
+        h, w = screen_img.shape[:2]
+        rx, ry, rw, rh = roi
+        rx = max(0, min(rx, w - 1))
+        ry = max(0, min(ry, h - 1))
+        rw = max(1, min(rw, w - rx))
+        rh = max(1, min(rh, h - ry))
+
+        roi_img = screen_img[ry:ry+rh, rx:rx+rw]
+        pos_local, conf = self.matcher.match(roi_img, template_name, threshold=threshold, quiet=True)
+
+        tmpl = self.matcher._load_template(template_name)
+        tw, th = (tmpl.shape[1], tmpl.shape[0]) if isinstance(tmpl, np.ndarray) else (40, 40)
+
+        if pos_local is not None:
+            gx = rx + pos_local[0]
+            gy = ry + pos_local[1]
+            bx = max(0, gx - tw // 2)
+            by = max(0, gy - th // 2)
+            return (gx, gy), (bx, by, tw, th), conf
+
+        # 若 ROI 內未達標，進行全圖比對以取得全局最高匹配資訊供診斷繪圖
+        pos_global, conf_global = self.matcher.match(screen_img, template_name, threshold=threshold, quiet=True)
+        if pos_global is not None:
+            bx = max(0, pos_global[0] - tw // 2)
+            by = max(0, pos_global[1] - th // 2)
+            return pos_global, (bx, by, tw, th), conf_global
+        return None, None, max(conf, conf_global)
+
     def _is_inside_bulletin_board(self, screen_img, cfg=None) -> bool:
         """
         排他性驗證是否身處告示牌介面（語意完全解耦的獨立 OR 通道）：
@@ -99,45 +135,65 @@ class BulletinBoardHandler(BaseStateHandler):
            - 通道 1【Before 待接取】：左側出現未接取任務捲軸 (task.png)
            - 通道 2【After 已接取】：左側出現已接取任務捲軸 (task_after.png)
            - 通道 3【Reset 控制項】：左下角出現重新整理按鈕 (reset.png)
+        所有判定範圍與匹配資訊均透過 DebugVisualizer 輸出至 debug_bulletin_board_verify.png。
         """
+        if screen_img is None or not isinstance(screen_img, np.ndarray) or getattr(screen_img, "size", 0) == 0:
+            return False
+
+        h, w = screen_img.shape[:2]
         cfg = cfg or (self.machine.config or {})
         quit_btn = cfg.get("quit_btn", "common/quit.png")
-        pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.80, quiet=True)
-        if not pos_quit:
-            return False
-
-        # 背包排他特徵檢查：若有 tidy.png 或 Disassembly.png，絕對是背包而非告示牌
-        pos_tidy, _ = self.matcher.match(screen_img, "common/tidy.png", threshold=0.80, quiet=True)
-        if pos_tidy:
-            return False
-        pos_disasm, _ = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.80, quiet=True)
-        if pos_disasm:
-            return False
-
-        # 正向獨立通道 1：Before 待接取任務捲軸 (task.png, threshold=0.70)
-        # 只要有一項未接取任務存在，即 100% 證明為告示牌介面
         task_tpl = cfg.get("task_btn", "town_building/bulletin_board/task.png")
-        pos_task, conf_task = self.matcher.match(screen_img, task_tpl, threshold=0.70, quiet=True)
-        if pos_task:
-            logging.debug("📋 [懸賞告示牌 介面驗證] 命中 Before 待接取任務圖示 (信心度: %.4f)", conf_task)
-            return True
-
-        # 正向獨立通道 2：After 已接取任務捲軸 (task_after.png, threshold=0.70)
-        # 當所有任務皆已接取時，畫面上全為 task_after.png
         task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
-        pos_after, conf_after = self.matcher.match(screen_img, task_after_tpl, threshold=0.70, quiet=True)
-        if pos_after:
-            logging.debug("📋 [懸賞告示牌 介面驗證] 命中 After 已接取任務圖示 (信心度: %.4f)", conf_after)
-            return True
-
-        # 正向獨立通道 3：Reset 重新整理按鈕 (reset.png, threshold=0.70)
         reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
-        pos_reset, conf_reset = self.matcher.match(screen_img, reset_btn, threshold=0.70, quiet=True)
-        if pos_reset:
-            logging.debug("📋 [懸賞告示牌 介面驗證] 命中 Reset 重新整理按鈕 (信心度: %.4f)", conf_reset)
-            return True
 
-        return False
+        # 0. 定義 Scoped ROI 範圍 (依畫面幾何劃分)
+        quit_roi = (int(w * 0.5), 0, w - int(w * 0.5), int(h * 0.45))
+        task_roi = (0, 0, min(w, int(w * 0.60)), h)
+        reset_roi = (0, int(h * 0.60), min(w, int(w * 0.60)), h - int(h * 0.60))
+
+        # 1. 基礎門禁：quit 按鈕
+        pos_quit, bbox_quit, conf_quit = self._match_in_roi(screen_img, quit_btn, quit_roi, threshold=0.80)
+
+        # 2. 背包排他特徵檢查：若有 tidy.png 或 Disassembly.png，絕對是背包而非告示牌
+        pos_tidy, _ = self.matcher.match(screen_img, "common/tidy.png", threshold=0.80, quiet=True)
+        pos_disasm, _ = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.80, quiet=True)
+        has_bag_overlay = (pos_tidy is not None) or (pos_disasm is not None)
+
+        # 3. 正向三通道獨立檢查
+        pos_task, bbox_task, conf_task = self._match_in_roi(screen_img, task_tpl, task_roi, threshold=0.70)
+        pos_after, bbox_after, conf_after = self._match_in_roi(screen_img, task_after_tpl, task_roi, threshold=0.70)
+        pos_reset, bbox_reset, conf_reset = self._match_in_roi(screen_img, reset_btn, reset_roi, threshold=0.70)
+
+        is_board = (
+            (pos_quit is not None)
+            and not has_bag_overlay
+            and (pos_task is not None or pos_after is not None or pos_reset is not None)
+        )
+
+        # 4. 委託 DebugVisualizer 繪製多特徵診斷影像 (符合 Greenfield Lite 決策與視覺化解耦架構)
+        diagnostics = [
+            {"name": "quit", "roi": quit_roi, "matched_bbox": bbox_quit, "confidence": conf_quit, "threshold": 0.80, "matched": pos_quit is not None},
+            {"name": "task (Before)", "roi": task_roi, "matched_bbox": bbox_task, "confidence": conf_task, "threshold": 0.70, "matched": pos_task is not None},
+            {"name": "task_after (After)", "roi": task_roi, "matched_bbox": bbox_after, "confidence": conf_after, "threshold": 0.70, "matched": pos_after is not None},
+            {"name": "reset", "roi": reset_roi, "matched_bbox": bbox_reset, "confidence": conf_reset, "threshold": 0.70, "matched": pos_reset is not None},
+        ]
+        status_banner = (
+            f"BULLETIN BOARD: {'PASS' if is_board else 'FAIL'} | "
+            f"quit={conf_quit:.2f} before={conf_task:.2f} after={conf_after:.2f} reset={conf_reset:.2f}"
+        )
+        DebugVisualizer.draw_features_diagnostic(
+            screen_img, diagnostics, status_text=status_banner, filename="debug_bulletin_board_verify.png"
+        )
+
+        if is_board:
+            matched_channels = []
+            if pos_task: matched_channels.append(f"Before({conf_task:.2f})")
+            if pos_after: matched_channels.append(f"After({conf_after:.2f})")
+            if pos_reset: matched_channels.append(f"Reset({conf_reset:.2f})")
+            logging.info("📋 [懸賞告示牌 介面驗證] 驗證成功 (通道: %s)，已保存診斷圖至 debug_bulletin_board_verify.png", ", ".join(matched_channels))
+
+        return is_board
 
     def handle(self, screen_img=None, rect=None):
         if screen_img is None and self.capturer:
