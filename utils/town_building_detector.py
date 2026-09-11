@@ -43,17 +43,14 @@ ORANGE_DOT_MIN_ORANGE_PIXEL_RATIO = 0.50
 from config import TOWN_BUILDING_BRIGHTNESS_THRESHOLD
 
 
-def is_true_red_dot(
+def _analyze_dot_color_patch(
     patch_img: np.ndarray,
-    min_red_ratio: float = RED_DOT_MIN_RED_PIXEL_RATIO,
-    rg_ratio_threshold: float = RED_DOT_MIN_RG_RATIO,
+    hue_mask_fn,
+    min_ratio: float,
+    rg_ratio_threshold: float,
 ) -> Tuple[bool, float]:
     """
-    檢驗影像區塊 (Patch) 是否為真實紅色驚嘆號，嚴格排除橘色任務驚嘆號。
-    :param patch_img: BGR 格式之候選影像區塊
-    :param min_red_ratio: 有效彩色像素中純紅像素之最低佔比
-    :param rg_ratio_threshold: R/G 通道比值之最低門檻
-    :return: (is_red: bool, red_ratio: float)
+    通用彩色驚嘆號/紅點像素區塊色彩比率分析私有工具函式。
     """
     if not isinstance(patch_img, np.ndarray) or patch_img.size == 0 or len(patch_img.shape) < 3:
         return False, 0.0
@@ -61,7 +58,6 @@ def is_true_red_dot(
     if h < 3 or w < 3:
         return False, 0.0
 
-    b = patch_img[:, :, 0].astype(np.float32)
     g = patch_img[:, :, 1].astype(np.float32)
     r = patch_img[:, :, 2].astype(np.float32)
 
@@ -74,14 +70,34 @@ def is_true_red_dot(
     if total_colored < RED_DOT_MIN_COLORED_PIXELS:
         return False, 0.0
 
-    # 2. 純紅像素判定: HSV 色相跨越 0/180，且 RGB 空間中 R 明顯壓過 G (排除橘色 H~14, R/G~1.85)
-    hue_red_mask = (hue <= RED_DOT_HUE_MAX_LOWER) | (hue >= RED_DOT_HUE_MIN_UPPER)
-    rg_red_mask = (r / np.maximum(1.0, g)) >= rg_ratio_threshold
-    red_mask = color_mask & hue_red_mask & rg_red_mask
+    # 2. 應用特定色彩之色相與 R/G 比值門禁
+    hue_mask = hue_mask_fn(hue)
+    rg_mask = (r / np.maximum(1.0, g)) >= rg_ratio_threshold
+    target_mask = color_mask & hue_mask & rg_mask
 
-    red_pixels = int(np.sum(red_mask))
-    red_ratio = red_pixels / float(total_colored)
-    return (red_ratio >= min_red_ratio), red_ratio
+    target_pixels = int(np.sum(target_mask))
+    ratio = target_pixels / float(total_colored)
+    return (ratio >= min_ratio), ratio
+
+
+def is_true_red_dot(
+    patch_img: np.ndarray,
+    min_red_ratio: float = RED_DOT_MIN_RED_PIXEL_RATIO,
+    rg_ratio_threshold: float = RED_DOT_MIN_RG_RATIO,
+) -> Tuple[bool, float]:
+    """
+    檢驗影像區塊 (Patch) 是否為真實紅色驚嘆號，嚴格排除橘色任務驚嘆號。
+    :param patch_img: BGR 格式之候選影像區塊
+    :param min_red_ratio: 有效彩色像素中純紅像素之最低佔比
+    :param rg_ratio_threshold: R/G 通道比值之最低門檻
+    :return: (is_red: bool, red_ratio: float)
+    """
+    return _analyze_dot_color_patch(
+        patch_img,
+        lambda hue: (hue <= RED_DOT_HUE_MAX_LOWER) | (hue >= RED_DOT_HUE_MIN_UPPER),
+        min_red_ratio,
+        rg_ratio_threshold,
+    )
 
 
 def is_true_orange_dot(
@@ -96,31 +112,12 @@ def is_true_orange_dot(
     :param rg_ratio_threshold: R/G 通道比值之最低門檻
     :return: (is_orange: bool, orange_ratio: float)
     """
-    if not isinstance(patch_img, np.ndarray) or patch_img.size == 0 or len(patch_img.shape) < 3:
-        return False, 0.0
-    h, w = patch_img.shape[:2]
-    if h < 3 or w < 3:
-        return False, 0.0
-
-    b = patch_img[:, :, 0].astype(np.float32)
-    g = patch_img[:, :, 1].astype(np.float32)
-    r = patch_img[:, :, 2].astype(np.float32)
-
-    hsv = cv2.cvtColor(patch_img, cv2.COLOR_BGR2HSV)
-    hue, sat, val = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
-
-    color_mask = (sat >= RED_DOT_MIN_SATURATION) & (val >= RED_DOT_MIN_VALUE)
-    total_colored = int(np.sum(color_mask))
-    if total_colored < RED_DOT_MIN_COLORED_PIXELS:
-        return False, 0.0
-
-    hue_orange_mask = (hue >= ORANGE_DOT_HUE_MIN) & (hue <= ORANGE_DOT_HUE_MAX)
-    rg_orange_mask = (r / np.maximum(1.0, g)) >= rg_ratio_threshold
-    orange_mask = color_mask & hue_orange_mask & rg_orange_mask
-
-    orange_pixels = int(np.sum(orange_mask))
-    orange_ratio = orange_pixels / float(total_colored)
-    return (orange_ratio >= min_orange_ratio), orange_ratio
+    return _analyze_dot_color_patch(
+        patch_img,
+        lambda hue: (hue >= ORANGE_DOT_HUE_MIN) & (hue <= ORANGE_DOT_HUE_MAX),
+        min_orange_ratio,
+        rg_ratio_threshold,
+    )
 
 
 def _resolve_debug_tag(debug_tag: Optional[str], template_path: str) -> str:

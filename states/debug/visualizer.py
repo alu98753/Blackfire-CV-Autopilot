@@ -86,15 +86,7 @@ class DebugVisualizer:
         # 5. 繪製頂部狀態橫幅 (Status Banner)
         banner_text = status_text or labels.get("status")
         if banner_text:
-            h, w = canvas.shape[:2]
-            bar_height = 36
-            overlay = canvas.copy()
-            cv2.rectangle(overlay, (0, 0), (w, bar_height), (30, 30, 30), -1)
-            cv2.addWeighted(overlay, 0.75, canvas, 0.25, 0, canvas)
-            color = (0, 255, 0) if any(kw in banner_text.upper() for kw in ["SUCCESS", "PASS"]) else (
-                (0, 0, 255) if any(kw in banner_text.upper() for kw in ["FAIL", "DEFER", "WARN"]) else (255, 255, 255)
-            )
-            cv2.putText(canvas, banner_text, (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
+            DebugVisualizer._draw_status_banner(canvas, banner_text)
 
         try:
             saved = write_debug_image(filename, canvas)
@@ -170,15 +162,7 @@ class DebugVisualizer:
 
         # 3. 繪製頂部狀態橫幅 (Status Banner)
         if status_text:
-            h, w = canvas.shape[:2]
-            bar_height = 40
-            overlay = canvas.copy()
-            cv2.rectangle(overlay, (0, 0), (w, bar_height), (25, 25, 25), -1)
-            cv2.addWeighted(overlay, 0.75, canvas, 0.25, 0, canvas)
-
-            is_pass = any(kw in status_text.upper() for kw in ["PASS", "SUCCESS"])
-            banner_color = GREEN_COLOR if is_pass else RED_COLOR
-            cv2.putText(canvas, status_text, (15, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.65, banner_color, 2, cv2.LINE_AA)
+            DebugVisualizer._draw_status_banner(canvas, status_text)
 
         try:
             saved = write_debug_image(filename, canvas)
@@ -187,4 +171,22 @@ class DebugVisualizer:
         except Exception as e:
             logging.debug(f"無法寫入 {filename}: {e}")
             return False
+
+    @staticmethod
+    def _draw_status_banner(canvas: np.ndarray, banner_text: str, bar_height: int = 38):
+        """繪製頂部半透明狀態橫幅與文字標記 (共用視覺化標記工具)"""
+        h, w = canvas.shape[:2]
+        overlay = canvas.copy()
+        cv2.rectangle(overlay, (0, 0), (w, bar_height), (25, 25, 25), -1)
+        cv2.addWeighted(overlay, 0.75, canvas, 0.25, 0, canvas)
+
+        text_upper = banner_text.upper()
+        if any(kw in text_upper for kw in ["SUCCESS", "PASS"]):
+            color = (0, 220, 0)
+        elif any(kw in text_upper for kw in ["FAIL", "DEFER", "WARN"]):
+            color = (0, 0, 255)
+        else:
+            color = (255, 255, 255)
+
+        cv2.putText(canvas, banner_text, (15, max(22, bar_height - 13)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
 

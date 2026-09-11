@@ -654,6 +654,7 @@ class GameStateMachine:
         STATE_HERO_DRAW: "hero_draw",
         STATE_BULLETIN_BOARD: "bulletin_board",
         STATE_DEMON_LORDS: "demon_lords",
+        STATE_BAG_TIDY: "bag_tidy",
     }
 
 
@@ -1936,15 +1937,9 @@ class GameStateMachine:
     def trigger_bag_maintenance_chain(self):
         """
         背包清理完成退回城鎮後，構建資源維護子流程佇列（血之祭壇獻祭、背包整理、珠寶加工廠出售）。
-        徹底與 Daily 每日福利流水線解耦，重複使用既有變數與設定。
+        徹底與 Daily 每日福利流水線解耦，透過 _expand_subflow_queue 統一展開複合巨集。
         """
-        from config import get_default_bag_maintenance_order
-        cfg = self.config or {}
-        # 統一讀取 bag_maintenance_order，相容舊 town_subflow_order 設定，重複使用既有變數
-        order = cfg.get(
-            "bag_maintenance_order",
-            cfg.get("town_subflow_order", get_default_bag_maintenance_order()),
-        )
+        order = self._expand_subflow_queue(["bag_maintenance"])
         logging.info("🎒 [背包後續維護] 背包清理完成，構建維護任務佇列: %s", order)
         self.start_subflow_queue(order)
         if self.current_state == self.STATE_BAG_CLEANING:
