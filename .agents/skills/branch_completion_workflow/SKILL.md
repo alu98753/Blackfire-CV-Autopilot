@@ -56,7 +56,7 @@ E:\Side_Project\
 - **永久雙工作樹互斥與分工鐵律 (Permanent Dual-Worktree Invariant)**：
   - **Git 限制**：同一分支（Branch Ref）在同一時間只能被一個工作樹 checkout。
   - **`temp-main` 永久持有 `main`**：專職負責 Baseline 測試、執行 `--no-ff` 合併、以及 `git push origin main`。
-  - **`BlackfireCrusade_tool` 永久只持有 Feature/Fix 分支**：日常開發與單元測試。**嚴禁在此工作樹執行 `git checkout main`**（會遭 Git 拒絕）。合併完成後，直接在此目錄從最新 `main` 建立下一個 feature 分支（`git checkout -b <next_feature> main`），完全不需要切回 main！
+  - **`BlackfireCrusade_tool` 永久只持有 Feature/Fix 分支**：日常開發與單元測試。**嚴禁在此工作樹執行 `git checkout main`**（會遭 Git 拒絕）。合併完成後，直接在此目錄從最新 `main` 建立下一個 feature 分支（`git switch -c <next_feature> main`），完全不需要切回 main！
 
 ---
 
@@ -402,10 +402,10 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
    - **步驟二：回到日常開發工作樹 `BlackfireCrusade_tool` 進入下一個任務（免切回 main）**：
      ```powershell
      cd E:\Side_Project\BlackfireCrusade_tool
-     # 1. 刪除已完成合併的舊本機分支（可選）
+     # 1. 先離開舊 branch，直接以最新 main 為基底建立並切換至下一個分支（共用 .git 物件庫已自動同步）
+     git switch -c feat/<next_feature_name> main
+     # 2. 此時舊 branch 已沒有任何 worktree 使用，方可安全刪除
      git branch -d <branch_name>
-     # 2. 直接以最新 main 為基底開立並切換至下一個分支（共用 .git 物件庫已自動同步）
-     git checkout -b feat/<next_feature_name> main
      ```
 
 ---
