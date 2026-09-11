@@ -35,6 +35,11 @@ TOWN_SUBFLOW_SPECS = {
         building_template="town_building/bulletin_board/bulletin_board.png",
         requires_red_dot=True,
     ),
+    "blood_sacrifice": TownSubflowSpec(
+        "blood_sacrifice",
+        building_template="town_building/Blood_Altar/Blood_Altar.png",
+        requires_red_dot=False,
+    ),
     "jewelry_workshop": TownSubflowSpec(
         "jewelry_workshop",
         dispatch_on_town=True,
