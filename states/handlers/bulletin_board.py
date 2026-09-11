@@ -81,6 +81,47 @@ class BulletinBoardHandler(BaseStateHandler):
         logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
         self.machine.pop_and_next_town_subflow()
 
+    def _is_inside_bulletin_board(self, screen_img, cfg=None) -> bool:
+        """
+        排他性驗證是否身處告示牌介面：
+        必須滿足：
+        1. 看得到 quit_btn (threshold=0.80)；
+        2. 同時偵測到告示牌專屬特徵（reset.png、task.png、task_after.png，threshold=0.80）；
+        3. 不能有背包專屬特徵（tidy.png、Disassembly.png，threshold=0.80）。
+        門禁門檻全面調高至 0.80，杜絕背景雜訊誤判。
+        """
+        cfg = cfg or (self.machine.config or {})
+        quit_btn = cfg.get("quit_btn", "common/quit.png")
+        pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.80, quiet=True)
+        if not pos_quit:
+            return False
+
+        # 背包排他特徵檢查：若有 tidy.png 或 Disassembly.png，絕對是背包而非告示牌
+        pos_tidy, _ = self.matcher.match(screen_img, "common/tidy.png", threshold=0.80, quiet=True)
+        if pos_tidy:
+            return False
+        pos_disasm, _ = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.80, quiet=True)
+        if pos_disasm:
+            return False
+
+        # 告示牌專屬特徵正向錨點 (threshold=0.80)
+        reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
+        pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.80, quiet=True)
+        if pos_reset:
+            return True
+
+        task_tpl = cfg.get("task_btn", "town_building/bulletin_board/task.png")
+        pos_task, _ = self.matcher.match(screen_img, task_tpl, threshold=0.80, quiet=True)
+        if pos_task:
+            return True
+
+        task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
+        pos_after, _ = self.matcher.match(screen_img, task_after_tpl, threshold=0.80, quiet=True)
+        if pos_after:
+            return True
+
+        return False
+
     def handle(self, screen_img=None, rect=None):
         if screen_img is None and self.capturer:
             rect = rect or self.capturer.get_window_rect()
@@ -357,25 +398,41 @@ class BulletinBoardHandler(BaseStateHandler):
                 return
 
         # =========================================================================
-        # 5. 等待開窗：先確認 quit.png 出現才算真正進入告示牌 (WAIT_BOARD_OPEN)
+        # 5. 等待開窗：確認進入告示牌介面 (WAIT_BOARD_OPEN)
         # =========================================================================
-        pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.75)
+        pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.80, quiet=True)
+        is_board = self._is_inside_bulletin_board(screen_img, cfg)
+
         if self.step_phase == "WAIT_BOARD_OPEN":
-            if pos_quit:
-                logging.info(f"📋 [懸賞告示牌] 偵測到 [{quit_btn}]，確認已成功進入告示牌介面！進行重置判斷...")
+            if is_board:
+                logging.info(f"📋 [懸賞告示牌] 偵測到 [{quit_btn}] 且確認進入告示牌介面！進行重置判斷...")
                 self.notify_ui_progress()
                 self.step_phase = "CHECK_RESET"
                 self.last_action_time = now
+                return
+
+            if pos_quit:
+                logging.warning("⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到非告示牌干擾覆蓋層 (quit 可見但無告示牌特徵)，嘗試閉環關閉以利重試...")
+                self.click_and_wait_until_gone(quit_btn, left + pos_quit[0], top + pos_quit[1], rect, timeout=3.0, threshold=0.80)
+                self.step_phase = "INIT"
+                self.last_action_time = time.time()
                 return
             return
 
         # =========================================================================
         # 6. 城鎮點擊告示牌建築 (INIT / 左上 1/4 區域 Scoped Crop 精確比對)
         # =========================================================================
-        if pos_quit:
-            logging.info(f"📋 [懸賞告示牌] 辨識到目前已在告示牌介面 (發現 {quit_btn})，準備進行重置判斷...")
+        if is_board:
+            logging.info("📋 [懸賞告示牌] 排他性驗證成功：目前已在告示牌介面，準備進行重置判斷...")
             self.step_phase = "CHECK_RESET"
             self.last_action_time = now
+            return
+
+        # 若在 INIT 階段發現存在未關閉的覆蓋層（非告示牌卻有 quit 按鈕，例如背包）
+        if pos_quit:
+            logging.warning("⚠️ [懸賞告示牌 INIT] 偵測到非告示牌之干擾覆蓋層/背包（存在 quit 按鈕），優先閉環關閉，禁止判定為告示牌！")
+            self.click_and_wait_until_gone(quit_btn, left + pos_quit[0], top + pos_quit[1], rect, timeout=3.0, threshold=0.80)
+            self.last_action_time = time.time()
             return
 
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
