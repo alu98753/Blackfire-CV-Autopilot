@@ -90,9 +90,10 @@ class BulletinBoardHandler(BaseStateHandler):
         logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
         self.machine.pop_and_next_town_subflow()
 
-    def _match_in_roi(self, screen_img, template_name, roi, threshold=0.70):
+    def _match_in_roi(self, screen_img, template_name, roi, threshold=0.80, scales=None):
         """
         在指定 Scoped ROI 區域內執行模板比對，回傳全圖中心座標、全圖 BBox 與信心度。
+        支援傳入 scales 候選尺度清單，解決不同解析度微小比例偏移。
         :return: (pos_global, bbox_global, confidence)
         """
         if screen_img is None or not isinstance(screen_img, np.ndarray) or getattr(screen_img, "size", 0) == 0:
@@ -105,7 +106,7 @@ class BulletinBoardHandler(BaseStateHandler):
         rh = max(1, min(rh, h - ry))
 
         roi_img = screen_img[ry:ry+rh, rx:rx+rw]
-        pos_local, conf = self.matcher.match(roi_img, template_name, threshold=threshold, quiet=True)
+        pos_local, conf = self.matcher.match(roi_img, template_name, threshold=threshold, quiet=True, scales=scales)
 
         tmpl = self.matcher._load_template(template_name)
         tw, th = (tmpl.shape[1], tmpl.shape[0]) if isinstance(tmpl, np.ndarray) else (40, 40)
@@ -118,7 +119,7 @@ class BulletinBoardHandler(BaseStateHandler):
             return (gx, gy), (bx, by, tw, th), conf
 
         # 若 ROI 內未達標，進行全圖比對以取得全局最高匹配資訊供診斷繪圖
-        pos_global, conf_global = self.matcher.match(screen_img, template_name, threshold=threshold, quiet=True)
+        pos_global, conf_global = self.matcher.match(screen_img, template_name, threshold=threshold, quiet=True, scales=scales)
         if pos_global is not None:
             bx = max(0, pos_global[0] - tw // 2)
             by = max(0, pos_global[1] - th // 2)
@@ -131,10 +132,11 @@ class BulletinBoardHandler(BaseStateHandler):
         必須滿足：
         1. 基礎門禁：看得到 quit_btn (threshold=0.80)；
         2. 負向排他：畫面絕無背包專屬特徵（tidy.png、Disassembly.png，threshold=0.80）；
-        3. 正向專屬特徵（三選一，OR 命中任一即確認為告示牌介面，門檻 0.70）：
+        3. 正向專屬特徵（三選一，OR 命中任一即確認為告示牌介面，門檻 0.65 搭配候選尺度）：
            - 通道 1【Before 待接取】：左側出現未接取任務捲軸 (task.png)
            - 通道 2【After 已接取】：左側出現已接取任務捲軸 (task_after.png)
            - 通道 3【Reset 控制項】：左下角出現重新整理按鈕 (reset.png)
+        只要三者有任一命中，即使 reset 處於冷卻倒數亦能藉由任務捲軸秒速識別。
         所有判定範圍與匹配資訊均透過 DebugVisualizer 輸出至 debug_bulletin_board_verify.png。
         """
         if screen_img is None or not isinstance(screen_img, np.ndarray) or getattr(screen_img, "size", 0) == 0:
@@ -152,18 +154,22 @@ class BulletinBoardHandler(BaseStateHandler):
         task_roi = (0, 0, min(w, int(w * 0.60)), h)
         reset_roi = (0, int(h * 0.60), min(w, int(w * 0.60)), h - int(h * 0.60))
 
+        # 針對解析度微幅縮放差異，提供候選尺度，門檻微調至 0.65 (A + B 雙重強韌保證)
+        board_scales = [1.00, 1.04, 1.08]
+        positive_threshold = 0.65
+
         # 1. 基礎門禁：quit 按鈕
-        pos_quit, bbox_quit, conf_quit = self._match_in_roi(screen_img, quit_btn, quit_roi, threshold=0.80)
+        pos_quit, bbox_quit, conf_quit = self._match_in_roi(screen_img, quit_btn, quit_roi, threshold=0.80, scales=board_scales)
 
         # 2. 背包排他特徵檢查：若有 tidy.png 或 Disassembly.png，絕對是背包而非告示牌
         pos_tidy, _ = self.matcher.match(screen_img, "common/tidy.png", threshold=0.80, quiet=True)
         pos_disasm, _ = self.matcher.match(screen_img, "common/Disassembly.png", threshold=0.80, quiet=True)
         has_bag_overlay = (pos_tidy is not None) or (pos_disasm is not None)
 
-        # 3. 正向三通道獨立檢查
-        pos_task, bbox_task, conf_task = self._match_in_roi(screen_img, task_tpl, task_roi, threshold=0.70)
-        pos_after, bbox_after, conf_after = self._match_in_roi(screen_img, task_after_tpl, task_roi, threshold=0.70)
-        pos_reset, bbox_reset, conf_reset = self._match_in_roi(screen_img, reset_btn, reset_roi, threshold=0.70)
+        # 3. 正向三通道獨立檢查 (三選一 OR 通道：任一命中即確認為告示牌介面)
+        pos_task, bbox_task, conf_task = self._match_in_roi(screen_img, task_tpl, task_roi, threshold=positive_threshold, scales=board_scales)
+        pos_after, bbox_after, conf_after = self._match_in_roi(screen_img, task_after_tpl, task_roi, threshold=positive_threshold, scales=board_scales)
+        pos_reset, bbox_reset, conf_reset = self._match_in_roi(screen_img, reset_btn, reset_roi, threshold=positive_threshold, scales=board_scales)
 
         is_board = (
             (pos_quit is not None)
@@ -174,9 +180,9 @@ class BulletinBoardHandler(BaseStateHandler):
         # 4. 委託 DebugVisualizer 繪製多特徵診斷影像 (符合 Greenfield Lite 決策與視覺化解耦架構)
         diagnostics = [
             {"name": "quit", "roi": quit_roi, "matched_bbox": bbox_quit, "confidence": conf_quit, "threshold": 0.80, "matched": pos_quit is not None},
-            {"name": "task (Before)", "roi": task_roi, "matched_bbox": bbox_task, "confidence": conf_task, "threshold": 0.70, "matched": pos_task is not None},
-            {"name": "task_after (After)", "roi": task_roi, "matched_bbox": bbox_after, "confidence": conf_after, "threshold": 0.70, "matched": pos_after is not None},
-            {"name": "reset", "roi": reset_roi, "matched_bbox": bbox_reset, "confidence": conf_reset, "threshold": 0.70, "matched": pos_reset is not None},
+            {"name": "task (Before)", "roi": task_roi, "matched_bbox": bbox_task, "confidence": conf_task, "threshold": positive_threshold, "matched": pos_task is not None},
+            {"name": "task_after (After)", "roi": task_roi, "matched_bbox": bbox_after, "confidence": conf_after, "threshold": positive_threshold, "matched": pos_after is not None},
+            {"name": "reset", "roi": reset_roi, "matched_bbox": bbox_reset, "confidence": conf_reset, "threshold": positive_threshold, "matched": pos_reset is not None},
         ]
         status_banner = (
             f"BULLETIN BOARD: {'PASS' if is_board else 'FAIL'} | "
