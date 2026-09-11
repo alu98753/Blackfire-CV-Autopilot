@@ -89,7 +89,6 @@ class GameStateMachine:
         "dungeons/gungeon_godown_confirm.png",
         "dungeons/Treasure.png",
         "dungeons/dungeon_bless.png",
-        "dungeons/dungeon_fight.png",
     )
     DUNGEON_RECOVERY_FEATURES = (
         "dungeons/leave.png",
@@ -97,7 +96,7 @@ class GameStateMachine:
         "dungeons/gungeon_godown.png",
     )
     DUNGEON_RECOVERY_MODE_TYPES = frozenset(
-        {"dungeon", "mix", "stage", "daily"}
+        {"dungeon", "mix", "stage", "daily", "domain", "collect_only"}
     )
     EMERGENCY_DUNGEON_EXIT_PRIORITIES = (
         "dungeons/dungeons_complete.png",
@@ -106,7 +105,6 @@ class GameStateMachine:
         "common/continue_gray.png",
         "dungeons/gungeon_godown_confirm.png",
         "common/ok.png",
-        "dungeons/dungeon_fight.png",
         "common/quit.png",
         "dungeons/Treasure.png",
         "dungeons/skill_event.png",
@@ -580,49 +578,78 @@ class GameStateMachine:
             return self.DUNGEON_SCENE_FEATURES
         return self.DUNGEON_RECOVERY_FEATURES
 
+    @classmethod
+    def is_dungeon_explore_config(cls, config: dict | None) -> bool:
+        """Return True if config defines valid dungeon exploration priorities.
+
+        Non-dungeon configs (e.g. domain modes with their own explore_btn.png,
+        stages, bag cleaning, or town subflows) must not be treated as dungeon routes.
+        """
+        if not isinstance(config, dict):
+            return False
+        if config.get("type") in ("domain", "stage", "bag_clean", "blood_altar", "jewelry_workshop", "chest", "collect_only"):
+            return False
+        priorities = config.get("explore_priorities")
+        if not isinstance(priorities, list) or not priorities:
+            return False
+        dungeon_anchors = (
+            "dungeons/gungeon_godown.png",
+            "dungeons/dungeons_complete.png",
+            "dungeons/leave.png",
+        )
+        return any(p in dungeon_anchors or p.startswith("dungeons/") for p in priorities)
+
     def ensure_explore_config(self):
-        """Restore a route config that can safely run ``ExploreHandler``.
+        """Restore or inject a route config that can safely run ``ExploreHandler``.
 
         Visual state detection and bag-cleanup recovery can enter EXPLORING
-        while a temporary town/subflow config is active.  Those configs do not
-        define ``explore_priorities``.
+        while a temporary town/subflow or non-dungeon config (e.g. domain, stage)
+        is active. Those configs either lack ``explore_priorities`` or define
+        non-dungeon priorities (e.g. ``domains/golden_empire/explore_btn.png``).
         """
         active_config = self.config or {}
-        if "explore_priorities" in active_config:
+        if self.is_dungeon_explore_config(active_config):
             return True
 
+        # 若當前持有非地下城目標意圖 (例如普通關卡 stage、領地探索 domain 或城鎮任務)：
+        # 依據 Precondition Contracts 7.2：角色肉身處於地下城，目標意圖的 dispatch precondition 未成立！
+        # 系統必須鎖定原目標意圖 (Intent Latching)，注入最小前置離場配置供 ExploreHandler 執行通關退出。
+        if active_config:
+            if getattr(self, "dungeon_recovery_return_config", None) is None:
+                self.dungeon_recovery_return_config = active_config.copy()
+            fallback_cfg = active_config.copy()
+            fallback_cfg["type"] = "dungeon"
+            fallback_cfg["explore_priorities"] = list(self.EMERGENCY_DUNGEON_EXIT_PRIORITIES)
+            fallback_cfg["dungeon_battle_results"] = [
+                "common/continue.png",
+                "common/continue1.png",
+                "common/continue2.png",
+                "common/continue_gray.png",
+                "stages/retry.png",
+                "exit_battle.png",
+            ]
+            self.set_config(fallback_cfg)
+            logging.warning(
+                "🏰 [探索前置路徑] 當前配置非地下城探索意圖 (type=%s)，已鎖定目標意圖並啟用地下城離場前置路徑配置。",
+                (self.dungeon_recovery_return_config or {}).get("type"),
+            )
+            return True
+
+        # 若當前完全無配置，嘗試從候選配置中恢復
         candidates = (
             getattr(self, "dungeon_cooldown_return_config", None),
             getattr(self, "original_config", None),
             getattr(self, "primary_config", None),
         )
         for candidate in candidates:
-            if candidate and "explore_priorities" in candidate:
+            if self.is_dungeon_explore_config(candidate):
                 logging.warning(
                     "[Explore config recovery] restoring dungeon route config before entering EXPLORING."
                 )
                 self.set_config(candidate.copy())
                 return True
 
-        # 若候選配置皆無 explore_priorities (例如當前意圖為普通關卡 stage 或城鎮任務)：
-        # 依據 Precondition Contracts：角色肉身處於地下城，目標意圖的 dispatch precondition (AtLobby/AtTown) 未成立！
-        # 系統保留原目標意圖 (Intent Latching)，注入最小前置離場配置供 ExploreHandler 執行通關退出。
-        self.dungeon_recovery_return_config = (self.config or {}).copy()
-        fallback_cfg = (self.config or {}).copy()
-        fallback_cfg["explore_priorities"] = list(self.EMERGENCY_DUNGEON_EXIT_PRIORITIES)
-        fallback_cfg["dungeon_battle_results"] = [
-            "common/continue.png",
-            "common/continue1.png",
-            "common/continue2.png",
-            "common/continue_gray.png",
-            "stages/retry.png",
-            "exit_battle.png",
-        ]
-        self.set_config(fallback_cfg)
-        logging.warning(
-            "🏰 [探索前置路徑] 當前配置缺少探索優先級（非地下城意圖），已鎖定目標意圖並啟用地下城離場前置路徑配置。"
-        )
-        return True
+        return False
 
     def notify_ui_progress(self):
         """
@@ -1075,7 +1102,6 @@ class GameStateMachine:
             "dungeons/gungeon_godown.png",
             "dungeons/Treasure.png",
             "dungeons/dungeon_bless.png",
-            "dungeons/dungeon_fight.png"
         ]
         for btn_name in dungeon_features:
             if os.path.exists(os.path.join("templates", btn_name)):

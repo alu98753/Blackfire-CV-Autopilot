@@ -52,7 +52,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         mock_exists.side_effect = lambda path: "dungeons/leave.png" in path.replace("\\", "/")
         self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: ((100, 100), 0.90) if tpl == "dungeons/leave.png" else (None, 0.0)
 
-        modes = ["dungeon", "mix", "stage", "daily"]
+        modes = ["dungeon", "mix", "stage", "daily", "domain"]
         for mode in modes:
             self.machine.config = {"name": f"{mode}測試", "type": mode, "explore_priorities": []}
             self.machine.is_in_dungeon = False
@@ -196,6 +196,99 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         mock_login.assert_called_once()
         # 斷言並未轉移至 EXPLORING，維持在 UNKNOWN
         self.assertNotEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+
+    @patch("os.path.exists")
+    def test_6_domain_tier4_dungeon_relaunch_recovery_and_restoration(self, mock_exists):
+        """
+        測試 6：領地模式 (如黃金古國 domain) 下意外重啟於地下城時：
+        1. 全域定位辨識 dungeons/leave.png 正確轉移至 STATE_DUNGEON_EXPLORING。
+        2. 原 domain 配置被鎖定至 dungeon_recovery_return_config。
+        3. 注入具備下樓標記的緊急離場優先級。
+        4. ExploreHandler 成功匹配並點擊下樓圖標 (dungeons/gungeon_godown.png)。
+        5. 通關離場後，原 domain 配置 100% 完整還原，狀態轉移至 STATE_NAVIGATING。
+        """
+        mock_exists.return_value = True
+        domain_cfg = {
+            "name": "黃金帝國",
+            "type": "domain",
+            "domain": "golden_empire",
+            "explore_priorities": ["domains/golden_empire/explore_btn.png"],
+        }
+        self.machine.config = domain_cfg.copy()
+        self.machine.current_state = self.machine.STATE_UNKNOWN
+
+        # 1. 模擬全域狀態定位遇到 dungeons/leave.png
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((64, 717), 0.96) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+        self.machine.detect_current_state(self.fake_img, self.rect)
+
+        # 斷言轉移至 STATE_DUNGEON_EXPLORING
+        self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+        # 斷言原 domain 配置被精確鎖定至 dungeon_recovery_return_config
+        self.assertEqual(self.machine.dungeon_recovery_return_config, domain_cfg)
+        # 斷言當前配置已替換為具備下樓圖標的離場配置
+        self.assertEqual(self.machine.config["type"], "dungeon")
+        self.assertIn("dungeons/gungeon_godown.png", self.machine.config.get("explore_priorities", []))
+
+        # 2. 模擬 ExploreHandler 在地下城中看到下樓按鈕
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((150, 400), 0.92) if tpl == "dungeons/gungeon_godown.png" else (None, 0.0)
+        )
+        explore_handler.handle(self.fake_img, self.rect)
+
+        # 斷言成功點擊下樓按鈕
+        self.mock_mouse.click.assert_called_with(self.rect["left"] + 150, self.rect["top"] + 400)
+        self.assertTrue(self.machine.dungeon_floor_transitioning)
+
+        # 3. 模擬通關寶箱出現 (dungeons/dungeons_complete.png)
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((200, 200), 0.95) if tpl == "dungeons/dungeons_complete.png" else (None, 0.0)
+        )
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertTrue(self.machine.dungeon_completing)
+
+        # 4. 模擬離場確鑿證據出現 (goback_town.png)
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.75, **kwargs: (
+            ((300, 300), 0.90) if tpl == "goback_town.png" else (None, 0.0)
+        )
+        explore_handler.handle(self.fake_img, self.rect)
+
+        # 斷言通關結束、意圖鎖定清空、且原 domain 配置 100% 原樣還原
+        self.assertFalse(self.machine.dungeon_completing)
+        self.assertIsNone(self.machine.dungeon_recovery_return_config)
+        self.assertEqual(self.machine.config["type"], "domain")
+        self.assertEqual(self.machine.config["name"], "黃金帝國")
+        self.assertEqual(self.machine.config["domain"], "golden_empire")
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+
+    @patch("os.path.exists")
+    def test_7_explore_handler_domain_autonomy_fallback(self, mock_exists):
+        """
+        測試 7：ExploreHandler 領域自治 (Domain Autonomy)：
+        若傳入之配置被外部污染 (只有 domains/golden_empire/explore_btn.png)，
+        ExploreHandler 自主識別其非地下城特徵，回退至 EMERGENCY_DUNGEON_EXIT_PRIORITIES，
+        保證下樓按鈕 (gungeon_godown.png) 仍能被比對並成功點擊。
+        """
+        mock_exists.return_value = True
+        self.machine.is_in_dungeon = True
+        self.machine.config = {
+            "name": "污染配置",
+            "type": "domain",
+            "explore_priorities": ["domains/golden_empire/explore_btn.png"],
+        }
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+
+        # 模擬畫面上存在下樓按鈕
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((150, 400), 0.92) if tpl == "dungeons/gungeon_godown.png" else (None, 0.0)
+        )
+
+        explore_handler.handle(self.fake_img, self.rect)
+
+        # 斷言成功點擊下樓按鈕
+        self.mock_mouse.click.assert_called_with(self.rect["left"] + 150, self.rect["top"] + 400)
 
 
 if __name__ == "__main__":

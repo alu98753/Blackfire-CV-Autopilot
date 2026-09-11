@@ -55,22 +55,40 @@ class ExploreHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_BATTLE)
                 return
 
-        # 3. 依優先級處理探險事件
+        # 3. 依優先級處理探險事件 (領域自治：若當前配置缺少或非地下城優先級，自主回退至標準離場清單)
         explore_priorities = (self.machine.config or {}).get("explore_priorities")
-        if not isinstance(explore_priorities, list):
+        is_valid_dungeon_priorities = (
+            isinstance(explore_priorities, list)
+            and any(
+                p in (
+                    "dungeons/gungeon_godown.png",
+                    "dungeons/dungeons_complete.png",
+                    "dungeons/leave.png",
+                )
+                or p.startswith("dungeons/")
+                for p in explore_priorities
+            )
+        )
+        if not is_valid_dungeon_priorities:
             logging.warning(
-                "[ExploreHandler] missing explore_priorities in config; falling back to emergency dungeon exit priorities."
+                "[ExploreHandler] missing or non-dungeon explore_priorities in config; falling back to emergency dungeon exit priorities."
             )
             explore_priorities = getattr(
                 self.machine,
                 "EMERGENCY_DUNGEON_EXIT_PRIORITIES",
                 [
                     "dungeons/dungeons_complete.png",
-                    "dungeons/leave.png",
-                    "dungeons/gungeon_godown.png",
                     "common/confirm.png",
+                    "common/continue.png",
+                    "common/continue_gray.png",
+                    "dungeons/gungeon_godown_confirm.png",
                     "common/ok.png",
                     "common/quit.png",
+                    "dungeons/Treasure.png",
+                    "dungeons/skill_event.png",
+                    "dungeons/dungeon_bless.png",
+                    "dungeons/gungeon_godown.png",
+                    "dungeons/leave.png",
                 ],
             )
 
