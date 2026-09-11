@@ -58,16 +58,16 @@
 
 ## ⚙️ 組態配置 (Configuration)
 
-可在 [config.py](../../../config.py) 的 `GLOBAL_SETTINGS` 或特定模式設定中自訂執行順序與項目：
+可在 [config.py](../../../config.py) 或 `config/defaults.toml` 的 `GLOBAL_SETTINGS` 中自訂背包清理後連動的維護順序：
 
 ```python
 GLOBAL_SETTINGS = {
-    # 預設背包清理後連動的城鎮建築順序
-    "default_town_subflow_order": ["blood_altar", "jewelry_workshop"],
+    # 預設背包清理後連動的資源維護子流程順序（獻祭、出售）
+    "default_bag_maintenance_order": ["blood_sacrifice", "jewelry_workshop"],
 }
 ```
 
-若欲關閉某一子流程或調整優先順序，只需修改 `town_subflow_order` 陣列即可。
+若欲關閉某一子流程或調整優先順序，可新增如bag_maintenance_order的陣列 並依照架構描述更新方法即可。
 
 ---
 

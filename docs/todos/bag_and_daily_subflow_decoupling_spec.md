@@ -1,10 +1,10 @@
 # 背包維護與每日子流程解耦規格書 (Bag Maintenance & Daily Subflow Decoupling Spec) 📋
 
 > 狀態：正式規格提案 (Proposed Specification)  
-> 上位架構：[Greenfield-lite Architecture v1](../../architecture/project_arch_greenfield_lite_v1.md)  
-> 前置條件契約：[Precondition Contracts](../../architecture/precondition_contracts.md)  
-> 關聯契約：[REACH_TOWN Contract](../navigation/reach_town_contract.md)、[Lobby Scene Contract](../navigation/lobby_scene_contract.md)  
-> 追蹤 Issue/TODO：[future_work.md](../../todos/future_work.md)、[bag_bug.md](../../todos/bag_bug.md)、[bag_jewelry_workshop_bug.md](../../todos/bag_jewelry_workshop_bug.md)
+> 上位架構：[Greenfield-lite Architecture v1](../architecture/project_arch_greenfield_lite_v1.md)  
+> 前置條件契約：[Precondition Contracts](../architecture/precondition_contracts.md)  
+> 關聯契約：[REACH_TOWN Contract](../features/navigation/reach_town_contract.md)、[Lobby Scene Contract](../features/navigation/lobby_scene_contract.md)  
+> 追蹤 Issue/TODO：[future_work.md](future_work.md)、[bag_bug.md](bag_bug.md)、[bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md)
 
 ---
 
@@ -13,7 +13,7 @@
 近期在長掛機與自動背包清理過程中，密集觀察到以下兩項嚴重影響無人值守穩定性的卡死與邏輯異常現象：
 
 1. **背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死**：
-   - 背包清理後觸發城鎮流水線，但在進入珠寶店時打開背包，畫面邊緣因暗化背景仍穿透匹配到城鎮大門 `common/door.png`（相似度 0.9403），觸發珠寶店內部的「Scene Guard 防護攔截」，結束出售並退出；
+   - 背包清理後觸發城鎮流水線，但在進入珠寶店前打開背包，畫面邊緣因暗化背景仍穿透匹配到城鎮大門 `common/door.png`（相似度 0.9403），觸發珠寶店內部的「Scene Guard 防護攔截」，結束出售並退出；
    - 此時背包視窗仍停留在螢幕上未關閉，狀態機強行轉移至 `NAVIGATING` 去執行懸賞任務；
    - 導航層在城鎮畫面嘗試點擊城門 `common/door.png`，因前景被未關閉的背包模態遮罩阻擋，點擊無效且無法跳轉場景，連續重試 15 次逾時，全域陷入死鎖卡死。
 2. **懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務**：
@@ -77,7 +77,7 @@
   2. **每日領血與戰後獻祭分離**：
      - `blood_altar` (Daily Claim)：僅限每日福利，依賴紅點（`requires_red_dot=True`），領取後記錄 `daily_status.json`。
      - `blood_sacrifice` (Maintenance Sacrifice)：戰後背包滿溢後的血水獻祭，**禁止檢查紅點**，**禁止標記每日 blood_altar 完成**，純以背包內有無血水決定執行或結束。
-  3. **商店出售獨立性**：`shop_sell` 專注於商店內出售，不承攬城鎮開包整理之重複職責。
+  3. **商店出售前置整理有界化**：`jewelry_workshop` 進店前的背包整理升格為獨立有界 Pre-Tidy 子階段，嚴格驗證關閉閉環，不允許未關閉狀態逃逸。
 
 ### Invariant 2：覆蓋層排他性門禁保證 (Overlay Exclusion Gate Invariant)
 - **原則**：模態覆蓋層（如背包、通用彈窗）未確認徹底關閉前，底層場景絕不可判定為可操作的穩態。
@@ -200,9 +200,27 @@ if self._is_modal_overlay_present(screen_img):
 
 ### 4.3 模組三：珠寶店內部職責收斂與 Scene Guard 修復
 
-#### 4.3.1 廢除 Handler 內部城鎮開包行為
-- `JewelryWorkshopHandler` 中的 `pre_tidy_done` 與「城鎮背包預先整理」邏輯屬於重複職責且為事故誘因，**予以徹底移除**。
-- 背包整理已由 `BagCleaningHandler` 全權保證。`JewelryWorkshopHandler` 啟動時即處於城鎮，直接進行商人金幣排序與進入商店。
+#### 4.3.1 規範化 Handler 內部「有界 Init ➔ 閉環 Verify」背包整理子階段
+- 出售前確實需預先整理背包，但**嚴禁散裝混寫在城鎮尋找商店的 if-else 邏輯中**（容易引發穿透往下執行進店與 Scene Guard 誤殺）。
+- **重構為獨立有界的 Pre-Tidy 子狀態機流程**：
+  ```text
+  [INIT]
+    │
+    ▼
+  [PRE_TIDY_OPEN_BAG] ────(點擊「物品欄」)───► 驗證背包已打開 (看見 tidy.png 或背包特徵)
+    │
+    ▼
+  [PRE_TIDY_CLICK_TIDY] ──(點擊整理 tidy.png)──► 整理完成 (靜置 0.3 秒供畫面穩定)
+    │
+    ▼
+  [PRE_TIDY_CLOSE_BAG] ───(點擊 quit.png)───► 🛡️ 嚴格閉環：click_and_wait_until_gone(quit.png)
+    │                                          唯有驗證背包視窗徹底消失，才准轉入下一階段！
+    ▼
+  [SEEK_AND_ENTER_SHOP] ─────────────────────► 前景已確認乾淨無背包，安心進行商人比對並點擊進店
+  ```
+- **有界與閉環保證**：
+  1. 設定超時/重試門禁（如 3 次重試或 5 秒上限），若無整理需求或超時則優雅跳過。
+  2. 唯有在 `PRE_TIDY_CLOSE_BAG` 透過 `click_and_wait_until_gone` 100% 驗證背包視窗消失後，才允許進入 `SEEK_AND_ENTER_SHOP`，杜絕任何殘留背包視窗污染後續流程。
 
 #### 4.3.2 修復 Scene Guard 誤判
 Scene Guard 僅於「已確認進入建築內部」且「建築特徵完全丟失」時生效。在尚未確認進店前，畫面看見 `door.png` 屬城鎮常態，**絕不能視為防護攔截逃逸的依據**：
@@ -269,7 +287,7 @@ def _is_inside_bulletin_board(self, screen_img) -> bool:
 | :--- | :--- | :--- |
 | **背包清理結束時** | 呼叫 `trigger_town_subflow_chain`，將 blood 與 jewelry 綁入 Daily 佇列 | 呼叫 `trigger_bag_maintenance_chain`，僅調度獨立的維護任務，與 Daily 脫鉤 |
 | **背包滿後獻祭血水** | 視為 `blood_altar`，因無紅點被前置控制器誤當完成跳過，且污染 Daily 紀錄 | 視為 `blood_sacrifice`，不查紅點，正常進入祭壇獻祭；不影響每日領血狀態 |
-| **珠寶店進店前** | 在城鎮中再次打開背包整理，觸發 Scene Guard 穿透誤判逃逸，留下開啟的背包 | 移除開包邏輯，直接選店進店；進店前嚴格核驗無覆蓋層 |
+| **珠寶店進店前** | 散裝開包整理，被 Scene Guard 邊緣 door.png 穿透誤判逃逸，留下開啟的背包 | 升格為獨立有界 Pre-Tidy 子流程；以 `click_and_wait_until_gone` 驗證背包徹底關閉才進店 |
 | **背包殘留時導航大門** | 盲目點擊 `door.png`，被背包遮擋無效，連續 15 次重試卡死 | 門禁攔截：偵測到 Overlay 先點擊 `quit.png` 關閉，確認無浮層後才點城門 |
 | **背包殘留時進告示牌** | 見 `quit.png` 即誤認進屋，OCR 找無任務判定全滿，吞噬當日懸賞 | 專屬錨點門禁：見 `quit.png` 無告示牌特徵時判定為干擾浮層，關閉浮層重試，不吞任務 |
 
@@ -286,7 +304,7 @@ def _is_inside_bulletin_board(self, screen_img) -> bool:
    - 驗證珠寶店出售與血水獻祭可各自獨立配置啟用。
 2. **`test_behavior_jewelry_scene_guard_fix.py`** (修復驗證)：
    - 模擬城鎮背景帶有 `door.png`，驗證珠寶店不會在進店前因門牌誤判而中途逃逸。
-   - 驗證珠寶店不再執行額外的城鎮背包開啟。
+   - 驗證珠寶店執行獨立有界 Pre-Tidy 子流程並以 `click_and_wait_until_gone` 嚴格驗證背包視窗關閉。
 3. **`test_behavior_bulletin_board_entry_guard.py`** (修復驗證)：
    - 模擬畫面僅有背包視窗與 `quit.png`，輸入 `BulletinBoardHandler`：斷言其不得進入 `PROCESS_ACCEPT_QUESTS`，不得標記 completed，且能正確觸發關閉覆蓋層。
    - 模擬畫面具備 `reset.png` 或 `task.png` + `quit.png`：斷言其成功識別並推進接取任務。
@@ -309,7 +327,8 @@ def _is_inside_bulletin_board(self, screen_img) -> bool:
 **待確認後之執行順序**：
 1. 更新 `docs/todos/future_work.md`，將此規格書作為兩個 Bug 的解耦與修復藍圖。
 2. 分支或實作階段依序落實：
-   - Step 1: 告示牌專屬排他錨點門禁 (`_is_inside_bulletin_board`)
-   - Step 2: 珠寶店移除城鎮開包與 Scene Guard 邊緣防護修復
+   - Step 1: 珠寶店 Pre-Tidy 有界子流程與 Scene Guard 邊緣防護修復
+   - Step 2: 告示牌專屬排他錨點門禁 (`_is_inside_bulletin_board`)
    - Step 3: 背包維護流水線 (`blood_sacrifice` / `jewelry_workshop`) 與每日福利流水線徹底分離
    - Step 4: 導航層與各 Handler Overlay 關閉驗證閉環
+

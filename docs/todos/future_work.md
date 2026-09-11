@@ -44,20 +44,37 @@ dengeon同理
 
 ## 📌 一、 進行中與待開發項目 (Active TODOs)
 
+
+1.3.8應該完成了 需要檢查
+
+我能否單獨用subflow 測試 這個功能?
+
+1. 背包滿了跑(整理背包 獻計寫 進珠寶店前再次整理背包 進珠寶店賣東西)  這應該已經坐在我的程式裡面了?
+
+==
+
+選卡bug: E:\Side_Project\BlackfireCrusade_tool\scratch\debug\debug_click.png
+2026-09-11 01:09:00,476 [INFO] 🎯 [DebugVisualizer] 已成功將診斷標記 (ROI/BBox/OCR/Click) 寫入 debug_click.png
+2026-09-11 01:09:01,071 [INFO] 🧭 [子流程] 開始執行「領取祝福」階段式子流程...
+2026-09-11 01:09:02,982 [INFO] 🧭 [子流程-選卡-Fallback] 點擊畫面第一個選擇按鈕 (0.9474) 座標: (765, 1636)
+2026-09-11 01:09:03,109 [INFO] [DebugArtifacts] Debug image written to: E:\Side_Project\BlackfireCrusade_tool\scratch\debug\debug_click.png
+
+有成功進入獻計 有成功整理背包 有成功賣東西 那不能保證什麼 還要測試什麼?
+
 ### Daily
 
 要讓我可以安心整天不用看的前提：
-- 規格書：[背包維護與每日子流程解耦規格書](../features/town_building/bag_and_daily_subflow_decoupling_spec.md) (已完成同源分析與完整架構設計)
-- [ ] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
-  - 核心原因為「背包後續子流程」與「每日子流程」未徹底切分清楚；珠寶店與 blood 的連帶性必須拔除，分開處理。背包滿觸發城鎮流水線時打開背包，卻因畫面邊緣誤判大門 door.png 而觸發防護攔截跳過；背包視窗仍維持開啟未關閉，狀態機即強行轉移回 NAVIGATING 去做懸賞，大門被背包阻擋無法點擊，導致點擊逾時超限重試，全域卡死在城鎮畫面。詳細架構解耦詳見 [bag_and_daily_subflow_decoupling_spec.md](../features/town_building/bag_and_daily_subflow_decoupling_spec.md)。
-- [ ] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務**
-  - 懸賞告示牌的流程不用改，只是要確認有進去才可以開始跑。目前問題是因殘留未關閉背包上的 `quit.png` 被誤當作進入告示牌憑證，在背包畫面誤跑任務 OCR，因無任務誤判今日已全完成。修復方案：增加告示牌專屬正交錨點 (`reset.png` / `task.png`) 門禁，無專屬錨點嚴禁開跑任務。詳細規格見 [bag_and_daily_subflow_decoupling_spec.md](../features/town_building/bag_and_daily_subflow_decoupling_spec.md)。
+- 規格書：[背包維護與每日子流程解耦規格書](bag_and_daily_subflow_decoupling_spec.md) (已完成同源分析與完整架構設計)
+- [x] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
+  - 核心原因為「背包後續子流程」與「每日子流程」未徹底切分清楚；已於 `fix/bag-and-daily-subflow-decoupling` 分支解耦，珠寶店進店前整理升格為獨立有界 Pre-Tidy 子流程並以消失閉環確認關閉；修復 Scene Guard 避免在城鎮過渡階段假陽性逃逸。詳細見 [bag_and_daily_subflow_decoupling_spec.md](bag_and_daily_subflow_decoupling_spec.md)。
+- [x] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務** ([bag_bug.md](bag_bug.md))
+  - 告示牌處理器增加 `_is_inside_bulletin_board` 排他性專屬正交錨點 (`reset.png` / `task.png` / `task_after.png`) 門禁；見 `quit.png` 但非告示牌時判定為干擾覆蓋層並點擊關閉自癒，絕不誤判任務與吞噬懸賞。詳細規格見 [bag_and_daily_subflow_decoupling_spec.md](bag_and_daily_subflow_decoupling_spec.md)。
 - [ ] **4. 定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖** ([daily_quest_dungeon_priority_spec.md](daily_quest_dungeon_priority_spec.md))
 - [ ] **7. 領主 Boss(Lord) 與深淵魔王(Demon Lord) 穩定運行與材料防護**
   - lord, demon lord 不被其他activity搶掉，可以正常打完。
   - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
-- [ ] **8. 血之祭壇 (Blood Altar) 判定被紅點掠過問題** ([bag_bug.md](bag_bug.md))
-  - blood building 徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與 戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)，避免已無紅點時獻祭被意外跳過。規格詳見 [bag_and_daily_subflow_decoupling_spec.md](../features/town_building/bag_and_daily_subflow_decoupling_spec.md)。
+- [x] **8. 血之祭壇 (Blood Altar) 判定被紅點掠過問題** ([bag_bug.md](bag_bug.md))
+  - blood building 徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與 戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)，避免已無紅點時獻祭被意外跳過，且不污染 `daily_status.json`。規格詳見 [bag_and_daily_subflow_decoupling_spec.md](bag_and_daily_subflow_decoupling_spec.md)。
 - 釐清 Daily Complete 與 Defer 的判斷依據
   - daily complete 的條件寫好了，那現在 defer 判斷的依據有哪些？
 
