@@ -460,6 +460,13 @@ type = "bag_tidy"
 timeout_seconds = 20.0
 navigation_path = []
 
+[subflow_configs.bag_maintenance]
+enabled = true
+name = "背包資源維護流水線"
+type = "bag_maintenance"
+navigation_path = []
+lobby_start_btn = "stages/start.png"
+
 [base_stage_levels]
 
 [base_stage_levels.1]

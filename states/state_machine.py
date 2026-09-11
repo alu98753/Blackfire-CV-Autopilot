@@ -1886,18 +1886,38 @@ class GameStateMachine:
                 self.check_and_advance_quest_target()
             logging.info("🎉 [子流程] 「領取任務獎勵」 Phase 狀態機圓滿結束！")
 
+    def _expand_subflow_queue(self, queue):
+        """
+        展開子流程佇列中的複合巨集（如 bag_maintenance -> 依序展開為 default_bag_maintenance_order）。
+        重複使用既有配置與變數，避免硬編碼。
+        """
+        from config import get_default_bag_maintenance_order
+        cfg = self.config or {}
+        expanded = []
+        for flow_key in queue:
+            if flow_key == "bag_maintenance":
+                steps = cfg.get(
+                    "bag_maintenance_order",
+                    cfg.get("town_subflow_order", get_default_bag_maintenance_order()),
+                )
+                expanded.extend(steps)
+            else:
+                expanded.append(flow_key)
+        return expanded
+
     def start_subflow_queue(self, queue):
         """
-        初始化並啟動城鎮子流程佇列，並單次列印任務總覽儀表板。
+        初始化並啟動城鎮子流程佇列，自動展開複合巨集（如 bag_maintenance），並單次列印任務總覽儀表板。
         """
         from config import SUBFLOW_CONFIGS
-        self.town_subflow_queue = list(queue)
+        expanded_queue = self._expand_subflow_queue(queue)
+        self.town_subflow_queue = list(expanded_queue)
         self.current_town_subflow = None
 
         logging.info("=" * 60)
         logging.info("🏛️ 【城鎮任務流水線 - 任務總覽儀表板】 🏛️")
         logging.info("=" * 60)
-        for idx, flow_key in enumerate(queue, 1):
+        for idx, flow_key in enumerate(expanded_queue, 1):
             cfg = SUBFLOW_CONFIGS.get(flow_key, {})
             name = cfg.get("name", flow_key)
             is_enabled = cfg.get("enabled", True)
@@ -1915,15 +1935,15 @@ class GameStateMachine:
 
     def trigger_bag_maintenance_chain(self):
         """
-        背包清理完成退回城鎮後，構建資源維護子流程佇列（血之祭壇獻祭、珠寶加工廠出售）。
-        徹底與 Daily 每日福利流水線解耦。
+        背包清理完成退回城鎮後，構建資源維護子流程佇列（血之祭壇獻祭、背包整理、珠寶加工廠出售）。
+        徹底與 Daily 每日福利流水線解耦，重複使用既有變數與設定。
         """
-        from config import GLOBAL_SETTINGS
+        from config import get_default_bag_maintenance_order
         cfg = self.config or {}
-        # 統一讀取 bag_maintenance_order，相容舊 town_subflow_order 設定
+        # 統一讀取 bag_maintenance_order，相容舊 town_subflow_order 設定，重複使用既有變數
         order = cfg.get(
             "bag_maintenance_order",
-            cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_bag_maintenance_order", ["blood_sacrifice", "bag_tidy", "jewelry_workshop"]))
+            cfg.get("town_subflow_order", get_default_bag_maintenance_order()),
         )
         logging.info("🎒 [背包後續維護] 背包清理完成，構建維護任務佇列: %s", order)
         self.start_subflow_queue(order)

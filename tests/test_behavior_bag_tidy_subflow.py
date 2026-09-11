@@ -152,6 +152,29 @@ class TestBehaviorBagTidySubflow(unittest.TestCase):
         machine.start_subflow_queue.assert_called_once_with(["blood_sacrifice", "bag_tidy", "jewelry_workshop"])
         machine.transition_to.assert_called_once_with(machine.STATE_NAVIGATING)
 
+    def test_bag_maintenance_macro_expands_to_default_order(self):
+        """
+        [契約 5 驗證] 驗證 start_subflow_queue(["bag_maintenance"]) 會自動展開為預設維護佇列
+        """
+        from config import get_default_bag_maintenance_order
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock())
+        machine._select_next_town_subflow = MagicMock()
+
+        machine.start_subflow_queue(["bag_maintenance"])
+
+        expected = get_default_bag_maintenance_order()
+        self.assertEqual(machine.town_subflow_queue, expected)
+        self.assertEqual(machine.town_subflow_queue, ["blood_sacrifice", "bag_tidy", "jewelry_workshop"])
+
+    def test_bag_maintenance_order_reuses_config_variable(self):
+        """
+        [契約 6 驗證] 驗證 get_default_bag_maintenance_order 重複使用 GLOBAL_SETTINGS 變數
+        """
+        from config import GLOBAL_SETTINGS, get_default_bag_maintenance_order
+        order = get_default_bag_maintenance_order()
+        self.assertEqual(order, GLOBAL_SETTINGS.get("default_bag_maintenance_order"))
+
 
 if __name__ == "__main__":
     unittest.main()
+
