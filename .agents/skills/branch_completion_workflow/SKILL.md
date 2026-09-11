@@ -1,149 +1,424 @@
 ---
 name: branch_completion_workflow
-description: 當一個 Feature/Fix 分支開發結束、準備收尾或準備合併至 main 時觸發此技能。引導 AI 自動執行代碼驗證、文件同步(docs)、PARS開發故事撰寫、測試全綠燈檢查，並生成標準 --no-ff 合併指令與詳細日誌。
+description: 個人開發模式下的分支收尾工作流，包含 dual-worktree baseline、regression classification、refactor、contract convergence 與 merge preparation。
+usage_scope: solo_development_only
 ---
 
-# 分支收尾與合併標準工作流 (Branch Completion & Merge Workflow Skill) 🚀
+# 分支收尾標準工作流 (Branch Closeout Gated Workflow Skill) 🚀
 
-# 分支收尾與合併標準工作流 (Branch Completion & Merge Workflow Skill) 🚀
+本技能為本專案 Feature / Fix 分支開發完成後的**統一分支收尾 (Branch Closeout) 總編排技能 (Orchestration Skill)**。
+負責從雙工作樹迴歸基準線 (Regression Baseline) 驗證開始，引導執行安全網檢驗、保行為維護重構 (Behavior-Preserving Maintenance Refactor)、程式碼與文件契約收斂，直到交付標準 Merge 指令。
 
-本技能定義當本專案任何 Feature / Fix 分支開發結束、準備收尾或準備進行 Merge 時，必須按順序執行的**三階段硬性狀態閘門 (Three-Phase Gated Workflow)** 與檢核清單。
+---
+
+## 👤 Usage Scope & 協作環境守衛 (Solo vs. Team Guard)
+
+> [!IMPORTANT]
+> **本 Skill 預設為「單人開發模式 (Solo Development Mode)」**：
+> 假設由單一開發者全權管理 `main`，因此允許以本地 `temp-main` 作為個人 baseline，並在 clean 且可 fast-forward 時由 AI 輔助同步。
+
+### 🛡️ 多人協作防護網 (Multi-Developer Guard)
+若出現團隊協作特徵（如有多位活躍貢獻者、強制 PR Review、保護分支或遠端 CI 驗證）：
+- 🚫 **禁止套用 Solo-Only 步驟**：不得以本地 `temp-main` 取代團隊整合環境，嚴禁本機直接 `--ff-only` 或繞過 PR/CI/Review 機制。
+- ✅ **維持通用收尾步驟**：保留 HEAD baseline 測試、迴歸分類、保行為重構與文件/契約收斂等核心品質閘門。
+- 🔀 **改由團隊標準流程整合**：交付物由本機 `--no-ff` 指令轉為提供 PR 描述、CI 檢查指引或協同合併審查。
 
 ---
 
 ## 🎯 觸發詞識別 (Trigger Identification)
-當使用者發出以下任何指令時，即視為啟動本工作流：
-- `跑merge` / `跑 merge`
-- `準備merge` / `可以merge了` / `請提供merge指令`
-- `收尾分支` / `結束分支` / `收尾`
+
+當使用者發出以下任何指令時，一律視為啟動本工作流：
+- `請分支收尾` / `分支收尾`
+- `準備 merge` / `準備merge`
+- `請 merge` / `請merge` / `跑merge`
+- `收尾分支` / `結束分支`
 
 > [!CRITICAL]
 > **【最高硬性阻斷禁令 (Hard Blocking Invariant)】**
-> 當使用者說「跑merge」時，AI **絕對禁止直接輸出 `git merge` 指令**！
-> 必須依序通過 **Phase 1 (程式碼潔淨度與 Docstring 閘門)** 與 **Phase 2 (收尾驗證與文件收斂閘門)**。
-> 若本次分支涉及任何 `docs/todos/`、開發 Spec 或核心契約變更，AI **必須停在 Phase 2 向使用者提問候選收斂清單，等待使用者確認後完成契約升格與過期 Spec 清理**。
-> 未完成 Phase 1 程式碼 Docstring 清理與 Phase 2 文件收斂之前，輸出任何 `git merge` 指令均視為嚴重流程違規（Process Regression）！
+> 1. **「請 merge」代表「啟動分支收尾流程」，絕對不是「立刻輸出 `git merge` 指令」！**
+> 2. 本流程為**硬性分段閘門工作流 (Gated Workflow)**，**嚴禁一次跑到底**！
+> 3. 每當遇到需要使用者執行全套測試、確認文件清理範圍或確認重大決策的 Gate 時，AI **必須停下來等待使用者回覆，嚴禁擅自推進至下一階段**。
 
 ---
 
-## 🚦 三階段硬性狀態閘門 (Three-Phase Gated Workflow)
+## 📁 標準工作區配置 (Worktree Layout)
+
+收尾時標準工作樹配置如下：
 
 ```text
-使用者輸入：「跑merge / 收尾 / 準備merge」
-      │
-      ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 【Phase 1: 程式碼潔淨度與 Docstring 審計閘門 (Code Hygiene)】 │
-├─────────────────────────────────────────────────────────────┤
-│ 1. 審查本次異動之 production code 中的 docstrings 與註解。   │
-│ 2. 禁令排除：徹底移除暫時性 spec 名稱、issue id、分支名。   │
-│ 3. 重寫為穩定行為/架構語意，必要時僅引用長效 Canonical Contract。│
-└──────────────────────────────┬──────────────────────────────┘
-                               │ (Phase 1 檢查無誤後推進)
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 【Phase 2: 收尾驗證與文件契約收斂閘門 (Archival & Docs Gate)】 │
-├─────────────────────────────────────────────────────────────┤
-│ 4. 執行最小聚焦單元測試，確保改動邏輯 100% 通過。            │
-│ 5. 撰寫 PARS 框架開發故事 (docs/storys/)。                  │
-│ 6. 檢查 git diff main..HEAD 是否有 docs/todos/ 或 Spec？    │
-│    ├─ 有 ──> 🛑 強制阻斷！向使用者列出候選清單提問。          │
-│    │         等待使用者確認後，執行契約升格與 Spec 清理。      │
-│    └─ 無（或已確認收斂完成） ──> 解鎖 Phase 3                 │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ (Phase 2 完成解鎖)
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 【Phase 3: 分支審計與合併指令交付 (Merge Command Delivery)】  │
-├─────────────────────────────────────────────────────────────┤
-│ 7. 執行 git log / git diff 彙整異動統計與模組細節。         │
-│ 8. 生成 Windows/Linux 相容之標準 --no-ff 合併指令。        │
-│ 9. 提醒使用者手動執行全套單元測試。                         │
-└─────────────────────────────────────────────────────────────┘
+E:\Side_Project\
+├─ BlackfireCrusade_tool\   ← 日常 Feature/Fix branch worktree (當前開發目錄)
+└─ temp-main\               ← 長期保留的 main baseline worktree
+```
+
+- `temp-main` 是長期存在的基準線工作樹，**不需要每次重新建立**。
+- **嚴禁假設 `temp-main` 一定已同步到最新 main**，在驗證前必須進行狀態檢查與安全同步。
+- **永久雙工作樹互斥與分工鐵律 (Permanent Dual-Worktree Invariant)**：
+  - **Git 限制**：同一分支（Branch Ref）在同一時間只能被一個工作樹 checkout。
+  - **`temp-main` 永久持有 `main`**：專職負責 Baseline 測試、執行 `--no-ff` 合併、以及 `git push origin main`。
+  - **`BlackfireCrusade_tool` 永久只持有 Feature/Fix 分支**：日常開發與單元測試。**嚴禁在此工作樹執行 `git checkout main`**（會遭 Git 拒絕）。合併完成後，直接在此目錄從最新 `main` 建立下一個 feature 分支（`git switch -c <next_feature> main`），完全不需要切回 main！
+
+---
+
+## 🚦 11 階段硬性狀態閘門 (The 11-Phase Gated Workflow)
+
+```mermaid
+flowchart TD
+    Start(["使用者觸發：請分支收尾 / 請 merge"]) --> P0["Phase 0: Closeout Context Audit<br>(審查變更範圍與模組邊界)"]
+    P0 --> P1["Phase 1: Dual-Worktree Baseline Verification<br>(AI 先查 temp-main；交付重定向 log 指令；<br>🛑 停下：等待使用者跑完並指示讀取 log 檔)"]
+    P1 --> P2{"Phase 2: Regression Classification<br>(讀取 log 檔比對 failures 分類)"}
+    
+    P2 -- "存在 BRANCH_REGRESSION 或 UNCERTAIN" --> P2_Block["🛑 強制阻斷！<br>先修復測試或程式行為問題"]
+    P2_Block -.-> P1
+    
+    P2 -- "無 Regression (僅 PRE_EXISTING 或 EXPECTED)" --> P3["Phase 3: Refactor Safety-Net Gate<br>(檢查行為測試覆蓋率，不足先補測)"]
+    P3 --> P4["Phase 4: Behavior-Preserving Maintenance Refactor<br>(審計與重構：清理 dead code/glue，獨立 commit)"]
+    P4 --> P5["Phase 5: Post-Refactor Verification<br>(跑 focused test；🛑 停下：等待使用者重跑 full test 並重定向 log)"]
+    
+    P5 -- "出現新 Failure 或行為改變" --> P5_Block["🛑 強制阻斷！修復重構問題"]
+    P5_Block -.-> P4
+    
+    P5 -- "確認無新增 Failure" --> P6["Phase 6: Code & Docstring Hygiene<br>(清除臨時 spec/issue 代號，重寫為穩定契約)"]
+    P6 --> P7["Phase 7: Contract / TODO / Spec Convergence<br>(🛑 停下：列出候選文件與日誌清單，等待使用者確認刪除範圍)"]
+    P7 --> P8["Phase 8: PARS Development Story<br>(撰寫 docs/storys/ 開發故事)"]
+    P8 --> P9["Phase 9: Final Branch Audit<br>(核對 git status, log, diff，確認乾淨)"]
+    P9 --> P10["Phase 10: Merge Delivery<br>(輸出 Closeout Report 與結構化 Merge 指令)"]
+    P10 --> End(["交付完成，等待使用者手動執行 Merge"])
 ```
 
 ---
 
-### Phase 1：程式碼潔淨度與 Docstring 審計 (Code Hygiene & Docstring Cleanliness Gate)
+### Phase 0 — Closeout Context Audit (變更脈絡審計)
 
-#### 核心原則：暫時 Spec 不得成為 Production Code 的永久依賴
-> [!IMPORTANT]
-> **Pre-Merge Cleanup Acceptance Criterion**：
-> Temporary issue/spec names (e.g. `nav_slow_bug2`, phase numbers, branch names, task IDs) may be used during implementation, but **MUST NOT remain in production docstrings/comments after the branch is completed**. Before merge, rewrite them into stable behavioral/architectural descriptions, or reference a canonical long-lived contract only when necessary.
+**目標**：完整理解本分支實際改動內容與模組邊界，嚴禁直接開始 merge。
 
-#### 審查與清理檢核表：
-1. **Docstring 本質是穩定契約 (Stable Semantic Contract)**：
-   - Docstring 的首要職責是向未來的維護者解釋該 function / class / module 的**職責邊界、輸入輸出、副作用與狀態轉移保證**。
-   - 嚴禁出現一次性 issue 代號（例如「遵循規格 nav_slow_bug2 第 4 節」），因為半年後 spec 可能被刪除、章節改動，會使 production code 遺留幽靈歷史包袱。
-2. **長效契約引用原則 (Canonical Contract Reference)**：
-   - 程式碼內部若確實需要標示架構依據，**僅允許引用長效維護的 Canonical Contract**（例如 `Contract: docs/features/navigation/lobby_scene_contract.md`）。
-   - 能以清楚的行為語意自我解釋時，優先自足描述，避免不必要的外部文件連結。
-3. **查核動作**：
-   - 使用 `git diff main..HEAD` 或針對本次修改檔案進行關鍵字掃描，排查是否遺留暫時性標籤、WIP 標記或一次性 Spec 代號。
-
----
-
-### Phase 2：收尾驗證與文件契約收斂 (Archival & Docs Gate)
-
-#### 步驟 1：最小聚焦單元測試驗證 (Focused Test Verification)
-- **原則**：AI 僅執行本次分支修改直接相關之最小單元測試檔案或方法，確保改動邏輯通過。
-- **禁令**：AI 嚴禁自行執行全套測試 (`.venv\Scripts\python -m unittest discover tests`)。
-
-#### 步驟 2：撰寫 PARS 框架開發故事 (PARS Story Archival)
-- 依據 `AGENTS.md` 第 3 條規範，於 `docs/storys/` 建立包含 Purpose, Action, Result, So What, Influence 的 PARS 文檔。
-- ⚠️ **PARS 定性紅線**：PARS 是開發歷程的敘事故事 (Narrative Log)，**絕非系統架構規範，絕不能作為行為約束或架構證據**。寫完 PARS 不等於完成架構收斂！
-
-#### 步驟 3：文件收斂、契約升格與過期 Spec 清理 (Contract Archival)
-- ⚠️ **嚴禁以「PARS 已記載」為由略過契約升格**：Spec 中只要含有「行為不變量、排程階梯、責任邊界、禁止模式」，**必須且只能**提煉升格至 `docs/architecture/` 或 `docs/features/<domain>/` 的 Canonical Contract。若未完成升格，原始 Spec 絕不可視為「已被承接」，更嚴禁直接刪除！
-檢查 `git diff main..HEAD --name-only`，若包含 `docs/todos/`、新架構規格或核心約束：
-1. **前置交互守則（強制提問）**：
-   - ⚠️ **嚴禁 AI 自行決定清理範圍**：AI 絕對禁止自行挑選檔案擅自執行文件收斂或刪除。
-   - **顯式提問機制**：AI 必須先盤點本次分支修改或產生的 Spec/TODO 候選清單，主動向使用者提問：
-     > 「請問本次分支要收斂與清理的文件清單是否為以下項目？是否有遺漏、或是否有不可清理/不可刪除的 TODO？」
-   - **🛑 停在此處等待回覆**：在使用者確認清單前，**絕對不得輸出 Phase 3 的 git merge 指令**！
-2. **調用 `canonical_contract_archival` 執行提煉**：
-   - 永久約束不變量 ➔ 升格至 `docs/features/<domain>/` 或 `docs/architecture/`。
-   - 未完成工作 ➔ 搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO。
-   - 原始完成 spec ➔ 依「刪除是預設；封存是例外」原則果斷清理，防止 Doc Drift。
-   - 精確 Stage 本次收斂修改之檔案並進行 Commit。
+1. **執行環境與歷程審查**：
+   ```powershell
+   git status
+   git branch --show-current
+   git diff main...HEAD --stat
+   git log main..HEAD --oneline
+   ```
+2. **變更清單盤點**：
+   - 本 branch 涉及的 Production Code 檔案。
+   - 相關的 Unit / Behavioral Tests。
+   - 暫時性 Specs / TODOs / RFCs。
+   - 相關的 Canonical Contracts 與 Architecture Docs。
+3. **產出**：向使用者簡要回報當前分支名稱、變更檔案規模與核心模組，並準備推進至 Phase 1。
 
 ---
 
-### Phase 3：分支審計與合併指令交付 (Merge Command Delivery)
-*（僅當 Phase 1 程式碼 Docstring 清理完畢且 Phase 2 文件收斂已確認完成時，方可進入本階段）*
+### Phase 1 — Dual-Worktree Baseline Verification (雙工作樹基準線驗證)
 
-#### 步驟 4：分支變更比對與統計 (Branch Diff Audit)
-- **比對指令**：
-  ```bash
-  git log main..HEAD --oneline
-  git diff main..HEAD --stat
+**目標**：確認 `temp-main` 為乾淨且最新的 main baseline，隨後由使用者分別執行 HEAD 與 main 的完整 test suite。
+
+> [!WARNING]
+> **AI 嚴禁自行執行完整 test suite (`python -m unittest discover tests`)！**
+
+#### 1. AI 主動核驗並刷新 main baseline
+於 `E:\Side_Project\temp-main`：
+- 確認 `git status --short` 為 clean（無未提交修改）。
+- 確認 `git branch --show-current` 為 `main`。
+- 執行 `git fetch origin`。
+- 比較兩者 Commit Hash：
+  - `git rev-parse HEAD`
+  - `git rev-parse origin/main`
+
+**決策分流**：
+- **若兩者相同**：baseline 已為最新狀態，直接進入測試。
+- **若兩者不同**：僅在 worktree clean 且可 fast-forward 時執行：
+  ```powershell
+  git pull --ff-only
   ```
-- **檢核重點**：統計 Commit 總數、修改檔案總數、新增/刪除行數，按模組分類梳理變更摘要。
+  *(注：baseline worktree 嚴禁產生 merge commit，必須使用 `--ff-only`)*
+- **若出現 dirty、diverged 或無法 fast-forward**：
+  - 立即停止流程並向使用者回報異常。
+  - **嚴禁自行使用 `reset --hard`、`clean`、force checkout 等破壞性操作**。
 
-#### 步驟 5：生成 --no-ff 合併指令與結構化 Merge Commit 日誌
-- 依據 `AGENTS.md` 第 1 條規範，分支合併至 `main` **必須強制使用 `--no-ff`**。
-- **Merge 訊息結構範本**：
-  ```markdown
-  Merge branch '<branch_name>' into main
-
-  [<type>/<scope>] 簡短摘要說明
-
-  Summary of Changes (<commits_count> commits, +<added_lines> / -<deleted_lines> lines across <files_count> files):
-
-  1. <模組 A>:
-     - 改動 1
-     - 改動 2
-  2. <模組 B>:
-     - 改動 1
-
-  Verification:
-  - All unit tests passed cleanly (OK).
+#### 2. 一次性交付雙 Terminal 測試指令 (重定向至獨立 Log 檔案)
+*(注：為徹底防止 Windows PowerShell 因原生應用程式 stderr 重定向產生 NativeCommandError 與 CP950/Big5 亂碼，全套測試統一透過 `cmd.exe /c "chcp 65001 >nul && ... -X utf8 ..."` 執行，確保產生純淨 UTF-8 日誌檔)*
+*(注：`temp-main` 為 Git worktree，通常無獨立 `.venv`，兩組測試統一共用主專案之 Python 解譯器以保證相依套件環境 100% 一致)*
+- **Terminal 1 — Feature HEAD 測試**：
+  ```powershell
+  cmd.exe /c "chcp 65001 >nul && cd /d E:\Side_Project\BlackfireCrusade_tool && .venv\Scripts\python.exe -X utf8 -m unittest discover tests > head_test_output.log 2>&1"
   ```
 
+- **Terminal 2 — Main Baseline 測試**：
+  ```powershell
+  cmd.exe /c "chcp 65001 >nul && cd /d E:\Side_Project\temp-main && E:\Side_Project\BlackfireCrusade_tool\.venv\Scripts\python.exe -X utf8 -m unittest discover tests > E:\Side_Project\BlackfireCrusade_tool\main_test_output.log 2>&1"
+  ```
+
+> [!TIP]
+> **執行順序守則**：兩組測試可以依序或平行執行；若測試涉及共享之 runtime resources（如遊戲處理序、`user_data/` 狀態檔、固定 debug 截圖/日誌等），**必須依序執行**以防互斥污染。
+
+#### 3. 🛑 阻斷點 (Gate Invariant)
+- 停在此處，**等待使用者在兩個 Terminal 執行完畢並回報「已跑完」**。
+- AI 收到通知後，直接以 `view_file` 讀取 `head_test_output.log` 與 `main_test_output.log` 進行完整、零截斷之比對分析。
+- 收到雙邊測試完成通知前，**絕對不得進入下一階段**。
+
+#### 4. 結構化記錄
+```text
+HEAD BASELINE
+- passed: <數量>
+- failed: <數量>
+- errors: <數量>
+- failing test names: [測試方法名稱清單]
+
+MAIN BASELINE
+- passed: <數量>
+- failed: <數量>
+- errors: <數量>
+- failing test names: [測試方法名稱清單]
+```
+
 ---
 
-## 📌 注意事項與安全防守
-- ⚠️ **禁止自行合併**：AI 絕對禁止自行執行 `git merge`，必須提供編排好的 `git merge --no-ff ...` 指令給使用者。
-- ⚠️ **嚴格順序性**：Phase 1 與 Phase 2 未確認完成前，絕不可輸出 Phase 3 的 merge 指令。
+### Phase 2 — Regression Classification Gate (迴歸分類閘門)
 
+**目標**：精確比對 `MAIN BASELINE` 與 `HEAD BASELINE`，將所有失敗案例分類並阻斷潛在迴歸。
+
+#### 失敗案例四象限分類：
+1. **`PRE_EXISTING_FAILURE`**：main 與 HEAD 均失敗的測試。屬於既有基準線問題，非本次分支引入。
+2. **`BRANCH_REGRESSION`**：main 通過但 HEAD 失敗的測試。確定為本分支引入的 regression！
+3. **`EXPECTED_BEHAVIOR_CHANGE`**：main 的舊測試預期因本次已確認之業務需求而合法改變。
+   - 必須由 Spec、Canonical Contract 或驗收條件佐證。
+   - 嚴禁僅因為「現在實作改成這樣」就將失敗歸類於此。
+4. **`UNCERTAIN`**：無法立即確定是 Production Bug、過期測試還是需求模糊的案例。
+
+#### Production-vs-Test 修復守則
+
+Regression 分析與修復必須遵循 `project-test-rules` 的
+**Test-Induced Production Logic Prohibition**。
+
+特別禁止為了相容 Mock / Fixture 而在 Production Code 新增測試專用 bypass。
+
+> [!CRITICAL]
+> **🛑 阻斷點 (Hard Gate)**：
+> 若存在任何 **`BRANCH_REGRESSION`** 或 **`UNCERTAIN`**：
+> - **絕對禁止進入後續 Refactor 或 Merge Closeout**！
+> - 必須停下來深入分析原因，優先修復測試或 Production 程式碼行為，回到 Phase 1 重新取樣。
+
+---
+
+### Phase 3 — Refactor Safety-Net Gate (重構安全網閘門)
+
+**目標**：確保在開始任何重構前，本分支的重要可觀察行為已有足夠的測試保護。
+
+1. **核心自我詰問**：
+   > 「如果下一階段修改內部實作時，不小心改壞了目前已通過的合法行為，現有測試是否具備足夠高機率能精確攔截？」
+2. **補強防護網**：
+   - 若測試網不足，優先提出需要補齊的：
+     - Characterization Tests（特徵描摹測試）
+     - Behavioral Tests（業務行為測試）
+     - Contract-Level Regression Tests（契約層級迴歸測試）
+   - 測試遵循 Google 軟體工程規範：**驗證可觀察行為，不依賴內部私有變數或 private helper**。
+3. **提早固化**：補齊測試後，以獨立 commit 提交（依 `precise_git_commit` 白名單 stage），方可推進。
+
+---
+
+### Phase 4 — Behavior-Preserving Maintenance Refactor (保行為維護重構)
+
+**目標**：在不改變任何可觀察行為的前提下，消除 dead code、重複邏輯、過渡膠水與不必要複雜度。
+
+1. **執行 Refactor Audit（審查 `git diff main...HEAD`）**：
+   - `Safe dead code removal`：確認無 caller 的死代碼
+   - `Safe simplifications`：化簡過深的巢狀分支與流程
+   - `Safe duplication removal`：提取超過 3 行的重複邏輯
+   - `Temporary glue`：清除開發過程暫時搭建的適配層
+   - `Obsolete compatibility paths`：清理已無意義的舊相容路徑
+   - `Duplicated state ownership`：釐清狀態歸屬，消除重複維護
+   - `Responsibility / boundary issues`：對齊模組單一職責
+   - `Compatibility logic that must remain`：明確標註不可動的相容邏輯
+   - `Deferred architecture work`：移出本次、記錄至未來工作
+   - `Explicitly out of scope`：明確排除的項目
+2. **八大硬性限制 (Strict Refactor Invariants)**：
+   1. 不新增功能。
+   2. 不改變可觀察行為 (Observable Behavior)。
+   3. 不順便重寫無關模組。
+   4. 不因為「追求漂亮」而增加過度抽象層。
+   5. 不修改正確的 tests 來配合重構。
+   6. 需要改變行為的問題，移出本次重構。
+   7. 涉及重大架構遷移的問題，記錄為後續工作。
+   8. 刪除代碼前必須全方位確認不存在：Runtime Caller、Callback、Registry、動態分發、Config 驅動調用、CLI/腳本入口、反射調用。
+3. **獨立提交**：重構必須使用獨立 Commit，例如：
+   ```powershell
+   git commit -m "refactor: simplify <scope> after feature implementation"
+   ```
+
+---
+
+### Phase 5 — Post-Refactor Verification (重構後驗證)
+
+**目標**：確認維護重構完全沒有破壞任何行為或引入新錯誤。
+
+1. **AI 執行聚焦測試**：
+   - 優先執行與重構模組直接相關的聚焦單元測試，確保快速反饋。
+2. **🛑 阻斷點 (Gate Invariant)**：
+   - 請使用者在 Feature/Fix 工作樹再次執行全套測試套件並重定向至日誌：
+     ```powershell
+     cmd.exe /c "chcp 65001 >nul && cd /d E:\Side_Project\BlackfireCrusade_tool && .venv\Scripts\python.exe -X utf8 -m unittest discover tests > post_refactor_test_output.log 2>&1"
+     ```
+   - 停在此處，等待使用者回報執行完畢。
+   - AI 讀取 `post_refactor_test_output.log` 比對確認。
+3. **比對確認**：
+   - 比對 `HEAD BEFORE REFACTOR` vs `HEAD AFTER REFACTOR`。
+   - 必須滿足：
+     - `New failures introduced: NONE`
+     - `Behavior changed: NO`
+   - 若產生任何新 failure，**嚴禁進入文件收斂或 merge 階段**，必須立即退回修復重構。
+
+---
+
+### Phase 6 — Code / Documentation Hygiene (程式碼潔淨度審計)
+
+**目標**：徹底消除 Production 代碼中的臨時歷史痕跡。
+
+1. **排查檢核**：
+   - 檢查本次異動之 Production Code 中的 docstrings 與註解。
+   - 徹底移除暫時性 spec 名稱（如 `nav_slow_bug2`、`bag_bug` 等檔名）、分支名、Task ID、WIP 註記或歷程說明。
+2. **契約化改寫**：
+   - Production Code 只能保留：穩定的行為語意 (Behavior Semantics)、職責邊界、公開契約。
+   - 若確實需要標示架構依據，**僅限引用長效維護的 Canonical Contract**（例如 `Contract: docs/features/navigation/lobby_scene_contract.md`）。
+
+---
+
+### Phase 7 — Contract / TODO / Spec Convergence (契約與文件收斂)
+
+**目標**：調用 [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) 技能，以 Production 代碼實作為唯一定本標準，將完成任務的臨時文件提煉為長期標準，更新 Canonical Contract 後再清理過期文件與暫存測試日誌，防止 Doc/Artifact Drift。
+
+1. **仲裁不變量與五分流分類 (Arbitrate Invariants & Classification)**：
+   - 盤點 `git diff main..HEAD --name-only` 涉及的 `docs/todos/`、臨時 Specs、RFCs、`future_work.md`。
+   - 審查各份文件內容，依 `canonical_contract_archival` 規範執行結構化分類：
+     - `PROMOTE`：長效架構不變量 (Invariants)、職責邊界、後置條件驗證契約、異常自癒機制，升格至 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。
+     - `LINK`：程式碼、常數與測試已有具體實作者，Contract 僅做參照，不複製貼上代碼細節。
+     - `HISTORY`：歷史脈絡留給 PARS 與 Git。
+     - `TODO`：尚未完成的工作或後續規劃，搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO 清單。
+     - `DROP`：**刪除是預設；封存是例外**。原始任務 Spec 提煉後預設刪除；**暫存測試日誌檔（`*.log`）亦於收尾時一併徹底清理刪除**，保證工作區無殘留雜檔。
+   - **以當前 Production 代碼與測試實作為唯一定本標準**：逐一核驗標記為 `PROMOTE` 的不變量是否與實際代碼行為 100% 一致，嚴禁將過時假設、初期規格或未落地的設計寫入 Contract。
+
+2. **升格更新 Canonical Contract (Pre-convergence Contract Update)**：
+   - **針對 `PROMOTE` 項目**：AI 必須**先主動將其更新/補充至對應的 Canonical Contract**（如 `docs/features/` 或 `docs/architecture/`），並同步更新 `future_work.md` 中指向舊 spec 的超連結與完成狀態。
+   - **若無 `PROMOTE` 項目**（或已完整覆蓋）：確認無遺漏後記錄「經審查無新增長效不變量」。
+
+3. **🛑 阻斷點：文件／日誌收斂清理清單確認 (Mandatory User Scope Confirmation)**：
+   - ⚠️ **嚴禁 AI 自行決定清理範圍**！完成上述契約升格與實作核對後，**停在此處向使用者呈報**：
+     1. 【已升格更新之 Canonical Contract 清單與章節】（或說明經核對無需更新）；
+     2. 【已萃取完畢、建請刪除 (DROP) 的過期 Spec 清單與暫存測試日誌 (`*.log`)】（遵循「刪除是預設；封存是例外」原則）；
+     3. 【仍未完成需保留 (RETAIN) 的 TODO 清單】。
+   - **等待使用者確認**。經使用者同意後，方可執行檔案刪除 (`git rm`)。
+
+4. **獨立提交**：以 `docs: archive and converge <scope> contracts` 進行獨立精確 Commit。
+
+---
+
+### Phase 8 — PARS Development Story (開發故事歸檔)
+
+**目標**：記錄本次開發歷程，供後續回溯複盤。
+
+1. **撰寫 PARS**：
+   - 於 `docs/storys/` 建立或更新本次工作之 PARS 文件：
+     - **P**urpose (目的與背景問題)
+     - **A**ction (採取的關鍵行動與設計決策)
+     - **R**esult (驗證結果與測試數據)
+     - **S**o What (業務價值與深遠意義)
+     - **I**nfluence (架構影響與後續注意事項)
+2. **遵約要求**：
+   - 調用 [`write_docs`](../write_docs/SKILL.md) 技能，保持客觀中立，文字確定性嚴格受實測證據約束，禁止 AI 味誇飾。
+   - ⚠️ **PARS 定性禁令**：PARS 只是歷史敘事紀錄，**絕非系統架構規範，絕不可作為架構約束依據**。寫完 PARS 不等於完成架構收斂！
+
+---
+
+### Phase 9 — Final Branch Audit (最終分支審查)
+
+**目標**：合併前全面複核，確保工作區與提交歷史潔淨無暇。
+
+1. **執行全域檢核指令**：
+   ```powershell
+   git status
+   git log main..HEAD --oneline
+   git diff main..HEAD --stat
+   git diff main..HEAD --name-only
+   ```
+2. **確認檢核項目**：
+   - [ ] Working tree 保持乾淨 (Clean)。
+   - [ ] Commits scope 清楚分離 (feature, test, refactor, docs 獨立可辨)。
+   - [ ] 暫時性 Spec 已正確收斂並刪除過期副本。
+   - [ ] Canonical Contract 與索引已同步。
+   - [ ] 無任何未追蹤或非本次任務的臨時檔案進入分支。
+
+---
+
+### Phase 10 — Merge Delivery (合併指令交付)
+
+> [!CRITICAL]
+> **只有當 Phase 0 至 Phase 9 的所有 Gate 均已確實完成後，才允許進入本階段！**
+> AI **絕對禁止自行執行 `git merge`**，必須交付編排好的指令給使用者手動執行。
+
+1. **輸出結構化 Closeout 報告**：
+   ```markdown
+   ### Branch Closeout Report
+
+   - **Branch**: `<feature_branch_name>`
+   - **Change summary**: `<本次變更核心摘要>`
+
+   #### Test Baseline & Verification:
+   - **Main baseline**: passed <P>, failed <F>, errors <E>
+   - **HEAD pre-refactor baseline**: passed <P>, failed <F>, errors <E>
+   - **HEAD post-refactor result**: passed <P>, failed <F>, errors <E>
+
+   #### Failure Analysis:
+   - **Pre-existing failures**: [清單]
+   - **Branch regressions**: NONE
+   - **New regressions after refactor**: NONE
+
+   #### Convergence Summary:
+   - **Refactor summary**: `<重構要點>`
+   - **Contracts updated**: `<升格或更新的契約路徑>`
+   - **Specs removed / retained**: `<刪除之 spec 與保留清單>`
+   - **TODOs created**: `<建立之後續 TODO>`
+   - **PARS story**: `<docs/storys/...>`
+
+   #### Readiness:
+   - **Behavior changed during refactor**: NO
+   - **New failures introduced**: NONE
+   - **Ready to merge**: YES
+   ```
+
+2. **生成標準 `--no-ff` 合併與後續分支管理指令（永久雙工作樹模型）**：
+   > [!IMPORTANT]
+   > **永久雙工作樹免切回原則 (Dual-Worktree Non-Checkout Rule)**：
+   > 因 `main` 分支已被 `temp-main` 永久 checkout，**嚴禁在 `BlackfireCrusade_tool` 執行 `git checkout main`**（Git 會直接拒絕）。
+   > 所有合併與遠端推送統一在 `temp-main` 進行；主專案開發工作樹在合併後，直接以最新 `main` 為基底建立下一個 feature 分支。
+
+   - **步驟一：於 `temp-main` 執行 `--no-ff` 合併與推送（感應用戶 OS）**：
+     - **Windows (PowerShell / CMD)**：必須使用**多個 `-m` 參數**串聯，避免跨列換行造成 terminal 截斷：
+       ```powershell
+       cd E:\Side_Project\temp-main
+       git merge --no-ff <branch_name> -m "Merge branch '<branch_name>' into main" -m "<簡短變更摘要>" -m "Verification: All unit tests verified against main baseline (0 regressions)."
+       git push origin main
+       ```
+     - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
+
+   - **步驟二：回到日常開發工作樹 `BlackfireCrusade_tool` 進入下一個任務（免切回 main）**：
+     ```powershell
+     cd E:\Side_Project\BlackfireCrusade_tool
+     # 1. 先離開舊 branch，直接以最新 main 為基底建立並切換至下一個分支（共用 .git 物件庫已自動同步）
+     git switch -c feat/<next_feature_name> main
+     # 2. 此時舊 branch 已沒有任何 worktree 使用，方可安全刪除
+     git branch -d <branch_name>
+     ```
+
+---
+
+## 🧩 模組化職責邊界與技能引用矩陣 (Skill Matrix)
+
+本工作流作為總編排者，遵循分工原則，嚴禁重疊複製。調用相關技能時維持各技能單一職責：
+
+| 階段 | 職責 | 權威依歸 / 調用技能 |
+| :--- | :--- | :--- |
+| **Phase 1, 5** | 測試執行政策（AI 不自行跑 full test，提示使用者跑） | [`project-test-rules`](../project-test-rules/SKILL.md) |
+| **Phase 3, 4, 7** | 精確 Commit 白名單 stage（嚴禁 `git add .`） | [`precise_git_commit`](../precise_git_commit/SKILL.md) |
+| **Phase 7** | 文件與契約分類、提煉不變量、刪除過期 spec | [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) |
+| **Phase 8** | 客觀撰寫 PARS 故事，證據確定性約束 | [`write_docs`](../write_docs/SKILL.md) |
+| **Phase 10** | 強制 `--no-ff` 合併與跨平台 Shell 語法 | [`.agents/AGENTS.md`](../../AGENTS.md) 第 1 條 |
 

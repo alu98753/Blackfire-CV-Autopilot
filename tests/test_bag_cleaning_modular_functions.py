@@ -101,7 +101,7 @@ class TestBagCleaningModularFunctions(unittest.TestCase):
             self.assertTrue(res)
             mock_wait.assert_called_once()
             self.assertFalse(self.mock_machine.need_bag_cleaning)
-            self.mock_machine.trigger_town_subflow_chain.assert_called_once()
+            self.mock_machine.trigger_bag_maintenance_chain.assert_called_once()
 
 
 if __name__ == "__main__":

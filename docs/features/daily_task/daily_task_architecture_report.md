@@ -31,10 +31,19 @@
 ### 2. 排程層技術棧 (Planner: Master Pipeline + Multi-tier Priority Engine)
 
 #### 四階梯全域動態優先級 (Master Priority Hierarchy)：
-1. **Tier 1: 一極優先 (每日一次性城鎮速領)**：`chest` (寶箱) ➔ `hero_draw` (抽卡) ➔ `blood_altar` (祭壇獻祭 + 珠寶賣裝)。
+1. **Tier 1: 一極優先 (每日一次性城鎮速領)**：`chest` (寶箱) ➔ `hero_draw` (抽卡) ➔ `blood_altar` (祭壇領血，需紅點；維護獻祭與商店出售已解耦至背包維護流水線)。
 2. **Tier 2: 二極優先 (領主 Boss 討伐 `lord_boss`)**：優先級大於 `bulletin_board`！具備蜘蛛 (1hr) / 惡靈 (2hr) 冷卻倒數與 5 次上限維護；當冷卻到期且尚有場次，**戰鬥結算回到大廳時立刻搶先插隊討伐 Boss！**
 3. **Tier 3: 三極優先 (懸賞告示牌與動態任務 `bulletin_board`)**：告示牌取卡與 8 個懸賞任務佇列多階梯排序執行。
 4. **Tier 4: 四極長駐（玩家 Profile 路由）**：週期活動暫無可執行項目時，依玩家選擇長駐 `stage` 或 `domain`；目前領地支援黃金古國。地下城與 Lord 預設啟用，冷卻完成後會插隊。
+
+### 3. 告示牌進場排他性正交錨點契約 (Building Entry Unique Anchor Invariant)
+
+`BulletinBoardHandler` 宣告「已成功進入告示牌」之充要條件，嚴禁單以 `common/quit.png` 作為進場憑證，必須同時滿足：
+1. **基礎門禁**：看得到 `common/quit.png`；
+2. **負向排除**：畫面無背包特徵（`common/tidy.png` 或 `common/Disassembly.png`）；
+3. **正向三通道 OR 專屬特徵**：左側出現未接取任務捲軸 (`task.png`)、已接取任務捲軸 (`task_after.png`) 或重置按鈕 (`reset.png`) 命中任一。
+
+若僅有 `quit.png` 但缺乏告示牌專屬特徵或存在背包特徵，判定為外部干擾覆蓋層並點擊關閉自癒，絕不發起任務 OCR 掃描，防止誤判「今日任務已接滿」而吞噬懸賞。
 
 
 ---

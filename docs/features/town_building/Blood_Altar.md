@@ -24,9 +24,9 @@
 
 ### 2. 掛機自動連動獻祭 (Auto-Triggered on Bag Clean)
 在普通關卡 (`stage`)、地下城 (`dungeon`) 或混合模式 (`mix`) 下進行長途掛機時：
-- **自動連動**：當背包滿觸發並完成背包清理 (`BAG_CLEANING`) 關閉背包時，腳本會自動標記 `need_blood_altar = True`。
-- **一路退回城鎮**：腳本自動引導退回城鎮 (`town`) 並尋找點擊血之祭壇建築 (`Blood_Altar.png`) 進入獻祭選單。
-- **動態瀑布流續行**：獻祭完成離場回到城鎮時，自動重置標記，並轉移至 `STATE_NAVIGATING` 進行動態導航（`mix` 模式有可用地下城進地下城、全員 CD 時退守關卡；`stage` 模式進關卡大廳）。
+- **自動連動**：當背包滿觸發並完成背包清理 (`BAG_CLEANING`) 關閉背包時，腳本調用 `trigger_bag_maintenance_chain()` 啟動城鎮維護佇列，首站依序派發 `blood_sacrifice` 子流程（參見 [城鎮任務流水線佇列](pipeline.md)）。
+- **雙軌解耦保證**：維護獻祭以 `requires_red_dot=False` 派發，無需紅點即可進入獻祭，且完成後**不簽核** `DailyManager`，嚴禁污染每日福利領血紀錄。
+- **流水線續行**：獻祭完成離場回到城鎮時，調用 `pop_and_next_town_subflow()` 自動推進至後續維護子流程（如 `bag_tidy` ➔ `jewelry_workshop`），全數完成後無縫恢復主掛機導航。
 
 ---
 

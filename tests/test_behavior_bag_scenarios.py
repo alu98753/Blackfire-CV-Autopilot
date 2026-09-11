@@ -225,7 +225,7 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         # 3. 驗證標記重置與轉移至城鎮流水線 (進入 STATE_NAVIGATING 待命 REACH_TOWN 前置導航)
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
-        self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
+        self.assertEqual(self.state_machine.current_town_subflow, "blood_sacrifice")
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
 
     @patch('os.path.exists')
@@ -487,6 +487,202 @@ class TestBagScenarios(BehavioralScenarioTestCase):
                 return ((100, 100), 0.90)
             return (None, 0.0)
 
+        
+        # 定位 全選按鈕 在 (676, 808) 算得 Slot A 中心 (616, 358), Slot B 中心 (750, 358)
+        # 格子 A (Col 0, Row 0): 只在邊緣畫一點點金色
+        screen[290:295, 549:559] = [0, 240, 240]
+        
+        # 格子 B (Col 1, Row 0): 中心 (750, 358)。繪製金色矩形 (683 to 817, 288 to 428)
+        cv2.rectangle(screen, (683, 288), (817, 428), (0, 240, 240), 10)
+        # 模擬打勾狀態：在貴重物品格子 B 的頂端打勾區 (check_x=733, check_y=332) 畫綠色實心方塊
+        cv2.rectangle(screen, (733, 332), (767, 362), (0, 255, 0), -1)
+        
+        # 設定可分解最高品質為紫色，使橘黃色貴重物品不屬於可分解列表，從而觸發反選保護條件
+        self.state_machine.config["disassemble_colors"] = ["gray_or_empty", "green", "blue", "purple"]
+        
+        self.mock_capturer.capture.return_value = screen
+        self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 1920, "height": 1080}
+        
+        # 匹配定位點
+        self.mock_matcher.match.side_effect = lambda img, name, threshold, **kwargs: (
+            ((676, 808), 0.9) if name == "common/select_all.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        
+        # Act
+        self.state_machine.step()
+        
+        # Assert
+        # 1. 必須點擊格子 B 進行反選
+        self.mock_mouse.click.assert_any_call(750, 357)
+        # 2. 絕對不能點擊格子 A
+        for call in self.mock_mouse.click.call_args_list:
+            self.assertNotEqual(call[0], (616, 357))
+        # 3. 此時由於單步反選，bag_deselected 應為 False
+        self.assertFalse(self.state_machine.bag_deselected)
+        
+        # 模擬下一影格：清除格子 B 的畫像，重新截圖
+        clean_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.mock_capturer.capture.return_value = clean_screen
+        
+        self.state_machine.step()
+        self.assertTrue(self.state_machine.bag_deselected)
+
+    @patch('os.path.exists')
+    def test_bag_cleaning_bag_color_channel_verification(self, mock_exists):
+        """
+        [行為場景 15] 備用背包按鈕 common/bag.png 的色彩通道驗證：
+        Given: 狀態機處於 BAG_CLEANING，且 bag_opened_clicked 為 False (背包尚未打開)。
+               畫面上只能匹配到備用模板 common/bag.png (在 100, 100)。
+        When: 
+          - 情況 A: 該位置中心色彩均值 R=100, B=90 (R - B = 10 <= 18.0，疑似灰色「戰團」)。
+          - 情況 B: 該位置中心色彩均值 R=120, B=90 (R - B = 30 > 18.0，真正棕色「背包」)。
+        Then:
+          - 情況 A: 應忽略不點擊，狀態不變。
+          - 情況 B: 應點擊該位置以打開背包，且 bag_opened_clicked 變為 True。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        self.state_machine.bag_opened_clicked = False
+        mock_exists.return_value = True
+        
+        # 模擬 matcher 匹配到 common/bag.png 在 (100, 100)
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 100), 0.9) if name == "common/bag.png" else (None, 0.0)
+        )
+        
+        # 建立模擬圖像 (R - B 驗證需要擷取以 (100, 100) 為中心的區塊)
+        # 情況 A: 模擬灰色「戰團」 R-B = 10
+        # 圖像格式是 BGR，所以 [B, G, R]
+        # 我們把 (100, 100) 附近 10x10 的區域設為 B=90, G=80, R=100
+        screen_gray = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        screen_gray[95:105, 95:105] = [90, 80, 100]
+        
+        self.mock_capturer.capture.return_value = screen_gray
+        self.mock_mouse.click.reset_mock()
+        
+        # Act 情況 A
+        self.state_machine.step()
+        
+        # Assert 情況 A: 應被忽略
+        self.mock_mouse.click.assert_not_called()
+        self.assertFalse(self.state_machine.bag_opened_clicked)
+        
+        # 情況 B: 模擬棕色「背包」 R-B = 30
+        # 我們把 (100, 100) 附近 10x10 區域設為 B=90, G=80, R=120
+        screen_brown = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        screen_brown[95:105, 95:105] = [90, 80, 120]
+        
+        self.mock_capturer.capture.return_value = screen_brown
+        
+        # Act 情況 B
+        self.state_machine.step()
+        # Assert 情況 B: 應點擊
+        self.mock_mouse.click.assert_called_with(100, 100)
+        self.assertTrue(self.state_machine.bag_opened_clicked)
+
+    @patch('os.path.exists')
+    def test_navigation_interceptor_for_bag_cleaning(self, mock_exists):
+        """
+        [行為場景 20] 尋路狀態下的背包清理優先攔截：
+        Given: 狀態機處於 NAVIGATING 狀態，且 need_bag_cleaning = True (背包滿需要清理)。
+        When & Then:
+          1. 畫面看到 exit_battle.png ➔ 應點擊 exit_battle.png 回城，不執行常規關卡選擇前進。
+          2. 畫面看到 common/door.png ➔ 狀態機應將狀態轉移至 BAG_CLEANING。
+        """
+        # Arrange
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.state_machine.need_bag_cleaning = True
+        mock_exists.return_value = True
+        
+        # 1. 畫面看到 exit_battle.png ➔ 應點擊退出，不前進
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((200, 200), 0.9) if name == "exit_battle.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.mock_mouse.click.assert_called_with(200, 200)
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+        
+        # 2. 畫面看到 common/door.png ➔ 應判定已抵達大廳，切換至 BAG_CLEANING 狀態
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((100, 100), 0.9) if name == "common/door.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+        self.mock_mouse.click.assert_not_called()
+
+        # 3. 重置狀態並測試：畫面看到 goback_town.png ➔ 應判定已在準備介面，切換至 BAG_CLEANING 狀態
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        self.mock_matcher.match.side_effect = lambda img, name, threshold: (
+            ((150, 150), 0.9) if name == "goback_town.png" else (None, 0.0)
+        )
+        self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BAG_CLEANING)
+        self.mock_mouse.click.assert_not_called()
+
+    @patch('os.path.exists')
+    def test_backpack_full_detection_threshold_override(self, mock_exists):
+        """
+        [行為場景 24] 背包滿彈窗高閾值比對防誤判：
+        Given: 狀態機處於 NAVIGATING 狀態。
+        When & Then:
+          1. 畫面上出現相似度為 0.72 的 backpack_full.png (大廳誤判) ➔ 狀態機應拒絕轉移，維持 NAVIGATING。
+          2. 畫面上出現相似度為 0.85 的 backpack_full.png (真實彈窗) ➔ 狀態機應正確轉移至 BACKPACK_FULL_SORTING。
+        """
+        self.state_machine.config = GAME_CONFIGS["stage"]
+        self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
+        mock_exists.return_value = True
+
+        # 模擬 match logic，如果比對分數小於 threshold，則不匹配 (回傳 None)
+        def mock_match_impl(img, name, threshold):
+            if name == "backpack_full.png":
+                score = getattr(self, "_current_mock_score", 0.0)
+                if score >= threshold:
+                    return ((300, 300), score)
+            return (None, 0.0)
+        self.mock_matcher.match.side_effect = mock_match_impl
+
+        # 1. 0.72 相似度 (低於新閾值 0.80)
+        self._current_mock_score = 0.72
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
+
+        # 2. 0.85 相似度 (高於新閾值 0.80)
+        self._current_mock_score = 0.85
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BACKPACK_FULL_SORTING)
+
+    @patch('os.path.exists')
+    def test_bag_cleaning_triggers_town_subflow_pipeline(self, mock_exists):
+        """
+        測試完整的城鎮流水線 (Town Subflow Pipeline) 連動：
+        1. 背包清理完成 ➔ 觸發 trigger_town_subflow_chain()，建佇列 ["blood_altar", "jewelry_workshop"]。
+        2. 第一站轉移至 STATE_BLOOD_ALTAR 獻祭。
+        3. 獻祭離場 ➔ pop_and_next_town_subflow() 接力進入 STATE_JEWELRY_WORKSHOP 出售。
+        4. 出售離場 ➔ pop_and_next_town_subflow() 佇列已空 ➔ 恢復 STATE_NAVIGATING 續行掛機！
+        """
+        mock_exists.return_value = True
+        self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.config["bag_maintenance_order"] = ["blood_sacrifice", "jewelry_workshop"]
+        self.state_machine.current_state = self.state_machine.STATE_BAG_CLEANING
+        
+        bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
+        if hasattr(bag_handler, 'reset_state'):
+            bag_handler.reset_state()
+        self.state_machine.bag_tidied = True
+
+        def mock_match_quit(img, name, **kw):
+            if name in ["common/door.png", "town_building/exitfromhouse_and_to_town.png"]:
+                return ((74, 744), 0.90)
+            elif name == "common/quit.png":
+                return ((100, 100), 0.90)
+            return (None, 0.0)
+
         self.mock_matcher.match.side_effect = mock_match_quit
         import numpy as np
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -495,7 +691,7 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         # Step 1: 關閉背包 ➔ 觸發流水線
         bag_handler.handle(fake_img, rect)
         self.assertEqual(
-            self.state_machine.current_town_subflow, "blood_altar"
+            self.state_machine.current_town_subflow, "blood_sacrifice"
         )
         self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
             ((74, 744), 0.90)
@@ -550,6 +746,7 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         """
         mock_exists.return_value = True
         self.state_machine.config = GAME_CONFIGS["mix"].copy()
+        self.state_machine.config["bag_maintenance_order"] = ["blood_sacrifice", "jewelry_workshop"]
         bag_handler = self.state_machine.handlers[self.state_machine.STATE_BAG_CLEANING]
         if hasattr(bag_handler, 'reset_state'):
             bag_handler.reset_state()
@@ -570,10 +767,10 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         # 1. 關閉背包完成清理
         bag_handler.handle(fake_img, rect)
 
-        # 斷言：清理標記重置，交接給 STATE_NAVIGATING，啟動城鎮流水線首項 blood_altar
+        # 斷言：清理標記重置，交接給 STATE_NAVIGATING，啟動城鎮流水線首項 blood_sacrifice
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         self.assertFalse(self.state_machine.need_bag_cleaning)
-        self.assertEqual(self.state_machine.current_town_subflow, "blood_altar")
+        self.assertEqual(self.state_machine.current_town_subflow, "blood_sacrifice")
 
         # 2. 模擬主迴圈 step() 自然推進：畫面呈現城鎮入口特徵與血之祭壇紅點
         self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (

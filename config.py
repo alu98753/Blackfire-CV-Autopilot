@@ -217,6 +217,16 @@ def _restore_mode_key_types(modes: dict) -> dict:
 # Existing imports remain valid while configuration data now lives in TOML.
 GLOBAL_SETTINGS = _SETTINGS["global"]
 BATTLE_MAX_DEFEAT = GLOBAL_SETTINGS.get("battle_max_defeat", 20)
+DEFAULT_BAG_MAINTENANCE_ORDER = list(
+    GLOBAL_SETTINGS.get("default_bag_maintenance_order", ["blood_sacrifice", "bag_tidy", "jewelry_workshop"])
+)
+
+
+def get_default_bag_maintenance_order() -> list[str]:
+    """取得背包維護流水線的預設子流程順序 (重複使用 default_bag_maintenance_order 設定)"""
+    return list(GLOBAL_SETTINGS.get("default_bag_maintenance_order", DEFAULT_BAG_MAINTENANCE_ORDER))
+
+
 QUEST_MAX_RUN_LIMIT = _SETTINGS["quest"]["max_run_limit"]
 QUEST_TARGET_COUNT = _SETTINGS["quest"]["target_count"]
 QUEST_STAGE_BATCH_SIZE = _SETTINGS["quest"]["stage_batch_size"]

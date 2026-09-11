@@ -65,3 +65,10 @@
 - **平手打破 (Tie-Break)**：若次數相同，依配置清單宣告順序穩定 tie-break。
 - **次數累加閉環**：當出售流程全數完成並退回城鎮後，系統自動將該商店的造訪次數 +1，並保存至 `user_data/daily_status.json`，實現長久掛機下造訪次數的完美均衡。
 
+---
+
+## 🛡️ 前置解耦與進店異常自癒 (Precondition Decoupling & Entry Recovery)
+
+1. **背包整理純化解耦**：珠寶店處理器徹底拔除內部開包與整理邏輯，由流水線前序的獨立 `BagTidyHandler` 保證進店前物品已排齊（參見 [城鎮任務流水線佇列](pipeline.md)）。
+2. **殘留覆蓋層清理**：於 `INIT` 階段若畫面偵測到殘留的關閉按鈕 (`common/quit.png` 可見但非城鎮大門)，優先透過 `click_and_wait_until_gone` 消除覆蓋層，防止進店點擊被前景遮罩吸收。
+3. **進店點擊遺失自癒**：進入 `ENTERED_BUILDING` 階段後，若超過 4 秒畫面依然看見城門 (`common/door.png` 可見) 且無店內特徵，判定進店點擊遺失，自癒退回 `INIT` 重新點擊進店，防止原地停留死鎖。

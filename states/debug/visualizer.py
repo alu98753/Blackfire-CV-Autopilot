@@ -86,15 +86,7 @@ class DebugVisualizer:
         # 5. 繪製頂部狀態橫幅 (Status Banner)
         banner_text = status_text or labels.get("status")
         if banner_text:
-            h, w = canvas.shape[:2]
-            bar_height = 36
-            overlay = canvas.copy()
-            cv2.rectangle(overlay, (0, 0), (w, bar_height), (30, 30, 30), -1)
-            cv2.addWeighted(overlay, 0.75, canvas, 0.25, 0, canvas)
-            color = (0, 255, 0) if any(kw in banner_text.upper() for kw in ["SUCCESS", "PASS"]) else (
-                (0, 0, 255) if any(kw in banner_text.upper() for kw in ["FAIL", "DEFER", "WARN"]) else (255, 255, 255)
-            )
-            cv2.putText(canvas, banner_text, (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
+            DebugVisualizer._draw_status_banner(canvas, banner_text)
 
         try:
             saved = write_debug_image(filename, canvas)
@@ -103,3 +95,98 @@ class DebugVisualizer:
         except Exception as e:
             logging.debug(f"無法寫入 {filename}: {e}")
             return False
+
+    @staticmethod
+    def draw_features_diagnostic(
+        screen_img: np.ndarray,
+        features: List[Dict[str, Any]],
+        status_text: Optional[str] = None,
+        filename: str = "debug_features_diagnostic.png"
+    ) -> bool:
+        """
+        繪製多特徵診斷視覺化圖檔：
+        將所有檢測項目的 ROI 搜尋區域、最佳匹配點 BBox（達標綠框 / 未達標紅框）與信心度/門檻標籤繪製於畫面上，
+        並在頂部產生狀態橫幅。
+
+        :param screen_img: 原始截圖 (BGR 格式)
+        :param features: 特徵項目清單，每項格式如：
+               {
+                   "name": "task (Before)",
+                   "roi": (rx, ry, rw, rh), # 可選
+                   "matched_bbox": (mx, my, mw, mh), # 可選
+                   "confidence": 0.65,
+                   "threshold": 0.70,
+                   "matched": False
+               }
+        :param status_text: 頂部狀態橫幅文字
+        :param filename: 存檔檔名
+        :return: bool 寫入是否成功
+        """
+        if screen_img is None or not isinstance(screen_img, np.ndarray) or getattr(screen_img, "size", 0) == 0:
+            return False
+
+        canvas = screen_img.copy()
+        GREEN_COLOR = (0, 220, 0)      # BGR: 達標綠色
+        RED_COLOR = (0, 0, 255)        # BGR: 未達標/失敗紅色
+        BLUE_ROI_COLOR = (255, 180, 0) # BGR: 天藍色 (ROI 搜尋邊框)
+
+        # 1. 繪製各項特徵的 ROI 搜尋邊界框
+        for feat in features:
+            roi = feat.get("roi")
+            if roi:
+                rx, ry, rw, rh = roi
+                cv2.rectangle(canvas, (rx, ry), (rx + rw, ry + rh), BLUE_ROI_COLOR, 1)
+                name = feat.get("name", "ROI")
+                cv2.putText(canvas, f"[ROI] {name}", (rx + 5, max(15, ry + 15)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, BLUE_ROI_COLOR, 1, cv2.LINE_AA)
+
+        # 2. 繪製各項特徵的匹配 Bounding Box 與信心度文字
+        for feat in features:
+            bbox = feat.get("matched_bbox")
+            name = feat.get("name", "Feature")
+            conf = feat.get("confidence", 0.0)
+            th = feat.get("threshold", 0.70)
+            matched = feat.get("matched", False)
+
+            color = GREEN_COLOR if matched else RED_COLOR
+            tag = "PASS" if matched else "FAIL"
+
+            if bbox:
+                bx, by, bw, bh = bbox
+                thickness = 2 if matched else 1
+                cv2.rectangle(canvas, (bx, by), (bx + bw, by + bh), color, thickness)
+                label = f"[{tag}] {name}: {conf:.3f} / th={th:.2f}"
+                cv2.putText(canvas, label, (bx, max(15, by - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+            else:
+                # 若無明確 bbox (例如完全未匹配)，在畫面下方或左側標記未檢測到
+                pass
+
+        # 3. 繪製頂部狀態橫幅 (Status Banner)
+        if status_text:
+            DebugVisualizer._draw_status_banner(canvas, status_text)
+
+        try:
+            saved = write_debug_image(filename, canvas)
+            logging.info(f"🎯 [DebugVisualizer] 已成功將多特徵診斷視覺化標記寫入 {filename}")
+            return saved
+        except Exception as e:
+            logging.debug(f"無法寫入 {filename}: {e}")
+            return False
+
+    @staticmethod
+    def _draw_status_banner(canvas: np.ndarray, banner_text: str, bar_height: int = 38):
+        """繪製頂部半透明狀態橫幅與文字標記 (共用視覺化標記工具)"""
+        h, w = canvas.shape[:2]
+        overlay = canvas.copy()
+        cv2.rectangle(overlay, (0, 0), (w, bar_height), (25, 25, 25), -1)
+        cv2.addWeighted(overlay, 0.75, canvas, 0.25, 0, canvas)
+
+        text_upper = banner_text.upper()
+        if any(kw in text_upper for kw in ["SUCCESS", "PASS"]):
+            color = (0, 220, 0)
+        elif any(kw in text_upper for kw in ["FAIL", "DEFER", "WARN"]):
+            color = (0, 0, 255)
+        else:
+            color = (255, 255, 255)
+
+        cv2.putText(canvas, banner_text, (15, max(22, bar_height - 13)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
+

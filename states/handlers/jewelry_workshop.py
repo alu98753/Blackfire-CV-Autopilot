@@ -30,14 +30,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.summary_logged = False
         self.item_sub_step = "SEARCH"    # SEARCH, CLICKED_ITEM, CLICKED_SELL, CLICKED_MAX
         self.repeat_sell_count = 0
-        self.pre_tidy_done = False
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
-        from states.handlers.bag_cleaning import BagCleaningHandler
-        self.bag_handler = BagCleaningHandler(machine)
-        self.bag_handler.matcher = self.matcher
-        self.bag_handler.mouse = self.mouse
-        self.bag_handler.capturer = self.capturer
+        self.entered_building_time = 0.0
         from utils.merchant_gold_detector import MerchantGoldDetector
         self.gold_detector = MerchantGoldDetector()
 
@@ -52,9 +47,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.summary_logged = False
         self.item_sub_step = "SEARCH"
         self.repeat_sell_count = 0
-        self.pre_tidy_done = False
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
+        self.entered_building_time = 0.0
 
     def _record_completion(self):
         """記錄 DailyManager 珠寶加工廠今日已完成，並累加該商店造訪次數"""
@@ -338,8 +333,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
         if now - self.last_action_time < 0.6:
             return
 
-        # 🛡️ 場景感知防護 (Scene Guard)：若非 INIT/EXITING 階段但畫面上已看見 common/door.png (確定在城鎮 Town)，代表已離場
-        if self.step_phase in ["SELL_MENU_OPEN", "ENTERED_BUILDING"]:
+        # 🛡️ 場景感知防護 (Scene Guard)：若處於 SELL_MENU_OPEN 階段但畫面上已看見 common/door.png (確定在城鎮 Town)，代表已離場
+        if self.step_phase == "SELL_MENU_OPEN":
             pos_door_chk, conf_door_chk = self.matcher.match(screen_img, "common/door.png", threshold=0.80)
             if pos_door_chk:
                 logging.warning(f"💎 [珠寶加工廠] 防護攔截 - 處於 [{self.step_phase}] 階段但畫面上已看見城鎮大門 [common/door.png] ({conf_door_chk:.4f})，結束出售流程。")
@@ -348,6 +343,15 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.machine.need_jewelry_workshop = False
                 self.last_action_time = now
                 self.machine.pop_and_next_town_subflow()
+                return
+
+        # 🛡️ ENTERED_BUILDING 階段防呆：若進店後超過 4 秒畫面依然看見城鎮大門且無店內元素，判定進店點擊遺失，自癒退回 INIT
+        if self.step_phase == "ENTERED_BUILDING":
+            pos_door_chk, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.80)
+            if pos_door_chk and (now - getattr(self, "entered_building_time", now) > 4.0):
+                logging.warning("⚠️ [城鎮商店] 處於 ENTERED_BUILDING 超過 4 秒仍停留在城門口 (door.png 可見)，判定進店點擊遺失，退回 INIT 重新進店！")
+                self.step_phase = "INIT"
+                self.last_action_time = now
                 return
 
         # Queue-driven runs already passed the shared REACH_TOWN controller.
@@ -496,33 +500,19 @@ class JewelryWorkshopHandler(BaseStateHandler):
             self.last_action_time = now
             return
 
-        # 3.3 城鎮點擊珠寶加工廠建築 (Jewelry_workshop.png) (進場前優先發起城鎮背包預先整理)
+        # 3.3 城鎮點擊珠寶加工廠建築 (純粹進店，完全交由前序 bag_tidy 保證背包已整理)
         if is_needed:
-            # 3.3.1 若目前背包已處於開啟狀態（不受城鎮大門/建築被背包遮擋影響），優先執行「整理」與「退出」
-            if self.bag_handler.is_backpack_opened(screen_img):
-                if not getattr(self.machine, "bag_tidied", False):
-                    if self.bag_handler.tidy_backpack(screen_img, rect):
-                        self.last_action_time = now
-                        return
-                else:
-                    pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.7)
-                    if pos_quit:
-                        logging.info("💎 [珠寶加工廠] 城鎮背包預先整理完畢，點擊關閉退出背包...")
-                        self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, threshold=0.7)
-                    self.machine.bag_tidied = False
-                    self.machine.bag_opened_clicked = False
-                    self.pre_tidy_done = True
-                    self.last_action_time = now
-                    return
+            # 3.3.1 若處於 INIT 階段卻偵測到殘留的關閉按鈕（非正常城鎮畫面，如背包或彈窗覆蓋層）
+            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.80, quiet=True)
+            if pos_quit:
+                logging.warning("⚠️ [城鎮商店 INIT] 偵測到殘留干擾覆蓋層 (quit 可見)，優先閉環關閉以利進店...")
+                self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, timeout=3.0, threshold=0.80)
+                self.last_action_time = time.time()
+                return
 
-            # 3.3.2 若背包未開啟，且處於城鎮 (pos_door 可見)
+            # 3.3.2 於純淨城鎮中尋找目標商店進入
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
-            if pos_door:
-                if not self.pre_tidy_done:
-                    logging.info("💎 [城鎮商店] 進入前執行城鎮背包預先整理，優先開啟背包...")
-                    if self.bag_handler.open_backpack(screen_img, rect):
-                        self.last_action_time = now
-                        return
+            if pos_door and self.step_phase == "INIT":
 
                 # 依商人持有金幣由多至少貪婪排序 (未探勘者優先)，並於畫面中尋找可見建築
                 dm = getattr(self.machine, "daily_manager", None)
@@ -576,6 +566,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
                     logging.info(f"💎 [城鎮商店] 於城鎮發現目標商店 [{shop_name}] ({self.current_building_btn}) (記錄金幣: {cur_gold}, 信心度: {matched_conf:.4f})，點擊進入...")
                     self.mouse.click(left + matched_pos[0], top + matched_pos[1])
                     self.step_phase = "ENTERED_BUILDING"
+                    self.entered_building_time = now
                     self.last_action_time = now
                     self.machine.notify_ui_progress()
                     return

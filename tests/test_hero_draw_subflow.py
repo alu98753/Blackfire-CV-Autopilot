@@ -76,7 +76,8 @@ class TestHeroDrawSubflow(unittest.TestCase):
 
         self.mock_machine.matcher.match.side_effect = fake_match
 
-        with patch("os.path.exists", return_value=True):
+        with patch("os.path.exists", return_value=True), \
+             patch("utils.town_building_detector.is_true_red_dot", return_value=(True, 1.0)):
             # 1. Step 1: INIT 點擊 Tavern.png ➔ ENTERED_TAVERN
             res1 = self.handler.handle(mock_img, rect)
             self.assertTrue(res1)
@@ -121,7 +122,7 @@ class TestHeroDrawSubflow(unittest.TestCase):
 
     def test_verify_exit_with_red_dot_still_present(self):
         """測試：退出後再次檢查紅點 (有檢查到紅點 ➔ 判定招募未成功，不標記 completed_today)"""
-        mock_img = MagicMock()
+        mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
         self.handler.step_phase = "VERIFY_EXIT"
 
@@ -133,7 +134,8 @@ class TestHeroDrawSubflow(unittest.TestCase):
             return (None, 0.0)
 
         self.mock_machine.matcher.match.side_effect = fake_match
-        with patch("os.path.exists", return_value=True):
+        with patch("os.path.exists", return_value=True), \
+             patch("utils.town_building_detector.is_true_red_dot", return_value=(True, 1.0)):
             res = self.handler.handle(mock_img, rect)
             self.assertTrue(res)
             # 斷言：絕對不得呼叫 record_subflow_completed！

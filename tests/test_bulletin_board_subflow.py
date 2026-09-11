@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import time
+import numpy as np
 from states.handlers.bulletin_board import BulletinBoardHandler
 from states.state_machine import GameStateMachine
 from config import GAME_CONFIGS
@@ -13,7 +14,7 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.mock_daily_manager = MagicMock()
 
         self.mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 800, "height": 600}
-        self.mock_capturer.capture.return_value = MagicMock()
+        self.mock_capturer.capture.return_value = np.zeros((600, 800, 3), dtype=np.uint8)
 
         self.state_machine = GameStateMachine(
             capturer=self.mock_capturer,
@@ -60,10 +61,10 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(150, 150)
         self.assertEqual(handler.step_phase, "WAIT_BOARD_OPEN")
 
-        # Step 2: 等待看到 quit.png
+        # Step 2: 等待看到 quit.png 與告示牌特徵
         handler.last_action_time = 0.0
         def fake_match_step2(img, name, **kw):
-            if name == "common/quit.png":
+            if name in ["common/quit.png", "town_building/bulletin_board/reset.png"]:
                 return ((700, 100), 0.9)
             return (None, 0.0)
 

@@ -55,18 +55,19 @@
 - `mouseDown`/`mouseUp` 間隔 `40ms` (`time.sleep(0.04)`)，釋放後至少等 `40ms`。
 - 主迴圈 `--interval` 預設 `0.05` 秒 (50ms)；常規按鈕點擊後等待 `30ms`，跨場景/下樓等待 `40ms`。
 
-### 3. 開發故事與契約收斂規範 (PARS & Contract Archival) 📝
-- 功能/修復收尾時於 `docs/storys/` 建立 PARS 文檔 (`Purpose`, `Action`, `Result`, `So What`, `Influence`)。
-- **文件收斂與契約歸檔**：遵循 `canonical_contract_archival` 與 `branch_completion_workflow` 規範：
-  - 🛑 **收尾三階段硬性狀態閘門 (Three-Phase Gated Invariant)**：當使用者發出「跑merge」、「準備merge」等收尾指令時，AI **絕對禁止直接輸出 `git merge` 指令**！必須依序完成：
-    1. **Phase 1 (程式碼潔淨度與 Docstring 審計閘門)**：
-       - **Pre-Merge Cleanup Acceptance Criterion**：暫時 Spec / Issue 代號（如 todo文件名稱、task ID、分支名、階段編號）可協助開發，但**嚴禁遺留在 production code 的 docstrings 或註解中進入 main**。Merge 前必須重寫為穩定的行為／架構語意契約描述，若需指涉架構來源，僅限引用長效 Canonical Contract。
-    2. **Phase 2 (收尾驗證與文件契約收斂閘門)**：
-       - 若涉及 Spec/TODO 變更，AI 必須先列出候選清單向使用者顯式確認後，方可執行契約升格與清理。
-       - **刪除是預設；封存是例外**：永久約束升格至 Canonical Contract，未完成事項獨立至 TODO/RFC，已完成的原始任務 spec 預設刪除，嚴防 Doc Drift。
-    3. **Phase 3 (分支審計與合併指令交付)**：
-       - 僅當 Phase 1 與 Phase 2 均完成確認後，方可生成標準 `--no-ff` 合併指令並提醒使用者手動執行全套測試。
-  - ⚠️ **嚴禁 AI 自行決定清理範圍**：必須先列出候選清單向使用者顯式確認後方可執行。
+### 3. 分支收尾工作流與契約收斂規範 (Branch Closeout & Contract Archival) 📝
+- **統一收尾工作流 (Branch Closeout)**：當使用者發出「`請分支收尾`」、「`分支收尾`」、「`準備 merge`」、「`請 merge`」等指令時，統一啟動由 [`branch_completion_workflow`](skills/branch_completion_workflow/SKILL.md) 總編排的 **11 階段硬性分段閘門工作流 (11-Phase Gated Workflow)**。
+- 🛑 **最高硬性阻斷禁令 (Hard Blocking Invariant)**：
+  - **「請 merge」代表「啟動分支收尾流程」，絕對禁止直接輸出 `git merge` 指令**！
+  - 本流程為分段閘門工作流，**嚴禁一次跑到底**。每當遇到全套測試執行、文件清理範圍確認或決策分歧時，必須停下來等待使用者指示方可推進。
+- **關鍵閘門守則**：
+  1. **雙工作樹迴歸基準驗證 (Phase 1~2)**：AI 先於 `temp-main` 檢查 clean，執行 `git fetch origin` 並比對 `HEAD` 與 `origin/main`（若落後且 clean 則 `git pull --ff-only` 刷新），隨後以共用主專案 `.venv` 交付兩個 Terminal 的全套測試執行指令。使用者執行完畢後指示 AI 檢視終端輸出。比對確認 failures，嚴禁在存在 `BRANCH_REGRESSION` 或 `UNCERTAIN` 時進入重構或收尾。
+  2. **保行為維護重構 (Phase 4~5)**：僅進行無行為改變的代碼清理（dead code, glue, duplication），獨立 commit。重構後必須再次對比測試無新增 failure。
+  3. **程式碼潔淨度審計 (Phase 6)**：暫時 Spec / Issue 代號（如 todo 檔名、Task ID、分支名）嚴禁遺留在 production code 的 docstrings 或註解中進入 main。僅限引用長效 Canonical Contract。
+  4. **文件收斂與契約歸檔 (Phase 7)**：調用 [`canonical_contract_archival`](skills/canonical_contract_archival/SKILL.md)。⚠️ **嚴禁 AI 自行決定清理範圍**，必須先列出候選清單向使用者確認。遵循「刪除是預設；封存是例外」果斷清理已提煉之過期 spec。
+  5. **開發故事歸檔 (Phase 8)**：於 `docs/storys/` 建立 PARS 文檔。⚠️ **PARS 僅為歷史敘事日誌，絕非架構規範，絕不可作為架構證據**。
+  6. **合併指令交付 (Phase 10)**：僅當所有前置閘門完成後，方可交付包含結構化日誌的 `--no-ff` 合併指令，AI 嚴禁自行執行 merge。
+
 
 
 ### 4. 局部比對與 Scale 視務規範 🎯
@@ -117,7 +118,13 @@
         ```
    - **全域收尾提醒**：完成所有增量開發後，由 AI 提示使用者手動執行全套測試驗證。
 
-### 7. Markdown 文檔與超連結繪製規範 📄
+### 7. Markdown 文檔客觀寫作與超連結繪製規範 (write_docs) 📄✍️
+- **全域文檔強制遵循 `write_docs` 技能**：本專案全域所有 Markdown 文章（包括但不限於 `docs/` 下的技術規格、架構契約、TODO/RFC、PARS 開發故事，以及 `meta_data/Game_docs/` 下的遊戲數據分析、攻略問答與機制指南），**一律強制遵循 `write_docs` (Evidence-Bound Natural Writing) 技能規範**：
+  1. **確定性 ≤ 證據強度 (Certainty <= Evidence)**：斷言確定性嚴禁超過可用代碼、底層數據或實測紀錄之依據。嚴禁未經實測證實的誇飾（如「絕對」、「必須」、「完美解決」、「終局最佳」）；建議或策略陳述必須使用「建議……」、「通常……」、「可先……」等中立表達。
+  2. **改寫嚴禁升級斷言與腦補空白 (No Evidence Inflation or Gap Filling)**：整理筆記、改寫規格或匯總 Q&A 時，嚴禁私自調高斷言語氣，或憑空捏造未驗證之數值、機率、排名與策略。
+  3. **拒絕 AI 味修飾與情緒化黑話 (No AI Embellishment)**：禁止使用「過渡打工人」、「傾家蕩產」、「賭怪」、「停手！」、「神級」等情緒化浮誇詞彙；避免無效的前綴標籤（如「老手大白話：」、「核心原則：」）與過度裝飾的 Emoji。
+  4. **優先連貫段落，禁止冗餘重述與假架構條列 (Continuous Prose & List Rule)**：優先以短段落自然敘述；嚴禁將內文重複抽成條列清單或無效懶人包（TL;DR）；只有在項目具備實質平行或步驟關係時才使用列表。
+  5. **保留具體細節 (Preserve Concrete Details)**：保留實質數值、底層變數、換算公式、程式碼符號與確切路徑，禁止將具體資訊抽象化為無效空話。
 - **嚴禁使用絕對路徑 `file:///`**：在撰寫 `docs/` 下的 Markdown 技術文檔時，**絕對禁止使用 `file:///...` 絕對路徑**（避免 VS Code Markdown Preview 預覽器無法解析而自動斷行，呈現未解析的長文字網址）。
 - **強制使用標準相對路徑 (Relative Markdown Links)**：
   - 引用專案範本或模組時，必須依據當前 Markdown 檔案位置使用標準相對路徑。
@@ -163,3 +170,4 @@
 6. ☐ 座標計算是否統一使用 Client 座標系？→ 禁用 GetWindowRect
 7. ☐ 日誌層級審查：高頻比對/像素差異/每幀運算是否使用 `logging.debug`？（嚴禁在 `INFO` 輸出高頻重複日誌）
 8. ☐ Docstring 潔淨度審查：Production code / docstrings / 註解中是否殘留暫時性 spec/issue 名稱（如 `nav_slow_bug2`、task ID、分支名）？→ 重寫為穩定行為語意描述或引用 Canonical Contract。
+9. ☐ 文檔客觀性審查（write_docs）：全專案文檔（`docs/`、`meta_data/Game_docs/`）是否符合「確定性 ≤ 證據強度」？是否剔除「絕對/必須/唯一/打工人」等誇飾、無效重複條列與未證實猜測？

@@ -37,7 +37,8 @@ from states.handlers import (
     HeroDrawHandler,
     BulletinBoardHandler,
     DomainExploreHandler,
-    DemonLordsHandler
+    DemonLordsHandler,
+    BagTidyHandler
 )
 from states.exceptions import ExceptionWatchdog, UnexpectedPopupRecoveryHandler
 from states.navigation_intent import ActionId, IntentId
@@ -79,6 +80,7 @@ class GameStateMachine:
     STATE_POPUP_RECOVERY = "POPUP_RECOVERY"              # 意外彈窗/視窗恢復處置流程
     STATE_DOMAIN_EXPLORE = "DOMAIN_EXPLORE"
     STATE_DEMON_LORDS = "DEMON_LORDS"                    # 深淵魔王討伐流程
+    STATE_BAG_TIDY = "BAG_TIDY"                          # 獨立背包整理流程
 
     DUNGEON_SCENE_FEATURES = (
         "dungeons/leave.png",
@@ -283,6 +285,7 @@ class GameStateMachine:
             self.STATE_POPUP_RECOVERY: UnexpectedPopupRecoveryHandler(self),
             self.STATE_DOMAIN_EXPLORE: DomainExploreHandler(self),
             self.STATE_DEMON_LORDS: DemonLordsHandler(self),
+            self.STATE_BAG_TIDY: BagTidyHandler(self),
         }
 
     def stash_current_state(self, reason="unexpected_popup"):
@@ -651,6 +654,7 @@ class GameStateMachine:
         STATE_HERO_DRAW: "hero_draw",
         STATE_BULLETIN_BOARD: "bulletin_board",
         STATE_DEMON_LORDS: "demon_lords",
+        STATE_BAG_TIDY: "bag_tidy",
     }
 
 
@@ -663,6 +667,8 @@ class GameStateMachine:
             self.navigation_progress.clear(IntentId.PRIMARY_NAVIGATION)
 
         key = self.TOWN_SUBFLOW_CONFIG_MAP.get(new_state)
+        if new_state == self.STATE_BLOOD_ALTAR and getattr(self, "current_town_subflow", None) == "blood_sacrifice":
+            key = "blood_sacrifice"
         if key and key in GAME_CONFIGS:
             saved_keep = self.config.get("keep_colors") if self.config else None
             saved_dis = self.config.get("disassemble_colors") if self.config else None
@@ -698,8 +704,8 @@ class GameStateMachine:
                 return
             if getattr(self, "pending_town_subflows", False):
                 self.pending_town_subflows = False
-                logging.info("🏛️ [城鎮流水線] 偵測到地下城探索結束退回城鎮，自動補跑延遲的城鎮任務流水線...")
-                self.trigger_town_subflow_chain()
+                logging.info("🎒 [背包後續維護] 偵測到地下城探索結束退回城鎮，自動補跑延遲的背包維護子流程佇列...")
+                self.trigger_bag_maintenance_chain()
             elif self.is_daily_pipeline_active() or self.has_available_selected_lord_boss() or self.has_available_demon_lords():
                 self.evaluate_and_schedule_daily_pipeline()
 
@@ -1881,18 +1887,38 @@ class GameStateMachine:
                 self.check_and_advance_quest_target()
             logging.info("🎉 [子流程] 「領取任務獎勵」 Phase 狀態機圓滿結束！")
 
+    def _expand_subflow_queue(self, queue):
+        """
+        展開子流程佇列中的複合巨集（如 bag_maintenance -> 依序展開為 default_bag_maintenance_order）。
+        重複使用既有配置與變數，避免硬編碼。
+        """
+        from config import get_default_bag_maintenance_order
+        cfg = self.config or {}
+        expanded = []
+        for flow_key in queue:
+            if flow_key == "bag_maintenance":
+                steps = cfg.get(
+                    "bag_maintenance_order",
+                    cfg.get("town_subflow_order", get_default_bag_maintenance_order()),
+                )
+                expanded.extend(steps)
+            else:
+                expanded.append(flow_key)
+        return expanded
+
     def start_subflow_queue(self, queue):
         """
-        初始化並啟動城鎮子流程佇列，並單次列印任務總覽儀表板。
+        初始化並啟動城鎮子流程佇列，自動展開複合巨集（如 bag_maintenance），並單次列印任務總覽儀表板。
         """
         from config import SUBFLOW_CONFIGS
-        self.town_subflow_queue = list(queue)
+        expanded_queue = self._expand_subflow_queue(queue)
+        self.town_subflow_queue = list(expanded_queue)
         self.current_town_subflow = None
 
         logging.info("=" * 60)
         logging.info("🏛️ 【城鎮任務流水線 - 任務總覽儀表板】 🏛️")
         logging.info("=" * 60)
-        for idx, flow_key in enumerate(queue, 1):
+        for idx, flow_key in enumerate(expanded_queue, 1):
             cfg = SUBFLOW_CONFIGS.get(flow_key, {})
             name = cfg.get("name", flow_key)
             is_enabled = cfg.get("enabled", True)
@@ -1904,12 +1930,17 @@ class GameStateMachine:
 
     def trigger_town_subflow_chain(self):
         """
-        當背包清理完成退回城鎮後，構建需在城鎮執行的子流程佇列。
+        [相容別名] 統一轉發至 trigger_bag_maintenance_chain。
         """
-        from config import GLOBAL_SETTINGS
-        cfg = self.config or {}
-        order = cfg.get("town_subflow_order", GLOBAL_SETTINGS.get("default_town_subflow_order", ["blood_altar", "jewelry_workshop"]))
-        logging.info("🏛️ [城鎮流水線] 背包清理完成，構建城鎮任務佇列...")
+        self.trigger_bag_maintenance_chain()
+
+    def trigger_bag_maintenance_chain(self):
+        """
+        背包清理完成退回城鎮後，構建資源維護子流程佇列（血之祭壇獻祭、背包整理、珠寶加工廠出售）。
+        徹底與 Daily 每日福利流水線解耦，透過 _expand_subflow_queue 統一展開複合巨集。
+        """
+        order = self._expand_subflow_queue(["bag_maintenance"])
+        logging.info("🎒 [背包後續維護] 背包清理完成，構建維護任務佇列: %s", order)
         self.start_subflow_queue(order)
         if self.current_state == self.STATE_BAG_CLEANING:
             self.transition_to(self.STATE_NAVIGATING)
@@ -1983,6 +2014,10 @@ class GameStateMachine:
         config_to_state = {v: k for k, v in self.TOWN_SUBFLOW_CONFIG_MAP.items()}
         if flow_key == "bag_clean":
             return self.STATE_BAG_CLEANING
+        if flow_key == "blood_sacrifice":
+            return self.STATE_BLOOD_ALTAR
+        if flow_key == "bag_tidy":
+            return self.STATE_BAG_TIDY
         return config_to_state.get(flow_key)
 
     def has_pending_town_subflow(self):
@@ -2001,8 +2036,9 @@ class GameStateMachine:
             return False
 
         self.need_bag_cleaning = flow_key == "bag_clean"
-        self.need_blood_altar = flow_key == "blood_altar"
+        self.need_blood_altar = flow_key in {"blood_altar", "blood_sacrifice"}
         self.need_jewelry_workshop = flow_key == "jewelry_workshop"
+        self.need_bag_tidy = flow_key == "bag_tidy"
         self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
         logging.info(
             "🎯 [城鎮流水線] Town precondition 已成立，派發 [%s] -> [%s]。",
@@ -2016,7 +2052,7 @@ class GameStateMachine:
         """Mark a verified red-dot-exhausted Town entry as completed today."""
         flow_key = self.current_town_subflow
         manager = getattr(self, "daily_manager", None)
-        if flow_key and manager and hasattr(manager, "record_subflow_completed"):
+        if flow_key and flow_key != "blood_sacrifice" and manager and hasattr(manager, "record_subflow_completed"):
             manager.record_subflow_completed(flow_key)
         logging.info(
             "✅ [城鎮流水線] [%s] 入口無紅點，確認今日已完成，標記 completed_today = True。",

@@ -97,16 +97,17 @@ echo  6. 討伐首領 Boss (lord_boss):             --backend --subflow lord_bos
 echo  7. 背包整理大量分解 (bag_clean):          --backend --subflow bag_clean
 echo  8. 深淵魔王 (demon_lords):                --backend --subflow demon_lords
 echo  9. 城鎮三大速領組合 (chest + blood + jewelry)
-echo 10. 自訂輸入子流程名稱 (例如 blood_altar lord_boss)
-echo 11. 返回主選單
+echo 10. 背包維護流水線 (bag_maintenance: 獻祭 + 整理 + 出售)
+echo 11. 自訂輸入子流程名稱 (例如 blood_altar lord_boss)
+echo 12. 返回主選單
 echo ============================================================
 echo.
 
 set "sub_choice="
-set /p sub_choice="請選擇 Dev 測試項 [1-11] 或直接輸入名稱 (預設為 3: 血之祭壇): "
+set /p sub_choice="請選擇 Dev 測試項 [1-12] 或直接輸入名稱 (預設為 3: 血之祭壇): "
 
 if "%sub_choice%"=="" set sub_choice=3
-if "%sub_choice%"=="11" goto MENU_LOOP
+if "%sub_choice%"=="12" goto MENU_LOOP
 
 if "%sub_choice%"=="1" set custom_args=--backend --subflow chest
 if "%sub_choice%"=="2" set custom_args=--backend --subflow hero_draw
@@ -117,6 +118,7 @@ if "%sub_choice%"=="6" set custom_args=--backend --subflow lord_boss
 if "%sub_choice%"=="7" set custom_args=--backend --subflow bag_clean
 if "%sub_choice%"=="8" set custom_args=--backend --subflow demon_lords
 if "%sub_choice%"=="9" set custom_args=--backend --subflow chest blood_altar jewelry_workshop
+if "%sub_choice%"=="10" set custom_args=--backend --subflow bag_maintenance
 
 if /i "%sub_choice%"=="chest" set custom_args=--backend --subflow chest
 if /i "%sub_choice%"=="hero_draw" set custom_args=--backend --subflow hero_draw
@@ -126,8 +128,9 @@ if /i "%sub_choice%"=="bulletin_board" set custom_args=--backend --subflow bulle
 if /i "%sub_choice%"=="lord_boss" set custom_args=--backend --subflow lord_boss
 if /i "%sub_choice%"=="bag_clean" set custom_args=--backend --subflow bag_clean
 if /i "%sub_choice%"=="demon_lords" set custom_args=--backend --subflow demon_lords
+if /i "%sub_choice%"=="bag_maintenance" set custom_args=--backend --subflow bag_maintenance
 
-if "%sub_choice%"=="10" goto CUSTOM_SUBFLOW_INPUT
+if "%sub_choice%"=="11" goto CUSTOM_SUBFLOW_INPUT
 
 :: 若非選單號碼 1-8 或常見 subflow 名稱，嘗試直接作為子流程名稱
 if "%custom_args%"=="" set custom_args=--backend --subflow %sub_choice%

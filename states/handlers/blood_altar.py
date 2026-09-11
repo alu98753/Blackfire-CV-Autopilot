@@ -45,12 +45,14 @@ class BloodAltarHandler(BaseStateHandler):
 
     def _record_completion(self):
         """記錄 DailyManager 完成狀態並自動切換至下一個城鎮任務"""
+        current_flow = getattr(self.machine, "current_town_subflow", "blood_altar")
         self.reset_state()
         self.machine.need_blood_altar = False
-        dm = getattr(self.machine, "daily_manager", None)
-        if dm and hasattr(dm, "record_subflow_completed"):
-            dm.record_subflow_completed("blood_altar")
-        logging.info("🩸 [血之祭壇] 領血與獻祭流程完成，消費城鎮佇列中的下一個任務...")
+        if current_flow != "blood_sacrifice":
+            dm = getattr(self.machine, "daily_manager", None)
+            if dm and hasattr(dm, "record_subflow_completed"):
+                dm.record_subflow_completed("blood_altar")
+        logging.info(f"🩸 [血之祭壇] 流程 [{current_flow}] 完成，消費城鎮佇列中的下一個任務...")
         self.machine.pop_and_next_town_subflow()
 
     def _is_blood_altar_claimed_today(self):
@@ -74,6 +76,13 @@ class BloodAltarHandler(BaseStateHandler):
         pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
         pos_building, _ = self.matcher.match(screen_img, building_btn, threshold=0.65, quiet=True)
         if pos_door or pos_building:
+            current_flow = getattr(self.machine, "current_town_subflow", "blood_altar")
+            if current_flow == "blood_sacrifice":
+                logging.info("✅ [血之祭壇] 偵測到已處於城鎮畫面，完成血水獻祭維護流程！")
+                self._record_completion()
+                self.last_action_time = now
+                return True
+
             from utils.town_building_detector import detect_building_with_red_dot
             check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="blood_altar")
             if check.found_building and check.has_red_dot:
@@ -128,7 +137,7 @@ class BloodAltarHandler(BaseStateHandler):
 
         # 防死鎖門禁：若獨立模式或城鎮流水線已不需要血之祭壇獻祭 且處於 INIT 階段，直接 return！
         cfg_type = self.machine.config.get("type") if getattr(self.machine, "config", None) else None
-        is_needed = getattr(self.machine, "need_blood_altar", False) or cfg_type == "blood_altar"
+        is_needed = getattr(self.machine, "need_blood_altar", False) or cfg_type in ("blood_altar", "blood_sacrifice")
         if not is_needed and self.step_phase == "INIT":
             return False
 
@@ -138,7 +147,7 @@ class BloodAltarHandler(BaseStateHandler):
 
         # Queue-driven runs already passed the shared REACH_TOWN controller.
         # Preserve the legacy route only for direct/standalone invocation.
-        if getattr(self.machine, "current_town_subflow", None) != "blood_altar":
+        if getattr(self.machine, "current_town_subflow", None) not in ("blood_altar", "blood_sacrifice"):
             if not self._ensure_in_town(screen_img, rect):
                 return True
 
@@ -194,8 +203,9 @@ class BloodAltarHandler(BaseStateHandler):
         # 2. ENTERED_BUILDING 階段：進屋後判斷切換至領血頁籤或獻祭頁籤
         # =========================================================================
         elif self.step_phase == "ENTERED_BUILDING":
+            is_sacrifice_only = getattr(self.machine, "current_town_subflow", None) == "blood_sacrifice"
             pos_rec_entry, conf_rec_entry = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
-            if not is_claimed_today and pos_rec_entry:
+            if not is_sacrifice_only and not is_claimed_today and pos_rec_entry:
                 logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}] [{conf_rec_entry:.4f}]，點擊切換至領血介面...")
                 self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
                 self.step_phase = "RECEIVE_TAB_OPEN"
@@ -203,8 +213,8 @@ class BloodAltarHandler(BaseStateHandler):
                 self.last_action_time = now
                 return True
 
-            # 若今日已領取過免費血水或無領血頁籤，直接轉移至 SACRIFICE_MENU_OPEN
-            logging.info("🩸 [血之祭壇] 今日免費血水已領取或無須領血，轉移至 SACRIFICE_MENU_OPEN 階段...")
+            # 若為 blood_sacrifice，或今日已領取過免費血水或無領血頁籤，直接轉移至 SACRIFICE_MENU_OPEN
+            logging.info("🩸 [血之祭壇] 今日免費血水已領取或執行純獻祭，轉移至 SACRIFICE_MENU_OPEN 階段...")
             self.step_phase = "SACRIFICE_MENU_OPEN"
             self.empty_blood_scan_count = 0
             self.last_action_time = now

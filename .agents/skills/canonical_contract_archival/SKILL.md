@@ -82,43 +82,47 @@ Tests 是 **executable verification**，不是天然的絕對 SSOT；測試也�
 
 ## 工作流程
 
-0. **前置交互：顯式確認處理範圍 (Mandatory User Scope Confirmation)**
+1. **讀完整上下文並核對實作 (Read Context & Verify against Implementation)**
+   - 盤點本次分支涉及的 Spec / TODO / RFC。
+      - 原始 spec / TODO
+      - 對應 production code / config
+      - 直接相關 focused tests
+      - 上位 architecture / contract
+      - 必要時查看 branch diff，確認哪些確實已交付
+   - 審視其提出的架構假設、職責邊界與後置條件。
+   - **以當前 Production 代碼與測試實作為唯一定本標準 (Implementation as Ground Truth)**：逐一核驗該不變量是否與實際代碼行為 100% 一致，嚴禁將初期過時假設或未落地的設計寫入 Contract。
+
+2. **五分流分類與實作仲裁 (Five-Bucket Classification & Arbitration)**
+   依據上述規範，將 Spec 與文件內容逐項對照當前代碼實作進行結構化分類：
+   - `PROMOTE`：長效架構不變量 (Invariants)、職責邊界、後置條件驗證契約、異常自癒機制，升格至 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。
+   - `LINK`：程式碼、常數與測試已有具體實作者，Contract 僅做參照，不複製貼上代碼細節。
+   - `HISTORY`：歷史脈絡留給 PARS 與 Git。
+   - `TODO`：尚未完成的工作或後續規劃，搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO 清單。
+   - `DROP`：過期或重複內容，提煉後預設刪除；暫存測試日誌檔（`*.log`）亦於收尾時一併徹底清理刪除。
+
+   **仲裁與升格執行**：
+   - **遇矛盾以實作為準**：spec、code、tests 衝突時，以目前 executable behavior 為準，不得盲目複製未落地的提案。
+   - **建立／更新 Contract 規範**：針對 `PROMOTE` 項目主動建立或更新 Contract。Contract 優先保持短、穩定、可掃讀，建議只含：
+     - Status / Scope / Document responsibility
+     - Canonical invariants
+     - Ownership / boundaries
+     - Observable behavior / evidence semantics
+     - Acceptance criteria
+     - 明確不採用的捷徑 / Non-goals
+     - Executable verification links
+     - Change / supersession rule
+   - **若有 PROMOTE 項目**：主動更新/建立對應的 Canonical Contract（`docs/architecture/` 或 `docs/features/`），並同步更新 `future_work.md` 中指向舊 spec 的超連結與狀態。
+   - **若無 PROMOTE 項目**（或已完整涵蓋）：確認無遺漏後記錄「經審查無新增長效不變量」。
+
+3. **顯式確認清理範圍 (Mandatory User Scope Confirmation)**
    > [!CRITICAL]
-   > **嚴禁 AI 自行決定清理範圍**：AI 絕對禁止自行挑選檔案擅自執行文件收斂或刪除。在動手之前，AI 必須：
-   > 1. 列出本次分支涉及的 Spec / TODO 候選檔案清單。
-   > 2. 向使用者明確詢問：「請問本次要收斂與清理的清單是否為這些？是否有遺漏、或是否有不可清理的 TODO？」
-   > 3. **顯式要求使用者提供／確認最終清理清單後，方可啟動後續流程**。
+   > **嚴禁 AI 自行決定清理範圍**：完成契約升格與實作核對後，AI 必須停下來向使用者顯式呈報：
+   > 1. 【已升格更新之 Canonical Contract 清單與章節】（或說明經核對無需更新）；
+   > 2. 【已萃取完畢、建請刪除 (DROP) 的過期 Spec 清單與暫存測試日誌 (`*.log`)】（遵循「刪除是預設；封存是例外」原則）；
+   > 3. 【仍未完成需保留 (RETAIN) 的 TODO 清單】。
+   > **經使用者明確確認同意後，方可執行檔案刪除 (`git rm`)**。
 
-1. **讀完整上下文**
-   - 原始 spec / TODO
-   - 對應 production code / config
-   - 直接相關 focused tests
-   - 上位 architecture / contract
-   - 必要時查看 branch diff，確認哪些確實已交付
-
-2. **先做內部分類**
-   - `PROMOTE`：升格為 contract
-   - `LINK`：由 code/config/tests 持有，只在 contract 指向
-   - `HISTORY`：留在 story / ADR / archive
-   - `TODO`：未完成工作
-   - `DROP`：過時或重複
-
-3. **遇到矛盾先停下 canonicalization**
-   - spec、code、tests 三者互相衝突時，不得挑自己喜歡的一個宣稱為標準。
-   - 明確指出衝突與目前 executable behavior，再決定是否需修 code、test 或文件。
-
-4. **建立／更新 Contract**
-   Contract 優先保持短、穩定、可掃讀，建議只含：
-   - Status / Scope / Document responsibility
-   - Canonical invariants
-   - Ownership / boundaries
-   - Observable behavior / evidence semantics
-   - Acceptance criteria
-   - 明確不採用的捷徑 / Non-goals
-   - Executable verification links
-   - Change / supersession rule
-
-5. **退休原始 Spec：刪除是預設；封存是例外 (Default to DELETE, Archive as EXCEPTION)**
+4. **退休原始 Spec：刪除是預設；封存是例外 (Default to DELETE, Archive as EXCEPTION)**
    - **核心理念**：完成的任務 Spec 通常由三部分組成：
      ```text
      已成立的規則 ───────> Canonical Contract (長期約束)

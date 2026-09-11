@@ -75,8 +75,8 @@ class TestBagCleaningDualModeBehavior(unittest.TestCase):
         with patch('states.handlers.bag_cleaning.time.sleep'):
             self.handler.handle(screen_img, rect)
 
-        # 驗證立刻呼叫了 trigger_town_subflow_chain()
-        self.mock_machine.trigger_town_subflow_chain.assert_called_once()
+        # 驗證立刻呼叫了 trigger_bag_maintenance_chain()
+        self.mock_machine.trigger_bag_maintenance_chain.assert_called_once()
 
 class TestBackpackFullDestroyableColorsDecoupling(unittest.TestCase):
     def setUp(self):
