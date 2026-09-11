@@ -243,18 +243,77 @@ def _get_building_crop_roi(screen_img, pos_building: Tuple[int, int], bw: int, b
     return crop_roi, (x1, y1, x2, y2)
 
 
+def _collect_red_dot_candidates(
+    matcher, crop_roi: np.ndarray, red_dot_template: str, threshold: float, candidate_scales
+) -> Tuple[list, float]:
+    """獲取驚嘆號紅點候選清單 (優先調用 match_all，降級支援 match)。"""
+    candidates = []
+    if hasattr(matcher, "match_all") and callable(matcher.match_all):
+        try:
+            all_matches = matcher.match_all(
+                crop_roi, red_dot_template, threshold=threshold, scales=candidate_scales, brightness_threshold=0.0
+            )
+            if all_matches:
+                candidates = [(int(pt[0]), int(pt[1]), float(pt[2])) for pt in all_matches]
+        except Exception as e:
+            logging.debug(f"matcher.match_all 調用異常，降級為單點比對: {e}")
+
+    if not candidates:
+        raw_dot_pos, best_conf_dot = matcher.match(
+            crop_roi, red_dot_template, threshold=threshold, scales=candidate_scales, brightness_threshold=0.0
+        )
+        if raw_dot_pos is not None:
+            candidates = [(int(raw_dot_pos[0]), int(raw_dot_pos[1]), float(best_conf_dot))]
+        return candidates, float(best_conf_dot)
+
+    return candidates, float(candidates[0][2])
+
+
 def _detect_and_verify_red_dot(
     crop_roi, matcher, red_dot_template: str, threshold: float, candidate_scales, templates_dir: str, screen_scale: float, tag: str, allow_orange: bool = False
 ):
-    """比對驚嘆號形狀並執行色彩門禁核驗。"""
-    raw_dot_pos, best_conf_dot = matcher.match(
-        crop_roi, red_dot_template, threshold=threshold, scales=candidate_scales, brightness_threshold=0.0
+    """比對驚嘆號形狀並執行色彩門禁核驗 (支援多候選點遍歷，紅點優先且保障告示牌防回歸)。"""
+    candidates, fallback_conf = _collect_red_dot_candidates(
+        matcher, crop_roi, red_dot_template, threshold, candidate_scales
     )
+    if not candidates:
+        return False, False, None, None, fallback_conf
+
     dot_h, dot_w = _load_template_dims(templates_dir, red_dot_template, (24, 24))
-    has_red_dot, ignored_orange, best_pos_dot = _verify_red_dot_color(
-        crop_roi, raw_dot_pos, dot_w, dot_h, screen_scale, tag, best_conf_dot, allow_orange=allow_orange
-    )
-    return has_red_dot, ignored_orange, best_pos_dot, raw_dot_pos, best_conf_dot
+    hw = max(4, int(round((dot_w * screen_scale) / 2)))
+    hh = max(4, int(round((dot_h * screen_scale) / 2)))
+
+    valid_red = None
+    valid_orange = None
+    any_orange_ignored = False
+
+    for cx, cy, conf in candidates:
+        cand_pos = (cx, cy)
+        is_valid, is_orange_ignored, _ = _verify_red_dot_color(
+            crop_roi, cand_pos, dot_w, dot_h, screen_scale, tag, conf, allow_orange=allow_orange
+        )
+        if is_orange_ignored:
+            any_orange_ignored = True
+
+        if is_valid:
+            py1, py2 = max(0, cy - hh), min(crop_roi.shape[0], cy + hh)
+            px1, px2 = max(0, cx - hw), min(crop_roi.shape[1], cx + hw)
+            patch = crop_roi[py1:py2, px1:px2]
+            is_red, _ = is_true_red_dot(patch)
+            if is_red:
+                valid_red = (cand_pos, conf)
+                break
+            elif allow_orange and valid_orange is None:
+                valid_orange = (cand_pos, conf)
+
+    chosen = valid_red or valid_orange
+    if chosen is not None:
+        best_pos, best_conf = chosen
+        return True, False, best_pos, best_pos, best_conf
+
+    first_pos = (candidates[0][0], candidates[0][1])
+    first_conf = candidates[0][2]
+    return False, any_orange_ignored, None, first_pos, first_conf
 
 
 def detect_building_with_red_dot(
