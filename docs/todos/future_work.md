@@ -65,6 +65,7 @@ dengeon同理
 
 要讓我可以安心整天不用看的前提：
 - 規格書：[背包維護與每日子流程解耦規格書](bag_and_daily_subflow_decoupling_spec.md) (已完成同源分析與完整架構設計)
+- 長期架構 RFC：[模式與活動大一統規格書](activity_mode_consolidation_spec.md) (統一名詞為 ActivityPlan/Activity/Intent，徹底消除 Mode 與 Subflow 歷史割裂)
 - [x] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
   - 核心原因為「背包後續子流程」與「每日子流程」未徹底切分清楚；已於 `fix/bag-and-daily-subflow-decoupling` 分支解耦，珠寶店進店前整理升格為獨立有界 Pre-Tidy 子流程並以消失閉環確認關閉；修復 Scene Guard 避免在城鎮過渡階段假陽性逃逸。詳細見 [bag_and_daily_subflow_decoupling_spec.md](bag_and_daily_subflow_decoupling_spec.md)。
 - [x] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務** ([bag_bug.md](bag_bug.md))
