@@ -228,7 +228,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         }
 
         def match(_screen, template, **_kwargs):
-            if template == "dungeons/dungeon_fight.png":
+            if template == "dungeons/leave.png":
                 return (400, 300), 0.96
             if template == "common/quit.png":
                 return (300, 100), 0.95
