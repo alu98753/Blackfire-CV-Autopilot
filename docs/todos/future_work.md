@@ -73,7 +73,7 @@ dengeon同理
 ### Daily
 - [ ] fix boss bug (already created separate file fix_boss_bug.md)
 - [ ] fix diamond collect lag
-- [ ] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([feat-daily-status-notifier.md](feat-daily-status-notifier.md))
+- [x] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([notification_contract.md](../features/notification/notification_contract.md))
 - [ ] 驗證橘紅雙點共存功能在daily正常
 - [ ] 基本上 我現在在逐漸重構成沒有while死等流程的方式,但當電腦或是遊戲本體較為卡頓的時候會導致腳本無效的推進流程(但之前while因為有等所以叫沒有觸發該問題) 要思考怎麼根本解決(所有流程都會遇到該問題) 
 - [ ] 不知道為何我已經在daily模式下 進入collect only 但他卻還可以跑到黃金古國(我tier4設定黃金古國 但是collectonly 下應該暫停 log在0912 8:50-52附近)

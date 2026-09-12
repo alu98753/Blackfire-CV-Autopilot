@@ -66,7 +66,7 @@
 
 ## 三、 通知類型與 Embed 訊息格式
 
-系統通知嚴格遵循 [`docs/todos/feat-daily-status-notifier.md`](../../todos/feat-daily-status-notifier.md) 的語意契約：
+系統通知嚴格遵循 [Notification System Contract](notification_contract.md) 的語意契約：
 
 | 類型 | 視覺標籤 | 顏色代碼 | 語意定義 |
 | :--- | :--- | :--- | :--- |
