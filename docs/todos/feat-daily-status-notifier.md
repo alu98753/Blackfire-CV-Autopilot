@@ -180,12 +180,12 @@ DailyManager / StateMachine
 ### 3. 收斂執行、迭代安全、節流、門閥與時鐘分離
 * **時鐘職責嚴格分離**：
   - **業務日曆與起跑線**：`today_tag` 與 07:00 判定統一採用業務時區（`Asia/Taipei`），絕不隨 Host OS 機器環境漂移。
-  - **節流與冷卻時間**：檢查節流（5s）與重試冷卻（`max(60s, retry_after)`）時間差計算一律採用 `time.monotonic()`，徹底杜絕 NTP 自動校時或手動調校系統時間引發之時間跳躍異常。
+  - **節流與冷卻時間**：檢查節流（10分鐘 / 600s）與重試冷卻（`max(60s, retry_after)`）時間差計算一律採用 `time.monotonic()`，徹底杜絕 NTP 自動校時或手動調校系統時間引發之時間跳躍異常。
 * **全數收斂完成門閥 (Daily Completion Latch)**：
   - 當日 07:00 跨越後，一旦確認所有歷史過期訊息（`date < today_tag`）數量歸零（清空或當日本無舊訊息），系統立即記錄 `last_reconciled_date = today_tag` 並持久化。
   - 當日後續主迴圈呼叫直接命中記憶體門閥，執行 **O(1) memory-only early return**，無任何 disk I/O 或 network I/O，直到翌日 07:00 門閥自然失效。
   - **門閥失效防護契約 (Latch Invalidation Invariant)**：在 `last_reconciled_date == today_tag` 鎖定期間，若因外部故障復原、手動遷移或資料重灌重新引入 `date < today_tag` 之歷史訊息，`track_dispatched_message` 保證自動清除 `last_reconciled_date = ""` 解除門閥，立即恢復收斂能力。
-* **檢查節流 (Check Throttle)**：Notifier 內部維護 `_next_reconcile_check_ts`，門閥未鎖定時每 5 秒才進行一次真實檢查（除非傳入 `force=True`），避免 20Hz 主控制迴圈每幀重複運算。
+* **檢查節流 (Check Throttle)**：Notifier 內部維護 `_next_reconcile_check_ts`，門閥未鎖定時每 10 分鐘（600s）才進行一次真實檢查（除非傳入 `force=True`），避免 20Hz 主控制迴圈每幀重複運算。
 * **單步單筆刪除 (One-Delete-Per-Call)**：每次檢查最多僅發起 1 筆 DELETE 請求即 return，將單一 step 之網路 I/O 阻塞上限嚴格限制為單一 HTTP request（約 100~300ms），徹底杜絕多筆舊訊息同時刪除累積造成遊戲主迴圈數秒長暫停之風險。
 * **迭代安全 (List Mutation Safety)**：收斂巡檢時嚴禁邊 iterate 邊刪除元素，一律遍歷清單複本 `list(dispatched_messages)`，刪除成功即時更新並寫入 JSON 存檔。
 * **有界冷卻退避 (Cool-down Backoff)**：

@@ -21,7 +21,7 @@ from config import USER_DATA_DIR
 from runtime.incident_journal import normalize_profile
 from runtime.notifier import NotificationPort, NullNotifier
 
-DEFAULT_RECONCILE_CHECK_INTERVAL_SECONDS: float = 5.0
+DEFAULT_RECONCILE_CHECK_INTERVAL_SECONDS: float = 600.0  # 10 minutes
 DEFAULT_RECONCILE_COOLDOWN_SECONDS: float = 60.0
 EARLIEST_RECONCILE_HOUR: int = 7
 EARLIEST_RECONCILE_MINUTE: int = 0
@@ -167,7 +167,7 @@ class DailyPipelineNotifier:
         Invariants:
         1. Daily Completion Latch: If today's expired messages have already been fully cleared
            (last_reconciled_date == today_tag), O(1) in-memory early return with zero disk/network I/O.
-        2. Check Throttle: Evaluated at most once every check_interval_seconds (5.0s) via time.monotonic() unless force=True.
+        2. Check Throttle: Evaluated at most once every check_interval_seconds (600s / 10m) via time.monotonic() unless force=True.
         3. Earliest Time: No-op before 07:00 Asia/Taipei business time.
         4. One-Delete-Per-Call: Dispatches at most 1 DELETE request per invocation, bounding single-step latency.
         5. Cooldown: Retried messages obey at least 60s monotonic cooldown or Discord Retry-After.

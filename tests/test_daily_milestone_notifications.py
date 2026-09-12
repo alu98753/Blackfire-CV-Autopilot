@@ -662,7 +662,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         self.assertEqual(self.notifier.reconcile_expired_messages(now_dt=dt), 1)
         self.assertEqual(self.mock_port.delete_message.call_count, 1)
 
-        # Immediate 2nd call without force is throttled by check_interval (5s) -> returns 0
+        # Immediate 2nd call without force is throttled by check_interval (600s / 10m) -> returns 0
         self.assertEqual(self.notifier.reconcile_expired_messages(now_dt=dt), 0)
         self.assertEqual(self.mock_port.delete_message.call_count, 1)
 
