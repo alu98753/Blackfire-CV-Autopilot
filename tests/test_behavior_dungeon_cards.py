@@ -23,7 +23,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.mock_machine.capturer = self.mock_capturer
         self.mock_machine.matcher = self.mock_matcher
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, (0, 0), 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.10)
 
         self.mock_machine.dungeon_cooldowns = {}
         self.mock_machine.last_dungeon_scroll_time = 0.0
@@ -37,6 +37,7 @@ class TestBehaviorDungeonCards(unittest.TestCase):
         self.mock_machine.enable_bread = False
         self.mock_machine.is_daily_pipeline_active.return_value = False
         self.mock_machine.has_available_dungeon.return_value = True
+        self.mock_machine.get_dungeon_cooldown_status.return_value = ("all cd", [])
 
         self.mock_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.mock_machine.config["greedy_dungeon"] = True
