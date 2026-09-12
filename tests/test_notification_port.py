@@ -231,6 +231,62 @@ class TestNotificationPort(unittest.TestCase):
             result = send_test_notifications(webhook_url="", profile=None, live=True)
             self.assertFalse(result)
 
+    @patch("runtime.notifier._safe_print")
+    def test_send_test_notifications_delete_after_requires_live(self, mock_print):
+        res = send_test_notifications(
+            webhook_url="https://discord.com/test",
+            live=False,
+            delete_after_seconds=5.0,
+        )
+        self.assertFalse(res)
+        self.assertTrue(any("--delete-after" in str(c) for c in mock_print.call_args_list))
+
+    @patch("runtime.notifier._safe_print")
+    def test_send_test_notifications_test_reconcile_requires_live(self, mock_print):
+        res = send_test_notifications(
+            webhook_url="https://discord.com/test",
+            live=False,
+            test_reconcile=True,
+        )
+        self.assertFalse(res)
+        self.assertTrue(any("--test-reconcile" in str(c) for c in mock_print.call_args_list))
+
+    @patch("time.sleep")
+    @patch("runtime.notifier._safe_print")
+    def test_run_live_deletion_verification_success(self, _mock_print, mock_sleep):
+        from runtime.notifier import DeleteResult, _run_live_deletion_verification
+        adapter = MagicMock()
+        adapter.delete_message.side_effect = [
+            DeleteResult(success=True, status_code=204),
+            DeleteResult(success=True, status_code=404),
+        ]
+        res = _run_live_deletion_verification(adapter, "msg_123", delete_after_seconds=3.0)
+        self.assertTrue(res)
+        self.assertEqual(adapter.delete_message.call_count, 2)
+        adapter.delete_message.assert_called_with("msg_123")
+        self.assertEqual(mock_sleep.call_count, 3)
+
+    @patch("time.sleep")
+    @patch("runtime.notifier._safe_print")
+    def test_run_live_reconcile_verification_success(self, _mock_print, _mock_sleep):
+        from runtime.notifier import DeleteResult, NotificationResult, _run_live_reconcile_verification
+        with patch.object(DiscordWebhookAdapter, "notify_milestone") as mock_notify, \
+             patch.object(DiscordWebhookAdapter, "delete_message") as mock_del:
+            mock_notify.return_value = NotificationResult(success=True, external_message_id="discord_msg_888")
+            mock_del.side_effect = [
+                DeleteResult(success=True, status_code=204),
+                DeleteResult(success=True, status_code=404),
+            ]
+            res = _run_live_reconcile_verification(
+                webhook_url="https://discord.com/api/webhooks/test/dummy",
+                profile="test_profile",
+                language="zh_TW",
+                delete_after_seconds=0.0,
+            )
+            self.assertTrue(res)
+            mock_notify.assert_called_once()
+            self.assertEqual(mock_del.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

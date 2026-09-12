@@ -208,3 +208,45 @@ DailyManager / StateMachine
 * **Fail-Fast 啟動阻斷**：當設定檔傳入未知或非法的語言代碼時，系統於初始化階段直接拋出 `ValueError`，明確阻斷啟動以防止靜默錯誤。
 * **未來擴充**：簡體中文 (`zh-CN`)、日文 (`ja`)、韓文 (`ko`) 納入待辦清單追蹤。
 
+---
+
+## 八、 三層驗證體系與 Live 診斷工具規格 (Three-Tier Verification Architecture)
+
+為兼顧離線 CI 自動化、真實網路通訊能力檢驗、與正式環境資料狀態零污染，通知系統定義三層漸進式驗證體系：
+
+### 1. 第一層：單元測試 (Unit Tests)
+* **環境**：離線測試環境，使用標準庫 `unittest.mock.patch` 攔截 `urllib.request.urlopen`。
+* **特性**：不發起任何真實網路封包、不碰真實 Discord 伺服器、不碰真實歷史檔案。
+* **職責**：驗證 payload 格式、欄位映射、多語言字典、狀態碼分支 (200/204/404/429/500)、單步單筆限制、檢查節流、與 Daily Completion Latch。
+
+### 2. 第二層：Live 刪除驗證 (`--live --delete-after <seconds>`)
+* **指令**：`python -m runtime.notifier --live --type milestone1 --delete-after 10`
+* **前置約束**：`--delete-after` 強制要求搭配 `--live`；若於 dry-run 模式下傳入，CLI 明確報錯並阻斷。
+* **執行流程**：
+  1. 向真實 Discord Webhook 發送 HTTP POST (`wait=true`)。
+  2. 捕獲真實 Discord Snowflake `message_id`。
+  3. 倒數暫停指定秒數（供操作員於 Discord 客戶端肉眼核對訊息視覺格式與推播通知）。
+  4. 發起第一次刪除：`DELETE #1: HTTP 204 -> removed`。
+  5. 發起第二次刪除：`DELETE #2: HTTP 404 -> already absent, treated as converged`（驗證領域 404 天然冪等收斂語意）。
+* **狀態隔離**：不碰觸任何歷史存檔檔案 (`notification_history.json`)。
+
+### 3. 第三層：Live 歷史收斂端對端驗證 (`--live --test-reconcile`)
+* **指令**：`python -m runtime.notifier --live --test-reconcile --delete-after 5`
+* **前置約束**：`--test-reconcile` 強制要求搭配 `--live`。
+* **絕對隔離契約 (Zero Production Touch Invariant)**：
+  - **嚴禁修改正式 Profile 狀態**：測試過程嚴禁讀寫 `user_data/<profile>/runtime/notification_history.json`。
+  - **隔離暫存目錄**：強制使用獨立的臨時檔案系統 (`tempfile.TemporaryDirectory`)，測試結束後自動完全銷毀。
+* **時鐘注入 (Injected Business Clock)**：
+  - 嚴禁透過 Patch 系統時鐘來測試；統一透過 `reconcile_expired_messages(now_dt=fake_0705, force=True)` 注入業務時間。
+* **自動驗證斷言**：
+  1. 透過真實 Webhook 發送測試訊息至 Discord 並捕獲 `message_id`。
+  2. 將該訊息寫入獨立臨時歷史檔案，日期刻意標註為昨天 (`yesterday_tag`)。
+  3. 倒數指定秒數供肉眼檢驗。
+  4. 以注入的當日 07:05 業務時間觸發收斂協調器 (`DailyPipelineNotifier.reconcile_expired_messages`)。
+  5. 自動斷言以下四大不變量：
+     - `temporary dispatched_messages == []`（臨時過期佇列已清空）。
+     - `last_reconciled_date == today_tag`（Daily Completion Latch 正確上鎖）。
+     - 第二次執行收斂時回傳 `0` 且發起 0 次 DELETE 請求（驗證門閥避免重複巡檢）。
+     - 向 Discord 再次確認該訊息確實已不存在（HTTP 404）。
+
+
