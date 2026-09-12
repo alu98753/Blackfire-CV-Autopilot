@@ -27,6 +27,7 @@ DEFAULT_DAILY_STATUS = {
             },
         },
         "bulletin_board": {"completed_today": False, "last_executed_at": "", "accepted_quests": [], "unknown_quests": []},
+        "bounty_quests": {"completed_today": False, "last_executed_at": ""},
 
         "lord_boss": {
             "completed_today": False,
@@ -959,4 +960,23 @@ class DailyManager:
 
         return False
 
+    def record_bounty_quests_completed(self, now_dt=None):
+        """
+        記錄今日所有懸賞任務已全部完成的持久化業務事實。
+        """
+        if now_dt is None:
+            now_dt = datetime.now()
+        subflows = self.status.setdefault("subflows", {})
+        bq = subflows.setdefault("bounty_quests", {"completed_today": False, "last_executed_at": ""})
+        bq["completed_today"] = True
+        bq["last_executed_at"] = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+        self.save_status()
+        logging.info("📜 [DailyManager] 已記錄持久化業務事實：今日懸賞任務已全部完成 (bounty_quests.completed_today = True)。")
 
+    def is_bounty_quests_completed(self) -> bool:
+        """
+        檢查今日懸賞任務是否已記錄為全部完成。
+        """
+        subflows = self.status.get("subflows", {})
+        bq = subflows.get("bounty_quests", {})
+        return bq.get("completed_today", False)

@@ -11,6 +11,7 @@ Follows Greenfield-lite architecture:
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, time as dtime, timedelta
 from typing import Any
 
@@ -43,6 +44,8 @@ class DailyPipelineNotifier:
         self.daily_manager = daily_manager
         self.profile = (profile or "native").strip()
         self.deadline_minutes = max(1, int(deadline_minutes))
+        self._pending_reconcile_interval_seconds: float = 60.0
+        self._next_pending_reconcile_ts: float = 0.0
 
         # Setup history store (pure dependency injection, default to in-memory store)
         self.history_store: NotificationHistoryPort = (
@@ -213,6 +216,36 @@ class DailyPipelineNotifier:
             )
         return res
 
+    def evaluate_bounty_completion(
+        self,
+        fallback_mode: str = "Tier 4 Loop (mix)",
+        now_dt: datetime | None = None,
+    ) -> Any:
+        """Evaluate durable bounty completion fact and dispatch Milestone 2 if eligible."""
+        if not self.daily_manager or not hasattr(self.daily_manager, "is_bounty_quests_completed"):
+            return False
+        if not self.daily_manager.is_bounty_quests_completed():
+            return False
+        return self.on_bounty_quests_cleared(fallback_mode=fallback_mode, now_dt=now_dt)
+
+    def reconcile_pending_notifications(
+        self,
+        current_state: str = "UNKNOWN",
+        fallback_mode: str = "Tier 4 Loop (mix)",
+        now_dt: datetime | None = None,
+        now_ts: float | None = None,
+        force: bool = False,
+    ) -> None:
+        """Periodically evaluate each notification policy to reconcile desired notification state with business facts."""
+        cur_ts = time.monotonic() if now_ts is None else now_ts
+        if not force and cur_ts < self._next_pending_reconcile_ts:
+            return
+        self._next_pending_reconcile_ts = cur_ts + self._pending_reconcile_interval_seconds
+
+        self.evaluate_tier1_completion(now_dt=now_dt)
+        self.evaluate_bounty_completion(fallback_mode=fallback_mode, now_dt=now_dt)
+        self.check_daily_claim_deadline(current_state=current_state, now_dt=now_dt)
+
     def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> Any:
         """Periodically check if 08:05 reset deadline has been exceeded while Tier 1 claims remain incomplete."""
         if not self.daily_manager or not hasattr(self.daily_manager, "is_tier1_daily_claim_completed"):
@@ -261,10 +294,9 @@ class DailyPipelineNotifier:
             footer_text=footer,
             sync=True,
         )
-        if res.success:
-            msg_id = getattr(res, "external_message_id", None)
-            if msg_id:
-                self.track_dispatched_message(msg_id, tag="deadline_alarm", now_dt=now_dt)
+        if res.success and getattr(res, "external_message_id", None):
+            msg_id = res.external_message_id
+            self.track_dispatched_message(msg_id, tag="deadline_alarm", now_dt=now_dt)
             self.record_milestone_notified("deadline_alarm", now_dt)
             logging.error("🚨 [DailyPipelineNotifier] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
         else:
@@ -298,8 +330,21 @@ class NullDailyPipelineNotifier(DailyPipelineNotifier):
     def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> Any:
         return False
 
+    def evaluate_bounty_completion(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> Any:
+        return False
+
     def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> Any:
         return False
+
+    def reconcile_pending_notifications(
+        self,
+        current_state: str = "UNKNOWN",
+        fallback_mode: str = "Tier 4 Loop (mix)",
+        now_dt: datetime | None = None,
+        now_ts: float | None = None,
+        force: bool = False,
+    ) -> None:
+        pass
 
     def reconcile_expired_messages(self, now_dt: datetime | None = None, force: bool = False) -> int:
         return 0

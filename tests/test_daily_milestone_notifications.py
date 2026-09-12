@@ -528,8 +528,8 @@ class TestMilestoneEventWiring(unittest.TestCase):
 
         sm.step()
 
-        # Assert state_machine stepped and called check_daily_claim_deadline directly without if guard
-        mock_coordinator.check_daily_claim_deadline.assert_called_once()
+        # Assert state_machine stepped and called reconcile_pending_notifications directly without if guard
+        mock_coordinator.reconcile_pending_notifications.assert_called_once()
 
     def test_state_machine_defaults_to_null_notifier(self):
         from states.daily_pipeline_notifier import NullDailyPipelineNotifier
@@ -868,6 +868,143 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         null_notifier.track_dispatched_message("123", tag="test")
         self.assertEqual(null_notifier.reconcile_expired_messages(), 0)
         self.assertEqual(null_notifier.get_today_date_tag(), "")
+        null_notifier.reconcile_pending_notifications()
+        self.assertFalse(null_notifier.evaluate_bounty_completion())
+
+
+class TestDailyNotificationReconcileAndRetry(unittest.TestCase):
+    """Verify durable business fact persistence, pending notification periodic reconciliation, and throttling."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.dm = DailyManager(data_dir=self.test_dir, profile="native")
+        self.mock_port = MagicMock(spec=NotificationPort)
+        self.history_file = os.path.join(self.test_dir, "notification_history.json")
+        self.store = JsonNotificationHistoryStore(profile="native", history_file_path=self.history_file)
+        self.notifier = DailyPipelineNotifier(
+            notification_port=self.mock_port,
+            daily_manager=self.dm,
+            profile="native",
+            deadline_minutes=30,
+            history_store=self.store,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_durable_bounty_fact_persistence_and_evaluation(self):
+        # Initially not completed
+        self.assertFalse(self.dm.is_bounty_quests_completed())
+        self.assertFalse(self.notifier.evaluate_bounty_completion())
+
+        # Durable fact persisted
+        test_dt = datetime(2026, 9, 12, 11, 0, 0)
+        self.dm.record_bounty_quests_completed(now_dt=test_dt)
+        self.assertTrue(self.dm.is_bounty_quests_completed())
+
+        # Now evaluate_bounty_completion should trigger Milestone 2
+        self.mock_port.notify_milestone.return_value = NotificationResult(
+            success=True, external_message_id="msg_bounty_123"
+        )
+        res = self.notifier.evaluate_bounty_completion(now_dt=test_dt)
+        self.assertTrue(res.success)
+        self.assertEqual(self.notifier.history.get("last_milestone2_date"), "2026-09-12")
+
+    def test_reconcile_milestone1_retry_when_first_dispatch_failed(self):
+        test_dt = datetime(2026, 9, 12, 9, 0, 0)
+        # Mark Tier 1 all completed in DailyManager
+        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            self.dm.record_subflow_completed(sf)
+        self.assertTrue(self.dm.is_tier1_daily_claim_completed())
+
+        # 1. First attempt fails (HTTP 204 or error, no ID)
+        self.mock_port.notify_milestone.return_value = NotificationResult(
+            success=False, error="Discord 204 No Content without ID"
+        )
+        res1 = self.notifier.evaluate_tier1_completion(now_dt=test_dt)
+        self.assertFalse(res1.success)
+        self.assertEqual(self.notifier.history.get("last_milestone1_date", ""), "")
+
+        # 2. Reconcile retry with force=True: succeeds with valid Snowflake ID
+        self.mock_port.notify_milestone.return_value = NotificationResult(
+            success=True, external_message_id="1548344819884236942"
+        )
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, force=True)
+        self.assertEqual(self.notifier.history.get("last_milestone1_date"), "2026-09-12")
+        dispatched_ids = [m["id"] for m in self.notifier.history.get("dispatched_messages", [])]
+        self.assertIn("1548344819884236942", dispatched_ids)
+
+    def test_reconcile_milestone2_retry_after_scheduler_cleared(self):
+        test_dt = datetime(2026, 9, 12, 11, 30, 0)
+        # Durable business fact recorded
+        self.dm.record_bounty_quests_completed(now_dt=test_dt)
+
+        # 1. First lifecycle notification fails
+        self.mock_port.notify_milestone.return_value = NotificationResult(
+            success=False, error="Network timeout"
+        )
+        res1 = self.notifier.on_bounty_quests_cleared(now_dt=test_dt)
+        self.assertFalse(res1.success)
+        self.assertEqual(self.notifier.history.get("last_milestone2_date", ""), "")
+
+        # 2. Reconciler scans business fact and retries Milestone 2
+        self.mock_port.notify_milestone.return_value = NotificationResult(
+            success=True, external_message_id="1548344819884236943"
+        )
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, force=True)
+        self.assertEqual(self.notifier.history.get("last_milestone2_date"), "2026-09-12")
+        dispatched_ids = [m["id"] for m in self.notifier.history.get("dispatched_messages", [])]
+        self.assertIn("1548344819884236943", dispatched_ids)
+
+    def test_reconcile_pending_notifications_periodic_throttle(self):
+        test_dt = datetime(2026, 9, 12, 9, 0, 0)
+        # Setup Tier 1 completed so evaluate_tier1_completion would be called if reconciler runs
+        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            self.dm.record_subflow_completed(sf)
+
+        self.mock_port.notify_milestone.return_value = NotificationResult(
+            success=False, error="Simulated fail"
+        )
+
+        # First run at ts = 100.0: executes (call count = 1)
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, now_ts=100.0)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 1)
+
+        # Second run at ts = 130.0 (30s later, interval is 60s): throttled, no new call
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, now_ts=130.0)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 1)
+
+        # Third run at ts = 161.0 (61s later): throttle expired, executes (call count = 2)
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, now_ts=161.0)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 2)
+
+        # Fourth run at ts = 170.0 but force=True: executes regardless of throttle (call count = 3)
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, now_ts=170.0, force=True)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 3)
+
+    def test_deadline_alarm_requires_external_message_id(self):
+        # 08:05 + 40 mins = 08:45 (exceeds 30 mins deadline)
+        alarm_dt = datetime(2026, 9, 12, 8, 45, 0)
+        self.assertFalse(self.dm.is_tier1_daily_claim_completed())
+
+        # 1. Send returns success=True, but external_message_id is None
+        self.mock_port.notify_alarm.return_value = NotificationResult(
+            success=True, external_message_id=None
+        )
+        res = self.notifier.check_daily_claim_deadline(current_state="TOWN", now_dt=alarm_dt)
+        self.assertTrue(res.success)
+        # Invariant: Must NOT record milestone notified if external_message_id is missing
+        self.assertEqual(self.notifier.history.get("last_deadline_alarm_date", ""), "")
+
+        # 2. Send returns success=True with valid external_message_id
+        self.mock_port.notify_alarm.return_value = NotificationResult(
+            success=True, external_message_id="alarm_msg_999"
+        )
+        res2 = self.notifier.check_daily_claim_deadline(current_state="TOWN", now_dt=alarm_dt)
+        self.assertTrue(res2.success)
+        self.assertEqual(self.notifier.history.get("last_deadline_alarm_date"), "2026-09-12")
+        dispatched_ids = [m["id"] for m in self.notifier.history.get("dispatched_messages", [])]
+        self.assertIn("alarm_msg_999", dispatched_ids)
 
 
 if __name__ == "__main__":
