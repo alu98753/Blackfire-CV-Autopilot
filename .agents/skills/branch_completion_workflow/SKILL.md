@@ -399,21 +399,60 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
        ```
      - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
 
-   - **步驟二：回到日常開發工作樹 `BlackfireCrusade_tool` 進入下一個任務與清理舊分支（免切回 main）**：
-     > [!IMPORTANT]
-     > **分支生命週期對稱銷毀契約 (Symmetrical Lifecycle Destruction)**：
-     > 與 `branch_start_workflow` 啟動時建立 local + remote 分支對稱，收尾時必須在 `git push origin main` 成功（`origin/main` 已確實包含 merge commit）且開發工作樹已切換至下一個分支後，方可刪除舊分支。**絕對禁止在 merge push 成功前提前刪除 remote branch**。
+   - **步驟二：Development Worktree Parking & Branch Cleanup（停泊於基準並對稱清理舊分支）**：
+
+     在 `temp-main` 完成 `--no-ff` merge 並成功 `git push origin main` 後，必須先確認遠端 `origin/main` 已包含本次完成分支：
+
      ```powershell
-     cd E:\Side_Project\BlackfireCrusade_tool
-     # 1. 先離開舊 branch，直接以最新 main 為基底建立並切換至下一個分支（共用 .git 物件庫已自動同步）
-     git switch -c feat/<next_feature_name> main
-     # 2. 依 branch_start_workflow 規範立即建立下一個分支的 remote tracking branch
-     git push -u origin HEAD
-     # 3. 此時舊 branch 已沒有任何 worktree 使用，且 origin/main 已安全包含 merge commit，刪除舊 local 與 remote branch
+     git fetch origin
+     git merge-base --is-ancestor <old_branch_name> origin/main
+     ```
+
+     若 ancestry 驗證失敗（exit code != 0），立即停止；不得刪除任何 local / remote branch。
+
+     驗證成功後，回到永久 Feature/Fix 工作樹 `BlackfireCrusade_tool`：
+
+     ```powershell
+     Set-Location E:\Side_Project\BlackfireCrusade_tool
+
+     git fetch origin
+
+     # main 已由 temp-main 永久 checkout，因此本工作樹不得 checkout main。
+     # 使用 Detached HEAD 停泊於 canonical remote baseline，
+     # 釋放目前 Feature/Fix branch 的 worktree ownership。
+     git switch --detach origin/main
+
+     # 確認舊 branch 已無 worktree 使用後，先安全刪除 local branch。
      git branch -d <old_branch_name>
+
+     # local branch 成功刪除後，清除對應 remote review branch。
      git push origin --delete <old_branch_name>
+
      git fetch --prune
      ```
+
+     完成後，`BlackfireCrusade_tool` 應處於：
+     ```text
+     HEAD detached at origin/main
+     working tree clean
+     old local branch absent
+     old remote branch absent
+     ```
+
+     此 Detached HEAD 是永久雙工作樹模型下的合法 **Baseline Parking State**，不是異常狀態。
+
+     #### Hard Invariants
+     * `temp-main` 永久持有 `main`。
+     * `BlackfireCrusade_tool` 在 branch closeout 後停泊於 `origin/main` Detached HEAD。
+     * 不得為了清理舊 branch 而在 development worktree checkout `main`。
+     * 不得在確認 `origin/main` 包含完成 branch 前刪除 local 或 remote branch。
+     * 優先刪除 local branch，再刪除 remote branch；若 local 安全刪除失敗，保留 remote branch 供恢復與審查。
+     * Branch Closeout 到此即結束，不得要求使用者立即決定下一個任務。
+
+     #### Next Development
+     若使用者之後要開始新的 Feature / Fix：
+     **不要由本 Skill 建立下一個 branch。**
+     改由 [`branch_start_workflow`](../branch_start_workflow/SKILL.md) 從目前 Baseline Parking State 啟動新的開發 lifecycle。
 
 ---
 

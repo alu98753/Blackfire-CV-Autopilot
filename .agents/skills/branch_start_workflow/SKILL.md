@@ -176,7 +176,7 @@ git branch --show-current
 * 不得將其混入新 branch 的 commit。
 * 必須保留並明確避開。
 
-若目前仍停留在上一個已完成 branch，後續直接從 `main` 建立新 branch，不需要 checkout main。
+若目前處於 Baseline Parking State（Detached HEAD @ origin/main）或仍停留在剛收尾的分支，後續直接從 `origin/main` 建立新 branch，不需要 checkout main。
 
 ---
 
@@ -288,7 +288,7 @@ git branch --list <branch_name>
 然後：
 
 ```powershell
-git switch -c <branch_name> main
+git switch -c <branch_name> origin/main
 ```
 
 因 `temp-main` 已刷新 `main` ref，因此新 branch 應直接基於最新 main。
@@ -297,7 +297,7 @@ git switch -c <branch_name> main
 
 ```powershell
 git branch --show-current
-git merge-base --is-ancestor main HEAD
+git merge-base --is-ancestor origin/main HEAD
 ```
 
 ---
