@@ -52,6 +52,8 @@ class PolicyEvaluationResult:
         return self.status == PolicyOutcomeStatus.ATTEMPTED_SUCCESS
 
     def __bool__(self) -> bool:
+        # Coding Rule: PolicyEvaluationResult 禁止依賴隱式 bool 做 orchestration 調度決策。
+        # 調度決策請顯式使用 result.attempted (判斷是否嘗試過 HTTP 請求) 或 result.success (判斷是否成功)。
         return self.success
 
 
