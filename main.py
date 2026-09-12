@@ -37,6 +37,18 @@ def main():
     setup_utf8_encoding()
     args = parse_arguments()
 
+    if getattr(args, "test_notify", None):
+        profile_name = normalize_profile(resolve_profile_name(args, ""))
+        from config import set_active_profile
+        set_active_profile(profile_name)
+        from runtime.notifier import send_test_notifications
+        ok = send_test_notifications(
+            profile=profile_name,
+            test_type=args.test_notify,
+            live=getattr(args, "live", False),
+        )
+        sys.exit(0 if ok else 1)
+
     # 1. 優先偵測並選擇遊戲視窗實例 (最優先確認目標實例，支援雙開/沙盒自動列舉與目標指定)
     is_resume = getattr(args, "resume", False) is True
     target_hwnd, target_title = select_game_window(target=args.target, auto_prompt=not is_resume)

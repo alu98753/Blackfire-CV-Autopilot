@@ -17,6 +17,18 @@ battle_max_defeat = 30 # 所有模式通用的連續戰敗重試上限；達到�
 log_level = "INFO" # 終端機日誌顯示等級: "DEBUG", "INFO", "WARNING", "ERROR"
 log_retention_days = 7 # 每日日誌檔案保留天數 (超過 7 天自動清理)
 
+[notification]
+[notification.discord]
+enabled = true
+webhook_url = "" # 可於環境變數 DISCORD_WEBHOOK_URL 或 user_data/<profile>/config.toml 覆蓋
+timeout_seconds = 3.0
+daily_claim_deadline_minutes = 30 # 08:05 重置後日常速領未完成之警報門檻 (分鐘)
+
+[supervisor]
+watchdog_timeout = 90.0        # 心跳逾時門檻 (秒)
+relaunch_buffer_seconds = 30.0 # 重啟後遊戲載入與狀態辨識緩衝 (秒)
+max_restarts = 5               # 滑動窗口內允許之最大重啟次數
+
 [navigation]
 action_timeout_seconds = 5.0
 action_max_attempts = 3
