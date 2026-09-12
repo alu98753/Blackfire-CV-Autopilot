@@ -835,9 +835,14 @@ class GameStateMachine:
         if should_check_low_freq:
             self._last_low_freq_check_time = now_time
             self._last_low_freq_state = self.current_state
-            from states.login_flow import handle_global_login
-            if handle_global_login(self, screen_img, rect):
-                return
+            if not getattr(self, "_in_login_flow", False):
+                from states.login_flow import handle_global_login
+                self._in_login_flow = True
+                try:
+                    if handle_global_login(self, screen_img, rect):
+                        return
+                finally:
+                    self._in_login_flow = False
 
             # C. Confirmed stamina overlays preempt the remaining
             # stamina-consuming workflows. Demon Lord was handled above so
@@ -946,12 +951,16 @@ class GameStateMachine:
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
         # 0.0 登入優先守護：若畫面處於未登入狀態 (看見 login/login.png)，嚴禁直接比對業務場景，優先觸發登入
-        if os.path.exists(os.path.join("templates", "login/login.png")):
+        if not getattr(self, "_in_login_flow", False) and os.path.exists(os.path.join("templates", "login/login.png")):
             pos_login, conf_login = self.matcher.match(screen_img, "login/login.png", threshold=0.80)
             if pos_login:
                 logging.info(f"🔑 [全域狀態定位] 偵測到遊戲處於未登入主畫面 [login.png] (信心度: {conf_login:.4f})，優先觸發登入流程...")
                 from states.login_flow import handle_global_login
-                handle_global_login(self, screen_img, rect)
+                self._in_login_flow = True
+                try:
+                    handle_global_login(self, screen_img, rect)
+                finally:
+                    self._in_login_flow = False
                 return
 
         # 0.0 全域防護：若畫面上存在歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防遮擋導航與領取
