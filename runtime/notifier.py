@@ -11,12 +11,49 @@ import threading
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 DEFAULT_TIMEOUT_SECONDS: float = 3.0
 DISCORD_COLOR_MILESTONE: int = 0x2ECC71  # Emerald Green
 DISCORD_COLOR_ALARM: int = 0xE74C3C      # Bright Red
+
+
+@dataclass(frozen=True)
+class NotificationResult:
+    """Encapsulates outcome of a notification dispatch."""
+    success: bool
+    external_message_id: str | None = None
+    error: str | None = None
+
+    def __bool__(self) -> bool:
+        return self.success
+
+
+@dataclass(frozen=True)
+class DeleteResult:
+    """Encapsulates outcome of a message deletion."""
+    success: bool
+    status_code: int = 200
+    retry_after_seconds: float = 0.0
+    error: str | None = None
+
+    def __bool__(self) -> bool:
+        return self.success
+
+
+def _inject_query_param(url: str, key: str, value: str) -> str:
+    """Safely append or update a query parameter on a URL without breaking existing query strings."""
+    if not url:
+        return url
+    parsed = urlparse(url)
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    filtered_pairs = [(k, v) for k, v in query_pairs if k != key]
+    filtered_pairs.append((key, value))
+    new_query = urlencode(filtered_pairs)
+    return urlunparse(parsed._replace(query=new_query))
 
 
 class NotificationPort(ABC):
@@ -29,7 +66,7 @@ class NotificationPort(ABC):
         description: str,
         fields: Mapping[str, Any] | None = None,
         sync: bool = False,
-    ) -> bool:
+    ) -> NotificationResult:
         """Send an AUTOMATION_HEALTHY milestone notification."""
 
     @abstractmethod
@@ -40,8 +77,12 @@ class NotificationPort(ABC):
         reason: str,
         details: Mapping[str, Any] | None = None,
         sync: bool = False,
-    ) -> bool:
+    ) -> NotificationResult:
         """Send an OPERATOR_ACTION_REQUIRED unrecoverable failure alarm."""
+
+    @abstractmethod
+    def delete_message(self, message_id: str) -> DeleteResult:
+        """Delete a previously dispatched message by external ID."""
 
 
 class NullNotifier(NotificationPort):
@@ -53,9 +94,9 @@ class NullNotifier(NotificationPort):
         description: str,
         fields: Mapping[str, Any] | None = None,
         sync: bool = False,
-    ) -> bool:
+    ) -> NotificationResult:
         logging.debug("[NullNotifier] Milestone suppressed: %s", title)
-        return False
+        return NotificationResult(success=False)
 
     def notify_alarm(
         self,
@@ -64,9 +105,13 @@ class NullNotifier(NotificationPort):
         reason: str,
         details: Mapping[str, Any] | None = None,
         sync: bool = False,
-    ) -> bool:
+    ) -> NotificationResult:
         logging.debug("[NullNotifier] Alarm suppressed (%s): %s", code, title)
-        return False
+        return NotificationResult(success=False)
+
+    def delete_message(self, message_id: str) -> DeleteResult:
+        logging.debug("[NullNotifier] Delete message suppressed: %s", message_id)
+        return DeleteResult(success=False, error="NullNotifier")
 
 
 class DiscordWebhookAdapter(NotificationPort):
@@ -96,7 +141,7 @@ class DiscordWebhookAdapter(NotificationPort):
         fields: Mapping[str, Any] | None = None,
         sync: bool = False,
         footer_text: str | None = None,
-    ) -> bool:
+    ) -> NotificationResult:
         from runtime.notification_i18n import MESSAGES
         footer = footer_text or MESSAGES[self.language]["footer_healthy"]
         embed = self._build_embed(
@@ -117,7 +162,7 @@ class DiscordWebhookAdapter(NotificationPort):
         sync: bool = False,
         description: str | None = None,
         footer_text: str | None = None,
-    ) -> bool:
+    ) -> NotificationResult:
         from runtime.notification_i18n import MESSAGES
         msg = MESSAGES[self.language]
         merged_details = dict(details or {})
@@ -136,6 +181,60 @@ class DiscordWebhookAdapter(NotificationPort):
             footer_text=footer_text or msg["footer_alarm"],
         )
         return self._dispatch(embed, sync=sync)
+
+    def delete_message(self, message_id: str) -> DeleteResult:
+        """Delete a previously dispatched webhook message.
+
+        204 (deleted) and 404 (already gone) both satisfy the desired state.
+        """
+        if not self.webhook_url:
+            return DeleteResult(success=False, error="Empty webhook URL")
+        if not message_id:
+            return DeleteResult(success=False, error="Empty message_id")
+
+        parsed = urlparse(self.webhook_url)
+        base_path = parsed.path.rstrip('/')
+        new_path = f"{base_path}/messages/{message_id.strip()}"
+        delete_url = urlunparse(parsed._replace(path=new_path))
+        req = urllib.request.Request(
+            delete_url,
+            headers={
+                "User-Agent": "BlackfireCrusade-Notifier/1.0",
+            },
+            method="DELETE",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                status = resp.status
+                if status in (200, 204):
+                    logging.info("[DiscordNotifier] Message %s deleted successfully (status: %d).", message_id, status)
+                    return DeleteResult(success=True, status_code=status)
+                return DeleteResult(success=False, status_code=status, error=f"Unexpected status {status}")
+        except urllib.error.HTTPError as e:
+            status = e.code
+            if status == 404:
+                logging.info("[DiscordNotifier] Message %s already deleted (404 Not Found), treated as success.", message_id)
+                return DeleteResult(success=True, status_code=404)
+            if status == 429:
+                retry_after = 0.0
+                try:
+                    body = e.read().decode("utf-8", errors="replace")
+                    data = json.loads(body)
+                    retry_after = float(data.get("retry_after", 0.0))
+                except Exception:
+                    pass
+                if not retry_after and "Retry-After" in e.headers:
+                    try:
+                        retry_after = float(e.headers["Retry-After"])
+                    except Exception:
+                        pass
+                logging.warning("[DiscordNotifier] Rate limited deleting message %s (429). Retry after: %.2fs", message_id, retry_after)
+                return DeleteResult(success=False, status_code=429, retry_after_seconds=retry_after, error="Rate limited")
+            logging.warning("[DiscordNotifier] HTTP error deleting message %s (%d): %s", message_id, status, e.reason)
+            return DeleteResult(success=False, status_code=status, error=str(e.reason))
+        except Exception as e:
+            logging.warning("[DiscordNotifier] Network error deleting message %s: %s", message_id, e)
+            return DeleteResult(success=False, error=str(e))
 
     def _build_embed(
         self,
@@ -160,7 +259,7 @@ class DiscordWebhookAdapter(NotificationPort):
             "footer": {"text": footer_text},
         }
 
-    def _dispatch(self, embed: dict[str, Any], sync: bool) -> bool:
+    def _dispatch(self, embed: dict[str, Any], sync: bool) -> NotificationResult:
         payload = {"embeds": [embed]}
         if sync:
             return self._post_payload(payload)
@@ -172,16 +271,17 @@ class DiscordWebhookAdapter(NotificationPort):
             name="DiscordNotificationThread",
         )
         worker.start()
-        return True
+        return NotificationResult(success=True)
 
-    def _post_payload(self, payload: dict[str, Any]) -> bool:
+    def _post_payload(self, payload: dict[str, Any]) -> NotificationResult:
         if not self.webhook_url:
             logging.warning("[DiscordNotifier] Webhook URL is empty; skipping notification.")
-            return False
+            return NotificationResult(success=False, error="Empty webhook URL")
 
+        post_url = _inject_query_param(self.webhook_url, "wait", "true")
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            self.webhook_url,
+            post_url,
             data=data,
             headers={
                 "Content-Type": "application/json",
@@ -194,19 +294,28 @@ class DiscordWebhookAdapter(NotificationPort):
             with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
                 status = resp.status
                 if status in (200, 204):
-                    logging.info("[DiscordNotifier] Notification delivered successfully (status: %d).", status)
-                    return True
+                    message_id = None
+                    try:
+                        resp_data = resp.read()
+                        if resp_data:
+                            resp_json = json.loads(resp_data.decode("utf-8"))
+                            if isinstance(resp_json, dict) and "id" in resp_json:
+                                message_id = str(resp_json["id"])
+                    except Exception:
+                        pass
+                    logging.info("[DiscordNotifier] Notification delivered successfully (status: %d, id: %s).", status, message_id)
+                    return NotificationResult(success=True, external_message_id=message_id)
                 logging.warning("[DiscordNotifier] Unexpected response status: %d", status)
-                return False
+                return NotificationResult(success=False, error=f"Unexpected status {status}")
         except urllib.error.HTTPError as ex:
             logging.warning("[DiscordNotifier] HTTP error delivering notification (%d): %s", ex.code, ex.reason)
-            return False
+            return NotificationResult(success=False, error=str(ex.reason))
         except urllib.error.URLError as ex:
             logging.warning("[DiscordNotifier] Network error delivering notification: %s", ex.reason)
-            return False
+            return NotificationResult(success=False, error=str(ex.reason))
         except Exception as ex:
             logging.warning("[DiscordNotifier] Unexpected failure delivering notification: %s", ex)
-            return False
+            return NotificationResult(success=False, error=str(ex))
 
 
 def resolve_webhook_url(profile: str | None = None) -> str | None:

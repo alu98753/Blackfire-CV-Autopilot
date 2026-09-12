@@ -775,6 +775,9 @@ class GameStateMachine:
             # 委派 DailyPipelineNotifier 檢測 08:05 重置後日常速領超時卡死警報 (DAILY_CLAIM_DEADLINE_EXCEEDED)
             self.daily_pipeline_notifier.check_daily_claim_deadline(current_state=self.current_state)
 
+        # 委派 DailyPipelineNotifier 執行歷史過期訊息 Desired-State 收斂 (07:00 起跑線)
+        self.daily_pipeline_notifier.reconcile_expired_messages()
+
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
             time.sleep(1)

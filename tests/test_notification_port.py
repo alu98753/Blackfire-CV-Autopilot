@@ -29,6 +29,98 @@ class TestNotificationPort(unittest.TestCase):
         self.assertIsInstance(notifier, NotificationPort)
         self.assertFalse(notifier.notify_milestone("Test Title", "Test Desc"))
         self.assertFalse(notifier.notify_alarm("ERR_CODE", "Test Title", "Test Reason"))
+        del_res = notifier.delete_message("12345")
+        self.assertFalse(del_res)
+        self.assertEqual(del_res.error, "NullNotifier")
+
+    def test_inject_query_param(self):
+        from runtime.notifier import _inject_query_param
+        self.assertEqual(
+            _inject_query_param("https://discord.com/api/webhooks/123", "wait", "true"),
+            "https://discord.com/api/webhooks/123?wait=true",
+        )
+        self.assertEqual(
+            _inject_query_param("https://discord.com/api/webhooks/123?thread_id=456", "wait", "true"),
+            "https://discord.com/api/webhooks/123?thread_id=456&wait=true",
+        )
+        self.assertEqual(
+            _inject_query_param("https://discord.com/api/webhooks/123?wait=false", "wait", "true"),
+            "https://discord.com/api/webhooks/123?wait=true",
+        )
+
+    @patch("urllib.request.urlopen")
+    def test_discord_webhook_adapter_milestone_returns_message_id(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = json.dumps({"id": "999888777"}).encode("utf-8")
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/test/dummy")
+        result = adapter.notify_milestone("Title", "Desc", sync=True)
+        self.assertTrue(result)
+        self.assertEqual(result.external_message_id, "999888777")
+
+    @patch("urllib.request.urlopen")
+    def test_discord_webhook_delete_message_success_204(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.status = 204
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/123/abc")
+        result = adapter.delete_message("msg_456")
+        self.assertTrue(result)
+        self.assertEqual(result.status_code, 204)
+        req = mock_urlopen.call_args[0][0]
+        self.assertEqual(req.full_url, "https://discord.com/api/webhooks/123/abc/messages/msg_456")
+        self.assertEqual(req.get_method(), "DELETE")
+
+    @patch("urllib.request.urlopen")
+    def test_discord_webhook_delete_message_404_treated_as_success(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="http://test", code=404, msg="Not Found", hdrs={}, fp=io.BytesIO(b'{"message": "Unknown Message"}')
+        )
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/123/abc")
+        result = adapter.delete_message("msg_456")
+        self.assertTrue(result)
+        self.assertEqual(result.status_code, 404)
+
+    @patch("urllib.request.urlopen")
+    def test_discord_webhook_delete_message_429_rate_limited(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="http://test", code=429, msg="Too Many Requests",
+            hdrs={"Retry-After": "12.5"},
+            fp=io.BytesIO(b'{"retry_after": 12.5, "message": "Rate limited"}'),
+        )
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/123/abc")
+        result = adapter.delete_message("msg_456")
+        self.assertFalse(result)
+        self.assertEqual(result.status_code, 429)
+        self.assertAlmostEqual(result.retry_after_seconds, 12.5)
+
+    @patch("urllib.request.urlopen")
+    def test_discord_webhook_delete_message_500_failure(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="http://test", code=500, msg="Internal Server Error", hdrs={}, fp=io.BytesIO()
+        )
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/123/abc")
+        result = adapter.delete_message("msg_456")
+        self.assertFalse(result)
+        self.assertEqual(result.status_code, 500)
+
+    @patch("urllib.request.urlopen")
+    def test_discord_webhook_delete_message_preserves_query_params(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.status = 204
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/123/abc?thread_id=777")
+        result = adapter.delete_message("msg_456")
+        self.assertTrue(result)
+        req = mock_urlopen.call_args[0][0]
+        self.assertEqual(req.full_url, "https://discord.com/api/webhooks/123/abc/messages/msg_456?thread_id=777")
 
     @patch("urllib.request.urlopen")
     def test_discord_webhook_adapter_milestone_payload(self, mock_urlopen):
@@ -48,7 +140,7 @@ class TestNotificationPort(unittest.TestCase):
         self.assertTrue(result)
         mock_urlopen.assert_called_once()
         req = mock_urlopen.call_args[0][0]
-        self.assertEqual(req.full_url, "https://discord.com/api/webhooks/test/dummy")
+        self.assertEqual(req.full_url, "https://discord.com/api/webhooks/test/dummy?wait=true")
         self.assertEqual(req.headers["Content-type"], "application/json")
 
         payload = json.loads(req.data.decode("utf-8"))

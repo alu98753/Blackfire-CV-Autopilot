@@ -28,11 +28,13 @@ from runtime.notification_i18n import (
     normalize_language,
 )
 from runtime.notifier import (
+    DeleteResult,
     NotificationPort,
+    NotificationResult,
     build_alarm_payload,
     build_milestone_payload,
 )
-from states.daily_pipeline_notifier import DailyPipelineNotifier
+from states.daily_pipeline_notifier import DailyPipelineNotifier, NullDailyPipelineNotifier
 from states.handlers.bulletin_board import BulletinBoardHandler
 from utils.daily_manager import DailyManager
 
@@ -596,6 +598,188 @@ class TestProductionBootstrapWiring(unittest.TestCase):
         self.assertIs(sm.daily_pipeline_notifier.daily_manager, sm.daily_manager)
 
 
+
+class TestHistoricalMessageReconciliation(unittest.TestCase):
+    """Verify 07:00 Desired-State Reconciliation and Crash Consistency invariants."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp(prefix="reconcile_test_")
+        self.history_file = os.path.join(self.test_dir, "notification_history.json")
+        self.mock_port = MagicMock(spec=NotificationPort)
+        self.mock_dm = MagicMock(spec=DailyManager)
+        self.notifier = DailyPipelineNotifier(
+            notification_port=self.mock_port,
+            daily_manager=self.mock_dm,
+            history_file_path=self.history_file,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_track_dispatched_message(self):
+        dt = datetime(2026, 9, 12, 10, 0)
+        self.notifier.track_dispatched_message("msg_123", tag="milestone1", now_dt=dt)
+        self.notifier.track_dispatched_message("msg_123", tag="milestone1", now_dt=dt)  # duplicate
+        self.notifier.track_dispatched_message("", tag="invalid", now_dt=dt)  # empty
+
+        self.assertEqual(len(self.notifier.history["dispatched_messages"]), 1)
+        item = self.notifier.history["dispatched_messages"][0]
+        self.assertEqual(item["id"], "msg_123")
+        self.assertEqual(item["date"], "2026-09-12")
+        self.assertEqual(item["tag"], "milestone1")
+
+        # Verify disk persistence
+        reloaded = DailyPipelineNotifier(
+            notification_port=self.mock_port,
+            daily_manager=self.mock_dm,
+            history_file_path=self.history_file,
+        )
+        self.assertEqual(len(reloaded.history["dispatched_messages"]), 1)
+        self.assertEqual(reloaded.history["dispatched_messages"][0]["id"], "msg_123")
+
+    def test_reconcile_before_0700_is_noop(self):
+        # 06:59:59 should not run reconciliation
+        dt = datetime(2026, 9, 12, 6, 59, 59)
+        self.notifier.history["dispatched_messages"] = [
+            {"id": "old_1", "date": "2026-09-11", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0}
+        ]
+        self.notifier._save_history()
+
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled, 0)
+        self.mock_port.delete_message.assert_not_called()
+        self.assertEqual(len(self.notifier.history["dispatched_messages"]), 1)
+
+    def test_reconcile_after_0700_purges_expired_and_retains_today(self):
+        # 07:05:00 on 2026-09-12: delete 2026-09-11 and 2026-09-10, retain 2026-09-12
+        dt = datetime(2026, 9, 12, 7, 5, 0)
+        self.notifier.history["dispatched_messages"] = [
+            {"id": "msg_past_1", "date": "2026-09-10", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0},
+            {"id": "msg_past_2", "date": "2026-09-11", "tag": "milestone2", "last_attempt_time": 0.0, "retry_after": 0.0},
+            {"id": "msg_today", "date": "2026-09-12", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0},
+        ]
+        self.notifier._save_history()
+
+        self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=204)
+
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled, 2)
+        self.assertEqual(self.mock_port.delete_message.call_count, 2)
+        called_ids = [call[0][0] for call in self.mock_port.delete_message.call_args_list]
+        self.assertIn("msg_past_1", called_ids)
+        self.assertIn("msg_past_2", called_ids)
+        self.assertNotIn("msg_today", called_ids)
+
+        # Ensure only today's message remains in memory and on disk
+        self.assertEqual(len(self.notifier.history["dispatched_messages"]), 1)
+        self.assertEqual(self.notifier.history["dispatched_messages"][0]["id"], "msg_today")
+
+        reloaded = DailyPipelineNotifier(
+            notification_port=self.mock_port,
+            daily_manager=self.mock_dm,
+            history_file_path=self.history_file,
+        )
+        self.assertEqual(len(reloaded.history["dispatched_messages"]), 1)
+        self.assertEqual(reloaded.history["dispatched_messages"][0]["id"], "msg_today")
+
+    def test_reconcile_404_treated_as_idempotent_success(self):
+        dt = datetime(2026, 9, 12, 7, 10, 0)
+        self.notifier.history["dispatched_messages"] = [
+            {"id": "msg_gone", "date": "2026-09-11", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0}
+        ]
+        self.notifier._save_history()
+
+        # Discord returns 404
+        self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=404)
+
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled, 1)
+        self.assertEqual(len(self.notifier.history["dispatched_messages"]), 0)
+
+        # Check persistence
+        reloaded = DailyPipelineNotifier(
+            notification_port=self.mock_port,
+            daily_manager=self.mock_dm,
+            history_file_path=self.history_file,
+        )
+        self.assertEqual(len(reloaded.history["dispatched_messages"]), 0)
+
+    def test_reconcile_cooldown_and_429_retry_after(self):
+        dt = datetime(2026, 9, 12, 7, 15, 0)
+        self.notifier.history["dispatched_messages"] = [
+            {"id": "msg_rate_limited", "date": "2026-09-11", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0}
+        ]
+        self.notifier._save_history()
+
+        # First attempt: 429 Too Many Requests with retry_after 120s
+        self.mock_port.delete_message.return_value = DeleteResult(
+            success=False, status_code=429, retry_after_seconds=120.0, error="Rate limited"
+        )
+
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled, 0)
+        self.assertEqual(self.mock_port.delete_message.call_count, 1)
+        self.assertEqual(len(self.notifier.history["dispatched_messages"]), 1)
+        self.assertAlmostEqual(self.notifier.history["dispatched_messages"][0]["retry_after"], 120.0)
+
+        # Immediate second call: must be skipped due to cooldown
+        reconciled2 = self.notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled2, 0)
+        self.assertEqual(self.mock_port.delete_message.call_count, 1)  # Still 1, no second call
+
+    def test_crash_consistency_before_and_after_save(self):
+        dt = datetime(2026, 9, 12, 7, 20, 0)
+
+        # 1. Crash-before-save simulation:
+        # Message A was deleted on Discord previously (204), but app crashed before saving JSON.
+        # So JSON on disk still has msg_A.
+        self.notifier.history["dispatched_messages"] = [
+            {"id": "msg_A", "date": "2026-09-11", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0}
+        ]
+        self.notifier._save_history()
+
+        # When app restarts, Discord returns 404 (already deleted).
+        self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=404)
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled, 1)
+        self.assertEqual(len(self.notifier.history["dispatched_messages"]), 0)
+
+        # 2. Crash-after-save simulation:
+        # Message A was evicted and saved to disk. Now app crashes and restarts.
+        restart_notifier = DailyPipelineNotifier(
+            notification_port=self.mock_port,
+            daily_manager=self.mock_dm,
+            history_file_path=self.history_file,
+        )
+        self.assertEqual(len(restart_notifier.history["dispatched_messages"]), 0)
+        self.mock_port.delete_message.reset_mock()
+
+        # Reconcile again: queue is empty, no delete calls are made
+        reconciled_after_restart = restart_notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled_after_restart, 0)
+        self.mock_port.delete_message.assert_not_called()
+
+    def test_iteration_safety_multiple_deletions(self):
+        dt = datetime(2026, 9, 12, 7, 30, 0)
+        self.notifier.history["dispatched_messages"] = [
+            {"id": f"msg_old_{i}", "date": "2026-09-10", "tag": f"tag_{i}", "last_attempt_time": 0.0, "retry_after": 0.0}
+            for i in range(5)
+        ]
+        self.notifier._save_history()
+
+        self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=204)
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        self.assertEqual(reconciled, 5)
+        self.assertEqual(len(self.notifier.history["dispatched_messages"]), 0)
+
+    def test_null_daily_pipeline_notifier_reconcile_and_track_noop(self):
+        null_notifier = NullDailyPipelineNotifier()
+        null_notifier.track_dispatched_message("123", tag="test")
+        self.assertEqual(null_notifier.reconcile_expired_messages(), 0)
+        self.assertEqual(null_notifier.get_today_date_tag(), "")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

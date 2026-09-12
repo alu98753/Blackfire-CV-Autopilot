@@ -161,36 +161,34 @@ DailyManager / StateMachine
 
 為了在保障訊息到達時能確實觸發操作員客戶端之推播通知（Push Notification 與未讀提示），系統維持「發送獨立新訊息」而非「原位 PATCH 更新」之架構。同時，為避免長期運作下 Discord 頻道訊息無限積累，系統建立**最終狀態收斂模型 (Desired-State Reconciliation)**，而非脆弱的「每日單次定時腳本」。
 
-### 1. 核心模型：狀態收斂 (Desired-State Model)
-* **狀態定義**：
-  - **期望狀態 (Desired State)**：頻道中早於今日發布的 Webhook 歷史訊息數為 0。
-  - **實際狀態 (Actual State)**：本地 `dispatched_messages` 中 `date < today_tag` 的訊息數為 $N$。
-* **Earliest Eligible Time 語意 (07:00 起跑線)**：
-  - **07:00 是收斂動作的最早合資格時間 (Earliest Eligible Time)**，絕非要求精確在 `07:00:00` 執行單次任務。
-  - 當時間跨過 07:00（無論程式是在 06:50 待機跨過 07:00，抑或 09:00、14:00 才開機），只要隊列中仍有過期舊訊息，狀態機便持續發動收斂動作，直到舊訊息數為 0。
-* **保留今日，清理歷史 (Retain Today, Purge All Historical)**：
-  - 清理範圍嚴謹定義為「保留當日通知（`date == today_tag`），清理所有早於當日發布的歷史訊息（`date < today_tag`）」。即使程式關機數天，重啟後亦能一次將數日前的陳舊訊息完整清除。
+### 1. 7 大核心契約 (The 7 Core Invariants)
+1. **Asia/Taipei 07:00 前**：絕不發起任何收斂刪除動作。
+2. **Asia/Taipei 07:00 後 (Earliest Eligible Time)**：所有早於今日（`message_date < today_tag`）且由本程式持久化追蹤之 Webhook 訊息，均被視為過期並持續嘗試收斂至 0。
+3. **204 (No Content) / 404 (Not Found)**：均視為 Desired State 已達成，立即自本地持久化佇列中永久移除。
+4. **Timeout / 5xx 故障**：保留 ID 於佇列中，進入冷卻並稍後自動重試。
+5. **429 (Too Many Requests)**：解析 Discord `Retry-After` 標頭，下次重試時間強制設定為 `now + max(60s, retry_after)`。
+6. **崩潰一致性 (Crash Consistency)**：無論在刪除前、刪除中、存檔前或存檔後崩潰，重啟後均具備天然冪等性，絕不造成永久卡死或誤刪當日新訊息。
+7. **嚴格白名單邊界 (Webhook-Owned Only)**：永遠只刪除本程式本地持久化追蹤到的 `message_id`，嚴禁對 Discord 頻道進行全域無差別掃描或刪除操作員其他訊息。
 
 ### 2. Message ID 捕獲與 URL 安全注入
-* **發送端捕獲**：發送 Webhook 請求時，使用標準 `urllib.parse` 安全注入 `wait=true` 查詢參數（防止 URL 本身已帶有 `?thread_id=xxx` 時發生字串硬串損毀）。Discord 於回應成功時回傳帶有 Snowflake `id` 之 JSON 物件。
-* **領域值物件封裝**：底層通訊埠回傳 `NotificationResult(success=True, external_message_id=id)`，防止 Tuple 簽名無限膨脹。
-* **本地持久化儲存**：由 `DailyPipelineNotifier` 負責將 `{"id": message_id, "date": today_tag, "tag": tag, "delete_attempts": 0, "last_delete_attempt_time": 0.0}` 寫入各 Profile 專屬之 `user_data/<profile>/runtime/notification_history.json` 的 `dispatched_messages` 列表中。
+* **發送端捕獲**：發送 Webhook 請求時，使用標準庫 `urllib.parse` 安全注入 `wait=true` 查詢參數（防止 URL 本身已帶有 `?thread_id=xxx` 時發生字串硬串損毀）。Discord 於回應成功時回傳帶有 Snowflake `id` 之 JSON 物件。
+* **領域值物件封裝**：底層通訊埠回傳結構化值物件：
+  - 發送結果：`NotificationResult(success: bool, external_message_id: str | None, error: str | None)`。
+  - 刪除結果：`DeleteResult(success: bool, status_code: int, retry_after_seconds: float, error: str | None)`。
+* **本地持久化儲存**：由 `DailyPipelineNotifier` 負責將 `{"id": message_id, "date": today_tag, "tag": tag, "last_attempt_time": 0.0, "retry_after": 0.0}` 寫入各 Profile 專屬之 `user_data/<profile>/runtime/notification_history.json` 的 `dispatched_messages` 列表中。
 
-### 3. 收斂執行、冷卻退避與天然冪等性 (Crash Consistency)
+### 3. 收斂執行、迭代安全與冷卻退避
+* **時區一致性**：`today_tag` 與 07:00 判定統一採用業務時區（`Asia/Taipei`）或注入之 `Clock`，絕不隨 Host OS 機器環境漂移。
+* **迭代安全 (List Mutation Safety)**：收斂巡檢時嚴禁邊 iterate 邊刪除元素，一律遍歷清單複本 `list(dispatched_messages)`，刪除成功即時更新並寫入 JSON 存檔。
 * **有界冷卻退避 (Cool-down Backoff)**：
-  - 若單筆訊息因網絡中斷或 Discord 5xx 刪除失敗，該筆記錄保留於 `dispatched_messages` 中。
-  - 系統記錄 `last_delete_attempt_time`，至少等待 60 秒冷卻後才允許再次嘗試，**嚴禁在狀態機主迴圈中每秒高頻狂轟 DELETE API**。
+  - 單筆訊息若因網絡或 429 刪除失敗，至少等待 `max(60s, retry_after)` 冷卻後才允許再次嘗試，**嚴禁在狀態機主迴圈中每秒高頻狂轟 DELETE API**。
   - 失敗絕不阻礙後續巡檢，系統會在後續狀態機 tick 中持續自然重試，徹底消除「單次失敗導致當天永遠不再清理」之死鎖。
-* **404 天然冪等自癒**：
-  - 對目標 `message_id` 發起 `DELETE https://discord.com/api/webhooks/<id>/<token>/messages/<message_id>`。
-  - 若目標訊息已被操作員手動刪除，Discord 回應 `404 Not Found`，系統將其視為有效清除，直接自本地列表中剔除。
-* **崩潰一致性契約 (Crash Consistency Invariant)**：
-  - 若訊息在 Discord 端已刪除成功，但本地尚未及時存檔程式即發生崩潰重啟：
-    重啟後系統將再次對該 ID 發起 DELETE ➔ Discord 回傳 404 ➔ 系統判定已不存在並出隊存檔。
-  - 依賴「404 等同已收斂」之特性，系統具備天然防崩潰與重啟自癒保證。
+* **雙向崩潰一致性契約 (Crash Consistency Invariant)**：
+  - **Crash-before-save**：DELETE 成功 ➔ 存檔前 Crash ➔ 重啟後再次 DELETE ➔ Discord 回 404 ➔ 視為成功並剔除存檔。
+  - **Crash-after-save**：DELETE 成功 ➔ 存檔成功 ➔ Crash ➔ 重啟後該 ID 已不在佇列 ➔ 不重複呼叫 DELETE。
 * **Null Object 邊界保護**：
-  - `NullNotifier.delete_message` 嚴禁回傳 `True` 假裝成功，防止錯誤配置時歷史紀錄被誤清空。
-  - `NullDailyPipelineNotifier` 之收斂方法直接實作為 `no-op`。
+  - `NullNotifier.delete_message` 回傳 `DeleteResult(success=False, error="NullNotifier")`，不假裝成功。
+  - `NullDailyPipelineNotifier.reconcile_expired_messages()` 直接實作為 `no-op`，杜絕因測試或未注入真實通知埠時誤將本地歷史追蹤 ID 意外抹除之風險。
 
 ---
 
