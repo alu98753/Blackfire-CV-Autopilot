@@ -38,6 +38,16 @@ dengeon同理
 - [x] **`COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
   - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡；地下城喚醒路由純潔化與冷卻復歸閉環已於 fix/stamina-retreat-dungeon-resume 完成。
 
+要讓我可以安心整天不用看的前提：
+- 核心契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md) (已完成雙軌解耦、獨立 bag_tidy 與後置條件驗證契約)
+- 長期架構 RFC：[模式與活動大一統規格書](activity_mode_consolidation_spec.md) (統一名詞為 ActivityPlan/Activity/Intent，徹底消除 Mode 與 Subflow 歷史割裂)
+- [x] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
+  - 核心原因為「背包後續維護」與「每日子流程」未徹底切分；已於 `fix/bag-and-daily-subflow-decoupling` 分支解耦，背包整理升格為一級獨立子流程 `BagTidyHandler` 並以消失閉環確認關閉；珠寶店具備 4 秒進店點擊遺失自癒與殘留覆蓋層清理。詳細見 [城鎮任務流水線佇列](../features/town_building/pipeline.md)。
+- [x] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務** ([bag_bug.md](bag_bug.md))
+  - 告示牌處理器增加 `_is_inside_bulletin_board` 排他性專屬正交錨點 (`reset.png` / `task.png` / `task_after.png`) 門禁；見 `quit.png` 但非告示牌時判定為干擾覆蓋層並點擊關閉自癒，絕不誤判任務與吞噬懸賞。詳細見 [每日懸賞任務報告](../features/daily_task/daily_task_architecture_report.md#3-告示牌進場排他性正交錨點契約-building-entry-unique-anchor-invariant)。
+- [x] **8. 血之祭壇 (Blood Altar) 判定被紅點掠過問題** ([bag_bug.md](bag_bug.md))
+  - blood building 徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與 戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)，避免已無紅點時獻祭被意外跳過，且不污染 `daily_status.json`。規格詳見 [城鎮任務流水線佇列](../features/town_building/pipeline.md)。
+  
 ### Navigation
 
 - [x] 選關與地下城向右翻頁/滑動過慢且比對過多無關圖片 ([navigation_slow_bug.md](navigation_slow_bug.md)) 以在6cea216ce112f0b584c0f3c1efde22b81bb38811 完成
@@ -52,7 +62,6 @@ dengeon同理
 1. 背包滿了跑(整理背包 獻計寫 進珠寶店前再次整理背包 進珠寶店賣東西)  這應該已經坐在我的程式裡面了?
 
 ==
-
 選卡bug: E:\Side_Project\BlackfireCrusade_tool\scratch\debug\debug_click.png
 2026-09-11 01:09:00,476 [INFO] 🎯 [DebugVisualizer] 已成功將診斷標記 (ROI/BBox/OCR/Click) 寫入 debug_click.png
 2026-09-11 01:09:01,071 [INFO] 🧭 [子流程] 開始執行「領取祝福」階段式子流程...
@@ -62,24 +71,18 @@ dengeon同理
 有成功進入獻計 有成功整理背包 有成功賣東西 那不能保證什麼 還要測試什麼?
 
 ### Daily
-
+- [ ] fix boss bug (already created separate file fix_boss_bug.md)
+- [ ] fix diamond collect lag
+- [ ] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([feat-daily-status-notifier.md](feat-daily-status-notifier.md))
 - [ ] 驗證橘紅雙點共存功能在daily正常
-- [ ] 基本上 我現在在逐漸重構成沒有while死等流程的方式,但當電腦或是遊戲本體較為卡頓的時候會導致腳本無效的推進流程(但之前while因為有等所以叫沒有觸發該問題) 要思考怎麼根本解決(所有流程都會遇到該問題)
+- [ ] 基本上 我現在在逐漸重構成沒有while死等流程的方式,但當電腦或是遊戲本體較為卡頓的時候會導致腳本無效的推進流程(但之前while因為有等所以叫沒有觸發該問題) 要思考怎麼根本解決(所有流程都會遇到該問題) 
+- [ ] 不知道為何我已經在daily模式下 進入collect only 但他卻還可以跑到黃金古國(我tier4設定黃金古國 但是collectonly 下應該暫停 log在0912 8:50-52附近)
 
-要讓我可以安心整天不用看的前提：
-- 核心契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md) (已完成雙軌解耦、獨立 bag_tidy 與後置條件驗證契約)
-- 長期架構 RFC：[模式與活動大一統規格書](activity_mode_consolidation_spec.md) (統一名詞為 ActivityPlan/Activity/Intent，徹底消除 Mode 與 Subflow 歷史割裂)
-- [x] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
-  - 核心原因為「背包後續維護」與「每日子流程」未徹底切分；已於 `fix/bag-and-daily-subflow-decoupling` 分支解耦，背包整理升格為一級獨立子流程 `BagTidyHandler` 並以消失閉環確認關閉；珠寶店具備 4 秒進店點擊遺失自癒與殘留覆蓋層清理。詳細見 [城鎮任務流水線佇列](../features/town_building/pipeline.md)。
-- [x] **3. 懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務** ([bag_bug.md](bag_bug.md))
-  - 告示牌處理器增加 `_is_inside_bulletin_board` 排他性專屬正交錨點 (`reset.png` / `task.png` / `task_after.png`) 門禁；見 `quit.png` 但非告示牌時判定為干擾覆蓋層並點擊關閉自癒，絕不誤判任務與吞噬懸賞。詳細見 [每日懸賞任務報告](../features/daily_task/daily_task_architecture_report.md#3-告示牌進場排他性正交錨點契約-building-entry-unique-anchor-invariant)。
 - [ ] **4. 定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖** ([daily_quest_dungeon_priority_spec.md](daily_quest_dungeon_priority_spec.md))
 - [ ] **7. 領主 Boss(Lord) 與深淵魔王(Demon Lord) 穩定運行與材料防護**
   - lord, demon lord 不被其他activity搶掉，可以正常打完。
   - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
-- [x] **8. 血之祭壇 (Blood Altar) 判定被紅點掠過問題** ([bag_bug.md](bag_bug.md))
-  - blood building 徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與 戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)，避免已無紅點時獻祭被意外跳過，且不污染 `daily_status.json`。規格詳見 [城鎮任務流水線佇列](../features/town_building/pipeline.md)。
-- 釐清 Daily Complete 與 Defer 的判斷依據
+- [ ] 釐清 Daily Complete 與 Defer 的判斷依據
   - daily complete 的條件寫好了，那現在 defer 判斷的依據有哪些？
 
 ### 商店
