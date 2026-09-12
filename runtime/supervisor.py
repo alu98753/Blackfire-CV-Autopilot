@@ -33,22 +33,8 @@ DEFAULT_DAILY_RESTART_HOUR = 8
 
 def load_supervisor_config(profile: str | None = None) -> dict[str, float | int]:
     """Load supervisor watchdog settings with defaults fallback."""
-    if profile:
-        try:
-            from config import set_active_profile
-            set_active_profile(profile)
-        except Exception:
-            pass
-    try:
-        from config import get_defaults_config
-        cfg = get_defaults_config().get("supervisor", {})
-    except Exception:
-        cfg = {}
-    return {
-        "watchdog_timeout": float(cfg.get("watchdog_timeout", 90.0)),
-        "relaunch_buffer_seconds": float(cfg.get("relaunch_buffer_seconds", 30.0)),
-        "max_restarts": int(cfg.get("max_restarts", 5)),
-    }
+    from config import get_supervisor_settings
+    return get_supervisor_settings(profile=profile)
 
 
 def heartbeat_age_seconds(path: Path, now: float | None = None) -> float:

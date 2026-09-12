@@ -79,6 +79,12 @@ TIER4_DOMAIN_OPTIONS = (
 )
 TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.35
 TOWN_BUILDING_BRIGHTNESS_THRESHOLD = 0.35
+
+# Supervisor 外部監控看門狗預設常數 (SSOT: config/defaults.toml [supervisor])
+DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT: float = 90.0
+DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS: float = 30.0
+DEFAULT_SUPERVISOR_MAX_RESTARTS: int = 5
+
 CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
@@ -114,6 +120,9 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("subflow_configs",),
     ("backpack_full", "destroy_goods"),
     ("base_stage_levels",),
+    ("supervisor", "watchdog_timeout"),
+    ("supervisor", "relaunch_buffer_seconds"),
+    ("supervisor", "max_restarts"),
 )
 
 
@@ -473,6 +482,18 @@ def set_active_profile(profile: str) -> None:
         profile_path = get_profile_config_path(_ACTIVE_PROFILE)
         if profile_path.exists():
             logging.info(f"⚙️ [ProfileConfig] 成功套用角色專屬覆蓋配置: user_data/{_ACTIVE_PROFILE}/config.toml")
+
+
+def get_supervisor_settings(profile: str | None = None) -> dict[str, float | int]:
+    """Return supervisor watchdog and crash-loop settings from profile or global defaults TOML."""
+    if profile:
+        set_active_profile(profile)
+    settings = get_defaults_config().get("supervisor", {})
+    return {
+        "watchdog_timeout": float(settings.get("watchdog_timeout", DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT)),
+        "relaunch_buffer_seconds": float(settings.get("relaunch_buffer_seconds", DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS)),
+        "max_restarts": int(settings.get("max_restarts", DEFAULT_SUPERVISOR_MAX_RESTARTS)),
+    }
 
 
 def update_profile_config(profile: str | None = None, updates: dict | None = None) -> Path:

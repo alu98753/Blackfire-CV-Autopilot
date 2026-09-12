@@ -5,6 +5,12 @@ from __future__ import annotations
 import logging
 import time
 
+from config import (
+    DEFAULT_SUPERVISOR_MAX_RESTARTS,
+    DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS,
+    DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT,
+)
+
 ACTIVE_RECOVERY_STATES = frozenset({"NAVIGATING", "BATTLE", "COLLECT_ONLY"})
 
 
@@ -23,9 +29,9 @@ class CrashLoopTracker:
 
     def __init__(
         self,
-        max_restarts: int = 5,
-        relaunch_buffer_seconds: float = 30.0,
-        watchdog_timeout: float = 90.0,
+        max_restarts: int = DEFAULT_SUPERVISOR_MAX_RESTARTS,
+        relaunch_buffer_seconds: float = DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS,
+        watchdog_timeout: float = DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT,
     ) -> None:
         self.max_restarts = max(1, int(max_restarts))
         self.relaunch_buffer = max(0.0, float(relaunch_buffer_seconds))

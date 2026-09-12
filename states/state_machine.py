@@ -46,6 +46,8 @@ from states.navigation_progress import NavigationProgress, NavigationProgressSet
 from states.town_subflow_navigation import TownSubflowPreconditionController
 from states.battle_session import BattleSession
 from states.stamina_retreat import StaminaRetreatRecovery, StaminaRetreatSettings
+from states.daily_pipeline_notifier import NullDailyPipelineNotifier
+
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 from utils.dungeon_catalog import DungeonCatalog
 
@@ -142,12 +144,11 @@ class GameStateMachine:
             from runtime.notifier import NullNotifier
             self.notification_port = NullNotifier()
 
-        if daily_pipeline_notifier is not None:
-            self.daily_pipeline_notifier = daily_pipeline_notifier
-        else:
-            from states.daily_pipeline_notifier import NullDailyPipelineNotifier
-            self.daily_pipeline_notifier = NullDailyPipelineNotifier()
-        
+        self.daily_pipeline_notifier = (
+            daily_pipeline_notifier
+            if daily_pipeline_notifier is not None
+            else NullDailyPipelineNotifier()
+        )
         self.current_state = self.STATE_UNKNOWN
         self.last_state = None
         self.last_state_change = time.time()

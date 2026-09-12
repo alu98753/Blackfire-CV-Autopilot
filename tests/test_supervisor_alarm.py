@@ -21,6 +21,28 @@ class TestSupervisorCrashTracker(unittest.TestCase):
         self.assertEqual(cfg["relaunch_buffer_seconds"], 30.0)
         self.assertEqual(cfg["max_restarts"], 5)
 
+    def test_get_supervisor_settings_and_constants(self):
+        from config import (
+            DEFAULT_SUPERVISOR_MAX_RESTARTS,
+            DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS,
+            DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT,
+            get_supervisor_settings,
+        )
+        self.assertEqual(DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT, 90.0)
+        self.assertEqual(DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS, 30.0)
+        self.assertEqual(DEFAULT_SUPERVISOR_MAX_RESTARTS, 5)
+
+        settings = get_supervisor_settings()
+        self.assertEqual(settings["watchdog_timeout"], 90.0)
+        self.assertEqual(settings["relaunch_buffer_seconds"], 30.0)
+        self.assertEqual(settings["max_restarts"], 5)
+
+        # CrashLoopTracker defaults match config constants
+        tracker = CrashLoopTracker()
+        self.assertEqual(tracker.max_restarts, 5)
+        self.assertEqual(tracker.relaunch_buffer, 30.0)
+        self.assertEqual(tracker.watchdog_timeout, 90.0)
+
     def test_sliding_window_dimensions(self):
         tracker = CrashLoopTracker(
             max_restarts=5,
