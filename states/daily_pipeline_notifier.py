@@ -170,11 +170,16 @@ class DailyPipelineNotifier:
             footer_text=footer,
             sync=True,
         )
-        msg_id = getattr(res, "external_message_id", None)
-        if msg_id:
+        if res.success and getattr(res, "external_message_id", None):
+            msg_id = res.external_message_id
             self.track_dispatched_message(msg_id, tag="milestone1", now_dt=now_dt)
-        self.record_milestone_notified("milestone1", now_dt)
-        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 1 (%s) 通知！", title)
+            self.record_milestone_notified("milestone1", now_dt)
+            logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 1 (%s) 通知！(msg_id: %s)", title, msg_id)
+        else:
+            logging.warning(
+                "⚠️ [DailyPipelineNotifier] Milestone 1 發送失敗 (%s)，今日暫不標記完成，保留重試空間。",
+                getattr(res, "error", "Unknown error"),
+            )
         return res
 
     def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> Any:
@@ -196,11 +201,16 @@ class DailyPipelineNotifier:
             footer_text=footer,
             sync=True,
         )
-        msg_id = getattr(res, "external_message_id", None)
-        if msg_id:
+        if res.success and getattr(res, "external_message_id", None):
+            msg_id = res.external_message_id
             self.track_dispatched_message(msg_id, tag="milestone2", now_dt=now_dt)
-        self.record_milestone_notified("milestone2", now_dt)
-        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 2 (%s) 通知！", title)
+            self.record_milestone_notified("milestone2", now_dt)
+            logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 2 (%s) 通知！(msg_id: %s)", title, msg_id)
+        else:
+            logging.warning(
+                "⚠️ [DailyPipelineNotifier] Milestone 2 發送失敗 (%s)，今日暫不標記完成，保留重試空間。",
+                getattr(res, "error", "Unknown error"),
+            )
         return res
 
     def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> Any:
@@ -251,11 +261,17 @@ class DailyPipelineNotifier:
             footer_text=footer,
             sync=True,
         )
-        msg_id = getattr(res, "external_message_id", None)
-        if msg_id:
-            self.track_dispatched_message(msg_id, tag="deadline_alarm", now_dt=now_dt)
-        self.record_milestone_notified("deadline_alarm", now_dt)
-        logging.error("🚨 [DailyPipelineNotifier] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
+        if res.success:
+            msg_id = getattr(res, "external_message_id", None)
+            if msg_id:
+                self.track_dispatched_message(msg_id, tag="deadline_alarm", now_dt=now_dt)
+            self.record_milestone_notified("deadline_alarm", now_dt)
+            logging.error("🚨 [DailyPipelineNotifier] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
+        else:
+            logging.warning(
+                "⚠️ [DailyPipelineNotifier] DAILY_CLAIM_DEADLINE_EXCEEDED 警報發送失敗 (%s)，今日暫不標記完成。",
+                getattr(res, "error", "Unknown error"),
+            )
         return res
 
 

@@ -71,24 +71,29 @@
 為防止歷史通知長期佔用 Discord 頻道版面，系統採用 Desired-State 收斂機制：
 
 1. **起跑線規則 (07:00 Line)**：
-   - 每日 07:00 起跑點，系統主動檢查前日歷史訊息記錄（`user_data/<profile>/notification_history.json`）。
+   - 每日 07:00 起跑點，系統主動檢查前日歷史訊息記錄（`user_data/<profile>/runtime/notification_history.json`）。
    - 對所有標記為前日週期的 Discord 訊息（包括 Milestone 1、Milestone 2、Deadline Alarm），依據記錄之 `message_id` 調用 Discord API 刪除（HTTP DELETE）。
    - 若 Discord 回應 404（訊息已被手動刪除），視為已收斂成功。
-   - 刪除成功後將記錄標記為 `deleted: true`，當日不再重複掃描。
+   - 刪除成功後將記錄自 `dispatched_messages` 列表中剔除 (Eviction)。當過期項目全數清空後，寫入 `last_reconciled_date = today_tag` 鎖定 (Daily Completion Latch)，當日不再重複掃描。
 
-2. **多實例隔離**：
+2. **嚴格派發契約 (Strict Tracked Dispatch Contract)**：
+   - 在帶有 `?wait=true` 條件下，只有 Discord 伺服器確認並回傳 HTTP 200 與有效 Snowflake ID 時，才視為 `success=True`。
+   - 若收到 HTTP 204、連線超時、伺服器異常或缺少 ID，均判定為發送失敗。`DailyPipelineNotifier` 不得將當日里程碑標記為已完成 (`record_milestone_notified`)，保留於後續狀態機週期或定時器中重試之空間。
+
+3. **多實例隔離與原子存取 (Crash Consistency)**：
    - 各 Profile（如 `native`、`sandbox`）各自擁有獨立的 `notification_history.json`，歷史記錄互不干擾。
+   - `JsonNotificationHistoryStore` 透過同目錄暫存檔原子替換 (`os.replace`) 與 `fsync` 保證寫入一致性，避免異常中斷破壞 JSON 格式或造成快取假陽性。
 
 ---
 
 ## 四、 執行緒安全與主流程零阻斷 (Non-blocking Invariant)
 
-1. **非同步派發預設**：
-   - `NotificationPort.notify_milestone()` 與 `NotificationPort.notify_alarm()` 預設以 Daemon Thread 非同步發送（`sync=False`）。
-   - HTTP 網路延遲、重試或暫時性斷網絕不阻塞狀態機主迴圈。
+1. **同步與非同步派發準則**：
+   - `NotificationPort` 基礎介面支援 Daemon Thread 非同步發送（`sync=False`）。
+   - 但非同步派發無法向呼叫者回傳 message ID。因此，凡需要記錄 `message_id` 於翌日 07:00 執行對帳清理之領域訊息（Milestone 1、Milestone 2、Deadline Alarm），Production 呼叫路徑一律使用 `sync=True`。
 
 2. **例外吞吐保證**：
    - 基礎設施層的所有網路錯誤（DNS 解析失敗、連線超時、HTTP 5xx）僅於日誌輸出 `logging.warning`，絕不拋出未捕獲例外至遊戲主調度器。
 
 3. **設定讀取無副作用**：
-   - `get_supervisor_settings(profile)` 與 `get_notification_language(profile)` 必須直接解析指定 Profile 設定檔，嚴禁調用 `set_active_profile` 造成全域狀態機與模式配置被污染。
+   - `get_supervisor_settings(profile)`、`get_notification_language(profile)` 與 `get_notification_webhook_url(profile)` 必須直接解析指定 Profile 設定檔，嚴禁調用 `set_active_profile` 造成全域狀態機與模式配置被污染。

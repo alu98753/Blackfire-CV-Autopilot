@@ -54,10 +54,21 @@ class JsonNotificationHistoryStore(NotificationHistoryPort):
         return self._cache
 
     def save_history(self, history: dict[str, Any]) -> None:
-        self._cache = history
+        target_dir = os.path.dirname(self.history_file)
+        tmp_file = f"{self.history_file}.tmp"
         try:
-            os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
-            with open(self.history_file, "w", encoding="utf-8") as f:
+            if target_dir:
+                os.makedirs(target_dir, exist_ok=True)
+            with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(history, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_file, self.history_file)
+            self._cache = history
         except Exception as e:
+            if os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except Exception:
+                    pass
             logging.warning("[JsonNotificationHistoryStore] Failed to save history file (%s): %s", self.history_file, e)

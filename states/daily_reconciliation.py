@@ -173,9 +173,17 @@ class DailyReconciliationService:
             logging.info("✨ [DailyReconciliationService] 歷史過期訊息已全數清空，已設定 last_reconciled_date = %s，今日不再巡檢。", today_tag)
 
     def _evict_message_id(self, history: dict[str, Any], message_id: str) -> None:
-        history["dispatched_messages"] = [
-            m for m in history.get("dispatched_messages", []) if m.get("id") != message_id
-        ]
+        target_id = str(message_id or "").strip()
+        if target_id:
+            history["dispatched_messages"] = [
+                m for m in history.get("dispatched_messages", [])
+                if str(m.get("id", "")).strip() != target_id
+            ]
+        else:
+            history["dispatched_messages"] = [
+                m for m in history.get("dispatched_messages", [])
+                if str(m.get("id", "")).strip()
+            ]
         self.history_store.save_history(history)
 
     def _record_delete_failure(self, history: dict[str, Any], message_id: str, attempt_time: float, retry_after: float) -> None:

@@ -402,6 +402,20 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
         self.assertEqual(en_call["footer_text"], "Automation Running Normally")
         self.assertIn("Quests Accepted", en_call["fields"])
 
+    def test_milestone_not_recorded_on_dispatch_failure(self):
+        dt_0820 = datetime(2026, 9, 12, 8, 20, 0)
+        self.mock_notifier.notify_milestone.return_value = NotificationResult(
+            success=False, error="Connection refused"
+        )
+        res = self.coordinator.on_bounty_quests_cleared(now_dt=dt_0820)
+        self.assertFalse(res.success)
+        # Crucial invariant: network failure must NOT latch today's milestone
+        self.assertTrue(self.coordinator.is_milestone_eligible("milestone2", dt_0820))
+        history = self.coordinator.history_store.load_history()
+        self.assertEqual(history.get("last_milestone2_date", ""), "")
+        self.assertEqual(len(history.get("dispatched_messages", [])), 0)
+
+
 
 class TestMilestoneEventWiring(unittest.TestCase):
     """Verify that BulletinBoardHandler and GameStateMachine delegate to DailyPipelineNotifier."""

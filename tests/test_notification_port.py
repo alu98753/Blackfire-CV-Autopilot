@@ -125,7 +125,8 @@ class TestNotificationPort(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_discord_webhook_adapter_milestone_payload(self, mock_urlopen):
         mock_response = MagicMock()
-        mock_response.status = 204
+        mock_response.status = 200
+        mock_response.read.return_value = json.dumps({"id": "1122334455"}).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
@@ -138,6 +139,7 @@ class TestNotificationPort(unittest.TestCase):
         )
 
         self.assertTrue(result)
+        self.assertEqual(result.external_message_id, "1122334455")
         mock_urlopen.assert_called_once()
         req = mock_urlopen.call_args[0][0]
         self.assertEqual(req.full_url, "https://discord.com/api/webhooks/test/dummy?wait=true")
@@ -156,6 +158,7 @@ class TestNotificationPort(unittest.TestCase):
     def test_discord_webhook_adapter_alarm_payload(self, mock_urlopen):
         mock_response = MagicMock()
         mock_response.status = 200
+        mock_response.read.return_value = json.dumps({"id": "5544332211"}).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
@@ -169,6 +172,7 @@ class TestNotificationPort(unittest.TestCase):
         )
 
         self.assertTrue(result)
+        self.assertEqual(result.external_message_id, "5544332211")
         mock_urlopen.assert_called_once()
         req = mock_urlopen.call_args[0][0]
         payload = json.loads(req.data.decode("utf-8"))
@@ -179,6 +183,47 @@ class TestNotificationPort(unittest.TestCase):
         self.assertEqual(field_dict["Alarm Code"], "CRASH_LIMIT_EXCEEDED")
         self.assertEqual(field_dict["Reason"], "Exceeded 5 restarts in 10 minutes")
         self.assertEqual(field_dict["Restarts"], "5")
+
+    @patch("urllib.request.urlopen")
+    def test_wait_true_with_204_returns_failure(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.status = 204
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/test/dummy")
+        result = adapter.notify_milestone("Title", "Desc", sync=True)
+        self.assertFalse(result)
+        self.assertIsNone(result.external_message_id)
+        self.assertIn("Expected HTTP 200 with wait=true, got 204", str(result.error))
+
+    @patch("urllib.request.urlopen")
+    def test_wait_true_with_200_missing_id_returns_failure(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = b'{"type": 0, "content": "hello"}'
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/test/dummy")
+        result = adapter.notify_milestone("Title", "Desc", sync=True)
+        self.assertFalse(result)
+        self.assertIsNone(result.external_message_id)
+        self.assertEqual(result.error, "Discord response missing message id")
+
+    @patch("urllib.request.urlopen")
+    def test_wait_true_with_malformed_json_returns_failure(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = b'not valid json <<<'
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/test/dummy")
+        result = adapter.notify_milestone("Title", "Desc", sync=True)
+        self.assertFalse(result)
+        self.assertIsNone(result.external_message_id)
+        self.assertIn("Invalid Discord response body", str(result.error))
 
     def test_empty_webhook_url_skips_dispatch(self):
         adapter = DiscordWebhookAdapter(webhook_url="")
@@ -244,6 +289,41 @@ class TestNotificationPort(unittest.TestCase):
             store.save_history(loaded)
             reloaded = store.load_history()
             self.assertEqual(reloaded.get("last_reconciled_date"), "2026-09-12")
+
+    def test_json_notification_history_store_atomic_replace_and_no_tmp_leak(self):
+        import tempfile
+        from runtime.json_notification_history_store import JsonNotificationHistoryStore
+        with tempfile.TemporaryDirectory() as td:
+            fpath = os.path.join(td, "history.json")
+            store = JsonNotificationHistoryStore(history_file_path=fpath)
+            data = {"last_milestone1_date": "2026-09-12", "dispatched_messages": []}
+            store.save_history(data)
+            self.assertTrue(os.path.exists(fpath))
+            self.assertFalse(os.path.exists(f"{fpath}.tmp"))
+            with open(fpath, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            self.assertEqual(saved["last_milestone1_date"], "2026-09-12")
+
+    def test_daily_reconciliation_evicts_missing_and_empty_id_entries(self):
+        from states.daily_reconciliation import DailyReconciliationService
+        from ports.notification_history_port import InMemoryNotificationHistoryStore
+        store = InMemoryNotificationHistoryStore()
+        history = {
+            "dispatched_messages": [
+                {"id": "", "date": "2026-09-11"},
+                {"date": "2026-09-11"},
+                {"id": "valid_123", "date": "2026-09-12"},
+            ]
+        }
+        store.save_history(history)
+        service = DailyReconciliationService(
+            notification_port=NullNotifier(),
+            history_store=store,
+        )
+        service._evict_message_id(history, "")
+        remaining = history["dispatched_messages"]
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0]["id"], "valid_123")
 
     @patch("tools.notifier_cli._safe_print")
     def test_send_test_notifications_dry_run_success(self, _mock_print):
