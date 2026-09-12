@@ -188,9 +188,14 @@ class DiscordWebhookAdapter(NotificationPort):
                             resp_json = json.loads(resp_data.decode("utf-8"))
                             if isinstance(resp_json, dict) and "id" in resp_json:
                                 message_id = str(resp_json["id"])
-                    except Exception:
-                        pass
-                    logging.info("[DiscordNotifier] Notification delivered successfully (status: %d, id: %s).", status, message_id)
+                    except Exception as parse_err:
+                        logging.debug("[DiscordNotifier] Failed to parse message ID from response body: %s", parse_err)
+                    if status == 204:
+                        logging.warning("[DiscordNotifier] Notification delivered but received status 204 (no body/ID returned by Discord).")
+                    elif not message_id:
+                        logging.warning("[DiscordNotifier] Notification delivered with status %d, but no message ID found in payload.", status)
+                    else:
+                        logging.info("[DiscordNotifier] Notification delivered successfully (status: %d, id: %s).", status, message_id)
                     return NotificationResult(success=True, external_message_id=message_id)
                 logging.warning("[DiscordNotifier] Unexpected response status: %d", status)
                 return NotificationResult(success=False, error=f"Unexpected status {status}")

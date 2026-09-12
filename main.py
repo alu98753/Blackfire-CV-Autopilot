@@ -46,6 +46,8 @@ def main():
             profile=profile_name,
             test_type=args.test_notify,
             live=getattr(args, "live", False),
+            delete_after_seconds=getattr(args, "delete_after", 0.0),
+            test_reconcile=getattr(args, "test_reconcile", False),
         )
         sys.exit(0 if ok else 1)
 

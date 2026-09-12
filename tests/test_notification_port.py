@@ -206,6 +206,22 @@ class TestNotificationPort(unittest.TestCase):
         url = resolve_webhook_url()
         self.assertEqual(url, "https://discord.com/env-webhook")
 
+    def test_get_notification_webhook_url_from_defaults_and_profile(self):
+        from config import get_notification_webhook_url
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("config.get_defaults_config", return_value={"notification": {"discord": {"webhook_url": "https://discord.com/default-url"}}}):
+                self.assertEqual(get_notification_webhook_url(None), "https://discord.com/default-url")
+                # Profile override
+                with patch("pathlib.Path.exists", return_value=True):
+                    with patch("config.TomlConfigManager.snapshot", return_value={"notification": {"discord": {"webhook_url": "https://discord.com/profile-url"}}}):
+                        self.assertEqual(get_notification_webhook_url("custom_prof"), "https://discord.com/profile-url")
+
+    def test_resolve_webhook_url_from_toml_when_env_empty(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with patch("config.get_notification_webhook_url", return_value="https://discord.com/toml-webhook"):
+                url = resolve_webhook_url(profile="native")
+                self.assertEqual(url, "https://discord.com/toml-webhook")
+
     def test_create_notification_port_returns_null_when_no_webhook(self):
         with patch("runtime.notifier_factory.resolve_webhook_url", return_value=None):
             notifier = create_notification_port()
@@ -301,5 +317,16 @@ class TestNotificationPort(unittest.TestCase):
             self.assertEqual(mock_del.call_count, 2)
 
 
+    def test_cli_arguments_test_notify_options(self):
+        from cli.arguments import parse_arguments
+        with patch("sys.argv", ["main.py", "--test-notify", "milestone1", "--live", "--delete-after", "5.0", "--test-reconcile"]):
+            args = parse_arguments()
+            self.assertEqual(args.test_notify, "milestone1")
+            self.assertTrue(args.live)
+            self.assertEqual(args.delete_after, 5.0)
+            self.assertTrue(args.test_reconcile)
+
+
 if __name__ == "__main__":
     unittest.main()
+
