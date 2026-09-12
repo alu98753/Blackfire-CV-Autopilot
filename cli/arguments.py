@@ -44,7 +44,7 @@ def parse_arguments():
                         default=None, help="設定終端機日誌顯示等級 (預設依 Profile TOML 偏好記憶)")
     parser.add_argument(
         "--test-notify",
-        choices=["all", "milestone", "milestone1", "milestone2", "alarm", "deadline"],
+        choices=["all", "milestone", "milestone1", "milestone2", "alarm", "deadline", "supervisor", "crash"],
         nargs="?",
         const="all",
         default=None,

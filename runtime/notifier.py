@@ -431,6 +431,27 @@ def send_test_notifications(
         )
         targets.append((f"Alarm: {d_title}", payload))
 
+    if test_type in ["all", "alarm", "supervisor", "crash"]:
+        s_title, s_reason, s_details, s_desc, s_footer = format_supervisor_crash_alarm(
+            profile=prof,
+            restarts=6,
+            max_restarts=5,
+            window_duration_str="15m",
+            window_seconds=900.0,
+            language=lang,
+            now_dt=now_dt,
+        )
+        payload = build_alarm_payload(
+            code="SUPERVISOR_CRASH_LOOP_EXCEEDED",
+            title=s_title,
+            reason=s_reason,
+            details=s_details,
+            description=s_desc,
+            footer_text=s_footer,
+            language=lang,
+        )
+        targets.append((f"Alarm: {s_title}", payload))
+
     if not live:
         _safe_print("\n" + "=" * 65)
         _safe_print("[DRY-RUN PREVIEW] Discord Webhook Notification Payload (No Network Sent)")
@@ -474,7 +495,7 @@ def main() -> int:
     parser.add_argument("--profile", type=str, default=None, help="Profile name to resolve webhook config")
     parser.add_argument(
         "--type",
-        choices=["all", "milestone", "milestone1", "milestone2", "alarm", "deadline"],
+        choices=["all", "milestone", "milestone1", "milestone2", "alarm", "deadline", "supervisor", "crash"],
         default="all",
         help="Notification type to test (default: all)",
     )
