@@ -727,6 +727,8 @@ class GameStateMachine:
             self.need_bag_cleaning = True
             self.handlers[new_state].screenshot_counter = 1
         elif new_state == self.STATE_NAVIGATING:
+            if getattr(self, "_in_town_subflow_pop", False):
+                return
             if self.consume_daily_quest_preemption_for_navigation():
                 return
             if getattr(self, "pending_town_subflows", False):
@@ -833,9 +835,14 @@ class GameStateMachine:
         if should_check_low_freq:
             self._last_low_freq_check_time = now_time
             self._last_low_freq_state = self.current_state
-            from states.login_flow import handle_global_login
-            if handle_global_login(self, screen_img, rect):
-                return
+            if not getattr(self, "_in_login_flow", False):
+                from states.login_flow import handle_global_login
+                self._in_login_flow = True
+                try:
+                    if handle_global_login(self, screen_img, rect):
+                        return
+                finally:
+                    self._in_login_flow = False
 
             # C. Confirmed stamina overlays preempt the remaining
             # stamina-consuming workflows. Demon Lord was handled above so
@@ -944,12 +951,16 @@ class GameStateMachine:
         logging.info("🔍 正在進行全域掃描以辨識遊戲狀態...")
         
         # 0.0 登入優先守護：若畫面處於未登入狀態 (看見 login/login.png)，嚴禁直接比對業務場景，優先觸發登入
-        if os.path.exists(os.path.join("templates", "login/login.png")):
+        if not getattr(self, "_in_login_flow", False) and os.path.exists(os.path.join("templates", "login/login.png")):
             pos_login, conf_login = self.matcher.match(screen_img, "login/login.png", threshold=0.80)
             if pos_login:
                 logging.info(f"🔑 [全域狀態定位] 偵測到遊戲處於未登入主畫面 [login.png] (信心度: {conf_login:.4f})，優先觸發登入流程...")
                 from states.login_flow import handle_global_login
-                handle_global_login(self, screen_img, rect)
+                self._in_login_flow = True
+                try:
+                    handle_global_login(self, screen_img, rect)
+                finally:
+                    self._in_login_flow = False
                 return
 
         # 0.0 全域防護：若畫面上存在歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防遮擋導航與領取
@@ -1976,29 +1987,35 @@ class GameStateMachine:
         結束目前子流程並選取下一個城鎮任務。只有入口 precondition
         成立後，才由共用 controller 派發對應 Handler。
         """
-        completed_flow = self.current_town_subflow
-        self.current_town_subflow = None
-        self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
-        self.need_blood_altar = False
-        self.need_jewelry_workshop = False
-
-        # A selected successor is only an intent, not the previous Handler.
-        # Restore the baseline identity so monitoring, recovery, and scene
-        # detection cannot observe a stale CHEST/HERO/etc. during REACH_TOWN.
-        if getattr(self, "primary_config", None):
-            self.set_config(self.primary_config.copy())
-        self.transition_to(self.STATE_NAVIGATING)
-
-        if completed_flow:
-            logging.info(
-                "✅ [城鎮流水線] 子流程 [%s] 已離開 active slot。",
-                completed_flow,
-            )
-
-        if self._select_next_town_subflow():
+        if getattr(self, "_in_town_subflow_pop", False):
             return
+        self._in_town_subflow_pop = True
+        try:
+            completed_flow = self.current_town_subflow
+            self.current_town_subflow = None
+            self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
+            self.need_blood_altar = False
+            self.need_jewelry_workshop = False
 
-        self._finish_town_subflow_queue()
+            # A selected successor is only an intent, not the previous Handler.
+            # Restore the baseline identity so monitoring, recovery, and scene
+            # detection cannot observe a stale CHEST/HERO/etc. during REACH_TOWN.
+            if getattr(self, "primary_config", None):
+                self.set_config(self.primary_config.copy())
+            self.transition_to(self.STATE_NAVIGATING)
+
+            if completed_flow:
+                logging.info(
+                    "✅ [城鎮流水線] 子流程 [%s] 已離開 active slot。",
+                    completed_flow,
+                )
+
+            if self._select_next_town_subflow():
+                return
+
+            self._finish_town_subflow_queue()
+        finally:
+            self._in_town_subflow_pop = False
 
     def _select_next_town_subflow(self):
         """Latch one queue head without applying its config or Handler state."""

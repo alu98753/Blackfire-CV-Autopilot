@@ -97,7 +97,7 @@ class DetectorRegistry:
 
     @staticmethod
     def classify(template_name, runtime_templates=()):
-        if template_name == "task_complete.png":
+        if template_name in {"task_complete.png", "dungeons/dungeons_complete.png"}:
             return DetectorGroup.SAFETY
         if template_name in {"common/door.png", "diamond.png"}:
             return DetectorGroup.TOWN

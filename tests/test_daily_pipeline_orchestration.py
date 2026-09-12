@@ -546,6 +546,8 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
                 self.daily_mgr.record_demon_lords_fight()
             self.assertTrue(self.daily_mgr.status["subflows"]["demon_lords"]["completed_today"])
 
+            sm.pop_and_next_town_subflow()
+
             scheduled_lord = sm.evaluate_and_schedule_daily_pipeline()
             self.assertTrue(scheduled_lord)
             self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)

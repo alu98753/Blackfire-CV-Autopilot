@@ -135,7 +135,7 @@ class TestStaminaRetreatRouting(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         handler.no_explore_match_count = 5  # 達到 6 次無匹配觸發 fallback
         
-        def mock_match(img, name, threshold=0.8):
+        def mock_match(img, name, *args, **kwargs):
             if name == "goback_town.png":
                 return ((100, 100), 0.9)
             return (None, 0.0)
@@ -153,7 +153,7 @@ class TestStaminaRetreatRouting(unittest.TestCase):
         self.state_machine.current_state = self.state_machine.STATE_DUNGEON_EXPLORING
         handler.no_explore_match_count = 5
         
-        def mock_match(img, name, threshold=0.8):
+        def mock_match(img, name, *args, **kwargs):
             if name == "goback_town.png":
                 return ((100, 100), 0.9)
             return (None, 0.0)
@@ -171,7 +171,7 @@ class TestStaminaRetreatRouting(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
         
-        def mock_match(img, name, threshold=0.8):
+        def mock_match(img, name, *args, **kwargs):
             if name == "common/door.png":
                 return ((100, 100), 0.9)
             return (None, 0.0)
@@ -186,7 +186,7 @@ class TestStaminaRetreatRouting(unittest.TestCase):
         self.state_machine.config = GAME_CONFIGS["stage"].copy()
         self.state_machine.current_state = self.state_machine.STATE_UNKNOWN
         
-        def mock_match(img, name, threshold=0.8):
+        def mock_match(img, name, *args, **kwargs):
             if name == "common/door.png":
                 return ((100, 100), 0.9)
             return (None, 0.0)

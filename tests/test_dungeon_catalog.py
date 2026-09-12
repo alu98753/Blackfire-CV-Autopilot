@@ -54,6 +54,22 @@ class TestDungeonCatalog(unittest.TestCase):
         self.assertFalse(DungeonCatalog.is_valid_index("1"))
         self.assertFalse(DungeonCatalog.is_valid_index(None))
 
+    def test_get_all_indices_and_count(self):
+        # 1. 預設清單 (基於 TOML 載入的 DUNGEON_NAMES)
+        indices = DungeonCatalog.get_all_indices()
+        count = DungeonCatalog.get_count()
+        self.assertEqual(len(indices), count)
+        self.assertEqual(indices, list(range(1, count + 1)))
+
+        # 2. 自訂動態清單 (例如 5 個或 8 個地下城)
+        custom_5 = ["D1", "D2", "D3", "D4", "D5"]
+        self.assertEqual(DungeonCatalog.get_all_indices(custom_5), [1, 2, 3, 4, 5])
+        self.assertEqual(DungeonCatalog.get_count(custom_5), 5)
+
+        custom_8 = [f"D{i}" for i in range(1, 9)]
+        self.assertEqual(DungeonCatalog.get_all_indices(custom_8), [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(DungeonCatalog.get_count(custom_8), 8)
+
     def test_build_default_cooldowns(self):
         cds = DungeonCatalog.build_default_cooldowns()
         self.assertEqual(list(cds.keys()), [1, 2, 3, 4, 5, 6, 7])

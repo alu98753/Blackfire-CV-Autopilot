@@ -120,7 +120,7 @@ class CollectOnlyHandler(BaseStateHandler):
                             or self.machine.original_config.get("tier4_mode") == "domain"
                         )
                         is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
-                        if is_in_retreat or use_policy_route or original_is_domain:
+                        if (is_in_retreat and resume_policy.get("type") != "dungeon") or use_policy_route or original_is_domain:
                             dungeon_route = self.machine.build_dungeon_resume_route(resume_policy)
                             self.machine.set_config(dungeon_route)
                         else:

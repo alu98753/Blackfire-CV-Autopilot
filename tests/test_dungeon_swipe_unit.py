@@ -25,38 +25,11 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.mock_capturer = MagicMock()
         self.mock_matcher = MagicMock()
 
-import unittest
-import numpy as np
-import os
-import time
-import logging
-from unittest.mock import MagicMock, patch
-from states.handlers.navigation import NavigationHandler
-from config import GAME_CONFIGS
-
-class TestDungeonSwipeLogic(unittest.TestCase):
-    """
-    專門防歸回測試 (Regression Tests)：
-    鎖定 NavigationHandler 中針對地下城 (Dungeon) 的左右滑動與選關邏輯。
-    包含：
-    1. 防呆拉回滑動 (無卡片可見時向右長滑動)
-    2. 防呆滑動次數上限處理 (回到大廳/返回)
-    3. 目標卡片在右側時向左滑動 (Drag Left)
-    4. 目標卡片在左側時向右滑動 (Drag Right)
-    5. 目標卡片在畫面上時直接點擊不引發滑動
-    """
-
-    def setUp(self):
-        self.mock_machine = MagicMock()
-        self.mock_mouse = MagicMock()
-        self.mock_capturer = MagicMock()
-        self.mock_matcher = MagicMock()
-
         self.mock_machine.mouse = self.mock_mouse
         self.mock_machine.capturer = self.mock_capturer
         self.mock_machine.matcher = self.mock_matcher
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, (0, 0), 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.10)
 
         self.mock_machine.dungeon_cooldowns = {}
         self.mock_machine.last_dungeon_scroll_time = 0.0

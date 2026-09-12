@@ -709,9 +709,11 @@ class TestTownScenarios(BehavioralScenarioTestCase):
 
         for mode_name in ["stage", "dungeon", "mix"]:
             self.state_machine.config = GAME_CONFIGS[mode_name].copy()
+            self.state_machine.config["bag_maintenance_order"] = ["blood_sacrifice", "jewelry_workshop"]
             
-            # 手動模擬觸發流水線
+            # 手動模擬觸發流水線並完成城鎮前置派發
             self.state_machine.trigger_town_subflow_chain()
+            self.state_machine.dispatch_current_town_subflow()
             self.assertTrue(self.state_machine.need_blood_altar)
             self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
 
@@ -726,7 +728,8 @@ class TestTownScenarios(BehavioralScenarioTestCase):
             self.mock_matcher.match.side_effect = mock_match_exit
             altar_handler.handle(fake_img, rect)
 
-            # 第一站完成 ➔ 切換至珠寶加工廠
+            # 第一站完成 ➔ 派發切換至珠寶加工廠
+            self.state_machine.dispatch_current_town_subflow()
             self.assertFalse(self.state_machine.need_blood_altar)
             self.assertTrue(self.state_machine.need_jewelry_workshop)
             self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_JEWELRY_WORKSHOP)

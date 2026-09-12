@@ -111,6 +111,9 @@ class TestBagStateMachine(StateMachineLogicTestCase):
         
         self.assertFalse(self.state_machine.need_bag_cleaning)
         self.assertFalse(self.state_machine.bag_tidied)
+
+        # 模擬城鎮前置條件就緒，派發血之祭壇獻祭任務
+        self.state_machine.dispatch_current_town_subflow()
         self.assertTrue(self.state_machine.need_blood_altar)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BLOOD_ALTAR)
 
