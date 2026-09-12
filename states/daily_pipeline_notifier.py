@@ -267,6 +267,7 @@ class NullDailyPipelineNotifier(DailyPipelineNotifier):
             notification_port=NullNotifier(),
             daily_manager=None,
             history_store=InMemoryNotificationHistoryStore(),
+            language="zh-TW",
         )
 
     def get_today_date_tag(self, now_dt: datetime | None = None) -> str:

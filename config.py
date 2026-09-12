@@ -495,13 +495,17 @@ def set_active_profile(profile: str) -> None:
 
 def get_supervisor_settings(profile: str | None = None) -> dict[str, float | int]:
     """Return supervisor watchdog and crash-loop settings from profile or global defaults TOML."""
+    sup_cfg = {}
     if profile:
-        set_active_profile(profile)
-    settings = get_defaults_config().get("supervisor", {})
+        profile_path = get_profile_config_path(profile)
+        if profile_path.exists():
+            manager = TomlConfigManager(profile_path, default={})
+            sup_cfg = manager.snapshot().get("supervisor", {})
+    defaults_sup = get_defaults_config().get("supervisor", {})
     return {
-        "watchdog_timeout": float(settings.get("watchdog_timeout", DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT)),
-        "relaunch_buffer_seconds": float(settings.get("relaunch_buffer_seconds", DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS)),
-        "max_restarts": int(settings.get("max_restarts", DEFAULT_SUPERVISOR_MAX_RESTARTS)),
+        "watchdog_timeout": float(sup_cfg.get("watchdog_timeout", defaults_sup.get("watchdog_timeout", DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT))),
+        "relaunch_buffer_seconds": float(sup_cfg.get("relaunch_buffer_seconds", defaults_sup.get("relaunch_buffer_seconds", DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS))),
+        "max_restarts": int(sup_cfg.get("max_restarts", defaults_sup.get("max_restarts", DEFAULT_SUPERVISOR_MAX_RESTARTS))),
     }
 
 
@@ -513,7 +517,13 @@ def get_notification_language(profile: str | None = None) -> str:
     """
     from runtime.notification_i18n import normalize_language
     if profile:
-        set_active_profile(profile)
+        profile_path = get_profile_config_path(profile)
+        if profile_path.exists():
+            manager = TomlConfigManager(profile_path, default={})
+            snap = manager.snapshot()
+            notif_cfg = snap.get("notification", {})
+            if "language" in notif_cfg:
+                return normalize_language(notif_cfg["language"])
     notif_cfg = get_defaults_config().get("notification", {})
     lang = notif_cfg.get("language", DEFAULT_NOTIFICATION_LANGUAGE)
     return normalize_language(lang)

@@ -19,8 +19,8 @@ from runtime.incident_journal import (
     SCHEDULED_MAINTENANCE,
     explicit_profile_from_command,
     new_session_id,
-    append_incident_event,
-    normalize_profile,
+    read_child_termination,
+    write_incident,
 )
 from runtime.notifier_factory import create_notification_port
 
