@@ -200,3 +200,33 @@ class DailyPipelineNotifier:
         self.record_milestone_notified("deadline_alarm", now_dt)
         logging.error("🚨 [DailyPipelineNotifier] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
         return res
+
+
+class NullDailyPipelineNotifier(DailyPipelineNotifier):
+    """Null Object implementation guaranteeing non-None contract for GameStateMachine."""
+
+    def __init__(self) -> None:
+        self.notification_port = NullNotifier()
+        self.daily_manager = None
+        self.profile = "null"
+        self.deadline_minutes = 30
+        self.history = {}
+
+    def get_current_reset_tag(self, now_dt: datetime | None = None) -> str:
+        return ""
+
+    def is_milestone_eligible(self, milestone_key: str, now_dt: datetime | None = None) -> bool:
+        return False
+
+    def record_milestone_notified(self, milestone_key: str, now_dt: datetime | None = None) -> None:
+        pass
+
+    def on_tier1_subflow_completed(self, subflow_key: str = "bulletin_board", now_dt: datetime | None = None) -> bool:
+        return False
+
+    def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> bool:
+        return False
+
+    def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> bool:
+        return False
+

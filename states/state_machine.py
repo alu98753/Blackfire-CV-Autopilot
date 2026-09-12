@@ -127,6 +127,7 @@ class GameStateMachine:
         clock=None,
         process_port=None,
         notification_port=None,
+        daily_pipeline_notifier=None,
     ):
         self.capturer = capturer
         self.capture_port = capturer
@@ -140,6 +141,12 @@ class GameStateMachine:
         else:
             from runtime.notifier import NullNotifier
             self.notification_port = NullNotifier()
+
+        if daily_pipeline_notifier is not None:
+            self.daily_pipeline_notifier = daily_pipeline_notifier
+        else:
+            from states.daily_pipeline_notifier import NullDailyPipelineNotifier
+            self.daily_pipeline_notifier = NullDailyPipelineNotifier()
         
         self.current_state = self.STATE_UNKNOWN
         self.last_state = None
@@ -204,7 +211,6 @@ class GameStateMachine:
         self.stamina_recovery = StaminaRetreatRecovery(
             StaminaRetreatSettings.from_mapping(get_stamina_retreat_settings())
         )
-        self.daily_pipeline_notifier = None
 
 
 
@@ -766,8 +772,7 @@ class GameStateMachine:
                 logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
 
             # 委派 DailyPipelineNotifier 檢測 08:05 重置後日常速領超時卡死警報 (DAILY_CLAIM_DEADLINE_EXCEEDED)
-            if self.daily_pipeline_notifier:
-                self.daily_pipeline_notifier.check_daily_claim_deadline(current_state=self.current_state)
+            self.daily_pipeline_notifier.check_daily_claim_deadline(current_state=self.current_state)
 
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
@@ -1733,10 +1738,9 @@ class GameStateMachine:
 
         if self.quest_scheduler.is_all_completed():
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器並切換至退守模式。")
-            if self.daily_pipeline_notifier:
-                self.daily_pipeline_notifier.on_bounty_quests_cleared(
-                    fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
-                )
+            self.daily_pipeline_notifier.on_bounty_quests_cleared(
+                fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
+            )
             self.quest_scheduler = None
             self.apply_tier4_fallback_config()
             return None
@@ -2358,10 +2362,9 @@ class GameStateMachine:
             if self.quest_scheduler:
                 if self.quest_scheduler.is_all_completed():
                     logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器並切換至退守模式")
-                    if self.daily_pipeline_notifier:
-                        self.daily_pipeline_notifier.on_bounty_quests_cleared(
-                            fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
-                        )
+                    self.daily_pipeline_notifier.on_bounty_quests_cleared(
+                        fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
+                    )
                     self.quest_scheduler = None
                     self.apply_tier4_fallback_config()
                     return False

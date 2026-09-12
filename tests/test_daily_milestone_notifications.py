@@ -231,9 +231,9 @@ class TestMilestoneEventWiring(unittest.TestCase):
             mouse=mock_mouse,
             preload_ocr=False,
             notification_port=self.mock_notifier,
+            daily_pipeline_notifier=self.coordinator,
         )
         sm.daily_manager = self.dm
-        sm.daily_pipeline_notifier = self.coordinator
         sm.config = {"name": "Tier 4 Loop (mix)"}
 
         # Simulate quest scheduler complete
@@ -264,24 +264,45 @@ class TestMilestoneEventWiring(unittest.TestCase):
         mock_matcher.match.return_value = (None, 0.0)
         mock_mouse = MagicMock()
 
+        mock_coordinator = MagicMock()
         sm = GameStateMachine(
             capturer=mock_capturer,
             matcher=mock_matcher,
             mouse=mock_mouse,
             preload_ocr=False,
             notification_port=self.mock_notifier,
+            daily_pipeline_notifier=mock_coordinator,
         )
         sm.daily_manager = self.dm
-
-        # Mock coordinator
-        mock_coordinator = MagicMock()
-        sm.daily_pipeline_notifier = mock_coordinator
         sm.config = {"name": "test_mode", "type": "mix"}
 
         sm.step()
 
-        # Assert state_machine stepped and called check_daily_claim_deadline
+        # Assert state_machine stepped and called check_daily_claim_deadline directly without if guard
         mock_coordinator.check_daily_claim_deadline.assert_called_once()
+
+    def test_state_machine_defaults_to_null_notifier(self):
+        from states.daily_pipeline_notifier import NullDailyPipelineNotifier
+        from states.state_machine import GameStateMachine
+
+        mock_capturer = MagicMock()
+        mock_capturer.get_window_rect.return_value = {"left": 0, "top": 0, "width": 800, "height": 600}
+        mock_matcher = MagicMock()
+        mock_matcher.match.return_value = (None, 0.0)
+        mock_mouse = MagicMock()
+
+        sm = GameStateMachine(
+            capturer=mock_capturer,
+            matcher=mock_matcher,
+            mouse=mock_mouse,
+            preload_ocr=False,
+        )
+        sm.daily_manager = self.dm
+        sm.config = {"name": "test_mode", "type": "mix"}
+
+        self.assertIsInstance(sm.daily_pipeline_notifier, NullDailyPipelineNotifier)
+        # step() executes seamlessly with Null Object, zero AttributeErrors
+        sm.step()
 
 
 if __name__ == "__main__":
