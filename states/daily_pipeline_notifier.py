@@ -21,6 +21,7 @@ from config import USER_DATA_DIR
 from runtime.incident_journal import normalize_profile
 from runtime.notifier import NotificationPort, NullNotifier
 
+DEFAULT_RECONCILE_CHECK_INTERVAL_SECONDS: float = 5.0
 DEFAULT_RECONCILE_COOLDOWN_SECONDS: float = 60.0
 EARLIEST_RECONCILE_HOUR: int = 7
 EARLIEST_RECONCILE_MINUTE: int = 0
@@ -55,11 +56,14 @@ class DailyPipelineNotifier:
         deadline_minutes: int = 30,
         history_file_path: str | None = None,
         language: str | None = None,
+        check_interval_seconds: float = DEFAULT_RECONCILE_CHECK_INTERVAL_SECONDS,
     ) -> None:
         self.notification_port: NotificationPort = notification_port or NullNotifier()
         self.daily_manager = daily_manager
         self.profile = normalize_profile(profile)
         self.deadline_minutes = max(1, int(deadline_minutes))
+        self.check_interval_seconds = max(0.5, float(check_interval_seconds))
+        self._next_reconcile_check_ts = 0.0
 
         if language is not None:
             from runtime.notification_i18n import normalize_language
@@ -151,16 +155,22 @@ class DailyPipelineNotifier:
             })
             self._save_history()
 
-    def reconcile_expired_messages(self, now_dt: datetime | None = None) -> int:
-        """Reconcile historical dispatched webhook messages at 07:00 Asia/Taipei.
+    def reconcile_expired_messages(self, now_dt: datetime | None = None, force: bool = False) -> int:
+        """Reconcile historical dispatched webhook messages with check throttle and one-delete-per-call.
 
-        Follows Desired-State Reconciliation:
-        - Before 07:00 Asia/Taipei: no-op.
-        - After 07:00: messages with date < today_tag are expired.
-        - 200/204/404: success, evicted immediately from persistence.
-        - 429: respects Discord Retry-After with at least 60s cooldown.
-        - 5xx / timeouts: retained with 60s cooldown.
+        Invariants:
+        1. Check Throttle: Checked at most once every check_interval_seconds (5s) unless force=True.
+        2. Earliest Time: No-op before 07:00 Asia/Taipei.
+        3. One-Delete-Per-Call: Dispatches at most 1 DELETE request per invocation, never freezing the main loop.
+        4. Cooldown: Retried messages obey at least 60s cooldown or Discord Retry-After.
+        5. Idempotent evict: 200/204/404 immediately removes message from memory & disk.
         """
+        current_ts = time.time()
+        if not force and current_ts < self._next_reconcile_check_ts:
+            return 0
+
+        self._next_reconcile_check_ts = current_ts + self.check_interval_seconds
+
         b_dt = resolve_business_dt(now_dt)
         if b_dt.time() < dtime(EARLIEST_RECONCILE_HOUR, EARLIEST_RECONCILE_MINUTE):
             return 0
@@ -169,9 +179,6 @@ class DailyPipelineNotifier:
         dispatched = self.history.get("dispatched_messages", [])
         if not dispatched:
             return 0
-
-        current_ts = time.time()
-        reconciled_count = 0
 
         for item in list(dispatched):
             msg_date = str(item.get("date", ""))
@@ -186,17 +193,17 @@ class DailyPipelineNotifier:
             msg_id = str(item.get("id", "")).strip()
             if not msg_id:
                 self._evict_message_id(msg_id)
-                continue
+                return 1
 
             del_res = self.notification_port.delete_message(msg_id)
             if del_res.success:
                 self._evict_message_id(msg_id)
-                reconciled_count += 1
                 logging.info(
                     "🧹 [DailyPipelineNotifier] 歷史過期訊息 %s 已成功自 Discord 刪除並自追蹤清單移除 (狀態碼: %s)。",
                     msg_id,
                     del_res.status_code,
                 )
+                return 1
             else:
                 self._record_delete_failure(msg_id, current_ts, del_res.retry_after_seconds)
                 logging.warning(
@@ -206,8 +213,9 @@ class DailyPipelineNotifier:
                     del_res.error,
                     max(DEFAULT_RECONCILE_COOLDOWN_SECONDS, del_res.retry_after_seconds),
                 )
+                return 0
 
-        return reconciled_count
+        return 0
 
     def _evict_message_id(self, message_id: str) -> None:
         self.history["dispatched_messages"] = [
@@ -381,7 +389,7 @@ class NullDailyPipelineNotifier(DailyPipelineNotifier):
     ) -> None:
         pass
 
-    def reconcile_expired_messages(self, now_dt: datetime | None = None) -> int:
+    def reconcile_expired_messages(self, now_dt: datetime | None = None, force: bool = False) -> int:
         return 0
 
     def on_tier1_subflow_completed(self, subflow_key: str = "bulletin_board", now_dt: datetime | None = None) -> Any:

@@ -650,6 +650,22 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         self.mock_port.delete_message.assert_not_called()
         self.assertEqual(len(self.notifier.history["dispatched_messages"]), 1)
 
+    def test_reconcile_check_throttle_without_force(self):
+        dt = datetime(2026, 9, 12, 7, 5, 0)
+        self.notifier.history["dispatched_messages"] = [
+            {"id": "msg_past_1", "date": "2026-09-10", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0},
+            {"id": "msg_past_2", "date": "2026-09-11", "tag": "milestone2", "last_attempt_time": 0.0, "retry_after": 0.0},
+        ]
+        self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=204)
+
+        # 1st call executes check and deletes 1 message
+        self.assertEqual(self.notifier.reconcile_expired_messages(now_dt=dt), 1)
+        self.assertEqual(self.mock_port.delete_message.call_count, 1)
+
+        # Immediate 2nd call without force is throttled by check_interval (5s) -> returns 0
+        self.assertEqual(self.notifier.reconcile_expired_messages(now_dt=dt), 0)
+        self.assertEqual(self.mock_port.delete_message.call_count, 1)
+
     def test_reconcile_after_0700_purges_expired_and_retains_today(self):
         # 07:05:00 on 2026-09-12: delete 2026-09-11 and 2026-09-10, retain 2026-09-12
         dt = datetime(2026, 9, 12, 7, 5, 0)
@@ -662,9 +678,21 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
 
         self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=204)
 
-        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
-        self.assertEqual(reconciled, 2)
+        # One-delete-per-call: step 1 deletes msg_past_1
+        res1 = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
+        self.assertEqual(res1, 1)
+        self.assertEqual(self.mock_port.delete_message.call_count, 1)
+
+        # Step 2 deletes msg_past_2
+        res2 = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
+        self.assertEqual(res2, 1)
         self.assertEqual(self.mock_port.delete_message.call_count, 2)
+
+        # Step 3: only msg_today remains, nothing to delete
+        res3 = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
+        self.assertEqual(res3, 0)
+        self.assertEqual(self.mock_port.delete_message.call_count, 2)
+
         called_ids = [call[0][0] for call in self.mock_port.delete_message.call_args_list]
         self.assertIn("msg_past_1", called_ids)
         self.assertIn("msg_past_2", called_ids)
@@ -692,7 +720,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         # Discord returns 404
         self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=404)
 
-        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
         self.assertEqual(reconciled, 1)
         self.assertEqual(len(self.notifier.history["dispatched_messages"]), 0)
 
@@ -716,14 +744,14 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
             success=False, status_code=429, retry_after_seconds=120.0, error="Rate limited"
         )
 
-        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
         self.assertEqual(reconciled, 0)
         self.assertEqual(self.mock_port.delete_message.call_count, 1)
         self.assertEqual(len(self.notifier.history["dispatched_messages"]), 1)
         self.assertAlmostEqual(self.notifier.history["dispatched_messages"][0]["retry_after"], 120.0)
 
-        # Immediate second call: must be skipped due to cooldown
-        reconciled2 = self.notifier.reconcile_expired_messages(now_dt=dt)
+        # Immediate second call (with force=True to bypass 5s check throttle): must still be skipped due to 120s cooldown
+        reconciled2 = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
         self.assertEqual(reconciled2, 0)
         self.assertEqual(self.mock_port.delete_message.call_count, 1)  # Still 1, no second call
 
@@ -740,7 +768,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
 
         # When app restarts, Discord returns 404 (already deleted).
         self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=404)
-        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
+        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
         self.assertEqual(reconciled, 1)
         self.assertEqual(len(self.notifier.history["dispatched_messages"]), 0)
 
@@ -755,7 +783,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         self.mock_port.delete_message.reset_mock()
 
         # Reconcile again: queue is empty, no delete calls are made
-        reconciled_after_restart = restart_notifier.reconcile_expired_messages(now_dt=dt)
+        reconciled_after_restart = restart_notifier.reconcile_expired_messages(now_dt=dt, force=True)
         self.assertEqual(reconciled_after_restart, 0)
         self.mock_port.delete_message.assert_not_called()
 
@@ -768,8 +796,14 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         self.notifier._save_history()
 
         self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=204)
-        reconciled = self.notifier.reconcile_expired_messages(now_dt=dt)
-        self.assertEqual(reconciled, 5)
+        deleted_count = 0
+        while True:
+            res = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
+            if res == 0:
+                break
+            deleted_count += res
+
+        self.assertEqual(deleted_count, 5)
         self.assertEqual(len(self.notifier.history["dispatched_messages"]), 0)
 
     def test_null_daily_pipeline_notifier_reconcile_and_track_noop(self):

@@ -177,8 +177,10 @@ DailyManager / StateMachine
   - 刪除結果：`DeleteResult(success: bool, status_code: int, retry_after_seconds: float, error: str | None)`。
 * **本地持久化儲存**：由 `DailyPipelineNotifier` 負責將 `{"id": message_id, "date": today_tag, "tag": tag, "last_attempt_time": 0.0, "retry_after": 0.0}` 寫入各 Profile 專屬之 `user_data/<profile>/runtime/notification_history.json` 的 `dispatched_messages` 列表中。
 
-### 3. 收斂執行、迭代安全與冷卻退避
+### 3. 收斂執行、迭代安全、節流與冷卻退避
 * **時區一致性**：`today_tag` 與 07:00 判定統一採用業務時區（`Asia/Taipei`）或注入之 `Clock`，絕不隨 Host OS 機器環境漂移。
+* **檢查節流 (Check Throttle)**：Notifier 內部維護 `_next_reconcile_check_ts`，每 5 秒才進行一次真實檢查（除非傳入 `force=True`），避免 20Hz 主控制迴圈每幀重複運算。
+* **單步單筆刪除 (One-Delete-Per-Call)**：每次檢查最多僅發起 1 筆 DELETE 請求即 return，將單一 step 之網路 I/O 阻塞上限嚴格限制為單一 HTTP request（約 100~300ms），徹底杜絕多筆舊訊息同時刪除累積造成遊戲主迴圈數秒長暫停之風險。
 * **迭代安全 (List Mutation Safety)**：收斂巡檢時嚴禁邊 iterate 邊刪除元素，一律遍歷清單複本 `list(dispatched_messages)`，刪除成功即時更新並寫入 JSON 存檔。
 * **有界冷卻退避 (Cool-down Backoff)**：
   - 單筆訊息若因網絡或 429 刪除失敗，至少等待 `max(60s, retry_after)` 冷卻後才允許再次嘗試，**嚴禁在狀態機主迴圈中每秒高頻狂轟 DELETE API**。
