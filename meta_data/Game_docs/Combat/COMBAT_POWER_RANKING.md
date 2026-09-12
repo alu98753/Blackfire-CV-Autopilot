@@ -28,13 +28,13 @@
 依據 `settings` 模組定義之常數：
 * `attr_to_damage = 1.0`
 * `attr_to_def = 3.0`
-* `attr_to_hp = 5.0`
+* `attr_to_hp = 2.5`
 
 $$\text{1 點 傷害 (Damage)} = \mathbf{1.000 \text{ 戰力}}$$
 $$\text{1 點 物理/魔法防禦 (Def / Def\_Mag)} = \mathbf{0.333 \text{ 戰力}} \quad \left(\frac{1}{3}\right)$$
-$$\text{1 點 生命值 (HP)} = \mathbf{0.200 \text{ 戰力}} \quad \left(\frac{1}{5}\right)$$
+$$\text{1 點 生命值 (HP)} = \mathbf{0.400 \text{ 戰力}} \quad \left(\frac{1}{2.5}\right)$$
 
-$$\Delta\text{Power} = \text{int}\left( \Delta\text{Damage} + \frac{\Delta\text{Def} + \Delta\text{Def\_Mag}}{3.0} + \frac{\Delta\text{HP}}{5.0} \right)$$
+$$\Delta\text{Power} = \text{int}\left( \Delta\text{Damage} + \frac{\Delta\text{Def} + \Delta\text{Def\_Mag}}{3.0} + \frac{\Delta\text{HP}}{2.5} \right)$$
 
 ---
 
@@ -55,7 +55,7 @@ $$\Delta\text{Power} = \text{int}\left( \Delta\text{Damage} + \frac{\Delta\text{
 | **聖物** | `relic` | 聖物 | 總雙防係數 0.4 | **0.107** |
 | **寵物獸石** | `destruction_stone` | 毀滅之石 | 傷害係數 0.4 / 0.4 (總和 0.8) | **0.800** |
 | **寵物獸石** | `fortitude_stone` / `elemental_stone` | 堅毅之石 / 元素之石 | 物防 1.6 / 魔防 1.6 | **0.533** |
-| **寵物獸石** | `life_stone` | 生命之石 | 生命值 1.6 | **0.320** |
+| **寵物獸石** | `life_stone` | 生命之石 | 生命值 1.6 | **0.640** |
 
 ---
 
