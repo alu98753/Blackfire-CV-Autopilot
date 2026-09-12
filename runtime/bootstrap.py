@@ -182,6 +182,8 @@ def init_state_machine_system(args, config, target_hwnd=None):
     daily_manager = DailyManager(profile=profile_name)
     logging.info(f"📂 [DailyManager] 成功綁定角色狀態檔: user_data/{profile_name}/daily_status.json")
     state_machine.daily_manager = daily_manager
+    from runtime.notifier import get_notifier
+    state_machine.notification_port = get_notifier(profile=profile_name)
 
     # 若使用 --subflow 發起 Dev 階段獨立測試
     if hasattr(args, "subflow") and args.subflow:

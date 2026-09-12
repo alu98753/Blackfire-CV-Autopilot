@@ -126,6 +126,7 @@ class GameStateMachine:
         *,
         clock=None,
         process_port=None,
+        notification_port=None,
     ):
         self.capturer = capturer
         self.capture_port = capturer
@@ -134,6 +135,11 @@ class GameStateMachine:
         self.input_port = mouse
         self.clock = clock or SystemClock()
         self.process_port = process_port or GameRelaunchProcessAdapter()
+        if notification_port is not None:
+            self.notification_port = notification_port
+        else:
+            from runtime.notifier import NullNotifier
+            self.notification_port = NullNotifier()
         
         self.current_state = self.STATE_UNKNOWN
         self.last_state = None
@@ -745,8 +751,9 @@ class GameStateMachine:
         執行單步狀態檢索與決策（主調度器）。
         """
         # 動態檢查 08:05 日常任務/Boss 清零重置線 (全模式適用)
-        if getattr(self, "daily_manager", None):
-            reset_occurred = self.daily_manager.check_and_reset_daily()
+        dm = getattr(self, "daily_manager", None)
+        if dm:
+            reset_occurred = dm.check_and_reset_daily()
             if reset_occurred:
                 logging.info("🌅 [GameStateMachine] 跨越 08:05 重置線！重置狀態機掛載的 QuestScheduler、戰敗計數與體力退避狀態。")
                 self.quest_scheduler = None
@@ -756,6 +763,26 @@ class GameStateMachine:
                 self.stamina_recovery.reset()
                 self.pending_daily_reset_exit = True
                 logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
+
+            # 檢測 08:05 重置後日常速領超時卡死警報 (DAILY_CLAIM_DEADLINE_EXCEEDED)
+            if hasattr(dm, "is_daily_claim_deadline_exceeded") and dm.is_daily_claim_deadline_exceeded():
+                notifier = getattr(self, "notification_port", None)
+                if notifier:
+                    pending_subflows = dm.get_pending_tier1_subflows() if hasattr(dm, "get_pending_tier1_subflows") else []
+                    profile_name = getattr(self, "restart_profile", None) or getattr(dm, "profile", None) or "default"
+                    notifier.notify_alarm(
+                        code="DAILY_CLAIM_DEADLINE_EXCEEDED",
+                        title="Daily Claim Deadline Exceeded",
+                        reason="Daily claim phase not completed within 30 minutes after 08:05 reset.",
+                        details={
+                            "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "Profile": profile_name,
+                            "Pending Subflows": ", ".join(pending_subflows) or "Unknown",
+                            "Current State": self.current_state,
+                        },
+                    )
+                    dm.record_milestone_notified("deadline_alarm")
+                    logging.error("🚨 [Daily Pipeline] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
 
         if self.config is None:
             logging.warning("⚠️ 尚未載入模式設定 config，請確認 main.py 初始化正確。")
@@ -1645,6 +1672,37 @@ class GameStateMachine:
         logging.info("[HotReload] refreshed running primary mode: %s", self.runtime_config_key)
         return True
 
+    def _notify_milestone2_if_eligible(self) -> None:
+        """
+        當所有每日懸賞任務均已 100% 完成時，發送 Milestone 2 (Bounty Quests Cleared) 通知。
+        遵守冪等性檢查，同一週期 (08:05) 內僅發送一次。
+        """
+        dm = getattr(self, "daily_manager", None)
+        if not dm or not hasattr(dm, "is_milestone_eligible"):
+            return
+        if not dm.is_milestone_eligible("milestone2"):
+            return
+
+        notifier = getattr(self, "notification_port", None)
+        if not notifier:
+            return
+
+        # 彙整已完成之任務清單 (若 accepted_quests 已核銷空，可從歷史或總結記錄取得)
+        profile_name = getattr(self, "restart_profile", None) or getattr(dm, "profile", None) or "default"
+        fallback_mode = (self.config or {}).get("name", "Tier 4 Loop (mix)")
+        notifier.notify_milestone(
+            title="Bounty Quests Cleared",
+            description="All accepted bounty quests completed. Bot transitioning to steady-state mode.",
+            fields={
+                "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "Profile": profile_name,
+                "Status": "All accepted quests completed",
+                "Next Target": fallback_mode,
+            },
+        )
+        dm.record_milestone_notified("milestone2")
+        logging.info("🔔 [Daily Pipeline] 已發送 Milestone 2 (Bounty Quests Cleared) 通知！")
+
     def apply_tier4_fallback_config(self):
         """Restore the user's configured Tier 4 fallback baseline.
 
@@ -1721,6 +1779,7 @@ class GameStateMachine:
 
         if self.quest_scheduler.is_all_completed():
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器並切換至退守模式。")
+            self._notify_milestone2_if_eligible()
             self.quest_scheduler = None
             self.apply_tier4_fallback_config()
             return None
@@ -2342,6 +2401,7 @@ class GameStateMachine:
             if self.quest_scheduler:
                 if self.quest_scheduler.is_all_completed():
                     logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器並切換至退守模式")
+                    self._notify_milestone2_if_eligible()
                     self.quest_scheduler = None
                     self.apply_tier4_fallback_config()
                     return False
