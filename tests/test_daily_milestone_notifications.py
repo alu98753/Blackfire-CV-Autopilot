@@ -997,7 +997,8 @@ class TestDailyNotificationReconcileAndRetry(unittest.TestCase):
             success=True, external_message_id=None
         )
         res = self.notifier.check_daily_claim_deadline(current_state="TOWN", now_dt=alarm_dt)
-        self.assertTrue(res.success)
+        self.assertTrue(res.attempted)
+        self.assertFalse(res.success)
         # Invariant: Must NOT record milestone notified if external_message_id is missing
         self.assertEqual(self.notifier.history.get("last_deadline_alarm_date", ""), "")
 
@@ -1006,6 +1007,7 @@ class TestDailyNotificationReconcileAndRetry(unittest.TestCase):
             success=True, external_message_id="alarm_msg_999"
         )
         res2 = self.notifier.check_daily_claim_deadline(current_state="TOWN", now_dt=alarm_dt)
+        self.assertTrue(res2.attempted)
         self.assertTrue(res2.success)
         self.assertEqual(self.notifier.history.get("last_deadline_alarm_date"), "2026-09-12")
 
@@ -1036,6 +1038,43 @@ class TestDailyNotificationReconcileAndRetry(unittest.TestCase):
         # Tick 3: No more pending notifications
         self.notifier.reconcile_pending_notifications(now_dt=test_dt, force=True)
         self.assertEqual(self.mock_port.notify_milestone.call_count, 2)
+
+    def test_reconcile_deadline_failure_bounds_tick_stops_further_attempts(self):
+        """Invariant: If Deadline Alarm fails dispatch, Reconciler must halt immediately without attempting Milestone 1 or 2."""
+        # 08:05 + 40 mins = 08:45 (exceeds deadline), Tier 1 incomplete, but Bounty completed
+        alarm_dt = datetime(2026, 9, 12, 8, 45, 0)
+        self.dm.record_bounty_quests_completed(now_dt=alarm_dt)
+
+        # Deadline alarm attempts dispatch and fails
+        self.mock_port.notify_alarm.return_value = NotificationResult(
+            success=False, error="Simulated 500 Server Error"
+        )
+
+        self.notifier.reconcile_pending_notifications(now_dt=alarm_dt, force=True)
+
+        # Invariant: At-most-one attempt made (Alarm attempted once, milestones NOT touched)
+        self.assertEqual(self.mock_port.notify_alarm.call_count, 1)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 0)
+
+    def test_reconcile_milestone1_failure_bounds_tick_stops_milestone2(self):
+        """Invariant: If Milestone 1 fails dispatch, Reconciler must halt immediately without attempting Milestone 2."""
+        test_dt = datetime(2026, 9, 12, 11, 0, 0)
+        # Both Tier 1 and Bounty are marked completed in DailyManager
+        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            self.dm.record_subflow_completed(sf)
+        self.dm.record_bounty_quests_completed(now_dt=test_dt)
+
+        # Milestone 1 attempt fails
+        self.mock_port.notify_milestone.return_value = NotificationResult(
+            success=False, error="Simulated Discord Connection Timeout"
+        )
+
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, force=True)
+
+        # Invariant: Exactly one attempt made (Milestone 1 attempted once, Milestone 2 not attempted in this tick)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 1)
+        self.assertEqual(self.notifier.history.get("last_milestone1_date", ""), "")
+        self.assertEqual(self.notifier.history.get("last_milestone2_date", ""), "")
 
 
 if __name__ == "__main__":

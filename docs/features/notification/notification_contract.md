@@ -53,7 +53,7 @@
 - **冪等保證**：同一 08:05 重置週期內（以 `cycle_tag` 為鍵）僅發送一次，避免重複通知。
 
 ### 2. 里程碑 2：告示牌懸賞全數清空
-- **業務事實持久化先行**：當 `QuestScheduler.is_all_completed()` 成立時，`DailyManager` 優先將 `bounty_quests.completed_today = True` 持久化至 JSON 存檔中，隨後才嘗試發送通知與解除排程器 (`quest_scheduler = None`)。每日 08:05 重置時該欄位隨子流程一同重置為 `False`。
+- **業務事實持久化先行**：當 `QuestScheduler.is_all_completed()` 成立時，狀態機嚴格執行：(1) `DailyManager.record_bounty_quests_completed()` 先行寫入 JSON 存檔，(2) 觸發 `on_bounty_quests_cleared()` 發送 Milestone 2 通知，(3) 安全解除排程器 (`quest_scheduler = None`)，(4) 切換至 Tier 4 退守模式。每日 08:05 重置時該欄位隨子流程一同重置為 `False`。
 - **觸發與冪等保證**：依據持久化業務事實發送通知，轉入 Tier 4 長駐模式。同一 08:05 重置週期內僅發送一次。
 
 ### 3. 警報 1：日常速領逾時未完成 (`DAILY_CLAIM_DEADLINE_EXCEEDED`)
@@ -89,7 +89,8 @@
      - Milestone 2 依據 `DailyManager.is_bounty_quests_completed()` 補發，不再依賴揮發性 `quest_scheduler` 物件存續或 `accepted_quests == []` 反推。
      - Deadline Alarm 依據 08:05 重置逾時狀態補發。
    - **單次 Tick 網路延遲有界上界 (At-most-one Outbound Request)**：
-     - 單一週期依優先級（`Deadline Alarm` ➔ `Milestone 1` ➔ `Milestone 2`）檢驗，一旦觸發第一個待發送通知之網路請求即返回，將剩餘通知交由下一個週期處理，確保單一狀態機步驟外部網路阻塞時間擁有明確上限。
+     - 單一週期依優先級（`Deadline Alarm` ➔ `Milestone 1` ➔ `Milestone 2`）檢驗 Policy 結果（`PolicyEvaluationResult`）。
+     - **明確分離「嘗試 (Attempted)」與「成功 (Success)」**：只要前序 Policy 曾發起外部 HTTP 呼叫（`result.attempted == True`，無論成功或失敗），即刻結束當前 tick，絕不連續發起第二個請求；後續待發項目留待下一個 60 秒週期依序處理，保證單一狀態機步驟外部網路阻塞時間擁有明確上限。
 
 4. **多實例隔離與原子存取 (Crash Consistency)**：
    - 各 Profile（如 `native`、`sandbox`）各自擁有獨立的 `notification_history.json`，歷史記錄互不干擾。
