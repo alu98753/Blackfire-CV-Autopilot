@@ -14,7 +14,7 @@ import shutil
 import tempfile
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from runtime.notifier import (
     NotificationPort,
@@ -305,5 +305,68 @@ class TestMilestoneEventWiring(unittest.TestCase):
         sm.step()
 
 
+class TestDailyPipelineNotifierInterfaceParity(unittest.TestCase):
+    """Verify NullDailyPipelineNotifier strictly implements all DailyPipelineNotifier public methods."""
+
+    def test_null_object_implements_all_public_methods_with_exact_signatures(self):
+        import inspect
+        from states.daily_pipeline_notifier import DailyPipelineNotifier, NullDailyPipelineNotifier
+
+        real_methods = {
+            name: inspect.signature(getattr(DailyPipelineNotifier, name))
+            for name, attr in inspect.getmembers(DailyPipelineNotifier, predicate=inspect.isfunction)
+            if not name.startswith("_")
+        }
+
+        null_methods = {
+            name: inspect.signature(getattr(NullDailyPipelineNotifier, name))
+            for name, attr in inspect.getmembers(NullDailyPipelineNotifier, predicate=inspect.isfunction)
+            if not name.startswith("_")
+        }
+
+        for method_name, real_sig in real_methods.items():
+            self.assertIn(method_name, null_methods, f"NullDailyPipelineNotifier missing method: {method_name}")
+            null_sig = null_methods[method_name]
+            self.assertEqual(
+                real_sig, null_sig,
+                f"Signature mismatch for {method_name}: real={real_sig}, null={null_sig}"
+            )
+
+
+class TestProductionBootstrapWiring(unittest.TestCase):
+    """Verify that production bootstrap explicitly injects real DailyPipelineNotifier (not Null)."""
+
+    @patch("builtins.print")
+    @patch("runtime.bootstrap.ScreenCapturer")
+    @patch("runtime.bootstrap.TemplateMatcher")
+    @patch("runtime.bootstrap.MouseController")
+    @patch("runtime.bootstrap.check_mode_templates", return_value=[])
+    @patch("runtime.bootstrap.os.path.exists", return_value=True)
+    def test_bootstrap_injects_real_daily_pipeline_notifier(
+        self, _exists, _tmpl, _mouse, _matcher, _capturer, _print
+    ):
+        from runtime.bootstrap import init_state_machine_system
+        from states.daily_pipeline_notifier import DailyPipelineNotifier, NullDailyPipelineNotifier
+
+        args = MagicMock()
+        args.mode = "mix"
+        args.title = "Blackfire Crusade"
+        args.backend = False
+        args.subflow = None
+        args.profile = "native"
+        args.monitor = 0
+        args.interval = 0.05
+
+        config = {"name": "Mix", "type": "mix", "auto_bread": False, "auto_diamond": False}
+
+        sm = init_state_machine_system(args, config, target_hwnd=123)
+
+        self.assertIsInstance(sm.daily_pipeline_notifier, DailyPipelineNotifier)
+        self.assertNotIsInstance(sm.daily_pipeline_notifier, NullDailyPipelineNotifier)
+        self.assertEqual(sm.daily_pipeline_notifier.profile, "native")
+        self.assertIs(sm.daily_pipeline_notifier.daily_manager, sm.daily_manager)
+
+
 if __name__ == "__main__":
     unittest.main()
+
