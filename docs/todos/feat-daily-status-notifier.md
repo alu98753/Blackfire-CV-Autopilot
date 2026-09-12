@@ -157,25 +157,40 @@ DailyManager / StateMachine
 
 ---
 
-## 六、 頻道生命週期管理：每日 07:00 歷史舊訊息定時清理契約 (Daily Channel Purge Contract at 07:00)
+## 六、 頻道生命週期管理：07:00 歷史訊息最終收斂契約 (Historical Message Reconciliation at 07:00)
 
-為了在保障訊息到達時能確實觸發操作員客戶端之推播通知（Push Notification 與未讀提示），系統維持「發送獨立新訊息」而非「原位 PATCH 更新」之架構。同時，為避免長期運作下 Discord 頻道訊息無限積累，系統建立定時清理機制。
+為了在保障訊息到達時能確實觸發操作員客戶端之推播通知（Push Notification 與未讀提示），系統維持「發送獨立新訊息」而非「原位 PATCH 更新」之架構。同時，為避免長期運作下 Discord 頻道訊息無限積累，系統建立**最終狀態收斂模型 (Desired-State Reconciliation)**，而非脆弱的「每日單次定時腳本」。
 
-### 1. 07:00 清理時間線 (Timeline)
-* **07:00 (前一日訊息清理線)**：系統於每日 07:00 執行舊訊息掃蕩，調用 Webhook DELETE API 清除所有前一日（或更早）所發布的訊息記錄。
-* **08:05 (當日日常重置線)**：頻道此時已維持乾淨狀態，Child Bot 跨入新循環，隨後產生的 Milestone 1 與 Milestone 2 將作為當日全新的專屬卡片展示。
+### 1. 核心模型：狀態收斂 (Desired-State Model)
+* **狀態定義**：
+  - **期望狀態 (Desired State)**：頻道中早於今日發布的 Webhook 歷史訊息數為 0。
+  - **實際狀態 (Actual State)**：本地 `dispatched_messages` 中 `date < today_tag` 的訊息數為 $N$。
+* **Earliest Eligible Time 語意 (07:00 起跑線)**：
+  - **07:00 是收斂動作的最早合資格時間 (Earliest Eligible Time)**，絕非要求精確在 `07:00:00` 執行單次任務。
+  - 當時間跨過 07:00（無論程式是在 06:50 待機跨過 07:00，抑或 09:00、14:00 才開機），只要隊列中仍有過期舊訊息，狀態機便持續發動收斂動作，直到舊訊息數為 0。
+* **保留今日，清理歷史 (Retain Today, Purge All Historical)**：
+  - 清理範圍嚴謹定義為「保留當日通知（`date == today_tag`），清理所有早於當日發布的歷史訊息（`date < today_tag`）」。即使程式關機數天，重啟後亦能一次將數日前的陳舊訊息完整清除。
 
-### 2. Message ID 捕獲與持久化契約
-* **發送端捕獲**：發送 Webhook 請求時附加 `?wait=true` 查詢參數。Discord 於回應成功時回傳帶有 Snowflake `id` 之 JSON 物件。`DiscordWebhookAdapter` 提取該 `message_id`。
-* **本地持久化儲存**：由 `DailyPipelineNotifier` 負責將 `{"id": message_id, "date": today_tag, "tag": tag}` 寫入各 Profile 專屬之 `user_data/<profile>/runtime/notification_history.json` 的 `dispatched_messages` 列表中。
+### 2. Message ID 捕獲與 URL 安全注入
+* **發送端捕獲**：發送 Webhook 請求時，使用標準 `urllib.parse` 安全注入 `wait=true` 查詢參數（防止 URL 本身已帶有 `?thread_id=xxx` 時發生字串硬串損毀）。Discord 於回應成功時回傳帶有 Snowflake `id` 之 JSON 物件。
+* **領域值物件封裝**：底層通訊埠回傳 `NotificationResult(success=True, external_message_id=id)`，防止 Tuple 簽名無限膨脹。
+* **本地持久化儲存**：由 `DailyPipelineNotifier` 負責將 `{"id": message_id, "date": today_tag, "tag": tag, "delete_attempts": 0, "last_delete_attempt_time": 0.0}` 寫入各 Profile 專屬之 `user_data/<profile>/runtime/notification_history.json` 的 `dispatched_messages` 列表中。
 
-### 3. 清理執行與容錯規則
-* **定時判定**：當系統時間達到 `now_dt.time() >= time(7, 0)` 且 `last_cleanup_date != today_tag` 時觸發。
-* **目標過濾**：僅過濾出 `date < today_tag` 之歷史項目，當日所發之新通知絕不誤刪。
-* **API 調用**：對目標 `message_id` 發起 `DELETE https://discord.com/api/webhooks/<id>/<token>/messages/<message_id>`。
-* **404 容錯**：若目標訊息已遭操作員手動刪除，Discord 回應 `404 Not Found`，系統將其視為有效清除，直接自本地列表中剔除，不拋出異常。
-* **網絡異常重試**：若遭遇網絡斷線或超時，該 ID 保留於列表中，待下次巡檢時重試。
-* **當日冪等性**：清理流程執行完畢後更新 `last_cleanup_date = today_tag`，保證單日內不重複進行全量清理。
+### 3. 收斂執行、冷卻退避與天然冪等性 (Crash Consistency)
+* **有界冷卻退避 (Cool-down Backoff)**：
+  - 若單筆訊息因網絡中斷或 Discord 5xx 刪除失敗，該筆記錄保留於 `dispatched_messages` 中。
+  - 系統記錄 `last_delete_attempt_time`，至少等待 60 秒冷卻後才允許再次嘗試，**嚴禁在狀態機主迴圈中每秒高頻狂轟 DELETE API**。
+  - 失敗絕不阻礙後續巡檢，系統會在後續狀態機 tick 中持續自然重試，徹底消除「單次失敗導致當天永遠不再清理」之死鎖。
+* **404 天然冪等自癒**：
+  - 對目標 `message_id` 發起 `DELETE https://discord.com/api/webhooks/<id>/<token>/messages/<message_id>`。
+  - 若目標訊息已被操作員手動刪除，Discord 回應 `404 Not Found`，系統將其視為有效清除，直接自本地列表中剔除。
+* **崩潰一致性契約 (Crash Consistency Invariant)**：
+  - 若訊息在 Discord 端已刪除成功，但本地尚未及時存檔程式即發生崩潰重啟：
+    重啟後系統將再次對該 ID 發起 DELETE ➔ Discord 回傳 404 ➔ 系統判定已不存在並出隊存檔。
+  - 依賴「404 等同已收斂」之特性，系統具備天然防崩潰與重啟自癒保證。
+* **Null Object 邊界保護**：
+  - `NullNotifier.delete_message` 嚴禁回傳 `True` 假裝成功，防止錯誤配置時歷史紀錄被誤清空。
+  - `NullDailyPipelineNotifier` 之收斂方法直接實作為 `no-op`。
 
 ---
 
