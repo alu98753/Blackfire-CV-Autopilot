@@ -109,6 +109,9 @@
 
 ### Exception
 
+- [ ] 🔴 **長途運行 OpenCV 影像矩陣與 EasyOCR 快取生命週期監控**：
+  - **24/7 風險 (記憶體耗盡崩潰)**：掛機數日後記憶體持續攀升，最終觸發 OOM 或系統卡頓。
+  - **規劃方向**：使用 `tracemalloc` 排查 OpenCV `cv2.Mat`、EasyOCR 辨識快取與 Win32 HWND / DC 控制代碼之生命週期，確保無暫存物件殘留。
 - [ ] 🔴 **整合自癒升級階梯與看門狗滑動窗口**：
   - 持續完善階梯 1~7 自癒機制（彈窗清理 ➔ 重設戰鬥 ➔ 返回城鎮 ➔ 重開遊戲 ➔ 殺進程 ➔ 警報發送），確保各層級自癒均能如實回報進展並寫入 [`runtime/incident_journal.py`](../../runtime/incident_journal.py)。
 
@@ -123,17 +126,16 @@
 - [ ] 🔴 **測試執行效率優化與消除阻塞式 `while` 迴圈 ([`test_redundent.md`](test_redundent.md))**：
   - **24/7 與工程品質風險**：部分舊測試執行過慢（全套需 380s+），且部分輔助函式殘留 `while` 死等邏輯，不符合 BDI 單次 tick 與事件驅動架構。
   - **規劃方向**：重構慢速測試，將假等待改為 mock time / clock 注入，加速反饋閉環。
-
-### 📦 分析如何變現
-
-- [ ] 評估未來是否封裝為獨立 `.exe`、GUI 介面或 Web 儀表板，降低無 Python 環境用戶的使用門檻。
-- [ ] 現階段專注於 24/7 掛機穩定性與核心邏輯完善；後續評估 PyInstaller / Nuitka 打包或 Electron / Tauri 介面封裝。
-
-### 3. 🎨 終端 Config 設定呈現方式優化 (UI Presentation Overhaul)
-
 - [ ] 優化終端 `config.toml` 與執行參數呈現排版，提升操作員檢視直觀度。
 
-### 4. 🏛️ 全域架構審查與 AGENTS.md 規範對齊 (Technical Debt & Rule Auditing)
+### 多實例與沙盒環境 (Multi-Instance & Sandboxie)
+
+- [ ] 🔴 **排查沙盒環境跨程序 IPC 與渲染幀率延遲**：
+  - 分析 Win32 API 跨沙盒發送訊息 (`PostMessage` / `SendMessage`) 之焦點延遲。
+  - 評估 `ScreenCapturer`（`mss` / `BitBlt`）在沙盒隔離視窗下的截圖幀率與開銷。
+  - 測試多實例 CPU 競爭與進程優先級（Priority Boost）對沙盒實例的提速效果。
+
+### 全域架構審查與技術債治理 (Technical Debt & Rule Auditing)
 
 - [ ] 🔴 **核心巨型模組依責任邊界拆分**：
   - 依據 [`AGENTS.md`](../../.agents/AGENTS.md) 的「生產代碼 ~300 行審查觸發線、方法 ~60 行、巢狀 ~3 層、感知與決策分離」原則，排查出以下亟待重構的核心檔案：
@@ -144,22 +146,10 @@
 | [`states/handlers/navigation.py`](../../states/handlers/navigation.py) | **1,334 行** | ~300 行觸發線 | **嚴重超標**。內部包含大量關卡滾動、島嶼點擊、頁籤切換等複雜巢狀分枝，需推進至 Scoped Navigation。 |
 | [`utils/daily_manager.py`](../../utils/daily_manager.py) | **982 行** | ~300 行觸發線 | **超標**。同時管理 Date Tag 重置、Boss CD、懸賞持久化事實與未知任務正名，應依領域拆分。 |
 
-### 5. ⚡ 沙盒環境 (Sandboxie-Plus) 運行延遲分析 (Sandbox Performance Analysis)
+### 產品化與變現方式 (Productization & Monetization)
 
-- [ ] 🔴 **排查沙盒環境跨程序 IPC 與渲染幀率延遲**：
-  - 分析 Win32 API 跨沙盒發送訊息 (`PostMessage` / `SendMessage`) 之焦點延遲。
-  - 評估 `ScreenCapturer`（`mss` / `BitBlt`）在沙盒隔離視窗下的截圖幀率與開銷。
-  - 測試多實例 CPU 競爭與進程優先級（Priority Boost）對沙盒實例的提速效果。
-
-### 6. 🧠 記憶體洩漏與長期掛機效能衰減分析 (Memory Leak & Resource Health)
-
-- [ ] 🔴 **長途運行 OpenCV 影像矩陣與 EasyOCR 快取生命週期監控**：
-  - **24/7 風險 (記憶體耗盡崩潰)**：掛機數日後記憶體持續攀升，最終觸發 OOM 或系統卡頓。
-  - **規劃方向**：使用 `tracemalloc` 排查 OpenCV `cv2.Mat`、EasyOCR 辨識快取與 Win32 HWND / DC 控制代碼之生命週期，確保無暫存物件殘留。
-
-### 7. 🔄 長期掛機定期安全重啟服務 (Periodic Process & Game Restart Service)
-
-- [x] **已完成並驗證**：本項目已由多進程 Supervisor S1~S7 生命週期重啟矩陣完整實現（參見架構規範 [`supervisor_lifecycle_contract.md`](../architecture/supervisor_lifecycle_contract.md)、[已解決項目第 6 節](#6-🔄-長期掛機定期安全重啟服務-supervisor-s1s7-restart-matrix) 與 PARS 故事 [`supervisor_lifecycle_game_restart_matrix_story.md`](../storys/supervisor_lifecycle_game_restart_matrix_story.md)）。
+- [ ] 評估未來是否封裝為獨立 `.exe`、GUI 介面或 Web 儀表板，降低無 Python 環境用戶的使用門檻。
+- [ ] 現階段專注於 24/7 掛機穩定性與核心邏輯完善；後續評估 PyInstaller / Nuitka 打包或 Electron / Tauri 介面封裝。
 
 ---
 
