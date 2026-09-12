@@ -399,13 +399,20 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
        ```
      - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
 
-   - **步驟二：回到日常開發工作樹 `BlackfireCrusade_tool` 進入下一個任務（免切回 main）**：
+   - **步驟二：回到日常開發工作樹 `BlackfireCrusade_tool` 進入下一個任務與清理舊分支（免切回 main）**：
+     > [!IMPORTANT]
+     > **分支生命週期對稱銷毀契約 (Symmetrical Lifecycle Destruction)**：
+     > 與 `branch_start_workflow` 啟動時建立 local + remote 分支對稱，收尾時必須在 `git push origin main` 成功（`origin/main` 已確實包含 merge commit）且開發工作樹已切換至下一個分支後，方可刪除舊分支。**絕對禁止在 merge push 成功前提前刪除 remote branch**。
      ```powershell
      cd E:\Side_Project\BlackfireCrusade_tool
      # 1. 先離開舊 branch，直接以最新 main 為基底建立並切換至下一個分支（共用 .git 物件庫已自動同步）
      git switch -c feat/<next_feature_name> main
-     # 2. 此時舊 branch 已沒有任何 worktree 使用，方可安全刪除
-     git branch -d <branch_name>
+     # 2. 依 branch_start_workflow 規範立即建立下一個分支的 remote tracking branch
+     git push -u origin HEAD
+     # 3. 此時舊 branch 已沒有任何 worktree 使用，且 origin/main 已安全包含 merge commit，刪除舊 local 與 remote branch
+     git branch -d <old_branch_name>
+     git push origin --delete <old_branch_name>
+     git fetch --prune
      ```
 
 ---
