@@ -22,7 +22,7 @@ from runtime.incident_journal import (
     read_child_termination,
     write_incident,
 )
-from runtime.notifier import get_notifier
+from runtime.notifier_factory import get_notifier
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

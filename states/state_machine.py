@@ -141,7 +141,7 @@ class GameStateMachine:
         if notification_port is not None:
             self.notification_port = notification_port
         else:
-            from runtime.notifier import NullNotifier
+            from ports.notification_port import NullNotifier
             self.notification_port = NullNotifier()
 
         self.daily_pipeline_notifier = (
@@ -2174,6 +2174,9 @@ class GameStateMachine:
         # 城鎮流水線結束，先將狀態轉移至 NAVIGATING / COLLECT_ONLY，確保退出子流程狀態
         next_st = self.STATE_COLLECT_ONLY if self.is_in_collect_only_mode() else self.STATE_NAVIGATING
         self.transition_to(next_st)
+
+        # 評估 Tier 1 每日速領是否全數完成並觸發 Milestone 1 (Null Object 保證，不使用 hasattr)
+        self.daily_pipeline_notifier.evaluate_tier1_completion()
 
         # 全域每日大流水線自動排程檢查 (僅在 daily 模式下觸發)
         if self.is_daily_pipeline_active():

@@ -427,7 +427,9 @@ class TestMilestoneEventWiring(unittest.TestCase):
         mock_machine = MagicMock()
         mock_machine.daily_manager = self.dm
         mock_machine.daily_pipeline_notifier = self.coordinator
-        mock_machine.pop_and_next_town_subflow = MagicMock()
+        mock_machine.pop_and_next_town_subflow = MagicMock(
+            side_effect=lambda: mock_machine.daily_pipeline_notifier.evaluate_tier1_completion()
+        )
 
         handler = BulletinBoardHandler(machine=mock_machine)
         handler.accepted_quest_titles = ["清除骷髏", "清除蜘蛛"]

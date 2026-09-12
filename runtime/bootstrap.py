@@ -160,12 +160,21 @@ def init_state_machine_system(args, config, target_hwnd=None):
     profile_name = resolve_profile_name(args, getattr(args, "title", ""))
     daily_manager = DailyManager(profile=profile_name)
     logging.info(f"📂 [DailyManager] 成功綁定角色狀態檔: user_data/{profile_name}/daily_status.json")
-    from runtime.notifier import get_notifier
-    notification_port = get_notifier(profile=profile_name)
+    from runtime.notifier_factory import create_notification_history_store, create_notification_port
+    notification_port = create_notification_port(profile=profile_name)
+    history_store = create_notification_history_store(profile=profile_name)
+
+    from states.daily_reconciliation import DailyReconciliationService
+    reconciliation_service = DailyReconciliationService(
+        notification_port=notification_port,
+        history_store=history_store,
+    )
     from states.daily_pipeline_notifier import DailyPipelineNotifier
     daily_pipeline_notifier = DailyPipelineNotifier(
         notification_port=notification_port,
         daily_manager=daily_manager,
+        history_store=history_store,
+        reconciliation_service=reconciliation_service,
         profile=profile_name,
     )
 

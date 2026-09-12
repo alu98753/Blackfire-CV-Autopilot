@@ -220,7 +220,7 @@ DailyManager / StateMachine
 * **職責**：驗證 payload 格式、欄位映射、多語言字典、狀態碼分支 (200/204/404/429/500)、單步單筆限制、檢查節流、與 Daily Completion Latch。
 
 ### 2. 第二層：Live 刪除驗證 (`--live --delete-after <seconds>`)
-* **指令**：`python -m runtime.notifier --live --type milestone1 --delete-after 10`
+* **指令**：`python -m tools.notifier_cli --live --type milestone1 --delete-after 10`
 * **前置約束**：`--delete-after` 強制要求搭配 `--live`；若於 dry-run 模式下傳入，CLI 明確報錯並阻斷。
 * **執行流程**：
   1. 向真實 Discord Webhook 發送 HTTP POST (`wait=true`)。
@@ -231,7 +231,7 @@ DailyManager / StateMachine
 * **狀態隔離**：不碰觸任何歷史存檔檔案 (`notification_history.json`)。
 
 ### 3. 第三層：Live 歷史收斂端對端驗證 (`--live --test-reconcile`)
-* **指令**：`python -m runtime.notifier --live --test-reconcile --delete-after 5`
+* **指令**：`python -m tools.notifier_cli --live --test-reconcile --delete-after 5`
 * **前置約束**：`--test-reconcile` 強制要求搭配 `--live`。
 * **絕對隔離契約 (Zero Production Touch Invariant)**：
   - **嚴禁修改正式 Profile 狀態**：測試過程嚴禁讀寫 `user_data/<profile>/runtime/notification_history.json`。

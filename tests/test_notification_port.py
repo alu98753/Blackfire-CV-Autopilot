@@ -9,16 +9,17 @@ import unittest
 import urllib.error
 from unittest.mock import MagicMock, patch
 
-from runtime.notifier import (
+from ports.notification_port import (
     DISCORD_COLOR_ALARM,
     DISCORD_COLOR_MILESTONE,
-    DiscordWebhookAdapter,
+    DeleteResult,
     NotificationPort,
+    NotificationResult,
     NullNotifier,
-    get_notifier,
-    resolve_webhook_url,
-    send_test_notifications,
 )
+from runtime.discord_webhook_adapter import DiscordWebhookAdapter
+from runtime.notifier_factory import get_notifier, resolve_webhook_url
+from tools.notifier_cli import send_test_notifications
 
 
 class TestNotificationPort(unittest.TestCase):
@@ -207,16 +208,29 @@ class TestNotificationPort(unittest.TestCase):
         self.assertEqual(url, "https://discord.com/env-webhook")
 
     def test_get_notifier_returns_null_when_no_webhook(self):
-        with patch("runtime.notifier.resolve_webhook_url", return_value=None):
+        with patch("runtime.notifier_factory.resolve_webhook_url", return_value=None):
             notifier = get_notifier()
             self.assertIsInstance(notifier, NullNotifier)
 
     def test_get_notifier_returns_adapter_when_configured(self):
-        with patch("runtime.notifier.resolve_webhook_url", return_value="https://discord.com/test"):
+        with patch("runtime.notifier_factory.resolve_webhook_url", return_value="https://discord.com/test"):
             notifier = get_notifier()
             self.assertIsInstance(notifier, DiscordWebhookAdapter)
 
-    @patch("runtime.notifier._safe_print")
+    def test_json_notification_history_store_roundtrip(self):
+        import tempfile
+        from runtime.json_notification_history_store import JsonNotificationHistoryStore
+        with tempfile.TemporaryDirectory() as td:
+            fpath = os.path.join(td, "history.json")
+            store = JsonNotificationHistoryStore(history_file_path=fpath)
+            loaded = store.load_history()
+            self.assertEqual(loaded.get("dispatched_messages"), [])
+            loaded["last_reconciled_date"] = "2026-09-12"
+            store.save_history(loaded)
+            reloaded = store.load_history()
+            self.assertEqual(reloaded.get("last_reconciled_date"), "2026-09-12")
+
+    @patch("tools.notifier_cli._safe_print")
     def test_send_test_notifications_dry_run_success(self, _mock_print):
         result = send_test_notifications(
             webhook_url="https://discord.com/test",
@@ -225,13 +239,13 @@ class TestNotificationPort(unittest.TestCase):
         )
         self.assertTrue(result)
 
-    @patch("runtime.notifier._safe_print")
+    @patch("tools.notifier_cli._safe_print")
     def test_send_test_notifications_unconfigured_live_fails(self, _mock_print):
-        with patch("runtime.notifier.resolve_webhook_url", return_value=None):
+        with patch("tools.notifier_cli.resolve_webhook_url", return_value=None):
             result = send_test_notifications(webhook_url="", profile=None, live=True)
             self.assertFalse(result)
 
-    @patch("runtime.notifier._safe_print")
+    @patch("tools.notifier_cli._safe_print")
     def test_send_test_notifications_delete_after_requires_live(self, mock_print):
         res = send_test_notifications(
             webhook_url="https://discord.com/test",
@@ -241,7 +255,7 @@ class TestNotificationPort(unittest.TestCase):
         self.assertFalse(res)
         self.assertTrue(any("--delete-after" in str(c) for c in mock_print.call_args_list))
 
-    @patch("runtime.notifier._safe_print")
+    @patch("tools.notifier_cli._safe_print")
     def test_send_test_notifications_test_reconcile_requires_live(self, mock_print):
         res = send_test_notifications(
             webhook_url="https://discord.com/test",
@@ -252,9 +266,9 @@ class TestNotificationPort(unittest.TestCase):
         self.assertTrue(any("--test-reconcile" in str(c) for c in mock_print.call_args_list))
 
     @patch("time.sleep")
-    @patch("runtime.notifier._safe_print")
+    @patch("tools.notifier_cli._safe_print")
     def test_run_live_deletion_verification_success(self, _mock_print, mock_sleep):
-        from runtime.notifier import DeleteResult, _run_live_deletion_verification
+        from tools.notifier_cli import _run_live_deletion_verification
         adapter = MagicMock()
         adapter.delete_message.side_effect = [
             DeleteResult(success=True, status_code=204),
@@ -267,9 +281,9 @@ class TestNotificationPort(unittest.TestCase):
         self.assertEqual(mock_sleep.call_count, 3)
 
     @patch("time.sleep")
-    @patch("runtime.notifier._safe_print")
+    @patch("tools.notifier_cli._safe_print")
     def test_run_live_reconcile_verification_success(self, _mock_print, _mock_sleep):
-        from runtime.notifier import DeleteResult, NotificationResult, _run_live_reconcile_verification
+        from tools.notifier_cli import _run_live_reconcile_verification
         with patch.object(DiscordWebhookAdapter, "notify_milestone") as mock_notify, \
              patch.object(DiscordWebhookAdapter, "delete_message") as mock_del:
             mock_notify.return_value = NotificationResult(success=True, external_message_id="discord_msg_888")

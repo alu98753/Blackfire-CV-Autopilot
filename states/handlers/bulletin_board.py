@@ -84,9 +84,6 @@ class BulletinBoardHandler(BaseStateHandler):
                 self.machine.quest_scheduler = dm.load_quest_scheduler()
                 logging.info(f"📋 [懸賞告示牌] 已即時同步載入動態懸賞排程器 (共 {len(getattr(self.machine.quest_scheduler, 'tasks', []))} 個任務)。")
 
-            # 委託 DailyPipelineNotifier 協調器處理 Milestone 1 檢測與通知
-            self.machine.daily_pipeline_notifier.on_tier1_subflow_completed("bulletin_board")
-
         logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
         self.machine.pop_and_next_town_subflow()
 
