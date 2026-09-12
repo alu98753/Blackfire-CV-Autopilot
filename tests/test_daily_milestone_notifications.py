@@ -806,6 +806,46 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         self.assertEqual(deleted_count, 5)
         self.assertEqual(len(self.notifier.history["dispatched_messages"]), 0)
 
+    def test_daily_completion_latch_skips_further_checks(self):
+        dt = datetime(2026, 9, 12, 7, 5, 0)
+        self.notifier.history["dispatched_messages"] = [
+            {"id": "msg_past", "date": "2026-09-11", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0},
+        ]
+        self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=204)
+
+        # Call 1: deletes the single expired message -> triggers latch to 2026-09-12
+        res1 = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
+        self.assertEqual(res1, 1)
+        self.assertEqual(self.notifier.history.get("last_reconciled_date"), "2026-09-12")
+
+        # Call 2: even with force=False and time passed, latch causes immediate O(1) early return 0
+        self.notifier._next_reconcile_check_ts = 0.0  # bypass throttle to test latch directly
+        res2 = self.notifier.reconcile_expired_messages(now_dt=dt, force=False)
+        self.assertEqual(res2, 0)
+        self.assertEqual(self.mock_port.delete_message.call_count, 1)  # No extra delete call
+
+    def test_historical_message_injection_invalidates_latch(self):
+        dt = datetime(2026, 9, 12, 10, 0, 0)
+        # Initially latched as clean today
+        self.notifier.history["last_reconciled_date"] = "2026-09-12"
+        self.notifier.history["dispatched_messages"] = []
+        self.notifier._save_history()
+
+        # Invariant check: Injected/recovered historical message from yesterday
+        past_dt = datetime(2026, 9, 11, 20, 0, 0)
+        self.notifier.track_dispatched_message("msg_injected", tag="recovered", now_dt=past_dt)
+
+        # Latch must be automatically invalidated (reset to "")
+        self.assertEqual(self.notifier.history.get("last_reconciled_date"), "")
+
+        # Reconcile can now clean it up
+        self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=204)
+        res = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
+        self.assertEqual(res, 1)
+        self.mock_port.delete_message.assert_called_once_with("msg_injected")
+        # And latched again once clean
+        self.assertEqual(self.notifier.history.get("last_reconciled_date"), "2026-09-12")
+
     def test_null_daily_pipeline_notifier_reconcile_and_track_noop(self):
         null_notifier = NullDailyPipelineNotifier()
         null_notifier.track_dispatched_message("123", tag="test")

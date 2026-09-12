@@ -95,6 +95,7 @@ class DailyPipelineNotifier:
             "last_milestone1_date": "",
             "last_milestone2_date": "",
             "last_deadline_alarm_date": "",
+            "last_reconciled_date": "",
             "dispatched_messages": [],
         }
 
@@ -140,7 +141,7 @@ class DailyPipelineNotifier:
         """Track dispatched webhook message ID for future 07:00 reconciliation."""
         if not message_id:
             return
-        today_tag = self.get_today_date_tag(now_dt)
+        msg_date_tag = self.get_today_date_tag(now_dt)
         if "dispatched_messages" not in self.history or not isinstance(self.history["dispatched_messages"], list):
             self.history["dispatched_messages"] = []
 
@@ -148,51 +149,74 @@ class DailyPipelineNotifier:
         if not existing:
             self.history["dispatched_messages"].append({
                 "id": str(message_id).strip(),
-                "date": today_tag,
+                "date": msg_date_tag,
                 "tag": tag,
                 "last_attempt_time": 0.0,
                 "retry_after": 0.0,
             })
+            # Invariant: If an expired message (date < today) is injected or recovered, invalidate latch
+            today_tag = self.get_today_date_tag()
+            if msg_date_tag < today_tag and self.history.get("last_reconciled_date") == today_tag:
+                self.history["last_reconciled_date"] = ""
             self._save_history()
 
     def reconcile_expired_messages(self, now_dt: datetime | None = None, force: bool = False) -> int:
-        """Reconcile historical dispatched webhook messages with check throttle and one-delete-per-call.
+        """Reconcile historical dispatched webhook messages with check throttle, one-delete-per-call,
+        and daily completion latch.
 
         Invariants:
-        1. Check Throttle: Checked at most once every check_interval_seconds (5s) unless force=True.
-        2. Earliest Time: No-op before 07:00 Asia/Taipei.
-        3. One-Delete-Per-Call: Dispatches at most 1 DELETE request per invocation, never freezing the main loop.
-        4. Cooldown: Retried messages obey at least 60s cooldown or Discord Retry-After.
-        5. Idempotent evict: 200/204/404 immediately removes message from memory & disk.
+        1. Daily Completion Latch: If today's expired messages have already been fully cleared
+           (last_reconciled_date == today_tag), O(1) in-memory early return with zero disk/network I/O.
+        2. Check Throttle: Evaluated at most once every check_interval_seconds (5.0s) via time.monotonic() unless force=True.
+        3. Earliest Time: No-op before 07:00 Asia/Taipei business time.
+        4. One-Delete-Per-Call: Dispatches at most 1 DELETE request per invocation, bounding single-step latency.
+        5. Cooldown: Retried messages obey at least 60s monotonic cooldown or Discord Retry-After.
+        6. Completion Condition: Once all expired messages (date < today_tag) are cleared,
+           records last_reconciled_date = today_tag to disarm reconciliation until tomorrow 07:00.
         """
-        current_ts = time.time()
-        if not force and current_ts < self._next_reconcile_check_ts:
+        b_dt = resolve_business_dt(now_dt)
+        today_tag = b_dt.strftime("%Y-%m-%d")
+
+        # 1. Daily Completion Latch: O(1) in-memory early return if already fully cleared today
+        if not force and self.history.get("last_reconciled_date") == today_tag:
             return 0
 
-        self._next_reconcile_check_ts = current_ts + self.check_interval_seconds
+        # 2. Check Throttle: monotonic time prevents NTP / system clock skew
+        monotonic_ts = time.monotonic()
+        if not force and monotonic_ts < self._next_reconcile_check_ts:
+            return 0
 
-        b_dt = resolve_business_dt(now_dt)
+        self._next_reconcile_check_ts = monotonic_ts + self.check_interval_seconds
+
+        # 3. Earliest Time Gate (07:00 Asia/Taipei)
         if b_dt.time() < dtime(EARLIEST_RECONCILE_HOUR, EARLIEST_RECONCILE_MINUTE):
             return 0
 
-        today_tag = b_dt.strftime("%Y-%m-%d")
         dispatched = self.history.get("dispatched_messages", [])
-        if not dispatched:
+        expired_items = [
+            m for m in dispatched
+            if str(m.get("date", "")) and str(m.get("date", "")) < today_tag
+        ]
+
+        # If no expired messages remain, mark today as fully reconciled and latch
+        if not expired_items:
+            if self.history.get("last_reconciled_date") != today_tag:
+                self.history["last_reconciled_date"] = today_tag
+                self._save_history()
+                logging.info("✨ [DailyPipelineNotifier] 今日 (07:00) 歷史過期訊息已全數清空，今日不再重複巡檢。")
             return 0
 
-        for item in list(dispatched):
-            msg_date = str(item.get("date", ""))
-            if not msg_date or msg_date >= today_tag:
-                continue
-
+        # 4. Process at most ONE expired item that is not in cooldown
+        for item in expired_items:
             last_attempt = float(item.get("last_attempt_time", 0.0))
             cooldown = max(DEFAULT_RECONCILE_COOLDOWN_SECONDS, float(item.get("retry_after", 0.0)))
-            if (current_ts - last_attempt) < cooldown:
+            if (monotonic_ts - last_attempt) < cooldown:
                 continue
 
             msg_id = str(item.get("id", "")).strip()
             if not msg_id:
                 self._evict_message_id(msg_id)
+                self._check_and_latch_completion(today_tag)
                 return 1
 
             del_res = self.notification_port.delete_message(msg_id)
@@ -203,9 +227,10 @@ class DailyPipelineNotifier:
                     msg_id,
                     del_res.status_code,
                 )
+                self._check_and_latch_completion(today_tag)
                 return 1
             else:
-                self._record_delete_failure(msg_id, current_ts, del_res.retry_after_seconds)
+                self._record_delete_failure(msg_id, monotonic_ts, del_res.retry_after_seconds)
                 logging.warning(
                     "⚠️ [DailyPipelineNotifier] 歷史訊息 %s 刪除失敗 (狀態碼: %s, 錯誤: %s)，將於 %.1f 秒後重試。",
                     msg_id,
@@ -216,6 +241,18 @@ class DailyPipelineNotifier:
                 return 0
 
         return 0
+
+    def _check_and_latch_completion(self, today_tag: str) -> None:
+        """If no expired messages remain after eviction, latch last_reconciled_date."""
+        dispatched = self.history.get("dispatched_messages", [])
+        has_remaining_expired = any(
+            str(m.get("date", "")) and str(m.get("date", "")) < today_tag
+            for m in dispatched
+        )
+        if not has_remaining_expired:
+            self.history["last_reconciled_date"] = today_tag
+            self._save_history()
+            logging.info("✨ [DailyPipelineNotifier] 歷史過期訊息已全數清空，已設定 last_reconciled_date = %s，今日不再巡檢。", today_tag)
 
     def _evict_message_id(self, message_id: str) -> None:
         self.history["dispatched_messages"] = [
