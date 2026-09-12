@@ -20,10 +20,30 @@
 
 1. **「感知」與「決策」分離 + 分層禁止反向依賴**：`Detector` 只負責觀察畫面並輸出狀態 (`SceneInfo`)，絕不觸發點擊；`Handler` 只根據狀態做決策，絕不現場比對畫面。
    - **分層依賴方向**：`main` → `state_machine` → `handlers` → `actions/mouse`。依賴只能由上往下流。底層模組（如 `actions/mouse.py`）**嚴禁持有上層物件的直接引用**。若需跨層通知，必須使用 **callback 注入**，由上層在初始化時接線。
-2. **單一職責：檔案 300 行、方法 60 行、巢狀 3 層**：一檔一職。
-   - 任何檔案超過 **300 行**或出現非本檔職責之 `if` 分支時，必須主動提請重構抽離。
-   - 單一方法超過 **60 行**時，必須拆分為具名子步驟。
-   - `if` / `try` / `for` 的巢狀層數不得超過 **3 層**，超過時必須使用 Early Return 或 Extract Method。
+2. **單一職責與架構警示 (Smell vs Goal)**：一檔一主要職責。檔案行數是架構警示（smell），不是重構目標。
+   - **Production Code ~300 行架構審查觸發線（非硬上限）**：超過約 300 行時，主動審查：
+     1. 是否存在兩個以上獨立 change reasons / responsibilities。
+     2. 是否混合 domain policy、I/O、adapter、presentation、CLI 等不同層次。
+     3. 是否出現不合理的跨層或反向依賴。
+     4. 是否存在可形成清楚契約的獨立模組。
+     * 若存在上述問題，應依責任與依賴邊界拆分。
+     * 若職責仍單一、高內聚且依賴方向正確，可合理超過 300 行；不得為符合行數而機械拆檔。
+   - **嚴禁 LOC-driven Refactoring / Code Golf**：
+     - 不得為壓低行數而刪除有價值的 docstring、註解、型別資訊或空白行。
+     - 不得將多個 statements 壓成單行。
+     - 不得建立只有形式上分檔、卻沒有獨立責任或契約的 helper/module。
+     - 不得以 `part1.py` / `part2.py` 等方式機械切割。
+   - **Tools / CLI / Tests 不套用 300 行觸發線**：
+     - 以 cohesion、可導航性與 change reason 判斷是否拆分。
+     - 大型測試檔應依 behavior / subsystem 拆分，而非依行數拆分。
+     - CLI 僅在 argument parsing、execution、presentation 或不同 workflow 已形成清楚獨立責任時拆分。
+   - **方法規模 (~60 行) 與巢狀 (~3 層) 同樣視為具名步驟警示**：
+     - 方法接近或超過約 60 行時，主動檢查是否包含多個具名步驟或責任。
+     - 深層巢狀優先使用 guard clause、early return 或 extract method 改善。
+     - 不得僅為符合數字限制而產生無語意的小函式。
+   - **決策優先級**：
+     `Responsibility → Dependency Direction → Cohesion → Testability → File/Method Size`
+     （永遠不要反過來因為 LOC 超標才硬找地方拆）。
 3. **狀態驅動，拒絕補釘**：面對新需求/彈窗，優先建立獨立 State 或子狀態機，絕不在主流程中增修 `if is_special_case` 補釘。
 4. **全局審視優先於局部編寫**：寫代碼前必須先審視既有架構，嚴禁無視模組邊界隨手插入跨層邏輯。
 5. **零容忍三害：Magic Number、Dead Code、DRY 違規**：
@@ -164,7 +184,7 @@
 
 1. ☐ 檔案中是否有裸數字或裸字串？→ 提取為 `config.py` 常數
 2. ☐ 是否有超過 3 行的重複邏輯？→ 抄取為共用方法
-3. ☐ 方法行數是否超過 60 行？巢狀是否超過 3 層？→ 拆分
+3. ☐ 職責與規模審查：Production 檔案是否超過 ~300 行且包含多重職責/不同層次？方法是否缺乏具名步驟？→ 依責任邊界拆分（嚴禁機械 Code Golf）
 4. ☐ 是否有底層模組直接引用上層物件？→ 改為 callback 注入
 5. ☐ 是否有重構後遺留的無人呼叫方法？→ 當次刪除
 6. ☐ 座標計算是否統一使用 Client 座標系？→ 禁用 GetWindowRect
