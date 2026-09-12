@@ -84,29 +84,10 @@ class BulletinBoardHandler(BaseStateHandler):
                 self.machine.quest_scheduler = dm.load_quest_scheduler()
                 logging.info(f"📋 [懸賞告示牌] 已即時同步載入動態懸賞排程器 (共 {len(getattr(self.machine.quest_scheduler, 'tasks', []))} 個任務)。")
 
-            # Milestone 1 檢測與通知 (Daily Claim Phase Completed)
-            if hasattr(dm, "is_tier1_daily_claim_completed") and dm.is_tier1_daily_claim_completed():
-                if hasattr(dm, "is_milestone_eligible") and dm.is_milestone_eligible("milestone1"):
-                    notifier = getattr(self.machine, "notification_port", None)
-                    if notifier:
-                        all_accepted = dm.status.get("subflows", {}).get("bulletin_board", {}).get("accepted_quests", [])
-                        sf_statuses = []
-                        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
-                            done = dm.is_subflow_completed(sf)
-                            sf_statuses.append(f"{sf}({'✓' if done else '✗'})")
-                        profile_name = getattr(self.machine, "restart_profile", None) or getattr(dm, "profile", None) or "default"
-                        notifier.notify_milestone(
-                            title="Daily Claim Phase Completed",
-                            description="All town daily claim subflows completed; bulletin board bounty quests accepted.",
-                            fields={
-                                "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                                "Profile": profile_name,
-                                "Quests Accepted": all_accepted,
-                                "Town Subflows": ", ".join(sf_statuses),
-                            },
-                        )
-                        dm.record_milestone_notified("milestone1")
-                        logging.info("🔔 [Daily Pipeline] 已發送 Milestone 1 (Daily Claim Phase Completed) 通知！")
+            # 委託 DailyPipelineNotifier 協調器處理 Milestone 1 檢測與通知
+            daily_notifier = getattr(self.machine, "daily_pipeline_notifier", None)
+            if daily_notifier and hasattr(daily_notifier, "on_tier1_subflow_completed"):
+                daily_notifier.on_tier1_subflow_completed("bulletin_board")
 
         logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
         self.machine.pop_and_next_town_subflow()

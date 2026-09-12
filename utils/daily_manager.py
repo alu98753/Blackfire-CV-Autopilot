@@ -70,11 +70,6 @@ DEFAULT_DAILY_STATUS = {
                 }
             }
         }
-    },
-    "notifications": {
-        "last_milestone1_date": "",
-        "last_milestone2_date": "",
-        "last_deadline_alarm_date": "",
     }
 }
 
@@ -175,15 +170,6 @@ class DailyManager:
                 "alchemy_hut": None,
                 "equipment_workshop": None,
                 "grocery_store": None,
-            }
-            self.save_status()
-
-        # 💡 [通知統計自癒機制] 確保 notifications 結構存在
-        if "notifications" not in self.status or not isinstance(self.status["notifications"], dict):
-            self.status["notifications"] = {
-                "last_milestone1_date": "",
-                "last_milestone2_date": "",
-                "last_deadline_alarm_date": "",
             }
             self.save_status()
 
@@ -783,43 +769,6 @@ class DailyManager:
             if not self.is_subflow_completed(key):
                 pending.append(key)
         return pending
-
-    def is_milestone_eligible(self, milestone_key: str, now_dt: datetime | None = None) -> bool:
-        """
-        比對當前 08:05 週期標籤與持久化紀錄，確認該里程碑在今日尚未發送過 (保證冪等性)。
-        """
-        current_tag = self.get_today_reset_tag(now_dt)
-        notifs = self.status.setdefault("notifications", {})
-        return notifs.get(f"last_{milestone_key}_date") != current_tag
-
-    def record_milestone_notified(self, milestone_key: str, now_dt: datetime | None = None) -> None:
-        """
-        持久化記錄指定里程碑今日已完成發送，避免重啟後重複發報。
-        """
-        current_tag = self.get_today_reset_tag(now_dt)
-        notifs = self.status.setdefault("notifications", {})
-        notifs[f"last_{milestone_key}_date"] = current_tag
-        self.save_status()
-
-    def is_daily_claim_deadline_exceeded(self, now_dt: datetime | None = None, deadline_minutes: int = 30) -> bool:
-        """
-        檢查是否已跨越每日 08:05 重置線超過 deadline_minutes (預設 30 分鐘，即 08:35)，
-        且 Tier 1 速領尚未全部完成。
-        """
-        now_dt = datetime.now() if now_dt is None else now_dt
-        reset_time = dtime(self.reset_hour, self.reset_minute)
-        from datetime import timedelta
-        if now_dt.time() < reset_time:
-            last_reset_dt = datetime.combine(now_dt.date() - timedelta(days=1), reset_time)
-        else:
-            last_reset_dt = datetime.combine(now_dt.date(), reset_time)
-
-        deadline_dt = last_reset_dt + timedelta(minutes=deadline_minutes)
-
-        if now_dt >= deadline_dt:
-            if not self.is_tier1_daily_claim_completed():
-                return self.is_milestone_eligible("deadline_alarm", now_dt)
-        return False
 
     def record_subflow_completed(self, subflow_key, now_ts=None, extra_data=None):
         """

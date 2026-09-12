@@ -184,6 +184,12 @@ def init_state_machine_system(args, config, target_hwnd=None):
     state_machine.daily_manager = daily_manager
     from runtime.notifier import get_notifier
     state_machine.notification_port = get_notifier(profile=profile_name)
+    from states.daily_pipeline_notifier import DailyPipelineNotifier
+    state_machine.daily_pipeline_notifier = DailyPipelineNotifier(
+        notification_port=state_machine.notification_port,
+        daily_manager=daily_manager,
+        profile=profile_name,
+    )
 
     # 若使用 --subflow 發起 Dev 階段獨立測試
     if hasattr(args, "subflow") and args.subflow:

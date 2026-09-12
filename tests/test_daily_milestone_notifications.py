@@ -1,8 +1,10 @@
-"""Unit tests for Phase 3: Daily Milestone Notifications & Deadline Alarm.
+"""Unit tests for Daily Pipeline Milestone Notifications & Deadline Alarm.
 
 Strictly follows:
 - 100% mocked notification port (ZERO outbound network I/O).
-- Asserts notify_milestone and notify_alarm calls, arguments, and idempotency.
+- Tests pure state inspection on DailyManager (no notification pollution).
+- Tests DailyPipelineNotifier coordinator (isolated history file, idempotency, deadline check).
+- Tests integration wiring between BulletinBoardHandler / GameStateMachine and DailyPipelineNotifier.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from runtime.notifier import (
     build_alarm_payload,
     build_milestone_payload,
 )
+from states.daily_pipeline_notifier import DailyPipelineNotifier
 from states.handlers.bulletin_board import BulletinBoardHandler
 from utils.daily_manager import DailyManager
 
@@ -60,8 +63,8 @@ class TestDailyMilestonePayloads(unittest.TestCase):
         self.assertIn("Pending Subflows", field_names)
 
 
-class TestDailyManagerMilestoneLogic(unittest.TestCase):
-    """Verify DailyManager milestone eligibility, tracking, and deadline calculations."""
+class TestDailyManagerPureStateQueries(unittest.TestCase):
+    """Verify DailyManager provides pure state queries without notification state pollution."""
 
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
@@ -85,55 +88,102 @@ class TestDailyManagerMilestoneLogic(unittest.TestCase):
         self.assertTrue(self.dm.is_tier1_daily_claim_completed())
         self.assertEqual(self.dm.get_pending_tier1_subflows(), [])
 
-    def test_milestone_eligibility_and_idempotency(self):
-        now_dt = datetime(2026, 9, 12, 8, 20, 0)
-        self.assertTrue(self.dm.is_milestone_eligible("milestone1", now_dt))
 
-        # Record notified
-        self.dm.record_milestone_notified("milestone1", now_dt)
-        self.assertFalse(self.dm.is_milestone_eligible("milestone1", now_dt))
-
-        # Milestone 2 is still eligible
-        self.assertTrue(self.dm.is_milestone_eligible("milestone2", now_dt))
-
-        # Reload from disk: persistence verified
-        dm2 = DailyManager(status_file=self.status_file)
-        self.assertFalse(dm2.is_milestone_eligible("milestone1", now_dt))
-        self.assertTrue(dm2.is_milestone_eligible("milestone2", now_dt))
-
-    def test_is_daily_claim_deadline_exceeded(self):
-        # Subflows incomplete
-        # 1. At 08:20 (15 min after 08:05 reset): not exceeded
-        dt_0820 = datetime(2026, 9, 12, 8, 20, 0)
-        self.assertFalse(self.dm.is_daily_claim_deadline_exceeded(now_dt=dt_0820, deadline_minutes=30))
-
-        # 2. At 08:34 (29 min after reset): not exceeded
-        dt_0834 = datetime(2026, 9, 12, 8, 34, 0)
-        self.assertFalse(self.dm.is_daily_claim_deadline_exceeded(now_dt=dt_0834, deadline_minutes=30))
-
-        # 3. At 08:36 (31 min after reset): exceeded!
-        dt_0836 = datetime(2026, 9, 12, 8, 36, 0)
-        self.assertTrue(self.dm.is_daily_claim_deadline_exceeded(now_dt=dt_0836, deadline_minutes=30))
-
-        # 4. Once notified, it becomes ineligible (idempotent)
-        self.dm.record_milestone_notified("deadline_alarm", dt_0836)
-        self.assertFalse(self.dm.is_daily_claim_deadline_exceeded(now_dt=dt_0836, deadline_minutes=30))
-
-        # 5. If all tier1 subflows are completed, deadline is never exceeded
-        dm_clean = DailyManager(status_file=os.path.join(self.test_dir, "clean_status.json"))
-        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
-            dm_clean.record_subflow_completed(sf)
-        self.assertFalse(dm_clean.is_daily_claim_deadline_exceeded(now_dt=dt_0836, deadline_minutes=30))
-
-
-class TestMilestoneEventWiring(unittest.TestCase):
-    """Verify that BulletinBoardHandler and GameStateMachine dispatch milestone notifications."""
+class TestDailyPipelineNotifierLogic(unittest.TestCase):
+    """Verify DailyPipelineNotifier idempotency, profile-isolated persistence, and deadline calculations."""
 
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
+        self.history_file = os.path.join(self.test_dir, "notification_history.json")
         self.status_file = os.path.join(self.test_dir, "daily_status.json")
         self.dm = DailyManager(status_file=self.status_file)
         self.mock_notifier = MagicMock(spec=NotificationPort)
+        self.coordinator = DailyPipelineNotifier(
+            notification_port=self.mock_notifier,
+            daily_manager=self.dm,
+            profile="test_profile",
+            history_file_path=self.history_file,
+            deadline_minutes=30,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_milestone_eligibility_and_idempotency(self):
+        now_dt = datetime(2026, 9, 12, 8, 20, 0)
+        self.assertTrue(self.coordinator.is_milestone_eligible("milestone1", now_dt))
+
+        # Record notified
+        self.coordinator.record_milestone_notified("milestone1", now_dt)
+        self.assertFalse(self.coordinator.is_milestone_eligible("milestone1", now_dt))
+
+        # Milestone 2 is still eligible
+        self.assertTrue(self.coordinator.is_milestone_eligible("milestone2", now_dt))
+
+        # Reload from disk: persistence verified
+        coord2 = DailyPipelineNotifier(
+            notification_port=self.mock_notifier,
+            daily_manager=self.dm,
+            profile="test_profile",
+            history_file_path=self.history_file,
+        )
+        self.assertFalse(coord2.is_milestone_eligible("milestone1", now_dt))
+        self.assertTrue(coord2.is_milestone_eligible("milestone2", now_dt))
+
+    def test_check_daily_claim_deadline(self):
+        # Subflows incomplete
+        # 1. At 08:20 (15 min after 08:05 reset): not exceeded
+        dt_0820 = datetime(2026, 9, 12, 8, 20, 0)
+        self.assertFalse(self.coordinator.check_daily_claim_deadline(now_dt=dt_0820))
+        self.mock_notifier.notify_alarm.assert_not_called()
+
+        # 2. At 08:34 (29 min after reset): not exceeded
+        dt_0834 = datetime(2026, 9, 12, 8, 34, 0)
+        self.assertFalse(self.coordinator.check_daily_claim_deadline(now_dt=dt_0834))
+        self.mock_notifier.notify_alarm.assert_not_called()
+
+        # 3. At 08:36 (31 min after reset): exceeded!
+        dt_0836 = datetime(2026, 9, 12, 8, 36, 0)
+        self.assertTrue(self.coordinator.check_daily_claim_deadline(current_state="NAVIGATING", now_dt=dt_0836))
+        self.mock_notifier.notify_alarm.assert_called_once()
+        call_kwargs = self.mock_notifier.notify_alarm.call_args[1]
+        self.assertEqual(call_kwargs["code"], "DAILY_CLAIM_DEADLINE_EXCEEDED")
+        self.assertEqual(call_kwargs["details"]["Current State"], "NAVIGATING")
+
+        # 4. Once notified, it becomes ineligible (idempotent)
+        self.mock_notifier.reset_mock()
+        self.assertFalse(self.coordinator.check_daily_claim_deadline(current_state="NAVIGATING", now_dt=dt_0836))
+        self.mock_notifier.notify_alarm.assert_not_called()
+
+        # 5. If all tier1 subflows are completed, deadline is never triggered
+        clean_status = os.path.join(self.test_dir, "clean_status.json")
+        dm_clean = DailyManager(status_file=clean_status)
+        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            dm_clean.record_subflow_completed(sf)
+        coord_clean = DailyPipelineNotifier(
+            notification_port=self.mock_notifier,
+            daily_manager=dm_clean,
+            profile="test_profile",
+            history_file_path=os.path.join(self.test_dir, "clean_history.json"),
+        )
+        self.assertFalse(coord_clean.check_daily_claim_deadline(now_dt=dt_0836))
+
+
+class TestMilestoneEventWiring(unittest.TestCase):
+    """Verify that BulletinBoardHandler and GameStateMachine delegate to DailyPipelineNotifier."""
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.history_file = os.path.join(self.test_dir, "notification_history.json")
+        self.status_file = os.path.join(self.test_dir, "daily_status.json")
+        self.dm = DailyManager(status_file=self.status_file)
+        self.mock_notifier = MagicMock(spec=NotificationPort)
+        self.coordinator = DailyPipelineNotifier(
+            notification_port=self.mock_notifier,
+            daily_manager=self.dm,
+            profile="test_profile",
+            history_file_path=self.history_file,
+        )
 
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
@@ -145,7 +195,7 @@ class TestMilestoneEventWiring(unittest.TestCase):
 
         mock_machine = MagicMock()
         mock_machine.daily_manager = self.dm
-        mock_machine.notification_port = self.mock_notifier
+        mock_machine.daily_pipeline_notifier = self.coordinator
         mock_machine.pop_and_next_town_subflow = MagicMock()
 
         handler = BulletinBoardHandler(machine=mock_machine)
@@ -160,8 +210,8 @@ class TestMilestoneEventWiring(unittest.TestCase):
         self.assertEqual(call_kwargs["title"], "Daily Claim Phase Completed")
         self.assertEqual(set(call_kwargs["fields"]["Quests Accepted"]), {"清除骷髏", "清除蜘蛛"})
 
-        # Assert recorded in DailyManager
-        self.assertFalse(self.dm.is_milestone_eligible("milestone1"))
+        # Assert recorded in coordinator history
+        self.assertFalse(self.coordinator.is_milestone_eligible("milestone1"))
 
         # Second completion does not notify again (idempotent)
         self.mock_notifier.reset_mock()
@@ -183,9 +233,17 @@ class TestMilestoneEventWiring(unittest.TestCase):
             notification_port=self.mock_notifier,
         )
         sm.daily_manager = self.dm
+        sm.daily_pipeline_notifier = self.coordinator
+        sm.config = {"name": "Tier 4 Loop (mix)"}
 
-        # Trigger milestone 2 helper
-        sm._notify_milestone2_if_eligible()
+        # Simulate quest scheduler complete
+        mock_scheduler = MagicMock()
+        mock_scheduler.is_all_completed.return_value = True
+        sm.quest_scheduler = mock_scheduler
+
+        # Trigger check_and_advance_quest_target
+        res = sm.check_and_advance_quest_target()
+        self.assertIsNone(res)
 
         # Assert called
         self.mock_notifier.notify_milestone.assert_called_once()
@@ -194,7 +252,7 @@ class TestMilestoneEventWiring(unittest.TestCase):
 
         # Second invocation does not notify again
         self.mock_notifier.reset_mock()
-        sm._notify_milestone2_if_eligible()
+        self.coordinator.on_bounty_quests_cleared()
         self.mock_notifier.notify_milestone.assert_not_called()
 
     def test_state_machine_step_triggers_deadline_alarm(self):
@@ -214,17 +272,16 @@ class TestMilestoneEventWiring(unittest.TestCase):
             notification_port=self.mock_notifier,
         )
         sm.daily_manager = self.dm
-        sm.config = {"name": "test_mode", "type": "mix"}
 
-        # Force deadline exceeded
-        self.dm.is_daily_claim_deadline_exceeded = MagicMock(return_value=True)
+        # Mock coordinator
+        mock_coordinator = MagicMock()
+        sm.daily_pipeline_notifier = mock_coordinator
+        sm.config = {"name": "test_mode", "type": "mix"}
 
         sm.step()
 
-        self.mock_notifier.notify_alarm.assert_called_once()
-        call_kwargs = self.mock_notifier.notify_alarm.call_args[1]
-        self.assertEqual(call_kwargs["code"], "DAILY_CLAIM_DEADLINE_EXCEEDED")
-        self.assertEqual(call_kwargs["title"], "Daily Claim Deadline Exceeded")
+        # Assert state_machine stepped and called check_daily_claim_deadline
+        mock_coordinator.check_daily_claim_deadline.assert_called_once()
 
 
 if __name__ == "__main__":
