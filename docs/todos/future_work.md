@@ -235,7 +235,7 @@
 
 ### 5. 🛡️ 戰鬥血條靜止卡死自癒 (Battle Stall Recovery)
 - [已完成並驗證] **設定 ➔ 重新開始戰鬥原地自癒機制**：
-  - 依據 [`battle_stall_recovery_spec.md`](battle_stall_recovery_spec.md)，由 [`BattleSession`](../../states/battle_session.py) 追蹤敵我血條特徵向量變化。
+  - 依據架構契約 [`battle_stall_recovery_contract.md`](../architecture/battle_stall_recovery_contract.md)，由 [`BattleSession`](../../states/battle_session.py) 追蹤敵我血條特徵向量變化。
   - 若連續 30 秒血條完全無進展判定為戰鬥死鎖，由 [`BattleHandler`](../../states/handlers/battle.py) 觸發「設定 ➔ 重新開始戰鬥」子流程原地自癒，無需重啟遊戲。
   - 包含上限 2 次原地重試保護；超過 2 次自動升級殺進程重開，並寫入 incident journal。
 
