@@ -32,13 +32,11 @@ dengeon同理
   抽英雄ok
   chest ok
   任務版 ok
-
+- [x] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([notification_contract.md](../features/notification/notification_contract.md))
 - [x] **Daily 模式退避進入 `COLLECT_ONLY` 後，地下城冷卻結束無法定時回歸** ([state_machine_bug.md](state_machine_bug.md))
   - 待機喚醒機制與型態判斷缺陷導致地下城冷卻就緒後無法自動喚醒復歸；已由 commit 8d4ce03、0626e03 搭配本次 fix/stamina-retreat-dungeon-resume 閉環驗證完成。
 - [x] **`COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
   - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡；地下城喚醒路由純潔化與冷卻復歸閉環已於 fix/stamina-retreat-dungeon-resume 完成。
-
-要讓我可以安心整天不用看的前提：
 - 核心契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md) (已完成雙軌解耦、獨立 bag_tidy 與後置條件驗證契約)
 - 長期架構 RFC：[模式與活動大一統規格書](activity_mode_consolidation_spec.md) (統一名詞為 ActivityPlan/Activity/Intent，徹底消除 Mode 與 Subflow 歷史割裂)
 - [x] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
@@ -73,7 +71,6 @@ dengeon同理
 ### Daily
 - [ ] fix boss bug (already created separate file fix_boss_bug.md)
 - [ ] fix diamond collect lag
-- [x] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([notification_contract.md](../features/notification/notification_contract.md))
 - [ ] 驗證橘紅雙點共存功能在daily正常
 - [ ] 基本上 我現在在逐漸重構成沒有while死等流程的方式,但當電腦或是遊戲本體較為卡頓的時候會導致腳本無效的推進流程(但之前while因為有等所以叫沒有觸發該問題) 要思考怎麼根本解決(所有流程都會遇到該問題) 
 - [ ] 不知道為何我已經在daily模式下 進入collect only 但他卻還可以跑到黃金古國(我tier4設定黃金古國 但是collectonly 下應該暫停 log在0912 8:50-52附近)
