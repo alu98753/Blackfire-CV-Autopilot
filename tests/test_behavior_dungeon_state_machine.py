@@ -214,6 +214,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         """
         self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.config["greedy_dungeon"] = True
+        self.state_machine.config["greedy_allowed_indices"] = [1, 2, 3, 4, 5, 6, 7]
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
@@ -227,7 +228,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         # 模擬 match_side_effect 用於大廳/尋路 (如果有比對的話)
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.40)
         nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
         nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
@@ -300,7 +301,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         # 模擬 match_side_effect 用於大廳/尋路
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.40)
         nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
         nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
@@ -365,7 +366,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         
         mock_exists.return_value = True
         self.mock_matcher.match.return_value = (None, 0.0)
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.40)
         nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
         nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
@@ -394,7 +395,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         self.state_machine.config["navigation_path"] = ["dungeons/Slime_entry.png"]
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         self.state_machine.dungeon_cooldowns = {}
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.40)
         nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
         nav_h.card_alignment_tab = "dungeon"
         self.mock_mouse.click.reset_mock()
@@ -627,7 +628,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         self.state_machine.config = config
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.40)
         nav_h = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
         nav_h.card_alignment_attempts = 7
         nav_h.card_alignment_tab = "dungeon"
@@ -820,6 +821,7 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         self.mock_mouse.click.assert_called_with(100, 100)
 
         # 情況 2: 所有地下城皆在冷卻中，在大廳匹配到 common/select_stage.png
+        self.state_machine._last_mix_tab_switch_time = 0.0
         num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))
         self.state_machine.dungeon_cooldowns = {i: time.time() + 1800 for i in range(1, num_dungeons + 1)}
         def mock_match_2(img, name, threshold=0.7, **kwargs):

@@ -90,7 +90,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         nav_handler = self.state_machine.handlers[self.state_machine.STATE_NAVIGATING]
         nav_handler.card_alignment_tab = "dungeon"
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.40)
         
         # Mock 視窗大小為 1000x800
         self.mock_capturer.get_window_rect.return_value = {
@@ -159,7 +159,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.mock_capturer.capture.return_value = img
         
         # 模擬 matcher 比對出地下城頁籤已開啟
-        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (False, True, 0.40, 0.95)
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (True, False, 0.95, 0.40)
         def match_side_effect(img_arg, templ, *args, **kwargs):
             if templ == "dungeons/dungeon_after.png":
                 return ((400, 100), 0.95)
@@ -412,6 +412,8 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.assertFalse(self.state_machine.has_available_dungeon())
         
         # --- 階段 6：地下城冷卻中，導向普通關卡 (select_stage.png) ---
+        self.state_machine._last_mix_tab_switch_time = 0.0
+        self.mock_mouse.click.reset_mock()
         self.mock_matcher.match.side_effect = lambda img, name, **kw: (
             ((530, 750), 0.95) if name == "common/select_stage.png" else (None, 0.0)
         )
@@ -425,6 +427,8 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.assertTrue(self.state_machine.has_available_dungeon())
         
         # --- 階段 8：返回大廳尋路時，自動點擊 dungeons/dungeon.png 切回地下城！ ---
+        self.state_machine._last_mix_tab_switch_time = 0.0
+        self.mock_mouse.click.reset_mock()
         self.mock_matcher.match.side_effect = lambda img, name, **kw: (
             ((650, 750), 0.95) if name == "dungeons/dungeon.png" else (None, 0.0)
         )
@@ -515,6 +519,7 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.assertTrue(self.state_machine.has_available_dungeon())
         
         # --- 階段 6：返抵大廳時，自動點擊 dungeons/dungeon.png 切回地下城！ ---
+        self.state_machine._last_mix_tab_switch_time = 0.0
         self.mock_matcher.match.side_effect = lambda img, name, **kw: (
             ((650, 750), 0.95) if name == "dungeons/dungeon.png" else (None, 0.0)
         )
