@@ -50,7 +50,7 @@ flowchart TD
 * **觸發時機**：[`QuestScheduler.is_all_completed()`](../../utils/quest_scheduler.py) 成立，`accepted_quests` 列表中所有項目均已討伐完成並移除，狀態機解除懸賞排程器，正式轉入 Tier 4（Transition to Tier 4 Steady-State Mode / Fallback Mode，如關卡刷怪、領地探索或體力耗盡進入 `collect_only` 待機）。
 * **通知訊息內容範例**：
   ```text
-  🎉 [AUTOMATION_HEALTHY] 告示牌任務全數清空，早晨日常 Completed！
+  🎉 [AUTOMATION_HEALTHY] 每日懸賞任務已全部完成
   • 時間: 08:42
   • 懸賞成果: 5/5 項任務已全部討伐完成
   • 當前狀態: 已轉入 Tier 4 Steady-State Mode
@@ -154,3 +154,36 @@ DailyManager / StateMachine
    - 網路異常、DNS 解析失敗或 Discord 伺服器錯誤時，僅記錄 `logging.warning`，**絕不反向阻礙遊戲畫面處理或主迴圈調度**。
 4. **憑證與隱私安全**：
    - Webhook URL 統一自環境變數 `DISCORD_WEBHOOK_URL` 或未被 Git 追蹤的本地設定讀取，嚴禁寫入任何追蹤之設定檔或腳本中。
+
+---
+
+## 六、 頻道生命週期管理：每日 07:00 歷史舊訊息定時清理契約 (Daily Channel Purge Contract at 07:00)
+
+為了在保障訊息到達時能確實觸發操作員客戶端之推播通知（Push Notification 與未讀提示），系統維持「發送獨立新訊息」而非「原位 PATCH 更新」之架構。同時，為避免長期運作下 Discord 頻道訊息無限積累，系統建立定時清理機制。
+
+### 1. 07:00 清理時間線 (Timeline)
+* **07:00 (前一日訊息清理線)**：系統於每日 07:00 執行舊訊息掃蕩，調用 Webhook DELETE API 清除所有前一日（或更早）所發布的訊息記錄。
+* **08:05 (當日日常重置線)**：頻道此時已維持乾淨狀態，Child Bot 跨入新循環，隨後產生的 Milestone 1 與 Milestone 2 將作為當日全新的專屬卡片展示。
+
+### 2. Message ID 捕獲與持久化契約
+* **發送端捕獲**：發送 Webhook 請求時附加 `?wait=true` 查詢參數。Discord 於回應成功時回傳帶有 Snowflake `id` 之 JSON 物件。`DiscordWebhookAdapter` 提取該 `message_id`。
+* **本地持久化儲存**：由 `DailyPipelineNotifier` 負責將 `{"id": message_id, "date": today_tag, "tag": tag}` 寫入各 Profile 專屬之 `user_data/<profile>/runtime/notification_history.json` 的 `dispatched_messages` 列表中。
+
+### 3. 清理執行與容錯規則
+* **定時判定**：當系統時間達到 `now_dt.time() >= time(7, 0)` 且 `last_cleanup_date != today_tag` 時觸發。
+* **目標過濾**：僅過濾出 `date < today_tag` 之歷史項目，當日所發之新通知絕不誤刪。
+* **API 調用**：對目標 `message_id` 發起 `DELETE https://discord.com/api/webhooks/<id>/<token>/messages/<message_id>`。
+* **404 容錯**：若目標訊息已遭操作員手動刪除，Discord 回應 `404 Not Found`，系統將其視為有效清除，直接自本地列表中剔除，不拋出異常。
+* **網絡異常重試**：若遭遇網絡斷線或超時，該 ID 保留於列表中，待下次巡檢時重試。
+* **當日冪等性**：清理流程執行完畢後更新 `last_cleanup_date = today_tag`，保證單日內不重複進行全量清理。
+
+---
+
+## 七、 多語言支援規格 (Notification i18n Specification)
+
+系統支援通知訊息多語言切換，由獨立模組 [`runtime/notification_i18n.py`](../../runtime/notification_i18n.py) 集中維護文本字典：
+* **支援語系**：繁體中文 (`zh-TW`，預設) 與英文 (`en`)。
+* **配置階層**：全域設定於 `config/defaults.toml` 的 `[notification] language`，支援各角色於 `user_data/<profile>/config.toml` 獨立覆寫。
+* **Fail-Fast 啟動阻斷**：當設定檔傳入未知或非法的語言代碼時，系統於初始化階段直接拋出 `ValueError`，明確阻斷啟動以防止靜默錯誤。
+* **未來擴充**：簡體中文 (`zh-CN`)、日文 (`ja`)、韓文 (`ko`) 納入待辦清單追蹤。
+
