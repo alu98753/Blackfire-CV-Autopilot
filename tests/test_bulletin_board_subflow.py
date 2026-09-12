@@ -6,6 +6,8 @@ from states.handlers.bulletin_board import BulletinBoardHandler
 from states.state_machine import GameStateMachine
 from config import GAME_CONFIGS
 
+from utils.town_building_detector import BuildingCheckResult
+
 class TestBulletinBoardSubflow(unittest.TestCase):
     def setUp(self):
         self.mock_capturer = MagicMock()
@@ -23,8 +25,9 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         )
         self.state_machine.daily_manager = self.mock_daily_manager
 
+    @patch('utils.town_building_detector.detect_building_with_red_dot')
     @patch('os.path.exists')
-    def test_bulletin_board_full_accept_and_quit_flow(self, mock_exists):
+    def test_bulletin_board_full_accept_and_quit_flow(self, mock_exists, mock_detect_red_dot):
         """
         測試懸賞告示牌完整流程：
         1. 城鎮點擊告示牌 ➔ WAIT_BOARD_OPEN
@@ -38,6 +41,10 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         9. ALL_DONE_EXITING 寫入 DailyManager accepted_quests 欄位並切換佇列
         """
         mock_exists.return_value = True
+        mock_detect_red_dot.side_effect = [
+            BuildingCheckResult(found_building=True, has_red_dot=True),
+            BuildingCheckResult(found_building=True, has_red_dot=False)
+        ]
         self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
         self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
         self.state_machine.need_bulletin_board = True
@@ -280,9 +287,11 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.mock_mouse.click.assert_called_once_with(400, 400)
         self.assertEqual(handler.step_phase, "EXIT_BOARD")
 
+    @patch('utils.town_building_detector.detect_building_with_red_dot')
     @patch('os.path.exists', return_value=True)
-    def test_bulletin_board_exit_with_red_dot_still_present(self, mock_exists):
+    def test_bulletin_board_exit_with_red_dot_still_present(self, mock_exists, mock_detect_red_dot):
         """測試：退出後在城鎮再次檢查紅點 (有檢查到紅點 ➔ 判定未完成接取，不標記 completed_today)"""
+        mock_detect_red_dot.return_value = BuildingCheckResult(found_building=True, has_red_dot=True)
         self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
         self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
         handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
