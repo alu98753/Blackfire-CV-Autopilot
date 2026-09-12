@@ -67,7 +67,7 @@ class TestNotificationPort(unittest.TestCase):
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
-        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/test/dummy")
+        adapter = DiscordWebhookAdapter(webhook_url="https://discord.com/api/webhooks/test/dummy", language="en")
         result = adapter.notify_alarm(
             code="CRASH_LIMIT_EXCEEDED",
             title="Supervisor Crash Loop",
@@ -114,8 +114,7 @@ class TestNotificationPort(unittest.TestCase):
         url = resolve_webhook_url()
         self.assertEqual(url, "https://discord.com/env-webhook")
 
-    @patch.dict(os.environ, {}, clear=True)
-    def test_get_notifier_returns_null_when_unconfigured(self):
+    def test_get_notifier_returns_null_when_no_webhook(self):
         with patch("runtime.notifier.resolve_webhook_url", return_value=None):
             notifier = get_notifier()
             self.assertIsInstance(notifier, NullNotifier)
@@ -125,20 +124,19 @@ class TestNotificationPort(unittest.TestCase):
             notifier = get_notifier()
             self.assertIsInstance(notifier, DiscordWebhookAdapter)
 
-    @patch("runtime.notifier.DiscordWebhookAdapter.notify_milestone", return_value=True)
-    @patch("runtime.notifier.DiscordWebhookAdapter.notify_alarm", return_value=True)
-    def test_send_test_notifications_success(self, mock_alarm, mock_milestone):
+    @patch("runtime.notifier._safe_print")
+    def test_send_test_notifications_dry_run_success(self, _mock_print):
         result = send_test_notifications(
             webhook_url="https://discord.com/test",
             test_type="all",
+            live=False,
         )
         self.assertTrue(result)
-        mock_milestone.assert_called_once()
-        mock_alarm.assert_called_once()
 
-    def test_send_test_notifications_unconfigured(self):
+    @patch("runtime.notifier._safe_print")
+    def test_send_test_notifications_unconfigured_live_fails(self, _mock_print):
         with patch("runtime.notifier.resolve_webhook_url", return_value=None):
-            result = send_test_notifications(webhook_url="", profile=None)
+            result = send_test_notifications(webhook_url="", profile=None, live=True)
             self.assertFalse(result)
 
 

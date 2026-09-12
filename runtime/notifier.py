@@ -72,9 +72,22 @@ class NullNotifier(NotificationPort):
 class DiscordWebhookAdapter(NotificationPort):
     """Outbound adapter delivering domain notifications to Discord via webhook."""
 
-    def __init__(self, webhook_url: str, timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> None:
+    def __init__(
+        self,
+        webhook_url: str,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        profile: str | None = None,
+        language: str | None = None,
+    ) -> None:
         self.webhook_url = webhook_url.strip()
-        self.timeout_seconds = max(1.0, float(timeout_seconds))
+        self.timeout_seconds = max(0.5, float(timeout_seconds))
+        self.profile = profile
+        if language is not None:
+            from runtime.notification_i18n import normalize_language
+            self.language = normalize_language(language)
+        else:
+            from config import get_notification_language
+            self.language = get_notification_language(profile=self.profile)
 
     def notify_milestone(
         self,
@@ -82,13 +95,16 @@ class DiscordWebhookAdapter(NotificationPort):
         description: str,
         fields: Mapping[str, Any] | None = None,
         sync: bool = False,
+        footer_text: str | None = None,
     ) -> bool:
+        from runtime.notification_i18n import MESSAGES
+        footer = footer_text or MESSAGES[self.language]["footer_healthy"]
         embed = self._build_embed(
             title=f"✅ {title}",
             description=description,
             color=DISCORD_COLOR_MILESTONE,
             fields=fields,
-            footer_text="Blackfire Crusade • Automation Healthy",
+            footer_text=footer,
         )
         return self._dispatch(embed, sync=sync)
 
@@ -99,17 +115,25 @@ class DiscordWebhookAdapter(NotificationPort):
         reason: str,
         details: Mapping[str, Any] | None = None,
         sync: bool = False,
+        description: str | None = None,
+        footer_text: str | None = None,
     ) -> bool:
+        from runtime.notification_i18n import MESSAGES
+        msg = MESSAGES[self.language]
         merged_details = dict(details or {})
-        merged_details["Alarm Code"] = code
-        merged_details["Reason"] = reason
+        code_key = msg["field_alarm_code"]
+        reason_key = msg["field_reason"]
+        if code_key not in merged_details and "Alarm Code" not in merged_details:
+            merged_details[code_key] = code
+        if reason_key not in merged_details and "Reason" not in merged_details:
+            merged_details[reason_key] = reason
 
         embed = self._build_embed(
             title=f"🚨 {title}",
-            description="Automatic recovery exhausted. Manual intervention required.",
+            description=description or msg["common_alarm_desc"],
             color=DISCORD_COLOR_ALARM,
             fields=merged_details,
-            footer_text="Blackfire Crusade • Operator Action Required",
+            footer_text=footer_text or msg["footer_alarm"],
         )
         return self._dispatch(embed, sync=sync)
 
@@ -224,8 +248,13 @@ def build_milestone_payload(
     title: str,
     description: str,
     fields: Mapping[str, Any] | None = None,
+    footer_text: str | None = None,
+    language: str | None = None,
 ) -> dict[str, Any]:
     """Pure function constructing an AUTOMATION_HEALTHY Discord embed payload."""
+    from runtime.notification_i18n import MESSAGES, normalize_language
+    lang = normalize_language(language) if language else "zh-TW"
+    footer = footer_text or MESSAGES[lang]["footer_healthy"]
     embed_fields: list[dict[str, Any]] = []
     if fields:
         for k, v in fields.items():
@@ -240,7 +269,7 @@ def build_milestone_payload(
                 "color": DISCORD_COLOR_MILESTONE,
                 "fields": embed_fields,
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "footer": {"text": "Blackfire Crusade • Automation Healthy"},
+                "footer": {"text": footer},
             }
         ]
     }
@@ -251,11 +280,21 @@ def build_alarm_payload(
     title: str,
     reason: str,
     details: Mapping[str, Any] | None = None,
+    description: str | None = None,
+    footer_text: str | None = None,
+    language: str | None = None,
 ) -> dict[str, Any]:
     """Pure function constructing an OPERATOR_ACTION_REQUIRED Discord embed payload."""
+    from runtime.notification_i18n import MESSAGES, normalize_language
+    lang = normalize_language(language) if language else "zh-TW"
+    msg = MESSAGES[lang]
     merged_details = dict(details or {})
-    merged_details["Alarm Code"] = code
-    merged_details["Reason"] = reason
+    code_key = msg["field_alarm_code"]
+    reason_key = msg["field_reason"]
+    if code_key not in merged_details and "Alarm Code" not in merged_details:
+        merged_details[code_key] = code
+    if reason_key not in merged_details and "Reason" not in merged_details:
+        merged_details[reason_key] = reason
 
     embed_fields: list[dict[str, Any]] = []
     for k, v in merged_details.items():
@@ -266,14 +305,22 @@ def build_alarm_payload(
         "embeds": [
             {
                 "title": f"🚨 {title}",
-                "description": "Automatic recovery exhausted. Manual intervention required.",
+                "description": description or msg["common_alarm_desc"],
                 "color": DISCORD_COLOR_ALARM,
                 "fields": embed_fields,
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "footer": {"text": "Blackfire Crusade • Operator Action Required"},
+                "footer": {"text": footer_text or msg["footer_alarm"]},
             }
         ]
     }
+
+
+def _safe_print(text: str = "") -> None:
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        encoding = sys.stdout.encoding or "ascii"
+        print(text.encode(encoding, errors="replace").decode(encoding))
 
 
 def send_test_notifications(
@@ -307,96 +354,117 @@ def send_test_notifications(
     except Exception:
         pass
 
+    from config import get_notification_language
+    from runtime.notification_i18n import (
+        format_daily_claim_deadline_alarm,
+        format_milestone1,
+        format_milestone2,
+        format_subflow_status,
+        format_supervisor_crash_alarm,
+    )
+
+    url = webhook_url or resolve_webhook_url(profile)
+    prof = profile or "test_preview"
+    lang = get_notification_language(profile)
+
+    now_dt = datetime.now()
     targets: list[tuple[str, dict[str, Any]]] = []
 
-    if test_type in ("all", "milestone", "milestone1"):
+    if test_type in ["all", "milestone", "milestone1"]:
+        m1_title, m1_desc, m1_fields, m1_footer = format_milestone1(
+            profile=prof,
+            accepted_quests=["[Daily] Clear 20 Skeletons", "[Daily] Clear 15 Spiders"],
+            subflow_statuses=[
+                format_subflow_status("chest", True, language=lang),
+                format_subflow_status("hero_draw", True, language=lang),
+                format_subflow_status("blood_altar", True, language=lang),
+                format_subflow_status("jewelry_workshop", True, language=lang),
+                format_subflow_status("bulletin_board", True, language=lang),
+            ],
+            language=lang,
+            now_dt=now_dt,
+        )
         payload = build_milestone_payload(
-            title="Daily Claim Phase Completed",
-            description="All town daily claim subflows completed; bulletin board bounty quests accepted.",
-            fields={
-                "Timestamp": now_str,
-                "Profile": profile or "default",
-                "Quests Accepted": accepted_quests,
-                "Town Subflows": town_subflows_summary,
-            },
+            title=m1_title,
+            description=m1_desc,
+            fields=m1_fields,
+            footer_text=m1_footer,
+            language=lang,
         )
-        targets.append(("Milestone 1: Daily Claim Phase Completed", payload))
+        targets.append((f"Milestone 1: {m1_title}", payload))
 
-    if test_type in ("all", "milestone", "milestone2"):
+    if test_type in ["all", "milestone", "milestone2"]:
+        m2_title, m2_desc, m2_fields, m2_footer = format_milestone2(
+            profile=prof,
+            fallback_mode="Tier 4 Loop (mix)",
+            language=lang,
+            now_dt=now_dt,
+            cleared_count=4,
+            cleared_quests=["Clear 20 Skeletons", "Clear 15 Spiders", "Dungeon 4", "Dungeon 2"],
+        )
         payload = build_milestone_payload(
-            title="Bounty Quests Cleared",
-            description="All accepted bounty quests completed. Bot transitioning to steady-state mode.",
-            fields={
-                "Timestamp": now_str,
-                "Profile": profile or "default",
-                "Cleared Quests Count": len(accepted_quests),
-                "Cleared Quests": accepted_quests,
-                "Next Target": "Tier 4 Loop (mix)",
-            },
+            title=m2_title,
+            description=m2_desc,
+            fields=m2_fields,
+            footer_text=m2_footer,
+            language=lang,
         )
-        targets.append(("Milestone 2: Bounty Quests Cleared", payload))
+        targets.append((f"Milestone 2: {m2_title}", payload))
 
-    if test_type in ("all", "alarm"):
-        payload = build_alarm_payload(
-            code="SUPERVISOR_CRASH_LOOP_EXCEEDED",
-            title="Supervisor Crash Loop Exceeded",
-            reason="Supervisor exceeded 5 restarts within sliding window (600s).",
-            details={
-                "Timestamp": now_str,
-                "Profile": profile or "default",
-                "Restarts in Window": "5 / 5",
-                "Window Duration": "10.0 minutes",
-            },
+    if test_type in ["all", "alarm", "deadline"]:
+        d_title, d_reason, d_details, d_desc, d_footer = format_daily_claim_deadline_alarm(
+            profile=prof,
+            deadline_minutes=30,
+            pending_subflows=["bulletin_board"],
+            current_state="STATE_NAVIGATING",
+            language=lang,
+            now_dt=now_dt,
         )
-        targets.append(("Alarm: Supervisor Crash Loop Exceeded", payload))
-
-    if test_type in ("all", "deadline"):
         payload = build_alarm_payload(
             code="DAILY_CLAIM_DEADLINE_EXCEEDED",
-            title="Daily Claim Deadline Exceeded",
-            reason="Daily claim phase not completed within 30 minutes after 08:05 reset.",
-            details={
-                "Timestamp": now_str,
-                "Profile": profile or "default",
-                "Pending Subflows": "jewelry_workshop, bulletin_board",
-            },
+            title=d_title,
+            reason=d_reason,
+            details=d_details,
+            description=d_desc,
+            footer_text=d_footer,
+            language=lang,
         )
-        targets.append(("Alarm: Daily Claim Deadline Exceeded", payload))
+        targets.append((f"Alarm: {d_title}", payload))
 
     if not live:
-        print("\n" + "=" * 65)
-        print("🔍 [DRY-RUN PREVIEW] Discord Webhook Notification Payload (No Network Sent)")
-        print("💡 Hint: Pass '--live' to perform actual HTTP POST to Discord.")
-        print(f"📡 Webhook URL Status: {'Configured (' + url[:30] + '...)' if url else 'NOT CONFIGURED'}")
-        print("=" * 65)
+        _safe_print("\n" + "=" * 65)
+        _safe_print("[DRY-RUN PREVIEW] Discord Webhook Notification Payload (No Network Sent)")
+        _safe_print("Hint: Pass '--live' to perform actual HTTP POST to Discord.")
+        _safe_print(f"Webhook URL Status: {'Configured (' + url[:30] + '...)' if url else 'NOT CONFIGURED'}")
+        _safe_print("=" * 65)
         for label, payload in targets:
-            print(f"\n--- [{label}] ---")
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
-        print("=" * 65 + "\n")
+            _safe_print(f"\n--- [{label}] ---")
+            _safe_print(json.dumps(payload, ensure_ascii=False, indent=2))
+        _safe_print("=" * 65 + "\n")
         return True
 
     # --- LIVE SENDING MODE ---
     if not url:
-        print("\n❌ [ERROR] DISCORD_WEBHOOK_URL is required for live send.")
-        print("   Please set DISCORD_WEBHOOK_URL in environment or configure it in TOML.\n")
+        _safe_print("\n[ERROR] DISCORD_WEBHOOK_URL is required for live send.")
+        _safe_print("   Please set DISCORD_WEBHOOK_URL in environment or configure it in TOML.\n")
         return False
 
-    print("\n" + "=" * 65)
-    print(f"🚀 [LIVE SEND] Dispatching {len(targets)} notification(s) to Discord...")
-    print(f"📡 Webhook URL: {url[:35]}...")
-    print("=" * 65)
+    _safe_print("\n" + "=" * 65)
+    _safe_print(f"[LIVE SEND] Dispatching {len(targets)} notification(s) to Discord...")
+    _safe_print(f"Webhook URL: {url[:35]}...")
+    _safe_print("=" * 65)
 
-    notifier = DiscordWebhookAdapter(webhook_url=url)
+    notifier = DiscordWebhookAdapter(webhook_url=url, language=lang)
     all_success = True
     for label, payload in targets:
-        print(f"[*] Posting [{label}]...")
+        _safe_print(f"[*] Posting [{label}]...")
         ok = notifier._post_payload(payload)
-        status_text = "✅ SUCCESS" if ok else "❌ FAILED"
-        print(f"    Delivery: {status_text}")
+        status_text = "SUCCESS" if ok else "FAILED"
+        _safe_print(f"    Delivery: {status_text}")
         if not ok:
             all_success = False
 
-    print("=" * 65 + "\n")
+    _safe_print("=" * 65 + "\n")
     return all_success
 
 

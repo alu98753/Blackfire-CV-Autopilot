@@ -343,17 +343,26 @@ def supervise(
                     len(tracker.restart_timestamps),
                     tracker.t_window / 60.0,
                 )
+                from config import get_notification_language
+                from runtime.notification_i18n import format_supervisor_crash_alarm
+                lang = get_notification_language(profile=profile)
+                title, reason, details, desc, footer = format_supervisor_crash_alarm(
+                    profile=profile,
+                    restarts=len(tracker.restart_timestamps),
+                    max_restarts=tracker.max_restarts,
+                    window_duration_str=f"{tracker.t_window / 60.0:.1f}m",
+                    window_seconds=tracker.t_window,
+                    language=lang,
+                )
+                details["Last Termination Reason"] = final_reason
+                details["Session ID"] = session_id
                 notifier.notify_alarm(
                     code="SUPERVISOR_CRASH_LOOP_EXCEEDED",
-                    title="Supervisor Crash Loop Exceeded",
-                    reason=f"Exceeded {len(tracker.restart_timestamps)} restarts within {tracker.t_window / 60.0:.1f} minutes. Unrecoverable failure.",
-                    details={
-                        "Profile": profile,
-                        "Restarts in Window": len(tracker.restart_timestamps),
-                        "Window Duration": f"{tracker.t_window / 60.0:.1f}m",
-                        "Last Termination Reason": final_reason,
-                        "Session ID": session_id,
-                    },
+                    title=title,
+                    reason=reason,
+                    details=details,
+                    description=desc,
+                    footer_text=footer,
                     sync=True,
                 )
 

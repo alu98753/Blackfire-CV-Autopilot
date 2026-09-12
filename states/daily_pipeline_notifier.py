@@ -31,11 +31,19 @@ class DailyPipelineNotifier:
         profile: str | None = None,
         deadline_minutes: int = 30,
         history_file_path: str | None = None,
+        language: str | None = None,
     ) -> None:
         self.notification_port: NotificationPort = notification_port or NullNotifier()
         self.daily_manager = daily_manager
         self.profile = normalize_profile(profile)
         self.deadline_minutes = max(1, int(deadline_minutes))
+
+        if language is not None:
+            from runtime.notification_i18n import normalize_language
+            self.language = normalize_language(language)
+        else:
+            from config import get_notification_language
+            self.language = get_notification_language(profile=self.profile)
 
         if history_file_path:
             self.history_file = history_file_path
@@ -110,24 +118,27 @@ class DailyPipelineNotifier:
                 "bulletin_board", {}
             ).get("accepted_quests", [])
 
+        from runtime.notification_i18n import format_milestone1, format_subflow_status
         sf_statuses = []
         for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
             done = self.daily_manager.is_subflow_completed(sf) if hasattr(self.daily_manager, "is_subflow_completed") else False
-            sf_statuses.append(f"{sf}({'✓' if done else '✗'})")
+            sf_statuses.append(format_subflow_status(sf, done, language=self.language))
 
-        now_str = (now_dt or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+        title, description, fields, footer = format_milestone1(
+            profile=self.profile,
+            accepted_quests=accepted_quests,
+            subflow_statuses=sf_statuses,
+            language=self.language,
+            now_dt=now_dt,
+        )
         res = self.notification_port.notify_milestone(
-            title="Daily Claim Phase Completed",
-            description="All town daily claim subflows completed; bulletin board bounty quests accepted.",
-            fields={
-                "Timestamp": now_str,
-                "Profile": self.profile,
-                "Quests Accepted": accepted_quests,
-                "Town Subflows": ", ".join(sf_statuses),
-            },
+            title=title,
+            description=description,
+            fields=fields,
+            footer_text=footer,
         )
         self.record_milestone_notified("milestone1", now_dt)
-        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 1 (Daily Claim Phase Completed) 通知！")
+        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 1 (%s) 通知！", title)
         return res
 
     def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> bool:
@@ -137,19 +148,21 @@ class DailyPipelineNotifier:
         if not self.is_milestone_eligible("milestone2", now_dt):
             return False
 
-        now_str = (now_dt or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+        from runtime.notification_i18n import format_milestone2
+        title, description, fields, footer = format_milestone2(
+            profile=self.profile,
+            fallback_mode=fallback_mode,
+            language=self.language,
+            now_dt=now_dt,
+        )
         res = self.notification_port.notify_milestone(
-            title="Bounty Quests Cleared",
-            description="All accepted bounty quests completed. Bot transitioning to steady-state mode.",
-            fields={
-                "Timestamp": now_str,
-                "Profile": self.profile,
-                "Status": "All accepted quests completed",
-                "Next Target": fallback_mode,
-            },
+            title=title,
+            description=description,
+            fields=fields,
+            footer_text=footer,
         )
         self.record_milestone_notified("milestone2", now_dt)
-        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 2 (Bounty Quests Cleared) 通知！")
+        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 2 (%s) 通知！", title)
         return res
 
     def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> bool:
@@ -185,17 +198,22 @@ class DailyPipelineNotifier:
         if hasattr(self.daily_manager, "get_pending_tier1_subflows"):
             pending_subflows = self.daily_manager.get_pending_tier1_subflows()
 
-        now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+        from runtime.notification_i18n import format_daily_claim_deadline_alarm
+        title, reason, details, desc, footer = format_daily_claim_deadline_alarm(
+            profile=self.profile,
+            deadline_minutes=self.deadline_minutes,
+            pending_subflows=pending_subflows,
+            current_state=current_state,
+            language=self.language,
+            now_dt=now_dt,
+        )
         res = self.notification_port.notify_alarm(
             code="DAILY_CLAIM_DEADLINE_EXCEEDED",
-            title="Daily Claim Deadline Exceeded",
-            reason=f"Daily claim phase not completed within {self.deadline_minutes} minutes after 08:05 reset.",
-            details={
-                "Timestamp": now_str,
-                "Profile": self.profile,
-                "Pending Subflows": ", ".join(pending_subflows) or "Unknown",
-                "Current State": current_state,
-            },
+            title=title,
+            reason=reason,
+            details=details,
+            description=desc,
+            footer_text=footer,
         )
         self.record_milestone_notified("deadline_alarm", now_dt)
         logging.error("🚨 [DailyPipelineNotifier] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
@@ -211,6 +229,7 @@ class NullDailyPipelineNotifier(DailyPipelineNotifier):
         self.profile = "null"
         self.deadline_minutes = 30
         self.history = {}
+        self.language = "zh-TW"
 
     def get_current_reset_tag(self, now_dt: datetime | None = None) -> str:
         return ""

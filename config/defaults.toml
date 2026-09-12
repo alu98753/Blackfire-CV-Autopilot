@@ -18,6 +18,8 @@ log_level = "INFO" # 終端機日誌顯示等級: "DEBUG", "INFO", "WARNING", "E
 log_retention_days = 7 # 每日日誌檔案保留天數 (超過 7 天自動清理)
 
 [notification]
+language = "zh-TW" # 通知語言: "zh-TW" (繁體中文) 或 "en" (英文)
+
 [notification.discord]
 enabled = true
 webhook_url = "" # 可於環境變數 DISCORD_WEBHOOK_URL 或 user_data/<profile>/config.toml 覆蓋
