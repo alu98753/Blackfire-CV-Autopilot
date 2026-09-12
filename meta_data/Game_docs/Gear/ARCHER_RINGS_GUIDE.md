@@ -120,3 +120,9 @@ graph LR
 | **光輝艾麗娜 (`hero_knight_5`)** | 前排聖光護盾坦 | **`ring_golem_runic`** (符文魔像戒) | **`ring_blood_altar_3`** | 雙物理抗性大幅減少前期被秒機率；後期轉血之祭壇 5 生命戒指極限撐血。 |
 | **阿斯卡 (`hero_knight_askar`)** | 神聖裁決/免沉默坦 | **`ring_golem_runic`** | **`ring_abyssbeast`** | 四生命 + 物理抗性 + 魔法抗性，結合阿斯卡天生免沉默，打造永不倒下的終極鋼鐵之軀。 |
 
+---
+
+## 🔗 相關裝備與養成指南
+* **武器與副手**：[遊俠頂級神兵與箭筒指南 (深海鰭翼 & 霜羽誓鋼箭筒)](ARCHER_WEAPONS_GUIDE.md)
+* **防具中甲**：[弓箭手中甲套裝深度對比：古獸 vs 蠻荒](ARCHER_SETS_COMPARISON.md)
+
