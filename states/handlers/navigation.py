@@ -1043,7 +1043,8 @@ class NavigationHandler(BaseStateHandler):
         # routes. They must not turn a single-route quest into a mix route.
         is_managed_daily = (
             self.machine.is_daily_pipeline_active()
-            and self.machine.config.get("type") != "mix"
+            and self.machine.config.get("name") != "混合模式"
+            and getattr(self.machine, "runtime_config_key", None) != "mix"
         )
         is_tier4_fallback = bool(self.machine.config.get("is_tier4_fallback", False))
         allow_mix_tab_switching = (not is_managed_daily) or is_tier4_fallback
