@@ -1,6 +1,6 @@
 # Notification System & Standalone Testing Guide 📢
 
-本文件說明本專案六角架構通知系統 ([`runtime/notifier.py`](../../../runtime/notifier.py)) 的配置方式、架構設計以及免啟動遊戲的獨立實體測試方法。
+本文件說明本專案六角架構通知系統 ([`ports/notification_port.py`](../../../ports/notification_port.py) 與 [`runtime/discord_webhook_adapter.py`](../../../runtime/discord_webhook_adapter.py)) 的配置方式、架構設計以及免啟動遊戲的獨立實體測試方法。
 
 ---
 
@@ -59,7 +59,7 @@
 若想跳過 Profile 讀取，直接測試特定 Webhook URL：
 
 ```powershell
-.venv\Scripts\python -m runtime.notifier --url "https://discord.com/api/webhooks/..." --type milestone1 --live
+.venv\Scripts\python -m tools.notifier_cli --url "https://discord.com/api/webhooks/..." --type milestone1 --live
 ```
 
 ---

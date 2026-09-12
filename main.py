@@ -41,7 +41,7 @@ def main():
         profile_name = normalize_profile(resolve_profile_name(args, ""))
         from config import set_active_profile
         set_active_profile(profile_name)
-        from runtime.notifier import send_test_notifications
+        from tools.notifier_cli import send_test_notifications
         ok = send_test_notifications(
             profile=profile_name,
             test_type=args.test_notify,

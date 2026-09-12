@@ -19,10 +19,10 @@ from runtime.incident_journal import (
     SCHEDULED_MAINTENANCE,
     explicit_profile_from_command,
     new_session_id,
-    read_child_termination,
-    write_incident,
+    append_incident_event,
+    normalize_profile,
 )
-from runtime.notifier_factory import get_notifier
+from runtime.notifier_factory import create_notification_port
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -204,7 +204,7 @@ def supervise(
         relaunch_buffer_seconds=float(sup_cfg["relaunch_buffer_seconds"]),
         watchdog_timeout=watchdog_timeout,
     )
-    notifier = get_notifier(profile=profile)
+    notifier = create_notification_port(profile=profile)
     launch_command = list(command)
     maintenance_state_path = daily_restart_state_path(heartbeat_path)
     supervisor_started_at = datetime.now()

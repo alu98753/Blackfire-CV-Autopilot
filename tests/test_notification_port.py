@@ -17,8 +17,8 @@ from ports.notification_port import (
     NotificationResult,
     NullNotifier,
 )
-from runtime.discord_webhook_adapter import DiscordWebhookAdapter
-from runtime.notifier_factory import get_notifier, resolve_webhook_url
+from runtime.discord_webhook_adapter import DiscordWebhookAdapter, inject_query_param
+from runtime.notifier_factory import create_notification_port, resolve_webhook_url
 from tools.notifier_cli import send_test_notifications
 
 
@@ -35,17 +35,16 @@ class TestNotificationPort(unittest.TestCase):
         self.assertEqual(del_res.error, "NullNotifier")
 
     def test_inject_query_param(self):
-        from runtime.notifier import _inject_query_param
         self.assertEqual(
-            _inject_query_param("https://discord.com/api/webhooks/123", "wait", "true"),
+            inject_query_param("https://discord.com/api/webhooks/123", "wait", "true"),
             "https://discord.com/api/webhooks/123?wait=true",
         )
         self.assertEqual(
-            _inject_query_param("https://discord.com/api/webhooks/123?thread_id=456", "wait", "true"),
+            inject_query_param("https://discord.com/api/webhooks/123?thread_id=456", "wait", "true"),
             "https://discord.com/api/webhooks/123?thread_id=456&wait=true",
         )
         self.assertEqual(
-            _inject_query_param("https://discord.com/api/webhooks/123?wait=false", "wait", "true"),
+            inject_query_param("https://discord.com/api/webhooks/123?wait=false", "wait", "true"),
             "https://discord.com/api/webhooks/123?wait=true",
         )
 
@@ -207,14 +206,14 @@ class TestNotificationPort(unittest.TestCase):
         url = resolve_webhook_url()
         self.assertEqual(url, "https://discord.com/env-webhook")
 
-    def test_get_notifier_returns_null_when_no_webhook(self):
+    def test_create_notification_port_returns_null_when_no_webhook(self):
         with patch("runtime.notifier_factory.resolve_webhook_url", return_value=None):
-            notifier = get_notifier()
+            notifier = create_notification_port()
             self.assertIsInstance(notifier, NullNotifier)
 
-    def test_get_notifier_returns_adapter_when_configured(self):
+    def test_create_notification_port_returns_adapter_when_configured(self):
         with patch("runtime.notifier_factory.resolve_webhook_url", return_value="https://discord.com/test"):
-            notifier = get_notifier()
+            notifier = create_notification_port()
             self.assertIsInstance(notifier, DiscordWebhookAdapter)
 
     def test_json_notification_history_store_roundtrip(self):

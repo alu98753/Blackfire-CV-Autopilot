@@ -50,6 +50,3 @@ def create_notification_history_store(
     """Instantiate and return the JsonNotificationHistoryStore."""
     return JsonNotificationHistoryStore(profile=profile, history_file_path=history_file_path)
 
-
-# Backward-compatible alias
-get_notifier = create_notification_port

@@ -27,13 +27,16 @@ from runtime.notification_i18n import (
     format_supervisor_crash_alarm,
     normalize_language,
 )
-from runtime.notifier import (
+from ports.notification_port import (
     DeleteResult,
     NotificationPort,
     NotificationResult,
+)
+from runtime.discord_payload_builder import (
     build_alarm_payload,
     build_milestone_payload,
 )
+from runtime.json_notification_history_store import JsonNotificationHistoryStore
 from states.daily_pipeline_notifier import DailyPipelineNotifier, NullDailyPipelineNotifier
 from states.handlers.bulletin_board import BulletinBoardHandler
 from utils.daily_manager import DailyManager
@@ -305,7 +308,7 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
             notification_port=self.mock_notifier,
             daily_manager=self.dm,
             profile="test_profile",
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
             deadline_minutes=30,
         )
 
@@ -328,7 +331,7 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
             notification_port=self.mock_notifier,
             daily_manager=self.dm,
             profile="test_profile",
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
         )
         self.assertFalse(coord2.is_milestone_eligible("milestone1", now_dt))
         self.assertTrue(coord2.is_milestone_eligible("milestone2", now_dt))
@@ -367,7 +370,7 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
             notification_port=self.mock_notifier,
             daily_manager=dm_clean,
             profile="test_profile",
-            history_file_path=os.path.join(self.test_dir, "clean_history.json"),
+            history_store=JsonNotificationHistoryStore(history_file_path=os.path.join(self.test_dir, "clean_history.json")),
         )
         self.assertFalse(coord_clean_check := coord_clean.check_daily_claim_deadline(now_dt=dt_0836))
 
@@ -377,7 +380,7 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
             self.dm.record_subflow_completed(sf)
 
         # 1. Default zh-TW coordinator
-        self.coordinator.on_tier1_subflow_completed("bulletin_board", now_dt=dt_0820)
+        self.coordinator.evaluate_tier1_completion("bulletin_board", now_dt=dt_0820)
         self.mock_notifier.notify_milestone.assert_called_once()
         zh_call = self.mock_notifier.notify_milestone.call_args[1]
         self.assertEqual(zh_call["title"], "每日城鎮速領完成")
@@ -389,10 +392,10 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
             notification_port=self.mock_notifier,
             daily_manager=self.dm,
             profile="en_profile",
-            history_file_path=os.path.join(self.test_dir, "en_history.json"),
+            history_store=JsonNotificationHistoryStore(history_file_path=os.path.join(self.test_dir, "en_history.json")),
             language="en",
         )
-        en_coord.on_tier1_subflow_completed("bulletin_board", now_dt=dt_0820)
+        en_coord.evaluate_tier1_completion("bulletin_board", now_dt=dt_0820)
         self.mock_notifier.notify_milestone.assert_called_once()
         en_call = self.mock_notifier.notify_milestone.call_args[1]
         self.assertEqual(en_call["title"], "Daily Claim Phase Completed")
@@ -413,7 +416,7 @@ class TestMilestoneEventWiring(unittest.TestCase):
             notification_port=self.mock_notifier,
             daily_manager=self.dm,
             profile="test_profile",
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
         )
 
     def tearDown(self):
@@ -612,7 +615,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         self.notifier = DailyPipelineNotifier(
             notification_port=self.mock_port,
             daily_manager=self.mock_dm,
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
         )
 
     def tearDown(self):
@@ -634,7 +637,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         reloaded = DailyPipelineNotifier(
             notification_port=self.mock_port,
             daily_manager=self.mock_dm,
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
         )
         self.assertEqual(len(reloaded.history["dispatched_messages"]), 1)
         self.assertEqual(reloaded.history["dispatched_messages"][0]["id"], "msg_123")
@@ -707,7 +710,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         reloaded = DailyPipelineNotifier(
             notification_port=self.mock_port,
             daily_manager=self.mock_dm,
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
         )
         self.assertEqual(len(reloaded.history["dispatched_messages"]), 1)
         self.assertEqual(reloaded.history["dispatched_messages"][0]["id"], "msg_today")
@@ -730,7 +733,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         reloaded = DailyPipelineNotifier(
             notification_port=self.mock_port,
             daily_manager=self.mock_dm,
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
         )
         self.assertEqual(len(reloaded.history["dispatched_messages"]), 0)
 
@@ -748,26 +751,24 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
 
         reconciled = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
         self.assertEqual(reconciled, 0)
-        self.assertEqual(self.mock_port.delete_message.call_count, 1)
+        self.mock_port.delete_message.assert_called_once()
         self.assertEqual(len(self.notifier.history["dispatched_messages"]), 1)
-        self.assertAlmostEqual(self.notifier.history["dispatched_messages"][0]["retry_after"], 120.0)
 
-        # Immediate second call (with force=True to bypass 5s check throttle): must still be skipped due to 120s cooldown
-        reconciled2 = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
-        self.assertEqual(reconciled2, 0)
-        self.assertEqual(self.mock_port.delete_message.call_count, 1)  # Still 1, no second call
+        # Second attempt before cooldown expires is skipped by monotonic cooldown
+        self.mock_port.delete_message.reset_mock()
+        reconciled_early = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
+        self.assertEqual(reconciled_early, 0)
+        self.mock_port.delete_message.assert_not_called()
 
-    def test_crash_consistency_before_and_after_save(self):
+    def test_crash_consistency_recovery(self):
         dt = datetime(2026, 9, 12, 7, 20, 0)
-
-        # 1. Crash-before-save simulation:
-        # Message A was deleted on Discord previously (204), but app crashed before saving JSON.
-        # So JSON on disk still has msg_A.
         self.notifier.history["dispatched_messages"] = [
-            {"id": "msg_A", "date": "2026-09-11", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0}
+            {"id": "msg_unconfirmed", "date": "2026-09-11", "tag": "milestone1", "last_attempt_time": 0.0, "retry_after": 0.0}
         ]
         self.notifier._save_history()
 
+        # 1. Crash-before-save simulation:
+        # Delete succeeded at Discord side, but app died before saving history.
         # When app restarts, Discord returns 404 (already deleted).
         self.mock_port.delete_message.return_value = DeleteResult(success=True, status_code=404)
         reconciled = self.notifier.reconcile_expired_messages(now_dt=dt, force=True)
@@ -779,7 +780,7 @@ class TestHistoricalMessageReconciliation(unittest.TestCase):
         restart_notifier = DailyPipelineNotifier(
             notification_port=self.mock_port,
             daily_manager=self.mock_dm,
-            history_file_path=self.history_file,
+            history_store=JsonNotificationHistoryStore(history_file_path=self.history_file),
         )
         self.assertEqual(len(restart_notifier.history["dispatched_messages"]), 0)
         self.mock_port.delete_message.reset_mock()

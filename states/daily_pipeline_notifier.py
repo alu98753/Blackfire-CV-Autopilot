@@ -38,22 +38,16 @@ class DailyPipelineNotifier:
         reconciliation_service: DailyReconciliationService | None = None,
         language: str | None = None,
         check_interval_seconds: float = 600.0,
-        history_file_path: str | None = None,  # Backward compatibility
     ) -> None:
         self.notification_port: NotificationPort = notification_port or NullNotifier()
         self.daily_manager = daily_manager
         self.profile = (profile or "native").strip()
         self.deadline_minutes = max(1, int(deadline_minutes))
 
-        # Setup history store
-        if history_store is not None:
-            self.history_store = history_store
-        elif history_file_path:
-            from runtime.json_notification_history_store import JsonNotificationHistoryStore
-            self.history_store = JsonNotificationHistoryStore(history_file_path=history_file_path)
-        else:
-            from runtime.notifier_factory import create_notification_history_store
-            self.history_store = create_notification_history_store(profile=self.profile)
+        # Setup history store (pure dependency injection, default to in-memory store)
+        self.history_store: NotificationHistoryPort = (
+            history_store if history_store is not None else InMemoryNotificationHistoryStore()
+        )
 
         # Setup reconciliation service
         if reconciliation_service is not None:
@@ -182,9 +176,6 @@ class DailyPipelineNotifier:
         self.record_milestone_notified("milestone1", now_dt)
         logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 1 (%s) 通知！", title)
         return res
-
-    # Backward-compatible alias
-    on_tier1_subflow_completed = evaluate_tier1_completion
 
     def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> Any:
         """Dispatch Milestone 2 when all bounty quests have been cleared and state machine switches to Tier 4."""
