@@ -159,7 +159,7 @@
 
 ### 7. 🔄 長期掛機定期安全重啟服務 (Periodic Process & Game Restart Service)
 
-- [x] **已完成並驗證**：本項目已由多進程 Supervisor S1~S7 生命週期重啟矩陣完整實現（參見 [已解決項目第 6 節](#6-🔄-長期掛機定期安全重啟服務-supervisor-s1s7-restart-matrix) 與 PARS 故事 [`supervisor_lifecycle_game_restart_matrix_story.md`](../storys/supervisor_lifecycle_game_restart_matrix_story.md)）。
+- [x] **已完成並驗證**：本項目已由多進程 Supervisor S1~S7 生命週期重啟矩陣完整實現（參見架構規範 [`supervisor_lifecycle_contract.md`](../architecture/supervisor_lifecycle_contract.md)、[已解決項目第 6 節](#6-🔄-長期掛機定期安全重啟服務-supervisor-s1s7-restart-matrix) 與 PARS 故事 [`supervisor_lifecycle_game_restart_matrix_story.md`](../storys/supervisor_lifecycle_game_restart_matrix_story.md)）。
 
 ---
 
@@ -246,7 +246,7 @@
   - S4 (執行期卡死)：Watchdog 觸發重構後的 `GameRelaunchSubflow`。
   - S5 (Python 例外崩潰) 與 S6 (Ctrl+C)：快速秒級 Attach，無損接續進度。
   - S7 (手動退出 `Ctrl+Shift+Q`)：優雅退出 Supervisor 且不重啟遊戲。
-  - 詳見 PARS 故事 [`supervisor_lifecycle_game_restart_matrix_story.md`](../storys/supervisor_lifecycle_game_restart_matrix_story.md) 與單元測試 [`tests/test_behavior_supervisor_lifecycle.py`](../../tests/test_behavior_supervisor_lifecycle.py)。
+  - 詳見架構規範 [`supervisor_lifecycle_contract.md`](../architecture/supervisor_lifecycle_contract.md)、PARS 故事 [`supervisor_lifecycle_game_restart_matrix_story.md`](../storys/supervisor_lifecycle_game_restart_matrix_story.md) 與單元測試 [`tests/test_behavior_supervisor_lifecycle.py`](../../tests/test_behavior_supervisor_lifecycle.py)。
 
 ### 7. 📜 執行期事件日誌持久化 (Runtime Incident Journaling)
 - [已完成並驗證] **Profile 隔離的結構化異常事件持久化**：
