@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import GAME_CONFIGS
 from states.state_machine import GameStateMachine
+from utils.dungeon_catalog import DungeonCatalog
 
 from tests._legacy_state_machine_test_support import StateMachineLogicTestCase
 
@@ -214,7 +215,9 @@ class TestDungeonStateMachine(StateMachineLogicTestCase):
         """
         self.state_machine.config = GAME_CONFIGS["dungeon"].copy()
         self.state_machine.config["greedy_dungeon"] = True
-        self.state_machine.config["greedy_allowed_indices"] = [1, 2, 3, 4, 5, 6, 7]
+        self.state_machine.config["greedy_allowed_indices"] = DungeonCatalog.get_all_indices(
+            self.state_machine.config.get("dungeon_names")
+        )
         self.state_machine.enable_bread = False
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
         num_dungeons = len(self.state_machine.config.get("dungeon_entries", []))

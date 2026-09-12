@@ -83,6 +83,17 @@ class DungeonCatalog:
         return None
 
     @classmethod
+    def get_all_indices(cls, custom_names: Sequence[str] | None = None) -> list[int]:
+        """Return all 1-based dungeon indices dynamically derived from configured dungeon count [1..N]."""
+        names = cls._resolve_names(custom_names)
+        return list(range(1, len(names) + 1))
+
+    @classmethod
+    def get_count(cls, custom_names: Sequence[str] | None = None) -> int:
+        """Return total count of configured dungeons."""
+        return len(cls._resolve_names(custom_names))
+
+    @classmethod
     def is_valid_index(
         cls,
         idx: Any,

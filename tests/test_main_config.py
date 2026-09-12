@@ -179,5 +179,32 @@ class TestMainConfig(unittest.TestCase):
         self.assertEqual(config["stage_entry"], "stages/level1_sky_plains.png")
         self.assertEqual(config["stage_target"], "stages/boss_skull.png")
 
+    def test_dynamic_dungeon_indices_and_normalize_defaults(self):
+        """驗證 get_all_dungeon_indices 與 normalize_config 自動補齊 greedy_allowed_indices"""
+        from config import get_all_dungeon_indices, normalize_config
+        from utils.dungeon_catalog import DungeonCatalog
+
+        # 1. 驗證 get_all_dungeon_indices 回傳與 DungeonCatalog.get_all_indices 一致
+        indices = get_all_dungeon_indices()
+        self.assertEqual(indices, DungeonCatalog.get_all_indices())
+
+        # 2. 驗證 normalize_config 當 greedy_dungeon=True 且未指定 greedy_allowed_indices 時自動填滿
+        raw_cfg = {
+            "type": "dungeon",
+            "greedy_dungeon": True,
+            "dungeon_names": ["A", "B", "C"],
+        }
+        normalized = normalize_config(raw_cfg)
+        self.assertEqual(normalized["greedy_allowed_indices"], [1, 2, 3])
+
+        # 3. 驗證若已有指定，則保留使用者的指定
+        raw_cfg_with_subset = {
+            "type": "dungeon",
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [1, 3],
+        }
+        normalized_subset = normalize_config(raw_cfg_with_subset)
+        self.assertEqual(normalized_subset["greedy_allowed_indices"], [1, 3])
+
 if __name__ == "__main__":
     unittest.main()

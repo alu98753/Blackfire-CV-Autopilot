@@ -237,6 +237,13 @@ DUNGEON_NAMES = _SETTINGS["catalog"]["dungeon_names"]
 DUNGEON_ENTRY_TEMPLATES = _SETTINGS["catalog"]["dungeon_entry_templates"]
 STAGE_TEMPLATES = _SETTINGS["catalog"]["stage_templates"]
 
+
+def get_all_dungeon_indices() -> list[int]:
+    """Return dynamic list of 1-based dungeon indices derived from defaults TOML catalog."""
+    from utils.dungeon_catalog import DungeonCatalog
+    return DungeonCatalog.get_all_indices(DUNGEON_NAMES)
+
+
 TASK_BANNER_OCR_OFFSET = _SETTINGS["ocr"]["task_banner"]
 BULLETIN_BOARD_OCR_OFFSET = _SETTINGS["ocr"]["bulletin_board"]
 MERCHANT_GOLD_OCR_ROI = _SETTINGS["ocr"]["merchant_gold"]
@@ -397,6 +404,13 @@ def normalize_config(config):
             cfg[activity_key] = (mode_type == "domain" and cfg.get("domain") == "golden_empire")
         else:
             cfg[activity_key] = default_value
+
+    if cfg.get("greedy_dungeon", False):
+        if cfg.get("greedy_allowed_indices") is None:
+            from utils.dungeon_catalog import DungeonCatalog
+            d_names = cfg.get("dungeon_names", DUNGEON_NAMES)
+            cfg["greedy_allowed_indices"] = DungeonCatalog.get_all_indices(custom_names=d_names)
+
     return cfg
 
 

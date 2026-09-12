@@ -79,17 +79,9 @@ class TaskNode:
         若傳入 base_config，自動傳承其中的裝備品質與獻祭偏好 (keep_colors, disassemble_colors, sacrifice_settings, backend_mode 等)。
         並自動透過 normalize_config 規範化各項全域活動開關 (如 enable_stage_farming, enable_dungeon)。
         """
-        from config import PRIMARY_MODES, normalize_config
-        dungeon_entries = [
-            "dungeons/Slime_entry.png",
-            "dungeons/Ghost_entry.png",
-            "dungeons/Forest_entry.png",
-            "dungeons/Ruins_entry.png",
-            "dungeons/dark_prison.png",
-            "dungeons/Ice_entry.png",
-            "dungeons/orc_bunker.png"
-        ]
-        dungeon_names = ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"]
+        from config import PRIMARY_MODES, normalize_config, DUNGEON_ENTRY_TEMPLATES, DUNGEON_NAMES
+        dungeon_entries = list(DUNGEON_ENTRY_TEMPLATES)
+        dungeon_names = list(DUNGEON_NAMES)
 
 
         stage_entries = {
