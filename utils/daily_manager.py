@@ -742,6 +742,34 @@ class DailyManager:
         sf = self.status.get("subflows", {}).get(subflow_key, {})
         return sf.get("completed_today", False)
 
+    def is_tier1_daily_claim_completed(self) -> bool:
+        """
+        檢查 Tier 1 城鎮速領 (chest, hero_draw, blood_altar, jewelry_workshop, bulletin_board)
+        是否皆已標記為 completed_today=True。
+        """
+        from config import SUBFLOW_CONFIGS
+        for key in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            flow_cfg = SUBFLOW_CONFIGS.get(key, {})
+            if not flow_cfg.get("enabled", True):
+                continue
+            if not self.is_subflow_completed(key):
+                return False
+        return True
+
+    def get_pending_tier1_subflows(self) -> list[str]:
+        """
+        取得尚未完成的 Tier 1 子流程名稱清單。
+        """
+        from config import SUBFLOW_CONFIGS
+        pending = []
+        for key in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            flow_cfg = SUBFLOW_CONFIGS.get(key, {})
+            if not flow_cfg.get("enabled", True):
+                continue
+            if not self.is_subflow_completed(key):
+                pending.append(key)
+        return pending
+
     def record_subflow_completed(self, subflow_key, now_ts=None, extra_data=None):
         """
         記錄通用子流程 (如 chest, hero_draw 等) 今日已完成。

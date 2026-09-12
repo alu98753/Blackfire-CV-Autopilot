@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
+from runtime.crash_tracker import CrashLoopTracker
 from runtime.heartbeat import DEFAULT_HEARTBEAT_PATH
 from runtime.incident_journal import (
     CRASH,
@@ -21,12 +22,19 @@ from runtime.incident_journal import (
     read_child_termination,
     write_incident,
 )
+from runtime.notifier_factory import create_notification_port
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 MANUAL_EXIT_CODE = 75
 MANUAL_RESTART_EXIT_CODE = 42
 DEFAULT_DAILY_RESTART_HOUR = 8
+
+
+def load_supervisor_config(profile: str | None = None) -> dict[str, float | int]:
+    """Load supervisor watchdog settings with defaults fallback."""
+    from config import get_supervisor_settings
+    return get_supervisor_settings(profile=profile)
 
 
 def heartbeat_age_seconds(path: Path, now: float | None = None) -> float:
@@ -179,7 +187,7 @@ def _stop_child(child: subprocess.Popen, timeout_seconds: float = 10.0) -> None:
 def supervise(
     command: Sequence[str],
     heartbeat_path: Path,
-    timeout_seconds: float = 180.0,
+    timeout_seconds: float | None = None,
     daily_restart_hour: int | None = DEFAULT_DAILY_RESTART_HOUR,
 ) -> int:
     if not command:
@@ -189,15 +197,24 @@ def supervise(
     if profile is None:
         raise ValueError("A supervised bot command must include an explicit '--profile <name>'.")
 
-    restart_count = 0
+    sup_cfg = load_supervisor_config(profile)
+    watchdog_timeout = float(timeout_seconds) if timeout_seconds is not None else float(sup_cfg["watchdog_timeout"])
+    tracker = CrashLoopTracker(
+        max_restarts=int(sup_cfg["max_restarts"]),
+        relaunch_buffer_seconds=float(sup_cfg["relaunch_buffer_seconds"]),
+        watchdog_timeout=watchdog_timeout,
+    )
+    notifier = create_notification_port(profile=profile)
     launch_command = list(command)
     maintenance_state_path = daily_restart_state_path(heartbeat_path)
     supervisor_started_at = datetime.now()
+
     while True:
         started_at = time.time()
         session_id = new_session_id()
         child_command = prepare_child_command(launch_command, session_id)
         termination_reason: str | None = None
+        recovery_acknowledged = False
         try:
             heartbeat_path.unlink(missing_ok=True)
         except OSError:
@@ -214,8 +231,6 @@ def supervise(
                         daily_restart_is_eligible(supervisor_started_at, local_now, daily_restart_hour)
                         and daily_restart_is_due(local_now, last_restart_date, daily_restart_hour)
                     ):
-                        # Persist first: watchdog recovery after a failed child restart must not
-                        # produce a second maintenance restart on the same calendar day.
                         if record_scheduled_restart(maintenance_state_path, local_now):
                             scheduled_restart = True
                             termination_reason = "daily_scheduled_restart"
@@ -237,13 +252,10 @@ def supervise(
                         logging.error(
                             "[Supervisor] Daily restart state could not be persisted; postponing maintenance restart."
                         )
-                # A previous run's heartbeat must never be allowed to kill a
-                # freshly created process, even if deleting it was unavailable.
+
                 current_heartbeat = heartbeat_is_current(heartbeat_path, started_at)
                 age = heartbeat_age_seconds(heartbeat_path) if current_heartbeat else time.time() - started_at
-                # The first launch legitimately pauses for the user's CLI choices.
-                # Restarted launches include --resume and use the normal liveness limit.
-                allowed_age = max(timeout_seconds, 600.0) if restart_count == 0 and "--resume" not in launch_command else timeout_seconds
+                allowed_age = max(watchdog_timeout, 600.0) if tracker.restart_count == 0 and "--resume" not in launch_command else watchdog_timeout
                 if age > allowed_age:
                     termination_reason = "heartbeat_stale"
                     last_heartbeat = read_heartbeat(heartbeat_path)
@@ -262,10 +274,15 @@ def supervise(
                     logging.error("[Supervisor] Heartbeat stale for %.1fs; terminating bot for recovery.", age)
                     _stop_child(child)
                     break
+
+                if not recovery_acknowledged and current_heartbeat:
+                    uptime = time.time() - started_at
+                    latest_hb = read_heartbeat(heartbeat_path)
+                    if tracker.check_stabilized(uptime, latest_hb.get("state")):
+                        recovery_acknowledged = True
+
                 time.sleep(5.0)
         except KeyboardInterrupt:
-            # Ctrl+C is treated as clean supervisor shutdown by user in console.
-            # Fast restart is exclusively handled by Ctrl+Q in game/terminal.
             logging.info("[Supervisor] KeyboardInterrupt (Ctrl+C) received; stopping supervisor and terminating bot.")
             _stop_child(child)
             return 0
@@ -283,6 +300,7 @@ def supervise(
             )
             logging.info("[Supervisor] Manual exit hotkey received; stopping supervisor.")
             return 0
+
         child_pid = getattr(child, "pid", None)
         expected_pid = child_pid if isinstance(child_pid, int) else None
         handoff = read_child_termination(profile, expected_pid)
@@ -306,6 +324,7 @@ def supervise(
                     "last_heartbeat": last_heartbeat.get("timestamp"),
                 },
             )
+
         manual_restart = is_manual_restart(exit_code)
         need_restart_game = scheduled_restart or (termination_reason == "heartbeat_stale")
         launch_command = prepare_resume_command(
@@ -313,14 +332,47 @@ def supervise(
             read_heartbeat(heartbeat_path),
             restart_game=need_restart_game,
         )
-        restart_count = 0 if (scheduled_restart or manual_restart) else restart_count + 1
-        delay = 0.0 if manual_restart else min(60.0, 2.0 ** min(restart_count, 5))
+
+        if scheduled_restart or manual_restart:
+            tracker.record_clean_restart()
+        else:
+            final_reason = termination_reason or fallback_reason or f"exit_code_{exit_code}"
+            if tracker.record_failure():
+                logging.error(
+                    "[Supervisor] 🚨 Crash loop exceeded (%d restarts in %.1fm); operator action required!",
+                    len(tracker.restart_timestamps),
+                    tracker.t_window / 60.0,
+                )
+                from config import get_notification_language
+                from runtime.notification_i18n import format_supervisor_crash_alarm
+                lang = get_notification_language(profile=profile)
+                title, reason, details, desc, footer = format_supervisor_crash_alarm(
+                    profile=profile,
+                    restarts=len(tracker.restart_timestamps),
+                    max_restarts=tracker.max_restarts,
+                    window_duration_str=f"{tracker.t_window / 60.0:.1f}m",
+                    window_seconds=tracker.t_window,
+                    language=lang,
+                )
+                details["Last Termination Reason"] = final_reason
+                details["Session ID"] = session_id
+                notifier.notify_alarm(
+                    code="SUPERVISOR_CRASH_LOOP_EXCEEDED",
+                    title=title,
+                    reason=reason,
+                    details=details,
+                    description=desc,
+                    footer_text=footer,
+                    sync=True,
+                )
+
+        delay = 0.0 if manual_restart else min(60.0, 2.0 ** min(tracker.restart_count, 5))
         if scheduled_restart:
             logging.warning("[Supervisor] Daily maintenance restart prepared; restarting in %.0fs.", delay)
         elif manual_restart:
             logging.warning("[Supervisor] Manual restart requested via Ctrl+Q; restarting immediately with saved settings.")
         else:
-            logging.warning("[Supervisor] Bot exited (%s); restart #%d in %.0fs.", exit_code, restart_count, delay)
+            logging.warning("[Supervisor] Bot exited (%s); restart #%d in %.0fs.", exit_code, tracker.restart_count, delay)
         if delay > 0:
             time.sleep(delay)
 
@@ -328,7 +380,7 @@ def supervise(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the game bot under a liveness supervisor.")
     parser.add_argument("--heartbeat", type=Path, default=DEFAULT_HEARTBEAT_PATH)
-    parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument("--timeout", type=float, default=None, help="Watchdog timeout seconds (default from TOML [supervisor])")
     parser.add_argument(
         "--daily-restart-hour",
         type=int,

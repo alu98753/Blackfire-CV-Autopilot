@@ -157,8 +157,36 @@ def init_state_machine_system(args, config, target_hwnd=None):
     mouse = MouseController(human_like=True, backend_mode=args.backend, window_title=args.title,
                             capturer=capturer, hwnd=target_hwnd)
 
-    # 初始化狀態機
-    state_machine = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
+    profile_name = resolve_profile_name(args, getattr(args, "title", ""))
+    daily_manager = DailyManager(profile=profile_name)
+    logging.info(f"📂 [DailyManager] 成功綁定角色狀態檔: user_data/{profile_name}/daily_status.json")
+    from runtime.notifier_factory import create_notification_history_store, create_notification_port
+    notification_port = create_notification_port(profile=profile_name)
+    history_store = create_notification_history_store(profile=profile_name)
+
+    from states.daily_reconciliation import DailyReconciliationService
+    reconciliation_service = DailyReconciliationService(
+        notification_port=notification_port,
+        history_store=history_store,
+    )
+    from states.daily_pipeline_notifier import DailyPipelineNotifier
+    daily_pipeline_notifier = DailyPipelineNotifier(
+        notification_port=notification_port,
+        daily_manager=daily_manager,
+        history_store=history_store,
+        reconciliation_service=reconciliation_service,
+        profile=profile_name,
+    )
+
+    # 初始化狀態機 (Constructor Injection)
+    state_machine = GameStateMachine(
+        capturer=capturer,
+        matcher=matcher,
+        mouse=mouse,
+        notification_port=notification_port,
+        daily_pipeline_notifier=daily_pipeline_notifier,
+    )
+    state_machine.daily_manager = daily_manager
     state_machine.backend_mode = args.backend
     state_machine.window_title = args.title
     state_machine.target_hwnd = target_hwnd
@@ -178,10 +206,6 @@ def init_state_machine_system(args, config, target_hwnd=None):
         args.subflow[0] if getattr(args, "subflow", None) else args.mode,
         config,
     )
-    profile_name = resolve_profile_name(args, getattr(args, "title", ""))
-    daily_manager = DailyManager(profile=profile_name)
-    logging.info(f"📂 [DailyManager] 成功綁定角色狀態檔: user_data/{profile_name}/daily_status.json")
-    state_machine.daily_manager = daily_manager
 
     # 若使用 --subflow 發起 Dev 階段獨立測試
     if hasattr(args, "subflow") and args.subflow:

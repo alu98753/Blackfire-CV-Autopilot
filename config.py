@@ -79,6 +79,15 @@ TIER4_DOMAIN_OPTIONS = (
 )
 TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.35
 TOWN_BUILDING_BRIGHTNESS_THRESHOLD = 0.35
+
+# Supervisor 外部監控看門狗預設常數 (SSOT: config/defaults.toml [supervisor])
+DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT: float = 90.0
+DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS: float = 30.0
+DEFAULT_SUPERVISOR_MAX_RESTARTS: int = 5
+
+# 通知語言預設常數 (SSOT: config/defaults.toml [notification])
+DEFAULT_NOTIFICATION_LANGUAGE: str = "zh-TW"
+
 CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
@@ -114,6 +123,10 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("subflow_configs",),
     ("backpack_full", "destroy_goods"),
     ("base_stage_levels",),
+    ("supervisor", "watchdog_timeout"),
+    ("supervisor", "relaunch_buffer_seconds"),
+    ("supervisor", "max_restarts"),
+    ("notification", "language"),
 )
 
 
@@ -129,6 +142,11 @@ def _validate_defaults_snapshot(settings: dict) -> None:
                 dotted_path = ".".join(path)
                 raise ValueError(f"config/defaults.toml 缺少必要設定: {dotted_path}")
             value = value[key]
+
+    notif_lang = settings.get("notification", {}).get("language")
+    if notif_lang is not None:
+        from runtime.notification_i18n import normalize_language
+        normalize_language(notif_lang)
 
 
 _DEFAULTS_MANAGER = TomlConfigManager(
@@ -473,6 +491,42 @@ def set_active_profile(profile: str) -> None:
         profile_path = get_profile_config_path(_ACTIVE_PROFILE)
         if profile_path.exists():
             logging.info(f"⚙️ [ProfileConfig] 成功套用角色專屬覆蓋配置: user_data/{_ACTIVE_PROFILE}/config.toml")
+
+
+def get_supervisor_settings(profile: str | None = None) -> dict[str, float | int]:
+    """Return supervisor watchdog and crash-loop settings from profile or global defaults TOML."""
+    sup_cfg = {}
+    if profile:
+        profile_path = get_profile_config_path(profile)
+        if profile_path.exists():
+            manager = TomlConfigManager(profile_path, default={})
+            sup_cfg = manager.snapshot().get("supervisor", {})
+    defaults_sup = get_defaults_config().get("supervisor", {})
+    return {
+        "watchdog_timeout": float(sup_cfg.get("watchdog_timeout", defaults_sup.get("watchdog_timeout", DEFAULT_SUPERVISOR_WATCHDOG_TIMEOUT))),
+        "relaunch_buffer_seconds": float(sup_cfg.get("relaunch_buffer_seconds", defaults_sup.get("relaunch_buffer_seconds", DEFAULT_SUPERVISOR_RELAUNCH_BUFFER_SECONDS))),
+        "max_restarts": int(sup_cfg.get("max_restarts", defaults_sup.get("max_restarts", DEFAULT_SUPERVISOR_MAX_RESTARTS))),
+    }
+
+
+def get_notification_language(profile: str | None = None) -> str:
+    """Return normalized notification language ('zh-TW' or 'en') for the active or specified profile.
+
+    Raises:
+        ValueError: If configured language is unsupported (Fail-Fast at startup).
+    """
+    from runtime.notification_i18n import normalize_language
+    if profile:
+        profile_path = get_profile_config_path(profile)
+        if profile_path.exists():
+            manager = TomlConfigManager(profile_path, default={})
+            snap = manager.snapshot()
+            notif_cfg = snap.get("notification", {})
+            if "language" in notif_cfg:
+                return normalize_language(notif_cfg["language"])
+    notif_cfg = get_defaults_config().get("notification", {})
+    lang = notif_cfg.get("language", DEFAULT_NOTIFICATION_LANGUAGE)
+    return normalize_language(lang)
 
 
 def update_profile_config(profile: str | None = None, updates: dict | None = None) -> Path:

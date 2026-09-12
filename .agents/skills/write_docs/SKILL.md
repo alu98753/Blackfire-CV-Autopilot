@@ -231,7 +231,68 @@ Natural writing does not need artificial excitement.
 
 ---
 
-## 9. Prefer continuous prose
+## 9. Use engineering terminology in technical documents
+
+For technical specifications, architecture documents, RFCs, contracts, and TODOs,
+prefer established software-engineering terminology over product copy, slogans,
+or ad-hoc metaphors.
+
+### Prefer operationally precise names
+
+Names should describe the actual system concept, state, responsibility, or mechanism.
+
+Prefer:
+
+- `Milestone Notification`
+- `Operator Action Required`
+- `Recovery Policy`
+- `Event Ownership`
+- `Completion Handoff`
+- `Steady-State Mode`
+
+Avoid inventing expressive labels such as:
+
+- 安心通報
+- 人工介入求救
+- 責任交割
+- 圓滿完成
+- 發射權
+
+unless the phrase is explicitly user-facing product copy.
+
+### Do not replace established SWE terms merely because they are metaphorical
+
+Terms such as `heartbeat`, `watchdog`, `health check`, `self-healing`,
+`supervisor`, and `handshake` are established engineering vocabulary and are allowed.
+
+The rule is:
+
+TECHNICAL NAME = PRECISE + CONVENTIONAL + CONSISTENT
+
+not:
+
+TECHNICAL NAME = LITERALLY NON-METAPHORICAL
+
+### Keep user-facing language separate from system terminology
+
+A specification may contain natural-language notification examples,
+but those phrases must not automatically become architecture names,
+event identifiers, states, or interface names.
+
+Example:
+
+User-facing text:
+"今天的日常已完成，可以不用查看遊戲。"
+
+System terminology:
+`DAILY_MILESTONE_COMPLETED`
+
+Do not derive:
+`SAFE_TO_IGNORE_CONTRACT`
+or
+`安心責任交割事件`.
+
+## 10. Prefer continuous prose
 
 Default to short, cohesive paragraphs.
 
@@ -248,7 +309,7 @@ For a simple Q&A, one or two paragraphs may be enough.
 
 ---
 
-## 10. Final evidence audit
+## 11. Final evidence audit
 
 Before producing the final text, silently inspect every meaningful claim:
 

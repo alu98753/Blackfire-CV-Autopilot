@@ -9,7 +9,8 @@ def resolve_profile_name(args, target_title: str = "") -> str:
 
     target = str(getattr(args, "target", "") or "").strip().lower()
     sandbox_targets = {"sandbox", "sandboxed", "box", "sb", "2"}
-    if target in sandbox_targets or "[#]" in target_title:
+    title_str = target_title or ""
+    if target in sandbox_targets or "[#]" in title_str:
         return "sandbox"
     return "native"
 

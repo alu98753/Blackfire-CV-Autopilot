@@ -32,13 +32,11 @@ dengeon同理
   抽英雄ok
   chest ok
   任務版 ok
-
+- [x] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([notification_contract.md](../features/notification/notification_contract.md))
 - [x] **Daily 模式退避進入 `COLLECT_ONLY` 後，地下城冷卻結束無法定時回歸** ([state_machine_bug.md](state_machine_bug.md))
   - 待機喚醒機制與型態判斷缺陷導致地下城冷卻就緒後無法自動喚醒復歸；已由 commit 8d4ce03、0626e03 搭配本次 fix/stamina-retreat-dungeon-resume 閉環驗證完成。
 - [x] **`COLLECT_ONLY` 期間定時領完體力竟擅自跑去打 Tier 4 關卡** ([collect_only_bug.md](collect_only_bug.md))
   - 退避待機期間領完體力應回城鎮等待，不應破壞待機節奏偷跑去刷關卡；地下城喚醒路由純潔化與冷卻復歸閉環已於 fix/stamina-retreat-dungeon-resume 完成。
-
-要讓我可以安心整天不用看的前提：
 - 核心契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md) (已完成雙軌解耦、獨立 bag_tidy 與後置條件驗證契約)
 - 長期架構 RFC：[模式與活動大一統規格書](activity_mode_consolidation_spec.md) (統一名詞為 ActivityPlan/Activity/Intent，徹底消除 Mode 與 Subflow 歷史割裂)
 - [x] **1. 背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死** ([bag_jewelry_workshop_bug.md](bag_jewelry_workshop_bug.md))
@@ -73,7 +71,6 @@ dengeon同理
 ### Daily
 - [ ] fix boss bug (already created separate file fix_boss_bug.md)
 - [ ] fix diamond collect lag
-- [ ] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([feat-daily-status-notifier.md](feat-daily-status-notifier.md))
 - [ ] 驗證橘紅雙點共存功能在daily正常
 - [ ] 基本上 我現在在逐漸重構成沒有while死等流程的方式,但當電腦或是遊戲本體較為卡頓的時候會導致腳本無效的推進流程(但之前while因為有等所以叫沒有觸發該問題) 要思考怎麼根本解決(所有流程都會遇到該問題) 
 - [ ] 不知道為何我已經在daily模式下 進入collect only 但他卻還可以跑到黃金古國(我tier4設定黃金古國 但是collectonly 下應該暫停 log在0912 8:50-52附近)
@@ -84,7 +81,8 @@ dengeon同理
   - demon 的石頭如果不夠目前會怎麼做？假設黃色的沒了會都用紫色的？需要考慮加入去商店買材料（順便買競技場門票）的功能。
 - [ ] 釐清 Daily Complete 與 Defer 的判斷依據
   - daily complete 的條件寫好了，那現在 defer 判斷的依據有哪些？
-
+- [ ] feat-auto-king-core 現在在背包會有王核 我提供圖片 然後他應該可以在每天做完任務沒事情的時候(要定義何時)去把他打完,然後背包滿了就分解(記得暫時設定為傳奇等級以上) 並且全部打完後 去珠寶店賣東西
+- [ ] **通知訊息多語言擴充 (Notification i18n Expansion)**: 目前已支援繁體中文 (`zh-TW`) 與英文 (`en`)；未來規劃支援簡體中文 (`zh-CN`)、日文 (`ja`)、韓文 (`ko`)。
 ### 商店
 
 - [ ] **10. 珠寶店商人金幣耗盡防護與通知**
@@ -144,15 +142,8 @@ dengeon同理
 ### DEV
 
 - [ ] RFC: 測試跑太慢且while部分不符合BDI架構 (docs/todos/test_redundent.md)
-  
 
-### 1. 🔔 異常暫停與中斷即時通知 (Discord / LINE Webhook Notification)
-- **需求背景**：當腳本在長掛機或黃金古國領地探索中進入手動暫停（Manual Pause）、觸發 Watchdog 卡死救援、或體力耗盡轉入退避模式時，能夠第一時間通報使用者。
-- **規劃方向**：
-  - 在 `config.py` 或 TOML 設定中增加 Webhook URL 配置。
-  - 於 `GameStateMachine` 觸發暫停、異常重開與模式切換時，非同步發送訊息至 Discord 頻道或 LINE Notify。
-
-### 2. 📦 分析如何變現
+### 📦 分析如何變現
 - **需求背景**：評估未來是否封裝為獨立 `.exe`、GUI 介面或 Web 儀表板，降低無 Python 環境用戶的使用門檻。
 - **規劃方向**：
   - 現階段專注於掛機穩定性與核心邏輯完善；後續評估 PyInstaller / Nuitka 打包或 Electron / Tauri 介面封裝。
@@ -176,9 +167,11 @@ dengeon同理
 ### 5. ⚡ 沙盒環境 (Sandboxie-Plus) 運行延遲分析 (Sandbox Performance Analysis)
 - **需求背景**：觀察到在 Sandboxie 沙盒實例中運行的腳本，反應速度與幀率相較原生主機實例有微幅延遲與變慢現象。
 - **規劃方向**：
+  - 我感覺用沙河開遊戲 遊戲本身用刑的速度根本機開起來差不多 因此我在想可能是腳本的問題嗎? 或是沙河傳過來的資訊比較慢? 不確定 要先觀察分析
   - 分析 Win32 API 跨沙盒發送訊息 (`PostMessage` / `SendMessage`) 之 IPC 轉發開銷與焦點延遲。
   - 評估 `ScreenCapturer`（`mss` / `BitBlt`）在沙盒隔離視窗下的截圖幀率與延遲。
   - 測試多實例 CPU 競爭與進程優先級（Priority Boost）對沙盒實例的提速效果。
+  
 
 ### 6. 🧠 記憶體洩漏與長期掛機效能衰減分析 (Memory Leak & Resource Health)
 - **需求背景**：排查 24/7 長時間掛機時，是否有記憶體持續累積（Memory Leak）、GDI 物件未釋放或造成電腦逐漸變慢的問題。

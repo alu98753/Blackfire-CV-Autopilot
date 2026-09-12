@@ -42,5 +42,19 @@ def parse_arguments():
     )
     parser.add_argument("--log-level", type=str.upper, choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                         default=None, help="設定終端機日誌顯示等級 (預設依 Profile TOML 偏好記憶)")
+    parser.add_argument(
+        "--test-notify",
+        choices=["all", "milestone", "milestone1", "milestone2", "alarm", "deadline", "supervisor", "crash"],
+        nargs="?",
+        const="all",
+        default=None,
+        help="測試 Discord Webhook 通知 (預設 Dry-Run 僅預覽列印；搭配 --live 才會真正發送 HTTP POST)",
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        default=False,
+        help="明確啟用向 Discord 伺服器發送真實網路 HTTP POST (若未指定則預設為 Dry-Run 僅預覽)",
+    )
     parser.add_argument("--incident-session-id", type=str, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()
