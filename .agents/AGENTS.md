@@ -73,6 +73,13 @@
   - 當使用者明確表示「開始新開發」、「開始新功能」、「開始修 bug」、「開新分支」或其他正式進入 implementation lifecycle 的指令時，統一調用 [`branch_start_workflow`](skills/branch_start_workflow/SKILL.md)。
   - 正式 Feature / Fix / Refactor 分支建立後，必須立即建立同名 remote tracking branch：`git push -u origin HEAD`，使開發期間即可透過遠端 `main...<branch>` 進行 review。
   - Branch 建立、同步與 safety guard 的詳細流程以 `branch_start_workflow` 為唯一權威；本文件不重複其執行細節。
+- **Detached HEAD 唯讀停泊守則 (Read-Only Parking Invariant)**：
+  - 分支收尾完成後，主開發目錄（`BlackfireCrusade_tool`）停泊於 `origin/main`（Detached HEAD）。
+  - **此狀態為嚴格「唯讀停泊狀態 (Read-Only Parking State)」，絕非開發狀態**。
+  - **AI 嚴禁在 Detached HEAD 狀態下直接修改代碼、更新設定或建立 Commit**！
+  - 當使用者提出任何修改代碼、更新設定或修復 Bug 之實作需求時，AI 必須在動手前先檢查當前分支：
+    - 若處於 Detached HEAD，**AI 必須主動阻斷**並引導建立新分支（調用 `branch_start_workflow` 執行 `git switch -c <branch> origin/main` 並建立 remote tracking），切換至具名分支後方可開始修改。
+
 
 ### 2. 極速掛機與延遲規範 ⚡
 - `pyautogui.PAUSE = 0.002` (2ms)。
