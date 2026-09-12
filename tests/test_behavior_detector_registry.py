@@ -27,17 +27,17 @@ class TestBehaviorDetectorRegistry(unittest.TestCase):
         self.machine.diamond_window_opened = False
         self.machine.bread_window_opened = False
 
-    def test_lobby_profile_excludes_town_and_dungeon_groups(self):
+    def test_lobby_profile_excludes_dungeon_group_and_includes_town(self):
         registry = DetectorRegistry()
         groups = registry.groups_for(DetectionProfileId.LOBBY)
 
         self.assertIn(DetectorGroup.LOBBY, groups)
         self.assertIn(DetectorGroup.TABS, groups)
-        self.assertNotIn(DetectorGroup.TOWN, groups)
+        self.assertIn(DetectorGroup.TOWN, groups)
         self.assertNotIn(DetectorGroup.DUNGEON, groups)
 
     @patch("os.path.exists", return_value=True)
-    def test_lobby_profile_does_not_run_town_or_dungeon_matchers(self, _exists):
+    def test_lobby_profile_does_not_run_dungeon_card_matchers(self, _exists):
         self.detector.detect(
             MagicMock(),
             machine=self.machine,
@@ -48,8 +48,8 @@ class TestBehaviorDetectorRegistry(unittest.TestCase):
         self.assertIn("goback_town.png", templates)
         self.assertIn("common/bread.png", templates)
         self.assertIn("stages/start.png", templates)
-        self.assertNotIn("common/door.png", templates)
-        self.assertNotIn("diamond.png", templates)
+        self.assertIn("common/door.png", templates)
+        self.assertIn("diamond.png", templates)
         self.assertNotIn("dungeons/leave.png", templates)
 
     @patch("os.path.exists", return_value=True)

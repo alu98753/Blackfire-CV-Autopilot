@@ -221,16 +221,17 @@ class TestBehaviorModularActivities(unittest.TestCase):
         self.state_machine.pending_daily_reset_exit = True
         self.state_machine.stamina_retreat_start_time = time.time()
         self.state_machine.original_config = {"name": "原模式", "type": "mix"}
-        self.state_machine.trigger_town_subflow_chain = MagicMock()
+        self.state_machine.transition_to = MagicMock()
 
         handler = self.state_machine.handlers[self.state_machine.STATE_COLLECT_ONLY]
         mock_img = MagicMock()
         handler.handle(mock_img, self.rect)
 
-        # 斷言：標記清除，退避時間清空，並觸發城鎮流水線
+        # 斷言：標記清除，退避時間清空，回復原模式，並轉移至 NAVIGATING
         self.assertFalse(self.state_machine.pending_daily_reset_exit)
         self.assertIsNone(self.state_machine.stamina_retreat_start_time)
-        self.state_machine.trigger_town_subflow_chain.assert_called_once()
+        self.assertEqual(self.state_machine.config["type"], "mix")
+        self.state_machine.transition_to.assert_called_once_with(self.state_machine.STATE_NAVIGATING)
 
     # =========================================================================
     # 場景 6：真實 DailyManager 整合與待機日誌格式化驗證

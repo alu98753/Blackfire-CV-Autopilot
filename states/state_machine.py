@@ -727,6 +727,8 @@ class GameStateMachine:
             self.need_bag_cleaning = True
             self.handlers[new_state].screenshot_counter = 1
         elif new_state == self.STATE_NAVIGATING:
+            if getattr(self, "_in_town_subflow_pop", False):
+                return
             if self.consume_daily_quest_preemption_for_navigation():
                 return
             if getattr(self, "pending_town_subflows", False):
@@ -1976,29 +1978,35 @@ class GameStateMachine:
         結束目前子流程並選取下一個城鎮任務。只有入口 precondition
         成立後，才由共用 controller 派發對應 Handler。
         """
-        completed_flow = self.current_town_subflow
-        self.current_town_subflow = None
-        self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
-        self.need_blood_altar = False
-        self.need_jewelry_workshop = False
-
-        # A selected successor is only an intent, not the previous Handler.
-        # Restore the baseline identity so monitoring, recovery, and scene
-        # detection cannot observe a stale CHEST/HERO/etc. during REACH_TOWN.
-        if getattr(self, "primary_config", None):
-            self.set_config(self.primary_config.copy())
-        self.transition_to(self.STATE_NAVIGATING)
-
-        if completed_flow:
-            logging.info(
-                "✅ [城鎮流水線] 子流程 [%s] 已離開 active slot。",
-                completed_flow,
-            )
-
-        if self._select_next_town_subflow():
+        if getattr(self, "_in_town_subflow_pop", False):
             return
+        self._in_town_subflow_pop = True
+        try:
+            completed_flow = self.current_town_subflow
+            self.current_town_subflow = None
+            self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
+            self.need_blood_altar = False
+            self.need_jewelry_workshop = False
 
-        self._finish_town_subflow_queue()
+            # A selected successor is only an intent, not the previous Handler.
+            # Restore the baseline identity so monitoring, recovery, and scene
+            # detection cannot observe a stale CHEST/HERO/etc. during REACH_TOWN.
+            if getattr(self, "primary_config", None):
+                self.set_config(self.primary_config.copy())
+            self.transition_to(self.STATE_NAVIGATING)
+
+            if completed_flow:
+                logging.info(
+                    "✅ [城鎮流水線] 子流程 [%s] 已離開 active slot。",
+                    completed_flow,
+                )
+
+            if self._select_next_town_subflow():
+                return
+
+            self._finish_town_subflow_queue()
+        finally:
+            self._in_town_subflow_pop = False
 
     def _select_next_town_subflow(self):
         """Latch one queue head without applying its config or Handler state."""
