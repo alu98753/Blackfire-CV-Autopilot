@@ -53,8 +53,8 @@
 - **冪等保證**：同一 08:05 重置週期內（以 `cycle_tag` 為鍵）僅發送一次，避免重複通知。
 
 ### 2. 里程碑 2：告示牌懸賞全數清空
-- **觸發條件**：`QuestScheduler.is_all_completed()` 為 `True`，且已轉入 Tier 4 長駐模式。
-- **冪等保證**：同一 08:05 重置週期內僅發送一次。
+- **業務事實持久化先行**：當 `QuestScheduler.is_all_completed()` 成立時，`DailyManager` 優先將 `bounty_quests.completed_today = True` 持久化至 JSON 存檔中，隨後才嘗試發送通知與解除排程器 (`quest_scheduler = None`)。每日 08:05 重置時該欄位隨子流程一同重置為 `False`。
+- **觸發與冪等保證**：依據持久化業務事實發送通知，轉入 Tier 4 長駐模式。同一 08:05 重置週期內僅發送一次。
 
 ### 3. 警報 1：日常速領逾時未完成 (`DAILY_CLAIM_DEADLINE_EXCEEDED`)
 - **觸發條件**：自 08:05 起算經過 `daily_claim_deadline_minutes`（預設 30 分鐘，即 08:35 後），Tier 1 仍有子流程未標記完成。
@@ -66,9 +66,9 @@
 
 ---
 
-## 三、 歷史訊息收斂契約 (Desired-State Reconciliation)
+## 三、 歷史訊息收斂與重試排程 (Desired-State Reconciliation)
 
-為防止歷史通知長期佔用 Discord 頻道版面，系統採用 Desired-State 收斂機制：
+為防止歷史通知長期佔用 Discord 頻道版面，並保證網路故障時通知具備穩定補發機制，系統採用 Desired-State 收斂架構：
 
 1. **起跑線規則 (07:00 Line)**：
    - 每日 07:00 起跑點，系統主動檢查前日歷史訊息記錄（`user_data/<profile>/runtime/notification_history.json`）。
@@ -78,9 +78,20 @@
 
 2. **嚴格派發契約 (Strict Tracked Dispatch Contract)**：
    - 在帶有 `?wait=true` 條件下，只有 Discord 伺服器確認並回傳 HTTP 200 與有效 Snowflake ID 時，才視為 `success=True`。
-   - 若收到 HTTP 204、連線超時、伺服器異常或缺少 ID，均判定為發送失敗。`DailyPipelineNotifier` 不得將當日里程碑標記為已完成 (`record_milestone_notified`)，保留於後續狀態機週期或定時器中重試之空間。
+   - 若收到 HTTP 204、連線超時、伺服器異常或缺少 ID，均判定為發送失敗。
+   - Milestone 1、Milestone 2 與 Deadline Alarm 均統一遵循該契約：僅當發送成功且取得有效 `external_message_id` 時，方可記錄 `last_*_date`；否則保留重試資格 (Retry Eligibility)。
 
-3. **多實例隔離與原子存取 (Crash Consistency)**：
+3. **待發送通知週期性對齊 (Pending Notification Reconciliation)**：
+   - 狀態機主迴圈透過 `DailyPipelineNotifier.reconcile_pending_notifications()` 週期性檢驗業務完成事實與通知達成狀態。
+   - **掃描間隔節流**：內部採用單調時鐘（`time.monotonic()`）維持 60 秒掃描間隔（`_pending_reconcile_interval_seconds = 60.0`），避免主迴圈高頻無冷卻發起外部 HTTP 請求。
+   - **客觀事實驅動**：
+     - Milestone 1 依據 `DailyManager.is_tier1_daily_claim_completed()` 補發。
+     - Milestone 2 依據 `DailyManager.is_bounty_quests_completed()` 補發，不再依賴揮發性 `quest_scheduler` 物件存續或 `accepted_quests == []` 反推。
+     - Deadline Alarm 依據 08:05 重置逾時狀態補發。
+   - **單次 Tick 網路延遲有界上界 (At-most-one Outbound Request)**：
+     - 單一週期依優先級（`Deadline Alarm` ➔ `Milestone 1` ➔ `Milestone 2`）檢驗，一旦觸發第一個待發送通知之網路請求即返回，將剩餘通知交由下一個週期處理，確保單一狀態機步驟外部網路阻塞時間擁有明確上限。
+
+4. **多實例隔離與原子存取 (Crash Consistency)**：
    - 各 Profile（如 `native`、`sandbox`）各自擁有獨立的 `notification_history.json`，歷史記錄互不干擾。
    - `JsonNotificationHistoryStore` 透過同目錄暫存檔原子替換 (`os.replace`) 與 `fsync` 保證寫入一致性，避免異常中斷破壞 JSON 格式或造成快取假陽性。
 
