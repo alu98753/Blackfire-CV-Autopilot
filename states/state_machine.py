@@ -772,8 +772,11 @@ class GameStateMachine:
                 self.pending_daily_reset_exit = True
                 logging.info("🌅 [GameStateMachine] 已設定 pending_daily_reset_exit = True，當前戰鬥/結算完畢後將主動離場退回城鎮啟動新日常。")
 
-            # 委派 DailyPipelineNotifier 檢測 08:05 重置後日常速領超時卡死警報 (DAILY_CLAIM_DEADLINE_EXCEEDED)
-            self.daily_pipeline_notifier.check_daily_claim_deadline(current_state=self.current_state)
+            # 委派 DailyPipelineNotifier 執行待發送日常通知對齊 (Milestone 1, Milestone 2, Deadline Alarm)
+            self.daily_pipeline_notifier.reconcile_pending_notifications(
+                current_state=self.current_state,
+                fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)"),
+            )
 
         # 委派 DailyPipelineNotifier 執行歷史過期訊息 Desired-State 收斂 (07:00 起跑線)
         self.daily_pipeline_notifier.reconcile_expired_messages()
@@ -1742,6 +1745,8 @@ class GameStateMachine:
 
         if self.quest_scheduler.is_all_completed():
             logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！解除懸賞排程器並切換至退守模式。")
+            if getattr(self, "daily_manager", None) and hasattr(self.daily_manager, "record_bounty_quests_completed"):
+                self.daily_manager.record_bounty_quests_completed()
             self.daily_pipeline_notifier.on_bounty_quests_cleared(
                 fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
             )
@@ -2369,6 +2374,8 @@ class GameStateMachine:
             if self.quest_scheduler:
                 if self.quest_scheduler.is_all_completed():
                     logging.info("🎉 [GameStateMachine] 所有每日懸賞任務均已 100% 完成！自動解除懸賞排程器並切換至退守模式")
+                    if getattr(self, "daily_manager", None) and hasattr(self.daily_manager, "record_bounty_quests_completed"):
+                        self.daily_manager.record_bounty_quests_completed()
                     self.daily_pipeline_notifier.on_bounty_quests_cleared(
                         fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
                     )

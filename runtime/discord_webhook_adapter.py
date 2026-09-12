@@ -151,6 +151,8 @@ class DiscordWebhookAdapter(NotificationPort):
         if sync:
             return self._post_payload(payload)
 
+        # Asynchronous dispatch cannot return an external_message_id to the caller.
+        # Callers requiring message tracking and daily reconciliation MUST specify sync=True.
         worker = threading.Thread(
             target=self._post_payload,
             args=(payload,),
@@ -180,20 +182,40 @@ class DiscordWebhookAdapter(NotificationPort):
         try:
             with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
                 status = resp.status
-                if status in (200, 204):
-                    message_id = None
-                    try:
-                        resp_data = resp.read()
-                        if resp_data:
-                            resp_json = json.loads(resp_data.decode("utf-8"))
-                            if isinstance(resp_json, dict) and "id" in resp_json:
-                                message_id = str(resp_json["id"])
-                    except Exception:
-                        pass
-                    logging.info("[DiscordNotifier] Notification delivered successfully (status: %d, id: %s).", status, message_id)
-                    return NotificationResult(success=True, external_message_id=message_id)
-                logging.warning("[DiscordNotifier] Unexpected response status: %d", status)
-                return NotificationResult(success=False, error=f"Unexpected status {status}")
+                if status != 200:
+                    logging.warning(
+                        "[DiscordNotifier] Delivery protocol failure: Expected HTTP 200 with wait=true, got %d.",
+                        status,
+                    )
+                    return NotificationResult(
+                        success=False,
+                        error=f"Expected HTTP 200 with wait=true, got {status}",
+                    )
+
+                raw_data = resp.read()
+                try:
+                    resp_json = json.loads(raw_data.decode("utf-8"))
+                except Exception as exc:
+                    logging.warning("[DiscordNotifier] Failed to decode JSON response from Discord: %s", exc)
+                    return NotificationResult(
+                        success=False,
+                        error=f"Invalid Discord response body: {exc}",
+                    )
+
+                if not isinstance(resp_json, dict) or not resp_json.get("id"):
+                    logging.warning("[DiscordNotifier] Discord response missing message ID: %s", resp_json)
+                    return NotificationResult(
+                        success=False,
+                        error="Discord response missing message id",
+                    )
+
+                message_id = str(resp_json["id"])
+                logging.info(
+                    "[DiscordNotifier] Notification delivered successfully (status: %d, id: %s).",
+                    status,
+                    message_id,
+                )
+                return NotificationResult(success=True, external_message_id=message_id)
         except urllib.error.HTTPError as ex:
             logging.warning("[DiscordNotifier] HTTP error delivering notification (%d): %s", ex.code, ex.reason)
             return NotificationResult(success=False, error=str(ex.reason))

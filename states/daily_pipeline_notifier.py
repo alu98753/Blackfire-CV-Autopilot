@@ -11,18 +11,50 @@ Follows Greenfield-lite architecture:
 from __future__ import annotations
 
 import logging
+import time
+from dataclasses import dataclass
 from datetime import datetime, time as dtime, timedelta
+from enum import Enum
 from typing import Any
 
 from ports.notification_history_port import (
     InMemoryNotificationHistoryStore,
     NotificationHistoryPort,
 )
-from ports.notification_port import NotificationPort, NullNotifier
+from ports.notification_port import NotificationPort, NotificationResult, NullNotifier
 from states.daily_reconciliation import (
     DailyReconciliationService,
     resolve_business_dt,
 )
+
+
+class PolicyOutcomeStatus(Enum):
+    """Execution status of an individual notification policy evaluation."""
+    NOT_APPLICABLE = "NOT_APPLICABLE"        # 業務事實或資格條件不符，未執行任何 outbound HTTP 請求
+    ATTEMPTED_SUCCESS = "ATTEMPTED_SUCCESS"  # 已執行 outbound 請求且成功 (已取得 Snowflake ID 並記錄)
+    ATTEMPTED_FAILED = "ATTEMPTED_FAILED"    # 已執行 outbound 請求但失敗 (未取得 ID 或連線異常，保留重試資格)
+
+
+@dataclass(frozen=True)
+class PolicyEvaluationResult:
+    """Outcome of a notification policy evaluation distinguishing attempt from success."""
+    status: PolicyOutcomeStatus
+    notification_result: NotificationResult | None = None
+
+    @property
+    def attempted(self) -> bool:
+        """True if an outbound network call was attempted (regardless of success or failure)."""
+        return self.status in (PolicyOutcomeStatus.ATTEMPTED_SUCCESS, PolicyOutcomeStatus.ATTEMPTED_FAILED)
+
+    @property
+    def success(self) -> bool:
+        """True only if the notification dispatch succeeded and external ID was recorded."""
+        return self.status == PolicyOutcomeStatus.ATTEMPTED_SUCCESS
+
+    def __bool__(self) -> bool:
+        # Coding Rule: PolicyEvaluationResult 禁止依賴隱式 bool 做 orchestration 調度決策。
+        # 調度決策請顯式使用 result.attempted (判斷是否嘗試過 HTTP 請求) 或 result.success (判斷是否成功)。
+        return self.success
 
 
 class DailyPipelineNotifier:
@@ -43,6 +75,8 @@ class DailyPipelineNotifier:
         self.daily_manager = daily_manager
         self.profile = (profile or "native").strip()
         self.deadline_minutes = max(1, int(deadline_minutes))
+        self._pending_reconcile_interval_seconds: float = 60.0
+        self._next_pending_reconcile_ts: float = 0.0
 
         # Setup history store (pure dependency injection, default to in-memory store)
         self.history_store: NotificationHistoryPort = (
@@ -124,7 +158,7 @@ class DailyPipelineNotifier:
         self,
         subflow_key: str | datetime | None = None,
         now_dt: datetime | None = None,
-    ) -> Any:
+    ) -> PolicyEvaluationResult:
         """Evaluate Tier 1 completion at a lifecycle boundary and dispatch Milestone 1 if eligible.
 
         Domain Invariants:
@@ -136,13 +170,13 @@ class DailyPipelineNotifier:
             subflow_key = None
 
         if not self.daily_manager or not hasattr(self.daily_manager, "is_tier1_daily_claim_completed"):
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         if not self.daily_manager.is_tier1_daily_claim_completed():
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         if not self.is_milestone_eligible("milestone1", now_dt):
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         accepted_quests = []
         if hasattr(self.daily_manager, "status"):
@@ -170,17 +204,23 @@ class DailyPipelineNotifier:
             footer_text=footer,
             sync=True,
         )
-        msg_id = getattr(res, "external_message_id", None)
-        if msg_id:
+        if res.success and getattr(res, "external_message_id", None):
+            msg_id = res.external_message_id
             self.track_dispatched_message(msg_id, tag="milestone1", now_dt=now_dt)
-        self.record_milestone_notified("milestone1", now_dt)
-        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 1 (%s) 通知！", title)
-        return res
+            self.record_milestone_notified("milestone1", now_dt)
+            logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 1 (%s) 通知！(msg_id: %s)", title, msg_id)
+            return PolicyEvaluationResult(PolicyOutcomeStatus.ATTEMPTED_SUCCESS, notification_result=res)
+        else:
+            logging.warning(
+                "⚠️ [DailyPipelineNotifier] Milestone 1 發送失敗 (%s)，今日暫不標記完成，保留重試空間。",
+                getattr(res, "error", "Unknown error"),
+            )
+            return PolicyEvaluationResult(PolicyOutcomeStatus.ATTEMPTED_FAILED, notification_result=res)
 
-    def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> Any:
+    def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> PolicyEvaluationResult:
         """Dispatch Milestone 2 when all bounty quests have been cleared and state machine switches to Tier 4."""
         if not self.is_milestone_eligible("milestone2", now_dt):
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         from runtime.notification_i18n import format_milestone2
         title, description, fields, footer = format_milestone2(
@@ -196,20 +236,66 @@ class DailyPipelineNotifier:
             footer_text=footer,
             sync=True,
         )
-        msg_id = getattr(res, "external_message_id", None)
-        if msg_id:
+        if res.success and getattr(res, "external_message_id", None):
+            msg_id = res.external_message_id
             self.track_dispatched_message(msg_id, tag="milestone2", now_dt=now_dt)
-        self.record_milestone_notified("milestone2", now_dt)
-        logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 2 (%s) 通知！", title)
-        return res
+            self.record_milestone_notified("milestone2", now_dt)
+            logging.info("🔔 [DailyPipelineNotifier] 已發送 Milestone 2 (%s) 通知！(msg_id: %s)", title, msg_id)
+            return PolicyEvaluationResult(PolicyOutcomeStatus.ATTEMPTED_SUCCESS, notification_result=res)
+        else:
+            logging.warning(
+                "⚠️ [DailyPipelineNotifier] Milestone 2 發送失敗 (%s)，今日暫不標記完成，保留重試空間。",
+                getattr(res, "error", "Unknown error"),
+            )
+            return PolicyEvaluationResult(PolicyOutcomeStatus.ATTEMPTED_FAILED, notification_result=res)
 
-    def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> Any:
+    def evaluate_bounty_completion(
+        self,
+        fallback_mode: str = "Tier 4 Loop (mix)",
+        now_dt: datetime | None = None,
+    ) -> PolicyEvaluationResult:
+        """Evaluate durable bounty completion fact and dispatch Milestone 2 if eligible."""
+        if not self.daily_manager or not hasattr(self.daily_manager, "is_bounty_quests_completed"):
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
+        if not self.daily_manager.is_bounty_quests_completed():
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
+        return self.on_bounty_quests_cleared(fallback_mode=fallback_mode, now_dt=now_dt)
+
+    def reconcile_pending_notifications(
+        self,
+        current_state: str = "UNKNOWN",
+        fallback_mode: str = "Tier 4 Loop (mix)",
+        now_dt: datetime | None = None,
+        now_ts: float | None = None,
+        force: bool = False,
+    ) -> None:
+        """Periodically evaluate each notification policy to reconcile desired notification state with business facts."""
+        cur_ts = time.monotonic() if now_ts is None else now_ts
+        if not force and cur_ts < self._next_pending_reconcile_ts:
+            return
+        self._next_pending_reconcile_ts = cur_ts + self._pending_reconcile_interval_seconds
+
+        # Invariant: At-most-one outbound notification attempt per reconciliation tick to bound network latency.
+        # Priority: Deadline Alarm (highest urgency) -> Milestone 1 -> Milestone 2
+        deadline_eval = self.check_daily_claim_deadline(current_state=current_state, now_dt=now_dt)
+        if deadline_eval.attempted:
+            return
+
+        m1_eval = self.evaluate_tier1_completion(now_dt=now_dt)
+        if m1_eval.attempted:
+            return
+
+        m2_eval = self.evaluate_bounty_completion(fallback_mode=fallback_mode, now_dt=now_dt)
+        if m2_eval.attempted:
+            return
+
+    def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> PolicyEvaluationResult:
         """Periodically check if 08:05 reset deadline has been exceeded while Tier 1 claims remain incomplete."""
         if not self.daily_manager or not hasattr(self.daily_manager, "is_tier1_daily_claim_completed"):
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         if self.daily_manager.is_tier1_daily_claim_completed():
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         now_dt = resolve_business_dt(now_dt)
         reset_hour = getattr(self.daily_manager, "reset_hour", 8)
@@ -224,10 +310,10 @@ class DailyPipelineNotifier:
         deadline_dt = last_reset_dt + timedelta(minutes=self.deadline_minutes)
 
         if now_dt < deadline_dt:
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         if not self.is_milestone_eligible("deadline_alarm", now_dt):
-            return False
+            return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
         pending_subflows = []
         if hasattr(self.daily_manager, "get_pending_tier1_subflows"):
@@ -251,12 +337,18 @@ class DailyPipelineNotifier:
             footer_text=footer,
             sync=True,
         )
-        msg_id = getattr(res, "external_message_id", None)
-        if msg_id:
+        if res.success and getattr(res, "external_message_id", None):
+            msg_id = res.external_message_id
             self.track_dispatched_message(msg_id, tag="deadline_alarm", now_dt=now_dt)
-        self.record_milestone_notified("deadline_alarm", now_dt)
-        logging.error("🚨 [DailyPipelineNotifier] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
-        return res
+            self.record_milestone_notified("deadline_alarm", now_dt)
+            logging.error("🚨 [DailyPipelineNotifier] 已觸發 DAILY_CLAIM_DEADLINE_EXCEEDED 警報通知！")
+            return PolicyEvaluationResult(PolicyOutcomeStatus.ATTEMPTED_SUCCESS, notification_result=res)
+        else:
+            logging.warning(
+                "⚠️ [DailyPipelineNotifier] DAILY_CLAIM_DEADLINE_EXCEEDED 警報發送失敗 (%s)，今日暫不標記完成。",
+                getattr(res, "error", "Unknown error"),
+            )
+            return PolicyEvaluationResult(PolicyOutcomeStatus.ATTEMPTED_FAILED, notification_result=res)
 
 
 class NullDailyPipelineNotifier(DailyPipelineNotifier):
@@ -276,14 +368,27 @@ class NullDailyPipelineNotifier(DailyPipelineNotifier):
     def get_current_reset_tag(self, now_dt: datetime | None = None) -> str:
         return ""
 
-    def evaluate_tier1_completion(self, subflow_key: str | datetime | None = None, now_dt: datetime | None = None) -> Any:
-        return False
+    def evaluate_tier1_completion(self, subflow_key: str | datetime | None = None, now_dt: datetime | None = None) -> PolicyEvaluationResult:
+        return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
-    def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> Any:
-        return False
+    def on_bounty_quests_cleared(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> PolicyEvaluationResult:
+        return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
 
-    def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> Any:
-        return False
+    def evaluate_bounty_completion(self, fallback_mode: str = "Tier 4 Loop (mix)", now_dt: datetime | None = None) -> PolicyEvaluationResult:
+        return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
+
+    def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> PolicyEvaluationResult:
+        return PolicyEvaluationResult(PolicyOutcomeStatus.NOT_APPLICABLE)
+
+    def reconcile_pending_notifications(
+        self,
+        current_state: str = "UNKNOWN",
+        fallback_mode: str = "Tier 4 Loop (mix)",
+        now_dt: datetime | None = None,
+        now_ts: float | None = None,
+        force: bool = False,
+    ) -> None:
+        pass
 
     def reconcile_expired_messages(self, now_dt: datetime | None = None, force: bool = False) -> int:
         return 0

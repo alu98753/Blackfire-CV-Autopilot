@@ -69,6 +69,10 @@
   - 為防止 Terminal 貼上多行指令時因換行符號（`\n`）導致指令截斷或報錯，提供 Merge 指令時必須**感應用戶 OS/Shell**。
   - **Windows (PowerShell / CMD)**：必須使用**多個 `-m` 參數**串聯多段訊息 (例如 `git merge --no-ff <branch> -m "標題" -m "變更摘要..." -m "測試結果..."`)，避免任何跨列換行。
   - **Linux / macOS (Bash / Zsh)**：可使用多個 `-m` 參數或標準多行引號。
+- **新開發分支啟動規範 (Branch Start Routing Rule)**：
+  - 當使用者明確表示「開始新開發」、「開始新功能」、「開始修 bug」、「開新分支」或其他正式進入 implementation lifecycle 的指令時，統一調用 [`branch_start_workflow`](skills/branch_start_workflow/SKILL.md)。
+  - 正式 Feature / Fix / Refactor 分支建立後，必須立即建立同名 remote tracking branch：`git push -u origin HEAD`，使開發期間即可透過遠端 `main...<branch>` 進行 review。
+  - Branch 建立、同步與 safety guard 的詳細流程以 `branch_start_workflow` 為唯一權威；本文件不重複其執行細節。
 
 ### 2. 極速掛機與延遲規範 ⚡
 - `pyautogui.PAUSE = 0.002` (2ms)。

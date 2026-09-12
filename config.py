@@ -529,6 +529,29 @@ def get_notification_language(profile: str | None = None) -> str:
     return normalize_language(lang)
 
 
+def get_notification_webhook_url(profile: str | None = None) -> str:
+    """Return configured Discord Webhook URL for the active or specified profile.
+
+    Follows profile isolation: reads profile TOML directly without modifying active profile state,
+    falling back to defaults.toml if not configured in the profile.
+    """
+    if profile:
+        profile_path = get_profile_config_path(profile)
+        if profile_path.exists():
+            manager = TomlConfigManager(profile_path, default={})
+            snap = manager.snapshot()
+            discord_cfg = snap.get("notification", {}).get("discord", {})
+            if isinstance(discord_cfg, dict) and "webhook_url" in discord_cfg:
+                url = str(discord_cfg["webhook_url"]).strip()
+                if url:
+                    return url
+    notif_discord = get_defaults_config().get("notification", {}).get("discord", {})
+    if isinstance(notif_discord, dict):
+        return str(notif_discord.get("webhook_url", "")).strip()
+    return ""
+
+
+
 def update_profile_config(profile: str | None = None, updates: dict | None = None) -> Path:
     """
     將使用者在終端機選單中修改的設定，增量合併並寫入 user_data/<profile>/config.toml。

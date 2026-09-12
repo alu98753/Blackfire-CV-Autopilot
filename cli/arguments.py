@@ -56,5 +56,18 @@ def parse_arguments():
         default=False,
         help="明確啟用向 Discord 伺服器發送真實網路 HTTP POST (若未指定則預設為 Dry-Run 僅預覽)",
     )
+    parser.add_argument(
+        "--delete-after",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="發送真實通知後等待指定秒數並執行刪除驗證 (需搭配 --live)",
+    )
+    parser.add_argument(
+        "--test-reconcile",
+        action="store_true",
+        default=False,
+        help="執行隔離歷史的端到端 07:00 期望狀態對帳測試 (需搭配 --live)",
+    )
     parser.add_argument("--incident-session-id", type=str, default=None, help=argparse.SUPPRESS)
     return parser.parse_args()
