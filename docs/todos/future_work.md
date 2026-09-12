@@ -74,7 +74,6 @@ dengeon同理
 - [ ] fix boss bug (already created separate file fix_boss_bug.md)
 - [ ] fix diamond collect lag
 - [ ] **如何做到: 早上我不打開遠端、不看遊戲，也能相信腳本自己處理；只有真的需要我介入時才打擾我。** ([feat-daily-status-notifier.md](feat-daily-status-notifier.md))
-- [ ] **通知訊息多語言擴充 (Notification i18n Expansion)**: 目前已支援繁體中文 (`zh-TW`) 與英文 (`en`)；未來規劃支援簡體中文 (`zh-CN`)、日文 (`ja`)、韓文 (`ko`)。
 - [ ] 驗證橘紅雙點共存功能在daily正常
 - [ ] 基本上 我現在在逐漸重構成沒有while死等流程的方式,但當電腦或是遊戲本體較為卡頓的時候會導致腳本無效的推進流程(但之前while因為有等所以叫沒有觸發該問題) 要思考怎麼根本解決(所有流程都會遇到該問題) 
 - [ ] 不知道為何我已經在daily模式下 進入collect only 但他卻還可以跑到黃金古國(我tier4設定黃金古國 但是collectonly 下應該暫停 log在0912 8:50-52附近)
@@ -86,6 +85,7 @@ dengeon同理
 - [ ] 釐清 Daily Complete 與 Defer 的判斷依據
   - daily complete 的條件寫好了，那現在 defer 判斷的依據有哪些？
 - [ ] feat-auto-king-core 現在在背包會有王核 我提供圖片 然後他應該可以在每天做完任務沒事情的時候(要定義何時)去把他打完,然後背包滿了就分解(記得暫時設定為傳奇等級以上) 並且全部打完後 去珠寶店賣東西
+- [ ] **通知訊息多語言擴充 (Notification i18n Expansion)**: 目前已支援繁體中文 (`zh-TW`) 與英文 (`en`)；未來規劃支援簡體中文 (`zh-CN`)、日文 (`ja`)、韓文 (`ko`)。
 ### 商店
 
 - [ ] **10. 珠寶店商人金幣耗盡防護與通知**
@@ -145,15 +145,8 @@ dengeon同理
 ### DEV
 
 - [ ] RFC: 測試跑太慢且while部分不符合BDI架構 (docs/todos/test_redundent.md)
-  
 
-### 1. 🔔 異常暫停與中斷即時通知 (Discord / LINE Webhook Notification)
-- **需求背景**：當腳本在長掛機或黃金古國領地探索中進入手動暫停（Manual Pause）、觸發 Watchdog 卡死救援、或體力耗盡轉入退避模式時，能夠第一時間通報使用者。
-- **規劃方向**：
-  - 在 `config.py` 或 TOML 設定中增加 Webhook URL 配置。
-  - 於 `GameStateMachine` 觸發暫停、異常重開與模式切換時，非同步發送訊息至 Discord 頻道或 LINE Notify。
-
-### 2. 📦 分析如何變現
+### 📦 分析如何變現
 - **需求背景**：評估未來是否封裝為獨立 `.exe`、GUI 介面或 Web 儀表板，降低無 Python 環境用戶的使用門檻。
 - **規劃方向**：
   - 現階段專注於掛機穩定性與核心邏輯完善；後續評估 PyInstaller / Nuitka 打包或 Electron / Tauri 介面封裝。

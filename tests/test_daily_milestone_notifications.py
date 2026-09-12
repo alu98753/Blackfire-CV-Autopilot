@@ -53,7 +53,7 @@ class TestDailyMilestonePayloads(unittest.TestCase):
         embed_en = payload_en["embeds"][0]
         self.assertEqual(embed_en["title"], "✅ Daily Claim Phase Completed")
         self.assertEqual(embed_en["color"], 0x2ECC71)
-        self.assertEqual(embed_en["footer"]["text"], "Blackfire Crusade • Automation Healthy")
+        self.assertEqual(embed_en["footer"]["text"], "Automation Running Normally")
         self.assertEqual(len(embed_en["fields"]), 1)
         self.assertEqual(embed_en["fields"][0]["name"], "Quests Accepted")
 
@@ -62,7 +62,7 @@ class TestDailyMilestonePayloads(unittest.TestCase):
             title="每日城鎮速領完成",
             description="已完成。",
         )
-        self.assertEqual(payload_zh["embeds"][0]["footer"]["text"], "黑火遠征 • 自動掛機運行正常")
+        self.assertEqual(payload_zh["embeds"][0]["footer"]["text"], "自動掛機運行正常")
 
     def test_build_alarm_payload_structure(self):
         # Test English footer when language="en"
@@ -78,7 +78,7 @@ class TestDailyMilestonePayloads(unittest.TestCase):
         embed_en = payload_en["embeds"][0]
         self.assertEqual(embed_en["title"], "🚨 Daily Claim Deadline Exceeded")
         self.assertEqual(embed_en["color"], 0xE74C3C)
-        self.assertEqual(embed_en["footer"]["text"], "Blackfire Crusade • Operator Action Required")
+        self.assertEqual(embed_en["footer"]["text"], "Automation Requires Manual Intervention")
         field_names = [f["name"] for f in embed_en["fields"]]
         self.assertIn("Alarm Code", field_names)
         self.assertIn("Reason", field_names)
@@ -90,7 +90,7 @@ class TestDailyMilestonePayloads(unittest.TestCase):
             title="每日速領超時卡死警報",
             reason="超時",
         )
-        self.assertEqual(payload_zh["embeds"][0]["footer"]["text"], "黑火遠征 • 需要人工介入處理")
+        self.assertEqual(payload_zh["embeds"][0]["footer"]["text"], "自動掛機需要人工介入處理")
 
 
 class TestNotificationI18n(unittest.TestCase):
@@ -120,9 +120,9 @@ class TestNotificationI18n(unittest.TestCase):
     def test_format_subflow_status_bilingual(self):
         # Traditional Chinese
         zh_status = format_subflow_status("chest", completed=True, language="zh-TW")
-        self.assertEqual(zh_status, "寶箱 (chest)(✓)")
+        self.assertEqual(zh_status, "寶箱 (Chest)(✓)")
         zh_uncompleted = format_subflow_status("bulletin_board", completed=False, language="zh-TW")
-        self.assertEqual(zh_uncompleted, "懸賞告示牌 (bulletin_board)(✗)")
+        self.assertEqual(zh_uncompleted, "懸賞告示牌 (Bulletin Board)(✗)")
 
         # English
         en_status = format_subflow_status("chest", completed=True, language="en")
@@ -135,7 +135,7 @@ class TestNotificationI18n(unittest.TestCase):
         title_zh, desc_zh, fields_zh, footer_zh = format_milestone1(
             profile="test",
             accepted_quests=["Quest A"],
-            subflow_statuses=["寶箱 (chest)(✓)"],
+            subflow_statuses=["寶箱 (Chest)(✓)"],
             language="zh-TW",
             now_dt=datetime(2026, 9, 12, 8, 15, 0),
         )
@@ -143,7 +143,7 @@ class TestNotificationI18n(unittest.TestCase):
         self.assertIn("告示牌懸賞任務", desc_zh)
         self.assertIn("已接取懸賞", fields_zh)
         self.assertIn("城鎮子流程", fields_zh)
-        self.assertEqual(footer_zh, "黑火遠征 • 自動掛機運行正常")
+        self.assertEqual(footer_zh, "自動掛機運行正常")
 
         # en
         title_en, desc_en, fields_en, footer_en = format_milestone1(
@@ -157,7 +157,7 @@ class TestNotificationI18n(unittest.TestCase):
         self.assertIn("bulletin board bounty quests", desc_en)
         self.assertIn("Quests Accepted", fields_en)
         self.assertIn("Town Subflows", fields_en)
-        self.assertEqual(footer_en, "Blackfire Crusade • Automation Healthy")
+        self.assertEqual(footer_en, "Automation Running Normally")
 
     def test_format_milestone2_bilingual(self):
         # zh-TW
@@ -169,11 +169,11 @@ class TestNotificationI18n(unittest.TestCase):
             cleared_count=5,
             cleared_quests=["Q1", "Q2"],
         )
-        self.assertEqual(title_zh, "每日懸賞全數清空")
+        self.assertEqual(title_zh, "每日懸賞任務已全部完成")
         self.assertIn("完成任務數", fields_zh)
         self.assertIn("已核銷懸賞", fields_zh)
         self.assertIn("後續目標", fields_zh)
-        self.assertEqual(footer_zh, "黑火遠征 • 自動掛機運行正常")
+        self.assertEqual(footer_zh, "自動掛機運行正常")
 
         # en
         title_en, desc_en, fields_en, footer_en = format_milestone2(
@@ -184,11 +184,11 @@ class TestNotificationI18n(unittest.TestCase):
             cleared_count=5,
             cleared_quests=["Q1", "Q2"],
         )
-        self.assertEqual(title_en, "Bounty Quests Cleared")
+        self.assertEqual(title_en, "All Daily Bounty Quests Completed")
         self.assertIn("Cleared Quests Count", fields_en)
         self.assertIn("Cleared Quests", fields_en)
         self.assertIn("Next Target", fields_en)
-        self.assertEqual(footer_en, "Blackfire Crusade • Automation Healthy")
+        self.assertEqual(footer_en, "Automation Running Normally")
 
     def test_format_deadline_alarm_bilingual(self):
         # zh-TW
@@ -203,7 +203,7 @@ class TestNotificationI18n(unittest.TestCase):
         self.assertEqual(title_zh, "每日速領超時卡死警報")
         self.assertIn("超過 30 分鐘", reason_zh)
         self.assertIn("未完成子流程", fields_zh)
-        self.assertEqual(footer_zh, "黑火遠征 • 需要人工介入處理")
+        self.assertEqual(footer_zh, "自動掛機需要人工介入處理")
 
         # en
         title_en, reason_en, fields_en, desc_en, footer_en = format_daily_claim_deadline_alarm(
@@ -217,7 +217,7 @@ class TestNotificationI18n(unittest.TestCase):
         self.assertEqual(title_en, "Daily Claim Deadline Exceeded")
         self.assertIn("within 30 minutes", reason_en)
         self.assertIn("Pending Subflows", fields_en)
-        self.assertEqual(footer_en, "Blackfire Crusade • Operator Action Required")
+        self.assertEqual(footer_en, "Automation Requires Manual Intervention")
 
     def test_format_supervisor_crash_alarm_bilingual(self):
         # zh-TW
@@ -231,9 +231,9 @@ class TestNotificationI18n(unittest.TestCase):
             now_dt=datetime(2026, 9, 12, 10, 0, 0),
         )
         self.assertEqual(title_zh, "Supervisor 崩潰循環超限警報")
-        self.assertIn("重啟次數超過上限 (5次)", reason_zh)
-        self.assertIn("窗口內重啟次數", fields_zh)
-        self.assertEqual(footer_zh, "黑火遠征 • 需要人工介入處理")
+        self.assertIn("超過上限 5 次", reason_zh)
+        self.assertIn("重啟次數", fields_zh)
+        self.assertEqual(footer_zh, "自動掛機需要人工介入處理")
 
         # en
         title_en, reason_en, fields_en, desc_en, footer_en = format_supervisor_crash_alarm(
@@ -247,8 +247,8 @@ class TestNotificationI18n(unittest.TestCase):
         )
         self.assertEqual(title_en, "Supervisor Crash Loop Exceeded")
         self.assertIn("exceeded 5 restarts", reason_en)
-        self.assertIn("Restarts in Window", fields_en)
-        self.assertEqual(footer_en, "Blackfire Crusade • Operator Action Required")
+        self.assertIn("Restart Count", fields_en)
+        self.assertEqual(footer_en, "Automation Requires Manual Intervention")
 
     def test_get_notification_language_and_profile_override(self):
         # Default global
@@ -379,7 +379,7 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
         self.mock_notifier.notify_milestone.assert_called_once()
         zh_call = self.mock_notifier.notify_milestone.call_args[1]
         self.assertEqual(zh_call["title"], "每日城鎮速領完成")
-        self.assertEqual(zh_call["footer_text"], "黑火遠征 • 自動掛機運行正常")
+        self.assertEqual(zh_call["footer_text"], "自動掛機運行正常")
 
         # 2. English coordinator
         self.mock_notifier.reset_mock()
@@ -394,7 +394,7 @@ class TestDailyPipelineNotifierLogic(unittest.TestCase):
         self.mock_notifier.notify_milestone.assert_called_once()
         en_call = self.mock_notifier.notify_milestone.call_args[1]
         self.assertEqual(en_call["title"], "Daily Claim Phase Completed")
-        self.assertEqual(en_call["footer_text"], "Blackfire Crusade • Automation Healthy")
+        self.assertEqual(en_call["footer_text"], "Automation Running Normally")
         self.assertIn("Quests Accepted", en_call["fields"])
 
 
@@ -477,7 +477,7 @@ class TestMilestoneEventWiring(unittest.TestCase):
         # Assert called
         self.mock_notifier.notify_milestone.assert_called_once()
         call_kwargs = self.mock_notifier.notify_milestone.call_args[1]
-        self.assertEqual(call_kwargs["title"], "每日懸賞全數清空")
+        self.assertEqual(call_kwargs["title"], "每日懸賞任務已全部完成")
 
         # Second invocation does not notify again
         self.mock_notifier.reset_mock()

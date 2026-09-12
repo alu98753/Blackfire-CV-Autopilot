@@ -26,11 +26,11 @@ LANGUAGE_ALIASES: dict[str, str] = {
 
 SUBFLOW_NAMES: dict[str, dict[str, str]] = {
     "zh-TW": {
-        "chest": "寶箱 (chest)",
-        "hero_draw": "英雄召喚 (hero_draw)",
-        "blood_altar": "血之祭壇 (blood_altar)",
-        "jewelry_workshop": "珠寶工坊 (jewelry_workshop)",
-        "bulletin_board": "懸賞告示牌 (bulletin_board)",
+        "chest": "寶箱 (Chest)",
+        "hero_draw": "英雄召喚 (Hero Draw)",
+        "blood_altar": "血之祭壇 (Blood Altar)",
+        "jewelry_workshop": "珠寶工坊 (Jewelry Workshop)",
+        "bulletin_board": "懸賞告示牌 (Bulletin Board)",
     },
     "en": {
         "chest": "Chest",
@@ -43,11 +43,11 @@ SUBFLOW_NAMES: dict[str, dict[str, str]] = {
 
 MESSAGES: dict[str, dict[str, Any]] = {
     "zh-TW": {
-        "footer_healthy": "黑火遠征 • 自動掛機運行正常",
-        "footer_alarm": "黑火遠征 • 需要人工介入處理",
-        "common_alarm_desc": "自動恢復機制已耗盡，需要手動介入處理。",
+        "footer_healthy": "自動掛機運行正常",
+        "footer_alarm": "自動掛機需要人工介入處理",
+        "common_alarm_desc": "自動修正機制超過重試次數上限，需要手動介入處理。",
         "field_timestamp": "時間戳記",
-        "field_profile": "角色檔案",
+        "field_profile": "玩家檔案",
         "field_alarm_code": "警報代碼",
         "field_reason": "原因",
         "milestone1": {
@@ -57,8 +57,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "field_town_subflows": "城鎮子流程",
         },
         "milestone2": {
-            "title": "每日懸賞全數清空",
-            "description": "所有已接取的每日懸賞任務皆已完成。掛機程序切換至常規常駐退守模式。",
+            "title": "每日懸賞任務已全部完成",
+            "description": "所有已接取的每日懸賞任務皆已完成。掛機程序進入常規掛機模式。",
             "field_status": "狀態",
             "status_completed": "所有懸賞任務已完成",
             "field_next_target": "後續目標",
@@ -67,23 +67,23 @@ MESSAGES: dict[str, dict[str, Any]] = {
         },
         "deadline_alarm": {
             "title": "每日速領超時卡死警報",
-            "reason_template": "每日 08:05 重置後超過 {minutes} 分鐘仍未完成城鎮速領階段。",
+            "reason_template": "08:05 重置後超過 {minutes} 分鐘仍未完成每日城鎮速領階段。",
             "field_pending_subflows": "未完成子流程",
             "field_current_state": "當前狀態機狀態",
         },
         "supervisor_alarm": {
             "title": "Supervisor 崩潰循環超限警報",
-            "reason_template": "Supervisor 在滑動觀察窗口 ({window_seconds}秒) 內重啟次數超過上限 ({max_restarts}次)。",
-            "field_restarts": "窗口內重啟次數",
-            "field_window_duration": "滑動窗口時長",
+            "reason_template": "Supervisor 在 {window_seconds} 秒內重啟次數超過上限 {max_restarts} 次。",
+            "field_restarts": "重啟次數",
+            "field_window_duration": "時間區間",
         },
     },
     "en": {
-        "footer_healthy": "Blackfire Crusade • Automation Healthy",
-        "footer_alarm": "Blackfire Crusade • Operator Action Required",
-        "common_alarm_desc": "Automatic recovery exhausted. Manual intervention required.",
+        "footer_healthy": "Automation Running Normally",
+        "footer_alarm": "Automation Requires Manual Intervention",
+        "common_alarm_desc": "Automatic recovery exceeded retry limit. Manual intervention required.",
         "field_timestamp": "Timestamp",
-        "field_profile": "Profile",
+        "field_profile": "Player Profile",
         "field_alarm_code": "Alarm Code",
         "field_reason": "Reason",
         "milestone1": {
@@ -93,8 +93,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "field_town_subflows": "Town Subflows",
         },
         "milestone2": {
-            "title": "Bounty Quests Cleared",
-            "description": "All accepted bounty quests completed. Bot transitioning to steady-state mode.",
+            "title": "All Daily Bounty Quests Completed",
+            "description": "All accepted daily bounty quests completed. Bot entering regular farming mode.",
             "field_status": "Status",
             "status_completed": "All accepted quests completed",
             "field_next_target": "Next Target",
@@ -109,9 +109,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
         },
         "supervisor_alarm": {
             "title": "Supervisor Crash Loop Exceeded",
-            "reason_template": "Supervisor exceeded {max_restarts} restarts within sliding window ({window_seconds}s).",
-            "field_restarts": "Restarts in Window",
-            "field_window_duration": "Window Duration",
+            "reason_template": "Supervisor exceeded {max_restarts} restarts within {window_seconds} seconds.",
+            "field_restarts": "Restart Count",
+            "field_window_duration": "Time Window",
         },
     },
 }
