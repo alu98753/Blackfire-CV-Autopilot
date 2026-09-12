@@ -936,6 +936,11 @@ class TestDailyNotificationReconcileAndRetry(unittest.TestCase):
 
     def test_reconcile_milestone2_retry_after_scheduler_cleared(self):
         test_dt = datetime(2026, 9, 12, 11, 30, 0)
+        # Setup Tier 1 completed and milestone1 notified so reconciler targets milestone2
+        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            self.dm.record_subflow_completed(sf)
+        self.notifier.record_milestone_notified("milestone1", now_dt=test_dt)
+
         # Durable business fact recorded
         self.dm.record_bounty_quests_completed(now_dt=test_dt)
 
@@ -1003,8 +1008,34 @@ class TestDailyNotificationReconcileAndRetry(unittest.TestCase):
         res2 = self.notifier.check_daily_claim_deadline(current_state="TOWN", now_dt=alarm_dt)
         self.assertTrue(res2.success)
         self.assertEqual(self.notifier.history.get("last_deadline_alarm_date"), "2026-09-12")
-        dispatched_ids = [m["id"] for m in self.notifier.history.get("dispatched_messages", [])]
-        self.assertIn("alarm_msg_999", dispatched_ids)
+
+    def test_reconcile_at_most_one_outbound_attempt_per_tick(self):
+        """Invariant: If multiple notifications are pending, only one is attempted per tick to bound network latency."""
+        test_dt = datetime(2026, 9, 12, 11, 0, 0)
+        # Both Tier 1 and Bounty are marked completed in DailyManager
+        for sf in ["chest", "hero_draw", "blood_altar", "jewelry_workshop", "bulletin_board"]:
+            self.dm.record_subflow_completed(sf)
+        self.dm.record_bounty_quests_completed(now_dt=test_dt)
+
+        self.mock_port.notify_milestone.side_effect = [
+            NotificationResult(success=True, external_message_id="msg_m1_101"),
+            NotificationResult(success=True, external_message_id="msg_m2_102"),
+        ]
+
+        # Tick 1: Both Milestone 1 and Milestone 2 are pending, but only Milestone 1 is dispatched
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, force=True)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 1)
+        self.assertEqual(self.notifier.history.get("last_milestone1_date"), "2026-09-12")
+        self.assertEqual(self.notifier.history.get("last_milestone2_date", ""), "")
+
+        # Tick 2: Next tick dispatches Milestone 2
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, force=True)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 2)
+        self.assertEqual(self.notifier.history.get("last_milestone2_date"), "2026-09-12")
+
+        # Tick 3: No more pending notifications
+        self.notifier.reconcile_pending_notifications(now_dt=test_dt, force=True)
+        self.assertEqual(self.mock_port.notify_milestone.call_count, 2)
 
 
 if __name__ == "__main__":

@@ -242,9 +242,16 @@ class DailyPipelineNotifier:
             return
         self._next_pending_reconcile_ts = cur_ts + self._pending_reconcile_interval_seconds
 
-        self.evaluate_tier1_completion(now_dt=now_dt)
-        self.evaluate_bounty_completion(fallback_mode=fallback_mode, now_dt=now_dt)
-        self.check_daily_claim_deadline(current_state=current_state, now_dt=now_dt)
+        # Invariant: At-most-one outbound notification attempt per reconciliation tick to bound network latency.
+        # Priority: Deadline Alarm (highest urgency) -> Milestone 1 -> Milestone 2
+        if self.check_daily_claim_deadline(current_state=current_state, now_dt=now_dt):
+            return
+
+        if self.evaluate_tier1_completion(now_dt=now_dt):
+            return
+
+        if self.evaluate_bounty_completion(fallback_mode=fallback_mode, now_dt=now_dt):
+            return
 
     def check_daily_claim_deadline(self, current_state: str = "UNKNOWN", now_dt: datetime | None = None) -> Any:
         """Periodically check if 08:05 reset deadline has been exceeded while Tier 1 claims remain incomplete."""
