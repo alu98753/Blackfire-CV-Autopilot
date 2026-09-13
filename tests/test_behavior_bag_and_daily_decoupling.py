@@ -103,8 +103,11 @@ class TestBehaviorBagAndDailyDecoupling(unittest.TestCase):
 
         def mock_match(img, tpl, **kw):
             if tpl == "common/quit.png":
-                return ((1400, 150), 0.92)
-            if tpl == "common/tidy.png":
+                # 全圖 (寬度 1920) 傳入時座標為 (1400, 150)；
+                # quit_roi (局部圖 rx=960) 傳入時局部座標為 1400 - 960 = 440
+                is_roi = img.shape[1] < 1920
+                return ((440, 150) if is_roi else (1400, 150), 0.92)
+            if tpl == "common/Disassembly.png":
                 return ((1200, 800), 0.90)
             if tpl == "common/door.png":
                 return ((100, 500), 0.88)
