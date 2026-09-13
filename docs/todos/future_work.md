@@ -105,11 +105,14 @@
 - [ ] **導航與狀態機模組化縮編 (~300 行原則)**：
   - 目前 [`states/handlers/navigation.py`](../../states/handlers/navigation.py) (1,334 行) 與 [`states/state_machine.py`](../../states/state_machine.py) (2,449 行) 規模龐大，需依 BDI 與業務職責進一步拆分。
 - [ ] 🟡 **覆蓋層感知存在性與關閉按鈕語意解耦技術債 (Overlay Presence vs Close Element Decoupling)**：
-  - **背景**：在 `fix/dungeon-navigation-routing` 分支中，我們透過 Intent Overlay Policy 將覆蓋層關閉行為收斂進 Navigation Table（`PRIMARY_NAVIGATION` + `LOBBY / DUNGEON_SELECT` + `CLOSE_OVERLAY` → `DISMISS_OVERLAY`），並在 `fix/stage-select-overlay-misclassification` 移除了會誤傷關卡抽屜的 `STAGE_SELECT` 邊。
+  - **背景與分析文件**：
+    - 分析規格詳見 [[Stage_Select_Overlay Misclassification Fix Spec.md](Stage_Select_Overlay%20Misclassification%20Fix%20Spec.md)] 與 [[domain_entry_overlay_misclassification_analysis.md](domain_entry_overlay_misclassification_analysis.md)]。
+    - 在 `fix/dungeon-navigation-routing` 分支中，我們透過 Intent Overlay Policy 將覆蓋層關閉行為收斂進 Navigation Table（`PRIMARY_NAVIGATION` + `LOBBY / DUNGEON_SELECT` + `CLOSE_OVERLAY` → `DISMISS_OVERLAY`），並在 `fix/stage-select-overlay-misclassification` 移除了會誤傷關卡抽屜的 `STAGE_SELECT` 邊。
   - **架構對齊技術債**：
-    1. **語意反向依賴**：目前 `snapshot_from_scene_info()` 幾乎僅真正建模 `TASK_COMPLETE` 於 `OverlayId`，而 `common/quit.png` 卻直接被映射進 `ElementId.CLOSE_OVERLAY`，導致系統以「哪裡有關閉按鈕 (WHERE)」代替了「當前是否存在應被關閉的 blocking overlay (WHAT)」的客觀存在性判定。
-    2. **正交分離與防範 FSM 爆炸**：後續應推進至「由 overlay 特徵判定 `OverlayId.DUNGEON_COOLDOWN` ➔ policy 決策 `DISMISS_OVERLAY` ➔ 取 `ElementId.CLOSE_OVERLAY` 發射點擊」，嚴守 Greenfield-lite 的 Scene 與 Overlay 正交分離，避免為 stage drawer / cooldown popup 增設不必要的新 Scene。
-    3. **非阻塞自癒執行**：`NavigationDecisionExecutor` 在處理 `DISMISS_OVERLAY` 時調用的 `click_and_wait_until_gone(...)` 仍包含內部阻塞式等待循環，應排程遷移至每幀響應式後置條件驗證。
+    1. **語意反向依賴**：目前 `snapshot_from_scene_info()` 幾乎僅真正建模 `TASK_COMPLETE` 於 `OverlayId`，而 `common/quit.png` 卻直接被映射進 `ElementId.CLOSE_OVERLAY`，導致系統以「哪裡有關閉按鈕 (WHERE)」代替了「當前是否存在應被關閉的 blocking overlay (WHAT)」的客觀存在性判定。此問題已在 Stage 抽屜與 Domain 出戰視窗（`Domains_entry` ➔ 誤點 `quit.png`）中重複出現。
+    2. **模板契約不一致 (`lobby_start_btn`)**：`navigation_routing.py` 預設 `lobby_start_btn = "stages/start.png"`，但領地出戰按鈕為 `domains/common/start_btn.png` 且 config 未配置，導致領地準備視窗無法被映射為 `ElementId.START`，反而放大 `ElementId.CLOSE_OVERLAY` 誤觸發機率。
+    3. **正交分離與防範 FSM 爆炸**：後續應推進至「由 overlay 特徵判定 `OverlayId.DUNGEON_COOLDOWN` ➔ policy 決策 `DISMISS_OVERLAY` ➔ 取 `ElementId.CLOSE_OVERLAY` 發射點擊」，嚴守 Greenfield-lite 的 Scene 與 Overlay 正交分離，避免為 stage drawer / domain drawer / cooldown popup 增設不必要的新 Scene。
+    4. **非阻塞自癒執行**：`NavigationDecisionExecutor` 在處理 `DISMISS_OVERLAY` 時調用的 `click_and_wait_until_gone(...)` 仍包含內部阻塞式等待循環，應排程遷移至每幀響應式後置條件驗證。
 - [ ] 🔴 **大廳領麵包卡住觸發 30s 看門狗逾時修復 ([bread_collect_watchdogbug.md](bread_collect_watchdogbug.md))**：
   - **24/7 風險 (看門狗殺進程)**：小號前往大廳領麵包時，點擊 `bread_collect` 後 `bread_click_attempted` 標記未改變後續 action policy，且大廳通用比對過多無關模板，導致卡在 BreadCollectionHandler 直至觸發 30 秒看門狗逾時。
   - **規劃方向**：解耦大廳領取特徵比對，落實最小感知（僅比對 `goback_town` 與 `bread`），並使 `bread_click_attempted` 成為推進下一階段的狀態機守衛。
