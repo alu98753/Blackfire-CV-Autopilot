@@ -47,6 +47,37 @@
 - **進店與整理前置清理**：各 Handler 於 `INIT` 階段若偵測到殘留的關閉按鈕 (`common/quit.png` 可見但非城鎮大門)，優先透過 `click_and_wait_until_gone` 消除覆蓋層，避免點擊被前景遮罩吸收。
 - **進店點擊遺失自癒**：`JewelryWorkshopHandler` 進入 `ENTERED_BUILDING` 階段後，若超過 4 秒畫面依然看見城門 (`common/door.png`) 且無店內特徵，判定為進店點擊遺失，自癒退回 `INIT` 重新點擊進店，防止原地死鎖。
 
+### 8. 懸賞告示牌子流程契約 (Bulletin Board Subflow Contract)
+
+懸賞告示牌子流程負責每日懸賞任務之開窗、重置與接取，依循 [Precondition Contracts](../../architecture/precondition_contracts.md) 嚴格落實以下不變量：
+
+#### 8.1 架構不變量 (Architecture Invariants)
+1. **Perception Classification Invariant**：
+   - 證據不足（Evidence-Insufficient）絕不等於已知干擾層（Known Conflicting Overlay）。
+   - 剛由目標動作引導產生之新彈窗，在缺乏明確反向證據前，不得僅因目標專屬特徵尚未就緒而逕行判定為干擾層並予以關閉。
+   - 狀態機之領域推進必須由確鑿的正向或排他證據支撐。
+2. **Scoped Decision Invariant**：
+   - 用於狀態轉移決策之特徵比對，必須嚴格限制於其專屬的 Scoped ROI 幾何邊界內。
+   - 診斷機制可擴大搜尋範圍以提取除錯證據，但任何全圖或全尺度診斷結果嚴禁反向影響或決定狀態決策。
+3. **Action Lifecycle Invariant**：
+   - 點擊不等於完成（`Click != Success`）；發射操作後必須於沉澱窗口後觀察物理後置條件。
+   - 在後置條件未被證實失敗前，嚴禁高頻重複發射相同動作。
+   - 所有重試必須具備有界上限（Bounded Retry），防止因 UI 假陽性產生死循環。
+4. **Failure Escalation Invariant**：
+   - 重試預算耗盡不等於業務成功（`Retry Exhausted != Completion`）。
+   - 當操作重試耗盡時，必須透過冷卻退避（Defer）或讓渡控制權（Yield）進入有界自癒，嚴禁將失敗偽裝成成功並推進至後續業務流程。
+
+#### 8.2 領域契約 (Domain Contracts)
+1. **開窗四互斥語意分流**：
+   - 彈窗狀態必須可明確區分為：目標確認（Confirmed Target）、已知衝突遮擋（Known Conflicting Overlay）、未知/證據不足遮擋（Unknown / Evidence-Insufficient Overlay）與無視窗（No Overlay）。
+   - 在有界沉澱窗口內，未知遮擋應進行有界再觀察，超額時始進入重試階梯；重試超限則退避讓渡。
+2. **背包排他判定正交性**：
+   - 背包排他判定必須使用經驗證為背包專屬的正交特徵，嚴禁使用會跨其他介面出現的共享圖示（如重新整理按鈕）作為單一排他證據。
+   - *(實作參考：目前以 `common/Disassembly.png` 作為背包專屬排他特徵；`common/tidy.png` 因可能於其他功能介面重疊出現，不得作為全域背包鑑別特徵)*。
+3. **重置操作 Bounded Click-Observe-Retry**：
+   - 重置按鈕遵循點擊 ➔ 沉澱等待 ➔ 有界重試 ➔ 失敗升級退避流程。
+   - 重置按鈕若在重試上限耗盡後依然持續可見，判定為操作失敗，必須觸發退避讓渡，不得強行推進至任務接取。
+
 ---
 
 ## 🔄 流程與運作原理
