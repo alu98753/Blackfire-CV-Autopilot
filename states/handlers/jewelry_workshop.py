@@ -4,6 +4,7 @@ import sys
 import logging
 from config import BASE_RESOLUTION_WIDTH
 from states.handlers.base import BaseStateHandler
+from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
 
 class JewelryWorkshopHandler(BaseStateHandler):
     """
@@ -14,13 +15,16 @@ class JewelryWorkshopHandler(BaseStateHandler):
        - 遍歷 goods 模板 (Sandworm_scales, Spider_silk, Spider_venom_glands, The_cloth_wrapped_around_the_dead, Warcraft_Fang, lizard_skin, scrap)。
        - 頂層未找到 ➔ 向下滑動兩下 ➔ 若仍未找到 ➔ 向上滑動兩下還原高度 ➔ 繼續下一個商品。
        - 找到商品 ➔ 點擊商品 ➔ 點擊 sell.png ➔ 點擊 sell_max.png ➔ 點擊 ok.png / confirm.png。
-    4. 退出階段 (ALL_DONE_EXITING)：
+    4. 退出階段 (ALL_DONE_EXITING / VERIFY_EXIT)：
        - 點擊離開建築按鈕 (exitfromhouse_and_to_town.png) 返回城鎮。
-       - 完成獨立模式並安全退出程式。
+       - 於 VERIFY_EXIT 階段有界核驗城鎮特徵後方可交棒。
     """
+    MAX_EXIT_VERIFY_ATTEMPTS = 3
+    MAX_NO_EVIDENCE_COUNT = 3
+
     def __init__(self, machine):
         super().__init__(machine)
-        self.step_phase = "INIT"  # INIT, ENTERED_BUILDING, SELL_MENU_OPEN, ALL_DONE_EXITING
+        self.step_phase = "INIT"  # INIT, ENTERED_BUILDING, SELL_MENU_OPEN, ALL_DONE_EXITING, VERIFY_EXIT
         self.last_action_time = 0.0
         self.current_goods_idx = 0
         self.goods_scroll_state = "TOP"  # TOP, SCROLLED_DOWN
@@ -33,6 +37,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
         self.entered_building_time = 0.0
+        self.exit_verify_attempts = 0
+        self.exit_no_evidence_count = 0
+        self.mislocation_guard = MislocationGuard(threshold=2)
         from utils.merchant_gold_detector import MerchantGoldDetector
         self.gold_detector = MerchantGoldDetector()
 
@@ -50,6 +57,36 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
         self.entered_building_time = 0.0
+        self.exit_verify_attempts = 0
+        self.exit_no_evidence_count = 0
+        self.mislocation_guard.reset()
+
+    def _reset_exit_verification_state(self):
+        """
+        僅重置離場驗證的階段與計數器至 INIT 安全起點。
+        明確保留 current_shop_id、current_building_btn、sold_summary 等 execution context，
+        防止 safe recovery 恢復後丟失商店輪換與出售結算上下文。
+        """
+        self.step_phase = "INIT"
+        self.last_action_time = 0.0
+        self.exit_verify_attempts = 0
+        self.exit_no_evidence_count = 0
+        self.mislocation_guard.reset()
+
+    def _handle_verify_exit_failure(self, reason: str):
+        """
+        當離場驗證耗盡重試或超出有界等待窗口時執行的安全失敗處置：
+        - 嚴禁標記完成 (_record_completion)
+        - 嚴禁交棒消費佇列 (pop_and_next_town_subflow)
+        - 僅重置離場驗證計數至 INIT 安全起點，保留商店輪換 context 與已出售數據
+        - 調用 safe recovery (stash_current_state) 進行彈窗復原或移交 Watchdog
+        """
+        logging.error(
+            f"❌ [珠寶加工廠 VERIFY_EXIT] 離場驗證安全失敗處置: [{reason}]，重置至 INIT 安全起點並發起 safe recovery"
+        )
+        self._reset_exit_verification_state()
+        if hasattr(self.machine, "stash_current_state"):
+            self.machine.stash_current_state(reason=f"jewelry_exit_failed_{reason}")
 
     def _record_completion(self):
         """記錄 DailyManager 珠寶加工廠今日已完成，並累加該商店造訪次數"""
@@ -412,8 +449,70 @@ class JewelryWorkshopHandler(BaseStateHandler):
             return
 
         # =========================================================================
-        # 2. 退出階段 (ALL_DONE_EXITING)
+        # 2. 退出階段 (ALL_DONE_EXITING / VERIFY_EXIT)
         # =========================================================================
+        if self.step_phase == "VERIFY_EXIT":
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+            pos_building, _ = self.matcher.match(screen_img, self.current_building_btn, threshold=0.75)
+            if pos_door or pos_building:
+                logging.info("✅ [珠寶加工廠 VERIFY_EXIT] 偵測到已回到城鎮大門/建築畫面，確認離場完成，進行交棒...")
+                self._record_completion()
+                self.reset_state()
+                self.machine.need_jewelry_workshop = False
+                self.last_action_time = now
+                self.machine.notify_ui_progress()
+
+                logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
+                self.machine.pop_and_next_town_subflow()
+                return
+
+            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
+            if pos_quit:
+                logging.info("💎 [珠寶加工廠 VERIFY_EXIT] 偵測到殘留浮層關閉按鈕 [common/quit.png]，進行關閉...")
+                self.mouse.click(left + pos_quit[0], top + pos_quit[1])
+                self.last_action_time = now
+                self.machine.notify_ui_progress()
+                self.exit_no_evidence_count = 0
+                return
+
+            pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+            if pos_exit:
+                self.exit_no_evidence_count = 0
+                if now - self.last_action_time >= 2.0:
+                    if self.exit_verify_attempts >= self.MAX_EXIT_VERIFY_ATTEMPTS:
+                        logging.error(
+                            f"❌ [珠寶加工廠 VERIFY_EXIT] 離開建築按鈕重試次數已達上限 ({self.exit_verify_attempts}/{self.MAX_EXIT_VERIFY_ATTEMPTS})，"
+                            "無法成功離場，觸發安全復原..."
+                        )
+                        self._handle_verify_exit_failure("exit_retries_exhausted")
+                        return
+
+                    self.exit_verify_attempts += 1
+                    logging.warning(
+                        f"⚠️ [珠寶加工廠 VERIFY_EXIT] 離場點擊後超過 2 秒仍停留在店內，重試點擊 [{exit_building_btn}] "
+                        f"({self.exit_verify_attempts}/{self.MAX_EXIT_VERIFY_ATTEMPTS})..."
+                    )
+                    self.mouse.click(left + pos_exit[0], top + pos_exit[1])
+                    self.last_action_time = now
+                    self.machine.notify_ui_progress()
+                return
+
+            # 若既無城鎮特徵、無 quit、亦無 exit 按鈕 (未知畫面/過場延遲/黑畫面)
+            if now - self.last_action_time >= 1.0:
+                self.exit_no_evidence_count += 1
+                self.last_action_time = now
+                if self.exit_no_evidence_count >= self.MAX_NO_EVIDENCE_COUNT:
+                    logging.error(
+                        f"❌ [珠寶加工廠 VERIFY_EXIT] 連續 {self.exit_no_evidence_count} 次未偵測到任何可用特徵，"
+                        "超出有界等待窗口，觸發安全復原..."
+                    )
+                    self._handle_verify_exit_failure("no_usable_evidence_timeout")
+                    return
+                logging.debug(
+                    f"⌛ [珠寶加工廠 VERIFY_EXIT] 等待離場畫面過渡中 ({self.exit_no_evidence_count}/{self.MAX_NO_EVIDENCE_COUNT})..."
+                )
+            return
+
         if self.step_phase == "ALL_DONE_EXITING":
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
             pos_building, _ = self.matcher.match(screen_img, self.current_building_btn, threshold=0.75)
@@ -435,7 +534,6 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.mouse.click(left + pos_quit[0], top + pos_quit[1])
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
-
                 return
 
             pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
@@ -450,25 +548,46 @@ class JewelryWorkshopHandler(BaseStateHandler):
                     if dm and hasattr(dm, "record_shop_gold"):
                         dm.record_shop_gold(self.current_shop_id, final_gold)
 
-                logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
+                logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮，轉入 VERIFY_EXIT 階段等待確認...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
-                self._record_completion()
-                self.reset_state()
-                self.machine.need_jewelry_workshop = False
+                self.step_phase = "VERIFY_EXIT"
+                self.exit_verify_attempts = 1
+                self.exit_no_evidence_count = 0
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
-
-                logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
-                self.machine.pop_and_next_town_subflow()
                 return
             return
 
         # =========================================================================
         # 3. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
         # =========================================================================
+        # 3.0 錯位防護 (MislocationGuard 連續確認讓渡)
+        # 自身專屬特徵：出售選單開啟 (sell_btn / sell_max_btn)、店內出售看板 (sell_out.png)、
+        # 或處於城鎮基準場景 (common/door.png) / 目標商店建築
+        pos_sell_chk, _ = self.matcher.match(screen_img, sell_btn, threshold=0.75, quiet=True)
+        pos_max_chk, _ = self.matcher.match(screen_img, sell_max_btn, threshold=0.75, quiet=True)
+        pos_sell_out, conf_so = self.matcher.match(screen_img, sell_out_btn, threshold=0.80, quiet=True)
+        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75, quiet=True)
+        pos_building, _ = self.matcher.match(screen_img, self.current_building_btn, threshold=0.65, quiet=True)
+
+        own_evidence = bool(pos_sell_chk or pos_max_chk or pos_sell_out or pos_door or pos_building)
+
+        # 通用建築內部特徵：exitfromhouse 或 goback_town 可見
+        pos_exit_init, conf_exit = self.matcher.match(screen_img, exit_building_btn, threshold=0.80, quiet=True)
+        pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
+        generic_building_evidence = bool(pos_exit_init or pos_goback)
+
+        decision = self.mislocation_guard.evaluate(own_evidence, generic_building_evidence)
+        if decision == MislocationDecision.RELINQUISH:
+            logging.warning("⚠️ [JewelryWorkshop Mislocation] 偵測到通用建築內部特徵但無珠寶加工廠/城鎮特徵，連續確認錯位，讓渡實體所有權給 REACH_TOWN...")
+            self.reset_state()
+            if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+            else:
+                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return True
+
         # 3.1 檢查是否已開啟出售選單 (畫面上有 sell_btn 或 sell_max_btn)
-        pos_sell_chk, _ = self.matcher.match(screen_img, sell_btn, threshold=0.75)
-        pos_max_chk, _ = self.matcher.match(screen_img, sell_max_btn, threshold=0.75)
         if pos_sell_chk or pos_max_chk:
             logging.info("💎 [珠寶加工廠] 辨識到目前已處於出售選單畫面，直接進入出售階段...")
             self.step_phase = "SELL_MENU_OPEN"
@@ -478,8 +597,6 @@ class JewelryWorkshopHandler(BaseStateHandler):
             return
 
         # 3.2 檢查是否已在建築內部 (sell_out.png 與 exitfromhouse_and_to_town.png 同時存在)
-        pos_sell_out, conf_so = self.matcher.match(screen_img, sell_out_btn, threshold=0.80)
-        pos_exit_init, conf_exit = self.matcher.match(screen_img, exit_building_btn, threshold=0.80)
         if pos_sell_out and pos_exit_init:
             # 進入房間時先辨識商人頭頂看板金幣
             ocr_reader = getattr(self.machine, "get_ocr_reader", lambda: None)

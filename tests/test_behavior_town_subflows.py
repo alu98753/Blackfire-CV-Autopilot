@@ -180,7 +180,7 @@ class TestTownSubflowRedDotRetryLifecycle(unittest.TestCase):
         sm.current_state = sm.STATE_NAVIGATING
         sm.matcher.match.side_effect = lambda _img, name, **_kw: (
             ((200, 550), 0.95)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         entry = BuildingCheckResult(

@@ -695,7 +695,7 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         )
         self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
             ((74, 744), 0.90)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         with patch(
@@ -720,7 +720,7 @@ class TestBagScenarios(BehavioralScenarioTestCase):
         altar_handler.handle(fake_img, rect)
         self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
             ((74, 744), 0.90)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         self.state_machine.handle_town_subflow_precondition(fake_img, rect)
@@ -774,7 +774,9 @@ class TestBagScenarios(BehavioralScenarioTestCase):
 
         # 2. 模擬主迴圈 step() 自然推進：畫面呈現城鎮入口特徵與血之祭壇紅點
         self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
-            ((74, 744), 0.90) if name == "common/door.png" else (None, 0.0)
+            ((74, 744), 0.90)
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
         )
         with patch(
             "states.town_subflow_perception.detect_building_with_red_dot",

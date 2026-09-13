@@ -204,20 +204,32 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         self.assertEqual(sm.config["type"], "jewelry_workshop")
         self.assertEqual(sm.config["building_btn"], "town_building/Jewelry_workshop/Jewelry_workshop.png")
 
-        # 3. 模擬狀態機在第二站突然進入 STATE_UNKNOWN，並看見城鎮/大門按鈕 (common/door.png)
-        # 驗證狀態機絕不會因為 sm.config['type'] == 'blood_altar' 而誤切回 BLOOD_ALTAR！
-        sm.current_state = sm.STATE_UNKNOWN
-        sm.matcher.match.side_effect = lambda img, name, **kw: ((50, 50), 0.90) if name == "common/door.png" else (None, 0.0)
+        # 3. 模擬狀態機在第二站位於 STATE_NAVIGATING，並看見城鎮與 clear anchor
+        # 驗證狀態機絕不會因為舊 config['type'] == 'blood_altar' 而誤切回 BLOOD_ALTAR！
+        from utils.town_building_detector import BuildingCheckResult
+        sm.current_state = sm.STATE_NAVIGATING
+        sm.matcher.match.side_effect = lambda img, name, **kw: (
+            ((50, 50), 0.90)
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
         import numpy as np
-        import os
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
 
-        # 執行全域掃描 step (在 STATE_UNKNOWN 下)
-        sm.step()
+        with patch(
+            "states.town_subflow_perception.detect_building_with_red_dot",
+            return_value=BuildingCheckResult(
+                True, True, building_pos=(200, 200), confidence_building=0.9
+            ),
+        ):
+            res = sm.handle_town_subflow_precondition(fake_img, rect)
+            self.assertTrue(res)
 
         # 斷言 3: 狀態應正確轉移至 STATE_JEWELRY_WORKSHOP，絕對不能誤轉回 BLOOD_ALTAR！
         self.assertEqual(sm.current_state, sm.STATE_JEWELRY_WORKSHOP)
+        self.assertFalse(sm.need_blood_altar)
+        self.assertEqual(sm.config["type"], "jewelry_workshop")
 
     def test_town_pipeline_flags_cleared_on_empty_queue(self):
         """

@@ -36,12 +36,12 @@ class TestHeroDrawSubflow(unittest.TestCase):
         self.mock_machine.mouse.click.assert_called_once_with(100, 100)
 
     def test_handler_starts_already_inside_tavern(self):
-        """測試：當一開始就處於酒館內部 (看得到 free_recruitment.png / exitfromhouse_and_to_town.png) 時，自動辨識並切換至 ENTERED_TAVERN"""
+        """測試：當一開始就處於酒館內部 (看得到 free_recruitment.png) 時，自動辨識並切換至 ENTERED_TAVERN"""
         mock_img = MagicMock()
         rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "town_building/exitfromhouse_and_to_town.png":
+            if template == "town_building/Tavern/free_recruitment.png":
                 return ((500, 500), 0.85)
             return (None, 0.0)
 

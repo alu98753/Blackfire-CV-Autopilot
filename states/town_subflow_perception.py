@@ -9,6 +9,7 @@ from utils.town_building_detector import detect_building_with_red_dot
 
 
 EXIT_BUILDING_TEMPLATE = "town_building/exitfromhouse_and_to_town.png"
+TOWN_CLEAR_ANCHOR_TEMPLATE = "town_building/arena_of_glory/arena_of_glory.png"
 OVERLAY_CLOSE_TEMPLATES = (
     "common/confirm.png",
     "common/ok.png",
@@ -58,11 +59,21 @@ class TownSubflowPerception:
                 0.80,
                 brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
             ),
+            ElementId.TOWN_CLEAR_ANCHOR: self._match(
+                screen_img,
+                TOWN_CLEAR_ANCHOR_TEMPLATE,
+                0.80,
+                brightness_threshold=TOWN_ANCHOR_BRIGHTNESS_THRESHOLD,
+            ),
         }
         elements.update({key: value for key, value in matches.items() if value})
 
-        # 城鎮核心錨點排除結算誤判：若已有明確城鎮大門或鑽石入口，畫面必為城鎮，排斥 RESULT 偽陽性
-        if ElementId.DOOR in elements or ElementId.DIAMOND_ENTRY in elements:
+        # 城鎮核心錨點排除結算誤判：若已有明確城鎮大門、鑽石入口或城鎮前景錨點，畫面必為城鎮，排斥 RESULT 偽陽性
+        if (
+            ElementId.DOOR in elements
+            or ElementId.DIAMOND_ENTRY in elements
+            or ElementId.TOWN_CLEAR_ANCHOR in elements
+        ):
             self._observe_entry(screen_img, flow_key, elements)
             return self._snapshot(SceneId.TOWN, elements)
 
@@ -164,7 +175,11 @@ class TownSubflowPerception:
 
     @staticmethod
     def _classify_scene(elements):
-        if ElementId.DOOR in elements or ElementId.DIAMOND_ENTRY in elements:
+        if (
+            ElementId.DOOR in elements
+            or ElementId.DIAMOND_ENTRY in elements
+            or ElementId.TOWN_CLEAR_ANCHOR in elements
+        ):
             return SceneId.TOWN
         if ElementId.EXIT_BUILDING_TO_TOWN in elements:
             return SceneId.TOWN_BUILDING

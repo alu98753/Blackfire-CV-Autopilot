@@ -184,7 +184,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.machine.current_state = self.machine.STATE_NAVIGATING
         self.matcher.match.side_effect = lambda _img, name, **_kw: (
             ((200, 550), 0.95)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         mock_building.return_value = BuildingCheckResult(
@@ -254,6 +254,21 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
 
         self.assertFalse(handled)
         self.assertEqual(self.machine.current_state, self.machine.STATE_BATTLE)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.mouse.click.assert_not_called()
+
+    def test_result_boundary_keeps_owning_frame_before_settlement_finishes(self):
+        self.machine.start_subflow_queue(["chest"])
+        self.machine.current_state = self.machine.STATE_RESULT
+        self.matcher.match.return_value = ((300, 100), 0.95)
+
+        handled = self.machine.handle_town_subflow_precondition(
+            self.screen, self.rect
+        )
+
+        self.assertFalse(handled)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_RESULT)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
         self.mouse.click.assert_not_called()
 
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
@@ -263,7 +278,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.machine.current_state = self.machine.STATE_NAVIGATING
         self.matcher.match.side_effect = lambda _img, name, **_kw: (
             ((200, 550), 0.95)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         mock_building.return_value = BuildingCheckResult(
@@ -294,7 +309,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.machine.current_state = self.machine.STATE_NAVIGATING
         self.matcher.match.side_effect = lambda _img, name, **_kw: (
             ((200, 550), 0.95)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         # 第 1 幀：看見建築但無紅點
@@ -323,7 +338,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.machine.current_state = self.machine.STATE_NAVIGATING
         self.matcher.match.side_effect = lambda _img, name, **_kw: (
             ((200, 550), 0.95)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         mock_building.return_value = BuildingCheckResult(False, False)
@@ -354,7 +369,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.machine.current_state = self.machine.STATE_NAVIGATING
         self.matcher.match.side_effect = lambda _img, name, **_kw: (
             ((200, 550), 0.95)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         mock_building.return_value = BuildingCheckResult(
@@ -389,7 +404,7 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.machine.current_state = self.machine.STATE_NAVIGATING
         self.matcher.match.side_effect = lambda _img, name, **_kw: (
             ((200, 550), 0.95)
-            if name == "common/door.png"
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
             else (None, 0.0)
         )
         mock_building.return_value = BuildingCheckResult(
@@ -404,6 +419,109 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.assertEqual(
             self.machine.current_state, self.machine.STATE_BULLETIN_BOARD
         )
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_town_door_only_without_clear_anchor_bounds_unknown_then_escalates_without_mutating_intent(
+        self, mock_building
+    ):
+        """
+        [User Mandate / Blocker 1 Verification]:
+        Production TownSubflowPreconditionController 必須真正遵守 Frozen Spec：
+        當畫面僅有 SceneId.TOWN (common/door.png) 但缺乏 TOWN_CLEAR_ANCHOR (arena_of_glory.png)：
+        - 前 2 幀：Readiness UNKNOWN，有界重新觀察，回傳 WAITING (True)，不 dispatch，不 pop，不 defer。
+        - 第 3 幀：UNKNOWN 次數耗盡，升級為 FAILED，觸發 stash_current_state 進入 recovery。
+        - 嚴格守護 Invariant 2：絕不 defer_current_town_subflow、絕不 complete、絕不 pop 業務佇列！
+        """
+        self.machine.start_subflow_queue(["chest", "hero_draw"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        # 僅提供 door.png，無 arena_of_glory.png
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((200, 550), 0.95)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        mock_building.return_value = BuildingCheckResult(
+            True, True, building_pos=(250, 300), confidence_building=0.9
+        )
+        self.machine.daily_manager = MagicMock()
+        self.machine.stash_current_state = MagicMock()
+
+        # 第 1 幀：UNKNOWN (1/3) -> WAITING
+        h1 = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(h1)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.assertEqual(self.machine.town_subflow_queue, ["hero_draw"])
+        self.machine.stash_current_state.assert_not_called()
+
+        # 第 2 幀：UNKNOWN (2/3) -> WAITING
+        h2 = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(h2)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.machine.stash_current_state.assert_not_called()
+
+        # 第 3 幀：UNKNOWN (3/3) 耗盡 -> FAILED -> 升級 recovery
+        h3 = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(h3)
+        self.machine.stash_current_state.assert_called_once_with(
+            reason="reach_town_normalization_failed"
+        )
+        # 核心隔離不變量：未變異業務 Intent
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.assertEqual(self.machine.town_subflow_queue, ["hero_draw"])
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_controller_self_heals_after_recovery_cycle_without_external_coupling(
+        self, mock_building
+    ):
+        """
+        [Architecture Decoupling Verification]:
+        驗證 TownSubflowPreconditionController 自主管理 failure latch 生命週期：
+        - 遭遇 FAILED 後標記 _escalated_recovery = True 並 stash_current_state。
+        - 外部 recovery 結束、角色重回 handler 時，controller 自動檢測到 recovery 已完成，
+          自主調用 reset_failure() 清空 latch，並展開全新正規化嘗試，
+          無需任何外部神物件 (GameStateMachine) 持有具體重置調用！
+        """
+        self.machine.start_subflow_queue(["chest"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        # 模擬先處於未知無 anchor 狀態觸發 failure
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((200, 550), 0.95)
+            if name == "common/door.png"
+            else (None, 0.0)
+        )
+        mock_building.return_value = BuildingCheckResult(
+            True, True, building_pos=(250, 300), confidence_building=0.9, confidence_red_dot=0.95
+        )
+        self.machine.stash_current_state = MagicMock()
+
+        # 連續 3 幀觸發 FAILED
+        for _ in range(3):
+            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(self.machine.town_subflow_precondition._escalated_recovery)
+        self.assertEqual(
+            self.machine.town_subflow_precondition.normalization_controller.last_failure_reason,
+            "readiness_unknown_exhausted",
+        )
+
+        # 模擬 recovery 結束後，畫面已恢復為完全 Ready 的 Town
+        self.matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((200, 550), 0.95)
+            if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+
+        # 下一次調用 handle：controller 自主感知並清空 failure latch，順利完成 dispatch！
+        handled = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(handled)
+        self.assertFalse(self.machine.town_subflow_precondition._escalated_recovery)
+        self.assertIsNone(
+            self.machine.town_subflow_precondition.normalization_controller.last_failure_reason
+        )
+        self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
 
     def test_next_town_subflow_restores_navigation_identity_before_dispatch(self):
         self.machine.primary_config = {"type": "daily", "name": "Daily"}
@@ -457,7 +575,15 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         task_flow.assert_called_once_with(self.rect)
         self.mouse.click.assert_not_called()
 
-    def test_repeated_navigation_timeout_defers_instead_of_clicking_forever(self):
+    def test_repeated_navigation_timeout_isolates_failure_and_preserves_intent(self):
+        """
+        [Slice 2 / Invariant 2]:
+        驗證 REACH_TOWN 動作超時重試耗盡時：
+        - 失敗領域與業務 Intent 嚴格隔離
+        - 絕不調用 defer_subflow("chest", 180)
+        - 絕不 pop current_town_subflow (保留業務 Intent)
+        - 僅重試有限次數 (max_attempts)，不再盲目點擊
+        """
         self.machine.daily_manager = MagicMock()
         self.machine.start_subflow_queue(["chest"])
         self.machine.current_state = self.machine.STATE_NAVIGATING
@@ -472,15 +598,23 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.assertTrue(
             self.machine.handle_town_subflow_precondition(self.screen, self.rect)
         )
+        self.machine.stash_current_state = MagicMock()
         for _ in range(max_attempts):
             self.clock.advance(timeout + 0.1)
-            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+            handled = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
 
-        self.machine.daily_manager.defer_subflow.assert_called_once_with(
-            "chest", 180
-        )
-        self.assertIsNone(self.machine.current_town_subflow)
+        # 核心斷言：Normalization 失敗絕不污染 business intent！
+        # 1. 消耗該幀控制權，防止洩漏給下游 handler 產生 dual authority
+        self.assertTrue(handled)
+        # 2. 不得延遲或彈出業務 Intent
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        # 3. 有限重試次數，不再盲目點擊
         self.assertEqual(self.mouse.click.call_count, max_attempts)
+        # 4. 移交 safe recovery / watchdog 接管
+        self.machine.stash_current_state.assert_called_once_with(
+            reason="reach_town_normalization_failed"
+        )
 
     def test_unknown_state_relocalizes_result_before_town_navigation(self):
         self.machine.start_subflow_queue(["chest"])

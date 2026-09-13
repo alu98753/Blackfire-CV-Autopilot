@@ -42,8 +42,9 @@ class TestChestSubflow(unittest.TestCase):
         """測試：當畫面在大廳 (視角有 goback_town.png) 時，自動點擊返回城鎮"""
         mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
         rect = {"left": 100, "top": 100, "width": 800, "height": 600}
+        self.handler.step_phase = "WAITING_QUIT"
         
-        self.mock_machine.matcher.match.side_effect = lambda img, template, threshold=0.8: (
+        self.mock_machine.matcher.match.side_effect = lambda img, template, threshold=0.8, **kwargs: (
             (50, 50), 0.90) if template == CHEST_GOBACK_TOWN_TEMPLATE else (None, 0.0)
 
         result = self.handler.handle(mock_img, rect)
@@ -53,7 +54,7 @@ class TestChestSubflow(unittest.TestCase):
     def test_handler_claims_chest_full_pipeline(self):
         """
         測試完整神秘寶箱領取管線：
-        Step 1 (INIT，有紅點) ➔ Step 2 (CLICK_FREE_CHEST，點擊 free.png)
+        Step 1 (INIT，有紅點) ➔ 點擊進入 ➔ VERIFY_ENTRY ➔ 確認進入並點擊 free.png ➔ WAITING_CONFIRM
         ➔ Step 3 (WAITING_CONFIRM，點擊 confirm.png)
         ➔ Step 4 (VERIFY_CLAIM_SUCCESS，free.png 消失，確認完成)
         ➔ Step 5 (WAITING_QUIT，點擊 quit.png)
@@ -86,12 +87,12 @@ class TestChestSubflow(unittest.TestCase):
 
         with patch("os.path.exists", return_value=True), \
              patch("utils.town_building_detector.is_true_red_dot", return_value=(True, 1.0)):
-            # Step 1: INIT ➔ 發現建築與紅點 ➔ 點擊進入 ➔ CLICK_FREE_CHEST
+            # Step 1: INIT ➔ 發現建築與紅點 ➔ 點擊進入 ➔ VERIFY_ENTRY
             res1 = self.handler.handle(mock_img, rect)
             self.assertTrue(res1)
-            self.assertEqual(self.handler.step_phase, "CLICK_FREE_CHEST")
+            self.assertEqual(self.handler.step_phase, "VERIFY_ENTRY")
 
-            # Step 2: CLICK_FREE_CHEST ➔ WAITING_CONFIRM
+            # Step 2: VERIFY_ENTRY ➔ 畫面比對到寶箱專屬特徵 ➔ 進入 CLICK_FREE_CHEST 並點擊 ➔ WAITING_CONFIRM
             self.handler.last_action_time = 0.0
             res2 = self.handler.handle(mock_img, rect)
             self.assertTrue(res2)
@@ -286,8 +287,8 @@ class TestChestSubflow(unittest.TestCase):
         with patch("os.path.exists", return_value=True):
             res = self.handler.handle(mock_img, rect)
             self.assertTrue(res)
-            # 斷言：Dev 模式強制進入，轉入 CLICK_FREE_CHEST，且不得 defer
-            self.assertEqual(self.handler.step_phase, "CLICK_FREE_CHEST")
+            # 斷言：Dev 模式強制進入，轉入 VERIFY_ENTRY，且不得 defer
+            self.assertEqual(self.handler.step_phase, "VERIFY_ENTRY")
             self.mock_daily_manager.defer_subflow.assert_not_called()
             self.mock_machine.mouse.click.assert_called_once_with(200, 300)
 

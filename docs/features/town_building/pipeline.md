@@ -110,9 +110,111 @@
           │ STATE_JEWELRY_WORKSHOP  │
           └──────────┬──────────────┘
                      │ (完成出售離場)
+
+---
+
+## 🔄 流程與運作原理
+
+```
+                           [ 背包滿 BAG_CLEANING 完成 ]
+                                       │
+                                       ▼
+                       ┌───────────────────────────────┐
+                       │ GameStateMachine              │
+                       │ trigger_bag_maintenance_chain()│
+                       └───────────────┬───────────────┘
+                                       │ (展開預設佇列: ["blood_sacrifice", "bag_tidy", "jewelry_workshop"])
+                                       ▼
+                           [ pop_and_next_town_subflow() ]
+                                       │
+                     ┌─────────────────┴─────────────────┐
+                     │                                   │
+                     ▼ (任務 1: blood_sacrifice)          ▼ (佇列已空)
+          ┌─────────────────────┐             ┌─────────────────────┐
+          │ STATE_BLOOD_ALTAR   │             │ STATE_NAVIGATING    │
+          └──────────┬──────────┘             │ (恢復 mix/stage/    │
+                     │ (完成獻祭離場)          │  dungeon 主導航)    │
+                     ▼                        └─────────────────────┘
+          [ pop_and_next_town_subflow() ]
+                     │
+                     ▼ (任務 2: bag_tidy)
+          ┌─────────────────────┐
+          │ STATE_BAG_TIDY      │
+          └──────────┬──────────┘
+                     │ (完成整理與後置驗證離場)
+                     ▼
+          [ pop_and_next_town_subflow() ]
+                     │
+                     ▼ (任務 3: jewelry_workshop)
+          ┌─────────────────────────┐
+          │ STATE_JEWELRY_WORKSHOP  │
+          └──────────┬──────────────┘
+                     │ (完成出售離場)
                      ▼
           [ pop_and_next_town_subflow() ] ➔ 佇列已空 ➔ STATE_NAVIGATING (回復主導航)
 ```
+
+---
+
+### 9. 城鎮實體正規化與互動就緒契約 (Town Egress Normalization & Interaction Readiness)
+
+本節是 [Precondition Contracts](../../architecture/precondition_contracts.md) 在城鎮場景與建築進出轉換的領域特化。
+
+#### Invariant 9.1: Town Physical Location vs. Interaction Readiness Separation
+- **Scope**: 全系統所有進入城鎮或依賴城鎮環境之子流程與排程器。
+- **Rule**:
+  1. 系統 MUST 將「處於城鎮物理環境 (Physical Location)」與「具備城鎮互動就緒性 (Interaction Readiness)」區分為兩個獨立閘門。
+  2. 單一城鎮門戶特徵可見，僅能確立物理位置處於城鎮；在缺乏正向城鎮無遮擋前景特徵（Clear Anchor）或多幀穩定確認前，系統 MUST NOT 判定為具備互動就緒性：
+     - `TOWN + positive clear anchor + no blocker` ➔ 判定為 `READY`，方可派發業務控制權。
+     - `TOWN + no blocker + no clear anchor` ➔ 判定為 `UNKNOWN`，進入有界重新觀測 (bounded re-observe)。
+  3. **Intent Protection**: 當城鎮就緒性處於 `UNKNOWN` 或正規化逾時失敗時，系統 **MUST NOT** 懲罰性 defer、pop 或 complete 業務 Intent。
+  4. 未達城鎮互動就緒狀態前，狀態機 MUST NOT 向依賴城鎮之業務 Handler 派發實體控制權。
+- **Observable consequence**: 退出戰鬥或建築後，若畫面仍處於半透明淡入、過渡載入或殘留彈窗未消退狀態，系統維持在安全導航前置等待，絕不引發過早點擊或偽完成。
+- **Allowed variation**: 前景驗證所採用之具體錨點模板、驗證演算法與多幀防抖次數可隨遊戲更新動態調整。
+- **Verification**: `tests/test_behavior_reach_town_normalization.py`
+
+#### Invariant 9.2: Building Egress Multi-Frame Verification Lifecycle
+- **Scope**: 所有具備進入或退出城鎮建築生命週期之 Handlers。
+- **Rule**:
+  1. 點擊建築退出特徵 MUST 僅視為退出動作之發起，MUST NOT 視為退出完成。
+  2. 建築 Handler 在發起退出點擊後，MUST 將生命週期轉移至退出驗證階段，唯有在後續畫面觀測到正向城鎮環境特徵時，方可判定退出完成並推進或交棒。
+- **Observable consequence**: 退出建築動作因點擊丟失或過渡延遲未生效時，Handler 絕不會同幀誤判退出成功而呼叫完成或銷毀。
+- **Allowed variation**: 內部狀態機階段名稱（如 `VERIFY_EXIT`）與超時重試預算可自由重構。
+- **Verification**: `tests/test_behavior_town_scenarios.py`
+
+#### Invariant 9.3: Login World-Ready Boundary
+- **Scope**: 登入、重啟重開與初始化生命週期 (`states/login_flow.py`, `relaunch`, `supervisor`) 及城鎮正規化控制器。
+- **Rule**:
+  1. 系統登入與重啟驗證完成之基準契約為 `WORLD_READY`，絕非 `TOWN_READY`。登入與恢復流程 MUST 將任何已驗證之已知遊戲世界場景（如 `IN_DUNGEON`、`TOWN`、`TOWN_BUILDING`、`LOBBY`）視為登入就緒。
+  2. 登入與重啟流程 MUST NOT 強制將實體位置正規化回城鎮。
+  3. 若登入或重啟後實體位置落在地下城 (`IN_DUNGEON`)，系統 MUST 保留地下城探索之所有權與接續性，嚴禁強制回城或退場。
+  4. 城鎮實體正規化 (`REACH_TOWN`) 唯有在下游業務消費者（Downstream Consumer，如城鎮福利領取、日常維護子流程）明確需要城鎮環境時，方由該消費者發起請求。
+- **Observable consequence**: 遊戲重開後若玩家落在地下城戰鬥或探索中，自動戰鬥與副本探索順暢接續，絕不會因為系統盲目尋找城門而觸發錯誤退場或狀態死鎖。
+- **Allowed variation**: `WORLD_READY` 具體支援之場景種類、識別順序與特徵比對演算法可隨世界地圖擴充。
+- **Verification**: `tests/test_behavior_login_and_town_boundary_regression.py`
+
+---
+
+### 10. 錯位讓渡協定與業務意圖保護 (Committed Handler Mislocation Relinquishment Protocol)
+
+#### Invariant 10.1: Generic Building Evidence Semantics
+- **Scope**: 全專案建築物特徵比對與內部判斷。
+- **Rule**:
+  1. 建築物共用之退出或回城按鈕（如 `exitfromhouse_and_to_town.png`）屬於「通用建築內部特徵 (Generic Building-Internal Evidence)」，MUST NOT 作為任何特定建築物之自身專屬正向特徵。
+  2. 各業務 Handler 進入其專屬業務邏輯前，MUST 依賴該建築之「自身專屬特徵 (Own-Specific Evidence)」確認身分。
+- **Observable consequence**: 誤入其他建築物時，Handler 不會因為看到通用退出按鈕而誤認為已成功進入正確房間。
+- **Allowed variation**: 具體模板檔名與特徵比對門檻屬可調策略。
+- **Verification**: `tests/test_phase_transition_stability.py`
+
+#### Invariant 10.2: Bounded Mislocation Relinquishment without Intent Mutation
+- **Scope**: 所有城鎮子流程 Handlers（Chest, HeroDraw, BloodAltar, BagTidy, BulletinBoard, JewelryWorkshop）。
+- **Rule**:
+  1. 當 Handler 處於運行中但觀測到通用建築內部特徵可見、且自身專屬特徵不存在時，MUST 透過有界連續幀確認（目前實作預設為連續 2 幀）判定錯位成立。
+  2. 錯位確認成立後，Handler MUST 主動讓渡（Relinquish）實體控制權交還給 shared `REACH_TOWN` 正規化路徑，由 shared controller 執行實體退場回城。
+  3. **Strict Prohibition (懲罰性消耗禁令)**：錯位讓渡期間，系統與 Handler **MUST NOT** 觸發 defer（冷卻退避）、pop（彈出佇列）或 mark completed（標記完成）！業務 Intent 必須 100% 完整保留，待回城達到 Interaction Readiness 後重新派發。
+- **Observable consequence**: 當因點擊偏移誤入錯誤建築時，系統自動退出並回到城鎮重新點擊正確建築，絕不吃掉今日任務、絕不使意圖陷入 180s 冷卻、亦不破壞日常流水線契約。
+- **Allowed variation**: 讓渡防抖幀數、實體讓渡內部訊號機制（如 Token 或 Transition）可自由演進。
+- **Verification**: `tests/test_behavior_handler_mislocation_relinquish.py`
 
 ---
 
@@ -135,7 +237,6 @@ GLOBAL_SETTINGS = {
 
 當未來欲擴充新城鎮建築時，請遵循以下步驟：
 
-1. **建立 Handler**：於 `states/handlers/` 建立新建築 Handler，傳承 `BaseStateHandler`。
+1. **建立 Handler**：於 `states/handlers/` 建立新建築 Handler，傳承 `BaseStateHandler`，並內嵌 `MislocationGuard` 實作錯位讓渡。
 2. **實作離場消費**：於完成離場判定處呼叫 `self.machine.pop_and_next_town_subflow()`。
 3. **註冊狀態與佇列**：於 `GameStateMachine` 註冊新狀態，並在 `states/town_subflow_registry.py` 與 `config.py` 中配置該子流程。
-

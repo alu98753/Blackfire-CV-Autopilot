@@ -13,7 +13,10 @@ from states.navigation_intent import (
     ReasonCode,
 )
 from states.navigation_progress import NavigationProgress, ProgressStatus
-from states.navigation_table import NavigationGoal, NavigationTable
+from states.reach_town_normalization import (
+    NormalizationResult,
+    ReachTownNormalizationController,
+)
 from states.town_subflow_perception import TownSubflowPerception
 from states.town_subflow_registry import TOWN_SUBFLOW_SPECS, spec_for
 from utils.scene_snapshot import ElementId, SceneId, SceneSnapshot
@@ -23,26 +26,13 @@ TOWN_SUBFLOW_DEFER_SECONDS = 180
 
 
 class TownSubflowPolicy:
-    """Resolve one task-agnostic REACH_TOWN action from one observation."""
+    """Resolve business dispatch or completion decisions on SceneId.TOWN."""
 
     def resolve(self, scene: SceneSnapshot, flow_key: str) -> ActionDecision:
-        if scene.has(ElementId.CLOSE_OVERLAY):
-            return ActionDecision.click(
-                ReasonCode.TOWN_SUBFLOW_CLOSE_OVERLAY,
-                ActionId.DISMISS_OVERLAY,
-                PostconditionId.OVERLAY_CLOSED,
-                ElementId.CLOSE_OVERLAY,
-            )
-
-        edge = NavigationTable().next_goal_edge(scene, NavigationGoal.REACH_TOWN)
-        if edge is not None:
-            return ActionDecision.click(
-                edge.reason,
-                edge.action,
-                edge.postcondition,
-                edge.required_element,
-            )
-
+        """
+        Assumes physical verification on Town (handled by ReachTownNormalizationController).
+        Determines business dispatch, completion (no red dot), or waiting.
+        """
         if scene.scene != SceneId.TOWN:
             return ActionDecision.wait()
 
@@ -77,20 +67,38 @@ class TownSubflowPolicy:
 class TownSubflowPreconditionController:
     """Execute the shared route while preserving committed workflow owners."""
 
-    def __init__(self, machine):
+    def __init__(
+        self,
+        machine,
+        policy: TownSubflowPolicy | None = None,
+        normalization_controller: ReachTownNormalizationController | None = None,
+    ):
         self.machine = machine
         self.perception = TownSubflowPerception(machine)
-        self.policy = TownSubflowPolicy()
+        self.policy = policy or TownSubflowPolicy()
+        self.normalization_controller = (
+            normalization_controller or ReachTownNormalizationController(machine)
+        )
         self._entry_wait_flow = None
         self._entry_wait_count = 0
         self._no_red_dot_flow = None
         self._no_red_dot_count = 0
+        self._current_flow = None
+        self._escalated_recovery = False
+
+    def reset_failure(self):
+        """Reset underlying normalization controller failure latch."""
+        self.normalization_controller.reset_failure()
 
     def _should_skip_handle(self, flow_key, progress) -> bool:
         if not flow_key or self._committed_workflow_owns_frame(flow_key):
             return True
         if isinstance(progress, NavigationProgress) and progress.in_flight:
             return progress.in_flight.intent_id != IntentId.TOWN_SUBFLOW
+        if getattr(self.machine, "town_normalization_pending", False):
+            # Explicit ownership token: REACH_TOWN has priority physical recovery ownership.
+            # Diamond/bread collection MUST NOT preempt an active relinquishment recovery.
+            return False
         return self._collection_pending()
 
     def handle(self, screen_img, rect) -> bool:
@@ -99,6 +107,15 @@ class TownSubflowPreconditionController:
         if self._should_skip_handle(flow_key, progress):
             return False
 
+        if self._current_flow != flow_key:
+            self._current_flow = flow_key
+            self.reset_failure()
+            self._escalated_recovery = False
+        elif self._escalated_recovery:
+            # Recovery cycle concluded; clear flag and grant fresh normalization attempt
+            self._escalated_recovery = False
+            self.reset_failure()
+
         scene = self.perception.observe(screen_img, flow_key)
         if scene.scene in {
             SceneId.BATTLE,
@@ -106,16 +123,31 @@ class TownSubflowPreconditionController:
             SceneId.DUNGEON_EXPLORING,
         }:
             return False
-        if isinstance(progress, NavigationProgress) and progress.in_flight:
-            status = progress.observe(scene, scene.captured_at)
-            if status == ProgressStatus.WAITING:
-                return True
-            if status == ProgressStatus.DEFERRED:
-                self.machine.defer_current_town_subflow(
-                    TOWN_SUBFLOW_DEFER_SECONDS
-                )
-                return True
 
+        # Phase 1: Physical REACH_TOWN normalization via shared controller.
+        # Strict Invariant: Normalization failure MUST NOT defer the business intent!
+        norm_result = self.normalization_controller.step(
+            scene, rect, progress, intent_id=IntentId.TOWN_SUBFLOW
+        )
+        if norm_result in (NormalizationResult.IN_PROGRESS, NormalizationResult.WAITING):
+            return True
+        if norm_result == NormalizationResult.FAILED:
+            # Physical normalization failed (retry exhausted); failure domain isolated.
+            # Consume this frame so downstream handlers do not act concurrently on the same frame.
+            # Preserve business intent without deferring or popping.
+            logging.warning(
+                "⚠️ [TownSubflowPreconditionController] Physical REACH_TOWN normalization FAILED; "
+                "consuming frame to prevent downstream leakage. Escalating to safe recovery. "
+                "Business intent '%s' preserved.",
+                flow_key,
+            )
+            self._escalated_recovery = True
+            if hasattr(self.machine, "stash_current_state"):
+                self.machine.stash_current_state(reason="reach_town_normalization_failed")
+            return True
+
+        # Phase 2: Physically verified in Town (SceneId.TOWN).
+        # Execute business dispatch / red-dot check / entry wait.
         self.machine.active_navigation_intent = ActiveIntent(IntentId.TOWN_SUBFLOW)
         decision = self.policy.resolve(scene, flow_key)
         if decision.kind == DecisionKind.WAIT:
@@ -127,9 +159,9 @@ class TownSubflowPreconditionController:
                 return True
             return scene.scene != SceneId.UNKNOWN
         self._reset_entry_wait()
-        return self._execute_decision(decision, scene, flow_key, rect, progress)
+        return self._execute_decision(decision, scene, flow_key)
 
-    def _execute_decision(self, decision, scene, flow_key, rect, progress) -> bool:
+    def _execute_decision(self, decision, scene, flow_key) -> bool:
         if decision.action == ActionId.DISPATCH_TOWN_SUBFLOW:
             self._reset_no_red_dot()
             self.machine.dispatch_current_town_subflow()
@@ -143,29 +175,6 @@ class TownSubflowPreconditionController:
         if decision.action == ActionId.DEFER_TOWN_SUBFLOW:
             self.machine.defer_current_town_subflow(TOWN_SUBFLOW_DEFER_SECONDS)
             return True
-
-        match = scene.elements.get(decision.element)
-        if match is None:
-            return True
-        self.machine.mouse.click(
-            rect["left"] + match.client_x,
-            rect["top"] + match.client_y,
-        )
-        if isinstance(progress, NavigationProgress):
-            progress.begin(
-                IntentId.TOWN_SUBFLOW,
-                decision.action,
-                decision.expected,
-                scene.frame_id,
-                scene.captured_at,
-            )
-        logging.info(
-            "[TownSubflowNavigation] flow=%s scene=%s action=%s reason=%s",
-            flow_key,
-            scene.scene.value,
-            decision.action.value,
-            decision.reason.value,
-        )
         return True
 
     def _committed_workflow_owns_frame(self, flow_key):

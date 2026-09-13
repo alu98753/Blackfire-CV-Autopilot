@@ -209,6 +209,7 @@ class GameStateMachine:
             )
         )
         self.town_subflow_precondition = TownSubflowPreconditionController(self)
+        self.town_normalization_pending = False
         self.stamina_recovery = StaminaRetreatRecovery(
             StaminaRetreatSettings.from_mapping(get_stamina_retreat_settings())
         )
@@ -2123,6 +2124,7 @@ class GameStateMachine:
         self.need_blood_altar = flow_key in {"blood_altar", "blood_sacrifice"}
         self.need_jewelry_workshop = flow_key == "jewelry_workshop"
         self.need_bag_tidy = flow_key == "bag_tidy"
+        self.town_normalization_pending = False
         self.navigation_progress.clear(IntentId.TOWN_SUBFLOW)
         logging.info(
             "🎯 [城鎮流水線] Town precondition 已成立，派發 [%s] -> [%s]。",
@@ -2135,6 +2137,7 @@ class GameStateMachine:
     def complete_current_town_subflow(self):
         """Mark a verified red-dot-exhausted Town entry as completed today."""
         flow_key = self.current_town_subflow
+        self.town_normalization_pending = False
         manager = getattr(self, "daily_manager", None)
         if flow_key and flow_key != "blood_sacrifice" and manager and hasattr(manager, "record_subflow_completed"):
             manager.record_subflow_completed(flow_key)
@@ -2147,6 +2150,7 @@ class GameStateMachine:
     def defer_current_town_subflow(self, defer_seconds=180):
         """Defer a verified unavailable Town entry without marking it complete."""
         flow_key = self.current_town_subflow
+        self.town_normalization_pending = False
         manager = getattr(self, "daily_manager", None)
         if flow_key and manager and hasattr(manager, "defer_subflow"):
             manager.defer_subflow(flow_key, defer_seconds)
@@ -2156,6 +2160,27 @@ class GameStateMachine:
             defer_seconds,
         )
         self.pop_and_next_town_subflow()
+
+    def relinquish_subflow_to_navigation(self, reason: str = "mislocation_detected"):
+        """
+        Relinquish physical ownership from a committed subflow handler back to
+        shared REACH_TOWN normalization path using STATE_NAVIGATING as carrier
+        and setting town_normalization_pending = True as explicit ownership token.
+
+        STRICT INVARIANTS:
+        1. MUST NOT mutate self.current_town_subflow.
+        2. MUST NOT pop self.town_subflow_queue.
+        3. MUST NOT defer self.current_town_subflow.
+        4. MUST NOT complete self.current_town_subflow.
+        """
+        logging.warning(
+            "⚠️ [Relinquish Protocol] 釋放當前子流程實體所有權 (%s)，"
+            "交由 REACH_TOWN 歸一化回城。保留業務 Intent: %s",
+            reason,
+            self.current_town_subflow,
+        )
+        self.town_normalization_pending = True
+        self.transition_to(self.STATE_NAVIGATING)
 
     def handle_town_subflow_precondition(self, screen_img, rect):
         return self.town_subflow_precondition.handle(screen_img, rect)
@@ -2167,6 +2192,7 @@ class GameStateMachine:
         self.need_blood_altar = False
         self.need_jewelry_workshop = False
         self.need_bag_cleaning = False
+        self.town_normalization_pending = False
 
         logging.info("=" * 60)
         logging.info("🎉 【城鎮流水線 - 全部完成】 🎉")

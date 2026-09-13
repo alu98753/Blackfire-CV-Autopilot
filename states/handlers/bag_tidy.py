@@ -11,6 +11,7 @@ import time
 import logging
 import numpy as np
 from states.handlers.base import BaseStateHandler
+from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
 
 
 class BagTidyHandler(BaseStateHandler):
@@ -24,12 +25,14 @@ class BagTidyHandler(BaseStateHandler):
         self.step_phase = "INIT"  # INIT, WAIT_BAG_OPEN, WAIT_TIDY_SETTLE, CLOSE_AND_VERIFY
         self.last_action_time = 0.0
         self.start_time = 0.0
+        self.mislocation_guard = MislocationGuard(threshold=2)
 
     def reset_state(self):
         """重置處理器所有階段狀態"""
         self.step_phase = "INIT"
         self.last_action_time = 0.0
         self.start_time = 0.0
+        self.mislocation_guard.reset()
 
     def is_backpack_opened(self, screen_img) -> bool:
         """檢測背包是否已處於開啟狀態 (看得到 tidy 或 Disassembly)"""
@@ -100,16 +103,40 @@ class BagTidyHandler(BaseStateHandler):
         # 階段 1：INIT (確認環境並發起開包)
         # =========================================================================
         if self.step_phase == "INIT":
+            # 自身專屬特徵：背包已展開，或處於城鎮基準場景 (common/door.png)
+            own_evidence = self.is_backpack_opened(screen_img)
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75, quiet=True)
+            if pos_door:
+                own_evidence = True
+
+            # 通用建築內部特徵：exitfromhouse 或 goback_town 可見
+            pos_exit, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.75, quiet=True)
+            pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
+            generic_building_evidence = bool(pos_exit or pos_goback)
+
+            decision = self.mislocation_guard.evaluate(own_evidence, generic_building_evidence)
+            if decision == MislocationDecision.RELINQUISH:
+                logging.warning("⚠️ [BagTidy Mislocation] INIT 階段偵測到通用建築內部特徵但無城鎮/背包特徵，連續確認錯位，讓渡實體所有權給 REACH_TOWN...")
+                self.reset_state()
+                if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                    self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+                else:
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return
+            elif generic_building_evidence and not own_evidence:
+                logging.info("🎒 [城鎮背包整理 INIT] 觀察到通用建築特徵但無城鎮/背包特徵 (suspected mislocation 觀測中)...")
+                return
+
             # 若背包已經開啟，直接進入等待整理
             if self.is_backpack_opened(screen_img):
                 logging.info("🎒 [城鎮背包整理 INIT] 畫面已見開啟的背包，直接進入整理階段...")
                 self.step_phase = "WAIT_BAG_OPEN"
                 self.last_action_time = now
+                self.mislocation_guard.reset()
                 return
 
             # 若畫面上有非背包的殘留 quit 覆蓋層，優先閉環清理
             pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.80, quiet=True)
-            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75, quiet=True)
             if pos_quit and not pos_door:
                 logging.warning("⚠️ [城鎮背包整理 INIT] 偵測到殘留覆蓋層 (quit 可見)，優先閉環關閉...")
                 self.click_and_wait_until_gone("common/quit.png", left + pos_quit[0], top + pos_quit[1], rect, timeout=3.0, threshold=0.80)
@@ -121,6 +148,7 @@ class BagTidyHandler(BaseStateHandler):
                 if self.open_backpack(screen_img, rect):
                     self.step_phase = "WAIT_BAG_OPEN"
                     self.last_action_time = now
+                    self.mislocation_guard.reset()
                 return
             return
 
