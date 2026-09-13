@@ -59,6 +59,17 @@
   - **目標**：推進至 200s ~ 210s 區間。
 
 ### Daily
+
+- [ ] **R1 Town Egress Postcondition Integrity Spec ([`R1 Town Egress Postcondition Integrity Spec.md`](R1 Town Egress Postcondition Integrity Spec.md))**：
+
+
+---
+- [ ] 🔴 **IntentRouting 觀測性日誌語意解耦與結構化收斂 ([`intent_routing_observability_todo.md`](intent_routing_observability_todo.md))**：
+  - **背景**：目前 `IntentRouting` 日誌混合輸出 `intent=collect_bread progress=deferred in_flight=return_town`（將前一個 in-flight action 之進展與當前新選取之 intent 混合同行印出）產生語意誤讀，導致曾誤判活鎖與進程重启需求。
+  - **規劃方向**：將目前混合語意的欄位 `intent`, `action`, `progress`, `in_flight` 明確拆分為五個具備清晰主詞的結構化欄位（`selected_intent`, `decision_action`, `observed_intent`, `observed_action`, `observed_progress`），以 `intent=%s scene=%s action=%s reason=%s progress=%s in_flight=%s expected=%s age=%.1fs deadline=%.3f attempt=%d` 格式改為 `intent=%s scene=%s decision_action=%s reason=%s observed_intent=%s observed_action=%s observed_progress=%s expected=%s age=%.1fs deadline=%.3f attempt=%d`。
+  - **預期效益**：徹底消除日誌語意混淆，避免誤導工程師與協同代理人進行無效的排程器架構修改。
+
+
 - [ ] 🔴🔴 **Boss 誤判已完成與次數判定修復 ([`fix_boss_bug.md`](fix_boss_bug.md))**：
   - **24/7 風險 (持久化狀態污染)**：目前「Start 點了沒有進入戰鬥」會被推論為次數已滿，直接呼叫 `mark_boss_completed()`。這種假陽性推論會持久化寫入 [`user_data/native/daily_status.json`](../../user_data/native/daily_status.json)，導致當日後續完全不再嘗試打 Boss，嚴重破壞日常責任移交。
   - **規劃方向**：廢除 Start 逾時反推次數的猜測邏輯，改以畫面中 5 個黑/白點作為 Boss 次數耗盡的客觀真理依據。
