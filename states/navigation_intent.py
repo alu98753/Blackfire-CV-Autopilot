@@ -146,6 +146,8 @@ class NavigationIntentPolicy:
 
         edge = NavigationTable().next_edge(scene, intent.intent_id)
         if edge is not None:
+            if self._should_delegate_primary_overlay(edge, intent, scene):
+                return self._resolve_primary(scene)
             return ActionDecision.click(
                 edge.reason,
                 edge.action,
@@ -157,6 +159,37 @@ class NavigationIntentPolicy:
         if intent.intent_id == IntentId.COLLECT_BREAD:
             return self._resolve_bread(scene)
         return self._resolve_primary(scene)
+
+    @staticmethod
+    def _should_delegate_primary_overlay(
+        edge, intent: ActiveIntent, scene: SceneSnapshot
+    ) -> bool:
+        """
+        Compatibility predicate to prevent primary preparation panels from being dismissed.
+
+        TODO: Address Overlay semantic debt. Currently, common/quit.png maps unconditionally
+        to ElementId.CLOSE_OVERLAY (WHERE), which confuses control location with dismissal intent (WHAT).
+        In the long term, OverlayId (e.g. OverlayId.UNEXPECTED_AD) must be required before triggering
+        ActionId.DISMISS_OVERLAY. Until OverlayId migration is complete, primary modes with built-in
+        quit controls (such as domain) must suppress generic LOBBY/DOMAIN_SELECT dismissal edges
+        and delegate to CONTINUE_PRIMARY. Stage mode is already safely handled without an edge in
+        STAGE_SELECT, so LOBBY popups in stage mode can still be dismissed normally.
+        """
+        if (
+            edge.action != ActionId.DISMISS_OVERLAY
+            or intent.intent_id != IntentId.PRIMARY_NAVIGATION
+            or intent.primary_payload is None
+        ):
+            return False
+
+        # Only protect preparation contexts that legitimately feature a quit button
+        if scene.scene not in {SceneId.LOBBY, SceneId.DOMAIN_SELECT}:
+            return False
+
+        return intent.primary_payload.mode in {"domain", "golden_empire"}
+
+
+
 
     @staticmethod
     def _resolve_diamond(scene: SceneSnapshot) -> ActionDecision:

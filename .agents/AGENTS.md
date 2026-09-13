@@ -67,8 +67,11 @@
 - **強制 `--no-ff`**：合併至 `main` 必須使用 `git merge --no-ff` 並附帶包含異動統計、模組細節與測試結果的結構化 Merge Log。
 - **跨平台 Shell 貼上語法規範**：
   - 為防止 Terminal 貼上多行指令時因換行符號（`\n`）導致指令截斷或報錯，提供 Merge 指令時必須**感應用戶 OS/Shell**。
-  - **Windows (PowerShell / CMD)**：必須使用**多個 `-m` 參數**串聯多段訊息 (例如 `git merge --no-ff <branch> -m "標題" -m "變更摘要..." -m "測試結果..."`)，避免任何跨列換行。
+  - **Windows (PowerShell / CMD)**：
+    - **目錄切換指令**：PowerShell 的 `cd` 是 `Set-Location` 的別名，**不支援 `/d` 參數**（帶 `/d` 會報錯 `PositionalParameterNotFound`）。交付 PowerShell 指令時**必須統一使用 `Set-Location <路徑>`**（或單純 `cd <路徑>`）；只有在明確以 `cmd.exe /c` 執行時才使用 `cd /d <路徑>`。
+    - **Commit/Merge 訊息**：必須使用**多個 `-m` 參數**串聯多段訊息 (例如 `git merge --no-ff <branch> -m "標題" -m "變更摘要..." -m "測試結果..."`)，避免任何跨列換行。
   - **Linux / macOS (Bash / Zsh)**：可使用多個 `-m` 參數或標準多行引號。
+
 - **新開發分支啟動規範 (Branch Start Routing Rule)**：
   - 當使用者明確表示「開始新開發」、「開始新功能」、「開始修 bug」、「開新分支」或其他正式進入 implementation lifecycle 的指令時，統一調用 [`branch_start_workflow`](skills/branch_start_workflow/SKILL.md)。
   - 正式 Feature / Fix / Refactor 分支建立後，必須立即建立同名 remote tracking branch：`git push -u origin HEAD`，使開發期間即可透過遠端 `main...<branch>` 進行 review。

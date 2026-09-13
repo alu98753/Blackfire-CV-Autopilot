@@ -1191,6 +1191,55 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.handler.click_and_wait_until_gone.assert_called_once()
         self.assertEqual(self.handler.click_and_wait_until_gone.call_args.args[0], "common/quit.png")
 
+    @patch("os.path.exists", return_value=True)
+    def test_navigation_stage_select_with_quit_does_not_dismiss_overlay(self, _mock_exists):
+        """
+        [Regression 驗證] 於普通關卡模式 (type='stage')，畫面處於 STAGE_SELECT 且出現 common/quit.png (抽屜關閉鈕) 時，
+        NavigationHandler 絕對不得將其視為 blocking overlay 點擊關閉，而必須委派既有尋路邏輯繼續前進。
+        """
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.current_state = "NAVIGATING"
+        self.mock_machine.is_in_dungeon = False
+        self.mock_machine.config = {
+            "name": "普通關卡模式",
+            "type": "stage",
+            "navigation_path": [
+                "common/select_stage.png",
+                "stages/level6_ice_cave.png",
+                "stages/stage_label.png",
+                "stages/first_stage.png",
+            ],
+        }
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+        self.handler.click_and_wait_until_gone = MagicMock()
+
+        def match_side_effect(_screen, template, **kwargs):
+            if template == "goback_town.png":
+                return ((64, 726), 0.95)
+            if template == "common/select_stage_after.png":
+                return ((648, 713), 0.95)
+            if template == "common/select_stage.png":
+                return ((648, 715), 0.40)
+            if template == "common/quit.png":
+                return ((1328, 94), 0.85)
+            if template == "stages/stage_label.png":
+                return ((610, 370), 0.95)
+            if template == "stages/first_stage.png":
+                return ((500, 300), 0.95)
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：絕對不得調用 click_and_wait_until_gone 關閉 common/quit.png
+        self.handler.click_and_wait_until_gone.assert_not_called()
+        # 斷言：點擊子關卡 (500, 300)
+        self.mock_machine.mouse.click.assert_called_with(500, 300)
+
 
 if __name__ == "__main__":
     unittest.main()
