@@ -198,11 +198,26 @@ Intent commitment 不代表立即搶占所有流程。下列 maintenance ownersh
 - 不因文件統一術語就宣稱程式已有全域 precondition registry。
 - 不一次建立 workflow engine、Navigation DSL、Event Bus、Statechart 或通用條件圖。
 
-## 11. 文件邊界
+## 11. 狀態機重構三大硬性不變量 (Refactoring Invariants)
+
+在後續重構 `state_machine.py` 或解耦調度邏輯時，必須嚴格遵守以下三條不變量，禁止為不存在的假想 bug 破壞現有穩定機制：
+
+1. **Gate Invariant（不得破壞 `is_deferred()` 對 intent eligibility 的門禁）**：
+   - 當某一 Intent 處於 deferred 期間時，`_select_available_intent` 或等價 selector 必須將其排除於可派發候選之外，不得重複發起未達重試冷卻的 deferred intent。
+   - 主排程在當前 Intent 被 defer 時，必須保有自由降級並推進其他非依賴任務（如 `primary_navigation`）的自由度。
+2. **In-Flight Action Exclusivity Invariant（既有動作未 resolution 前禁止發射第二動作）**：
+   - 不得讓任何新模組在既有 `InFlightAction` 未 resolution（即次幀 postcondition 成立或超時確認）前發射第二個業務點擊或切換業務 intent。
+   - 動作與後置條件驗證必須維持嚴格的因果閉環，防止動作重疊造成畫面與狀態迷航。
+3. **Lifecycle Migration Slice Isolation Invariant（禁止在重構中順手統一雙重生命週期）**：
+   - 既有相容層的 legacy flags（如 `machine.need_bread_collection`、`machine.need_diamond_collection`）與 `NavigationProgress` 內部生命週期屬於不同的 migration slice。
+   - 在未開闢專屬遷移計畫前，嚴禁在一般重構中順手合併或強行單一化，避免引發跨層隱式依賴回歸。
+
+## 12. 文件邊界
 
 - 本文件：長期、跨功能的語意與開發準則。
 - [Greenfield-lite Architecture v1](project_arch_greenfield_lite_v1.md)：整體 runtime 不變量、資料流與精簡架構限制。
 - [Navigation Intent Routing Spec](navigation_intent_routing_spec.md)：Diamond／Bread／Primary 的固定 precedence、Start commitment 與相容 routing。
 - [REACH_TOWN Contract](../features/navigation/reach_town_contract.md)：Town subflow prerequisite 的已落地 reference。
 - [Precondition Contracts TODO](../todos/precondition_contracts_todo.md)：目前散落位置、分類、缺口與後續盤點。
+- [IntentRouting 觀測性 TODO](../todos/intent_routing_observability_todo.md)：排程日誌語意清晰化與結構化解耦專項。
 

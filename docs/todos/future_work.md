@@ -62,9 +62,6 @@
 - [ ] 🔴🔴 **Boss 誤判已完成與次數判定修復 ([`fix_boss_bug.md`](fix_boss_bug.md))**：
   - **24/7 風險 (持久化狀態污染)**：目前「Start 點了沒有進入戰鬥」會被推論為次數已滿，直接呼叫 `mark_boss_completed()`。這種假陽性推論會持久化寫入 [`user_data/native/daily_status.json`](../../user_data/native/daily_status.json)，導致當日後續完全不再嘗試打 Boss，嚴重破壞日常責任移交。
   - **規劃方向**：廢除 Start 逾時反推次數的猜測邏輯，改以畫面中 5 個黑/白點作為 Boss 次數耗盡的客觀真理依據。
-- [ ] 🔴 **定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖**：
-  - **24/7 風險 (活鎖)**：定時領取體力在特定畫面打不開視窗時觸發 DEFER，若狀態機將 DEFER 誤判為阻塞性條件，會導致主排程停止派發後續所有 Activity，全系統陷入活鎖停擺。
-  - **規劃方向**：明確切分 DEFER 與 BLOCKING 語意；DEFER 僅延後當前 Intent，主排程必須能自由降級並推進其他非依賴任務。
 - [ ] 🔴 **COLLECT_ONLY 期間洩漏進入 Tier 4 / 黃金古國問題排查**：
   - **24/7 風險 (Tier 階梯契約違規)**：操作員回報在 daily 模式進入 `COLLECT_ONLY` 後，系統竟偶發跑到黃金古國（Tier 4 設定）。此現象直接違反「高 Tier 未完成禁止洩漏 Tier 4」與「待機期間嚴禁執行非待機任務」之階梯契約。
   - **規劃方向**：於 `DailyMasterPipeline` 與狀態機調度層增加強型態門禁，當處於 `COLLECT_ONLY` 待機狀態時，絕對禁止任何 Tier 4 意圖派發。
@@ -288,3 +285,9 @@
   - 於 [`runtime/incident_journal.py`](../../runtime/incident_journal.py) 實作 CRASH、HEARTBEAT_TIMEOUT、SCHEDULED_MAINTENANCE、IN_GAME_RECOVERY 四大類別事件記錄。
   - 自動脫敏敏感資訊（token、password 等），保證寫入 `user_data/<profile>/runtime/incidents/<date>.jsonl` 與 `latest_child_termination.json`。
   - 詳見架構規格 [`runtime_incident_recording_spec.md`](../architecture/runtime_incident_recording_spec.md) 與單元測試 [`tests/test_incident_journal.py`](../../tests/test_incident_journal.py)。
+
+### 8. ❌ 已結案 / 撤回之推論 (Disproved / Retracted Hypotheses)
+- [已排查並撤回] **定時領體力打不開視窗觸發 DEFER 導致主排程活鎖假說**：
+  - **背景**：原推論懷疑定時領取體力在特定畫面打不開視窗觸發 DEFER 時，狀態機會將 DEFER 誤判為阻塞性條件，導致主排程停止派發後續 Activity 陷入活鎖。
+  - **排查證據**：經深入審計 2026-09-11 ～ 2026-09-14 之 `app.log`、`incidents/*.jsonl` 與狀態轉移記錄，證實全天無任何 `collection_recovery_limit_collect_bread` 重啟，亦無主排程停擺；當體力處於 deferred 期間，系統正常降級將控制權交還主導航（`primary_navigation`）並順暢選關進入戰鬥，現有 bounded defer 機制運作正常。
+  - **結論**：原假說係因 `IntentRouting` 日誌混合輸出 `intent=collect_bread progress=deferred in_flight=return_town`（將前一個 in-flight action 之進展與當前新選取之 intent 混合同行印出）產生之語意誤讀，該活鎖 bug 不成立，撤回架構修改需求。日誌語意混淆轉移為專項可觀測性技術債收斂 ([`intent_routing_observability_todo.md`](intent_routing_observability_todo.md))。
