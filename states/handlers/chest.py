@@ -84,6 +84,8 @@ class ChestHandler(BaseStateHandler):
 
         if self.step_phase == "INIT":
             return self._handle_init(screen_img, rect, left, top, now)
+        elif self.step_phase == "VERIFY_ENTRY":
+            return self._handle_verify_entry(screen_img, rect, left, top, now)
         elif self.step_phase == "CLICK_FREE_CHEST":
             return self._handle_click_free_chest(screen_img, rect, left, top, now)
         elif self.step_phase == "WAITING_CONFIRM":
@@ -159,8 +161,9 @@ class ChestHandler(BaseStateHandler):
                     logging.info("🎁 [神秘寶箱 Step 1] 發現建築且帶紅點，點擊進入！")
                 self.mouse.click(left + pos_chest[0], top + pos_chest[1])
                 self.last_action_time = now
-                self.step_phase = "CLICK_FREE_CHEST"
+                self.step_phase = "VERIFY_ENTRY"
                 self.not_found_count = 0
+                self.mislocation_count = 0
                 time.sleep(0.3)
                 return True
 
@@ -201,6 +204,58 @@ class ChestHandler(BaseStateHandler):
             self._defer_subflow("入口證據在 Handler 啟動後消失")
             logging.info("🎁 [神秘寶箱] 未發現寶箱建築，安全推進下一個任務...")
             self.machine.pop_and_next_town_subflow()
+            return True
+        return False
+
+    def _handle_verify_entry(self, screen_img, rect, left, top, now) -> bool:
+        """
+        Step 1.5 (VERIFY_ENTRY): 驗證點擊建築入口後是否確實進入神秘寶箱內部。
+        Invariant:
+        - 點擊入口 != 成功進入寶箱。
+        - 自身合法特徵 (CHEST_DIALOG_TEMPLATE) 成立 -> 轉入 CLICK_FREE_CHEST 業務階段。
+        - 非自身實體特徵 (exitfromhouse / goback_town) 連續成立且無寶箱特徵 -> 判定物理錯位，
+          主動 Relinquish 實體所有權給 shared REACH_TOWN，嚴格不得 defer / pop / complete！
+        - 兩者皆無 -> 有界等待，超限退回 INIT 重試點擊。
+        """
+        # 1. 檢查自身合法特徵 (chest-specific evidence)
+        if os.path.exists(os.path.join("templates", CHEST_DIALOG_TEMPLATE)):
+            pos_ft, _ = self.matcher.match(screen_img, CHEST_DIALOG_TEMPLATE, threshold=0.75)
+            if pos_ft:
+                logging.info("🎁 [神秘寶箱 VERIFY_ENTRY] 成功辨識寶箱專屬面板，進入 CLICK_FREE_CHEST！")
+                self.mislocation_count = 0
+                self.not_found_count = 0
+                self.step_phase = "CLICK_FREE_CHEST"
+                return self._handle_click_free_chest(screen_img, rect, left, top, now)
+
+        # 2. 檢查非自身房間特徵 (foreign-building / mislocation evidence)
+        pos_exit, _ = self.matcher.match(screen_img, CHEST_EXIT_BUILDING_TEMPLATE, threshold=0.75)
+        pos_goback, _ = self.matcher.match(screen_img, CHEST_GOBACK_TOWN_TEMPLATE, threshold=0.80)
+        if pos_exit or pos_goback:
+            self.mislocation_count += 1
+            logging.info(
+                "⚠️ [神秘寶箱 VERIFY_ENTRY] 偵測到非自身之其他場景特徵 (exit/goback 可見，確認第 %d/%d 幀)...",
+                self.mislocation_count,
+                CHEST_MAX_MISLOCATION_FRAMES,
+            )
+            if self.mislocation_count >= CHEST_MAX_MISLOCATION_FRAMES:
+                logging.warning(
+                    "⚠️ [Mislocation Detected] 點擊入口後落入非目標場景，釋放實體所有權交由 REACH_TOWN 歸一化..."
+                )
+                self.reset_state()
+                if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                    self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+                else:
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return True
+            return True
+
+        # 3. 證據不足 (過渡動畫中)，有界等待
+        self.mislocation_count = 0
+        self.not_found_count += 1
+        if self.not_found_count >= CHEST_MAX_NOT_FOUND_INIT:
+            logging.warning("⚠️ [神秘寶箱 VERIFY_ENTRY] 點擊入口後超時未見面板，退回 INIT 重試點擊。")
+            self.step_phase = "INIT"
+            self.not_found_count = 0
             return True
         return False
 

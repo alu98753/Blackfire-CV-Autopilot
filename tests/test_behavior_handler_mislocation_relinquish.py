@@ -160,11 +160,22 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         with patch("os.path.exists", return_value=True):
             self.handler.handle(self.screen, self.rect)
 
-        # 斷言：mislocation 計數歸零，推進至 CLICK_FREE_CHEST，未退讓
+        # 斷言：mislocation 計數歸零，點擊進入建築，推進至 VERIFY_ENTRY，未退讓
         self.assertEqual(self.handler.mislocation_count, 0)
-        self.assertEqual(self.handler.step_phase, "CLICK_FREE_CHEST")
+        self.assertEqual(self.handler.step_phase, "VERIFY_ENTRY")
         self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
         self.mouse.click.assert_called_once_with(300, 400)
+
+        # 第 3 幀：成功進入寶箱內部 (free_treasure.png 可見)
+        self.handler.last_action_time = 0.0
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 200), 0.90) if t == "town_building/mysterious_treasure/free_treasure.png" else (None, 0.0)
+        )
+        with patch("os.path.exists", return_value=True):
+            self.handler.handle(self.screen, self.rect)
+
+        self.assertEqual(self.handler.step_phase, "CLICK_FREE_CHEST")
+        self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
 
     @patch("states.handlers.chest.detect_building_with_red_dot")
     def test_no_own_feature_and_no_exit_falls_back_to_bounded_defer(self, mock_detect):
@@ -340,6 +351,88 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertFalse(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
 
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    @patch("states.handlers.chest.detect_building_with_red_dot")
+    def test_chest_real_path_mislocation_after_entry_click_must_relinquish_without_defer(
+        self, mock_chest_detect, mock_prec_detect
+    ):
+        """
+        [真實 Failure A 迴歸驗證]:
+        模擬 Chest 從 Town 正常點擊建築入口 -> step_phase 前進 ->
+        下一幀實際落入非自身之 foreign building (如誤入 Blood Altar)。
+        
+        核心契約與守護 Invariant:
+        1. 點擊入口 != 成功進入 Chest。
+        2. 若下一幀落入 foreign building (exitfromhouse 可見但無 chest dialog)，
+           Handler 必須在連續確認後主動 Relinquish 回 STATE_NAVIGATING，
+           交由 shared REACH_TOWN 處理。
+        3. 嚴格 Invariant 2：物理點偏/錯位絕不得 defer、pop 或 complete 業務 Intent！
+        4. 經 shared REACH_TOWN 回城後，同一個 chest intent 重新派發繼續執行。
+        """
+        self.machine.current_state = self.machine.STATE_CHEST
+        self.machine.current_town_subflow = "chest"
+        self.machine.daily_manager = MagicMock()
+
+        # Step 1: 在 Town 看到帶紅點的寶箱建築，點擊入口
+        mock_chest_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(200, 300), confidence_building=0.9
+        )
+        self.matcher.match.return_value = (None, 0.0)
+
+        step1_res = self.handler.handle(self.screen, self.rect)
+        self.assertTrue(step1_res)
+        self.mouse.click.assert_called_with(200, 300)
+        # 驗證 phase 已經前進 (離開 INIT)
+        self.assertNotEqual(self.handler.step_phase, "INIT")
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+
+        # Step 2: 點擊後下一幀落入 foreign building (例如 Blood Altar):
+        # exitfromhouse_and_to_town 可見，但 chest dialog (free_treasure.png) 不可見
+        mock_chest_detect.return_value = BuildingCheckResult(False, False)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        # 模擬後續影格：Handler 在 foreign building 必須連續確認並 Relinquish，絕不能走入 defer/pop！
+        for _ in range(3):
+            self.handler.last_action_time = 0.0
+            self.handler.handle(self.screen, self.rect)
+            if self.machine.current_state == self.machine.STATE_NAVIGATING:
+                break
+
+        # 斷言 1: 必須主動 Relinquish 至 STATE_NAVIGATING，並獲取 ownership token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 斷言 2: 嚴格守護 Invariant 2：業務 Intent 絕不被懲罰性 defer 或 pop！
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # Step 3: shared REACH_TOWN 退出錯誤建築並重新回到 Town
+        prec_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_res)
+        self.mouse.click.assert_called_with(50, 500)
+
+        # Step 4: 回到 Town Ready，重新派發回 STATE_CHEST
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(200, 300), confidence_building=0.9
+        )
+        redispatch_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_res)
+
+        # 斷言 3: 重新派發回 STATE_CHEST，業務 Intent 完好無損，Token 清除
+        self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.assertFalse(self.machine.town_normalization_pending)
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
+
