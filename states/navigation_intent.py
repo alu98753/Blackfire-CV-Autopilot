@@ -171,8 +171,9 @@ class NavigationIntentPolicy:
         to ElementId.CLOSE_OVERLAY (WHERE), which confuses control location with dismissal intent (WHAT).
         In the long term, OverlayId (e.g. OverlayId.UNEXPECTED_AD) must be required before triggering
         ActionId.DISMISS_OVERLAY. Until OverlayId migration is complete, primary modes with built-in
-        quit controls (domain, stage) must suppress generic LOBBY/DOMAIN_SELECT dismissal edges
-        and delegate to CONTINUE_PRIMARY.
+        quit controls (such as domain) must suppress generic LOBBY/DOMAIN_SELECT dismissal edges
+        and delegate to CONTINUE_PRIMARY. Stage mode is already safely handled without an edge in
+        STAGE_SELECT, so LOBBY popups in stage mode can still be dismissed normally.
         """
         if (
             edge.action != ActionId.DISMISS_OVERLAY
@@ -185,7 +186,8 @@ class NavigationIntentPolicy:
         if scene.scene not in {SceneId.LOBBY, SceneId.DOMAIN_SELECT}:
             return False
 
-        return intent.primary_payload.mode in {"domain", "golden_empire", "stage"}
+        return intent.primary_payload.mode in {"domain", "golden_empire"}
+
 
 
 

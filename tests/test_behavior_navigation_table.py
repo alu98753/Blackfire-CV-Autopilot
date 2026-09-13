@@ -281,7 +281,7 @@ class TestBehaviorNavigationTable(unittest.TestCase):
 
     def test_preserve_legacy_dungeon_lobby_close_recovery(self):
         """
-        [Test 5 - Compatibility] 在非 domain/stage 模式 (例如 mode="dungeon") 時，
+        [Test 5 - Compatibility] 在非 domain 模式 (例如 mode="dungeon") 時，
         LOBBY + CLOSE_OVERLAY 仍保留舊有已驗證之彈窗關閉行為，派發 DISMISS_OVERLAY。
 
         Note: This preserves current verified legacy behavior; CLOSE_OVERLAY alone is not
@@ -310,9 +310,36 @@ class TestBehaviorNavigationTable(unittest.TestCase):
         self.assertEqual(decision.action, ActionId.DISMISS_OVERLAY)
         self.assertEqual(decision.reason, ReasonCode.PRIMARY_CLOSE_OVERLAY)
 
+    def test_stage_mode_in_lobby_still_dismisses_real_overlay(self):
+        """
+        [Regression] Stage 模式下，若在 LOBBY 遇到真正的阻擋彈窗 (CLOSE_OVERLAY)，
+        必須正常派發 DISMISS_OVERLAY 進行關閉自癒，不得被過度保護。
+        """
+        from states.navigation_intent import (
+            ActiveIntent,
+            NavigationIntentPolicy,
+            PrimaryPayload,
+            ReasonCode,
+        )
+
+        scene = SceneSnapshot(
+            1,
+            1.0,
+            SceneId.LOBBY,
+            elements=self._element(ElementId.CLOSE_OVERLAY),
+        )
+        intent = ActiveIntent(
+            IntentId.PRIMARY_NAVIGATION,
+            primary_payload=PrimaryPayload(mode="stage"),
+        )
+        policy = NavigationIntentPolicy()
+        decision = policy.resolve(scene, intent)
+        self.assertEqual(decision.action, ActionId.DISMISS_OVERLAY)
+        self.assertEqual(decision.reason, ReasonCode.PRIMARY_CLOSE_OVERLAY)
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
