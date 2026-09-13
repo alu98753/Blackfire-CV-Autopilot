@@ -412,8 +412,41 @@ class JewelryWorkshopHandler(BaseStateHandler):
             return
 
         # =========================================================================
-        # 2. 退出階段 (ALL_DONE_EXITING)
+        # 2. 退出階段 (ALL_DONE_EXITING / VERIFY_EXIT)
         # =========================================================================
+        if self.step_phase == "VERIFY_EXIT":
+            pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
+            pos_building, _ = self.matcher.match(screen_img, self.current_building_btn, threshold=0.75)
+            if pos_door or pos_building:
+                logging.info("✅ [珠寶加工廠 VERIFY_EXIT] 偵測到已回到城鎮大門/建築畫面，確認離場完成，進行交棒...")
+                self._record_completion()
+                self.reset_state()
+                self.machine.need_jewelry_workshop = False
+                self.last_action_time = now
+                self.machine.notify_ui_progress()
+
+                logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
+                self.machine.pop_and_next_town_subflow()
+                return
+
+            pos_quit, _ = self.matcher.match(screen_img, "common/quit.png", threshold=0.8)
+            if pos_quit:
+                logging.info("💎 [珠寶加工廠 VERIFY_EXIT] 偵測到殘留浮層關閉按鈕 [common/quit.png]，進行關閉...")
+                self.mouse.click(left + pos_quit[0], top + pos_quit[1])
+                self.last_action_time = now
+                self.machine.notify_ui_progress()
+                return
+
+            if now - self.last_action_time >= 2.0:
+                pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+                if pos_exit:
+                    logging.warning(f"⚠️ [珠寶加工廠 VERIFY_EXIT] 離場點擊後超過 2 秒仍停留在店內，重試點擊 [{exit_building_btn}]...")
+                    self.mouse.click(left + pos_exit[0], top + pos_exit[1])
+                    self.last_action_time = now
+                    self.machine.notify_ui_progress()
+                    return
+            return
+
         if self.step_phase == "ALL_DONE_EXITING":
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
             pos_building, _ = self.matcher.match(screen_img, self.current_building_btn, threshold=0.75)
@@ -435,7 +468,6 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.mouse.click(left + pos_quit[0], top + pos_quit[1])
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
-
                 return
 
             pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
@@ -450,16 +482,11 @@ class JewelryWorkshopHandler(BaseStateHandler):
                     if dm and hasattr(dm, "record_shop_gold"):
                         dm.record_shop_gold(self.current_shop_id, final_gold)
 
-                logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮...")
+                logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮，轉入 VERIFY_EXIT 階段等待確認...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
-                self._record_completion()
-                self.reset_state()
-                self.machine.need_jewelry_workshop = False
+                self.step_phase = "VERIFY_EXIT"
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
-
-                logging.info("💎 [珠寶加工廠] 出售流程完成，消費城鎮佇列中的下一個任務...")
-                self.machine.pop_and_next_town_subflow()
                 return
             return
 

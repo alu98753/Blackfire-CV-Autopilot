@@ -154,7 +154,8 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         端到端閉環防回歸測試：
         模擬在城鎮選中 alchemy_hut，進入建築後完成販賣，
         在 ALL_DONE_EXITING 點擊離開建築回到城鎮時，
-        驗證 record_shop_visit 被調用時傳入的是 'alchemy_hut'，而非重置後的預設 'jewelry_workshop'。
+        驗證點擊後先進入 VERIFY_EXIT，待看到城門確認回城後才交棒，
+        並驗證 record_shop_visit 被調用時傳入的是 'alchemy_hut'，而非重置後的預設 'jewelry_workshop'。
         """
         mock_dm = MagicMock()
         self.mock_machine.daily_manager = mock_dm
@@ -164,7 +165,7 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         self.handler.current_building_btn = "town_building/alchemy_hut/alchemy_hut.png"
         self.handler.step_phase = "ALL_DONE_EXITING"
 
-        # 2. 模擬看到 exitfromhouse_and_to_town.png (離開建築)
+        # 2. 模擬第 1 幀：看到 exitfromhouse_and_to_town.png (離開建築)
         def match_exit(img, template_name, **kwargs):
             if template_name == "town_building/exitfromhouse_and_to_town.png":
                 return (200, 300), 0.90
@@ -175,13 +176,50 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         dummy_img = MagicMock()
         self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
 
-        # 驗證：點擊離開按鈕
+        # 驗證第 1 幀：點擊離開按鈕，轉入 VERIFY_EXIT，且此時尚未交棒、尚未記錄
         self.handler.mouse.click.assert_called_once_with(200, 300)
-        # 核心斷言：記錄的必須是當前商店 'alchemy_hut'，絕對不能是 'jewelry_workshop'
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+        mock_dm.record_shop_visit.assert_not_called()
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+
+        # 3. 模擬第 2 幀：在 VERIFY_EXIT 階段看到 common/door.png (回到城鎮大門)
+        def match_door(img, template_name, **kwargs):
+            if template_name == "common/door.png":
+                return (100, 100), 0.90
+            return None, 0.0
+
+        self.handler.matcher.match.side_effect = match_door
+        self.handler.last_action_time = 0  # 推進時間避免節流攔截
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 驗證第 2 幀：確認回到城鎮，記錄當前商店 'alchemy_hut'，並交棒 pop
         mock_dm.record_shop_visit.assert_called_once_with("alchemy_hut")
-        # 驗證調用完畢後內部狀態已正確 reset
+        self.mock_machine.pop_and_next_town_subflow.assert_called_once()
         self.assertEqual(self.handler.step_phase, "INIT")
         self.assertFalse(self.mock_machine.need_jewelry_workshop)
+
+    def test_verify_exit_waits_for_town_before_handoff(self):
+        """
+        驗證 VERIFY_EXIT 階段在未觀察到城鎮特徵前，絕不提前交棒。
+        """
+        mock_dm = MagicMock()
+        self.mock_machine.daily_manager = mock_dm
+
+        self.handler.current_shop_id = "alchemy_hut"
+        self.handler.current_building_btn = "town_building/alchemy_hut/alchemy_hut.png"
+        self.handler.step_phase = "VERIFY_EXIT"
+        self.handler.last_action_time = 0
+
+        # 模擬畫面仍處於店內（既沒有 door 也沒有 building 按鈕）
+        self.handler.matcher.match.return_value = (None, 0.0)
+
+        dummy_img = MagicMock()
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 斷言：仍在 VERIFY_EXIT，不調用 record_shop_visit，不 pop_and_next_town_subflow
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+        mock_dm.record_shop_visit.assert_not_called()
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
 
     def test_full_cycle_scene_guard_records_selected_shop_not_reset_default(self):
         """
