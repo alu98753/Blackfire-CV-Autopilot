@@ -1259,10 +1259,6 @@ class NavigationHandler(BaseStateHandler):
             active_tabs.append("stage")
         if dungeon_select_open or is_dungeon_page:
             active_tabs.append("dungeon")
-        elif any("dungeon" in p for p in nav_path):
-            pos_dg_after, conf_dg_after = match_current_frame("dungeons/dungeon_after.png", threshold=0.75)
-            if pos_dg_after and conf_dg_after >= 0.75:
-                active_tabs.append("dungeon")
 
         filtered_nav_path = filter_navigation_path(nav_path, active_tabs, is_lobby=scene.is_lobby)
 
@@ -1295,7 +1291,7 @@ class NavigationHandler(BaseStateHandler):
                 if "boss_skull" in btn or "skull" in btn:
                     pos = self._validate_boss_skull(pos, rect, match_current_frame, screen_img=screen_img)
             if pos:
-                # 門禁 1: 地下城冷卻與木牌檢查
+                # 門禁 1: 地下城冷卻檢查 (消費 canonical scanner 驗證的記憶體狀態，通用尋路禁止自行執行第二套 OCR)
                 entry_templates = self.machine.config.get("dungeon_entries") if self.machine.config else None
                 dungeon_idx = DungeonCatalog.resolve_index_from_nav_path([btn], entry_templates)
                 if dungeon_idx is not None:
@@ -1304,36 +1300,6 @@ class NavigationHandler(BaseStateHandler):
                         dungeon_name = DungeonCatalog.get_name(dungeon_idx)
                         logging.info(f"⏳ [尋路門禁] 地下城按鈕 [{btn}] ({dungeon_name}) 處於冷卻中，禁止盲點！")
                         continue
-                    if type(screen_img).__name__ == "ndarray":
-                        h_limit, w_limit = screen_img.shape[:2]
-                        scale_screen = compute_screen_scale(w_limit)
-                        t_w = int(238.0 * scale_screen)
-                        t_h = int(320.0 * scale_screen)
-                        if os.path.exists(os.path.join("templates", btn)):
-                            t_img = cv2.imread(os.path.join("templates", btn))
-                            if t_img is not None:
-                                t_h = int(t_img.shape[0] * scale_screen)
-                                t_w = int(t_img.shape[1] * scale_screen)
-                        crop_y1 = pos[1]
-                        crop_y2 = min(h_limit, pos[1] + t_h)
-                        crop_x1 = pos[0]
-                        crop_x2 = min(w_limit, pos[0] + t_w)
-                        dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
-                        has_cd, parsed_secs, raw_text = detect_cooldown_sign_and_time(
-                            dungeon_crop,
-                            self.machine.get_ocr_reader,
-                            max_allowed_seconds=7200.0,
-                            threshold=0.58,
-                            scale=scale_screen,
-                        )
-                        if has_cd:
-                            if parsed_secs and 0 < parsed_secs < 7200.0:
-                                self.machine.dungeon_cooldowns[dungeon_idx] = time.time() + parsed_secs
-                            else:
-                                self.machine.dungeon_cooldowns[dungeon_idx] = time.time() + 30.0
-                            dungeon_name = DungeonCatalog.get_name(dungeon_idx)
-                            logging.warning(f"🛡️ [尋路門禁] 地下城按鈕 [{btn}] ({dungeon_name}) 偵測到冷卻木牌，禁止點擊！")
-                            continue
 
                 if btn == "stages/stage_label.png":
                     if self._handle_sub_stage_scroll(

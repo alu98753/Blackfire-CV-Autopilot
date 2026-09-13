@@ -257,9 +257,11 @@ class TestEntityLobbyPanel(unittest.TestCase):
                             self.assertNotIn(other_def.active_template, matched_templates)
                             self.assertNotIn(other_def.inactive_template, matched_templates)
 
-    def test_expected_tab_inactive_confirmed_returns_lobby_other(self):
+    def test_expected_tab_inactive_confirmed_upgrades_to_full_relocalize(self):
         """
-        [測試案例 8] EXPECTED_TAB 模式下目標 inactive 命中時，判定在 lobby 但 active_tabs 為空
+        [測試案例 8] EXPECTED_TAB 模式下目標 inactive 命中時，升級為 full relocalize：
+        - 若無其他活躍頁籤，確認在 lobby 且 active_tabs 為空。
+        - 若畫面上實際上是另一個頁籤活躍（例如預期 STAGE 但畫面是 dungeon_after），正確識別出活躍頁籤。
         """
         from unittest.mock import MagicMock, patch
         from utils.scene_detector import SceneDetector, SceneType
@@ -293,13 +295,41 @@ class TestEntityLobbyPanel(unittest.TestCase):
             )
             scene = detector.detect("mock_screen", machine=mock_machine, request=request)
 
+            # 1. 觸發 Full Relocalize 確認無其他活躍頁籤，判定為 LOBBY_OTHER 且 active_tabs 為空
             self.assertEqual(scene.scene_type, SceneType.LOBBY_OTHER)
             self.assertEqual(scene.active_tabs, [])
             self.assertTrue(scene.is_lobby)
+            # 全量比對觸發，確認其餘頁籤被掃描驗證
+            self.assertIn("common/select_stage.png", matched_templates)
 
-            # 其餘頁籤未被掃描
-            self.assertNotIn("common/select_stage.png", matched_templates)
-            self.assertNotIn("common/select_stage_after.png", matched_templates)
+        # 2. 核心感知修復驗證：預期 STAGE 但畫面實際在 dungeon_after，必須升級並判定出 DUNGEON
+        matched_templates.clear()
+
+        def match_dungeon_active(_img, template, threshold=0.8):
+            matched_templates.append(template)
+            if template == "common/select_stage.png":
+                return ((500, 715), 0.95)
+            if template == "common/select_stage_after.png":
+                return ((500, 713), 0.40)
+            if template == "dungeons/dungeon_after.png":
+                return ((648, 713), 0.95)
+            if template == "dungeons/dungeon.png":
+                return ((648, 715), 0.40)
+            return (None, 0.0)
+
+        mock_matcher.match.side_effect = match_dungeon_active
+
+        with patch("os.path.exists", return_value=True):
+            request_stage = SceneDetectionRequest(
+                profile=DetectionProfileId.STAGE_SELECT,
+                expected_tab=TabId.STAGE,
+                tab_scope=LobbyTabScope.EXPECTED_TAB,
+                reason="navigation_steady",
+            )
+            scene2 = detector.detect("mock_screen", machine=mock_machine, request=request_stage)
+            self.assertEqual(scene2.scene_type, SceneType.LOBBY_DUNGEON)
+            self.assertEqual(scene2.active_tabs, ["dungeon"])
+            self.assertTrue(scene2.is_lobby)
 
     def test_expected_tab_miss_upgrades_to_full_relocalize(self):
         """

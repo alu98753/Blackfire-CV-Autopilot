@@ -1113,12 +1113,11 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.mock_machine.mouse.click.assert_not_called()
 
     @patch("os.path.exists", return_value=True)
-    @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
-    def test_navigation_reversed_path_skips_dungeon_entry_when_cooldown_sign_detected(
-        self, mock_detect_cd, _mock_exists
+    def test_navigation_reversed_path_skips_dungeon_entry_when_cooldown_active(
+        self, _mock_exists
     ):
         """
-        [冷卻門禁測試 2] 當地下城 entry 按鈕畫面上偵測到冷卻木牌時，必須記錄冷卻並跳過點擊，防止點進冷卻彈窗！
+        [冷卻門禁測試 2] 當地下城 entry 按鈕在記憶體冷卻中時，通用尋路必須跳過點擊，防止點進冷卻中地下城！
         """
         import time
         import numpy as np
@@ -1141,7 +1140,8 @@ class TestBehaviorNavigation(unittest.TestCase):
                 "dungeons/orc_bunker.png",
             ],
         }
-        self.mock_machine.dungeon_cooldowns = {}
+        # 模擬 Ice_entry (index=6) 處於記憶體冷卻中
+        self.mock_machine.dungeon_cooldowns = {6: time.time() + 300.0}
         self.mock_machine.diamond_window_opened = False
         self.mock_machine.bread_window_opened = False
 
@@ -1151,15 +1151,11 @@ class TestBehaviorNavigation(unittest.TestCase):
             return None, 0.0
 
         self.mock_machine.matcher.match.side_effect = match_side_effect
-        # 模擬偵測到冷卻木牌，剩餘 300 秒
-        mock_detect_cd.return_value = (True, 300.0, "05:00")
 
         self.handler.handle(dummy_screen, self.rect)
 
-        # 斷言：絕不點擊 Ice_entry.png，且寫入冷卻時間
+        # 斷言：Ice_entry.png 處於冷卻中，通用尋路絕不點擊
         self.mock_machine.mouse.click.assert_not_called()
-        self.assertIn(6, self.mock_machine.dungeon_cooldowns)
-        self.assertGreater(self.mock_machine.dungeon_cooldowns[6], time.time())
 
     @patch("os.path.exists", return_value=True)
     def test_navigation_dismisses_quit_overlay_in_primary_navigation(self, _mock_exists):

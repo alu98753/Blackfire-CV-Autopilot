@@ -530,23 +530,17 @@ class SceneDetector:
             )
             return tab.name, tab.scene_type, conf_act, False
 
-        # 2. Inactive confirmed or active not dominant
-        if conf_inact >= LOBBY_TAB_THRESHOLD or pos_inact is not None or conf_act >= LOBBY_TAB_THRESHOLD:
-            self._last_tab_was_full_relocalize = False
-            logging.debug(
-                "[LobbyTabFastPath] tab=%s target_inactive active_conf=%.4f inactive_conf=%.4f elapsed=%.3fs upgrade=False",
-                tab.name, conf_act, conf_inact, elapsed
-            )
-            return None, None, 0.0, False
-
-        # 3. Both missed: upgrade to bounded full relocalize
+        # 2. Inactive confirmed or missed:
+        # 當預期頁籤不是 Active（即使 inactive 模板匹配成功，或者 active 不佔優勢，或者都沒命中），
+        # 均不能將 FastPath negative evidence 誤當成全域無 active tab。
+        # 必須升級為 FULL_RELOCALIZE，客觀尋找當前畫面實際 active 的頁籤（例如 dungeon_after）。
         self._last_tab_was_full_relocalize = True
         logging.info(
-            "[LobbyTabUpgrade] Expected tab '%s' missed (act=%.4f, inact=%.4f, elapsed=%.3fs); upgrading to FULL_RELOCALIZE",
+            "[LobbyTabUpgrade] Expected tab '%s' not active (act=%.4f, inact=%.4f, elapsed=%.3fs); upgrading to FULL_RELOCALIZE",
             tab.name, conf_act, conf_inact, elapsed
         )
         return self._resolve_full_relocalize(
-            screen_img, machine, scene_info, reason="expected_tab_miss", expected_tab_name=tab.name
+            screen_img, machine, scene_info, reason="expected_tab_inactive", expected_tab_name=tab.name
         )
 
     def _evaluate_tab_active(

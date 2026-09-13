@@ -797,8 +797,8 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertFalse(fallback["enable_golden_empire"])
         self.assertTrue(fallback["enable_dungeon"])
 
-    def test_build_tier4_fallback_config_dungeon_mode(self):
-        # 測試 1: 原配置為純地下城 (type="dungeon")
+    def test_build_tier4_fallback_config_stage_coherence_and_pure_dungeon(self):
+        # 測試 1: 原配置為純地下城 (type="dungeon")，退守時保持純地下城配置
         pure_dungeon = {
             "type": "dungeon",
             "name": "地下城",
@@ -807,25 +807,40 @@ class TestDailyTier4Behavior(unittest.TestCase):
         }
         fallback1 = build_tier4_fallback_config(pure_dungeon, {})
         self.assertEqual(fallback1["type"], "dungeon")
-        self.assertEqual(fallback1["tier4_mode"], "dungeon")
-        self.assertFalse(fallback1["enable_stage_farming"])
-        self.assertFalse(fallback1["enable_golden_empire"])
-        self.assertTrue(fallback1["enable_dungeon"])
         self.assertEqual(fallback1["navigation_path"], pure_dungeon["navigation_path"])
 
-        # 測試 2: daily 配置明確指定 tier4_mode="dungeon"
-        daily_dungeon = {
+        # 測試 2: 原配置為 mix/daily，其 navigation_path 原本為地下城路徑
+        # 退守為 stage 後，navigation_path 必須是 canonical stage 路由，絕不包含地下城入口！
+        mix_with_dungeon_path = {
             "_config_mode_key": "daily",
             "type": "mix",
-            "tier4_mode": "dungeon",
-            "navigation_path": ["dungeons/dungeon.png"],
+            "tier4_mode": "stage",
+            "navigation_path": ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"],
+            "stage_navigation_path": [
+                "common/door.png",
+                "common/select_stage.png",
+                "stages/level6_ice_cave.png",
+                "stages/stage_label.png",
+                "stages/first_stage.png",
+            ],
+            "enable_dungeon": True,
         }
-        fallback2 = build_tier4_fallback_config(daily_dungeon, {})
-        self.assertEqual(fallback2["type"], "dungeon")
-        self.assertEqual(fallback2["tier4_mode"], "dungeon")
-        self.assertFalse(fallback2["enable_stage_farming"])
-        self.assertFalse(fallback2["enable_golden_empire"])
-        self.assertTrue(fallback2["enable_dungeon"])
+        mode_configs = {
+            "stage": {
+                "name": "普通關卡",
+                "type": "stage",
+                "navigation_path": ["common/door.png", "common/select_stage.png", "stages/level1.png"],
+                "stage_templates": ["stages/level1.png"],
+            }
+        }
+        fallback2 = build_tier4_fallback_config(mix_with_dungeon_path, mode_configs)
+        self.assertEqual(fallback2["type"], "stage")
+        self.assertEqual(fallback2["tier4_mode"], "stage")
+        self.assertTrue(fallback2["enable_stage_farming"])
+        # Invariant 驗證：navigation_path 不得包含任何 dungeon entry，而是 canonical stage 路由
+        self.assertNotIn("dungeons/dungeon.png", fallback2["navigation_path"])
+        self.assertNotIn("dungeons/Ice_entry.png", fallback2["navigation_path"])
+        self.assertEqual(fallback2["navigation_path"], mix_with_dungeon_path["stage_navigation_path"])
 
     def test_evaluate_next_activity_enters_collect_only_when_tier4_none_and_activities_on_cooldown(self):
         import time

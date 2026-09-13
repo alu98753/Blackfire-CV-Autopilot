@@ -5,7 +5,6 @@ from copy import deepcopy
 from config import (
     DEFAULT_TIER4_DOMAIN,
     TIER4_MODE_DOMAIN,
-    TIER4_MODE_DUNGEON,
     TIER4_MODE_NONE,
     TIER4_MODE_STAGE,
 )
@@ -28,12 +27,8 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
     """Resolve the player's Daily policy into one executable Tier 4 route."""
     fallback = deepcopy(primary_config)
     primary_type = primary_config.get("type")
-    if primary_type == "dungeon" or fallback.get("tier4_mode") == TIER4_MODE_DUNGEON:
-        fallback["type"] = "dungeon"
-        fallback["tier4_mode"] = TIER4_MODE_DUNGEON
-        fallback["enable_stage_farming"] = False
-        fallback["enable_golden_empire"] = False
-        fallback["enable_dungeon"] = True
+    # 純地下城模式為獨立活動模式，退守時保持自身配置，不適用 Daily Tier 4 政策轉換
+    if primary_type == "dungeon":
         return fallback
 
     tier4_mode = fallback.get("tier4_mode", TIER4_MODE_STAGE)
@@ -47,15 +42,28 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
         return fallback
 
     if tier4_mode != TIER4_MODE_DOMAIN:
+        stage_cfg = mode_configs.get("stage", {})
         fallback["type"] = "stage"
         fallback["tier4_mode"] = TIER4_MODE_STAGE
         fallback["enable_stage_farming"] = True
         fallback["enable_golden_empire"] = False
         fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
         fallback["greedy_dungeon"] = False
-        stage_cfg = mode_configs.get("stage", {})
+
+        # Invariant: type == stage 時，navigation_path 必須為 canonical stage 路由，嚴禁殘留地下城路徑
+        canonical_stage_nav = (
+            primary_config.get("stage_navigation_path")
+            or stage_cfg.get("stage_navigation_path")
+            or stage_cfg.get("navigation_path")
+        )
+        if canonical_stage_nav:
+            fallback["navigation_path"] = deepcopy(canonical_stage_nav)
+
         if "stage_templates" not in fallback and "stage_templates" in stage_cfg:
             fallback["stage_templates"] = deepcopy(stage_cfg["stage_templates"])
+        for key in ("stage_name", "stage_entry", "stage_target"):
+            if key in stage_cfg and key not in fallback:
+                fallback[key] = deepcopy(stage_cfg[key])
         return fallback
 
     domain_key = fallback.get("tier4_domain", DEFAULT_TIER4_DOMAIN)
