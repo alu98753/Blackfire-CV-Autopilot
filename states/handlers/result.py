@@ -444,8 +444,8 @@ class ResultHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
 
         # 進入確認放棄子流程，等待並點擊 confirm.png
-        start_time = time.time()
-        while time.time() - start_time < 5.0:
+        start_time = self._get_monotonic_time()
+        while self._get_monotonic_time() - start_time < 5.0:
             loop_screen = self.machine.capturer.capture(rect)
             if loop_screen is not None:
                 pos_c, conf_c = self.matcher.match(loop_screen, "common/confirm.png", threshold=0.80)
@@ -453,7 +453,7 @@ class ResultHandler(BaseStateHandler):
                     logging.info(f"👉 偵測到退出確認按鈕 'common/confirm.png' (相似度: {conf_c:.4f})，進行點擊確認。")
                     self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
                     break
-            time.sleep(0.3)
+            self._sleep(0.3)
 
         if is_dungeon:
             idx = getattr(self.machine, "current_dungeon_index", None)

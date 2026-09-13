@@ -34,7 +34,7 @@ class SystemClock:
 
 
 class FakeClock:
-    def __init__(self, now: float = 0.0):
+    def __init__(self, now: float = 1000.0):
         self.now = float(now)
 
     def monotonic(self) -> float:

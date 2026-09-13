@@ -14,6 +14,7 @@ from states.handlers.lord_boss import LordBossHandler
 from states.handlers.battle import BattleHandler
 from states.handlers.result import ResultHandler
 from config import GAME_CONFIGS
+from runtime.ports import FakeClock
 
 class TestLordBossSubflowMatrix(unittest.TestCase):
     def setUp(self):
@@ -24,10 +25,12 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         mock_capturer = MagicMock()
         mock_matcher = MagicMock()
         mock_mouse = MagicMock()
+        self.clock = FakeClock()
         self.state_machine = GameStateMachine(
             capturer=mock_capturer,
             matcher=mock_matcher,
             mouse=mock_mouse,
+            clock=self.clock,
             preload_ocr=False,
         )
         self.state_machine.daily_manager = self.daily_manager
