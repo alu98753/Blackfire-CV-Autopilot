@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import re
+import cv2
 from copy import deepcopy
 from states.handlers.base import BaseStateHandler
 from config import (
@@ -42,10 +43,12 @@ def filter_navigation_path(nav_path, active_tabs=None, is_lobby=False):
 
     if active_tabs:
         skip_map = {
-            "stage": "common/select_stage.png",
-            "dungeon": "dungeons/dungeon.png"
+            "stage": {"common/select_stage.png", "select_stage.png"},
+            "dungeon": {"dungeons/dungeon.png", "dungeon.png"},
         }
-        skip_btns.update({skip_map[tab] for tab in active_tabs if tab in skip_map})
+        for tab in active_tabs:
+            if tab in skip_map:
+                skip_btns.update(skip_map[tab])
 
     if not skip_btns:
         return list(nav_path)
@@ -805,7 +808,6 @@ class NavigationHandler(BaseStateHandler):
             if time_diff < 2.2 and not is_testing:
                 logging.info(f"⌛ 剛執行過地下城水平滑動 (僅過 {time_diff:.1f} 秒)，等待地圖滾動完全靜止後再進行圖像辨識...")
                 return
-            import cv2
             h_img, w_img = screen_img.shape[:2]
             standard_widths = [1280, 1366, 1600, 1920, 2560, 3840]
             matched_width = w_img
@@ -1255,7 +1257,7 @@ class NavigationHandler(BaseStateHandler):
         active_tabs = []
         if stage_select_open:
             active_tabs.append("stage")
-        if dungeon_select_open:
+        if dungeon_select_open or is_dungeon_page:
             active_tabs.append("dungeon")
 
         filtered_nav_path = filter_navigation_path(nav_path, active_tabs, is_lobby=scene.is_lobby)
@@ -1289,6 +1291,16 @@ class NavigationHandler(BaseStateHandler):
                 if "boss_skull" in btn or "skull" in btn:
                     pos = self._validate_boss_skull(pos, rect, match_current_frame, screen_img=screen_img)
             if pos:
+                # 門禁 1: 地下城冷卻檢查 (消費 canonical scanner 驗證的記憶體狀態，通用尋路禁止自行執行第二套 OCR)
+                entry_templates = self.machine.config.get("dungeon_entries") if self.machine.config else None
+                dungeon_idx = DungeonCatalog.resolve_index_from_nav_path([btn], entry_templates)
+                if dungeon_idx is not None:
+                    cooldown_until = getattr(self.machine, "dungeon_cooldowns", {}).get(dungeon_idx, 0.0)
+                    if time.time() < cooldown_until:
+                        dungeon_name = DungeonCatalog.get_name(dungeon_idx)
+                        logging.info(f"⏳ [尋路門禁] 地下城按鈕 [{btn}] ({dungeon_name}) 處於冷卻中，禁止盲點！")
+                        continue
+
                 if btn == "stages/stage_label.png":
                     if self._handle_sub_stage_scroll(
                         rect,

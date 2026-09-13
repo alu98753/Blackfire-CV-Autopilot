@@ -102,6 +102,10 @@
   - 將歷史遺留的混合模式 `mix` 解耦為純場景與排程驅動，消除 `daily` 構建於 `mix` 之上的歷史包袱。
 - [ ] **導航與狀態機模組化縮編 (~300 行原則)**：
   - 目前 [`states/handlers/navigation.py`](../../states/handlers/navigation.py) (1,334 行) 與 [`states/state_machine.py`](../../states/state_machine.py) (2,449 行) 規模龐大，需依 BDI 與業務職責進一步拆分。
+- [ ] 🟡 **導航覆蓋層關閉執行器阻塞式等待技術債 (Navigation Overlay Dismiss Blocking Helper)**：
+  - **背景**：在 `fix/dungeon-navigation-routing` 分支中，我們透過 Intent Overlay Policy 將覆蓋層關閉行為收斂進 Navigation Table（`PRIMARY_NAVIGATION` + `LOBBY / STAGE_SELECT / DUNGEON_SELECT` + `CLOSE_OVERLAY` → `DISMISS_OVERLAY`）。
+  - **技術債**：目前 `NavigationDecisionExecutor` 在處理 `DISMISS_OVERLAY` 時，調用了 `self.handler.click_and_wait_until_gone(...)`，其內部包含 `Decision → click → internal capture/sleep/wait loop → return` 的阻塞式等待控制流，偏離了狀態機每幀非阻塞的響應式原則。
+  - **規劃方向**：未來在 Navigation 重構中，將 `DISMISS_OVERLAY` 改為發射點擊後交由狀態機下一幀 tick 驗證後置條件（PostconditionSatisfied / SceneSnapshot 更新），消除 blocking wait loop。
 - [ ] 不知道為何小號會卡在 breadcollection 導致30s watchdog(./todos/bread_collect_watchdogbug.md)
 
 ### .agent

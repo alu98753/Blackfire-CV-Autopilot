@@ -23,7 +23,7 @@ class TestBehaviorNavigationTable(unittest.TestCase):
             for edge in V1_NAVIGATION_EDGES
         }
 
-        self.assertEqual(len(V1_NAVIGATION_EDGES), 13)
+        self.assertEqual(len(V1_NAVIGATION_EDGES), 16)
         self.assertIn(
             (IntentId.COLLECT_BREAD, SceneId.TOWN, SceneId.LOBBY), routes
         )
@@ -59,6 +59,30 @@ class TestBehaviorNavigationTable(unittest.TestCase):
                 IntentId.PRIMARY_NAVIGATION,
                 SceneId.DUNGEON_SELECT,
                 SceneId.LOADING,
+            ),
+            routes,
+        )
+        self.assertIn(
+            (
+                IntentId.PRIMARY_NAVIGATION,
+                SceneId.LOBBY,
+                SceneId.LOBBY,
+            ),
+            routes,
+        )
+        self.assertIn(
+            (
+                IntentId.PRIMARY_NAVIGATION,
+                SceneId.STAGE_SELECT,
+                SceneId.STAGE_SELECT,
+            ),
+            routes,
+        )
+        self.assertIn(
+            (
+                IntentId.PRIMARY_NAVIGATION,
+                SceneId.DUNGEON_SELECT,
+                SceneId.DUNGEON_SELECT,
             ),
             routes,
         )

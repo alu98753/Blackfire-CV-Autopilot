@@ -158,6 +158,33 @@ V1_NAVIGATION_EDGES = (
         PostconditionId.LOADING_OR_BATTLE,
         ReasonCode.PRIMARY_START_READY,
     ),
+    NavigationEdge(
+        IntentId.PRIMARY_NAVIGATION,
+        SceneId.LOBBY,
+        SceneId.LOBBY,
+        ElementId.CLOSE_OVERLAY,
+        ActionId.DISMISS_OVERLAY,
+        PostconditionId.OVERLAY_CLOSED,
+        ReasonCode.PRIMARY_CLOSE_OVERLAY,
+    ),
+    NavigationEdge(
+        IntentId.PRIMARY_NAVIGATION,
+        SceneId.STAGE_SELECT,
+        SceneId.STAGE_SELECT,
+        ElementId.CLOSE_OVERLAY,
+        ActionId.DISMISS_OVERLAY,
+        PostconditionId.OVERLAY_CLOSED,
+        ReasonCode.PRIMARY_CLOSE_OVERLAY,
+    ),
+    NavigationEdge(
+        IntentId.PRIMARY_NAVIGATION,
+        SceneId.DUNGEON_SELECT,
+        SceneId.DUNGEON_SELECT,
+        ElementId.CLOSE_OVERLAY,
+        ActionId.DISMISS_OVERLAY,
+        PostconditionId.OVERLAY_CLOSED,
+        ReasonCode.PRIMARY_CLOSE_OVERLAY,
+    ),
 )
 
 
