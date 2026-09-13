@@ -175,13 +175,13 @@ class ChestHandler(BaseStateHandler):
                 return True
 
         # 2. Relinquishment Protocol (Invariant 2 / Spec Section 5):
-        # 未見自身特徵，但明確觀察到非自身房間退出按鈕 (exitfromhouse) 或大廳返回按鈕 (goback_town)
+        # 未見自身特徵，但明確觀察到通用建築內部特徵 (exitfromhouse) 或大廳返回按鈕 (goback_town)
         pos_exit, _ = self.matcher.match(screen_img, CHEST_EXIT_BUILDING_TEMPLATE, threshold=0.75)
         pos_goback, _ = self.matcher.match(screen_img, CHEST_GOBACK_TOWN_TEMPLATE, threshold=0.80)
         if pos_exit or pos_goback:
             self.mislocation_count += 1
             logging.info(
-                "⚠️ [神秘寶箱 INIT] 偵測到非自身之其他場景特徵 (exit/goback 可見，確認第 %d/%d 幀)...",
+                "⚠️ [神秘寶箱 INIT] 偵測到通用建築內部特徵但無自身特徵 (exit/goback 可見，確認第 %d/%d 幀)...",
                 self.mislocation_count,
                 CHEST_MAX_MISLOCATION_FRAMES,
             )
@@ -213,7 +213,7 @@ class ChestHandler(BaseStateHandler):
         Invariant:
         - 點擊入口 != 成功進入寶箱。
         - 自身專屬特徵 (CHEST_DIALOG_TEMPLATE) 成立 -> 轉入 CLICK_FREE_CHEST 業務階段。
-        - 通用建築環境特徵 (exitfromhouse / goback_town) 連續成立但無自身專屬特徵 ->
+        - 通用建築內部特徵 (exitfromhouse / goback_town) 連續成立但無自身專屬特徵 ->
           判定為疑似錯位 (suspected mislocation)，主動 Relinquish 實體所有權給 shared REACH_TOWN，
           嚴格不得 defer / pop / complete！
         - 兩者皆無 -> 有界等待 (bounded wait)，超限退回 INIT 重試點擊。
@@ -228,14 +228,14 @@ class ChestHandler(BaseStateHandler):
                 self.step_phase = "CLICK_FREE_CHEST"
                 return self._handle_click_free_chest(screen_img, rect, left, top, now)
 
-        # 2. 檢查通用建築環境特徵 (generic building-context evidence: exit/goback)
-        # 唯有「generic building evidence + own evidence absent」連續成立時，才判定為物理錯位
+        # 2. 檢查通用建築內部特徵 (generic building-internal evidence: exit/goback)
+        # 唯有「generic building internal evidence + own evidence absent」連續成立時，才判定為物理錯位
         pos_exit, _ = self.matcher.match(screen_img, CHEST_EXIT_BUILDING_TEMPLATE, threshold=0.75)
         pos_goback, _ = self.matcher.match(screen_img, CHEST_GOBACK_TOWN_TEMPLATE, threshold=0.80)
         if pos_exit or pos_goback:
             self.mislocation_count += 1
             logging.info(
-                "⚠️ [神秘寶箱 VERIFY_ENTRY] 觀察到通用建築環境特徵但無寶箱專屬面板 (suspected mislocation 第 %d/%d 幀)...",
+                "⚠️ [神秘寶箱 VERIFY_ENTRY] 觀察到通用建築內部特徵但無寶箱專屬面板 (suspected mislocation 第 %d/%d 幀)...",
                 self.mislocation_count,
                 CHEST_MAX_MISLOCATION_FRAMES,
             )

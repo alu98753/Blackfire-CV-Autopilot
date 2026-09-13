@@ -67,7 +67,7 @@ class HeroDrawHandler(BaseStateHandler):
             pos_rec_check, _ = self.matcher.match(screen_img, "town_building/Tavern/RECRUITED.png", threshold=0.85)
             own_inside_evidence = bool(pos_free_check or pos_rec_check)
 
-            # 2.2 通用建築環境特徵檢查 (generic building-context evidence)
+            # 2.2 通用建築內部特徵檢查 (generic building-internal evidence)
             pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.80)
             pos_goback_check, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80)
             generic_building_evidence = bool(pos_exit_check or pos_goback_check)
@@ -80,7 +80,7 @@ class HeroDrawHandler(BaseStateHandler):
                 return True
             elif decision == MislocationDecision.RELINQUISH:
                 logging.warning(
-                    "⚠️ [HeroDraw Mislocation] 觀察到通用建築環境特徵但無酒館專屬特徵，連續確認錯位成立，讓渡實體所有權給 REACH_TOWN..."
+                    "⚠️ [HeroDraw Mislocation] 觀察到通用建築內部特徵但無酒館專屬特徵，連續確認錯位成立，讓渡實體所有權給 REACH_TOWN..."
                 )
                 self.reset_state()
                 if hasattr(self.machine, "relinquish_subflow_to_navigation"):
@@ -89,7 +89,7 @@ class HeroDrawHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return True
             elif generic_building_evidence:
-                logging.info("⚠️ [HeroDraw] 觀察到通用建築環境特徵但無酒館面板 (suspected mislocation 觀測中)...")
+                logging.info("⚠️ [HeroDraw] 觀察到通用建築內部特徵但無酒館特徵 (suspected mislocation 觀測中)...")
                 return True
 
             # 2.3 在城鎮尋找並點擊酒館建築 (Tavern.png，前置紅點預檢)
@@ -152,7 +152,7 @@ class HeroDrawHandler(BaseStateHandler):
             decision = self.mislocation_guard.evaluate(own_inside, generic_exit)
             if decision == MislocationDecision.RELINQUISH:
                 logging.warning(
-                    "⚠️ [HeroDraw Mislocation] ENTERED_TAVERN 階段未見酒館招募特徵但見通用退出按鈕，連續確認成立，讓渡實體所有權給 REACH_TOWN..."
+                    "⚠️ [HeroDraw Mislocation] ENTERED_TAVERN 階段未見酒館招募特徵但見通用建築內部特徵，連續確認成立，讓渡實體所有權給 REACH_TOWN..."
                 )
                 self.reset_state()
                 if hasattr(self.machine, "relinquish_subflow_to_navigation"):
@@ -161,7 +161,7 @@ class HeroDrawHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return True
             elif generic_exit:
-                logging.info("⚠️ [HeroDraw] ENTERED_TAVERN 觀察到通用建築環境特徵但無招募按鈕 (suspected mislocation 觀測中)...")
+                logging.info("⚠️ [HeroDraw] ENTERED_TAVERN 觀察到通用建築內部特徵但無招募按鈕 (suspected mislocation 觀測中)...")
                 return True
 
             self.not_found_count += 1

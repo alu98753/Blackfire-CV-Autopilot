@@ -188,7 +188,7 @@ class BloodAltarHandler(BaseStateHandler):
             pos_rec_entry_check, _ = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
             own_inside_evidence = bool(pos_sac_check or pos_rec_entry_check)
 
-            # 1.2 通用建築環境特徵檢查 (generic building-context evidence)
+            # 1.2 通用建築內部特徵檢查 (generic building-internal evidence)
             pos_exit_check, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
             pos_goback_check, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80)
             generic_building_evidence = bool(pos_exit_check or pos_goback_check)
@@ -201,7 +201,7 @@ class BloodAltarHandler(BaseStateHandler):
                 return True
             elif decision == MislocationDecision.RELINQUISH:
                 logging.warning(
-                    "⚠️ [BloodAltar Mislocation] INIT 觀察到通用建築環境特徵但無血之祭壇專屬特徵，連續確認錯位成立，讓渡實體所有權給 REACH_TOWN..."
+                    "⚠️ [BloodAltar Mislocation] INIT 觀察到通用建築內部特徵但無血之祭壇專屬特徵，連續確認錯位成立，讓渡實體所有權給 REACH_TOWN..."
                 )
                 self.reset_state()
                 if hasattr(self.machine, "relinquish_subflow_to_navigation"):
@@ -210,7 +210,7 @@ class BloodAltarHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return True
             elif generic_building_evidence:
-                logging.info("🩸 [血之祭壇] INIT 觀察到通用建築環境特徵但無祭壇內部特徵 (suspected mislocation 觀測中)...")
+                logging.info("🩸 [血之祭壇] INIT 觀察到通用建築內部特徵但無祭壇內部特徵 (suspected mislocation 觀測中)...")
                 return True
 
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)

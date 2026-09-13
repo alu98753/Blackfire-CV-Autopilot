@@ -63,7 +63,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
     @patch("states.handlers.chest.detect_building_with_red_dot")
     def test_chest_handler_relinquishes_after_consecutive_mislocation_frames(self, mock_detect):
         """
-        驗證 ChestHandler committed 後，若畫面為非自身房間 (exitfromhouse 可見但無寶箱)：
+        驗證 ChestHandler committed 後，若畫面為通用建築內部 (exitfromhouse 可見但無寶箱專屬特徵)：
         - 第 1 幀：mislocation_count = 1，回傳 True，不釋放，不 defer，不 pop。
         - 第 2 幀：mislocation_count = 2，主動呼叫 relinquish_subflow_to_navigation，
           轉移至 STATE_NAVIGATING。
@@ -74,7 +74,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.machine.town_subflow_queue = ["hero_draw"]
         self.machine.daily_manager = MagicMock()
 
-        # 模擬畫面：未找到寶箱建築，但找到 exitfromhouse_and_to_town
+        # 模擬畫面：未找到寶箱專屬特徵，但找到 exitfromhouse_and_to_town (通用建築內部特徵)
         mock_detect.return_value = BuildingCheckResult(False, False)
 
         def match(_screen, template, **_kw):
@@ -203,7 +203,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         """
         [Spec Scenario 4 Full Acceptance Test]:
         Given: Subflow A (Chest) is committed (current_state == STATE_CHEST)
-        When: Physical screen is observed to be an unrelated TOWN_BUILDING (Blood Altar, exitfromhouse visible)
+        When: Physical screen is observed to be generic building interior (Blood Altar, exitfromhouse visible)
         Then:
           1. ChestHandler yields ownership without calling defer_subflow or mutating intent.
           2. System transitions to STATE_NAVIGATING.
@@ -219,7 +219,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
         self.assertEqual(self.machine.current_town_subflow, "chest")
 
-        # 1. 模擬畫面處於血之祭壇內部 (exitfromhouse 可見，無寶箱)
+        # 1. 模擬畫面處於通用建築內部 (exitfromhouse 可見，無寶箱專屬特徵)
         mock_chest_detect.return_value = BuildingCheckResult(False, False)
 
         def match_blood_altar(_screen, template, **_kw):
@@ -244,7 +244,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.machine.daily_manager.defer_subflow.assert_not_called()
 
         # 幀 3: 主迴圈執行 handle_town_subflow_precondition (在 STATE_NAVIGATING)
-        # REACH_TOWN 看到 exitfromhouse -> 點擊退場 (IN_PROGRESS)
+        # REACH_TOWN 看到 exitfromhouse (通用建築內部特徵) -> 點擊退場 (IN_PROGRESS)
         prec1 = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
         self.assertTrue(prec1)
         self.mouse.click.assert_called_with(50, 500)
@@ -305,7 +305,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
         self.assertEqual(self.machine.current_town_subflow, "chest")
 
-        # 1. 模擬畫面處於其他建築 (exitfromhouse 可見)
+        # 1. 模擬畫面處於通用建築內部 (exitfromhouse 可見)
         mock_chest_detect.return_value = BuildingCheckResult(False, False)
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
@@ -359,11 +359,11 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         """
         [真實 Failure A 迴歸驗證]:
         模擬 Chest 從 Town 正常點擊建築入口 -> step_phase 前進 ->
-        下一幀實際落入非自身之 foreign building (如誤入 Blood Altar)。
+        下一幀實際落入通用建築內部 (如誤入 Blood Altar)。
         
         核心契約與守護 Invariant:
         1. 點擊入口 != 成功進入 Chest。
-        2. 若下一幀落入 foreign building (exitfromhouse 可見但無 chest dialog)，
+        2. 若下一幀落入通用建築內部 (exitfromhouse 可見但無 chest dialog)，
            Handler 必須在連續確認後主動 Relinquish 回 STATE_NAVIGATING，
            交由 shared REACH_TOWN 處理。
         3. 嚴格 Invariant 2：物理點偏/錯位絕不得 defer、pop 或 complete 業務 Intent！
@@ -386,8 +386,8 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertEqual(self.handler.step_phase, "VERIFY_ENTRY")
         self.assertEqual(self.machine.current_town_subflow, "chest")
 
-        # Step 2: 點擊後下一幀落入 foreign building (例如 Blood Altar):
-        # exitfromhouse_and_to_town 可見，但 chest dialog (free_treasure.png) 不可見
+        # Step 2: 點擊後下一幀落入通用建築內部 (例如 Blood Altar):
+        # exitfromhouse_and_to_town (通用建築內部特徵) 可見，但 chest dialog (free_treasure.png) 不可見
         mock_chest_detect.return_value = BuildingCheckResult(False, False)
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
@@ -497,7 +497,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
     ):
         """
         [BloodAltar 錯位迴歸驗證]:
-        驗證 BloodAltar 處於 foreign building 時 (exitfromhouse 可見但無祭壇專屬特徵)，
+        驗證 BloodAltar 處於通用建築內部時 (exitfromhouse 可見但無祭壇專屬特徵)，
         不得誤認 generic exit 為已在祭壇內部；
         必須在連續確認後主動 Relinquish 回 STATE_NAVIGATING，
         嚴格不得推進 business phase 並懲罰性 defer/pop 業務 Intent！
@@ -508,7 +508,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.machine.daily_manager = MagicMock()
         altar_handler = self.machine.handlers[self.machine.STATE_BLOOD_ALTAR]
 
-        # 模擬畫面：身處 foreign building (exitfromhouse 可見，但無 Blood_Altar / Sacrifice / receive_entry)
+        # 模擬畫面：身處通用建築內部 (exitfromhouse 可見，但無 Blood_Altar / Sacrifice / receive_entry)
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
         )
@@ -561,8 +561,8 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         [HeroDraw 完整真實點擊錯位閉環驗證 (Post-Entry Real Path)]:
         驗證 HeroDraw 從城鎮發起點擊進入 Tavern：
         1. INIT 階段找到 Tavern 且帶紅點，點擊後推進至 ENTERED_TAVERN。
-        2. 下一幀實際因點偏落在 foreign building (exitfromhouse 可見，但無 free_recruitment / RECRUITED)。
-        3. 第一幀判定 generic exit visible 且 own evidence absent -> 進入 suspected mislocation (WAIT)。
+        2. 下一幀實際因點偏落在通用建築內部 (exitfromhouse 可見，但無 free_recruitment / RECRUITED)。
+        3. 第一幀判定通用建築內部特徵可見且 own evidence absent -> 進入 suspected mislocation (WAIT)。
         4. 第二幀連續確認成立 -> 輸出 RELINQUISH，交還所有權給 REACH_TOWN。
         5. 嚴格遵守 Invariant 2：不 defer、不 pop、不 mark completed！
         6. shared REACH_TOWN 點擊退出，回到 Town Ready 後乾淨重新派發回 STATE_HERO_DRAW。
@@ -584,8 +584,8 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertEqual(hero_handler.step_phase, "ENTERED_TAVERN")
         self.assertEqual(self.machine.current_town_subflow, "hero_draw")
 
-        # Step 2: 點擊後下一幀落入 foreign building (例如 Blood Altar)
-        # exitfromhouse_and_to_town 可見，但 free_recruitment / RECRUITED 均不存在
+        # Step 2: 點擊後下一幀落入通用建築內部 (例如 Blood Altar)
+        # exitfromhouse_and_to_town (通用建築內部特徵) 可見，但 free_recruitment / RECRUITED 均不存在
         mock_hero_detect.return_value = BuildingCheckResult(False, False)
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
@@ -635,8 +635,8 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
     ):
         """
         [BagTidy 錯位迴歸驗證 (C1)]:
-        驗證 BagTidy 處於 foreign building 時 (exitfromhouse_and_to_town 可見，但無 bag/tidy/door)，
-        不得在 foreign building 盲目等待 20 秒超時後 pop_and_next_town_subflow() 消耗業務意圖；
+        驗證 BagTidy 處於通用建築內部時 (exitfromhouse_and_to_town 可見，但無 bag/tidy/door)，
+        不得在通用建築內部盲目等待 20 秒超時後 pop_and_next_town_subflow() 消耗業務意圖；
         必須由 MislocationGuard 連續確認 (2 frames) 後主動讓渡實體所有權給 REACH_TOWN！
         嚴格遵守 Invariant 2：業務 Intent 絕不被 pop 或 completed！
         """
@@ -647,7 +647,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.machine.pop_and_next_town_subflow = MagicMock(wraps=self.machine.pop_and_next_town_subflow)
         tidy_handler = self.machine.handlers[self.machine.STATE_BAG_TIDY]
 
-        # 模擬畫面：身處 foreign building (exitfromhouse 可見，但無 common/door, bag_text, bag, tidy)
+        # 模擬畫面：身處通用建築內部 (exitfromhouse 可見，但無 common/door, bag_text, bag, tidy)
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
         )
@@ -694,8 +694,8 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
     ):
         """
         [BulletinBoard 錯位迴歸驗證 (C2)]:
-        驗證 BulletinBoard 處於 foreign building 時 (exitfromhouse 可見，但無 bulletin_board / task / reset / door)，
-        不得在 foreign building 盲目重試開窗超時後 defer_subflow() 懲罰業務 Intent；
+        驗證 BulletinBoard 處於通用建築內部時 (exitfromhouse 可見，但無 bulletin_board / task / reset / door)，
+        不得在通用建築內部盲目重試開窗超時後 defer_subflow() 懲罰業務 Intent；
         必須由 MislocationGuard 連續確認 (2 frames) 後主動讓渡實體所有權給 REACH_TOWN！
         嚴格遵守 Invariant 2：業務 Intent 絕不被 defer、pop 或 mark completed！
         """
@@ -705,7 +705,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.machine.daily_manager = MagicMock()
         bb_handler = self.machine.handlers[self.machine.STATE_BULLETIN_BOARD]
 
-        # 模擬畫面：身處 foreign building (exitfromhouse 可見，但無 common/door, bulletin_board, task, reset)
+        # 模擬畫面：身處通用建築內部 (exitfromhouse 可見，但無 common/door, bulletin_board, task, reset)
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
         )
@@ -754,8 +754,8 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
     ):
         """
         [JewelryWorkshop 錯位迴歸驗證 (C3)]:
-        驗證 JewelryWorkshop 處於 foreign building 時 (exitfromhouse 可見，但無 sell_out / sell_btn / door / workshop)，
-        不得在 foreign building 盲目空轉或觸發 safe recovery / error；
+        驗證 JewelryWorkshop 處於通用建築內部時 (exitfromhouse 可見，但無 sell_out / sell_btn / door / workshop)，
+        不得在通用建築內部盲目空轉或觸發 safe recovery / error；
         必須由 MislocationGuard 連續確認 (2 frames) 後主動讓渡實體所有權給 REACH_TOWN！
         嚴格遵守 Invariant 2：業務 Intent 絕不被 defer、pop 或 mark completed！
         """
@@ -765,7 +765,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.machine.daily_manager = MagicMock()
         jw_handler = self.machine.handlers[self.machine.STATE_JEWELRY_WORKSHOP]
 
-        # 模擬畫面：身處 foreign building (exitfromhouse 可見，但無 sell_out, sell_btn, door, workshop)
+        # 模擬畫面：身處通用建築內部 (exitfromhouse 可見，但無 sell_out, sell_btn, door, workshop)
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
         )

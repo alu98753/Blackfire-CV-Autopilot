@@ -572,14 +572,14 @@ class JewelryWorkshopHandler(BaseStateHandler):
 
         own_evidence = bool(pos_sell_chk or pos_max_chk or pos_sell_out or pos_door or pos_building)
 
-        # 通用建築環境特徵：exitfromhouse 或 goback_town 可見
+        # 通用建築內部特徵：exitfromhouse 或 goback_town 可見
         pos_exit_init, conf_exit = self.matcher.match(screen_img, exit_building_btn, threshold=0.80, quiet=True)
         pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
         generic_building_evidence = bool(pos_exit_init or pos_goback)
 
         decision = self.mislocation_guard.evaluate(own_evidence, generic_building_evidence)
         if decision == MislocationDecision.RELINQUISH:
-            logging.warning("⚠️ [JewelryWorkshop Mislocation] 偵測到通用建築特徵但無珠寶加工廠/城鎮特徵，連續確認錯位，讓渡實體所有權給 REACH_TOWN...")
+            logging.warning("⚠️ [JewelryWorkshop Mislocation] 偵測到通用建築內部特徵但無珠寶加工廠/城鎮特徵，連續確認錯位，讓渡實體所有權給 REACH_TOWN...")
             self.reset_state()
             if hasattr(self.machine, "relinquish_subflow_to_navigation"):
                 self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")

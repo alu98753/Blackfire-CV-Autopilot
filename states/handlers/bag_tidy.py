@@ -109,14 +109,14 @@ class BagTidyHandler(BaseStateHandler):
             if pos_door:
                 own_evidence = True
 
-            # 通用建築環境特徵：exitfromhouse 或 goback_town 可見
+            # 通用建築內部特徵：exitfromhouse 或 goback_town 可見
             pos_exit, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.75, quiet=True)
             pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
             generic_building_evidence = bool(pos_exit or pos_goback)
 
             decision = self.mislocation_guard.evaluate(own_evidence, generic_building_evidence)
             if decision == MislocationDecision.RELINQUISH:
-                logging.warning("⚠️ [BagTidy Mislocation] INIT 階段偵測到通用建築特徵但無城鎮/背包特徵，連續確認錯位，讓渡實體所有權給 REACH_TOWN...")
+                logging.warning("⚠️ [BagTidy Mislocation] INIT 階段偵測到通用建築內部特徵但無城鎮/背包特徵，連續確認錯位，讓渡實體所有權給 REACH_TOWN...")
                 self.reset_state()
                 if hasattr(self.machine, "relinquish_subflow_to_navigation"):
                     self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")

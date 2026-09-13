@@ -426,14 +426,14 @@ class BulletinBoardHandler(BaseStateHandler):
             return
 
         if obs.classification == "UNKNOWN_OVERLAY":
-            # 優先檢查是否為 foreign building (例如誤入其他建築物看得到 exitfromhouse_and_to_town)
+            # 檢查通用建築內部特徵 (例如看得到 exitfromhouse_and_to_town 但無告示牌特徵)
             pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.75, quiet=True)
             pos_goback_check, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
             generic_building = bool(pos_exit_check or pos_goback_check)
 
             decision = self.mislocation_guard.evaluate(False, generic_building)
             if decision == MislocationDecision.RELINQUISH:
-                logging.warning("⚠️ [BulletinBoard Mislocation] WAIT_BOARD_OPEN 階段偵測到通用建築特徵但無告示牌特徵，連續確認成立，讓渡實體所有權給 REACH_TOWN...")
+                logging.warning("⚠️ [BulletinBoard Mislocation] WAIT_BOARD_OPEN 階段偵測到通用建築內部特徵但無告示牌特徵，連續確認成立，讓渡實體所有權給 REACH_TOWN...")
                 self.reset_state()
                 if hasattr(self.machine, "relinquish_subflow_to_navigation"):
                     self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
@@ -441,7 +441,7 @@ class BulletinBoardHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                 return
             elif generic_building:
-                logging.info("⌛ [BulletinBoard] WAIT_BOARD_OPEN 觀察到通用建築特徵但無告示牌特徵 (suspected mislocation 觀測中)...")
+                logging.info("⌛ [BulletinBoard] WAIT_BOARD_OPEN 觀察到通用建築內部特徵但無告示牌特徵 (suspected mislocation 觀測中)...")
                 return
 
             is_suspected = (self.click_building_time is not None) and (not obs.has_bag)
@@ -472,13 +472,13 @@ class BulletinBoardHandler(BaseStateHandler):
             return
 
         # NO_OVERLAY: 點擊建築後連 quit 均未出現
-        # 檢查是否在無 quit 的 foreign building (例如只有 exitfromhouse_and_to_town)
+        # 檢查是否在無 quit 的通用建築內部 (例如只有 exitfromhouse_and_to_town)
         pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.75, quiet=True)
         pos_goback_check, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
         generic_building = bool(pos_exit_check or pos_goback_check)
         decision = self.mislocation_guard.evaluate(False, generic_building)
         if decision == MislocationDecision.RELINQUISH:
-            logging.warning("⚠️ [BulletinBoard Mislocation] WAIT_BOARD_OPEN (NO_OVERLAY) 偵測到通用建築特徵，連續確認成立，讓渡實體所有權給 REACH_TOWN...")
+            logging.warning("⚠️ [BulletinBoard Mislocation] WAIT_BOARD_OPEN (NO_OVERLAY) 偵測到通用建築內部特徵，連續確認成立，讓渡實體所有權給 REACH_TOWN...")
             self.reset_state()
             if hasattr(self.machine, "relinquish_subflow_to_navigation"):
                 self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
@@ -486,7 +486,7 @@ class BulletinBoardHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return
         elif generic_building:
-            logging.info("⌛ [BulletinBoard] WAIT_BOARD_OPEN 觀察到通用建築特徵 (suspected mislocation 觀測中)...")
+            logging.info("⌛ [BulletinBoard] WAIT_BOARD_OPEN 觀察到通用建築內部特徵 (suspected mislocation 觀測中)...")
             return
 
         click_time = self.click_building_time or self.last_action_time
@@ -508,14 +508,14 @@ class BulletinBoardHandler(BaseStateHandler):
         if pos_door:
             own_evidence = True
 
-        # 2. 通用建築環境特徵檢查
+        # 2. 通用建築內部特徵檢查
         pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.75, quiet=True)
         pos_goback_check, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
         generic_building = bool(pos_exit_check or pos_goback_check)
 
         decision = self.mislocation_guard.evaluate(own_evidence, generic_building)
         if decision == MislocationDecision.RELINQUISH:
-            logging.warning("⚠️ [BulletinBoard Mislocation] INIT 階段偵測到通用建築特徵但無城門/告示牌特徵，連續確認成立，讓渡實體所有權給 REACH_TOWN...")
+            logging.warning("⚠️ [BulletinBoard Mislocation] INIT 階段偵測到通用建築內部特徵但無城門/告示牌特徵，連續確認成立，讓渡實體所有權給 REACH_TOWN...")
             self.reset_state()
             if hasattr(self.machine, "relinquish_subflow_to_navigation"):
                 self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
@@ -523,7 +523,7 @@ class BulletinBoardHandler(BaseStateHandler):
                 self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return
         elif generic_building and not own_evidence:
-            logging.info("⌛ [BulletinBoard] INIT 觀察到通用建築特徵但無城門 (suspected mislocation 觀測中)...")
+            logging.info("⌛ [BulletinBoard] INIT 觀察到通用建築內部特徵但無城門 (suspected mislocation 觀測中)...")
             return
 
         if obs.classification == "BOARD_CONFIRMED":
