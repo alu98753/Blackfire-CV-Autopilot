@@ -49,7 +49,9 @@
   - **目標**：推進至 200s ~ 210s 區間。
 
 ### Daily
-- [ ] **公告牌 livelock 修正** [bulletboard_bug.md](bulletboard_bug.md)
+- [ ] 🔴 **公告牌進場判定與關閉形成活鎖修復 ([bulletboard_bug.md](bulletboard_bug.md))**：
+  - **24/7 風險 (活鎖/空轉)**：告示牌在開出帶有 `quit` 的視窗後，若未命中 `reset/task/task_after` 正向證據，會在 2.5 秒後誤判為干擾層關閉並返回 INIT；而城鎮紅點仍在導致再次點擊，形成 `INIT ➔ 點告示牌 ➔ WAIT_BOARD_OPEN ➔ 2.5s 關閉 ➔ INIT` 無限活鎖。
+  - **規劃方向**：修正真實世界進場特徵契約，消除錯誤假設（quit + 無特徵 ➔ 誤殺關閉），並補齊防活鎖機制。
 - [ ] 🔴 **定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖**：
   - **24/7 風險 (活鎖)**：定時領取體力在特定畫面打不開視窗時觸發 DEFER，若狀態機將 DEFER 誤判為阻塞性條件，會導致主排程停止派發後續所有 Activity，全系統陷入活鎖停擺。
   - **規劃方向**：明確切分 DEFER 與 BLOCKING 語意；DEFER 僅延後當前 Intent，主排程必須能自由降級並推進其他非依賴任務。
@@ -105,8 +107,9 @@
 - [ ] 🟡 **導航覆蓋層關閉執行器阻塞式等待技術債 (Navigation Overlay Dismiss Blocking Helper)**：
   - **背景**：在 `fix/dungeon-navigation-routing` 分支中，我們透過 Intent Overlay Policy 將覆蓋層關閉行為收斂進 Navigation Table（`PRIMARY_NAVIGATION` + `LOBBY / STAGE_SELECT / DUNGEON_SELECT` + `CLOSE_OVERLAY` → `DISMISS_OVERLAY`）。
   - **技術債**：目前 `NavigationDecisionExecutor` 在處理 `DISMISS_OVERLAY` 時，調用了 `self.handler.click_and_wait_until_gone(...)`，其內部包含 `Decision → click → internal capture/sleep/wait loop → return` 的阻塞式等待控制流，偏離了狀態機每幀非阻塞的響應式原則。
-  - **規劃方向**：未來在 Navigation 重構中，將 `DISMISS_OVERLAY` 改為發射點擊後交由狀態機下一幀 tick 驗證後置條件（PostconditionSatisfied / SceneSnapshot 更新），消除 blocking wait loop。
-- [ ] 不知道為何小號會卡在 breadcollection 導致30s watchdog(./todos/bread_collect_watchdogbug.md)
+- [ ] 🔴 **大廳領麵包卡住觸發 30s 看門狗逾時修復 ([bread_collect_watchdogbug.md](bread_collect_watchdogbug.md))**：
+  - **24/7 風險 (看門狗殺進程)**：小號前往大廳領麵包時，點擊 `bread_collect` 後 `bread_click_attempted` 標記未改變後續 action policy，且大廳通用比對過多無關模板，導致卡在 BreadCollectionHandler 直至觸發 30 秒看門狗逾時。
+  - **規劃方向**：解耦大廳領取特徵比對，落實最小感知（僅比對 `goback_town` 與 `bread`），並使 `bread_click_attempted` 成為推進下一階段的狀態機守衛。
 
 ### .agent
 
