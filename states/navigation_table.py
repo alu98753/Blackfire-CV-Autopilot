@@ -160,6 +160,16 @@ V1_NAVIGATION_EDGES = (
     ),
     NavigationEdge(
         IntentId.PRIMARY_NAVIGATION,
+        SceneId.DOMAIN_SELECT,
+        SceneId.LOADING,
+        ElementId.START,
+        ActionId.START_PRIMARY,
+        PostconditionId.LOADING_OR_BATTLE,
+        ReasonCode.PRIMARY_START_READY,
+    ),
+    NavigationEdge(
+
+        IntentId.PRIMARY_NAVIGATION,
         SceneId.LOBBY,
         SceneId.LOBBY,
         ElementId.CLOSE_OVERLAY,

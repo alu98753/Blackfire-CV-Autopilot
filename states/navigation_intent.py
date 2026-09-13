@@ -146,6 +146,13 @@ class NavigationIntentPolicy:
 
         edge = NavigationTable().next_edge(scene, intent.intent_id)
         if edge is not None:
+            if (
+                edge.action == ActionId.DISMISS_OVERLAY
+                and intent.intent_id == IntentId.PRIMARY_NAVIGATION
+                and intent.primary_payload is not None
+                and intent.primary_payload.mode in {"domain", "golden_empire", "stage"}
+            ):
+                return self._resolve_primary(scene)
             return ActionDecision.click(
                 edge.reason,
                 edge.action,
@@ -157,6 +164,7 @@ class NavigationIntentPolicy:
         if intent.intent_id == IntentId.COLLECT_BREAD:
             return self._resolve_bread(scene)
         return self._resolve_primary(scene)
+
 
     @staticmethod
     def _resolve_diamond(scene: SceneSnapshot) -> ActionDecision:
