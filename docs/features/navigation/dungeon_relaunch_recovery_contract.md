@@ -27,28 +27,32 @@
 除非外部協定或安全需求另有要求，模板清單、優先級索引、設定欄位與私有方法名稱皆是實作細節；以下規則與其可觀測結果才是本契約的長期約束。
 
 ### Invariant 1：客觀場景主導與感知解耦保證 (Perceptual Scene Primacy Invariant)
-- **原則**：依據 Precondition Contracts 第 6.3 條，場景感知以畫面物理特徵為單一真相，嚴禁用 FSM state 或 config 類型代替世界觀察。
-- **保證**：
-  1. 當畫面上觀測到地下城核心錨點（`dungeons/leave.png`、`dungeons/gungeon_godown.png`、`dungeons/dungeons_complete.png`）時，全域感知層保證判定為身處地下城，並轉移至 `STATE_DUNGEON_EXPLORING`。
-  2. 全域感知檢驗（`dungeon_detection_features`）嚴禁因當前 `config` 標記為 `domain`、`stage` 或 `collect_only` 而略過地下城錨點檢驗。
+- **Scope**：登入、重啟或導航期間的地下城場景定位。
+- **Rule**：世界場景 MUST 由客觀感知證據裁決；業務意圖、設定或既有狀態 MUST NOT 排除地下城感知。
+- **Observable consequence**：系統重新進入或重啟於地下城時，會交由地下城流程處理，而非以原業務設定覆蓋畫面事實。
+- **Allowed variation**：場景特徵、感知器、狀態名稱與設定模型可變更。
+- **Verification**：`tests/test_dungeon_relaunch_recovery.py`。
 
 ### Invariant 2：探索處理器領域自治保證 (ExploreHandler Domain Autonomy Invariant)
-- **原則**：`ExploreHandler` 是專屬 `SceneId.DUNGEON_EXPLORING` 的處理器，必須自主維護地下城探索順序，不得受外部不相干業務配置閹割。
-- **保證**：
-  1. `ExploreHandler` 執行的探索優先級清單中，必須包含下樓按鈕 (`dungeons/gungeon_godown.png`)、下樓確認 (`dungeons/gungeon_godown_confirm.png`) 與通關按鈕 (`dungeons/dungeons_complete.png`)。
-  2. 若當前 `config` 傳入之 `explore_priorities` 未包含任何地下城有效模板（例如殘留領地模式之 `domains/golden_empire/explore_btn.png`），`ExploreHandler` 保證自主回退至標準離場優先級 (`EMERGENCY_DUNGEON_EXIT_PRIORITIES`)，絕不在地下城內嘗試比對非地下城模板。
+- **Scope**：已確認地下城場景中的探索與離場決策。
+- **Rule**：地下城的合法擁有人 MUST 維持可推進或安全離場的領域行為；不相干的業務設定 MUST NOT 令其改用非地下城操作。
+- **Observable consequence**：殘留或不相容的設定不會使地下城流程停留在無法推進的操作集合。
+- **Allowed variation**：處理器、優先級表示法、操作集合與 fallback 機制可變更。
+- **Verification**：`tests/test_dungeon_relaunch_recovery.py`。
 
 ### Invariant 3：下樓與進展交互優先於被動錨點保證 (Action-Over-Anchor Priority Invariant)
-- **原則**：地下城每層左下角恆常存在離開按鈕 (`dungeons/leave.png`)。該圖標僅作為樓層起點與維護錨點，絕不具備推進探索之效果。
-- **保證**：
-  1. 在所有地下城探索優先級清單中，具備實質推進效果之交互模板（通關、彈窗確認、下樓確認、戰鬥房、開寶箱、選祝福、下樓按鈕）必須嚴格排列於 `dungeons/leave.png` 之前。
-  2. `dungeons/leave.png` 必須置於清單最末位，僅在畫面無任何可交互按鈕時充當被動維護錨點，重置樓層過渡標記與防卡死計數，嚴禁排在下樓按鈕前阻斷探索進展。
+- **Scope**：地下城內同時可觀測到推進操作與被動維護證據時。
+- **Rule**：能推進或完成地下城的操作 MUST 優先於只用於定位或維護的被動證據；被動證據 MUST NOT 阻斷可觀測的進展操作。
+- **Observable consequence**：流程不會因反覆處理定位錨點而忽略可用的下樓、確認或完成操作。
+- **Allowed variation**：操作排序、互動特徵、錨點、過渡狀態與防卡死資料可變更。
+- **Verification**：`tests/test_dungeon_relaunch_recovery.py`。
 
 ### Invariant 4：意圖鎖定與對稱還原閉環保證 (Intent Latching & Definitive Restoration Invariant)
-- **原則**：依據 Precondition Contracts 第 7.2 條，角色意外處於地下城時，非地下城目標業務意圖（如 `domain` 或 `stage`）之 dispatch 前置條件不成立，未滿足之前置條件不得銷毀意圖。
-- **保證**：
-  1. 進入 `STATE_DUNGEON_EXPLORING` 時，若當前配置非合格地下城探索路線，狀態機保證將原配置鎖定於 `self.dungeon_recovery_return_config`，並注入前置離場路由。若先前已存在鎖定意圖，嚴禁重複覆蓋。
-  2. 唯有在觀測到確鑿離場證據（`dungeons_complete.png` 消失且出現大廳或城鎮錨點）時，`_finalize_dungeon_completion` 保證將鎖定之配置 100% 還原至 `self.config`，並轉移至 `STATE_NAVIGATING` 恢復原業務目標。
+- **Scope**：未滿足原業務前置條件卻觀測到地下城的復原流程。
+- **Rule**：系統 MUST 保留原業務意圖，先完成地下城的前置離場；只有在觀測到離場後，才可恢復原意圖。尚未恢復的意圖 MUST NOT 被後續偵測重複覆寫。
+- **Observable consequence**：意外進入地下城不會遺失原任務，也不會在仍位於地下城時提前恢復原任務。
+- **Allowed variation**：意圖保存媒介、離場證據、路由注入與狀態交接可變更。
+- **Verification**：`tests/test_dungeon_relaunch_recovery.py`。
 
 ---
 

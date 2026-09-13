@@ -40,7 +40,7 @@ rewritten to match the other.
 | [Supervisor Lifecycle Contract](supervisor_lifecycle_contract.md) | lifecycle safety and crash-loop escalation | `DOMAIN_CONTRACT` | canonical |
 | [Lobby Scene Contract](../features/navigation/lobby_scene_contract.md) | lobby perception and navigation safety | `DOMAIN_CONTRACT` | canonical |
 | [Dungeon Relaunch Recovery Contract](../features/navigation/dungeon_relaunch_recovery_contract.md) | objective dungeon recovery and intent restoration | `DOMAIN_CONTRACT` | canonical |
-| [Town Building Pipeline](../features/town_building/pipeline.md) | bulletin-board action lifecycle | `DOMAIN_CONTRACT` | canonical specialization of the precondition contract |
+| [Town Building Pipeline](../features/town_building/pipeline.md) | §8 bulletin-board decision semantics | `DOMAIN_CONTRACT` | `MIXED`; only §8 is a canonical specialization of the precondition contract |
 | [Stamina Retreat Feature](../features/stamina_retreat_feature.md) | retreat precedence and temporary dungeon resume | `DOMAIN_CONTRACT` | canonical |
 | [Notification Contract](../features/notification/notification_contract.md) | non-blocking notification delivery | `DOMAIN_CONTRACT` | canonical |
 | `docs/storys/` | incident rationale and promotion history | `HISTORY` | retain as narrative; not normative |
@@ -52,4 +52,3 @@ rewritten to match the other.
 completion, defer, and recovery. Feature contracts may specialize those rules
 only where they add an observable domain condition. They MUST link to the
 parent rule instead of restating it with a different obligation.
-

@@ -9,7 +9,7 @@ description: 當 Feature/Fix/Spec/TODO 已完成，準備把已驗證且應長�
 
 把「完成一次任務的開發文件」收斂成「未來開發者應遵守的長期標準」。
 
-**Canonical contract（權威契約）**：只針對一個明確 concern，記錄未來修改仍必須維持的行為、不變量、責任邊界與禁止事項。  
+**Canonical contract（權威契約）**：只針對一個明確 concern，記錄未來修改仍必須維持的行為、不變量、責任邊界與禁止事項。
 它不是目前 code 的逐行說明，也不是歷史開發日記。
 
 ## 先建立 Source of Truth 邊界
@@ -128,7 +128,7 @@ Verification:
 - `Recovery 不得偽裝成業務成功`
 - `Perception 與 Decision 職責分離`
 
-**Domain Contract 嚴禁全文重複複製上位鐵律！**  
+**Domain Contract 嚴禁全文重複複製上位鐵律！**
 Domain Contract 只能記錄 **Domain Specialization**，例如：
 > 「Bulletin Board reset 遵循上位 Action/Postcondition Invariant；其 domain postcondition 為 reset 按鈕消失且目標面板可見；其 recovery escalation 為重試耗盡時觸發 DEFER 退避，不得強行推進接任務。」
 
@@ -139,6 +139,9 @@ Canonical 文件應形成有層次的樹狀體系，杜絕複製貼上。
 Canonical Contract 必須保持：
 - **短、中性、可掃讀、Refactor-resistant**。
 - **嚴格使用 RFC 2119 關鍵字**（MUST / MUST NOT / MAY）描述 semantic obligation。
+- **架構邊界與實作對應定位 (Architecture Boundaries & Implementation Mapping)**：
+  - 邊界示意圖或章節中提及之具體檔案路徑、類別名稱（如 `BattleSession`）或模組名，屬於「目前實作參照 (Current Implementation Reference / Mapping)」，用於指明當前系統承擔該職責之元件。
+  - 這些實作標籤**不構成 Normative Invariant 本體**；重構更名只要維持同一架構分層、職責邊界與單向依賴，即屬完全合法。
 - **剔除情緒化與偽權威詞彙**：禁用「不可動搖」、「永久鐵律」、「唯一法定」、「徹底杜絕」、「100%」等誇飾字眼（除非真的是外部通訊協定絕對限制）。
 - **排除歷程敘事**：嚴禁將 root cause、開發故事、commit SHA、除錯步驟寫進 Normative Contract（這些屬於 PARS / ADR）。
 

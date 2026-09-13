@@ -43,22 +43,25 @@
 - **Verification**：`tests/test_entity_lobby_panel.py`。
 
 ### Invariant 2：保守仲裁保證 (Conservative Disambiguation Invariant)
-- **原則**：畫面可能受切換動畫、光影特效或外部干擾。
-- **保證**：
-  1. 當且僅當單一頁籤明確 Active，或最高信心度頁籤**顯著領先**次高者時，由優勢者勝出。
-  2. 若複數頁籤同時宣稱 Active 且差距過小，系統遵循 Greenfield-lite 保守原則「**證據衝突時拒絕盲目猜測**」，**保證退回 `SceneId.LOBBY` (`LOBBY_OTHER`)**，等待下一幀畫面穩定。
+- **Scope**：多個大廳頁籤候選互相衝突時的場景裁決。
+- **Rule**：只有充分且可區分的證據才可裁決特定頁籤；證據衝突或不足時，系統 MUST 保留保守的大廳結果並等待新的觀測。
+- **Observable consequence**：不穩定畫面不會被強制導向任一頁籤。
+- **Allowed variation**：信心計算、仲裁演算法、保守場景型別與觀測節奏可變更。
+- **Verification**：`tests/test_entity_lobby_panel.py`。
 
 ### Invariant 3：大廳無大門導航保證 (No-Door in Lobby Invariant)
-- **原則**：角色身處大廳內部時，客觀物理世界中絕無在大廳中尋找城門之可能。
-- **保證**：
-  1. 當確認身處大廳（`is_lobby=True` 或偵測到大廳特徵錨點）時，導航路徑過濾 (`filter_navigation_path`) **保證強制剃除 `common/door.png`**。
-  2. 系統絕不在大廳內部將任何拱形裝飾或按鈕誤認為大門而觸發誤點擊。
+- **Scope**：已確認大廳中的導航行為。
+- **Rule**：系統 MUST NOT 在大廳中發出僅適用於城鎮入口的導航操作。
+- **Observable consequence**：大廳裝飾或頁面元素不會觸發返回城鎮的誤點擊。
+- **Allowed variation**：大廳識別器、路徑過濾器、入口特徵與導航資料結構可變更。
+- **Verification**：`tests/test_behavior_navigation.py`。
 
 ### Invariant 4：純領域契約與單一真相保證 (Pure Domain & Single Truth Invariant)
-- **原則**：決策層（Handlers / Preconditions / Intents）只消費不可變快照與領域型別，不應跨層持有視覺匹配器。
-- **保證**：
-  1. **`SceneId` 是全系統唯一 Canonical Truth**。
-  2. 領域契約模組 [utils/scene_types.py](../../../utils/scene_types.py) **保證零 OpenCV、零 Matcher 依賴**，可被任何上層決策模組安全引用。
+- **Scope**：大廳場景的領域表述與決策輸入。
+- **Rule**：決策層 MUST 消費穩定的場景領域表述，且該表述 MUST NOT 依賴特定視覺實作。
+- **Observable consequence**：視覺引擎可以替換，而依賴場景結果的決策契約維持不變。
+- **Allowed variation**：場景列舉、快照型別、模組位置與感知實作可變更。
+- **Verification**：`tests/test_scene_types.py`。
 
 ### Invariant 5：兩階段感知與預期頁籤最小化保證 (Two-Tier Perception & Expected Tab Invariant)
 - **Scope**：已知目標頁籤的穩態導航與定位失敗處理。

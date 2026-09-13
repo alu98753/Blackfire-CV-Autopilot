@@ -53,32 +53,23 @@
 
 本節是 `Precondition Contracts` 對告示牌流程的領域特化。它約束可觀測的感知、決策與復原行為；ROI 尺寸、沉澱時間、重試次數、模板路徑與診斷輸出均為實作或執行期策略，不構成不變量。術語判讀見 [Canonical Invariant Registry](../../architecture/canonical_invariant_registry.md)。
 
-#### 8.1 架構不變量 (Architecture Invariants)
-1. **Perception Classification Invariant**：
-   - 證據不足（Evidence-Insufficient）絕不等於已知干擾層（Known Conflicting Overlay）。
-   - 剛由目標動作引導產生之新彈窗，在缺乏明確反向證據前，不得僅因目標專屬特徵尚未就緒而逕行判定為干擾層並予以關閉。
-   - 狀態機之領域推進必須由確鑿的正向或排他證據支撐。
-2. **Scoped Decision Invariant**：
-   - 用於狀態轉移決策之特徵比對，必須嚴格限制於其專屬的 Scoped ROI 幾何邊界內。
-   - 診斷機制可擴大搜尋範圍以提取除錯證據，但任何全圖或全尺度診斷結果嚴禁反向影響或決定狀態決策。
-3. **Action Lifecycle Invariant**：
-   - 點擊不等於完成（`Click != Success`）；發射操作後必須於沉澱窗口後觀察物理後置條件。
-   - 在後置條件未被證實失敗前，嚴禁高頻重複發射相同動作。
-   - 所有重試必須具備有界上限（Bounded Retry），防止因 UI 假陽性產生死循環。
-4. **Failure Escalation Invariant**：
-   - 重試預算耗盡不等於業務成功（`Retry Exhausted != Completion`）。
-   - 當操作重試耗盡時，必須透過冷卻退避（Defer）或讓渡控制權（Yield）進入有界自癒，嚴禁將失敗偽裝成成功並推進至後續業務流程。
+#### 8.1 告示牌特有的決策語意 (Domain Decision Semantics)
+
+告示牌動作的 Click／postcondition／bounded retry／defer／recovery 義務由 [Precondition Contracts](../../architecture/precondition_contracts.md) 擁有，本節不重新定義。
+
+1. **Perception Classification**：證據不足 MUST NOT 被視為已知干擾層。目標動作剛產生的新彈窗，在缺乏反向證據前 MUST NOT 僅因目標特徵尚未就緒而被關閉；領域推進 MUST 由正向或排他證據支撐。
+2. **Decision Evidence Scope**：決策證據 MUST 遵守其宣告的感知範圍。診斷證據 MAY 使用較廣的搜尋範圍，但 MUST NOT 改寫或決定狀態轉移語意。
 
 #### 8.2 領域契約 (Domain Contracts)
 1. **開窗四互斥語意分流**：
    - 彈窗狀態必須可明確區分為：目標確認（Confirmed Target）、已知衝突遮擋（Known Conflicting Overlay）、未知/證據不足遮擋（Unknown / Evidence-Insufficient Overlay）與無視窗（No Overlay）。
-   - 在有界沉澱窗口內，未知遮擋應進行有界再觀察，超額時始進入重試階梯；重試超限則退避讓渡。
+   - 未知／證據不足狀態不得直接被轉譯為已知衝突遮擋。
 2. **背包排他判定正交性**：
    - 背包排他判定必須使用經驗證為背包專屬的正交特徵，嚴禁使用會跨其他介面出現的共享圖示（如重新整理按鈕）作為單一排他證據。
    - *(實作參考：目前以 `common/Disassembly.png` 作為背包專屬排他特徵；`common/tidy.png` 因可能於其他功能介面重疊出現，不得作為全域背包鑑別特徵)*。
-3. **重置操作 Bounded Click-Observe-Retry**：
-   - 重置按鈕遵循點擊 ➔ 沉澱等待 ➔ 有界重試 ➔ 失敗升級退避流程。
-   - 重置按鈕若在重試上限耗盡後依然持續可見，判定為操作失敗，必須觸發退避讓渡，不得強行推進至任務接取。
+3. **重置的領域結果**：
+   - 重置成功的後置條件是告示牌進入可安全繼續任務接取的可觀測狀態。
+   - 若無法建立該後置條件，流程的領域結果 MUST 是未完成；後續處理依 Precondition Contracts 的 defer／recovery 規則進行。
 
 ---
 
