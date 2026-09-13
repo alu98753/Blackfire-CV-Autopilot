@@ -88,8 +88,8 @@ class TestBehaviorBagAndDailyDecoupling(unittest.TestCase):
 
     def test_bulletin_board_with_backpack_overlay_does_not_swallow_quests(self):
         """
-        [契約 3 驗證 / bag_bug.md 根治]
-        Given: 城鎮畫面上殘留未關閉的背包，此時看得到 quit.png 與 tidy.png，但非告示牌
+        [城鎮流水線與背包解耦契約]
+        Given: 城鎮畫面上殘留未關閉的背包，此時看得到 quit.png 與 Disassembly.png，但非告示牌
         When: BulletinBoardHandler.handle() 執行
         Then: 1. 排他性檢查 _is_inside_bulletin_board 必須判定為 False
               2. 絕不可推進至 CHECK_RESET 或 PROCESS_ACCEPT_QUESTS
