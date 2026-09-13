@@ -7,7 +7,13 @@ import numpy as np
 # 將專案根目錄加入系統路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from states.handlers.bulletin_board import BulletinBoardHandler, BOARD_OPEN_SETTLE_TIMEOUT, BOARD_OPEN_HARD_TIMEOUT
+from states.handlers.bulletin_board import (
+    BulletinBoardHandler,
+    BOARD_OPEN_SETTLE_TIMEOUT,
+    BOARD_OPEN_HARD_TIMEOUT,
+    RESET_CLICK_RETRY_INTERVAL,
+    MAX_RESET_CLICK_ATTEMPTS,
+)
 
 
 class TestBehaviorBulletinBoardSettle(unittest.TestCase):
@@ -361,6 +367,109 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
             # 斷言：日誌中包含 SUSPECTED_TARGET_OVERLAY
             has_suspected_tag = any("SUSPECTED_TARGET_OVERLAY" in str(c) for c in mock_log_warn.call_args_list)
             self.assertTrue(has_suspected_tag)
+
+    def test_reset_first_appearance_clicks_exactly_once(self):
+        """
+        [契約 16-1 驗證] reset 第一次出現：
+        執行一次點擊，記錄 last_reset_click_time 與 reset_attempts = 1，維持在 CHECK_RESET。
+        """
+        self.handler.step_phase = "CHECK_RESET"
+        self.handler.reset_attempts = 0
+        self.handler.last_reset_click_time = 0.0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=True)
+
+        now = 100.0
+        with patch("states.handlers.bulletin_board.time.time", return_value=now):
+            self.handler.handle(self.fake_img, self.rect)
+
+        self.handler.mouse.click.assert_called_once_with(300, 500)
+        self.assertEqual(self.handler.reset_attempts, 1)
+        self.assertEqual(self.handler.last_reset_click_time, now)
+        self.assertEqual(self.handler.step_phase, "CHECK_RESET")
+
+    def test_reset_still_visible_during_settle_window_blocks_repeated_click(self):
+        """
+        [契約 16-2 驗證] 點擊後短時間內 (elapsed < RESET_CLICK_RETRY_INTERVAL) reset 仍存在：
+        禁止再次 click，維持沉澱等待，不增加 reset_attempts。
+        """
+        self.handler.step_phase = "CHECK_RESET"
+        self.handler.reset_attempts = 1
+        self.handler.last_reset_click_time = 100.0
+        self.handler.last_action_time = 100.0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=True)
+
+        # 經過 1.0 秒 (小於 3.0 秒 settle window)
+        with patch("states.handlers.bulletin_board.time.time", return_value=101.0):
+            self.handler.handle(self.fake_img, self.rect)
+
+        self.handler.mouse.click.assert_not_called()
+        self.assertEqual(self.handler.reset_attempts, 1)
+        self.assertEqual(self.handler.step_phase, "CHECK_RESET")
+
+    def test_reset_still_visible_after_retry_interval_allows_second_click(self):
+        """
+        [契約 16-3 驗證] retry interval 到期 (elapsed >= RESET_CLICK_RETRY_INTERVAL) 且 reset 仍存在：
+        視為前次可能未生效，允許第二次 click attempt，reset_attempts 遞增至 2。
+        """
+        self.handler.step_phase = "CHECK_RESET"
+        self.handler.reset_attempts = 1
+        self.handler.last_reset_click_time = 100.0
+        self.handler.last_action_time = 100.0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=True)
+
+        # 經過 3.1 秒 (大於等於 RESET_CLICK_RETRY_INTERVAL 3.0 秒)
+        with patch("states.handlers.bulletin_board.time.time", return_value=103.1):
+            self.handler.handle(self.fake_img, self.rect)
+
+        self.handler.mouse.click.assert_called_once_with(300, 500)
+        self.assertEqual(self.handler.reset_attempts, 2)
+        self.assertEqual(self.handler.last_reset_click_time, 103.1)
+        self.assertEqual(self.handler.step_phase, "CHECK_RESET")
+
+    def test_reset_disappeared_advances_to_process_accept_quests_without_retry(self):
+        """
+        [契約 16-4 驗證] reset 消失 (不管是否點過重置)：
+        不再 retry，標記 progress 並正常進入 PROCESS_ACCEPT_QUESTS。
+        """
+        self.handler.step_phase = "CHECK_RESET"
+        self.handler.reset_attempts = 1
+        self.handler.last_reset_click_time = 100.0
+        self.handler.last_action_time = 100.0
+        # reset 不再出現
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=False)
+
+        with patch("states.handlers.bulletin_board.time.time", return_value=101.5), \
+             patch.object(self.handler, "notify_ui_progress") as mock_progress:
+            self.handler.handle(self.fake_img, self.rect)
+
+        self.handler.mouse.click.assert_not_called()
+        mock_progress.assert_called_once()
+        self.assertEqual(self.handler.step_phase, "PROCESS_ACCEPT_QUESTS")
+        self.assertEqual(self.handler.accept_sub_phase, "FIND_TOP_TASK")
+
+    def test_reset_permanently_visible_exceeds_budget_forces_progression(self):
+        """
+        [契約 16-5 驗證] reset 永久存在且達到 MAX_RESET_CLICK_ATTEMPTS 上限：
+        不再點擊重置，強制推進至 PROCESS_ACCEPT_QUESTS，防止死鎖與無限點擊。
+        """
+        self.handler.step_phase = "CHECK_RESET"
+        self.handler.reset_attempts = MAX_RESET_CLICK_ATTEMPTS  # 已達 3 次上限
+        self.handler.last_reset_click_time = 100.0
+        self.handler.last_action_time = 100.0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=True)
+
+        # 經過 3.5 秒 (超過 settle window)，但已達上限
+        with patch("states.handlers.bulletin_board.time.time", return_value=103.5), \
+             patch.object(self.handler, "notify_ui_progress") as mock_progress, \
+             patch("states.handlers.bulletin_board.logging.warning") as mock_log_warn:
+            self.handler.handle(self.fake_img, self.rect)
+
+        self.handler.mouse.click.assert_not_called()
+        mock_progress.assert_called_once()
+        self.assertEqual(self.handler.step_phase, "PROCESS_ACCEPT_QUESTS")
+        self.assertEqual(self.handler.accept_sub_phase, "FIND_TOP_TASK")
+        has_limit_warn = any("重置按鈕持續存在且點擊已達上限" in str(c) for c in mock_log_warn.call_args_list)
+        self.assertTrue(has_limit_warn)
 
 
 if __name__ == "__main__":

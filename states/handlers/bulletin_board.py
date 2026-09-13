@@ -19,6 +19,10 @@ BOARD_OPEN_HARD_TIMEOUT = 5.0
 MAX_OPEN_ATTEMPTS = 2
 OPEN_ATTEMPT_DEFER_SECONDS = 180
 
+# 重置按鈕有界點擊重試窗口 (秒) 與重試上限
+RESET_CLICK_RETRY_INTERVAL = 3.0
+MAX_RESET_CLICK_ATTEMPTS = 3
+
 
 class BulletinBoardHandler(BaseStateHandler):
     """
@@ -48,6 +52,7 @@ class BulletinBoardHandler(BaseStateHandler):
         super().__init__(machine)
         self.ocr_extractor = None
         self.open_attempts = 0
+        self.reset_attempts = 0
         self.reset_state()
 
     def reset_state(self):
@@ -55,6 +60,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.accept_sub_phase = "FIND_TOP_TASK"
         self.last_action_time = 0.0
         self.last_reset_click_time = 0.0
+        self.reset_attempts = 0
         self.wait_board_open_start_time = None
         self.click_building_time = None
         self.accepted_quest_titles = []
@@ -352,17 +358,42 @@ class BulletinBoardHandler(BaseStateHandler):
     def _step_check_reset(self, screen_img, reset_btn, left, top, now):
         pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
         if pos_reset:
-            logging.info(f"📋 [懸賞告示牌] 發現重置按鈕 [{reset_btn}]，點擊執行重置！")
+            if self.last_reset_click_time > 0.0:
+                elapsed = now - self.last_reset_click_time
+                if elapsed < RESET_CLICK_RETRY_INTERVAL:
+                    logging.info(
+                        "⌛ [懸賞告示牌] 已點擊重置 (嘗試 %d/%d)，處於沉澱等待窗口 (%.2f / %.1f 秒)，暫不重複點擊...",
+                        self.reset_attempts, MAX_RESET_CLICK_ATTEMPTS, elapsed, RESET_CLICK_RETRY_INTERVAL
+                    )
+                    return
+                # Settle window 已過且 reset 仍可見：前次點擊可能未送達或未生效，判定是否允許重試
+                if self.reset_attempts >= MAX_RESET_CLICK_ATTEMPTS:
+                    logging.warning(
+                        "⚠️ [懸賞告示牌] 重置按鈕持續存在且點擊已達上限 (%d/%d)，放棄重試並強制推進至 PROCESS_ACCEPT_QUESTS，防止死鎖！",
+                        self.reset_attempts, MAX_RESET_CLICK_ATTEMPTS
+                    )
+                    self.notify_ui_progress()
+                    self.step_phase = "PROCESS_ACCEPT_QUESTS"
+                    self.accept_sub_phase = "FIND_TOP_TASK"
+                    self.last_action_time = now
+                    return
+
+            self.reset_attempts += 1
+            logging.info(
+                "📋 [懸賞告示牌] 發現重置按鈕 [%s]，執行點擊重置 (嘗試 %d/%d)！",
+                reset_btn, self.reset_attempts, MAX_RESET_CLICK_ATTEMPTS
+            )
             self.mouse.click(left + pos_reset[0], top + pos_reset[1])
             self.last_reset_click_time = now
             self.last_action_time = now
             return
 
-        if self.last_reset_click_time > 0.0 and (now - self.last_reset_click_time < 3.0):
-            logging.info("⌛ [懸賞告示牌] 重置完成，等待畫面渲染中 (剩餘 %.1f 秒)...", 3.0 - (now - self.last_reset_click_time))
-            return
+        # reset 已消失 / 未曾出現：若曾點擊過重置，確認重置已成功生效
+        if self.last_reset_click_time > 0.0:
+            logging.info("📋 [懸賞告示牌] 重置按鈕已消失 (重置成功生效)，進入任務接取流程...")
+        else:
+            logging.info("📋 [懸賞告示牌] 未發現重置按鈕，直接進入任務接取流程...")
 
-        logging.info("📋 [懸賞告示牌] 切換至 PROCESS_ACCEPT_QUESTS...")
         self.notify_ui_progress()
         self.step_phase = "PROCESS_ACCEPT_QUESTS"
         self.accept_sub_phase = "FIND_TOP_TASK"
