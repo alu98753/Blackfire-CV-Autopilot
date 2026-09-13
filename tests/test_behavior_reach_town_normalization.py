@@ -278,6 +278,106 @@ class TestReachTownNormalizationController(unittest.TestCase):
         res_after_reset = self.controller.step(scene_next, self.rect, self.progress)
         self.assertEqual(res_after_reset, NormalizationResult.IN_PROGRESS)
 
+    def test_town_with_clear_anchor_establishes_readiness_immediately(self):
+        """
+        [Invariant 6 / Scenario 9 Verification]:
+        當畫面為 SceneId.TOWN 且包含 ElementId.TOWN_CLEAR_ANCHOR 且無 blocker 時：
+        立即滿足 Town Interaction Readiness，回傳 NormalizationResult.ARRIVED。
+        """
+        elements = {
+            ElementId.DOOR: ElementMatch(100, 200, 0.9, "common/door.png"),
+            ElementId.TOWN_CLEAR_ANCHOR: ElementMatch(500, 400, 0.92, "town_building/arena_of_glory/arena_of_glory.png"),
+        }
+        scene = SceneSnapshot(frame_id=1, captured_at=self.clock.monotonic(), scene=SceneId.TOWN, elements=elements)
+        result = self.controller.step(scene, self.rect, self.progress)
+        self.assertEqual(result, NormalizationResult.ARRIVED)
+
+    def test_town_without_clear_anchor_when_required_bounds_unknown_then_fails_isolated(self):
+        """
+        [Implementation Guard / Scenario 8 & Invariant 2 Verification]:
+        當 require_clear_anchor=True 時：
+        - 畫面雖為 SceneId.TOWN 但無 TOWN_CLEAR_ANCHOR：Readiness 為 UNKNOWN。
+        - 進行有界重新觀察（bounded re-observation），前 2 幀回傳 WAITING。
+        - 第 3 幀次數耗盡，升級為 FAILED (readiness_unknown_exhausted)。
+        - 嚴格守護 Invariant 2：絕不 defer、pop 或 complete 業務 Intent！
+        """
+        controller = ReachTownNormalizationController(
+            self.mock_machine,
+            max_readiness_unknown_frames=3,
+            require_clear_anchor=True,
+        )
+        self.mock_machine.current_town_subflow = "chest"
+        elements = {ElementId.DOOR: ElementMatch(100, 200, 0.9, "common/door.png")}
+
+        # 第 1 幀：UNKNOWN -> WAITING
+        scene1 = SceneSnapshot(frame_id=1, captured_at=1.0, scene=SceneId.TOWN, elements=elements)
+        res1 = controller.step(scene1, self.rect, self.progress)
+        self.assertEqual(res1, NormalizationResult.WAITING)
+
+        # 第 2 幀：UNKNOWN -> WAITING
+        scene2 = SceneSnapshot(frame_id=2, captured_at=1.5, scene=SceneId.TOWN, elements=elements)
+        res2 = controller.step(scene2, self.rect, self.progress)
+        self.assertEqual(res2, NormalizationResult.WAITING)
+
+        # 第 3 幀：UNKNOWN 次數耗盡 -> FAILED
+        scene3 = SceneSnapshot(frame_id=3, captured_at=2.0, scene=SceneId.TOWN, elements=elements)
+        res3 = controller.step(scene3, self.rect, self.progress)
+        self.assertEqual(res3, NormalizationResult.FAILED)
+        self.assertEqual(controller.last_failure_reason, "readiness_unknown_exhausted")
+
+        # 斷言：失敗領域嚴格隔離，絕不觸碰業務 Intent
+        self.mock_machine.defer_current_town_subflow.assert_not_called()
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        self.mock_machine.complete_current_town_subflow.assert_not_called()
+        self.assertEqual(self.mock_machine.current_town_subflow, "chest")
+
+    def test_town_clear_anchor_appears_during_reobservation_resolves_to_arrived(self):
+        """驗證若在有界重新觀察期間 TOWN_CLEAR_ANCHOR 出現，順利收斂為 ARRIVED。"""
+        controller = ReachTownNormalizationController(
+            self.mock_machine,
+            max_readiness_unknown_frames=3,
+            require_clear_anchor=True,
+        )
+        elem_no_anchor = {ElementId.DOOR: ElementMatch(100, 200, 0.9, "common/door.png")}
+        scene1 = SceneSnapshot(frame_id=1, captured_at=1.0, scene=SceneId.TOWN, elements=elem_no_anchor)
+        self.assertEqual(controller.step(scene1, self.rect, self.progress), NormalizationResult.WAITING)
+
+        # 第 2 幀 clear anchor 成功辨識
+        elem_with_anchor = {
+            ElementId.DOOR: ElementMatch(100, 200, 0.9, "common/door.png"),
+            ElementId.TOWN_CLEAR_ANCHOR: ElementMatch(500, 400, 0.92, "arena.png"),
+        }
+        scene2 = SceneSnapshot(frame_id=2, captured_at=1.5, scene=SceneId.TOWN, elements=elem_with_anchor)
+        self.assertEqual(controller.step(scene2, self.rect, self.progress), NormalizationResult.ARRIVED)
+
+    def test_production_failure_latch_auto_resets_when_scene_changes(self):
+        """
+        [Production Reset Lifecycle Verification]:
+        驗證當在 TOWN_BUILDING 發生重試耗盡 latch 為 FAILED 後，
+        若物理場景發生變化（例如 recovery 帶角色回到 LOBBY）：
+        控制器自動感知場景遷移並自我重置 failure latch，恢復正常導航！
+        """
+        elem_building = {ElementId.EXIT_BUILDING_TO_TOWN: ElementMatch(50, 500, 0.92, "exit.png")}
+        scene_building = SceneSnapshot(frame_id=1, captured_at=self.clock.monotonic(), scene=SceneId.TOWN_BUILDING, elements=elem_building)
+
+        # 耗盡重試進入 FAILED
+        self.controller.step(scene_building, self.rect, self.progress)
+        for i in range(self.settings.action_max_attempts):
+            self.clock.advance(self.settings.action_timeout_seconds + 0.1)
+            scene_retry = SceneSnapshot(frame_id=10 + i, captured_at=self.clock.monotonic(), scene=SceneId.TOWN_BUILDING, elements=elem_building)
+            self.controller.step(scene_retry, self.rect, self.progress)
+        self.assertEqual(self.controller.last_failure_reason, "action_retry_exhausted")
+
+        # 場景變更至 LOBBY（例如 recovery 退出或外部轉場）
+        elem_lobby = {ElementId.GOBACK_TOWN: ElementMatch(30, 40, 0.90, "goback_town.png")}
+        scene_lobby = SceneSnapshot(frame_id=20, captured_at=self.clock.monotonic(), scene=SceneId.LOBBY, elements=elem_lobby)
+
+        # 自動解鎖 latch 並發起 RETURN_TOWN 點擊
+        res = self.controller.step(scene_lobby, self.rect, self.progress)
+        self.assertEqual(res, NormalizationResult.IN_PROGRESS)
+        self.assertIsNone(self.controller.last_failure_reason)
+        self.assertEqual(self.progress.in_flight.action_id, ActionId.RETURN_TOWN)
+
 
 if __name__ == "__main__":
     unittest.main()

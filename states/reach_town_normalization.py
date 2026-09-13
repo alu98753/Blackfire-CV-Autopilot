@@ -92,7 +92,7 @@ class ReachTownNormalizationController:
     Manages the multi-frame lifecycle of normalizing physical state to SceneId.TOWN.
 
     BOUNDARIES:
-    - Responsible ONLY for reaching Town ('到 Town 為止').
+    - Responsible ONLY for reaching Town ('到 Town 為止') and verifying Town interaction readiness.
     - Isolated from business intent scheduling and queue manipulation.
     """
 
@@ -100,19 +100,47 @@ class ReachTownNormalizationController:
         self,
         machine,
         policy: ReachTownNormalizationPolicy | None = None,
+        max_readiness_unknown_frames: int = 3,
+        require_clear_anchor: bool = False,
     ):
         self.machine = machine
         self.policy = policy or ReachTownNormalizationPolicy()
+        self.max_readiness_unknown_frames = max_readiness_unknown_frames
+        self.require_clear_anchor = require_clear_anchor
         self.last_failure_reason: str | None = None
+        self._last_failure_scene: SceneId | None = None
+        self._readiness_unknown_count: int = 0
 
     def reset_failure(self):
-        """Reset failure escalation memory after recovery."""
+        """Reset failure escalation memory after recovery, scene transition, or new flow."""
         self.last_failure_reason = None
+        self._last_failure_scene = None
+        self._readiness_unknown_count = 0
 
     @staticmethod
     def is_in_town(scene: SceneSnapshot) -> bool:
-        """Return True only when snapshot physically proves SceneId.TOWN."""
+        """Return True only when snapshot physically proves SceneId.TOWN (WHERE)."""
         return scene.scene == SceneId.TOWN
+
+    def check_town_readiness(self, scene: SceneSnapshot) -> str:
+        """
+        Evaluate Town Interaction Readiness (INTERACTION READINESS).
+
+        Returns:
+            "ready": Verified clear Town foreground (SceneId.TOWN + TOWN_CLEAR_ANCHOR + no blocker,
+                     or v1 default without positively detected blocker).
+            "blocked": Explicit blocker detected (CLOSE_OVERLAY, etc.).
+            "unknown": In Town, no blocker detected, but positive clear anchor is absent.
+        """
+        if scene.has(ElementId.CLOSE_OVERLAY):
+            return "blocked"
+        if scene.scene == SceneId.TOWN:
+            if scene.has(ElementId.TOWN_CLEAR_ANCHOR):
+                return "ready"
+            if self.require_clear_anchor:
+                return "unknown"
+            return "ready"
+        return "unknown"
 
     def step(
         self,
@@ -122,7 +150,7 @@ class ReachTownNormalizationController:
         intent_id: IntentId = IntentId.TOWN_SUBFLOW,
     ) -> NormalizationResult:
         """
-        Execute one normalization frame towards SceneId.TOWN.
+        Execute one normalization frame towards SceneId.TOWN and verify readiness.
 
         Returns NormalizationResult indicating current physical normalization status.
         """
@@ -135,6 +163,7 @@ class ReachTownNormalizationController:
                 # Normalization action retry exhausted!
                 # STRICT INVARIANT: Must NOT defer, pop, or complete business intent.
                 self.last_failure_reason = "action_retry_exhausted"
+                self._last_failure_scene = scene.scene
                 logging.warning(
                     "⚠️ [ReachTownNormalizationController] REACH_TOWN normalization action retry "
                     "exhausted; failure domain isolated, NOT mutating business intent."
@@ -142,7 +171,12 @@ class ReachTownNormalizationController:
                 return NormalizationResult.FAILED
             # If status == PROGRESSED or TIMED_OUT, proceed to verify state and resolve next decision
 
-        # 2. If previously exhausted and not recovered/arrived, retain FAILED state
+        # 2. Production Failure Latch Lifecycle:
+        # If scene changed from the failure scene, automatically heal/reset latch
+        if self._last_failure_scene is not None and scene.scene != self._last_failure_scene:
+            self.reset_failure()
+
+        # If still latched in the failure scene, retain FAILED state to prevent blind click loop
         if self.last_failure_reason is not None and not self.is_in_town(scene):
             return NormalizationResult.FAILED
 
@@ -169,6 +203,7 @@ class ReachTownNormalizationController:
                     scene.frame_id,
                     scene.captured_at,
                 )
+            self._readiness_unknown_count = 0
             logging.info(
                 "[ReachTownNormalizationController] scene=%s action=%s reason=%s expected=%s",
                 scene.scene.value,
@@ -178,10 +213,35 @@ class ReachTownNormalizationController:
             )
             return NormalizationResult.IN_PROGRESS
 
-        # 3.2 Physical destination verified (SceneId.TOWN without blocking overlay)
+        # 3.2 Physical destination verified (SceneId.TOWN) -> Check Interaction Readiness
         if self.is_in_town(scene):
-            self.last_failure_reason = None
-            return NormalizationResult.ARRIVED
+            readiness = self.check_town_readiness(scene)
+            if readiness == "ready":
+                self.reset_failure()
+                return NormalizationResult.ARRIVED
+            if readiness == "blocked":
+                return NormalizationResult.WAITING
+
+            # readiness == "unknown": Bounded re-observation
+            self._readiness_unknown_count += 1
+            if self._readiness_unknown_count < self.max_readiness_unknown_frames:
+                logging.info(
+                    "[ReachTownNormalizationController] Town location verified, but readiness UNKNOWN "
+                    "(%d/%d frames); waiting for positive foreground anchor.",
+                    self._readiness_unknown_count,
+                    self.max_readiness_unknown_frames,
+                )
+                return NormalizationResult.WAITING
+
+            # Bounded re-observation exhausted: Escalate physical failure without mutating intent!
+            self.last_failure_reason = "readiness_unknown_exhausted"
+            self._last_failure_scene = scene.scene
+            logging.warning(
+                "⚠️ [ReachTownNormalizationController] Town readiness UNKNOWN exhausted (%d frames); "
+                "failure domain isolated, NOT mutating business intent.",
+                self.max_readiness_unknown_frames,
+            )
+            return NormalizationResult.FAILED
 
         # 3.3 Transient or unresolvable frame waiting
         if decision.kind == DecisionKind.WAIT:

@@ -83,6 +83,11 @@ class TownSubflowPreconditionController:
         self._entry_wait_count = 0
         self._no_red_dot_flow = None
         self._no_red_dot_count = 0
+        self._current_flow = None
+
+    def reset_failure(self):
+        """Reset underlying normalization controller failure latch."""
+        self.normalization_controller.reset_failure()
 
     def _should_skip_handle(self, flow_key, progress) -> bool:
         if not flow_key or self._committed_workflow_owns_frame(flow_key):
@@ -96,6 +101,10 @@ class TownSubflowPreconditionController:
         progress = getattr(self.machine, "navigation_progress", None)
         if self._should_skip_handle(flow_key, progress):
             return False
+
+        if self._current_flow != flow_key:
+            self._current_flow = flow_key
+            self.reset_failure()
 
         scene = self.perception.observe(screen_img, flow_key)
         if scene.scene in {

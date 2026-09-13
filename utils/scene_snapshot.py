@@ -21,6 +21,7 @@ class ElementId(str, Enum):
     EXIT_BUILDING_TO_TOWN = "exit_building_to_town"
     TOWN_SUBFLOW_ENTRY = "town_subflow_entry"
     TOWN_SUBFLOW_RED_DOT = "town_subflow_red_dot"
+    TOWN_CLEAR_ANCHOR = "town_clear_anchor"
 
 
 class OverlayId(str, Enum):
