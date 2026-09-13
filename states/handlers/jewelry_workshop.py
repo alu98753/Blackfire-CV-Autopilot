@@ -14,13 +14,16 @@ class JewelryWorkshopHandler(BaseStateHandler):
        - 遍歷 goods 模板 (Sandworm_scales, Spider_silk, Spider_venom_glands, The_cloth_wrapped_around_the_dead, Warcraft_Fang, lizard_skin, scrap)。
        - 頂層未找到 ➔ 向下滑動兩下 ➔ 若仍未找到 ➔ 向上滑動兩下還原高度 ➔ 繼續下一個商品。
        - 找到商品 ➔ 點擊商品 ➔ 點擊 sell.png ➔ 點擊 sell_max.png ➔ 點擊 ok.png / confirm.png。
-    4. 退出階段 (ALL_DONE_EXITING)：
+    4. 退出階段 (ALL_DONE_EXITING / VERIFY_EXIT)：
        - 點擊離開建築按鈕 (exitfromhouse_and_to_town.png) 返回城鎮。
-       - 完成獨立模式並安全退出程式。
+       - 於 VERIFY_EXIT 階段有界核驗城鎮特徵後方可交棒。
     """
+    MAX_EXIT_VERIFY_ATTEMPTS = 3
+    MAX_NO_EVIDENCE_COUNT = 3
+
     def __init__(self, machine):
         super().__init__(machine)
-        self.step_phase = "INIT"  # INIT, ENTERED_BUILDING, SELL_MENU_OPEN, ALL_DONE_EXITING
+        self.step_phase = "INIT"  # INIT, ENTERED_BUILDING, SELL_MENU_OPEN, ALL_DONE_EXITING, VERIFY_EXIT
         self.last_action_time = 0.0
         self.current_goods_idx = 0
         self.goods_scroll_state = "TOP"  # TOP, SCROLLED_DOWN
@@ -35,8 +38,6 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.entered_building_time = 0.0
         self.exit_verify_attempts = 0
         self.exit_no_evidence_count = 0
-        self.MAX_EXIT_VERIFY_ATTEMPTS = 3
-        self.MAX_NO_EVIDENCE_COUNT = 3
         from utils.merchant_gold_detector import MerchantGoldDetector
         self.gold_detector = MerchantGoldDetector()
 
@@ -62,10 +63,13 @@ class JewelryWorkshopHandler(BaseStateHandler):
         當離場驗證耗盡重試或超出有界等待窗口時執行的安全失敗處置：
         - 嚴禁標記完成 (_record_completion)
         - 嚴禁交棒消費佇列 (pop_and_next_town_subflow)
-        - 調用 safe recovery (stash_current_state) 或移交 Watchdog 處置
+        - 重置內部狀態至 INIT 安全起點，保留業務 Intent，避免 recovery 恢復後停留在死鎖 phase
+        - 調用 safe recovery (stash_current_state) 進行彈窗復原或移交 Watchdog
         """
-        logging.error(f"❌ [珠寶加工廠 VERIFY_EXIT] 離場驗證安全失敗處置: [{reason}]")
-        self.step_phase = "EXIT_FAILED"
+        logging.error(
+            f"❌ [珠寶加工廠 VERIFY_EXIT] 離場驗證安全失敗處置: [{reason}]，重置至 INIT 安全起點並發起 safe recovery"
+        )
+        self.reset_state()
         if hasattr(self.machine, "stash_current_state"):
             self.machine.stash_current_state(reason=f"jewelry_exit_failed_{reason}")
 
@@ -345,9 +349,6 @@ class JewelryWorkshopHandler(BaseStateHandler):
         cfg_type = self.machine.config.get("type") if getattr(self.machine, "config", None) else None
         is_needed = getattr(self.machine, "need_jewelry_workshop", False) or cfg_type == "jewelry_workshop"
         if not is_needed and self.step_phase == "INIT":
-            return
-
-        if self.step_phase == "EXIT_FAILED":
             return
 
         now = time.time()

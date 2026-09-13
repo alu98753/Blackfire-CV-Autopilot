@@ -269,8 +269,8 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         self.mock_machine.pop_and_next_town_subflow.assert_not_called()
         # 2. 絕不得調用 record_shop_visit (never fake completion)
         mock_dm.record_shop_visit.assert_not_called()
-        # 3. 轉入 EXIT_FAILED 階段並調用 safe recovery (stash_current_state)
-        self.assertEqual(self.handler.step_phase, "EXIT_FAILED")
+        # 3. 重置回 INIT 安全起點並調用 safe recovery (stash_current_state)，絕不停在 inert EXIT_FAILED
+        self.assertEqual(self.handler.step_phase, "INIT")
         self.mock_machine.stash_current_state.assert_called_once_with(reason="jewelry_exit_failed_exit_retries_exhausted")
 
     def test_verify_exit_no_evidence_triggers_safe_failure_path(self):
@@ -313,9 +313,63 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         self.mock_machine.pop_and_next_town_subflow.assert_not_called()
         # 2. 絕不標記完成
         mock_dm.record_shop_visit.assert_not_called()
-        # 3. 轉入 EXIT_FAILED 並調用 safe recovery
-        self.assertEqual(self.handler.step_phase, "EXIT_FAILED")
+        # 3. 重置回 INIT 並調用 safe recovery，絕不停在 inert EXIT_FAILED
+        self.assertEqual(self.handler.step_phase, "INIT")
         self.mock_machine.stash_current_state.assert_called_once_with(reason="jewelry_exit_failed_no_usable_evidence_timeout")
+
+    def test_verify_exit_exhaustion_recovery_and_restore_does_not_deadlock_or_consume_subflow(self):
+        """
+        模擬 VERIFY_EXIT 重試耗盡 ➔ stash/recovery ➔ restore_stashed_state 的完整生命週期：
+        - 斷言重試耗盡發起 safe recovery 後，Handler step_phase 重置為安全起點 INIT (絕不能停在 inert EXIT_FAILED)
+        - 斷言整個 recovery 與 restore 過程絕不 pop 或 mark complete 當前 Town subflow (保留業務 Intent)
+        - 斷言從 recovery 恢復回 STATE_JEWELRY_WORKSHOP 後，Handler 可正常響應合法動作 (如重入店內或重新辨識)，而非永久卡死 return
+        """
+        mock_dm = MagicMock()
+        self.mock_machine.daily_manager = mock_dm
+        self.mock_machine.current_town_subflow = "jewelry_workshop"
+        self.mock_machine.need_jewelry_workshop = True
+
+        self.handler.current_shop_id = "jewelry_workshop"
+        self.handler.step_phase = "VERIFY_EXIT"
+        self.handler.exit_verify_attempts = 3  # 已嘗試 3 次
+
+        # 模擬畫面仍是 exit 按鈕
+        def match_exit_only(img, template_name, **kwargs):
+            if template_name == "town_building/exitfromhouse_and_to_town.png":
+                return (200, 300), 0.90
+            return None, 0.0
+
+        self.handler.matcher.match.side_effect = match_exit_only
+        dummy_img = MagicMock()
+
+        # 1. 觸發第 4 次檢查 (attempts >= 3 耗盡)
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 斷言：調用 stash_current_state 且 step_phase 已重置為 INIT (非死鎖狀態)
+        self.mock_machine.stash_current_state.assert_called_once_with(
+            reason="jewelry_exit_failed_exit_retries_exhausted"
+        )
+        self.assertEqual(self.handler.step_phase, "INIT")
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        mock_dm.record_subflow_completed.assert_not_called()
+
+        # 2. 模擬 recovery 結束後 restore 回 STATE_JEWELRY_WORKSHOP
+        # 假設此時畫面已由 recovery 成功回到店內 (可見 sell_out.png 按鈕)
+        def match_sell_out(img, template_name, **kwargs):
+            if template_name == "town_building/sell_out.png":
+                return (150, 250), 0.90
+            return None, 0.0
+
+        self.handler.matcher.match.side_effect = match_sell_out
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 斷言：Handler 成功響應並進入 SELL_MENU_OPEN，而非被 inert dead state 阻斷！
+        self.assertEqual(self.handler.step_phase, "SELL_MENU_OPEN")
+        self.handler.mouse.click.assert_called_with(150, 250)
+        # 再次確認業務 Intent 未被消耗
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
 
     def test_full_cycle_scene_guard_records_selected_shop_not_reset_default(self):
         """
