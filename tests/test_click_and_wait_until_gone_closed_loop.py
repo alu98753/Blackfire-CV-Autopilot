@@ -106,6 +106,7 @@ class TestClickAndWaitUntilGoneClosedLoop(unittest.TestCase):
         驗證 ResultHandler 在點擊 common/continue.png 或 exit_btn 時，採用 click_and_wait_until_gone 閉環確認消失才推進。
         """
         handler = ResultHandler(self.state_machine)
+        handler.subflow_step = "CONTINUE_LOOP"
         rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
 
         def mock_match(img, template, **kwargs):

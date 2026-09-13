@@ -5,17 +5,28 @@ from states.handlers.base import BaseStateHandler
 from utils.dungeon_catalog import DungeonCatalog
 
 class ResultHandler(BaseStateHandler):
+    INIT_DELAY_SECONDS = 1.5
+    GIVEUP_TIMEOUT_SECONDS = 5.0
+
     def __init__(self, machine):
         super().__init__(machine)
         self.no_match_count = 0
         self.continue_click_count = 0
-        self.subflow_step = "INIT_DELAY"  # INIT_DELAY -> CONTINUE_LOOP -> FINAL_MATCH
+        self.subflow_step = "INIT_DELAY"  # INIT_DELAY -> CONTINUE_LOOP -> FINAL_MATCH -> WAIT_GIVEUP_CONFIRM -> WAIT_GIVEUP_EXIT
+        self.init_delay_start_time = None
+        self.giveup_confirm_start_time = None
+        self.giveup_exit_start_time = None
+        self.giveup_is_dungeon = False
 
     def reset_state(self):
         self.subflow_step = "INIT_DELAY"
         self.continue_click_count = 0
         self.no_match_count = 0
         self._recorded_kill_for_current_battle = False
+        self.init_delay_start_time = None
+        self.giveup_confirm_start_time = None
+        self.giveup_exit_start_time = None
+        self.giveup_is_dungeon = False
 
     def _commit_lord_boss_result(self):
         """Commit one verified fight and return control to the Boss workflow."""
@@ -80,10 +91,18 @@ class ResultHandler(BaseStateHandler):
     def _handle_impl(self, screen_img, rect):
         """
         戰鬥結算獨立子流程 (Result Subflow):
-        1. 步驟 1 (INIT_DELAY): 剛進入結算時，固定休眠 1.5 秒讓勝利特效與第一層動畫完全繪製與定格。
-        2. 步驟 2 (CONTINUE_LOOP): 輪詢 continue.png，每次點擊成功後固定休眠 1.0 秒。若連續沒點到或滿 2 次則轉移至 FINAL_MATCH。
-        3. 步驟 3 (FINAL_MATCH): 白名單二分法配對。續戰場次僅點擊 retry (1.0s 休眠)，離場場次僅點擊 exit_battle (1.0s 休眠)。
+        1. 步驟 1 (INIT_DELAY): 剛進入結算時，單次記錄時間戳沉澱 1.5 秒讓勝利特效與第一層動畫完全繪製定格。
+        2. 步驟 2 (CONTINUE_LOOP): 輪詢 continue.png，每次點擊成功後推進流程。
+        3. 步驟 3 (FINAL_MATCH): 白名單二分法配對。續戰場次點擊 retry，離場場次點擊 exit_battle。
+        4. 放棄流程 (GIVEUP): 點擊 giveup ➔ WAIT_GIVEUP_CONFIRM ➔ WAIT_GIVEUP_EXIT ➔ 驗證正向場景特徵後 commit 退出。
         """
+        # Committed giveup subflow owns maintenance until complete / timeout / recovery
+        if self.subflow_step == "WAIT_GIVEUP_CONFIRM":
+            return self._handle_wait_giveup_confirm(screen_img, rect)
+
+        if self.subflow_step == "WAIT_GIVEUP_EXIT":
+            return self._handle_wait_giveup_exit(screen_img, rect)
+
         # 0. 優先檢查是否已回到準備大廳/關卡選單 (出現 select_stage 或 select_stage_after 代表戰鬥結算已結束)
         lobby_features = [
             "common/select_stage.png",
@@ -170,8 +189,16 @@ class ResultHandler(BaseStateHandler):
         # 步驟 1：結算初登場沉澱 (INIT_DELAY)
         # =========================================================================
         if self.subflow_step == "INIT_DELAY":
-            logging.info("⏳ [結算子流程 Step 1] 戰鬥剛結束，執行初次登場沉澱 (休眠 1.5 秒)，等待勝負畫面與第一層彈窗定格...")
-            time.sleep(1.5)
+            now = self._get_monotonic_time()
+            if self.init_delay_start_time is None:
+                self.init_delay_start_time = now
+                logging.info(f"⏳ [結算子流程 Step 1] 戰鬥剛結束，啟動初次登場沉澱計時 ({self.INIT_DELAY_SECONDS} 秒)...")
+                return True
+
+            if now - self.init_delay_start_time < self.INIT_DELAY_SECONDS:
+                return True
+
+            self.init_delay_start_time = None
             self.subflow_step = "CONTINUE_LOOP"
             # 重新擷取第一層定格後的最新畫面，隨後貫穿向下執行 CONTINUE_LOOP
             if self.machine.capturer:
@@ -195,8 +222,18 @@ class ResultHandler(BaseStateHandler):
                 )
                 
                 if self.machine.defeat_count >= (max_defeat - 1):
-                    self.reset_state()
-                    return self._run_defeat_giveup_subflow(rect, is_dungeon=is_dungeon)
+                    logging.warning(f"🚨 連續戰敗次數已達 {self.machine.defeat_count + 1} 次！發起「放棄挑戰」流程...")
+                    giveup_temp = "defeat_giveup.png"
+                    if os.path.exists(os.path.join("templates", giveup_temp)):
+                        pos_g, conf_g = self.matcher.match(screen_img, giveup_temp, threshold=0.75)
+                        if pos_g:
+                            logging.info(f"👉 偵測到放棄挑戰按鈕 [{giveup_temp}] (信心度: {conf_g:.4f})，進行點擊並進入 WAIT_GIVEUP_CONFIRM...")
+                            self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
+
+                    self.subflow_step = "WAIT_GIVEUP_CONFIRM"
+                    self.giveup_confirm_start_time = self._get_monotonic_time()
+                    self.giveup_is_dungeon = is_dungeon
+                    return True
 
                 pos_retry = None
                 conf_retry = 0.0
@@ -225,7 +262,6 @@ class ResultHandler(BaseStateHandler):
                 logging.info(f"🚀 已點擊重新開始按鈕，累計戰敗次數: {self.machine.defeat_count}")
                 self.machine.last_result_retry_click_time = time.time()
                 self.machine.run_count += 1
-                time.sleep(1.0)
                 logging.info(f"🚀 點擊重新開始按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
                 self.machine.transition_to(self.machine.STATE_LOADING)
                 return True
@@ -366,6 +402,7 @@ class ResultHandler(BaseStateHandler):
             if final_btn_found:
                 logging.info("👉 [結算 Step 2] 畫面上已無 continue/confirm，且終局按鈕 (retry/exit) 已顯現，確信 continue 階段結束，切換至 FINAL_MATCH！")
                 self.subflow_step = "FINAL_MATCH"
+                # 同一個 Tick 內若終局按鈕已明確就緒，可直接貫穿執行 FINAL_MATCH 配對離場或再戰
             else:
                 logging.info("⌛ [結算 Step 2] continue 按鈕淡出/過場中，等待下一個 continue 或終局按鈕顯現...")
                 return False
@@ -403,7 +440,6 @@ class ResultHandler(BaseStateHandler):
                     self.machine.last_result_retry_click_time = time.time()
                     self.machine.run_count += 1
                     self.reset_state()
-                    time.sleep(1.0)  # 固定 1.0 秒過渡等待，確保遊戲視窗響應點擊並啟動載入
                     logging.info(f"🚀 點擊再戰按鈕，進入過渡載入等待... (累計啟動次數: {self.machine.run_count})")
                     self.machine.transition_to(self.machine.STATE_LOADING)
                     return True
@@ -427,48 +463,105 @@ class ResultHandler(BaseStateHandler):
 
         return False
 
-    def _run_defeat_giveup_subflow(self, rect, is_dungeon=True):
+    def _handle_wait_giveup_confirm(self, screen_img, rect):
         """
-        [子流程] 統一戰敗放棄流程（比對 defeat_giveup.png 與 common/confirm.png）
+        [Tick-Driven Giveup Phase 1: 等待並點擊退出確認按鈕]
+        單次 Tick 評估畫面上的 confirm 按鈕；超時 5 秒則 failure recovery，不提交 side effects。
         """
-        mode_name = "地下城" if is_dungeon else "普通關卡"
-        logging.warning(f"🚨 連續戰敗次數已達 {self.machine.defeat_count + 1} 次！執行「放棄挑戰」流程 (當前模式: {mode_name})...")
+        now = self._get_monotonic_time()
+        confirm_temp = "common/confirm.png"
+        
+        if os.path.exists(os.path.join("templates", confirm_temp)):
+            pos_c, conf_c = self.matcher.match(screen_img, confirm_temp, threshold=0.80)
+            if pos_c:
+                logging.info(f"👉 偵測到退出確認按鈕 '{confirm_temp}' (相似度: {conf_c:.4f})，點擊確認並轉入 WAIT_GIVEUP_EXIT...")
+                self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+                self.subflow_step = "WAIT_GIVEUP_EXIT"
+                self.giveup_exit_start_time = now
+                return True
 
-        giveup_temp = "defeat_giveup.png"
-        if os.path.exists(os.path.join("templates", giveup_temp)):
-            cap_img = self.machine.capturer.capture(rect)
-            if cap_img is not None:
-                pos_g, conf_g = self.matcher.match(cap_img, giveup_temp, threshold=0.75)
-                if pos_g:
-                    logging.info(f"👉 偵測到放棄挑戰按鈕 [{giveup_temp}] (信心度: {conf_g:.4f})，進行點擊。")
-                    self.mouse.click(rect["left"] + pos_g[0], rect["top"] + pos_g[1])
+        # 未超時前等待下一幀
+        if now - self.giveup_confirm_start_time < self.GIVEUP_TIMEOUT_SECONDS:
+            return True
 
-        # 進入確認放棄子流程，等待並點擊 confirm.png
-        start_time = self._get_monotonic_time()
-        while self._get_monotonic_time() - start_time < 5.0:
-            loop_screen = self.machine.capturer.capture(rect)
-            if loop_screen is not None:
-                pos_c, conf_c = self.matcher.match(loop_screen, "common/confirm.png", threshold=0.80)
-                if pos_c:
-                    logging.info(f"👉 偵測到退出確認按鈕 'common/confirm.png' (相似度: {conf_c:.4f})，進行點擊確認。")
-                    self.mouse.click(rect["left"] + pos_c[0], rect["top"] + pos_c[1])
+        # 超時：未偵測到確認按鈕，轉移至 UNKNOWN，🚫 絕不提交 cooldown/reset
+        logging.warning(f"⚠️ 等待放棄確認彈窗 (common/confirm.png) {self.GIVEUP_TIMEOUT_SECONDS} 秒超時！未確認成功退出，轉移至 UNKNOWN 進行有界復原，不提交完成 side effects。")
+        self.reset_state()
+        self.machine.transition_to(self.machine.STATE_UNKNOWN)
+        return True
+
+    def _handle_wait_giveup_exit(self, screen_img, rect):
+        """
+        [Tick-Driven Giveup Phase 2: 等待正向退出場景證據]
+        單次 Tick 評估正向退出場景證據 (大廳/城鎮/領地等)；正向特徵成立才 commit side effects；
+        超時則 failure recovery，絕不提交 side effects。
+        """
+        now = self._get_monotonic_time()
+        has_positive_exit = False
+        target_state = self.machine.STATE_NAVIGATING
+        
+        # 1. 尋找正向退出場景證據 (positive exit scene evidence)
+        # 檢查準備大廳/關卡選單特徵
+        for l_temp in [
+            "common/select_stage.png",
+            "common/select_stage_after.png",
+            "load/Lord_entry_after.png",
+            "demon_lords/demon_lords_entry_after.png"
+        ]:
+            if os.path.exists(os.path.join("templates", l_temp)):
+                pos_l, _ = self.matcher.match(screen_img, l_temp, threshold=0.75, quiet=True)
+                if pos_l:
+                    has_positive_exit = True
                     break
-            self._sleep(0.3)
 
-        if is_dungeon:
-            idx = getattr(self.machine, "current_dungeon_index", None)
-            if idx is not None and DungeonCatalog.is_valid_index(idx):
-                cooldown_map = self.machine.config.get("cooldown_map", {})
-                cd_seconds = cooldown_map.get(idx, 900.0)
-                self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
-                dname = DungeonCatalog.get_name(idx)
-                logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定 [{dname}] (#{idx}) 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
-        else:
-            logging.warning("⚠️ 普通關卡戰敗放棄完成，重置戰敗計數並切換至 NAVIGATING。")
+        # 檢查城鎮大門或返回特徵
+        if not has_positive_exit:
+            for t_temp in ["common/door.png", "goback_town.png"]:
+                if os.path.exists(os.path.join("templates", t_temp)):
+                    pos_d, _ = self.matcher.match(screen_img, t_temp, threshold=0.75, quiet=True)
+                    if pos_d:
+                        has_positive_exit = True
+                        break
 
-        self.machine.defeat_count = 0
-        self.machine.is_in_dungeon = False
-        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
-        self.machine.transition_to(next_state)
-        time.sleep(0.2)
+        # 檢查領地特徵
+        if not has_positive_exit:
+            for dom_temp in ["domains/golden_empire/explore_btn.png", "domains/common/exit_to_lobby.png"]:
+                if os.path.exists(os.path.join("templates", dom_temp)):
+                    pos_dom, _ = self.matcher.match(screen_img, dom_temp, threshold=0.75, quiet=True)
+                    if pos_dom:
+                        has_positive_exit = True
+                        target_state = self.machine.STATE_DOMAIN_EXPLORE
+                        break
+
+        # 2. 若正向退出證據成立：此時才合法提交 side effects！
+        if has_positive_exit:
+            logging.info("✅ 戰敗放棄確認退出成功 (偵測到正向場景證據)！提交結算完成 Side Effects...")
+            if self.giveup_is_dungeon:
+                idx = getattr(self.machine, "current_dungeon_index", None)
+                if idx is not None and DungeonCatalog.is_valid_index(idx):
+                    cooldown_map = self.machine.config.get("cooldown_map", {})
+                    cd_seconds = cooldown_map.get(idx, 900.0)
+                    self.machine.dungeon_cooldowns[idx] = time.time() + cd_seconds
+                    dname = DungeonCatalog.get_name(idx)
+                    logging.info(f"⏳ 貪婪地下城：戰敗放棄！設定 [{dname}] (#{idx}) 進入 {int(cd_seconds / 60)} 分鐘冷卻期。")
+            else:
+                logging.warning("⚠️ 普通關卡戰敗放棄完成。")
+
+            self.machine.defeat_count = 0
+            self.machine.is_in_dungeon = False
+            if target_state == self.machine.STATE_NAVIGATING and self.machine.is_in_collect_only_mode():
+                target_state = self.machine.STATE_COLLECT_ONLY
+
+            self.reset_state()
+            self.machine.transition_to(target_state)
+            return True
+
+        # 3. 未超時前等待下一幀
+        if now - self.giveup_exit_start_time < self.GIVEUP_TIMEOUT_SECONDS:
+            return True
+
+        # 4. 超時：未偵測到正向退出特徵，轉移至 UNKNOWN，🚫 絕不提交 cooldown/reset
+        logging.warning(f"⚠️ 等待戰敗退出正向場景特徵 {self.GIVEUP_TIMEOUT_SECONDS} 秒超時！未確認成功退出，轉移至 UNKNOWN 進行重新定位，不提交完成 side effects。")
+        self.reset_state()
+        self.machine.transition_to(self.machine.STATE_UNKNOWN)
         return True

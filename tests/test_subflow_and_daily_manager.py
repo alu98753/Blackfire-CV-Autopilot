@@ -532,6 +532,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         sm.daily_manager = dm
 
         handler = ResultHandler(sm)
+        handler.subflow_step = "FINAL_MATCH"
         
         import numpy as np
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -683,6 +684,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         sm = GameStateMachine(capturer=capturer, matcher=matcher, mouse=mouse)
         sm.config = {"type": "stage"}
         handler = ResultHandler(sm)
+        handler.subflow_step = "FINAL_MATCH"
 
         fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -708,6 +710,7 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         sm.need_bag_cleaning = True
         sm.current_state = sm.STATE_UNKNOWN
         mouse.reset_mock()
+        handler.subflow_step = "FINAL_MATCH"
 
         res_exit = handler._handle_impl(fake_img, rect)
         self.assertTrue(res_exit)
@@ -739,12 +742,25 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 斷言初始步驟為 INIT_DELAY
         self.assertEqual(handler.subflow_step, "INIT_DELAY")
 
-        # 1. 測試 Step 1: INIT_DELAY 轉為 CONTINUE_LOOP (無 continue.png 且無終局按鈕時，維持 CONTINUE_LOOP 等待動畫過場)
+        # 1. 測試 Step 1: INIT_DELAY 多 Tick 時間推進轉為 CONTINUE_LOOP
+        from tests.support.fake_clock import FakeClock
+        fake_clock = FakeClock()
+        sm.clock = fake_clock
         matcher.match.return_value = (None, 0.0)
-        with patch("time.sleep") as mock_sleep:
-            handler._handle_impl(fake_img, rect)
-            mock_sleep.assert_called_with(1.5) # 斷言精確觸發 1.5 秒初始沉澱休眠
-            self.assertEqual(handler.subflow_step, "CONTINUE_LOOP") # 防過場誤判：維持 CONTINUE_LOOP
+
+        # Tick 1: 啟動沉澱計時，維持 INIT_DELAY
+        handler._handle_impl(fake_img, rect)
+        self.assertEqual(handler.subflow_step, "INIT_DELAY")
+
+        # 前進 1.0s (未滿 1.5s): 依然維持 INIT_DELAY
+        fake_clock.advance(1.0)
+        handler._handle_impl(fake_img, rect)
+        self.assertEqual(handler.subflow_step, "INIT_DELAY")
+
+        # 前進 0.6s (滿 1.6s): 自動轉入 CONTINUE_LOOP
+        fake_clock.advance(0.6)
+        handler._handle_impl(fake_img, rect)
+        self.assertEqual(handler.subflow_step, "CONTINUE_LOOP")
 
         # 重置回 CONTINUE_LOOP 測試 continue 點擊
         handler.subflow_step = "CONTINUE_LOOP"

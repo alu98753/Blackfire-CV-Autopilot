@@ -89,6 +89,7 @@ class TestStaminaRetreatRouting(unittest.TestCase):
     def test_result_exit_in_retreat_mode(self):
         """測試：當處於體力退避期間時，結算完成應轉移至 STATE_COLLECT_ONLY"""
         handler = ResultHandler(self.state_machine)
+        handler.subflow_step = "FINAL_MATCH"
         self.state_machine.stamina_retreat_start_time = time.time()
         self.state_machine.config = GAME_CONFIGS["collect_only"].copy()
         self.state_machine.current_state = self.state_machine.STATE_RESULT
@@ -108,6 +109,7 @@ class TestStaminaRetreatRouting(unittest.TestCase):
     def test_result_exit_in_normal_mode(self):
         """測試：當處於正常期間時，結算完成應轉移至 STATE_NAVIGATING"""
         handler = ResultHandler(self.state_machine)
+        handler.subflow_step = "FINAL_MATCH"
         self.state_machine.stamina_retreat_start_time = None
         self.state_machine.config = GAME_CONFIGS["stage"].copy()
         self.state_machine.current_state = self.state_machine.STATE_RESULT
