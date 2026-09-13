@@ -77,8 +77,11 @@ class DungeonCatalog:
         if not nav_path:
             return None
         entries = cls._resolve_entries(custom_entries)
+        import os
+        nav_set = set(nav_path)
+        nav_basenames = {os.path.basename(p) for p in nav_path}
         for idx, template_name in enumerate(entries, start=1):
-            if template_name in nav_path:
+            if template_name in nav_set or os.path.basename(template_name) in nav_basenames:
                 return idx
         return None
 

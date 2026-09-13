@@ -1069,7 +1069,134 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.mock_machine.transition_to.assert_called_once_with(self.mock_machine.STATE_DUNGEON_EXPLORING)
         self.mock_machine.mouse.click.assert_not_called()
 
+    @patch("os.path.exists", return_value=True)
+    def test_navigation_reversed_path_skips_dungeon_entry_when_in_memory_cooldown(self, _mock_exists):
+        """
+        [冷卻門禁測試 1] 當地下城 entry 按鈕在 memory cooldown 中時，尋路逆序點擊必須跳過，絕不盲點！
+        """
+        import time
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.current_state = "NAVIGATING"
+        self.mock_machine.is_in_dungeon = False
+        self.mock_machine.config = {
+            "name": "退守模式",
+            "type": "stage",
+            "navigation_path": ["dungeons/Ice_entry.png"],
+            "dungeon_names": ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+            ],
+        }
+        # 冰雪洞窟 (index 6) 處於記憶體冷卻中 (剩餘 100 秒)
+        self.mock_machine.dungeon_cooldowns = {6: time.time() + 100.0}
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+
+        def match_side_effect(_screen, template, **kwargs):
+            if template == "dungeons/Ice_entry.png":
+                return ((500, 500), 0.95)
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：絕不點擊 Ice_entry.png
+        self.mock_machine.mouse.click.assert_not_called()
+
+    @patch("os.path.exists", return_value=True)
+    @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
+    def test_navigation_reversed_path_skips_dungeon_entry_when_cooldown_sign_detected(
+        self, mock_detect_cd, _mock_exists
+    ):
+        """
+        [冷卻門禁測試 2] 當地下城 entry 按鈕畫面上偵測到冷卻木牌時，必須記錄冷卻並跳過點擊，防止點進冷卻彈窗！
+        """
+        import time
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.current_state = "NAVIGATING"
+        self.mock_machine.is_in_dungeon = False
+        self.mock_machine.config = {
+            "name": "退守模式",
+            "type": "stage",
+            "navigation_path": ["dungeons/Ice_entry.png"],
+            "dungeon_names": ["黏糊糊的石窟", "幽影地穴", "森林迷宮", "神秘遺跡", "幽暗監獄", "冰雪洞窟", "獸人地堡"],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+            ],
+        }
+        self.mock_machine.dungeon_cooldowns = {}
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+
+        def match_side_effect(_screen, template, **kwargs):
+            if template == "dungeons/Ice_entry.png":
+                return ((500, 500), 0.95)
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+        # 模擬偵測到冷卻木牌，剩餘 300 秒
+        mock_detect_cd.return_value = (True, 300.0, "05:00")
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：絕不點擊 Ice_entry.png，且寫入冷卻時間
+        self.mock_machine.mouse.click.assert_not_called()
+        self.assertIn(6, self.mock_machine.dungeon_cooldowns)
+        self.assertGreater(self.mock_machine.dungeon_cooldowns[6], time.time())
+
+    @patch("os.path.exists", return_value=True)
+    def test_navigation_dismisses_quit_overlay_in_primary_navigation(self, _mock_exists):
+        """
+        [彈窗自癒測試 3] 當主導航狀態下畫面出現 common/quit.png 時，系統透過 Intent Overlay Policy 關閉彈窗自癒。
+        """
+        import numpy as np
+        dummy_screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        self.mock_machine.current_state = "NAVIGATING"
+        self.mock_machine.is_in_dungeon = False
+        self.mock_machine.config = {
+            "name": "地下城模式",
+            "type": "dungeon",
+            "navigation_path": ["dungeons/Ice_entry.png"],
+        }
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+        self.handler.click_and_wait_until_gone = MagicMock()
+
+        def match_side_effect(_screen, template, **kwargs):
+            if template == "goback_town.png":
+                return ((64, 726), 0.95)
+            if template == "common/quit.png":
+                return ((688, 126), 0.97)
+            return None, 0.0
+
+        self.mock_machine.matcher.match.side_effect = match_side_effect
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：調用 click_and_wait_until_gone 關閉 common/quit.png
+        self.handler.click_and_wait_until_gone.assert_called_once()
+        self.assertEqual(self.handler.click_and_wait_until_gone.call_args.args[0], "common/quit.png")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

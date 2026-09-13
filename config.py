@@ -67,6 +67,7 @@ def compute_screen_scale_y(
 
 TIER4_MODE_STAGE = "stage"
 TIER4_MODE_DOMAIN = "domain"
+TIER4_MODE_DUNGEON = "dungeon"
 TIER4_MODE_NONE = "none"
 DEFAULT_TIER4_DOMAIN = "golden_empire"
 TIER4_MODE_OPTIONS = (

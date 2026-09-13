@@ -797,6 +797,36 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertFalse(fallback["enable_golden_empire"])
         self.assertTrue(fallback["enable_dungeon"])
 
+    def test_build_tier4_fallback_config_dungeon_mode(self):
+        # 測試 1: 原配置為純地下城 (type="dungeon")
+        pure_dungeon = {
+            "type": "dungeon",
+            "name": "地下城",
+            "navigation_path": ["dungeons/dungeon.png", "dungeons/Ice_entry.png"],
+            "dungeon_templates": ["dungeons/Ice_entry.png"],
+        }
+        fallback1 = build_tier4_fallback_config(pure_dungeon, {})
+        self.assertEqual(fallback1["type"], "dungeon")
+        self.assertEqual(fallback1["tier4_mode"], "dungeon")
+        self.assertFalse(fallback1["enable_stage_farming"])
+        self.assertFalse(fallback1["enable_golden_empire"])
+        self.assertTrue(fallback1["enable_dungeon"])
+        self.assertEqual(fallback1["navigation_path"], pure_dungeon["navigation_path"])
+
+        # 測試 2: daily 配置明確指定 tier4_mode="dungeon"
+        daily_dungeon = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "tier4_mode": "dungeon",
+            "navigation_path": ["dungeons/dungeon.png"],
+        }
+        fallback2 = build_tier4_fallback_config(daily_dungeon, {})
+        self.assertEqual(fallback2["type"], "dungeon")
+        self.assertEqual(fallback2["tier4_mode"], "dungeon")
+        self.assertFalse(fallback2["enable_stage_farming"])
+        self.assertFalse(fallback2["enable_golden_empire"])
+        self.assertTrue(fallback2["enable_dungeon"])
+
     def test_evaluate_next_activity_enters_collect_only_when_tier4_none_and_activities_on_cooldown(self):
         import time
         now = time.time()

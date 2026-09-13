@@ -62,6 +62,7 @@ class ReasonCode(str, Enum):
     IN_FLIGHT_ACTION_WAITING = "in_flight_action_waiting"
     ACTION_TIMEOUT_RETRY = "action_timeout_retry"
     DIAMOND_CLOSE_OVERLAY = "diamond_close_overlay"
+    PRIMARY_CLOSE_OVERLAY = "primary_close_overlay"
     TOWN_SUBFLOW_CLOSE_OVERLAY = "town_subflow_close_overlay"
     TOWN_SUBFLOW_EXIT_BUILDING = "town_subflow_exit_building"
     TOWN_SUBFLOW_RETURN_TO_TOWN = "town_subflow_return_to_town"

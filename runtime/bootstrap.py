@@ -10,6 +10,7 @@ from capture.screen import ScreenCapturer
 from config import (
     GAME_CONFIGS,
     TIER4_MODE_DOMAIN,
+    TIER4_MODE_DUNGEON,
     TIER4_MODE_STAGE,
     get_monitor_index,
     normalize_config,
@@ -92,6 +93,8 @@ def check_mode_templates(config):
             )
             missing.extend(check_mode_templates(tier4_config))
         elif tier4_config.get("tier4_mode") == TIER4_MODE_DOMAIN:
+            missing.extend(check_mode_templates(tier4_config))
+        elif tier4_config.get("tier4_mode") == TIER4_MODE_DUNGEON:
             missing.extend(check_mode_templates(tier4_config))
 
     return list(dict.fromkeys(missing))

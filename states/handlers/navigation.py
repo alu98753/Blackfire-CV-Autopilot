@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import re
+import cv2
 from copy import deepcopy
 from states.handlers.base import BaseStateHandler
 from config import (
@@ -42,10 +43,12 @@ def filter_navigation_path(nav_path, active_tabs=None, is_lobby=False):
 
     if active_tabs:
         skip_map = {
-            "stage": "common/select_stage.png",
-            "dungeon": "dungeons/dungeon.png"
+            "stage": {"common/select_stage.png", "select_stage.png"},
+            "dungeon": {"dungeons/dungeon.png", "dungeon.png"},
         }
-        skip_btns.update({skip_map[tab] for tab in active_tabs if tab in skip_map})
+        for tab in active_tabs:
+            if tab in skip_map:
+                skip_btns.update(skip_map[tab])
 
     if not skip_btns:
         return list(nav_path)
@@ -805,7 +808,6 @@ class NavigationHandler(BaseStateHandler):
             if time_diff < 2.2 and not is_testing:
                 logging.info(f"⌛ 剛執行過地下城水平滑動 (僅過 {time_diff:.1f} 秒)，等待地圖滾動完全靜止後再進行圖像辨識...")
                 return
-            import cv2
             h_img, w_img = screen_img.shape[:2]
             standard_widths = [1280, 1366, 1600, 1920, 2560, 3840]
             matched_width = w_img
@@ -1255,8 +1257,12 @@ class NavigationHandler(BaseStateHandler):
         active_tabs = []
         if stage_select_open:
             active_tabs.append("stage")
-        if dungeon_select_open:
+        if dungeon_select_open or is_dungeon_page:
             active_tabs.append("dungeon")
+        elif any("dungeon" in p for p in nav_path):
+            pos_dg_after, conf_dg_after = match_current_frame("dungeons/dungeon_after.png", threshold=0.75)
+            if pos_dg_after and conf_dg_after >= 0.75:
+                active_tabs.append("dungeon")
 
         filtered_nav_path = filter_navigation_path(nav_path, active_tabs, is_lobby=scene.is_lobby)
 
@@ -1289,6 +1295,46 @@ class NavigationHandler(BaseStateHandler):
                 if "boss_skull" in btn or "skull" in btn:
                     pos = self._validate_boss_skull(pos, rect, match_current_frame, screen_img=screen_img)
             if pos:
+                # 門禁 1: 地下城冷卻與木牌檢查
+                entry_templates = self.machine.config.get("dungeon_entries") if self.machine.config else None
+                dungeon_idx = DungeonCatalog.resolve_index_from_nav_path([btn], entry_templates)
+                if dungeon_idx is not None:
+                    cooldown_until = getattr(self.machine, "dungeon_cooldowns", {}).get(dungeon_idx, 0.0)
+                    if time.time() < cooldown_until:
+                        dungeon_name = DungeonCatalog.get_name(dungeon_idx)
+                        logging.info(f"⏳ [尋路門禁] 地下城按鈕 [{btn}] ({dungeon_name}) 處於冷卻中，禁止盲點！")
+                        continue
+                    if type(screen_img).__name__ == "ndarray":
+                        h_limit, w_limit = screen_img.shape[:2]
+                        scale_screen = compute_screen_scale(w_limit)
+                        t_w = int(238.0 * scale_screen)
+                        t_h = int(320.0 * scale_screen)
+                        if os.path.exists(os.path.join("templates", btn)):
+                            t_img = cv2.imread(os.path.join("templates", btn))
+                            if t_img is not None:
+                                t_h = int(t_img.shape[0] * scale_screen)
+                                t_w = int(t_img.shape[1] * scale_screen)
+                        crop_y1 = pos[1]
+                        crop_y2 = min(h_limit, pos[1] + t_h)
+                        crop_x1 = pos[0]
+                        crop_x2 = min(w_limit, pos[0] + t_w)
+                        dungeon_crop = screen_img[crop_y1:crop_y2, crop_x1:crop_x2]
+                        has_cd, parsed_secs, raw_text = detect_cooldown_sign_and_time(
+                            dungeon_crop,
+                            self.machine.get_ocr_reader,
+                            max_allowed_seconds=7200.0,
+                            threshold=0.58,
+                            scale=scale_screen,
+                        )
+                        if has_cd:
+                            if parsed_secs and 0 < parsed_secs < 7200.0:
+                                self.machine.dungeon_cooldowns[dungeon_idx] = time.time() + parsed_secs
+                            else:
+                                self.machine.dungeon_cooldowns[dungeon_idx] = time.time() + 30.0
+                            dungeon_name = DungeonCatalog.get_name(dungeon_idx)
+                            logging.warning(f"🛡️ [尋路門禁] 地下城按鈕 [{btn}] ({dungeon_name}) 偵測到冷卻木牌，禁止點擊！")
+                            continue
+
                 if btn == "stages/stage_label.png":
                     if self._handle_sub_stage_scroll(
                         rect,
@@ -1319,7 +1365,20 @@ class NavigationHandler(BaseStateHandler):
                     break
 
         if not clicked_any:
-            # 備用邏輯：若在普通關卡模式下，已進入關卡細節畫面但未看見目標子關卡，執行自適應滑動
+            # 備用邏輯 1: 地下城模式下若目標在冷卻中，退回城鎮進入待機
+            if config_type == "dungeon":
+                entry_templates = self.machine.config.get("dungeon_entries") if self.machine.config else None
+                target_idx = DungeonCatalog.resolve_index_from_nav_path(nav_path, entry_templates)
+                cd_until = getattr(self.machine, "dungeon_cooldowns", {}).get(target_idx, 0.0) if target_idx else 0.0
+                if target_idx and cd_until > time.time():
+                    dungeon_names = self.machine.config.get("dungeon_names")
+                    dungeon_name = DungeonCatalog.get_name(target_idx, custom_names=dungeon_names)
+                    self._enter_collect_only_after_dungeon_cooldown(
+                        screen_img, rect, f"target dungeon [{dungeon_name}] is on cooldown"
+                    )
+                    return
+
+            # 備用邏輯 2: 若在普通關卡模式下，已進入關卡細節畫面但未看見目標子關卡，執行自適應滑動
             if self.machine.config.get("type") == "stage":
                 if pos_label and not pos_final and target_final_btn:
                     if self._handle_sub_stage_scroll(
