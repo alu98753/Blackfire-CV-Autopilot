@@ -14,6 +14,7 @@
 - [x] 朱王與朱厚判定任務完成的 OCR 邊界擴大與 debug 截圖。（已加入除錯視覺化）
 - [x] 地下城通關狀態早產與大廳導航迷航已閉環修復。（已升格至 [Precondition Contracts 7.1](../architecture/precondition_contracts.md#71-活動與地下城通關離場後置條件閉環契約-activity--dungeon-exit-postcondition-contract) 與 [Lobby Scene Contract Invariant 6](../features/navigation/lobby_scene_contract.md#invariant-6導航地下城客觀特徵自癒彈回保證-dungeon-re-entrant-guard-invariant)）
 - [x] 重開登入全域感知解耦與地下城交棒前置離場路由已閉環修復。（已升格至 [Precondition Contracts 7.2](../architecture/precondition_contracts.md#72-重開登入全域感知解耦與前置離場路由契約-game-relaunch-world-perception--prerequisite-route-injection-contract) 與 PARS 故事 [2026-09-11_login_flow_dungeon_handover_and_global_perception_story.md](../storys/2026-09-11_login_flow_dungeon_handover_and_global_perception_story.md)）
+- [x] **測試執行效率優化 (Phase A/B Milestone)**：`NavigationHandler` clock seam 解耦與 `ResultHandler` tick-driven 子流程重構，全套測試耗時由 380s+ 降至 243.013s，1092 tests 全數綠燈通過。（詳細參閱 [test_redundent_spec_v2.md](test_redundent_spec_v2.md)）
 
 ### Daily
 
@@ -36,6 +37,16 @@
 ## 📌 一、 進行中與待開發項目 (Active TODOs)
 
 > 💡 **24/7 排序指標**：各章節第一項標註 `🔴` 者，代表最可能導致無人值守時陷入死鎖、活鎖、假陽性完成或無效空轉之最高風險項目，優先推進。
+
+### 測試架構與執行效率優化 (Test Architecture & Performance)
+- [ ] 🟡 **測試執行效率 Profiling Hotspots 優化 (v3)** [test_profiling_hotspots_v3.md](test_profiling_hotspots_v3.md)：
+  - **背景**：Phase A/B 將全套測試從 380s+ 降至 243.013s。由最新 profiling evidence 顯示仍有 159.11s 的實體等待間隙。
+  - **規劃方向**：針對 Top Hotspots 繼續推進下一刀：
+    1. 地下城寶箱關閉逾時等待 (~12.6s)
+    2. 血祭壇 Phase 4 捐獻確認輪詢 (~16.0s)
+    3. 進程重啟等待 (~6.0s)
+    4. 地下城選卡滑動動畫 (~4.0s)
+  - **目標**：推進至 200s ~ 210s 區間。
 
 ### Daily
 - [ ] **公告牌 livelock 修正** [bulletboard_bug.md](bulletboard_bug.md)

@@ -107,35 +107,24 @@ Timeout 必須 bounded，且測試用 `FakeClock.advance()` 驗證，不得等�
 
 ---
 
-### Phase C — Re-profile
+### Phase C — Re-profile & Verification (Completed)
 
-Phase A+B 完成 focused tests 後，由使用者執行完整 suite。
-
-比較：
+Phase A+B 已完成，全套測試套件實測驗證結果：
 
 ```text
-Current baseline:
-298.145s
+Previous Baseline:
+298.145s (1087 tests)
 
-New:
-Xs
+New Result:
+243.013s (1092 tests, 0 Failure, 14 Skipped)
 
 Delta:
-298.145 - X
+-55.132s (相較於 298s)
+累計縮短約 137 秒 (相較於原始 380s+ baseline，降幅 36%)
 ```
 
-重新產生：
-
-```text
-Top real-time gaps
-Top slow modules
-Remaining real sleep
-Remaining blocking capture loops
-```
-
-**只有新的 profiling 結果仍顯示 Explore/Treasure 為高 hotspot，才開始 Explore migration。**
-
-不得因為目前已知 Explore 有 legacy while 就直接把整個 ExploreHandler 一次重寫。
+後續分析之 Wall-Clock Gap Hotspots (Treasure subflow 12.6s, Phase 4 捐獻 16.0s 等) 已整理至新規格：
+👉 [test_profiling_hotspots_v3.md](test_profiling_hotspots_v3.md)
 
 ---
 
