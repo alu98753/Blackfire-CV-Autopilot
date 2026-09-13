@@ -447,10 +447,11 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         self.assertEqual(self.handler.step_phase, "PROCESS_ACCEPT_QUESTS")
         self.assertEqual(self.handler.accept_sub_phase, "FIND_TOP_TASK")
 
-    def test_reset_permanently_visible_exceeds_budget_forces_progression(self):
+    def test_reset_permanently_visible_exceeds_budget_defers_and_yields(self):
         """
         [契約 16-5 驗證] reset 永久存在且達到 MAX_RESET_CLICK_ATTEMPTS 上限：
-        不再點擊重置，強制推進至 PROCESS_ACCEPT_QUESTS，防止死鎖與無限點擊。
+        判定重置動作失敗 (RESET_ACTION_FAILED)，絕不偽裝成功進入接取流程，
+        走 bounded recovery: 觸發 defer_subflow 並切換佇列 (pop_and_next_town_subflow)。
         """
         self.handler.step_phase = "CHECK_RESET"
         self.handler.reset_attempts = MAX_RESET_CLICK_ATTEMPTS  # 已達 3 次上限
@@ -459,17 +460,13 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=True)
 
         # 經過 3.5 秒 (超過 settle window)，但已達上限
-        with patch("states.handlers.bulletin_board.time.time", return_value=103.5), \
-             patch.object(self.handler, "notify_ui_progress") as mock_progress, \
-             patch("states.handlers.bulletin_board.logging.warning") as mock_log_warn:
+        with patch("states.handlers.bulletin_board.time.time", return_value=103.5):
             self.handler.handle(self.fake_img, self.rect)
 
         self.handler.mouse.click.assert_not_called()
-        mock_progress.assert_called_once()
-        self.assertEqual(self.handler.step_phase, "PROCESS_ACCEPT_QUESTS")
-        self.assertEqual(self.handler.accept_sub_phase, "FIND_TOP_TASK")
-        has_limit_warn = any("重置按鈕持續存在且點擊已達上限" in str(c) for c in mock_log_warn.call_args_list)
-        self.assertTrue(has_limit_warn)
+        self.mock_machine.daily_manager.defer_subflow.assert_called_once_with("bulletin_board", 180)
+        self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+        self.assertEqual(self.handler.step_phase, "INIT")
 
 
 if __name__ == "__main__":

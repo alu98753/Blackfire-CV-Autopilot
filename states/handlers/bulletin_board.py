@@ -368,14 +368,9 @@ class BulletinBoardHandler(BaseStateHandler):
                     return
                 # Settle window 已過且 reset 仍可見：前次點擊可能未送達或未生效，判定是否允許重試
                 if self.reset_attempts >= MAX_RESET_CLICK_ATTEMPTS:
-                    logging.warning(
-                        "⚠️ [懸賞告示牌] 重置按鈕持續存在且點擊已達上限 (%d/%d)，放棄重試並強制推進至 PROCESS_ACCEPT_QUESTS，防止死鎖！",
-                        self.reset_attempts, MAX_RESET_CLICK_ATTEMPTS
+                    self._defer_and_yield(
+                        f"重置按鈕點擊 {self.reset_attempts} 次後仍持續存在"
                     )
-                    self.notify_ui_progress()
-                    self.step_phase = "PROCESS_ACCEPT_QUESTS"
-                    self.accept_sub_phase = "FIND_TOP_TASK"
-                    self.last_action_time = now
                     return
 
             self.reset_attempts += 1
