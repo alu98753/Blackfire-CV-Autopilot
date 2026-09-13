@@ -164,8 +164,11 @@
 - **Scope**: 全系統所有進入城鎮或依賴城鎮環境之子流程與排程器。
 - **Rule**:
   1. 系統 MUST 將「處於城鎮物理環境 (Physical Location)」與「具備城鎮互動就緒性 (Interaction Readiness)」區分為兩個獨立閘門。
-  2. 單一城鎮門戶特徵可見，僅能確立物理位置處於城鎮；在缺乏正向城鎮無遮擋前景特徵（Clear Anchor）或多幀穩定確認前，系統 MUST NOT 判定為具備互動就緒性。
-  3. 未達城鎮互動就緒狀態前，狀態機 MUST NOT 向依賴城鎮之業務 Handler 派發實體控制權。
+  2. 單一城鎮門戶特徵可見，僅能確立物理位置處於城鎮；在缺乏正向城鎮無遮擋前景特徵（Clear Anchor）或多幀穩定確認前，系統 MUST NOT 判定為具備互動就緒性：
+     - `TOWN + positive clear anchor + no blocker` ➔ 判定為 `READY`，方可派發業務控制權。
+     - `TOWN + no blocker + no clear anchor` ➔ 判定為 `UNKNOWN`，進入有界重新觀測 (bounded re-observe)。
+  3. **Intent Protection**: 當城鎮就緒性處於 `UNKNOWN` 或正規化逾時失敗時，系統 **MUST NOT** 懲罰性 defer、pop 或 complete 業務 Intent。
+  4. 未達城鎮互動就緒狀態前，狀態機 MUST NOT 向依賴城鎮之業務 Handler 派發實體控制權。
 - **Observable consequence**: 退出戰鬥或建築後，若畫面仍處於半透明淡入、過渡載入或殘留彈窗未消退狀態，系統維持在安全導航前置等待，絕不引發過早點擊或偽完成。
 - **Allowed variation**: 前景驗證所採用之具體錨點模板、驗證演算法與多幀防抖次數可隨遊戲更新動態調整。
 - **Verification**: `tests/test_behavior_reach_town_normalization.py`
@@ -178,6 +181,17 @@
 - **Observable consequence**: 退出建築動作因點擊丟失或過渡延遲未生效時，Handler 絕不會同幀誤判退出成功而呼叫完成或銷毀。
 - **Allowed variation**: 內部狀態機階段名稱（如 `VERIFY_EXIT`）與超時重試預算可自由重構。
 - **Verification**: `tests/test_behavior_town_scenarios.py`
+
+#### Invariant 9.3: Login World-Ready Boundary
+- **Scope**: 登入、重啟重開與初始化生命週期 (`login_handler.py`, `relaunch`, `supervisor`) 及城鎮正規化控制器。
+- **Rule**:
+  1. 系統登入與重啟驗證完成之基準契約為 `WORLD_READY`，絕非 `TOWN_READY`。登入與恢復流程 MUST 將任何已驗證之已知遊戲世界場景（如 `IN_DUNGEON`、`TOWN`、`TOWN_BUILDING`、`LOBBY`）視為登入就緒。
+  2. 登入與重啟流程 MUST NOT 強制將實體位置正規化回城鎮。
+  3. 若登入或重啟後實體位置落在地下城 (`IN_DUNGEON`)，系統 MUST 保留地下城探索之所有權與接續性，嚴禁強制回城或退場。
+  4. 城鎮實體正規化 (`REACH_TOWN`) 唯有在下游業務消費者（Downstream Consumer，如城鎮福利領取、日常維護子流程）明確需要城鎮環境時，方由該消費者發起請求。
+- **Observable consequence**: 遊戲重開後若玩家落在地下城戰鬥或探索中，自動戰鬥與副本探索順暢接續，絕不會因為系統盲目尋找城門而觸發錯誤退場或狀態死鎖。
+- **Allowed variation**: `WORLD_READY` 具體支援之場景種類、識別順序與特徵比對演算法可隨世界地圖擴充。
+- **Verification**: `tests/test_behavior_login_and_town_boundary_regression.py`
 
 ---
 
