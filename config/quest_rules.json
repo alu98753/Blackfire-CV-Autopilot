@@ -26,7 +26,8 @@
     "清除蛤蟆",
     "討伐惡魔",
     "擊敗冰元素",
-    "破除遺跡的詛咒"
+    "破除遺跡的詛咒",
+    "討伐獸人"
   ],
   "banner_verify_quests": [
     "終結獄炎統治",
@@ -44,8 +45,7 @@
     "敵人剿滅",
     "擊殺首領",
     "虛空行者的審判",
-    "雪山詛咒",
-    "討伐獸人"
+    "雪山詛咒"
   ],
   "typo_groups": {
     "蛛後之死": [
@@ -250,6 +250,12 @@
       "pattern": "(擊敗冰元素|冰元素)",
       "stage_level": 6,
       "sub_stage": "first",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(討伐獸人|獸人)",
+      "stage_level": 7,
+      "sub_stage": "middle",
       "policy": "deterministic_count"
     }
   ]
