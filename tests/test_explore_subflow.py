@@ -9,10 +9,12 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from states.handlers.explore import ExploreHandler
+from tests.support.fake_clock import FakeClock
 
 class TestExploreSubflow(unittest.TestCase):
     def setUp(self):
         self.mock_machine = MagicMock()
+        self.mock_machine.clock = FakeClock()
         self.mock_matcher = MagicMock()
         self.mock_mouse = MagicMock()
         self.mock_capturer = MagicMock()

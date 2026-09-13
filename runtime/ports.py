@@ -22,6 +22,8 @@ class InputPort(Protocol):
 class ClockPort(Protocol):
     def monotonic(self) -> float: ...
 
+    def sleep(self, seconds: float) -> None: ...
+
 
 @runtime_checkable
 class ProcessPort(Protocol):
@@ -32,20 +34,8 @@ class SystemClock:
     def monotonic(self) -> float:
         return time.monotonic()
 
-
-class FakeClock:
-    def __init__(self, now: float = 1000.0):
-        self.now = float(now)
-
-    def monotonic(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> float:
-        self.now += float(seconds)
-        return self.now
-
     def sleep(self, seconds: float) -> None:
-        self.advance(seconds)
+        time.sleep(seconds)
 
 
 class GameRelaunchProcessAdapter:

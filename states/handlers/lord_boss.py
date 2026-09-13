@@ -21,6 +21,7 @@ class LordBossHandler(BaseStateHandler):
         self.has_reset_to_left = False
         self.reset_swipe_count = 0
         self.last_lord_scroll_time = 0.0
+        self.start_verify_time = 0.0
 
     def reset_state(self):
         """狀態重置與子流程生命週期初始化"""
@@ -30,6 +31,7 @@ class LordBossHandler(BaseStateHandler):
         self.has_reset_to_left = False
         self.reset_swipe_count = 0
         self.last_lord_scroll_time = 0.0
+        self.start_verify_time = 0.0
 
     def _check_card_cooldown_ocr(self, screen_img, pos_b, temp_path, max_allowed_seconds=7200.0):
         """
@@ -71,65 +73,79 @@ class LordBossHandler(BaseStateHandler):
             logging.warning(f"⚠️ [首領討伐] 點擊前單張卡片 OCR 辨識過程異常: {e}")
         return None, None
 
-    def _verify_and_enter_battle(self, rect, start_btn, boss_key, b_name, dm):
+    def _start_verify_battle_entry(self):
         """
-        驗證點擊開始戰鬥後的進場特徵，若超時未進場且按鈕仍在則退回大廳並標記完成。
+        啟動非阻塞戰鬥進場驗證 phase。
         """
-        battle_entered = False
-        start_verify_t = self._get_monotonic_time()
+        self.step_phase = "VERIFY_BATTLE_ENTRY"
+        self.start_verify_time = self._get_monotonic_time()
+
+    def _handle_verify_battle_entry(self, screen_img, rect, dm):
+        """
+        [Tick-driven 戰鬥進場驗證]
+        每幀無阻塞檢查戰鬥特徵；超時 (2.5s) 若仍在選關頁且有 start_btn 則判定次數已滿/無法挑戰，點擊 quit 退場。
+        """
+        now = self._get_monotonic_time()
+        boss_key = self.current_target_boss
+        bosses_cfg = self.machine.config.get("bosses", {})
+        b_name = bosses_cfg.get(boss_key, {}).get("name", boss_key) if boss_key else "Unknown"
+
         battle_features = [
             "battle/battle_features_1.png",
             "battle/battle_features_2.png",
             "common/auto.png"
         ]
 
-        while self._get_monotonic_time() - start_verify_t < 2.5:
-            self._sleep(0.3)
-            if self.capturer and rect:
-                fresh_img = self.capturer.capture(rect)
-                if fresh_img is not None:
-                    for feat in battle_features:
-                        if os.path.exists(os.path.join("templates", feat)):
-                            p_f, _ = self.matcher.match(fresh_img, feat, threshold=0.85, quiet=True)
-                            if p_f:
-                                battle_entered = True
-                                break
-            if battle_entered:
-                break
+        for feat in battle_features:
+            if os.path.exists(os.path.join("templates", feat)):
+                p_f, _ = self.matcher.match(screen_img, feat, threshold=0.85, quiet=True)
+                if p_f:
+                    logging.info(f"⚔️ [首領討伐] 成功比對到戰鬥特徵 [{feat}]，確認進入戰鬥！轉移至 STATE_BATTLE 發起討伐 [{boss_key}]...")
+                    self.machine.current_lord_boss_key = boss_key
+                    self.reset_state()
+                    self.machine.transition_to(self.machine.STATE_BATTLE)
+                    return True
 
-        if battle_entered:
-            logging.info(f"⚔️ [首領討伐] 成功比對到戰鬥特徵，確認進入戰鬥！轉移至 STATE_BATTLE 發起討伐 [{boss_key}]...")
-            self.machine.current_lord_boss_key = boss_key
-            self.machine.transition_to(self.machine.STATE_BATTLE)
+        # 若未進入戰鬥且未超時 2.5 秒，保留在當前 phase 等待下一幀驗證
+        if now - self.start_verify_time < 2.5:
             return True
-        else:
-            latest_img = self.capturer.capture(rect) if (self.capturer and rect) else None
-            still_start = False
-            if latest_img is not None and os.path.exists(os.path.join("templates", start_btn)):
-                p_still, _ = self.matcher.match(latest_img, start_btn, threshold=0.75, quiet=True)
-                if p_still:
-                    still_start = True
 
-            if still_start or latest_img is None:
-                logging.warning(f"⚠️ [首領討伐] 點擊開始戰鬥 2.5 秒後未偵測到戰鬥特徵，且按鈕 [{start_btn}] 依然存在！判定 Boss [{b_name}] 次數已滿或無法挑戰。")
-                quit_template = "common/quit.png"
-                if latest_img is not None and os.path.exists(os.path.join("templates", quit_template)):
-                    p_quit, _ = self.matcher.match(latest_img, quit_template, threshold=0.75)
-                    if p_quit:
-                        logging.info(f"🚪 [首領討伐] 點擊卡片關閉按鈕 [{quit_template}] 退回大廳...")
-                        self.click_and_wait_until_gone(quit_template, rect["left"] + p_quit[0], rect["top"] + p_quit[1], rect, threshold=0.75)
+        # 超時 >= 2.5 秒：檢查 start_btn 是否依然存在
+        start_btn = self.machine.config.get("start_btn", "stages/start.png")
+        still_start = False
+        if os.path.exists(os.path.join("templates", start_btn)):
+            p_still, _ = self.matcher.match(screen_img, start_btn, threshold=0.75, quiet=True)
+            if p_still:
+                still_start = True
 
-                if dm and hasattr(dm, "mark_boss_completed"):
-                    dm.mark_boss_completed(boss_key)
+        if still_start:
+            logging.warning(f"⚠️ [首領討伐] 點擊開始戰鬥 2.5 秒後未偵測到戰鬥特徵，且按鈕 [{start_btn}] 依然存在！判定 Boss [{b_name}] 次數已滿或無法挑戰。")
+            quit_template = "common/quit.png"
+            if os.path.exists(os.path.join("templates", quit_template)):
+                p_quit, _ = self.matcher.match(screen_img, quit_template, threshold=0.75)
+                if p_quit:
+                    logging.info(f"🚪 [首領討伐] 點擊卡片關閉按鈕 [{quit_template}] 退回大廳...")
+                    self.click_and_wait_until_gone(quit_template, rect["left"] + p_quit[0], rect["top"] + p_quit[1], rect, threshold=0.75)
 
-                self.reset_state()
-                self.machine.pop_and_next_town_subflow()
-                return True
+            if dm and hasattr(dm, "mark_boss_completed") and boss_key:
+                dm.mark_boss_completed(boss_key)
+
+            self.reset_state()
+            self.machine.pop_and_next_town_subflow()
+            return True
+
+        # 若 start_btn 也消失且未見戰鬥特徵，重置 phase 回 INIT
+        self.step_phase = "INIT"
         return False
 
     def handle(self, screen_img, rect):
         now = self._get_monotonic_time()
         dm = getattr(self.machine, "daily_manager", None)
+
+        # 0. 若正處於非阻塞戰鬥進場驗證 phase，由專屬處理器進行每幀驗證
+        if self.step_phase == "VERIFY_BATTLE_ENTRY":
+            return self._handle_verify_battle_entry(screen_img, rect, dm)
+
         avail_bosses = self.machine.get_available_selected_lord_bosses() if dm else []
 
         # 若當前沒有可討伐的 Boss，結束首領討伐子流程，動態計算最快解鎖秒數並彈出下一個城鎮任務
@@ -197,9 +213,10 @@ class LordBossHandler(BaseStateHandler):
             if pos_start:
                 boss_key = self.current_target_boss
                 b_name = self.machine.config.get("bosses", {}).get(boss_key, {}).get("name", boss_key)
-                logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，啟動 2.5 秒戰鬥進場驗證 [{b_name}]...")
+                logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，啟動非阻塞戰鬥進場驗證 [{b_name}]...")
                 self.mouse.click(rect["left"] + pos_start[0], rect["top"] + pos_start[1])
-                return self._verify_and_enter_battle(rect, start_btn, boss_key, b_name, dm)
+                self._start_verify_battle_entry()
+                return True
 
         # 4. 若最近 1.5 秒內剛點擊過 Boss 卡片，冷卻等待進入戰鬥頁面，避免重複或連續點擊不同 Boss
         if self.last_card_click_time > 0 and now - self.last_card_click_time < 1.5:
@@ -299,13 +316,14 @@ class LordBossHandler(BaseStateHandler):
                     self.current_target_boss = boss_key
                     self.last_card_click_time = now
 
-                    # 若畫面上已存在「開始戰鬥」按鈕 (stages/start.png)，點擊並啟動 2.5 秒戰鬥進場驗證閉環
+                    # 若畫面上已存在「開始戰鬥」按鈕 (stages/start.png)，點擊並啟動非阻塞戰鬥進場驗證閉環
                     if os.path.exists(os.path.join("templates", start_btn)):
                         pos_start, conf_start = self.matcher.match(screen_img, start_btn, threshold=0.80)
                         if pos_start:
-                            logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，啟動 2.5 秒戰鬥進場驗證...")
+                            logging.info(f"🚀 [首領討伐] 點擊開始戰鬥按鈕 [{conf_start:.4f}]，啟動非阻塞戰鬥進場驗證...")
                             self.mouse.click(rect["left"] + pos_start[0], rect["top"] + pos_start[1])
-                            return self._verify_and_enter_battle(rect, start_btn, boss_key, b_name, dm)
+                            self._start_verify_battle_entry()
+                            return True
                     break
 
         # 7. 若在畫面上未能匹配到當前欲尋找的 Boss 卡片，發動向左滑動翻頁

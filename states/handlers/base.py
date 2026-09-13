@@ -53,14 +53,12 @@ class BaseStateHandler:
     def _get_monotonic_time(self) -> float:
         clock = getattr(self.machine, "clock", None)
         if clock and hasattr(clock, "monotonic"):
-            val = clock.monotonic()
-            if isinstance(val, (int, float)):
-                return float(val)
+            return clock.monotonic()
         return time.monotonic()
 
     def _sleep(self, seconds: float) -> None:
         clock = getattr(self.machine, "clock", None)
-        if clock and hasattr(clock, "sleep") and not hasattr(clock.sleep, "assert_called"):
+        if clock and hasattr(clock, "sleep"):
             clock.sleep(seconds)
         else:
             time.sleep(seconds)

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch, call
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from runtime.ports import FakeClock
+from tests.support.fake_clock import FakeClock
 from states.state_machine import GameStateMachine
 from states.handlers.base import BaseStateHandler
 from states.handlers.blood_altar import BloodAltarHandler

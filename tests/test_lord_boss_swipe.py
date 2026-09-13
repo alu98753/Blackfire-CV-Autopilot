@@ -5,6 +5,7 @@ import time
 from unittest.mock import MagicMock, patch
 from states.handlers.lord_boss import LordBossHandler
 from config import GAME_CONFIGS
+from tests.support.fake_clock import FakeClock
 
 class TestLordBossSwipeLogic(unittest.TestCase):
     """
@@ -16,6 +17,7 @@ class TestLordBossSwipeLogic(unittest.TestCase):
 
     def setUp(self):
         self.mock_machine = MagicMock()
+        self.mock_machine.clock = FakeClock()
         self.mock_mouse = MagicMock()
         self.mock_capturer = MagicMock()
         self.mock_matcher = MagicMock()

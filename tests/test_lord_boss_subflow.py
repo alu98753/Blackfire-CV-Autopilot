@@ -14,7 +14,7 @@ from states.handlers.lord_boss import LordBossHandler
 from states.handlers.battle import BattleHandler
 from states.handlers.result import ResultHandler
 from config import GAME_CONFIGS
-from runtime.ports import FakeClock
+from tests.support.fake_clock import FakeClock
 
 class TestLordBossSubflowMatrix(unittest.TestCase):
     def setUp(self):
@@ -284,6 +284,9 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         handler = LordBossHandler(self.state_machine)
         handler.has_reset_to_left = True
         
+        # Tick 1: 點擊卡片與 start 按鈕，進入 VERIFY_BATTLE_ENTRY
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # Tick 2: 驗證戰鬥特徵，轉移至 STATE_BATTLE
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
         # 斷言：發起戰鬥時鎖定的目標必須是最高優先權 Boss (ghoul_snow: 10800s)
@@ -326,6 +329,9 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         handler.has_reset_to_left = True
         
         # 執行 handle，預期 lord_spectre 被 pre-click OCR 攔截跳過，選擇 lord_spider 進入戰鬥
+        # Tick 1: 點擊 lord_spider 與 start.png，進入 VERIFY_BATTLE_ENTRY
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # Tick 2: 驗證戰鬥特徵，轉移至 STATE_BATTLE
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         self.assertEqual(self.state_machine.current_lord_boss_key, "lord_spider")
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
@@ -368,6 +374,11 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         handler = LordBossHandler(self.state_machine)
         handler.has_reset_to_left = True
 
+        # Tick 1: 點擊卡片與 start_btn，進入 VERIFY_BATTLE_ENTRY
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 前進 2.6 秒以觸發超時
+        self.clock.advance(2.6)
+        # Tick 2: 驗證超時且 start.png 仍在，點擊 quit 退場
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         # 斷言：點擊 quit 後狀態轉移至 NAVIGATING，且 lord_spider 已標記為今日完成
         spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
@@ -416,6 +427,11 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         handler = LordBossHandler(self.state_machine)
         handler.current_target_boss = "lord_spider"  # 模擬上一幀已點擊過卡片
 
+        # Tick 1: 點擊 start.png，進入 VERIFY_BATTLE_ENTRY
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 前進 2.6 秒以觸發超時
+        self.clock.advance(2.6)
+        # Tick 2: 超時且 start.png 仍在，點擊 quit 退場
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         # 斷言：步驟 3 的 2.5 秒驗證失敗後點擊 quit 退場，且 lord_spider 被標記為今日完成
         spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
@@ -444,6 +460,9 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         handler = LordBossHandler(self.state_machine)
         handler.current_target_boss = "lord_spider"
 
+        # Tick 1: 點擊 start.png，進入 VERIFY_BATTLE_ENTRY
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # Tick 2: 驗證戰鬥特徵，轉移至 STATE_BATTLE
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         # 斷言：成功進戰場，狀態切換至 STATE_BATTLE
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_BATTLE)
@@ -475,6 +494,11 @@ class TestLordBossSubflowMatrix(unittest.TestCase):
         handler = LordBossHandler(self.state_machine)
         handler.current_target_boss = "lord_spider"
 
+        # Tick 1: 點擊 start.png，進入 VERIFY_BATTLE_ENTRY
+        handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
+        # 前進 2.6 秒以觸發超時
+        self.clock.advance(2.6)
+        # Tick 2: 信心度過低判定未進場，觸發 quit 退場流程並標記完成
         handler.handle(None, {"left": 0, "top": 0, "width": 1000, "height": 800})
         # 斷言：因為信心度 < 0.85 被過濾，觸發 quit 退場流程並標記完成
         spider_info = self.daily_manager.status["subflows"]["lord_boss"]["bosses"]["lord_spider"]
