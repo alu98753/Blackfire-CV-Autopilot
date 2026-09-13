@@ -221,6 +221,102 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         mock_dm.record_shop_visit.assert_not_called()
         self.mock_machine.pop_and_next_town_subflow.assert_not_called()
 
+    def test_verify_exit_bounded_retries_when_exit_button_persists(self):
+        """
+        驗證當 exit 按鈕持續可見且未能成功退出時：
+        - 僅進行有界次數重試 (Bounded Retries)
+        - 到達上限後停止重試，絕不提前 pop / 絕不假裝完成
+        - 觸發 safe recovery (stash_current_state)
+        """
+        mock_dm = MagicMock()
+        self.mock_machine.daily_manager = mock_dm
+
+        self.handler.current_shop_id = "alchemy_hut"
+        self.handler.current_building_btn = "town_building/alchemy_hut/alchemy_hut.png"
+        self.handler.step_phase = "ALL_DONE_EXITING"
+
+        def match_exit_only(img, template_name, **kwargs):
+            if template_name == "town_building/exitfromhouse_and_to_town.png":
+                return (200, 300), 0.90
+            return None, 0.0
+
+        self.handler.matcher.match.side_effect = match_exit_only
+        dummy_img = MagicMock()
+
+        # 第 1 幀：在 ALL_DONE_EXITING 點擊退出按鈕，進入 VERIFY_EXIT (attempt = 1)
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+        self.assertEqual(self.handler.exit_verify_attempts, 1)
+
+        # 模擬第 2 次嘗試 (attempt = 2)
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+        self.assertEqual(self.handler.exit_verify_attempts, 2)
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+
+        # 模擬第 3 次嘗試 (attempt = 3)
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+        self.assertEqual(self.handler.exit_verify_attempts, 3)
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+
+        # 模擬第 4 次檢查：此時 attempts >= MAX_EXIT_VERIFY_ATTEMPTS (3)，耗盡重試
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 核心斷言：
+        # 1. 絕不得調用 pop_and_next_town_subflow (never pop before Town)
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        # 2. 絕不得調用 record_shop_visit (never fake completion)
+        mock_dm.record_shop_visit.assert_not_called()
+        # 3. 轉入 EXIT_FAILED 階段並調用 safe recovery (stash_current_state)
+        self.assertEqual(self.handler.step_phase, "EXIT_FAILED")
+        self.mock_machine.stash_current_state.assert_called_once_with(reason="jewelry_exit_failed_exit_retries_exhausted")
+
+    def test_verify_exit_no_evidence_triggers_safe_failure_path(self):
+        """
+        驗證當 VERIFY_EXIT 階段畫面既無城鎮特徵、無 quit 亦無 exit 按鈕 (超出有界等待窗口)：
+        - 不得靜默永久死循環
+        - 達到次數上限後觸發 defined safe failure path
+        - 絕不提前 pop / 絕不假裝完成
+        """
+        mock_dm = MagicMock()
+        self.mock_machine.daily_manager = mock_dm
+
+        self.handler.current_shop_id = "alchemy_hut"
+        self.handler.current_building_btn = "town_building/alchemy_hut/alchemy_hut.png"
+        self.handler.step_phase = "VERIFY_EXIT"
+        self.handler.exit_no_evidence_count = 0
+
+        # 模擬既無 door、無 building、無 quit、無 exit 按鈕
+        self.handler.matcher.match.return_value = (None, 0.0)
+        dummy_img = MagicMock()
+
+        # 第 1 次無證據
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+        self.assertEqual(self.handler.exit_no_evidence_count, 1)
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+
+        # 第 2 次無證據
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+        self.assertEqual(self.handler.exit_no_evidence_count, 2)
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+
+        # 第 3 次無證據：達到 MAX_NO_EVIDENCE_COUNT (3)，觸發安全失敗處置
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 核心斷言：
+        # 1. 絕不提前 pop
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        # 2. 絕不標記完成
+        mock_dm.record_shop_visit.assert_not_called()
+        # 3. 轉入 EXIT_FAILED 並調用 safe recovery
+        self.assertEqual(self.handler.step_phase, "EXIT_FAILED")
+        self.mock_machine.stash_current_state.assert_called_once_with(reason="jewelry_exit_failed_no_usable_evidence_timeout")
+
     def test_full_cycle_scene_guard_records_selected_shop_not_reset_default(self):
         """
         場景防護攔截閉環防回歸測試：

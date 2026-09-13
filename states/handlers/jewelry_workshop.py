@@ -33,6 +33,10 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
         self.entered_building_time = 0.0
+        self.exit_verify_attempts = 0
+        self.exit_no_evidence_count = 0
+        self.MAX_EXIT_VERIFY_ATTEMPTS = 3
+        self.MAX_NO_EVIDENCE_COUNT = 3
         from utils.merchant_gold_detector import MerchantGoldDetector
         self.gold_detector = MerchantGoldDetector()
 
@@ -50,6 +54,20 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.current_shop_id = "jewelry_workshop"
         self.current_building_btn = "town_building/Jewelry_workshop/Jewelry_workshop.png"
         self.entered_building_time = 0.0
+        self.exit_verify_attempts = 0
+        self.exit_no_evidence_count = 0
+
+    def _handle_verify_exit_failure(self, reason: str):
+        """
+        當離場驗證耗盡重試或超出有界等待窗口時執行的安全失敗處置：
+        - 嚴禁標記完成 (_record_completion)
+        - 嚴禁交棒消費佇列 (pop_and_next_town_subflow)
+        - 調用 safe recovery (stash_current_state) 或移交 Watchdog 處置
+        """
+        logging.error(f"❌ [珠寶加工廠 VERIFY_EXIT] 離場驗證安全失敗處置: [{reason}]")
+        self.step_phase = "EXIT_FAILED"
+        if hasattr(self.machine, "stash_current_state"):
+            self.machine.stash_current_state(reason=f"jewelry_exit_failed_{reason}")
 
     def _record_completion(self):
         """記錄 DailyManager 珠寶加工廠今日已完成，並累加該商店造訪次數"""
@@ -329,6 +347,9 @@ class JewelryWorkshopHandler(BaseStateHandler):
         if not is_needed and self.step_phase == "INIT":
             return
 
+        if self.step_phase == "EXIT_FAILED":
+            return
+
         now = time.time()
         if now - self.last_action_time < 0.6:
             return
@@ -435,16 +456,45 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 self.mouse.click(left + pos_quit[0], top + pos_quit[1])
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
+                self.exit_no_evidence_count = 0
                 return
 
-            if now - self.last_action_time >= 2.0:
-                pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
-                if pos_exit:
-                    logging.warning(f"⚠️ [珠寶加工廠 VERIFY_EXIT] 離場點擊後超過 2 秒仍停留在店內，重試點擊 [{exit_building_btn}]...")
+            pos_exit, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+            if pos_exit:
+                self.exit_no_evidence_count = 0
+                if now - self.last_action_time >= 2.0:
+                    if self.exit_verify_attempts >= self.MAX_EXIT_VERIFY_ATTEMPTS:
+                        logging.error(
+                            f"❌ [珠寶加工廠 VERIFY_EXIT] 離開建築按鈕重試次數已達上限 ({self.exit_verify_attempts}/{self.MAX_EXIT_VERIFY_ATTEMPTS})，"
+                            "無法成功離場，觸發安全復原..."
+                        )
+                        self._handle_verify_exit_failure("exit_retries_exhausted")
+                        return
+
+                    self.exit_verify_attempts += 1
+                    logging.warning(
+                        f"⚠️ [珠寶加工廠 VERIFY_EXIT] 離場點擊後超過 2 秒仍停留在店內，重試點擊 [{exit_building_btn}] "
+                        f"({self.exit_verify_attempts}/{self.MAX_EXIT_VERIFY_ATTEMPTS})..."
+                    )
                     self.mouse.click(left + pos_exit[0], top + pos_exit[1])
                     self.last_action_time = now
                     self.machine.notify_ui_progress()
+                return
+
+            # 若既無城鎮特徵、無 quit、亦無 exit 按鈕 (未知畫面/過場延遲/黑畫面)
+            if now - self.last_action_time >= 1.0:
+                self.exit_no_evidence_count += 1
+                self.last_action_time = now
+                if self.exit_no_evidence_count >= self.MAX_NO_EVIDENCE_COUNT:
+                    logging.error(
+                        f"❌ [珠寶加工廠 VERIFY_EXIT] 連續 {self.exit_no_evidence_count} 次未偵測到任何可用特徵，"
+                        "超出有界等待窗口，觸發安全復原..."
+                    )
+                    self._handle_verify_exit_failure("no_usable_evidence_timeout")
                     return
+                logging.debug(
+                    f"⌛ [珠寶加工廠 VERIFY_EXIT] 等待離場畫面過渡中 ({self.exit_no_evidence_count}/{self.MAX_NO_EVIDENCE_COUNT})..."
+                )
             return
 
         if self.step_phase == "ALL_DONE_EXITING":
@@ -485,6 +535,8 @@ class JewelryWorkshopHandler(BaseStateHandler):
                 logging.info(f"💎 [珠寶加工廠] 點擊離開建築按鈕 [{exit_building_btn}] 返回城鎮，轉入 VERIFY_EXIT 階段等待確認...")
                 self.mouse.click(left + pos_exit[0], top + pos_exit[1])
                 self.step_phase = "VERIFY_EXIT"
+                self.exit_verify_attempts = 1
+                self.exit_no_evidence_count = 0
                 self.last_action_time = now
                 self.machine.notify_ui_progress()
                 return
