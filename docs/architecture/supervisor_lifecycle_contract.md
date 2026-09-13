@@ -38,6 +38,8 @@ Supervisor 依據子進程退出碼（Exit Code）、心跳逾時與維護排程
 
 ## 3. 核心不可變鐵律 (Core Invariants)
 
+本節約束旗標消費、PID 安全、持久化順序與崩潰循環的可觀測安全結果。退出碼分類、時間窗口、次數預算、檔案格式與程序 API 均可在不改變義務及其驗證的情況下調整；聚焦驗證為 `tests/test_behavior_supervisor_lifecycle.py` 與 `tests/test_supervisor_alarm.py`。術語判讀見 [Canonical Invariant Registry](canonical_invariant_registry.md)。
+
 ### Invariant 1: 單次消費旗標保護 (Single-Use Flag Consumption)
 - `--restart-game` 旗標嚴格採「單次消費」語意。
 - 僅在 S1 (定時維護) 或 S2 (心跳逾時) 觸發時由 Supervisor 動態追加。

@@ -6,6 +6,8 @@
 > 導航關聯契約：[Lobby Scene Contract](lobby_scene_contract.md)（Invariant 6）  
 > 相關處理器：[ExploreHandler](../../../states/handlers/explore.py)、[GameStateMachine](../../../states/state_machine.py)  
 > 驗證測試檔：[tests/test_dungeon_relaunch_recovery.py](../../../tests/test_dungeon_relaunch_recovery.py)
+>
+> 術語與判讀：[Canonical Invariant Registry](../../architecture/canonical_invariant_registry.md)
 
 ---
 
@@ -21,6 +23,8 @@
 ---
 
 ## 2. 核心架構不變量 (Normative Invariants)
+
+除非外部協定或安全需求另有要求，模板清單、優先級索引、設定欄位與私有方法名稱皆是實作細節；以下規則與其可觀測結果才是本契約的長期約束。
 
 ### Invariant 1：客觀場景主導與感知解耦保證 (Perceptual Scene Primacy Invariant)
 - **原則**：依據 Precondition Contracts 第 6.3 條，場景感知以畫面物理特徵為單一真相，嚴禁用 FSM state 或 config 類型代替世界觀察。

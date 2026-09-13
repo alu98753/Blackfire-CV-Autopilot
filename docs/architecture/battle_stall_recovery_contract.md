@@ -37,6 +37,8 @@
 
 ## 3. 核心不可變鐵律 (Core Invariants)
 
+本節的長期約束是感知與決策的責任分離、以觀測進展判斷停滯、失敗後的有界復原，以及跨場景生命週期隔離。ROI、影像特徵、秒數、次數、私有欄位與重啟實作是可替換的策略；修改後仍須維持同一可觀測行為並通過 `tests/test_behavior_battle_session_lifecycle.py`。術語判讀見 [Canonical Invariant Registry](canonical_invariant_registry.md)。
+
 ### Invariant 1: 感知與決策嚴格分離 (Perception / Decision Separation)
 - `utils.battle_stall_detector.extract_health_bar_signature` 必須是純無狀態函式（Pure Function）。
 - 其職責僅限於從單幀畫面中截取血條 ROI 並計算紅色像素統計值 (`int`)。

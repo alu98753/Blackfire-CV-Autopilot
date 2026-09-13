@@ -51,6 +51,8 @@
 
 懸賞告示牌子流程負責每日懸賞任務之開窗、重置與接取，依循 [Precondition Contracts](../../architecture/precondition_contracts.md) 嚴格落實以下不變量：
 
+本節是 `Precondition Contracts` 對告示牌流程的領域特化。它約束可觀測的感知、決策與復原行為；ROI 尺寸、沉澱時間、重試次數、模板路徑與診斷輸出均為實作或執行期策略，不構成不變量。術語判讀見 [Canonical Invariant Registry](../../architecture/canonical_invariant_registry.md)。
+
 #### 8.1 架構不變量 (Architecture Invariants)
 1. **Perception Classification Invariant**：
    - 證據不足（Evidence-Insufficient）絕不等於已知干擾層（Known Conflicting Overlay）。
