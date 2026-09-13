@@ -340,9 +340,6 @@ class GameStateMachine:
                 if saved_stuck_state == target and saved_stuck_count > 0:
                     self.exception_watchdog.consecutive_stuck_count = saved_stuck_count
                     self.exception_watchdog.last_stuck_state = saved_stuck_state
-
-            if hasattr(self, "town_subflow_precondition") and hasattr(self.town_subflow_precondition, "reset_failure"):
-                self.town_subflow_precondition.reset_failure()
             return True
         else:
             logging.warning("⚠️ [StateRestore] 無可恢復之暫存狀態，安全退避至 NAVIGATING")
@@ -2006,9 +2003,6 @@ class GameStateMachine:
             status_str = "🟢 待執行 (Enabled)" if is_enabled else "🔴 停用 (enabled=False)"
             logging.info(f"  {idx}. [{flow_key}] {name:<12} : {status_str}")
         logging.info("=" * 60)
-
-        if hasattr(self, "town_subflow_precondition") and hasattr(self.town_subflow_precondition, "reset_failure"):
-            self.town_subflow_precondition.reset_failure()
 
         self._select_next_town_subflow()
 

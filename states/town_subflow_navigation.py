@@ -84,6 +84,7 @@ class TownSubflowPreconditionController:
         self._no_red_dot_flow = None
         self._no_red_dot_count = 0
         self._current_flow = None
+        self._escalated_recovery = False
 
     def reset_failure(self):
         """Reset underlying normalization controller failure latch."""
@@ -104,6 +105,11 @@ class TownSubflowPreconditionController:
 
         if self._current_flow != flow_key:
             self._current_flow = flow_key
+            self.reset_failure()
+            self._escalated_recovery = False
+        elif self._escalated_recovery:
+            # Recovery cycle concluded; clear flag and grant fresh normalization attempt
+            self._escalated_recovery = False
             self.reset_failure()
 
         scene = self.perception.observe(screen_img, flow_key)
@@ -131,6 +137,7 @@ class TownSubflowPreconditionController:
                 "Business intent '%s' preserved.",
                 flow_key,
             )
+            self._escalated_recovery = True
             if hasattr(self.machine, "stash_current_state"):
                 self.machine.stash_current_state(reason="reach_town_normalization_failed")
             return True

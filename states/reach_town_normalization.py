@@ -101,20 +101,16 @@ class ReachTownNormalizationController:
         machine,
         policy: ReachTownNormalizationPolicy | None = None,
         max_readiness_unknown_frames: int = 3,
-        require_clear_anchor: bool = False,
     ):
         self.machine = machine
         self.policy = policy or ReachTownNormalizationPolicy()
         self.max_readiness_unknown_frames = max_readiness_unknown_frames
-        self.require_clear_anchor = require_clear_anchor
         self.last_failure_reason: str | None = None
-        self._last_failure_scene: SceneId | None = None
         self._readiness_unknown_count: int = 0
 
     def reset_failure(self):
         """Reset failure escalation memory after recovery, scene transition, or new flow."""
         self.last_failure_reason = None
-        self._last_failure_scene = None
         self._readiness_unknown_count = 0
 
     @staticmethod
@@ -127,8 +123,7 @@ class ReachTownNormalizationController:
         Evaluate Town Interaction Readiness (INTERACTION READINESS).
 
         Returns:
-            "ready": Verified clear Town foreground (SceneId.TOWN + TOWN_CLEAR_ANCHOR + no blocker,
-                     or v1 default without positively detected blocker).
+            "ready": Verified clear Town foreground (SceneId.TOWN + TOWN_CLEAR_ANCHOR + no blocker).
             "blocked": Explicit blocker detected (CLOSE_OVERLAY, etc.).
             "unknown": In Town, no blocker detected, but positive clear anchor is absent.
         """
@@ -137,9 +132,7 @@ class ReachTownNormalizationController:
         if scene.scene == SceneId.TOWN:
             if scene.has(ElementId.TOWN_CLEAR_ANCHOR):
                 return "ready"
-            if self.require_clear_anchor:
-                return "unknown"
-            return "ready"
+            return "unknown"
         return "unknown"
 
     def step(
@@ -163,7 +156,6 @@ class ReachTownNormalizationController:
                 # Normalization action retry exhausted!
                 # STRICT INVARIANT: Must NOT defer, pop, or complete business intent.
                 self.last_failure_reason = "action_retry_exhausted"
-                self._last_failure_scene = scene.scene
                 logging.warning(
                     "⚠️ [ReachTownNormalizationController] REACH_TOWN normalization action retry "
                     "exhausted; failure domain isolated, NOT mutating business intent."
@@ -172,12 +164,9 @@ class ReachTownNormalizationController:
             # If status == PROGRESSED or TIMED_OUT, proceed to verify state and resolve next decision
 
         # 2. Production Failure Latch Lifecycle:
-        # If scene changed from the failure scene, automatically heal/reset latch
-        if self._last_failure_scene is not None and scene.scene != self._last_failure_scene:
-            self.reset_failure()
-
-        # If still latched in the failure scene, retain FAILED state to prevent blind click loop
-        if self.last_failure_reason is not None and not self.is_in_town(scene):
+        # Retain FAILED state in the failure scene or transient UNKNOWN flicker to prevent blind click loop.
+        # Only semantic events (recovery cycle completed, readiness verified ARRIVED, or new flow) clear the latch.
+        if self.last_failure_reason is not None and not (self.is_in_town(scene) and self.check_town_readiness(scene) == "ready"):
             return NormalizationResult.FAILED
 
         # 3. Resolve next action from pure policy FIRST.
@@ -235,7 +224,6 @@ class ReachTownNormalizationController:
 
             # Bounded re-observation exhausted: Escalate physical failure without mutating intent!
             self.last_failure_reason = "readiness_unknown_exhausted"
-            self._last_failure_scene = scene.scene
             logging.warning(
                 "⚠️ [ReachTownNormalizationController] Town readiness UNKNOWN exhausted (%d frames); "
                 "failure domain isolated, NOT mutating business intent.",
