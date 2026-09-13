@@ -122,12 +122,12 @@ def _enrich_feature_diagnostics(
 
     if not ev.passed:
         if conf_global >= ev.threshold and not is_inside_roi:
-            ev.primary_reason = "STRONG_MATCH_OUTSIDE_EXPECTED_ROI"
             ev.diagnostic_flags.append("STRONG_MATCH_OUTSIDE_EXPECTED_ROI")
-        elif (ev.threshold - ev.roi_score) <= 0.05:
+
+        if (ev.threshold - ev.roi_score) <= 0.05:
             ev.primary_reason = "NEAR_THRESHOLD"
-            if conf_global >= ev.threshold and not is_inside_roi:
-                ev.diagnostic_flags.append("STRONG_MATCH_OUTSIDE_EXPECTED_ROI")
+        elif "STRONG_MATCH_OUTSIDE_EXPECTED_ROI" in ev.diagnostic_flags:
+            ev.primary_reason = "STRONG_MATCH_OUTSIDE_EXPECTED_ROI"
         elif ev.roi_score < 0.20 and conf_global < 0.20:
             ev.primary_reason = "NO_MEANINGFUL_MATCH"
         else:
@@ -315,8 +315,8 @@ def observe_bulletin_board(
     else:
         obs.classification = "UNKNOWN_OVERLAY"
 
-    # 5. 診斷路徑 (僅在 failure 或顯式診斷要求時補齊昂貴全圖分析)
-    if obs.classification != "BOARD_CONFIRMED":
+    # 5. 診斷路徑 (僅在 failure milestone 或顯式要求 run_full_diagnostics=True 時昂貴執行)
+    if run_full_diagnostics and obs.classification != "BOARD_CONFIRMED":
         for ev in (ev_reset, ev_task, ev_after):
             _enrich_feature_diagnostics(screen_img, matcher, ev, scales=board_scales)
 

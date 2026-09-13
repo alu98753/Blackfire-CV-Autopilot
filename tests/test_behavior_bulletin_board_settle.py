@@ -251,7 +251,7 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
             return (None, 0.0)
 
         self.handler.matcher.match.side_effect = mock_match_roi_miss_global_hit
-        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config, run_full_diagnostics=True)
 
         # 斷言：決策絕不可通過
         self.assertEqual(obs.classification, "UNKNOWN_OVERLAY")
@@ -264,9 +264,10 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
 
     def test_feature_evidence_near_threshold_diagnosis(self):
         """
-        [契約 12 驗證 - Near Miss 語意診斷]
+        [契約 12 驗證 - Near Miss 語意診斷與多重訊號優先級]
         當 ROI 比對分數僅差 threshold <= 0.05 (例如 threshold 0.65, 觀測 0.62)：
         passed 為 False，但 primary_reason 必須標註為 NEAR_THRESHOLD。
+        若外部同時有強匹配，標記於 diagnostic_flags 中。
         """
         from utils.bulletin_board_detector import observe_bulletin_board
 
@@ -274,15 +275,18 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
             if template_name == "common/quit.png":
                 return ((700, 100), 0.90)
             elif template_name == "town_building/bulletin_board/task.png":
-                return (None, 0.62)
+                if img.shape[1] < 800:
+                    return (None, 0.62)
+                return ((700, 300), 0.85)  # 外部同時有強匹配
             return (None, 0.0)
 
         self.handler.matcher.match.side_effect = mock_match_near_miss
-        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config, run_full_diagnostics=True)
 
         ev_task = obs.evidence_map["task"]
         self.assertFalse(ev_task.passed)
         self.assertEqual(ev_task.primary_reason, "NEAR_THRESHOLD")
+        self.assertIn("STRONG_MATCH_OUTSIDE_EXPECTED_ROI", ev_task.diagnostic_flags)
 
     def test_diagnostic_report_formatting(self):
         """
@@ -293,7 +297,7 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         from utils.bulletin_board_detector import observe_bulletin_board
 
         self.handler.matcher.match.side_effect = self._make_mock_match(quit=True)
-        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config, run_full_diagnostics=True)
 
         report = obs.diagnostic_report
         self.assertIn("[BulletinBoardDetector] classification=UNKNOWN_OVERLAY", report)
@@ -304,9 +308,36 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         self.assertIn("Candidate scales:", report)
         self.assertIn("Best scale: unavailable", report)
 
+    def test_fast_path_never_invokes_full_screen_matching(self):
+        """
+        [契約 14 驗證 - 計算成本分離]
+        當 run_full_diagnostics=False (預設每幀快速路徑) 時：
+        所有正向通道 (reset, task, task_after) 絕不被傳入全圖 (screen_img.shape[1] == 800) 進行匹配，
+        且不生成 diagnostic_report，開銷維持極簡。
+        """
+        from utils.bulletin_board_detector import observe_bulletin_board
+
+        called_templates_with_full_screen = []
+
+        def mock_track_calls(img, template_name, **kw):
+            if img.shape[1] == 800:
+                called_templates_with_full_screen.append(template_name)
+            if template_name == "common/quit.png":
+                return ((300, 100), 0.90)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_track_calls
+        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config, run_full_diagnostics=False)
+
+        # 斷言：正向特徵絕無以全圖呼叫
+        for positive_name in ["town_building/bulletin_board/reset.png", "town_building/bulletin_board/task.png", "town_building/bulletin_board/task_after.png"]:
+            self.assertNotIn(positive_name, called_templates_with_full_screen)
+        # 斷言：未執行 full diagnostics，報告為空
+        self.assertEqual(obs.diagnostic_report, "")
+
     def test_suspected_target_overlay_logging(self):
         """
-        [契約 14 驗證 - SUSPECTED_TARGET_OVERLAY 因果語意]
+        [契約 15 驗證 - SUSPECTED_TARGET_OVERLAY 因果語意標記]
         在點擊建築後進入 WAIT_BOARD_OPEN，若出現 quit 且無背包特徵但缺乏正向特徵：
         日誌必須包含 SUSPECTED_TARGET_OVERLAY 標籤並輸出 diagnostic_report。
         """

@@ -412,8 +412,9 @@ class BulletinBoardHandler(BaseStateHandler):
                 "⚠️ [%s] 出現 quit 但超過沉澱時間 (%.1fs) 仍無告示牌正向證據且非已知干擾層 (嘗試 %d/%d)...",
                 overlay_tag, BOARD_OPEN_SETTLE_TIMEOUT, self.open_attempts, MAX_OPEN_ATTEMPTS
             )
-            if obs.diagnostic_report:
-                logging.warning("%s", obs.diagnostic_report)
+            diag_obs = observe_bulletin_board(screen_img, self.matcher, self.machine.config or {}, run_full_diagnostics=True)
+            if diag_obs.diagnostic_report:
+                logging.warning("%s", diag_obs.diagnostic_report)
 
             if obs.pos_quit:
                 self.click_and_wait_until_gone(quit_btn, left + obs.pos_quit[0], top + obs.pos_quit[1], rect, timeout=3.0, threshold=0.80)
