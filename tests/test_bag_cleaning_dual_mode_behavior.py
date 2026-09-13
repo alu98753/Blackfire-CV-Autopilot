@@ -2,10 +2,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 from config import BACKPACK_FULL_SETTINGS
 from states.handlers.bag_cleaning import BagCleaningHandler
+from tests.support.fake_clock import FakeClock
 
 class TestBagCleaningDualModeBehavior(unittest.TestCase):
     def setUp(self):
         self.mock_machine = MagicMock()
+        self.mock_machine.clock = FakeClock()
         self.mock_machine.STATE_DUNGEON_EXPLORING = "DUNGEON_EXPLORING"
         self.mock_machine.STATE_BATTLE = "BATTLE"
         self.mock_machine.STATE_NAVIGATING = "NAVIGATING"

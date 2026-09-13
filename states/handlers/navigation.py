@@ -338,7 +338,7 @@ class NavigationHandler(BaseStateHandler):
                 max_attempts,
             )
             self.notify_ui_progress()
-            time.sleep(1.2)
+            self._sleep(1.2)
             return True
 
         logging.error(
@@ -443,7 +443,7 @@ class NavigationHandler(BaseStateHandler):
         self.mouse.drag(start_x, start_y, end_x, end_y)
         self.machine.last_stage_scroll_time = now
         self.sub_stage_scroll_attempts = next_attempts
-        time.sleep(0.3)
+        self._sleep(0.3)
         return True
 
     def _parse_time_to_seconds(self, time_str):
@@ -463,7 +463,7 @@ class NavigationHandler(BaseStateHandler):
         if pos_back:
             logging.info("[Dungeon cooldown fallback] Clicking goback_town.png (%.4f).", conf_back)
             self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-            time.sleep(0.5)
+            self._sleep(0.5)
         else:
             logging.warning("[Dungeon cooldown fallback] goback_town.png not found; collect_only will return on its next step.")
 
@@ -535,7 +535,7 @@ class NavigationHandler(BaseStateHandler):
             )
             if pos_back:
                 self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-                time.sleep(0.5)
+                self._sleep(0.5)
             self.machine.apply_tier4_fallback_config()
             self.machine.transition_to(self.machine.STATE_NAVIGATING)
             return
@@ -563,12 +563,12 @@ class NavigationHandler(BaseStateHandler):
         if pos_st:
             logging.info(f"👉 點擊 [common/select_stage.png] ({conf_st:.4f}) 切換至普通關卡頁籤！")
             self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
-            time.sleep(0.3)
+            self._sleep(0.3)
             return
         pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75)
         if pos_back:
             self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
-            time.sleep(0.3)
+            self._sleep(0.3)
 
     def _check_dungeon_status(self, screen_img, scale, h_limit, w_limit, i, visible_dungeons):
         """
@@ -663,7 +663,7 @@ class NavigationHandler(BaseStateHandler):
                 if pos_popup:
                     logging.info(f"👉 [尋路防護] 偵測到可能遮擋的彈窗按鈕 [{popup_btn}] (相似度: {conf_popup:.4f})，優先點擊關閉...")
                     self.mouse.click(rect["left"] + pos_popup[0], rect["top"] + pos_popup[1])
-                    time.sleep(0.5)
+                    self._sleep(0.5)
                     return
 
 
@@ -709,7 +709,7 @@ class NavigationHandler(BaseStateHandler):
             pos_fight, conf_fight = matched[0], matched[1]
             logging.info(f"🧭 尋路中：在畫面上找到地下城戰鬥開始按鈕 [dungeons/dungeon_fight.png] (信心度: {conf_fight:.4f})，點擊進入地下城。")
             self.mouse.click(rect["left"] + pos_fight[0], rect["top"] + pos_fight[1])
-            time.sleep(0.5)
+            self._sleep(0.5)
             return
 
         # 領地主場景優先判定：若未標記清理背包且畫面上已經出現領地探索按鈕，說明已進入領地，轉移狀態至 DOMAIN_EXPLORE
@@ -735,7 +735,7 @@ class NavigationHandler(BaseStateHandler):
                     if pos_b:
                         logging.info(f"🎒 尋路中：需要清理背包，點擊回城/退場按鈕 [{back_btn}] 退回城鎮。")
                         self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
-                        time.sleep(0.1)
+                        self._sleep(0.1)
                         return
 
             logging.info("⌛ 尋路中：背包已滿，正在等待退出戰鬥或返回城鎮畫面...")
@@ -882,7 +882,7 @@ class NavigationHandler(BaseStateHandler):
                         self.notify_ui_progress()
                         self.machine.last_dungeon_scroll_time = time.time()
                         self.card_alignment_attempts = fallback_count + 1
-                        time.sleep(1.2)
+                        self._sleep(1.2)
                     else:
                         logging.warning(
                             "⚠️ 地下城拉回已達 %d 次，仍未發現解鎖卡片，開始 recovery。",
@@ -899,10 +899,10 @@ class NavigationHandler(BaseStateHandler):
                             logging.info(f"👉 偵測到返回按鈕 [goback_town.png] (信心度: {conf_back:.4f})，點擊返回。")
                             self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
                             self.card_alignment_attempts = 0  # 重置計數
-                            time.sleep(1.0)
+                            self._sleep(1.0)
                         else:
                             logging.warning("⚠️ 無法定位返回按鈕 [goback_town.png]，原地等待中...")
-                            time.sleep(1.0)
+                            self._sleep(1.0)
                     return
                 
                 # 有找到解鎖卡片，重置防呆滑動計數
@@ -974,7 +974,7 @@ class NavigationHandler(BaseStateHandler):
                                 logging.warning(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx - 1]}] 處於永久不可打狀態，原地等待中...")
                             else:
                                 logging.info(f"⏳ 貪婪地下城：指定副本 [{dungeon_names[target_idx - 1]}] 處於冷卻中，剩餘 {int(cooldown_until - time.time())} 秒，原地等待中...")
-                            time.sleep(1.0)
+                            self._sleep(1.0)
                             return
                             
                         # 2. 如果已在畫面上，進行即時畫面冷卻木牌與解鎖狀態偵測
@@ -991,7 +991,7 @@ class NavigationHandler(BaseStateHandler):
                                         screen_img, rect, f"target dungeon [{dungeon_names[target_idx - 1]}] was detected on cooldown"
                                     )
                                     return
-                                time.sleep(1.0)
+                                self._sleep(1.0)
                                 return
                             
                 if target_idx is None:
@@ -1015,7 +1015,7 @@ class NavigationHandler(BaseStateHandler):
                         return
 
                     logging.warning("⚠️ 貪婪地下城：所有地下城均處於冷卻或不可打狀態，原地等待中...")
-                    time.sleep(1.0)
+                    self._sleep(1.0)
                     return
                     
                 # 檢查目標地下城是否已在畫面上
@@ -1027,14 +1027,14 @@ class NavigationHandler(BaseStateHandler):
                     self.mouse.click(click_x, click_y)
                     self.machine.current_dungeon_index = target_idx
                     self.machine.is_in_dungeon = True
-                    time.sleep(0.2)
+                    self._sleep(0.2)
                     return
                 else:
                     # 不在畫面上，進行左右滑動尋找目標地下城
                     any_visible_idx = list(visible_dungeons.keys())[0]
                     CardListNavigator.swipe_towards_target(self.mouse, rect, any_visible_idx, target_idx, duration=0.8, inertia=False)
                     self.machine.last_dungeon_scroll_time = time.time()
-                    time.sleep(1.2)
+                    self._sleep(1.2)
                     return
 
 
@@ -1069,7 +1069,7 @@ class NavigationHandler(BaseStateHandler):
                     self.machine._last_mix_tab_switch_time = now
                     logging.info(f"🧭 混合模式：地下城已就緒 (冷卻情形: {status_str} | 判定可挑戰: [{avail_str}])，在活動大廳點擊 [dungeons/dungeon.png] ({conf_dg:.4f}) 切換至地下城頁籤！")
                     self.mouse.click(rect["left"] + pos_dg[0], rect["top"] + pos_dg[1])
-                    time.sleep(0.3)
+                    self._sleep(0.3)
                     return
                 nav_path = ["common/door.png", "dungeons/dungeon.png"]
             else:
@@ -1097,7 +1097,7 @@ class NavigationHandler(BaseStateHandler):
                     self.machine._last_mix_tab_switch_time = now
                     logging.info(f"🧭 混合模式：地下城全冷卻 (冷卻情形: {status_str})，在活動大廳點擊 [common/select_stage.png] ({conf_st:.4f}) 切換至普通關卡頁籤！")
                     self.mouse.click(rect["left"] + pos_st[0], rect["top"] + pos_st[1])
-                    time.sleep(0.3)
+                    self._sleep(0.3)
                     return
                 stage_entry = self.machine.config.get("stage_entry", "stages/level6_ice_cave.png")
                 stage_target = self.machine.config.get("stage_target", "stages/first_stage.png")
@@ -1114,7 +1114,7 @@ class NavigationHandler(BaseStateHandler):
             if pos_goback:
                 logging.info("🧭 [純領取模式] 領取完成後在大廳畫面，點擊 [goback_town.png] 返回城鎮待機...")
                 self.mouse.click(rect["left"] + pos_goback[0], rect["top"] + pos_goback[1])
-                time.sleep(0.5)
+                self._sleep(0.5)
                 self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
                 return
             self.machine.transition_to(self.machine.STATE_COLLECT_ONLY)
@@ -1204,11 +1204,11 @@ class NavigationHandler(BaseStateHandler):
                                 logging.info(f"👉 偵測到返回按鈕 [goback_town.png] (信心度: {conf_back:.4f})，點擊返回。")
                                 self.mouse.click(rect["left"] + pos_back[0], rect["top"] + pos_back[1])
                                 self.machine.horizontal_scroll_count = 0
-                                time.sleep(1.2)
+                                self._sleep(1.2)
                             else:
                                 logging.warning("⚠️ 無法定位返回按鈕 [goback_town.png]，重置滑動計數原地等待...")
                                 self.machine.horizontal_scroll_count = 0
-                                time.sleep(1.0)
+                                self._sleep(1.0)
                             return
 
                         if scroll_count < 6:
@@ -1226,7 +1226,7 @@ class NavigationHandler(BaseStateHandler):
                         self.mouse.drag(start_x, y_pos, end_x, y_pos, duration=0.8, inertia=False)
                         self.machine.last_stage_scroll_time = time.time()
                         # 增加靜止等待時間，確保清單滑動動畫完全停止後再進行下一幀偵測與點擊
-                        time.sleep(1.2)
+                        self._sleep(1.2)
                         return
 
         # 優先檢查：若人在城鎮大門 (common/door.png 相似度 >= 0.90)，且尚未開啟關卡/地下城選單且未在大廳，優先點擊大門進入
@@ -1241,14 +1241,14 @@ class NavigationHandler(BaseStateHandler):
                     logging.warning("🛡️ [尋路門禁] 偵測到城鎮畫面存在未關閉的模態覆蓋層/背包，優先關閉，禁止盲點城門！")
                     if pos_quit:
                         self.mouse.click(rect["left"] + pos_quit[0], rect["top"] + pos_quit[1])
-                        time.sleep(0.5)
+                        self._sleep(0.5)
                     return
 
                 click_x = rect["left"] + pos_door[0]
                 click_y = rect["top"] + pos_door[1]
                 logging.info(f"🚪 [尋路] 偵測到城鎮大門 [common/door.png] (信心度: {conf_door:.4f})，優先點擊大門進入選單...")
                 self.mouse.click(click_x, click_y)
-                time.sleep(0.3)
+                self._sleep(0.3)
                 return
 
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
@@ -1315,7 +1315,7 @@ class NavigationHandler(BaseStateHandler):
                         logging.info(f"🧭 尋路中：在畫面中找到 [{btn}] (信心度: {conf:.4f})，點擊按鈕中心座標 ({click_x}, {click_y})。")
                     self.mouse.click(click_x, click_y)
                     clicked_any = True
-                    time.sleep(0.03) # 等待跳轉動畫
+                    self._sleep(0.03) # 等待跳轉動畫
                     break
 
         if not clicked_any:

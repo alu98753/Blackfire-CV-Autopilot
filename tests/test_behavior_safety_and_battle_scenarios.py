@@ -138,6 +138,7 @@ class TestSafetyAndBattleScenarios(BehavioralScenarioTestCase):
         # Arrange
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step = "CONTINUE_LOOP"
         mock_exists.return_value = True
         
         # 設定模擬的單一繼續模板
@@ -223,6 +224,7 @@ class TestSafetyAndBattleScenarios(BehavioralScenarioTestCase):
         # Arrange
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step = "FINAL_MATCH"
         self.state_machine.need_bag_cleaning = True
         mock_exists.return_value = True
         
@@ -277,6 +279,7 @@ class TestSafetyAndBattleScenarios(BehavioralScenarioTestCase):
         # Arrange
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step = "FINAL_MATCH"
         mock_exists.return_value = True
         
         # 模擬完全匹配不到任何東西

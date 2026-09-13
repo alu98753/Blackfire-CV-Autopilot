@@ -183,6 +183,7 @@ def init_state_machine_system(args, config, target_hwnd=None):
         capturer=capturer,
         matcher=matcher,
         mouse=mouse,
+        preload_ocr=True,
         notification_port=notification_port,
         daily_pipeline_notifier=daily_pipeline_notifier,
     )
