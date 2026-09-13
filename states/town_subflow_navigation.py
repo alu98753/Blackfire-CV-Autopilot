@@ -14,6 +14,11 @@ from states.navigation_intent import (
 )
 from states.navigation_progress import NavigationProgress, ProgressStatus
 from states.navigation_table import NavigationGoal, NavigationTable
+from states.reach_town_normalization import (
+    NormalizationResult,
+    ReachTownNormalizationController,
+    ReachTownNormalizationPolicy,
+)
 from states.town_subflow_perception import TownSubflowPerception
 from states.town_subflow_registry import TOWN_SUBFLOW_SPECS, spec_for
 from utils.scene_snapshot import ElementId, SceneId, SceneSnapshot
@@ -25,27 +30,18 @@ TOWN_SUBFLOW_DEFER_SECONDS = 180
 class TownSubflowPolicy:
     """Resolve one task-agnostic REACH_TOWN action from one observation."""
 
+    def __init__(self, normalization_policy: ReachTownNormalizationPolicy | None = None):
+        self.normalization_policy = normalization_policy or ReachTownNormalizationPolicy()
+
     def resolve(self, scene: SceneSnapshot, flow_key: str) -> ActionDecision:
-        if scene.has(ElementId.CLOSE_OVERLAY):
-            return ActionDecision.click(
-                ReasonCode.TOWN_SUBFLOW_CLOSE_OVERLAY,
-                ActionId.DISMISS_OVERLAY,
-                PostconditionId.OVERLAY_CLOSED,
-                ElementId.CLOSE_OVERLAY,
-            )
-
-        edge = NavigationTable().next_goal_edge(scene, NavigationGoal.REACH_TOWN)
-        if edge is not None:
-            return ActionDecision.click(
-                edge.reason,
-                edge.action,
-                edge.postcondition,
-                edge.required_element,
-            )
-
+        # Phase 1: REACH_TOWN normalization
         if scene.scene != SceneId.TOWN:
+            decision = self.normalization_policy.resolve(scene)
+            if decision.kind == DecisionKind.CLICK:
+                return decision
             return ActionDecision.wait()
 
+        # Phase 2: Town-specific business dispatch/completion
         spec = spec_for(flow_key)
         if spec.dispatch_on_town:
             return ActionDecision.delegate(
@@ -77,10 +73,18 @@ class TownSubflowPolicy:
 class TownSubflowPreconditionController:
     """Execute the shared route while preserving committed workflow owners."""
 
-    def __init__(self, machine):
+    def __init__(
+        self,
+        machine,
+        policy: TownSubflowPolicy | None = None,
+        normalization_controller: ReachTownNormalizationController | None = None,
+    ):
         self.machine = machine
         self.perception = TownSubflowPerception(machine)
-        self.policy = TownSubflowPolicy()
+        self.policy = policy or TownSubflowPolicy()
+        self.normalization_controller = (
+            normalization_controller or ReachTownNormalizationController(machine)
+        )
         self._entry_wait_flow = None
         self._entry_wait_count = 0
         self._no_red_dot_flow = None
@@ -106,16 +110,20 @@ class TownSubflowPreconditionController:
             SceneId.DUNGEON_EXPLORING,
         }:
             return False
-        if isinstance(progress, NavigationProgress) and progress.in_flight:
-            status = progress.observe(scene, scene.captured_at)
-            if status == ProgressStatus.WAITING:
-                return True
-            if status == ProgressStatus.DEFERRED:
-                self.machine.defer_current_town_subflow(
-                    TOWN_SUBFLOW_DEFER_SECONDS
-                )
-                return True
 
+        # Phase 1: Physical REACH_TOWN normalization via shared controller.
+        # Strict Invariant: Normalization failure MUST NOT defer the business intent!
+        norm_result = self.normalization_controller.step(
+            scene, rect, progress, intent_id=IntentId.TOWN_SUBFLOW
+        )
+        if norm_result in (NormalizationResult.IN_PROGRESS, NormalizationResult.WAITING):
+            return True
+        if norm_result == NormalizationResult.FAILED:
+            # Physical normalization failed (retry exhausted); failure domain isolated.
+            return False
+
+        # Phase 2: Physically verified in Town (SceneId.TOWN).
+        # Execute business dispatch / red-dot check / entry wait.
         self.machine.active_navigation_intent = ActiveIntent(IntentId.TOWN_SUBFLOW)
         decision = self.policy.resolve(scene, flow_key)
         if decision.kind == DecisionKind.WAIT:

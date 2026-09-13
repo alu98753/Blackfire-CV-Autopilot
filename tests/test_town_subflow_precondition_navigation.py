@@ -457,7 +457,15 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         task_flow.assert_called_once_with(self.rect)
         self.mouse.click.assert_not_called()
 
-    def test_repeated_navigation_timeout_defers_instead_of_clicking_forever(self):
+    def test_repeated_navigation_timeout_isolates_failure_and_preserves_intent(self):
+        """
+        [Slice 2 / Invariant 2]:
+        驗證 REACH_TOWN 動作超時重試耗盡時：
+        - 失敗領域與業務 Intent 嚴格隔離
+        - 絕不調用 defer_subflow("chest", 180)
+        - 絕不 pop current_town_subflow (保留業務 Intent)
+        - 僅重試有限次數 (max_attempts)，不再盲目點擊
+        """
         self.machine.daily_manager = MagicMock()
         self.machine.start_subflow_queue(["chest"])
         self.machine.current_state = self.machine.STATE_NAVIGATING
@@ -476,10 +484,9 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
             self.clock.advance(timeout + 0.1)
             self.machine.handle_town_subflow_precondition(self.screen, self.rect)
 
-        self.machine.daily_manager.defer_subflow.assert_called_once_with(
-            "chest", 180
-        )
-        self.assertIsNone(self.machine.current_town_subflow)
+        # 核心斷言：Normalization 失敗絕不污染 business intent！
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.assertEqual(self.machine.current_town_subflow, "chest")
         self.assertEqual(self.mouse.click.call_count, max_attempts)
 
     def test_unknown_state_relocalizes_result_before_town_navigation(self):
