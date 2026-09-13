@@ -95,6 +95,10 @@ class TownSubflowPreconditionController:
             return True
         if isinstance(progress, NavigationProgress) and progress.in_flight:
             return progress.in_flight.intent_id != IntentId.TOWN_SUBFLOW
+        if getattr(self.machine, "town_normalization_pending", False):
+            # Explicit ownership token: REACH_TOWN has priority physical recovery ownership.
+            # Diamond/bread collection MUST NOT preempt an active relinquishment recovery.
+            return False
         return self._collection_pending()
 
     def handle(self, screen_img, rect) -> bool:

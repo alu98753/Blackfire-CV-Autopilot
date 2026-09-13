@@ -229,6 +229,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertTrue(h2)
         self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
         self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.assertTrue(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
 
         # 幀 3: 主迴圈執行 handle_town_subflow_precondition (在 STATE_NAVIGATING)
@@ -255,12 +256,89 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         prec2 = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
         self.assertTrue(prec2)
 
-        # 斷言：城鎮 Precondition 通過，寶箱子流程被重新派發！
+        # 斷言：城鎮 Precondition 通過，寶箱子流程被重新派發，token 已清除！
         self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
         self.assertEqual(self.machine.current_town_subflow, "chest")
         self.assertEqual(self.machine.town_subflow_queue, ["hero_draw"])
+        self.assertFalse(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
         self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    @patch("states.handlers.chest.detect_building_with_red_dot")
+    def test_diamond_collection_must_not_preempt_relinquished_normalization(
+        self, mock_chest_detect, mock_prec_detect
+    ):
+        """
+        [Mandatory Regression / Guaranteed Ownership Handoff Verification]:
+        Given:
+          Chest committed (current_state == STATE_CHEST, current_town_subflow == 'chest')
+          + physical scene = other Town building (exitfromhouse visible)
+          + need_diamond_collection = True (待領鑽石)
+        When:
+          Chest relinquishes (after 2-frame confirmation)
+        Then:
+          1. current_town_subflow remains 'chest' (Intent preserved).
+          2. town_normalization_pending is True (Explicit ownership token set).
+          3. REACH_TOWN normalization owns the next physical action:
+             Diamond collection MUST NOT preempt! (_should_skip_handle returns False).
+          4. Physical normalization exits building (EXIT_BUILDING_TO_TOWN).
+          5. Town ready achieved -> redispatch Chest -> town_normalization_pending cleared.
+        """
+        self.machine.handlers[self.machine.STATE_CHEST] = self.handler
+        self.machine.start_subflow_queue(["chest"])
+        self.machine.daily_manager = MagicMock()
+        self.machine.need_diamond_collection = True
+
+        self.machine.transition_to(self.machine.STATE_CHEST)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+
+        # 1. 模擬畫面處於其他建築 (exitfromhouse 可見)
+        mock_chest_detect.return_value = BuildingCheckResult(False, False)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        # 幀 1: 防抖
+        self.handler.handle(self.screen, self.rect)
+        # 幀 2: Relinquish!
+        self.handler.last_action_time = 0.0
+        self.handler.handle(self.screen, self.rect)
+
+        # 驗證 Relinquish 結果與 Ownership Token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 幀 3: 在 STATE_NAVIGATING 下，雖然 need_diamond_collection = True，
+        # 但 TownSubflowPreconditionController 憑藉 town_normalization_pending 取得實體優先權！
+        # 絕不被 diamond collection 擋掉 (不得 skip)！
+        prec_handled = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_handled)
+        self.mouse.click.assert_called_with(50, 500)
+        self.assertEqual(
+            self.machine.navigation_progress.in_flight.action_id,
+            ActionId.EXIT_BUILDING_TO_TOWN,
+        )
+
+        # 幀 4: 抵達城鎮 Ready，完成歸一化並重新派發 Chest
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(300, 400), confidence_building=0.9
+        )
+        redispatch_handled = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_handled)
+
+        # 斷言：順利重回 STATE_CHEST，且 ownership token 已清除！
+        self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        self.assertFalse(self.machine.town_normalization_pending)
+        self.machine.daily_manager.defer_subflow.assert_not_called()
 
 
 if __name__ == "__main__":
