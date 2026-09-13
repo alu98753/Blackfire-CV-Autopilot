@@ -371,6 +371,70 @@ class TestBehaviorJewelryWorkshopRotation(unittest.TestCase):
         # 再次確認業務 Intent 未被消耗
         self.mock_machine.pop_and_next_town_subflow.assert_not_called()
 
+    def test_verify_exit_exhaustion_preserves_shop_rotation_context(self):
+        """
+        驗證當輪換商店 (如 alchemy_hut) 發生 VERIFY_EXIT 重試耗盡觸發 safe recovery 時：
+        - current_town_subflow 保持不變 (保留業務 Intent)
+        - current_shop_id 保持為 'alchemy_hut' (不得因 recovery 重置為預設 jewelry_workshop)
+        - current_building_btn 保持為煉金小屋按鈕
+        - sold_summary 數據保留，不被清空
+        - 絕不提早 mark completion，絕不 pop
+        - recovery 恢復後，最終結算依然能正確記錄 alchemy_hut
+        """
+        mock_dm = MagicMock()
+        self.mock_machine.daily_manager = mock_dm
+        self.mock_machine.current_town_subflow = "jewelry_workshop"
+        self.mock_machine.need_jewelry_workshop = True
+
+        self.handler.current_shop_id = "alchemy_hut"
+        self.handler.current_building_btn = "town_building/alchemy_hut/alchemy_hut.png"
+        self.handler.sold_summary = {"green": {"potion_sample"}}
+        self.handler.summary_logged = True
+        self.handler.step_phase = "VERIFY_EXIT"
+        self.handler.exit_verify_attempts = 3  # 已達上限
+
+        def match_exit_only(img, template_name, **kwargs):
+            if template_name == "town_building/exitfromhouse_and_to_town.png":
+                return (200, 300), 0.90
+            return None, 0.0
+
+        self.handler.matcher.match.side_effect = match_exit_only
+        dummy_img = MagicMock()
+
+        # 觸發第 4 次檢查 (attempts >= 3 耗盡)
+        self.handler.last_action_time = 0
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 斷言：觸發 stash_current_state
+        self.mock_machine.stash_current_state.assert_called_once_with(
+            reason="jewelry_exit_failed_exit_retries_exhausted"
+        )
+        # 核心斷言：context 完整保留！
+        self.assertEqual(self.handler.current_shop_id, "alchemy_hut")
+        self.assertEqual(self.handler.current_building_btn, "town_building/alchemy_hut/alchemy_hut.png")
+        self.assertEqual(self.handler.sold_summary, {"green": {"potion_sample"}})
+        self.assertTrue(self.handler.summary_logged)
+        self.assertEqual(self.handler.step_phase, "INIT")
+        # 核心斷言：沒有提前 pop 或 record
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        mock_dm.record_subflow_completed.assert_not_called()
+        mock_dm.record_shop_visit.assert_not_called()
+
+        # 模擬 recovery 結束後恢復至城鎮門口 (door.png 可見)
+        def match_door(img, template_name, **kwargs):
+            if template_name == "common/door.png":
+                return (100, 100), 0.90
+            return None, 0.0
+
+        self.handler.matcher.match.side_effect = match_door
+        self.handler.last_action_time = 0
+        self.handler.step_phase = "ALL_DONE_EXITING"
+        self.handler.handle(dummy_img, rect={"left": 0, "top": 0})
+
+        # 斷言：最終完成時記錄的是 alchemy_hut，而非預設的 jewelry_workshop
+        mock_dm.record_shop_visit.assert_called_once_with("alchemy_hut")
+        self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+
     def test_full_cycle_scene_guard_records_selected_shop_not_reset_default(self):
         """
         場景防護攔截閉環防回歸測試：

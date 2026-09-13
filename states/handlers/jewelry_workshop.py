@@ -58,18 +58,29 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.exit_verify_attempts = 0
         self.exit_no_evidence_count = 0
 
+    def _reset_exit_verification_state(self):
+        """
+        僅重置離場驗證的階段與計數器至 INIT 安全起點。
+        明確保留 current_shop_id、current_building_btn、sold_summary 等 execution context，
+        防止 safe recovery 恢復後丟失商店輪換與出售結算上下文。
+        """
+        self.step_phase = "INIT"
+        self.last_action_time = 0.0
+        self.exit_verify_attempts = 0
+        self.exit_no_evidence_count = 0
+
     def _handle_verify_exit_failure(self, reason: str):
         """
         當離場驗證耗盡重試或超出有界等待窗口時執行的安全失敗處置：
         - 嚴禁標記完成 (_record_completion)
         - 嚴禁交棒消費佇列 (pop_and_next_town_subflow)
-        - 重置內部狀態至 INIT 安全起點，保留業務 Intent，避免 recovery 恢復後停留在死鎖 phase
+        - 僅重置離場驗證計數至 INIT 安全起點，保留商店輪換 context 與已出售數據
         - 調用 safe recovery (stash_current_state) 進行彈窗復原或移交 Watchdog
         """
         logging.error(
             f"❌ [珠寶加工廠 VERIFY_EXIT] 離場驗證安全失敗處置: [{reason}]，重置至 INIT 安全起點並發起 safe recovery"
         )
-        self.reset_state()
+        self._reset_exit_verification_state()
         if hasattr(self.machine, "stash_current_state"):
             self.machine.stash_current_state(reason=f"jewelry_exit_failed_{reason}")
 
