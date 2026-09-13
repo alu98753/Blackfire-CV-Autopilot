@@ -3,6 +3,7 @@ import time
 import logging
 from states.handlers.base import BaseStateHandler
 from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
+from utils.town_building_detector import detect_building_with_red_dot
 
 class HeroDrawHandler(BaseStateHandler):
     """
@@ -93,7 +94,6 @@ class HeroDrawHandler(BaseStateHandler):
 
             # 2.3 在城鎮尋找並點擊酒館建築 (Tavern.png，前置紅點預檢)
             if os.path.exists(os.path.join("templates", building_btn)):
-                from utils.town_building_detector import detect_building_with_red_dot
                 check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
                 if check.found_building:
                     if not check.has_red_dot:
@@ -281,7 +281,6 @@ class HeroDrawHandler(BaseStateHandler):
 
         # 7. VERIFY_EXIT 階段：退出後在城鎮再次檢查酒館下方紅點 (有檢查到紅點 vs 沒檢查到紅點)
         elif self.step_phase == "VERIFY_EXIT":
-            from utils.town_building_detector import detect_building_with_red_dot
             check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
             if check.found_building:
                 if check.has_red_dot:

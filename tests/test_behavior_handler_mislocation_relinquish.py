@@ -504,6 +504,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         """
         self.machine.current_state = self.machine.STATE_BLOOD_ALTAR
         self.machine.current_town_subflow = "blood_altar"
+        self.machine.need_blood_altar = True
         self.machine.daily_manager = MagicMock()
         altar_handler = self.machine.handlers[self.machine.STATE_BLOOD_ALTAR]
 
@@ -549,6 +550,145 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertEqual(self.machine.current_town_subflow, "blood_altar")
         self.assertFalse(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
+
+    @patch("states.handlers.hero_draw.detect_building_with_red_dot")
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    @patch("os.path.exists", return_value=True)
+    def test_hero_draw_real_path_mislocation_after_entry_click(
+        self, mock_exists, mock_prec_detect, mock_hero_detect
+    ):
+        """
+        [HeroDraw 完整真實點擊錯位閉環驗證 (Post-Entry Real Path)]:
+        驗證 HeroDraw 從城鎮發起點擊進入 Tavern：
+        1. INIT 階段找到 Tavern 且帶紅點，點擊後推進至 ENTERED_TAVERN。
+        2. 下一幀實際因點偏落在 foreign building (exitfromhouse 可見，但無 free_recruitment / RECRUITED)。
+        3. 第一幀判定 generic exit visible 且 own evidence absent -> 進入 suspected mislocation (WAIT)。
+        4. 第二幀連續確認成立 -> 輸出 RELINQUISH，交還所有權給 REACH_TOWN。
+        5. 嚴格遵守 Invariant 2：不 defer、不 pop、不 mark completed！
+        6. shared REACH_TOWN 點擊退出，回到 Town Ready 後乾淨重新派發回 STATE_HERO_DRAW。
+        """
+        self.machine.current_state = self.machine.STATE_HERO_DRAW
+        self.machine.current_town_subflow = "hero_draw"
+        self.machine.daily_manager = MagicMock()
+        hero_handler = self.machine.handlers[self.machine.STATE_HERO_DRAW]
+
+        # Step 1: 在城鎮發現帶紅點的 Tavern
+        mock_hero_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(250, 350), confidence_building=0.92
+        )
+        self.matcher.match.return_value = (None, 0.0)
+
+        step1_res = hero_handler.handle(self.screen, self.rect)
+        self.assertTrue(step1_res)
+        self.mouse.click.assert_called_with(250, 350)
+        self.assertEqual(hero_handler.step_phase, "ENTERED_TAVERN")
+        self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+
+        # Step 2: 點擊後下一幀落入 foreign building (例如 Blood Altar)
+        # exitfromhouse_and_to_town 可見，但 free_recruitment / RECRUITED 均不存在
+        mock_hero_detect.return_value = BuildingCheckResult(False, False)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        for _ in range(3):
+            hero_handler.last_action_time = 0.0
+            hero_handler.handle(self.screen, self.rect)
+            if self.machine.current_state == self.machine.STATE_NAVIGATING:
+                break
+
+        # 斷言 1: 必須主動 Relinquish 至 STATE_NAVIGATING，並獲取 ownership token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 斷言 2: 嚴格守護 Invariant 2：業務 Intent 絕不被懲罰性 defer 或 pop！
+        self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # Step 3: shared REACH_TOWN 退出錯誤建築並重新回到 Town
+        prec_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_res)
+        self.mouse.click.assert_called_with(50, 500)
+
+        # Step 4: 回到 Town Ready，重新派發回 STATE_HERO_DRAW
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(250, 350), confidence_building=0.9
+        )
+        redispatch_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_res)
+
+        # 斷言 3: 重新派發回 STATE_HERO_DRAW，業務 Intent 完好無損，Token 清除
+        self.assertEqual(self.machine.current_state, self.machine.STATE_HERO_DRAW)
+        self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+        self.assertFalse(self.machine.town_normalization_pending)
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
+
+class TestMislocationGuardSemantic(unittest.TestCase):
+    """
+    MislocationGuard 語意契約單元測試：
+    驗證 stateful bounded confirmation guard / debouncer 之狀態機決策轉換：
+    1. own=True, generic=True -> RETAIN
+    2. generic=True frame1 -> WAIT
+    3. generic=True frame2 -> RELINQUISH
+    4. generic frame -> own frame -> generic frame -> WAIT (own evidence 重置確認計數)
+    5. generic frame -> neither -> generic frame -> WAIT (非連續重置確認計數)
+    """
+
+    def setUp(self):
+        from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
+        self.guard = MislocationGuard(threshold=2)
+        self.decision = MislocationDecision
+
+    def test_own_evidence_always_retains_and_resets(self):
+        # own=True, generic=True -> RETAIN
+        self.assertEqual(self.guard.evaluate(True, True), self.decision.RETAIN)
+        self.assertEqual(self.guard.consecutive_count, 0)
+
+        # own=True, generic=False -> RETAIN
+        self.assertEqual(self.guard.evaluate(True, False), self.decision.RETAIN)
+        self.assertEqual(self.guard.consecutive_count, 0)
+
+    def test_generic_consecutive_confirmation_reaches_relinquish(self):
+        # generic=True frame1 -> WAIT
+        self.assertEqual(self.guard.evaluate(False, True), self.decision.WAIT)
+        self.assertEqual(self.guard.consecutive_count, 1)
+
+        # generic=True frame2 -> RELINQUISH
+        self.assertEqual(self.guard.evaluate(False, True), self.decision.RELINQUISH)
+        self.assertEqual(self.guard.consecutive_count, 2)
+
+    def test_own_evidence_resets_confirmation_budget(self):
+        # generic frame 1 -> WAIT
+        self.assertEqual(self.guard.evaluate(False, True), self.decision.WAIT)
+        self.assertEqual(self.guard.consecutive_count, 1)
+
+        # own frame -> RETAIN (重置)
+        self.assertEqual(self.guard.evaluate(True, False), self.decision.RETAIN)
+        self.assertEqual(self.guard.consecutive_count, 0)
+
+        # generic frame -> WAIT (重新從 1 開始)
+        self.assertEqual(self.guard.evaluate(False, True), self.decision.WAIT)
+        self.assertEqual(self.guard.consecutive_count, 1)
+
+    def test_neither_evidence_resets_consecutive_confirmation(self):
+        # generic frame 1 -> WAIT
+        self.assertEqual(self.guard.evaluate(False, True), self.decision.WAIT)
+        self.assertEqual(self.guard.consecutive_count, 1)
+
+        # neither frame -> WAIT (中斷連續確認)
+        self.assertEqual(self.guard.evaluate(False, False), self.decision.WAIT)
+        self.assertEqual(self.guard.consecutive_count, 0)
+
+        # generic frame -> WAIT (重新計數)
+        self.assertEqual(self.guard.evaluate(False, True), self.decision.WAIT)
+        self.assertEqual(self.guard.consecutive_count, 1)
 
 
 if __name__ == "__main__":
