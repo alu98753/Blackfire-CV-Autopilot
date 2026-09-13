@@ -1331,20 +1331,7 @@ class NavigationHandler(BaseStateHandler):
                     break
 
         if not clicked_any:
-            # 備用邏輯 1: 地下城模式下若目標在冷卻中，退回城鎮進入待機
-            if config_type == "dungeon":
-                entry_templates = self.machine.config.get("dungeon_entries") if self.machine.config else None
-                target_idx = DungeonCatalog.resolve_index_from_nav_path(nav_path, entry_templates)
-                cd_until = getattr(self.machine, "dungeon_cooldowns", {}).get(target_idx, 0.0) if target_idx else 0.0
-                if target_idx and cd_until > time.time():
-                    dungeon_names = self.machine.config.get("dungeon_names")
-                    dungeon_name = DungeonCatalog.get_name(target_idx, custom_names=dungeon_names)
-                    self._enter_collect_only_after_dungeon_cooldown(
-                        screen_img, rect, f"target dungeon [{dungeon_name}] is on cooldown"
-                    )
-                    return
-
-            # 備用邏輯 2: 若在普通關卡模式下，已進入關卡細節畫面但未看見目標子關卡，執行自適應滑動
+            # 備用邏輯：若在普通關卡模式下，已進入關卡細節畫面但未看見目標子關卡，執行自適應滑動
             if self.machine.config.get("type") == "stage":
                 if pos_label and not pos_final and target_final_btn:
                     if self._handle_sub_stage_scroll(
