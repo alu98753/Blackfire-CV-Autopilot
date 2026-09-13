@@ -397,13 +397,14 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
    > 所有合併與遠端推送統一在 `temp-main` 進行；主專案開發工作樹在合併後，直接以最新 `main` 為基底建立下一個 feature 分支。
 
    - **步驟一：於 `temp-main` 執行 `--no-ff` 合併與推送（感應用戶 OS）**：
-     - **Windows (PowerShell / CMD)**：必須使用**多個 `-m` 參數**串聯，避免跨列換行造成 terminal 截斷：
-       ```powershell
-       cd E:\Side_Project\temp-main
-       git merge --no-ff <branch_name> -m "Merge branch '<branch_name>' into main" -m "<簡短變更摘要>" -m "Verification: All unit tests verified against main baseline (0 regressions)."
-       git push origin main
-       ```
-     - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
+      - **Windows (PowerShell)**：目錄切換統一使用 `Set-Location`（禁止使用 `cd /d`），並使用**多個 `-m` 參數**串聯避免換行截斷：
+        ```powershell
+        Set-Location E:\Side_Project\temp-main
+        git merge --no-ff <branch_name> -m "Merge branch '<branch_name>' into main" -m "<簡短變更摘要>" -m "Verification: All unit tests verified against main baseline (0 regressions)."
+        git push origin main
+        ```
+      - **Windows (CMD)**：若在命令提示字元下，切換磁碟目錄使用 `cd /d E:\Side_Project\temp-main`。
+      - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
 
    - **步驟二：Development Worktree Parking & Branch Cleanup（停泊於基準並對稱清理舊分支）**：
 
