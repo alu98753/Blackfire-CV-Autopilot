@@ -183,7 +183,7 @@
 - **Verification**: `tests/test_behavior_town_scenarios.py`
 
 #### Invariant 9.3: Login World-Ready Boundary
-- **Scope**: 登入、重啟重開與初始化生命週期 (`login_handler.py`, `relaunch`, `supervisor`) 及城鎮正規化控制器。
+- **Scope**: 登入、重啟重開與初始化生命週期 (`states/login_flow.py`, `relaunch`, `supervisor`) 及城鎮正規化控制器。
 - **Rule**:
   1. 系統登入與重啟驗證完成之基準契約為 `WORLD_READY`，絕非 `TOWN_READY`。登入與恢復流程 MUST 將任何已驗證之已知遊戲世界場景（如 `IN_DUNGEON`、`TOWN`、`TOWN_BUILDING`、`LOBBY`）視為登入就緒。
   2. 登入與重啟流程 MUST NOT 強制將實體位置正規化回城鎮。
@@ -209,7 +209,7 @@
 #### Invariant 10.2: Bounded Mislocation Relinquishment without Intent Mutation
 - **Scope**: 所有城鎮子流程 Handlers（Chest, HeroDraw, BloodAltar, BagTidy, BulletinBoard, JewelryWorkshop）。
 - **Rule**:
-  1. 當 Handler 處於運行中但觀測到通用建築內部特徵可見、且自身專屬特徵不存在時，MUST 透過有界連續幀確認（連續 2 幀）判定錯位成立。
+  1. 當 Handler 處於運行中但觀測到通用建築內部特徵可見、且自身專屬特徵不存在時，MUST 透過有界連續幀確認（目前實作預設為連續 2 幀）判定錯位成立。
   2. 錯位確認成立後，Handler MUST 主動讓渡（Relinquish）實體控制權交還給 shared `REACH_TOWN` 正規化路徑，由 shared controller 執行實體退場回城。
   3. **Strict Prohibition (懲罰性消耗禁令)**：錯位讓渡期間，系統與 Handler **MUST NOT** 觸發 defer（冷卻退避）、pop（彈出佇列）或 mark completed（標記完成）！業務 Intent 必須 100% 完整保留，待回城達到 Interaction Readiness 後重新派發。
 - **Observable consequence**: 當因點擊偏移誤入錯誤建築時，系統自動退出並回到城鎮重新點擊正確建築，絕不吃掉今日任務、絕不使意圖陷入 180s 冷卻、亦不破壞日常流水線契約。
