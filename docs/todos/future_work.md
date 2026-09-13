@@ -146,6 +146,12 @@
 - [ ] 🔴 **測試執行效率優化與消除阻塞式 `while` 迴圈 ([`test_redundent.md`](test_redundent.md))**：
   - **24/7 與工程品質風險**：部分舊測試執行過慢（全套需 380s+），且部分輔助函式殘留 `while` 死等邏輯，不符合 BDI 單次 tick 與事件驅動架構。
   - **規劃方向**：重構慢速測試，將假等待改為 mock time / clock 注入，加速反饋閉環。
+- [ ] 🟡 **設定架構解耦與 Config Editor 視覺化編輯器 ([`config_editor.md`](config_editor.md))**：
+  - **問題與痛點**：目前產品預設 (`defaults.toml`) 與個人玩家政策（裝備分解、材料出售、Boss 挑戰清單）耦合於單一龐大 TOML 檔案中。玩家頻繁調整個人政策時容易污染 Git 工作區，而 sparse override 又缺乏完整選項可見性。
+  - **規劃方向**：
+    1. **四層設定架構治理**：正式切分 ① Product Defaults (`config/defaults.toml`) ➔ ② Shared Policy Defaults (`config/policies/*.toml`) ➔ ③ Profile Overrides (`user_data/<profile>/config.toml`、`item_policy.toml`) ➔ ④ Runtime State。
+    2. **大型政策集合與 Map 治理**：採用 Boolean map + deep merge 或 set-like `add/remove` 機制，避免陣列覆寫與整檔複製漂移。
+    3. **Effective Config 預覽與 Config Editor**：提供 `show --profile` 完整合成展開預覽，未來規劃 GUI/Web Config Editor（左側完整選項、右側 override 標記，儲存僅存差異）。
 - [ ] 優化終端 `config.toml` 與執行參數呈現排版，提升操作員檢視直觀度。
 
 ### 多實例與沙盒環境 (Multi-Instance & Sandboxie)
