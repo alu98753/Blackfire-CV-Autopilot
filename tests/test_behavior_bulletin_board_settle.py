@@ -16,6 +16,9 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
     """
 
     def setUp(self):
+        self._patcher_write_debug = patch("utils.bulletin_board_detector.write_debug_image")
+        self._mock_write_debug = self._patcher_write_debug.start()
+
         self.mock_machine = MagicMock()
         self.mock_machine.config = {
             "type": "bulletin_board",
@@ -31,6 +34,9 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         self.handler.mouse = MagicMock()
         self.fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
         self.rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+    def tearDown(self):
+        self._patcher_write_debug.stop()
 
     def _make_mock_match(self, quit=True, reset=False, task=False, task_after=False, tidy=False, disasm=False):
         """輔助 mock matcher，根據 ROI 幾何回傳正確的局部座標"""
