@@ -748,6 +748,83 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertFalse(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
 
+    @patch("states.handlers.bulletin_board.tbd.detect_building_with_red_dot")
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    @patch("os.path.exists", return_value=True)
+    def test_bulletin_board_real_path_mislocation_after_entry_click(
+        self, mock_exists, mock_prec_detect, mock_bb_detect
+    ):
+        """
+        [BulletinBoard 完整真實點擊錯位閉環驗證 (Post-Entry Real Path)]:
+        驗證 BulletinBoard 從城鎮發起點擊進入公告欄：
+        1. INIT 階段在城鎮 (door 可見) 找到 bulletin_board 且帶紅點，點擊後推進至 WAIT_BOARD_OPEN。
+        2. 下一幀實際因點偏落在通用建築內部 (exitfromhouse 可見，但無 bulletin_board 正向特徵)。
+        3. Handler 在 WAIT_BOARD_OPEN 階段偵測到通用建築內部特徵且無告示牌特徵 -> 連續確認成立。
+        4. 連續 2 幀確認成立後主動讓渡實體所有權給 shared REACH_TOWN。
+        5. 嚴格遵守 Invariant 2：絕不觸發 180 秒 defer 或 pop！
+        6. shared REACH_TOWN 點擊退出，回到 Town Ready 後乾淨重新派發回 STATE_BULLETIN_BOARD。
+        """
+        self.machine.current_state = self.machine.STATE_BULLETIN_BOARD
+        self.machine.current_town_subflow = "bulletin_board"
+        self.machine.need_bulletin_board = True
+        self.machine.daily_manager = MagicMock()
+        bb_handler = self.machine.handlers[self.machine.STATE_BULLETIN_BOARD]
+
+        # Step 1: 在城鎮發現帶紅點的告示牌建築
+        mock_bb_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(200, 300), confidence_building=0.90
+        )
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((100, 100), 0.90) if t in ("common/door.png", "town_building/bulletin_board/bulletin_board.png") else (None, 0.0)
+        )
+
+        step1_res = bb_handler.handle(self.screen, self.rect)
+        self.assertEqual(bb_handler.step_phase, "WAIT_BOARD_OPEN")
+        self.assertEqual(self.machine.current_town_subflow, "bulletin_board")
+
+        # Step 2: 點擊後下一幀落入通用建築內部 (例如只有 exitfromhouse_and_to_town)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        for _ in range(3):
+            bb_handler.last_action_time = 0.0
+            bb_handler.handle(self.screen, self.rect)
+            if self.machine.current_state == self.machine.STATE_NAVIGATING:
+                break
+
+        # 斷言 1: 必須主動 Relinquish 至 STATE_NAVIGATING，並獲取 ownership token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 斷言 2: 嚴格守護 Invariant 2：業務 Intent 絕不被 defer 或 pop！
+        self.assertEqual(self.machine.current_town_subflow, "bulletin_board")
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # Step 3: shared REACH_TOWN 退出錯誤建築並重新回到 Town
+        prec_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_res)
+        self.mouse.click.assert_called_with(50, 500)
+
+        # Step 4: 回到 Town Ready，重新派發回 STATE_BULLETIN_BOARD
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(200, 200), confidence_building=0.9
+        )
+        redispatch_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_res)
+
+        # 斷言 3: 重新派發回 STATE_BULLETIN_BOARD，業務 Intent 完好無損，Token 清除
+        self.assertEqual(self.machine.current_state, self.machine.STATE_BULLETIN_BOARD)
+        self.assertEqual(self.machine.current_town_subflow, "bulletin_board")
+        self.assertFalse(self.machine.town_normalization_pending)
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
     def test_jewelry_workshop_mislocation_in_foreign_building_must_relinquish_without_error(
         self, mock_prec_detect
@@ -791,6 +868,81 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.mouse.click.assert_called_with(50, 500)
 
         # Step 3: 回到 Town Ready，重新派發回 STATE_JEWELRY_WORKSHOP
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(200, 200), confidence_building=0.9
+        )
+        redispatch_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_res)
+
+        # 斷言 3: 重新派發回 STATE_JEWELRY_WORKSHOP，業務 Intent 完好無損，Token 清除
+        self.assertEqual(self.machine.current_state, self.machine.STATE_JEWELRY_WORKSHOP)
+        self.assertEqual(self.machine.current_town_subflow, "jewelry_workshop")
+        self.assertFalse(self.machine.town_normalization_pending)
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    @patch("os.path.exists", return_value=True)
+    def test_jewelry_workshop_real_path_mislocation_after_entry_click(
+        self, mock_exists, mock_prec_detect
+    ):
+        """
+        [JewelryWorkshop 完整真實點擊錯位閉環驗證 (Post-Entry Real Path)]:
+        驗證 JewelryWorkshop 從城鎮發起點擊進入珠寶加工廠：
+        1. INIT 階段在城鎮 (door 可見) 找到珠寶店建築，點擊後推進至 ENTERED_BUILDING。
+        2. 下一幀實際因點偏落在通用建築內部 (exitfromhouse 可見，但無 sell_out / sell_btn)。
+        3. Handler 在 ENTERED_BUILDING 階段由 MislocationGuard 連續確認成立。
+        4. 連續 2 幀確認後主動讓渡實體所有權給 shared REACH_TOWN。
+        5. 嚴格遵守 Invariant 2：不觸發 safe recovery 錯誤，不 defer，不 pop！
+        6. shared REACH_TOWN 點擊退出，回到 Town Ready 後乾淨重新派發回 STATE_JEWELRY_WORKSHOP。
+        """
+        self.machine.current_state = self.machine.STATE_JEWELRY_WORKSHOP
+        self.machine.current_town_subflow = "jewelry_workshop"
+        self.machine.need_jewelry_workshop = True
+        self.machine.daily_manager = MagicMock()
+        jw_handler = self.machine.handlers[self.machine.STATE_JEWELRY_WORKSHOP]
+
+        # Step 1: 在城鎮發現珠寶加工廠建築
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 300), 0.90)
+            if t in ("common/door.png", "town_building/Jewelry_workshop/Jewelry_workshop.png")
+            else (None, 0.0)
+        )
+
+        step1_res = jw_handler.handle(self.screen, self.rect)
+        self.assertEqual(jw_handler.step_phase, "ENTERED_BUILDING")
+        self.assertEqual(self.machine.current_town_subflow, "jewelry_workshop")
+
+        # Step 2: 點擊後下一幀落入通用建築內部 (例如只有 exitfromhouse_and_to_town)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        for _ in range(3):
+            jw_handler.last_action_time = 0.0
+            jw_handler.handle(self.screen, self.rect)
+            if self.machine.current_state == self.machine.STATE_NAVIGATING:
+                break
+
+        # 斷言 1: 必須主動 Relinquish 至 STATE_NAVIGATING，並獲取 ownership token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 斷言 2: 嚴格守護 Invariant 2：業務 Intent 絕不被 defer、pop 或 mark completed！
+        self.assertEqual(self.machine.current_town_subflow, "jewelry_workshop")
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # Step 3: shared REACH_TOWN 退出錯誤建築並重新回到 Town
+        prec_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_res)
+        self.mouse.click.assert_called_with(50, 500)
+
+        # Step 4: 回到 Town Ready，重新派發回 STATE_JEWELRY_WORKSHOP
         self.matcher.match.side_effect = lambda _s, t, **_kw: (
             ((200, 550), 0.95)
             if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
