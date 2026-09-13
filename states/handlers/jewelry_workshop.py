@@ -4,6 +4,7 @@ import sys
 import logging
 from config import BASE_RESOLUTION_WIDTH
 from states.handlers.base import BaseStateHandler
+from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
 
 class JewelryWorkshopHandler(BaseStateHandler):
     """
@@ -38,6 +39,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.entered_building_time = 0.0
         self.exit_verify_attempts = 0
         self.exit_no_evidence_count = 0
+        self.mislocation_guard = MislocationGuard(threshold=2)
         from utils.merchant_gold_detector import MerchantGoldDetector
         self.gold_detector = MerchantGoldDetector()
 
@@ -57,6 +59,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.entered_building_time = 0.0
         self.exit_verify_attempts = 0
         self.exit_no_evidence_count = 0
+        self.mislocation_guard.reset()
 
     def _reset_exit_verification_state(self):
         """
@@ -68,6 +71,7 @@ class JewelryWorkshopHandler(BaseStateHandler):
         self.last_action_time = 0.0
         self.exit_verify_attempts = 0
         self.exit_no_evidence_count = 0
+        self.mislocation_guard.reset()
 
     def _handle_verify_exit_failure(self, reason: str):
         """
@@ -557,9 +561,33 @@ class JewelryWorkshopHandler(BaseStateHandler):
         # =========================================================================
         # 3. 城鎮與建築內起點階段 (INIT / ENTERED_BUILDING)
         # =========================================================================
+        # 3.0 錯位防護 (MislocationGuard 連續確認讓渡)
+        # 自身專屬特徵：出售選單開啟 (sell_btn / sell_max_btn)、店內出售看板 (sell_out.png)、
+        # 或處於城鎮基準場景 (common/door.png) / 目標商店建築
+        pos_sell_chk, _ = self.matcher.match(screen_img, sell_btn, threshold=0.75, quiet=True)
+        pos_max_chk, _ = self.matcher.match(screen_img, sell_max_btn, threshold=0.75, quiet=True)
+        pos_sell_out, conf_so = self.matcher.match(screen_img, sell_out_btn, threshold=0.80, quiet=True)
+        pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75, quiet=True)
+        pos_building, _ = self.matcher.match(screen_img, self.current_building_btn, threshold=0.65, quiet=True)
+
+        own_evidence = bool(pos_sell_chk or pos_max_chk or pos_sell_out or pos_door or pos_building)
+
+        # 通用建築環境特徵：exitfromhouse 或 goback_town 可見
+        pos_exit_init, conf_exit = self.matcher.match(screen_img, exit_building_btn, threshold=0.80, quiet=True)
+        pos_goback, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80, quiet=True)
+        generic_building_evidence = bool(pos_exit_init or pos_goback)
+
+        decision = self.mislocation_guard.evaluate(own_evidence, generic_building_evidence)
+        if decision == MislocationDecision.RELINQUISH:
+            logging.warning("⚠️ [JewelryWorkshop Mislocation] 偵測到通用建築特徵但無珠寶加工廠/城鎮特徵，連續確認錯位，讓渡實體所有權給 REACH_TOWN...")
+            self.reset_state()
+            if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+            else:
+                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return True
+
         # 3.1 檢查是否已開啟出售選單 (畫面上有 sell_btn 或 sell_max_btn)
-        pos_sell_chk, _ = self.matcher.match(screen_img, sell_btn, threshold=0.75)
-        pos_max_chk, _ = self.matcher.match(screen_img, sell_max_btn, threshold=0.75)
         if pos_sell_chk or pos_max_chk:
             logging.info("💎 [珠寶加工廠] 辨識到目前已處於出售選單畫面，直接進入出售階段...")
             self.step_phase = "SELL_MENU_OPEN"
@@ -569,8 +597,6 @@ class JewelryWorkshopHandler(BaseStateHandler):
             return
 
         # 3.2 檢查是否已在建築內部 (sell_out.png 與 exitfromhouse_and_to_town.png 同時存在)
-        pos_sell_out, conf_so = self.matcher.match(screen_img, sell_out_btn, threshold=0.80)
-        pos_exit_init, conf_exit = self.matcher.match(screen_img, exit_building_btn, threshold=0.80)
         if pos_sell_out and pos_exit_init:
             # 進入房間時先辨識商人頭頂看板金幣
             ocr_reader = getattr(self.machine, "get_ocr_reader", lambda: None)
