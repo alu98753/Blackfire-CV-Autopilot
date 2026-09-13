@@ -551,7 +551,7 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertFalse(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
 
-    @patch("states.handlers.hero_draw.detect_building_with_red_dot")
+    @patch("utils.town_building_detector.detect_building_with_red_dot")
     @patch("states.town_subflow_perception.detect_building_with_red_dot")
     @patch("os.path.exists", return_value=True)
     def test_hero_draw_real_path_mislocation_after_entry_click(

@@ -3,7 +3,6 @@ import time
 import logging
 from states.handlers.base import BaseStateHandler
 from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
-from utils.town_building_detector import detect_building_with_red_dot
 
 class HeroDrawHandler(BaseStateHandler):
     """
@@ -94,6 +93,7 @@ class HeroDrawHandler(BaseStateHandler):
 
             # 2.3 在城鎮尋找並點擊酒館建築 (Tavern.png，前置紅點預檢)
             if os.path.exists(os.path.join("templates", building_btn)):
+                from utils.town_building_detector import detect_building_with_red_dot
                 check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
                 if check.found_building:
                     if not check.has_red_dot:
@@ -107,7 +107,10 @@ class HeroDrawHandler(BaseStateHandler):
                         pos_tavern = check.building_pos
                         conf_tavern = check.confidence_building
                         logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築且帶有紅點 [{building_btn}] [{conf_tavern:.4f}]，點擊進入...")
-                        self.mouse.click(left + pos_tavern[0], top + pos_tavern[1])
+                        self.machine.click_and_wait_until_gone(
+                            building_btn, left + pos_tavern[0], top + pos_tavern[1], rect,
+                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+                        )
                         self.last_action_time = now
                         self.step_phase = "ENTERED_TAVERN"
                         self.not_found_count = 0
@@ -281,6 +284,7 @@ class HeroDrawHandler(BaseStateHandler):
 
         # 7. VERIFY_EXIT 階段：退出後在城鎮再次檢查酒館下方紅點 (有檢查到紅點 vs 沒檢查到紅點)
         elif self.step_phase == "VERIFY_EXIT":
+            from utils.town_building_detector import detect_building_with_red_dot
             check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
             if check.found_building:
                 if check.has_red_dot:
