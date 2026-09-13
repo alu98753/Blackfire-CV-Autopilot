@@ -38,7 +38,7 @@
 > 💡 **24/7 排序指標**：各章節第一項標註 `🔴` 者，代表最可能導致無人值守時陷入死鎖、活鎖、假陽性完成或無效空轉之最高風險項目，優先推進。
 
 ### Daily
-
+- [ ] **公告牌 livelock 修正** [bulletboard_bug.md](bulletboard_bug.md)
 - [ ] 🔴 **定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖**：
   - **24/7 風險 (活鎖)**：定時領取體力在特定畫面打不開視窗時觸發 DEFER，若狀態機將 DEFER 誤判為阻塞性條件，會導致主排程停止派發後續所有 Activity，全系統陷入活鎖停擺。
   - **規劃方向**：明確切分 DEFER 與 BLOCKING 語意；DEFER 僅延後當前 Intent，主排程必須能自由降級並推進其他非依賴任務。
@@ -91,6 +91,7 @@
   - 將歷史遺留的混合模式 `mix` 解耦為純場景與排程驅動，消除 `daily` 構建於 `mix` 之上的歷史包袱。
 - [ ] **導航與狀態機模組化縮編 (~300 行原則)**：
   - 目前 [`states/handlers/navigation.py`](../../states/handlers/navigation.py) (1,334 行) 與 [`states/state_machine.py`](../../states/state_machine.py) (2,449 行) 規模龐大，需依 BDI 與業務職責進一步拆分。
+- [ ] 不知道為何小號會卡在 breadcollection 導致30s watchdog(./todos/bread_collect_watchdogbug.md)
 
 ### .agent
 
@@ -108,16 +109,17 @@
   - 利用已有的角色技能與站位數據，探索固定座標點擊出招，不需額外 CV 即能提升戰鬥效率。
 
 ### Exception
+- [ ] 假設需要使用者介入 那應該暫停掛機 而非繼續 避免像是(game server 維護  我卻不斷嘗試登入 導致可能被鎖帳號的問題)
 
 - [ ] 🔴 **長途運行 OpenCV 影像矩陣與 EasyOCR 快取生命週期監控**：
   - **24/7 風險 (記憶體耗盡崩潰)**：掛機數日後記憶體持續攀升，最終觸發 OOM 或系統卡頓。
   - **規劃方向**：使用 `tracemalloc` 排查 OpenCV `cv2.Mat`、EasyOCR 辨識快取與 Win32 HWND / DC 控制代碼之生命週期，確保無暫存物件殘留。
-- [ ] 🔴 **整合自癒升級階梯與看門狗滑動窗口**：
+- [ ] **整合自癒升級階梯與看門狗滑動窗口**：
   - 持續完善階梯 1~7 自癒機制（彈窗清理 ➔ 重設戰鬥 ➔ 返回城鎮 ➔ 重開遊戲 ➔ 殺進程 ➔ 警報發送），確保各層級自癒均能如實回報進展並寫入 [`runtime/incident_journal.py`](../../runtime/incident_journal.py)。
 
 ### Town
 
-- [ ] 🔴 **背包維護加入可合成有價值材料之預先製作**：
+- [ ] **背包維護加入可合成有價值材料之預先製作**：
   - **24/7 風險 (資源浪費)**：在觸發珠寶店賣東西前，若背包中有可合成的高階有價值材料，未先合成即直接被賣掉或分解，降低掛機效益。
   - **規劃方向**：在 `subflow_configs.bag_maintenance` 流程中，於整理與出售前加入合成子步驟。
 

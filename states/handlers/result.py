@@ -185,28 +185,7 @@ class ResultHandler(BaseStateHandler):
                     self.machine.transition_to(self.machine.STATE_DEMON_LORDS)
                 return True
 
-        # =========================================================================
-        # 步驟 1：結算初登場沉澱 (INIT_DELAY)
-        # =========================================================================
-        if self.subflow_step == "INIT_DELAY":
-            now = self._get_monotonic_time()
-            if self.init_delay_start_time is None:
-                self.init_delay_start_time = now
-                logging.info(f"⏳ [結算子流程 Step 1] 戰鬥剛結束，啟動初次登場沉澱計時 ({self.INIT_DELAY_SECONDS} 秒)...")
-                return True
-
-            if now - self.init_delay_start_time < self.INIT_DELAY_SECONDS:
-                return True
-
-            self.init_delay_start_time = None
-            self.subflow_step = "CONTINUE_LOOP"
-            # 重新擷取第一層定格後的最新畫面，隨後貫穿向下執行 CONTINUE_LOOP
-            if self.machine.capturer:
-                cap_fresh = self.machine.capturer.capture(rect)
-                if cap_fresh is not None:
-                    screen_img = cap_fresh
-
-        # A1. 戰敗防護 (defeat.png)
+        # A1. 戰敗防護 (defeat.png) - 戰敗畫面定格無需等待勝利結算動畫
         if os.path.exists(os.path.join("templates", "defeat.png")):
             pos_defeat, conf_defeat = self.matcher.match(screen_img, "defeat.png", threshold=0.75)
             if pos_defeat:
@@ -276,6 +255,27 @@ class ResultHandler(BaseStateHandler):
                     stage_level=cfg.get("stage_level"),
                     sub_stage=cfg.get("sub_stage")
                 )
+
+        # =========================================================================
+        # 步驟 1：結算初登場沉澱 (INIT_DELAY)
+        # =========================================================================
+        if self.subflow_step == "INIT_DELAY":
+            now = self._get_monotonic_time()
+            if self.init_delay_start_time is None:
+                self.init_delay_start_time = now
+                logging.info(f"⏳ [結算子流程 Step 1] 戰鬥剛結束，啟動初次登場沉澱計時 ({self.INIT_DELAY_SECONDS} 秒)...")
+                return True
+
+            if now - self.init_delay_start_time < self.INIT_DELAY_SECONDS:
+                return True
+
+            self.init_delay_start_time = None
+            self.subflow_step = "CONTINUE_LOOP"
+            # 重新擷取第一層定格後的最新畫面，隨後貫穿向下執行 CONTINUE_LOOP
+            if self.machine.capturer:
+                cap_fresh = self.machine.capturer.capture(rect)
+                if cap_fresh is not None:
+                    screen_img = cap_fresh
 
         # 計算是否滿足離場條件 (第 4、8、10 場 / 滿背包 / 體力退避等)
         is_daily = self.machine.is_daily_pipeline_active()

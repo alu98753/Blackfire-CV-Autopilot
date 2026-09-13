@@ -217,6 +217,11 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         # 1. 第一次戰敗：我們需要匹配 defeat.png 成功，以及 defeat_retry.png 成功
         # 2. 第二次戰敗：我們需要匹配 defeat.png 成功，defeat_giveup.png 成功，以及 confirm.png 成功
         def mock_match(img_arg, name, threshold=0.7, **kwargs):
+            res_h = self.state_machine.handlers.get(self.state_machine.STATE_RESULT)
+            if res_h and res_h.subflow_step == "WAIT_GIVEUP_EXIT":
+                if name in ["common/select_stage.png", "common/door.png"]:
+                    return (500, 500), 0.88
+                return None, 0.0
             if name == "defeat.png":
                 return (100, 100), 0.85
             elif name in ["defeat_retry.png", "stages/retry.png"]:
@@ -241,8 +246,17 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         # 回歸到結算狀態準備最後一次戰敗 (達到上限)
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         
-        # 最後一次戰敗：這次因為 count >= max_defeat - 1，會點選放棄與確認退出
+        # 最後一次戰敗：這次因為 count >= max_defeat - 1，發起放棄流程 (Tick-Driven)
+        # Tick 1: 點選放棄 (defeat_giveup.png) 轉入 WAIT_GIVEUP_CONFIRM
         self.mock_mouse.click.reset_mock()
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step, "WAIT_GIVEUP_CONFIRM")
+        
+        # Tick 2: 點選確認 (common/confirm.png) 轉入 WAIT_GIVEUP_EXIT
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step, "WAIT_GIVEUP_EXIT")
+        
+        # Tick 3: 偵測到正向退出證據 (common/select_stage.png)，提交 side effects 並轉移至 NAVIGATING
         self.state_machine.step()
         # 驗證戰敗次數清零，狀態切回 NAVIGATING，且設定了對應的冷卻
         self.assertEqual(self.state_machine.defeat_count, 0)
@@ -269,6 +283,11 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.mock_capturer.capture.return_value = dummy_img
         
         def mock_match(img_arg, name, threshold=0.7, **kwargs):
+            res_h = self.state_machine.handlers.get(self.state_machine.STATE_RESULT)
+            if res_h and res_h.subflow_step == "WAIT_GIVEUP_EXIT":
+                if name in ["common/select_stage.png", "common/door.png", "goback_town.png"]:
+                    return (500, 500), 0.88
+                return None, 0.0
             if name == "defeat.png":
                 return (100, 100), 0.85
             elif name in ["stages/retry.png", "defeat_retry.png"]:
@@ -287,11 +306,19 @@ class TestDungeonScenarios(BehavioralScenarioTestCase):
         self.assertEqual(self.state_machine.defeat_count, 1)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LOADING)
         
-        # 準備第二次戰敗 (已達上限 2 次)
+        # 準備第二次戰敗 (已達上限 2 次，發起放棄流程 Tick-Driven)
         self.state_machine.transition_to(self.state_machine.STATE_RESULT)
         self.mock_mouse.click.reset_mock()
+        # Tick 1: 點選放棄 (defeat_giveup.png)
         self.state_machine.step()
+        self.assertEqual(self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step, "WAIT_GIVEUP_CONFIRM")
         
+        # Tick 2: 點選確認 (common/confirm.png)
+        self.state_machine.step()
+        self.assertEqual(self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step, "WAIT_GIVEUP_EXIT")
+        
+        # Tick 3: 偵測到正向退出證據，提交 side effects 並切回 NAVIGATING
+        self.state_machine.step()
         # 驗證戰敗次數清零，狀態切回 NAVIGATING
         self.assertEqual(self.state_machine.defeat_count, 0)
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)

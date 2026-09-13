@@ -121,6 +121,7 @@ class TestCollectionScenarios(BehavioralScenarioTestCase):
         # Arrange
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step = "FINAL_MATCH"
         self.state_machine.need_bag_cleaning = False
         self.state_machine.need_diamond_collection = True
         mock_exists.return_value = True
@@ -147,6 +148,7 @@ class TestCollectionScenarios(BehavioralScenarioTestCase):
         # Arrange
         self.state_machine.config = GAME_CONFIGS["stage"]
         self.state_machine.current_state = self.state_machine.STATE_RESULT
+        self.state_machine.handlers[self.state_machine.STATE_RESULT].subflow_step = "FINAL_MATCH"
         self.state_machine.need_bag_cleaning = False
         self.state_machine.enable_bread = True
         self.state_machine.need_bread_collection = True
