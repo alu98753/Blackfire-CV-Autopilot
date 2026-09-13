@@ -536,13 +536,22 @@ class ChestHandler(BaseStateHandler):
 
         if check.found_building and check.has_red_dot:
             self._defer_subflow("退出後寶箱仍有紅點，領取結果未成立")
+            self.machine.pop_and_next_town_subflow()
+            return True
         elif check.found_building:
             self._complete_subflow()
-
-        if check.found_building or self.not_found_count >= 3:
             logging.info("🎁 [神秘寶箱 Step 6] 已確認回到城鎮，切換下一個任務...")
             self.machine.pop_and_next_town_subflow()
             return True
 
         self.not_found_count += 1
+        if self.not_found_count >= 3:
+            logging.warning("⚠️ [神秘寶箱 VERIFY_EXIT] 退出後超時未見城鎮寶箱特徵，保留階段釋放實體所有權至 REACH_TOWN 歸一化...")
+            self.not_found_count = 0
+            if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                self.machine.relinquish_subflow_to_navigation("chest_exit_unverified")
+            else:
+                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            return True
+
         return False

@@ -67,6 +67,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.click_building_time = None
         self.accepted_quest_titles = []
         self.open_attempts = 0
+        self.exit_verify_attempts = 0
         self.mislocation_guard.reset()
 
     def _get_ocr_extractor(self):
@@ -155,7 +156,7 @@ class BulletinBoardHandler(BaseStateHandler):
             return self._step_all_done_exiting(screen_img, building_btn, now)
 
         if self.step_phase == "EXIT_BOARD":
-            return self._step_exit_board(screen_img, quit_btn, left, top, now)
+            return self._step_exit_board(screen_img, rect, quit_btn, left, top, now)
 
         if self.step_phase == "PROCESS_ACCEPT_QUESTS":
             return self._step_accept_quests(screen_img, rect, cfg, left, top, w_img, h_img, now)
@@ -173,19 +174,48 @@ class BulletinBoardHandler(BaseStateHandler):
     def _step_all_done_exiting(self, screen_img, building_btn, now):
         check = tbd.detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="bulletin_board")
         if check.found_building and check.has_red_dot:
+            self.exit_verify_attempts = 0
             self._defer_and_yield("退出後檢查：告示牌下方仍有驚嘆號紅點！判定任務未全部接取")
-        else:
+            self.last_action_time = now
+        elif check.found_building:
+            self.exit_verify_attempts = 0
             self._record_completion()
-        self.last_action_time = now
+            self.last_action_time = now
+        else:
+            self.exit_verify_attempts = getattr(self, "exit_verify_attempts", 0) + 1
+            if self.exit_verify_attempts < 3:
+                logging.info(
+                    "⌛ [懸賞告示牌 ALL_DONE_EXITING] 退出後等待確認城鎮告示牌特徵 (嘗試 %d/3)...",
+                    self.exit_verify_attempts,
+                )
+                self.last_action_time = now
+                return
 
-    def _step_exit_board(self, screen_img, quit_btn, left, top, now):
+            logging.warning(
+                "⚠️ [懸賞告示牌 ALL_DONE_EXITING] 退出後超時未取得城鎮證據，保留階段釋放實體所有權至 REACH_TOWN..."
+            )
+            self.exit_verify_attempts = 0
+            if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                self.machine.relinquish_subflow_to_navigation("bulletin_board_exit_unverified")
+            else:
+                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            self.last_action_time = now
+
+    def _step_exit_board(self, screen_img, rect, quit_btn, left, top, now):
         pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.75)
         if pos_quit:
-            logging.info(f"📋 [懸賞告示牌] 點擊關閉視窗按鈕 [{quit_btn}] 退出告示牌介面...")
-            self.mouse.click(left + pos_quit[0], top + pos_quit[1])
+            disappeared = self.click_and_wait_until_gone(
+                quit_btn, left + pos_quit[0], top + pos_quit[1], rect,
+                timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
+            )
+            if not disappeared:
+                logging.warning("⚠️ [懸賞告示牌] 點擊退出按鈕後逾時未消失，保留在 EXIT_BOARD 重試...")
+                self.last_action_time = now
+                return
         else:
-            logging.info("📋 [懸賞告示牌] 已無視窗退出按鈕 (回到城鎮)，完成離場步驟。")
+            logging.info("📋 [懸賞告示牌] 已無視窗退出按鈕 (回到城鎮)，進入城鎮驗證階段...")
         self.step_phase = "ALL_DONE_EXITING"
+        self.exit_verify_attempts = 0
         self.last_action_time = now
 
     def _step_accept_quests(self, screen_img, rect, cfg, left, top, w_img, h_img, now):

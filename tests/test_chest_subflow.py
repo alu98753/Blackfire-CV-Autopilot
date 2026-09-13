@@ -293,5 +293,69 @@ class TestChestSubflow(unittest.TestCase):
             self.mock_machine.mouse.click.assert_called_once_with(200, 300)
 
 
+    @patch("utils.town_building_detector.detect_building_with_red_dot")
+    def test_chest_verify_exit_unknown_must_not_pop(self, mock_detect_red_dot):
+        """測試：VERIFY_EXIT 階段收到 UNKNOWN (找不到建築) 且未達上限時，絕不得 pop"""
+        from utils.town_building_detector import BuildingCheckResult
+        mock_detect_red_dot.return_value = BuildingCheckResult(found_building=False, has_red_dot=False)
+        mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        self.handler.step_phase = "VERIFY_EXIT"
+        self.handler.claim_verified = True
+        self.handler.not_found_count = 0
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+
+        res = self.handler.handle(mock_img, rect)
+        self.assertFalse(res)
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+        self.assertTrue(self.handler.claim_verified)
+
+    @patch("utils.town_building_detector.detect_building_with_red_dot")
+    def test_chest_verify_exit_unknown_exhausted_relinquishes_without_reset_or_pop(self, mock_detect_red_dot):
+        """測試：VERIFY_EXIT UNKNOWN 超限時，讓渡實體所有權至 REACH_TOWN，保留 phase 與 claim_verified，絕不 pop 也不 defer"""
+        from utils.town_building_detector import BuildingCheckResult
+        mock_detect_red_dot.return_value = BuildingCheckResult(found_building=False, has_red_dot=False)
+        mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        self.handler.step_phase = "VERIFY_EXIT"
+        self.handler.claim_verified = True
+        self.handler.not_found_count = 0
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+
+        for _ in range(3):
+            self.handler.last_action_time = 0.0
+            self.handler.handle(mock_img, rect)
+
+        self.mock_machine.relinquish_subflow_to_navigation.assert_called_once_with("chest_exit_unverified")
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        self.mock_daily_manager.defer_subflow.assert_not_called()
+        # 關鍵生命週期不變量：保留 VERIFY_EXIT 與 claim_verified = True
+        self.assertEqual(self.handler.step_phase, "VERIFY_EXIT")
+        self.assertTrue(self.handler.claim_verified)
+
+    @patch("utils.town_building_detector.detect_building_with_red_dot")
+    def test_chest_final_queue_item_unknown_exit_must_not_resume_primary_navigation(self, mock_detect_red_dot):
+        """測試：當 Chest 為最後佇列項且退場 UNKNOWN 時，絕不得呼叫 pop_and_next_town_subflow 間接恢復主導航"""
+        from utils.town_building_detector import BuildingCheckResult
+        mock_detect_red_dot.return_value = BuildingCheckResult(found_building=False, has_red_dot=False)
+        mock_img = np.zeros((600, 800, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 800, "height": 600}
+
+        self.handler.step_phase = "VERIFY_EXIT"
+        self.handler.claim_verified = True
+        self.handler.not_found_count = 2  # 下一次即達上限
+        self.mock_machine.matcher.match.return_value = (None, 0.0)
+
+        self.handler.last_action_time = 0.0
+        self.handler.handle(mock_img, rect)
+
+        self.mock_machine.pop_and_next_town_subflow.assert_not_called()
+        self.mock_machine.relinquish_subflow_to_navigation.assert_called_once_with("chest_exit_unverified")
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -161,11 +161,12 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         handler.handle()
         self.assertEqual(handler.step_phase, "EXIT_BOARD")
 
-        # Step 8: EXIT_BOARD 點擊 quit.png
+        # Step 8: EXIT_BOARD 點擊 quit.png (點擊後按鈕徹底消失)
         handler.last_action_time = 0.0
+        quit_matches = [((700, 100), 0.90), (None, 0.0)]
         def fake_match_step8(img, name, **kw):
             if name == "common/quit.png":
-                return ((700, 100), 0.90)
+                return quit_matches.pop(0) if quit_matches else (None, 0.0)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = fake_match_step8
@@ -336,5 +337,76 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.mock_mouse.click.assert_not_called()
 
 
+    @patch('os.path.exists', return_value=True)
+    def test_bulletin_board_exit_quit_button_timeout_must_not_advance_to_all_done_exiting(self, mock_exists):
+        """測試：EXIT_BOARD 點擊 quit 後若未消失 (timeout)，絕對不得前進至 ALL_DONE_EXITING"""
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.step_phase = "EXIT_BOARD"
+        handler.last_action_time = 0.0
+
+        def fake_match(img, name, **kw):
+            if name == "common/quit.png":
+                return ((700, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        with patch.object(handler, "click_and_wait_until_gone", return_value=False) as mock_wait:
+            handler.handle()
+            mock_wait.assert_called_once()
+            self.assertEqual(handler.step_phase, "EXIT_BOARD")
+
+    @patch('utils.town_building_detector.detect_building_with_red_dot')
+    @patch('os.path.exists', return_value=True)
+    def test_bulletin_board_exit_unknown_must_not_complete_or_pop(self, mock_exists, mock_detect_red_dot):
+        """測試：ALL_DONE_EXITING 收到 UNKNOWN (找不到建築) 且未達上限時，絕不 complete 也絕不 pop"""
+        mock_detect_red_dot.return_value = BuildingCheckResult(found_building=False, has_red_dot=False)
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+        self.state_machine.pop_and_next_town_subflow = MagicMock()
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.step_phase = "ALL_DONE_EXITING"
+        handler.accepted_quest_titles = ["未完成任務A"]
+        handler.last_action_time = 0.0
+
+        handler.handle()
+
+        self.mock_daily_manager.record_subflow_completed.assert_not_called()
+        self.state_machine.pop_and_next_town_subflow.assert_not_called()
+        self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
+        self.assertEqual(handler.accepted_quest_titles, ["未完成任務A"])
+
+    @patch('utils.town_building_detector.detect_building_with_red_dot')
+    @patch('os.path.exists', return_value=True)
+    def test_bulletin_board_exit_unknown_exhausted_relinquishes_without_reset_or_pop(self, mock_exists, mock_detect_red_dot):
+        """測試：ALL_DONE_EXITING UNKNOWN 超限時，讓渡實體所有權至 REACH_TOWN，保留 phase 與已接任務，不 reset 也不 pop"""
+        mock_detect_red_dot.return_value = BuildingCheckResult(found_building=False, has_red_dot=False)
+        self.mock_matcher.match.return_value = (None, 0.0)
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+        self.state_machine.pop_and_next_town_subflow = MagicMock()
+        self.state_machine.relinquish_subflow_to_navigation = MagicMock()
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.step_phase = "ALL_DONE_EXITING"
+        handler.accepted_quest_titles = ["已接任務1", "已接任務2"]
+
+        for _ in range(3):
+            handler.last_action_time = 0.0
+            handler.handle()
+
+        self.state_machine.relinquish_subflow_to_navigation.assert_called_once_with("bulletin_board_exit_unverified")
+        self.mock_daily_manager.record_subflow_completed.assert_not_called()
+        self.mock_daily_manager.defer_subflow.assert_not_called()
+        self.state_machine.pop_and_next_town_subflow.assert_not_called()
+        # 關鍵生命週期不變量：保留 ALL_DONE_EXITING 與已接取任務清單
+        self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
+        self.assertEqual(handler.accepted_quest_titles, ["已接任務1", "已接任務2"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
+
