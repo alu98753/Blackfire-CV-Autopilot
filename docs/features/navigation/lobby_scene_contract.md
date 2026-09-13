@@ -11,6 +11,8 @@
 > - [tests/test_entity_lobby_panel.py](../../../tests/test_entity_lobby_panel.py) (頁籤防偽與衝突仲裁)
 > - [tests/test_behavior_navigation.py](../../../tests/test_behavior_navigation.py) (大廳剔除城門防誤點)
 > - [tests/test_scene_types.py](../../../tests/test_scene_types.py) (領域模型純潔性與零 CV 依賴)
+>
+> 術語與判讀：[Canonical Invariant Registry](../../architecture/canonical_invariant_registry.md)
 
 ---
 
@@ -31,44 +33,49 @@
 
 ## 2. 核心架構不變量 (Canonical Invariants)
 
-任何未來的程式碼重構或新增功能，**必須永久滿足以下 4 大核心不變量**，違反任一項皆視為系統性退化 (Regression)：
+任何未來的程式碼重構或新增功能，**必須滿足以下 6 項核心不變量**。本節的精確模板路徑、信心門檻、ROI、呼叫次數與狀態名稱均屬可替換的實作或策略；只要本節規則與聚焦驗證仍成立，這些細節可以調整。
 
 ### Invariant 1：成對差值主導與二維色相光環消歧保證 (Active-Dominance & Chromatic Disambiguation Invariant)
-- **原則**：大廳按鈕具有選中態 (`Active / After`) 與未選中態 (`Inactive`)。選中態圖標與未選中態中央紋理高度一致（匹配度常皆高達 0.90+），其唯一物理正交特徵為外環是否亮起紅色發光光環 (Red Halo Ring)。
-- **保證**：
-  1. **顯著差值快速裁決**：當 $c_{\text{active}} - c_{\text{inactive}} \ge \text{CLEAR\_MARGIN} (0.025)$，確鑿判定為選中態；當 $\le -0.025$，確鑿判定為未選中態。
-  2. **微差模糊區間物理色相消歧**：當差值處於微差模糊區間時，系統**保證在按鈕歸一化外環半徑 $[0.75, 1.05]$ 區間內檢驗 HSV 紅色高飽和像素比例**（門檻 $\ge 7.0\%$）。外環具備紅光者確鑿判定為 Active，否則堅決撤銷選中態，杜絕幽靈假陽性與切頁死循環。
+- **Scope**：大廳頁籤選中態的感知。
+- **Rule**：系統 MUST 以能區分選中與未選中態的成對證據裁決；當主要證據不足以區分時，MUST 使用獨立的視覺證據，而非把相似的中央圖樣當成選中態。
+- **Observable consequence**：相似頁籤不會因單一模糊匹配而被誤判為已選中。
+- **Allowed variation**：差值、色相特徵、ROI 與門檻可變更。
+- **Verification**：`tests/test_entity_lobby_panel.py`。
 
 ### Invariant 2：保守仲裁保證 (Conservative Disambiguation Invariant)
-- **原則**：畫面可能受切換動畫、光影特效或外部干擾。
-- **保證**：
-  1. 當且僅當單一頁籤明確 Active，或最高信心度頁籤**顯著領先**次高者時，由優勢者勝出。
-  2. 若複數頁籤同時宣稱 Active 且差距過小，系統遵循 Greenfield-lite 保守原則「**證據衝突時拒絕盲目猜測**」，**保證退回 `SceneId.LOBBY` (`LOBBY_OTHER`)**，等待下一幀畫面穩定。
+- **Scope**：多個大廳頁籤候選互相衝突時的場景裁決。
+- **Rule**：只有充分且可區分的證據才可裁決特定頁籤；證據衝突或不足時，系統 MUST 保留保守的大廳結果並等待新的觀測。
+- **Observable consequence**：不穩定畫面不會被強制導向任一頁籤。
+- **Allowed variation**：信心計算、仲裁演算法、保守場景型別與觀測節奏可變更。
+- **Verification**：`tests/test_entity_lobby_panel.py`。
 
 ### Invariant 3：大廳無大門導航保證 (No-Door in Lobby Invariant)
-- **原則**：角色身處大廳內部時，客觀物理世界中絕無在大廳中尋找城門之可能。
-- **保證**：
-  1. 當確認身處大廳（`is_lobby=True` 或偵測到大廳特徵錨點）時，導航路徑過濾 (`filter_navigation_path`) **保證強制剃除 `common/door.png`**。
-  2. 系統絕不在大廳內部將任何拱形裝飾或按鈕誤認為大門而觸發誤點擊。
+- **Scope**：已確認大廳中的導航行為。
+- **Rule**：系統 MUST NOT 在大廳中發出僅適用於城鎮入口的導航操作。
+- **Observable consequence**：大廳裝飾或頁面元素不會觸發返回城鎮的誤點擊。
+- **Allowed variation**：大廳識別器、路徑過濾器、入口特徵與導航資料結構可變更。
+- **Verification**：`tests/test_behavior_navigation.py`。
 
 ### Invariant 4：純領域契約與單一真相保證 (Pure Domain & Single Truth Invariant)
-- **原則**：決策層（Handlers / Preconditions / Intents）只消費不可變快照與領域型別，不應跨層持有視覺匹配器。
-- **保證**：
-  1. **`SceneId` 是全系統唯一 Canonical Truth**。
-  2. 領域契約模組 [utils/scene_types.py](../../../utils/scene_types.py) **保證零 OpenCV、零 Matcher 依賴**，可被任何上層決策模組安全引用。
+- **Scope**：大廳場景的領域表述與決策輸入。
+- **Rule**：決策層 MUST 消費穩定的場景領域表述，且該表述 MUST NOT 依賴特定視覺實作。
+- **Observable consequence**：視覺引擎可以替換，而依賴場景結果的決策契約維持不變。
+- **Allowed variation**：場景列舉、快照型別、模組位置與感知實作可變更。
+- **Verification**：`tests/test_scene_types.py`。
 
 ### Invariant 5：兩階段感知與預期頁籤最小化保證 (Two-Tier Perception & Expected Tab Invariant)
-- **原則**：大廳穩態導航、卡片拖曳與頁籤滑動過程中，系統已由導航決策層明確獲知當前目標頁籤。
-- **保證**：
-  1. 當導航請求提供明確的 `expected_tab` 時，系統**保證僅比對該目標頁籤之一對 active/inactive 模板**（TemplateMatcher 呼叫次數 $\le 2$），嚴禁在穩態下重複掃描全量 10 模板造成畫面嚴重停頓。
-  2. 若目標頁籤之成對檢驗未命中（兩者皆 miss），系統**保證自動升級至有界全局重定位 (`FULL_RELOCALIZE`)**，重新掃描 5 大頁籤並進行最大信心度仲裁，杜絕迷航。
-  3. 頁籤感知與卡片 fallback 行為解耦：僅在全局重定位下允許降級至卡片推斷，在已知頁籤的快速感知下不執行多餘卡片推斷。
+- **Scope**：已知目標頁籤的穩態導航與定位失敗處理。
+- **Rule**：已知目標時，系統 MUST 先採用目標範圍內的感知；該感知未提供足夠證據時，MUST 進入有界的全局重定位。卡片推斷不得改寫快速路徑的判定。
+- **Observable consequence**：已知頁籤不會無限制地全量掃描；目標證據消失時可重新定位而非持續迷航。
+- **Allowed variation**：掃描範圍、模板數量、重定位名稱與嘗試預算可變更。
+- **Verification**：`tests/test_entity_lobby_panel.py` 與 `tests/test_behavior_navigation.py`。
 
 ### Invariant 6：導航地下城客觀特徵自癒彈回保證 (Dungeon Re-entrant Guard Invariant)
-- **原則**：大廳導航（`NavigationHandler`）僅負責已到達大廳後之頁籤切換與關卡導航，不具備任何副本探索之維護權。
-- **保證**：
-  1. 當狀態機處於 `STATE_NAVIGATING` 時，若客觀世界感知回報為 `SceneType.IN_DUNGEON`（如通關轉場延遲、或異常回退至地下城），導航層**嚴禁嘗試任何大廳頁籤比對、滑動或尋路點擊**。
-  2. 導航 Handler 保證在首幀立即轉移回 `STATE_DUNGEON_EXPLORING`，將控制權無條件歸還給唯一合法擁有人（`ExploreHandler`），徹底杜絕無效重定位與卡死逾時。
+- **Scope**：導航流程重新觀測到地下城時的控制權交接。
+- **Rule**：導航層 MUST NOT 在客觀地下城場景中執行大廳頁籤或路徑操作，並 MUST 將控制權交回地下城的合法擁有人。
+- **Observable consequence**：地下城轉場或回退不會觸發大廳定位與點擊。
+- **Allowed variation**：場景列舉、交接時機與處理器名稱可變更。
+- **Verification**：`tests/test_dungeon_relaunch_recovery.py` 與 `tests/test_behavior_navigation.py`。
 
 ---
 

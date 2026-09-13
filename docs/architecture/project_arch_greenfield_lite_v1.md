@@ -327,6 +327,8 @@ dismiss overlay → verify disappeared → quit once → verify scene
 
 ## 6. Runtime 不變量
 
+本節描述的長期義務以責任歸屬、資料流與可觀測的安全結果為準；排程間隔、具體狀態名、設定欄位與內部結構不是不變量本身。術語、證據門檻與下位契約關係見 [Canonical Invariant Registry](canonical_invariant_registry.md)。
+
 1. **One tick, one frame**：一輪最多擷取一次畫面。
 2. **One frame, one snapshot**：所有決策共用同一不可變 observation。
 3. **Scoped perception**：Detector 必須屬於明確 profile，禁止每幀全模板盲掃。

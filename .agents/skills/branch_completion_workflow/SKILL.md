@@ -284,30 +284,36 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
 
 ### Phase 7 — Contract / TODO / Spec Convergence (契約與文件收斂)
 
-**目標**：調用 [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) 技能，以 Production 代碼實作為唯一定本標準，將完成任務的臨時文件提煉為長期標準，更新 Canonical Contract 後再清理過期文件與暫存測試日誌，防止 Doc/Artifact Drift。
+**目標**：調用 [`canonical_contract_archival`](../canonical_contract_archival/SKILL.md) 技能，落實 **Audit-First（先審查分層再動文件）** 機制。嚴禁一看到候選就寫 Contract，必須透過語意分層審查、Invariant 語意壓縮、反事實自檢與上位契約去重，確認存在真正的 Normative Delta 後方可更新 Canonical Contract，最後清理已收斂之過期文件與日誌，防止 Doc/Artifact Drift。
 
-1. **仲裁不變量與五分流分類 (Arbitrate Invariants & Classification)**：
-   - 盤點 `git diff main..HEAD --name-only` 涉及的 `docs/todos/`、臨時 Specs、RFCs、`future_work.md`。
-   - 審查各份文件內容，依 `canonical_contract_archival` 規範執行結構化分類：
-     - `PROMOTE`：長效架構不變量 (Invariants)、職責邊界、後置條件驗證契約、異常自癒機制，升格至 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。
-     - `LINK`：程式碼、常數與測試已有具體實作者，Contract 僅做參照，不複製貼上代碼細節。
-     - `HISTORY`：歷史脈絡留給 PARS 與 Git。
-     - `TODO`：尚未完成的工作或後續規劃，搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO 清單。
-     - `DROP`：**刪除是預設；封存是例外**。原始任務 Spec 提煉後預設刪除；**暫存測試日誌檔（`*.log`）亦於收尾時一併徹底清理刪除**，保證工作區無殘留雜檔。
-   - **以當前 Production 代碼與測試實作為唯一定本標準**：逐一核驗標記為 `PROMOTE` 的不變量是否與實際代碼行為 100% 一致，嚴禁將過時假設、初期規格或未落地的設計寫入 Contract。
+#### 1. Audit-First 候選審查矩陣 (Candidate Audit Matrix)
+盤點 `git diff main..HEAD --name-only` 涉及的 `docs/todos/`、臨時 Specs、RFCs、`future_work.md` 及代碼中的行為變更。在修改任何契約檔案前，**必須先輸出結構化審查矩陣**：
 
-2. **升格更新 Canonical Contract (Pre-convergence Contract Update)**：
-   - **針對 `PROMOTE` 項目**：AI 必須**先主動將其更新/補充至對應的 Canonical Contract**（如 `docs/features/` 或 `docs/architecture/`），並同步更新 `future_work.md` 中指向舊 spec 的超連結與完成狀態。
-   - **若無 `PROMOTE` 項目**（或已完整覆蓋）：確認無遺漏後記錄「經審查無新增長效不變量」。
+| Candidate | Source | Semantic Layer | Existing Parent Contract | Promote? | Canonical Wording | Excluded Implementation Details | Evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-3. **🛑 阻斷點：文件／日誌收斂清理清單確認 (Mandatory User Scope Confirmation)**：
-   - ⚠️ **嚴禁 AI 自行決定清理範圍**！完成上述契約升格與實作核對後，**停在此處向使用者呈報**：
-     1. 【已升格更新之 Canonical Contract 清單與章節】（或說明經核對無需更新）；
-     2. 【已萃取完畢、建請刪除 (DROP) 的過期 Spec 清單與暫存測試日誌 (`*.log`)】（遵循「刪除是預設；封存是例外」原則）；
-     3. 【仍未完成需保留 (RETAIN) 的 TODO 清單】。
-   - **等待使用者確認**。經使用者同意後，方可執行檔案刪除 (`git rm`)。
+#### 2. 審查 5 步硬性管線 (The 5-Step Convergence Pipeline)
+任何 candidate 在獲准進入 Canonical Contract 規範章節前，必須依序通過以下 5 步審查：
+1. **Classification (語意分層)**：分類為 7 大層級（`ARCHITECTURE_INVARIANT`, `DOMAIN_CONTRACT`, `RUNTIME_POLICY`, `IMPLEMENTATION_DETAIL`, `DIAGNOSTIC_DETAIL`, `HISTORY`, `TODO`）。只有前兩者允許進入 Normative Section。
+2. **Abstraction (語意壓縮)**：強制剝離具體實作詞彙（禁止包含：timeout 秒數、retry 次數、cooldown 秒數、threshold、ROI 座標、模板檔名、私有函式名、debug 標籤、臨時 enum 等），改寫為最小穩定語意。
+3. **Counterfactual Check (反事實自檢)**：逐一通過 5 大反事實提問（Rename、Policy 調整、比對演算法替換、日誌標籤變更、FSM 結構重構後是否仍必須成立？若否則降級或再抽象化）。
+4. **Parent-Contract Dedup (上位去重)**：檢索既有上位契約（如 `precondition_contracts.md`）。上位已定義之鐵律（如 Click ≠ Completion、Bounded Retry、Recovery 不得偽裝成功）不得全文複製，僅記錄 Domain Specialization。
+5. **Normative Delta (增量判定)**：核對是否具備真正的長效約束增量。
 
-4. **獨立提交**：以 `docs: archive and converge <scope> contracts` 進行獨立精確 Commit。
+#### 3. 契約升格與無增量判定 (Contract Update or No-Delta Confirmation)
+- **若存在 Normative Delta**：主動更新/建立對應的 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。每條 Invariant 必須包含 `Scope`, `Rule (MUST/MUST NOT)`, `Observable consequence`, **`Allowed variation` (必要欄位)** 與 `Verification`。同步更新 `future_work.md` 索引。
+- **若無 Normative Delta**（全部候選均已被上位契約涵蓋，或僅屬 policy/implementation）：明確記錄「**經審查無新增長效不變量**」。**嚴禁為了分支收尾硬湊或生造 Invariant**！
+
+#### 4. 🛑 阻斷點：文件／日誌清理範圍確認 (Mandatory User Scope Confirmation)
+⚠️ **嚴禁 AI 自行決定清理範圍**！確認 durable semantic knowledge 已被涵蓋、升格或移至 TODO/ADR/History 後，**停在此處向使用者呈報**：
+1. 【已升格更新之 Canonical Contract 清單與章節】（或記錄「經審查無新增長效不變量」）；
+2. 【已萃取完畢、建請刪除 (DROP) 的過期 Spec 清單與暫存測試日誌 (`*.log`)】（遵循「刪除是預設；封存是例外」原則）；
+3. 【仍未完成需保留 (RETAIN) 的 TODO 清單】。
+
+**等待使用者確認同意後，方可執行檔案刪除 (`git rm`)**。
+
+#### 5. 獨立提交 (Dedicated Commit)
+以 `docs: archive and converge <scope> contracts` 進行獨立精確 Commit。
 
 ---
 

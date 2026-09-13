@@ -37,39 +37,50 @@
 
 ## 3. 核心不可變鐵律 (Core Invariants)
 
-### Invariant 1: 感知與決策嚴格分離 (Perception / Decision Separation)
-- `utils.battle_stall_detector.extract_health_bar_signature` 必須是純無狀態函式（Pure Function）。
-- 其職責僅限於從單幀畫面中截取血條 ROI 並計算紅色像素統計值 (`int`)。
-- 純感知層**嚴禁自行持有時間戳、嚴禁快取前次數值、嚴禁判定卡死，更絕對禁止觸發滑鼠點擊**。
-- `BattleHandler` 嚴禁在 Handler 物件內部維護計時器；[`BattleSession`](../../states/battle_session.py) 是單場戰鬥起始時間、停頓計時與重試次數的**唯一持有者（Single Source of Truth）**。
+本節的長期約束是感知與決策的責任分離、以觀測進展判斷停滯、失敗後的有界復原，以及跨場景生命週期隔離。ROI、影像特徵、秒數、次數、私有欄位與重啟實作是可替換的策略；修改後仍須維持同一可觀測行為並通過 `tests/test_behavior_battle_session_lifecycle.py`。術語判讀見 [Canonical Invariant Registry](canonical_invariant_registry.md)。
 
-### Invariant 2: 血條靜止客觀判定門檻 (HP Stall Determination Thresholds)
-- **視覺有效性門檻**：僅當當前幀簽章 `current_signature > 0`（ROI 內確實見到血條紅色像素）時方參與卡死判定；黑屏、轉場或結算彈窗遮擋時直接略過，絕不將轉場空幀誤判為卡死。
-- **實質進展重置**：當前後幀簽章差距 $\text{diff} = |\text{current} - \text{last}| \ge \text{BLOOD\_DIFF}$（實作門檻為 300 像素，代表敵我雙方產生實質傷害或治療）時，必須立即刷新 `hp_stall_started_at = now` 與 `last_hp_signature = current`，確認戰鬥正常推進。
-- **卡死宣告**：當 $\text{diff} < \text{BLOOD\_DIFF}$ 持續時間 $\ge \text{timeout\_seconds}$（預設 30.0 秒）時，`is_hp_stalled()` 回傳 `True`，宣告戰鬥邏輯卡死。
+### Invariant 1: 感知與決策嚴格分離 (Perception / Decision Separation)
+- **Scope**：戰鬥進展感知與停滯復原的責任分工。
+- **Rule**：感知元件 MUST 只產生觀測結果；停滯判定、復原決策與 UI 操作 MUST 由明確的決策／生命週期擁有人負責。單場戰鬥的進展與復原狀態 MUST 有唯一擁有人。
+- **Observable consequence**：更換感知演算法不會自行觸發復原；重複的狀態持有者不會對同一戰鬥做出相互衝突的決策。
+- **Allowed variation**：感知訊號、ROI、資料結構、類別與函式名稱可變更。
+- **Verification**：`tests/test_behavior_battle_session_lifecycle.py`。
+
+### Invariant 2: 可觀測進展的停滯判定 (Observable Progress Stall Determination)
+- **Scope**：可觀測戰鬥進展不足時的停滯判定。
+- **Rule**：系統 MUST 只在進展訊號有效時評估停滯；可觀測進展 MUST 重置停滯判定；持續無進展才可宣告停滯。
+- **Observable consequence**：轉場或沒有有效進展訊號的畫面不會被誤判為停滯；戰鬥恢復進展後不會沿用先前的停滯時間。
+- **Allowed variation**：進展訊號、差異門檻、取樣時間與停滯期限可變更。
+- **Verification**：`tests/test_behavior_battle_session_lifecycle.py`。
 
 ### Invariant 3: 有界原地重試自癒閉環 (Bounded In-Place Retry)
-- 當判定卡死且未達上限時，`BattleHandler` 優先啟動低成本原地自癒：
-  1. 點擊 `templates/battle/setting.png`（閥值 0.75）。
-  2. 點擊 `templates/battle/restart_battle.png`（閥值 0.80）。
-- 自癒動作完成後，必須調用 `BattleSession.reset_after_restart(now)`：
-  - 重置單場戰鬥開始時間（`started_at = now`），歸零單場 900 秒大上限計時。
-  - 清空血條簽章基準（`last_hp_signature = None`, `hp_stall_started_at = None`），避免剛進場吃到舊的卡死時間。
-  - 累加重試計數 `restart_battle_attempts += 1`。
-  - 重置自動戰鬥點擊計時器，促使次幀自動點擊 `common/auto.png` 重新啟用自動施法。
+- **Scope**：已確認停滯且尚可嘗試低成本復原的戰鬥。
+- **Rule**：系統 MUST 先執行有界的低成本復原；每次嘗試後 MUST 建立新的戰鬥觀測基準，避免以先前戰鬥狀態判定新嘗試。
+- **Observable consequence**：單一停滯不會立即升級為程序重啟；復原後的判定從新的觀測週期開始。
+- **Allowed variation**：復原 UI 序列、復原預算、計數器與重置實作可變更。
+- **Verification**：`tests/test_behavior_battle_session_lifecycle.py`。
 
 ### Invariant 4: 階梯升級殺進程重開 (Escalation to Process Relaunch)
-- 單場戰鬥的原地重新開始次數受嚴格硬上限保護：`max_retries = 2`。
-- 當 `restart_battle_attempts >= max_retries` 且再次判定卡死時，**嚴禁無限在戰鬥內原地重試**！
-- 必須果斷升級自癒階梯：調用 `machine.request_relaunch("battle_stall_max_retries_exceeded")`，交由看門狗與外部 Supervisor 殺進程並強制重開遊戲，杜絕死循環。
+- **Scope**：低成本復原已耗盡且停滯仍持續的戰鬥。
+- **Rule**：系統 MUST NOT 無限重試低成本復原；其預算耗盡後 MUST 升級至受 Supervisor 管理的復原層級。
+- **Observable consequence**：持續停滯會停止原地循環，並產生可處理的升級復原請求。
+- **Allowed variation**：預算、升級機制、退出原因與 Supervisor API 可變更。
+- **Verification**：`tests/test_behavior_battle_session_lifecycle.py`。
 
 ### Invariant 5: 跨場景重置與生命週期隔離 (Session Clear on Exit)
-- 戰鬥結束離場（勝利結算、失敗結算、體力耗盡退避、手動中止）時，必須於狀態機退出戰鬥狀態時呼叫 `BattleSession.clear()`。
-- 所有時間戳、血條基準與重試計數必須無條件歸零，**絕對禁止將上一場戰鬥的重試次數洩漏至下一場戰鬥**。
+- **Scope**：離開戰鬥的所有正常、失敗與中止路徑。
+- **Rule**：離開戰鬥時，系統 MUST 清除該場戰鬥的停滯與復原生命週期狀態。
+- **Observable consequence**：前一場的進展基準與復原預算不會影響下一場戰鬥。
+- **Allowed variation**：離場狀態、清除函式與內部欄位可變更。
+- **Verification**：`tests/test_behavior_battle_session_lifecycle.py`。
 
 ---
 
 ## 4. 相關模組與測試依歸
+
+### Current policy / implementation reference
+
+目前的血條訊號、門檻、逾時、復原 UI 步驟與重試預算由 production code 與 `defaults.toml` 維護。這些是 AS-IS 策略，不是本章的 normative rule。
 
 - 感知輔助：`utils/battle_stall_detector.py`
 - 狀態儲存：[`states/battle_session.py`](../../states/battle_session.py)

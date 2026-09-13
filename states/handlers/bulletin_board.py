@@ -5,12 +5,23 @@ import numpy as np
 from states.handlers.base import BaseStateHandler
 from utils.quest_ocr_extractor import QuestOCRExtractor
 from utils.debug_artifacts import write_debug_image
-from utils.bulletin_board_detector import is_inside_bulletin_board, has_bag_features
+from utils.bulletin_board_detector import (
+    is_inside_bulletin_board,
+    has_bag_features,
+    observe_bulletin_board,
+    BulletinBoardObservation,
+)
 import utils.town_building_detector as tbd
 
 # 告示牌開窗動畫沉澱等待窗口 (秒) 與進店逾時
 BOARD_OPEN_SETTLE_TIMEOUT = 2.5
 BOARD_OPEN_HARD_TIMEOUT = 5.0
+MAX_OPEN_ATTEMPTS = 2
+OPEN_ATTEMPT_DEFER_SECONDS = 180
+
+# 重置按鈕有界點擊重試窗口 (秒) 與重試上限
+RESET_CLICK_RETRY_INTERVAL = 3.0
+MAX_RESET_CLICK_ATTEMPTS = 3
 
 
 class BulletinBoardHandler(BaseStateHandler):
@@ -22,6 +33,7 @@ class BulletinBoardHandler(BaseStateHandler):
     2. 等待開窗確認 (WAIT_BOARD_OPEN)：
        - 具有 2.5 秒開窗動畫沉澱等待窗口，避免過渡期誤關閉彈窗。
        - 必須等待並確認告示牌專屬特徵出現，作為 100% 成功進入告示牌的憑據。
+       - 嚴格區分 BOARD_CONFIRMED、KNOWN_INTERFERENCE 與 UNKNOWN_OVERLAY，具有上限 bounded retry。
     3. 條件式重置檢查 (CHECK_RESET)：
        - 若看得到 reset.png 則點擊重置；若未看到則記錄日誌並跳過該步驟。
     4. 逐一接取懸賞任務與 OCR 標題記錄 (PROCESS_ACCEPT_QUESTS)：
@@ -39,6 +51,8 @@ class BulletinBoardHandler(BaseStateHandler):
     def __init__(self, machine):
         super().__init__(machine)
         self.ocr_extractor = None
+        self.open_attempts = 0
+        self.reset_attempts = 0
         self.reset_state()
 
     def reset_state(self):
@@ -46,9 +60,11 @@ class BulletinBoardHandler(BaseStateHandler):
         self.accept_sub_phase = "FIND_TOP_TASK"
         self.last_action_time = 0.0
         self.last_reset_click_time = 0.0
+        self.reset_attempts = 0
         self.wait_board_open_start_time = None
         self.click_building_time = None
         self.accepted_quest_titles = []
+        self.open_attempts = 0
 
     def _get_ocr_extractor(self):
         if self.ocr_extractor is None:
@@ -85,6 +101,16 @@ class BulletinBoardHandler(BaseStateHandler):
                 logging.info(f"📋 [懸賞告示牌] 已即時同步載入動態懸賞排程器 (共 {len(getattr(self.machine.quest_scheduler, 'tasks', []))} 個任務)。")
 
         logging.info(f"📋 [懸賞告示牌] 任務接取與持久化 JSON 保存完成 (共 {len(titles)} 項: {titles})，消費佇列...")
+        self.machine.pop_and_next_town_subflow()
+
+    def _defer_and_yield(self, reason: str):
+        logging.warning("⚠️ [懸賞告示牌] %s，進入 %d 秒冷卻退避並切換下一個子任務，防止死鎖！", reason, OPEN_ATTEMPT_DEFER_SECONDS)
+        self.reset_state()
+        if hasattr(self.machine, "need_bulletin_board"):
+            self.machine.need_bulletin_board = False
+        dm = getattr(self.machine, "daily_manager", None)
+        if dm and hasattr(dm, "defer_subflow"):
+            dm.defer_subflow("bulletin_board", OPEN_ATTEMPT_DEFER_SECONDS)
         self.machine.pop_and_next_town_subflow()
 
     def _is_inside_bulletin_board(self, screen_img, cfg=None) -> bool:
@@ -134,25 +160,17 @@ class BulletinBoardHandler(BaseStateHandler):
         if self.step_phase == "CHECK_RESET":
             return self._step_check_reset(screen_img, reset_btn, left, top, now)
 
-        pos_quit, _ = self.matcher.match(screen_img, quit_btn, threshold=0.80, quiet=True)
-        is_board = self._is_inside_bulletin_board(screen_img, cfg)
+        obs = observe_bulletin_board(screen_img, self.matcher, cfg)
 
         if self.step_phase == "WAIT_BOARD_OPEN":
-            return self._step_wait_board_open(screen_img, rect, quit_btn, left, top, pos_quit, is_board, now)
+            return self._step_wait_board_open(screen_img, rect, quit_btn, left, top, obs, now)
 
-        return self._step_init(screen_img, rect, building_btn, quit_btn, left, top, pos_quit, is_board, now)
+        return self._step_init(screen_img, rect, building_btn, quit_btn, left, top, obs, now)
 
     def _step_all_done_exiting(self, screen_img, building_btn, now):
         check = tbd.detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="bulletin_board")
         if check.found_building and check.has_red_dot:
-            logging.warning("⚠️ [懸賞告示牌 ALL_DONE_EXITING] 退出後檢查：告示牌下方仍有驚嘆號紅點！判定任務未全部接取，進入 180 秒冷卻退避。")
-            self.reset_state()
-            if hasattr(self.machine, "need_bulletin_board"):
-                self.machine.need_bulletin_board = False
-            dm = getattr(self.machine, "daily_manager", None)
-            if dm and hasattr(dm, "defer_subflow"):
-                dm.defer_subflow("bulletin_board", 180)
-            self.machine.pop_and_next_town_subflow()
+            self._defer_and_yield("退出後檢查：告示牌下方仍有驚嘆號紅點！判定任務未全部接取")
         else:
             self._record_completion()
         self.last_action_time = now
@@ -340,17 +358,37 @@ class BulletinBoardHandler(BaseStateHandler):
     def _step_check_reset(self, screen_img, reset_btn, left, top, now):
         pos_reset, _ = self.matcher.match(screen_img, reset_btn, threshold=0.75)
         if pos_reset:
-            logging.info(f"📋 [懸賞告示牌] 發現重置按鈕 [{reset_btn}]，點擊執行重置！")
+            if self.last_reset_click_time > 0.0:
+                elapsed = now - self.last_reset_click_time
+                if elapsed < RESET_CLICK_RETRY_INTERVAL:
+                    logging.info(
+                        "⌛ [懸賞告示牌] 已點擊重置 (嘗試 %d/%d)，處於沉澱等待窗口 (%.2f / %.1f 秒)，暫不重複點擊...",
+                        self.reset_attempts, MAX_RESET_CLICK_ATTEMPTS, elapsed, RESET_CLICK_RETRY_INTERVAL
+                    )
+                    return
+                # Settle window 已過且 reset 仍可見：前次點擊可能未送達或未生效，判定是否允許重試
+                if self.reset_attempts >= MAX_RESET_CLICK_ATTEMPTS:
+                    self._defer_and_yield(
+                        f"重置按鈕點擊 {self.reset_attempts} 次後仍持續存在"
+                    )
+                    return
+
+            self.reset_attempts += 1
+            logging.info(
+                "📋 [懸賞告示牌] 發現重置按鈕 [%s]，執行點擊重置 (嘗試 %d/%d)！",
+                reset_btn, self.reset_attempts, MAX_RESET_CLICK_ATTEMPTS
+            )
             self.mouse.click(left + pos_reset[0], top + pos_reset[1])
             self.last_reset_click_time = now
             self.last_action_time = now
             return
 
-        if self.last_reset_click_time > 0.0 and (now - self.last_reset_click_time < 3.0):
-            logging.info("⌛ [懸賞告示牌] 重置完成，等待畫面渲染中 (剩餘 %.1f 秒)...", 3.0 - (now - self.last_reset_click_time))
-            return
+        # reset 已消失 / 未曾出現：若曾點擊過重置，確認重置已成功生效
+        if self.last_reset_click_time > 0.0:
+            logging.info("📋 [懸賞告示牌] 重置按鈕已消失 (重置成功生效)，進入任務接取流程...")
+        else:
+            logging.info("📋 [懸賞告示牌] 未發現重置按鈕，直接進入任務接取流程...")
 
-        logging.info("📋 [懸賞告示牌] 切換至 PROCESS_ACCEPT_QUESTS...")
         self.notify_ui_progress()
         self.step_phase = "PROCESS_ACCEPT_QUESTS"
         self.accept_sub_phase = "FIND_TOP_TASK"
@@ -362,44 +400,81 @@ class BulletinBoardHandler(BaseStateHandler):
         self.click_building_time = None
         self.last_action_time = now or time.time()
 
-    def _step_wait_board_open(self, screen_img, rect, quit_btn, left, top, pos_quit, is_board, now):
-        if is_board:
-            logging.info(f"📋 [懸賞告示牌] 偵測到 [{quit_btn}] 且確認進入告示牌介面！進行重置判斷...")
+    def _step_wait_board_open(self, screen_img, rect, quit_btn, left, top, obs, now):
+        if obs.classification == "BOARD_CONFIRMED":
+            logging.info("📋 [懸賞告示牌] 偵測到 [%s] 且確認進入告示牌介面！進行重置判斷...", quit_btn)
             self.notify_ui_progress()
             self.step_phase = "CHECK_RESET"
             self.wait_board_open_start_time = None
             self.click_building_time = None
+            self.open_attempts = 0
             self.last_action_time = now
             return
 
-        if pos_quit:
+        if obs.classification == "KNOWN_INTERFERENCE":
+            logging.warning("⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到明確的背包干擾覆蓋層，立即閉環關閉以利重試！")
+            if obs.pos_quit:
+                self.click_and_wait_until_gone(quit_btn, left + obs.pos_quit[0], top + obs.pos_quit[1], rect, timeout=3.0, threshold=0.80)
+            self.open_attempts += 1
+            if self.open_attempts >= MAX_OPEN_ATTEMPTS:
+                self._defer_and_yield(f"干擾層關閉後重試超過上限 ({self.open_attempts}/{MAX_OPEN_ATTEMPTS})")
+            else:
+                self._back_to_init(now)
+            return
+
+        if obs.classification == "UNKNOWN_OVERLAY":
+            is_suspected = (self.click_building_time is not None) and (not obs.has_bag)
+            overlay_tag = "SUSPECTED_TARGET_OVERLAY" if is_suspected else "UNKNOWN_OVERLAY"
+
             if self.wait_board_open_start_time is None:
                 self.wait_board_open_start_time = now
             elapsed = now - self.wait_board_open_start_time
             if elapsed < BOARD_OPEN_SETTLE_TIMEOUT:
-                logging.info("⌛ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到 quit 但特徵尚未穩定，等待沉澱 (%.2f / %.1f 秒)...", elapsed, BOARD_OPEN_SETTLE_TIMEOUT)
+                logging.info("⌛ [%s] 偵測到 quit 但特徵尚未穩定，進行有界再觀察沉澱 (%.2f / %.1f 秒)...", overlay_tag, elapsed, BOARD_OPEN_SETTLE_TIMEOUT)
                 return
 
-            logging.warning("⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 出現 quit 後超過沉澱時間仍無告示牌特徵，判定為干擾層，閉環關閉...")
-            self.click_and_wait_until_gone(quit_btn, left + pos_quit[0], top + pos_quit[1], rect, timeout=3.0, threshold=0.80)
-            self._back_to_init()
+            self.open_attempts += 1
+            logging.warning(
+                "⚠️ [%s] 出現 quit 但超過沉澱時間 (%.1fs) 仍無告示牌正向證據且非已知干擾層 (嘗試 %d/%d)...",
+                overlay_tag, BOARD_OPEN_SETTLE_TIMEOUT, self.open_attempts, MAX_OPEN_ATTEMPTS
+            )
+            diag_obs = observe_bulletin_board(screen_img, self.matcher, self.machine.config or {}, run_full_diagnostics=True)
+            if diag_obs.diagnostic_report:
+                logging.warning("%s", diag_obs.diagnostic_report)
+
+            if obs.pos_quit:
+                self.click_and_wait_until_gone(quit_btn, left + obs.pos_quit[0], top + obs.pos_quit[1], rect, timeout=3.0, threshold=0.80)
+            if self.open_attempts >= MAX_OPEN_ATTEMPTS:
+                self._defer_and_yield(f"{overlay_tag} 且重試超過上限 ({self.open_attempts}/{MAX_OPEN_ATTEMPTS})")
+            else:
+                self._back_to_init(now)
             return
 
+        # NO_OVERLAY: 點擊建築後連 quit 均未出現
         click_time = self.click_building_time or self.last_action_time
         if now - click_time > BOARD_OPEN_HARD_TIMEOUT:
-            logging.warning("⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 點擊建築超過 %.1f 秒未見彈窗/quit，退回 INIT...", BOARD_OPEN_HARD_TIMEOUT)
-            self._back_to_init(now)
+            self.open_attempts += 1
+            logging.warning(
+                "⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 點擊建築超過 %.1f 秒未見彈窗/quit (嘗試 %d/%d)...",
+                BOARD_OPEN_HARD_TIMEOUT, self.open_attempts, MAX_OPEN_ATTEMPTS
+            )
+            if self.open_attempts >= MAX_OPEN_ATTEMPTS:
+                self._defer_and_yield(f"點擊建築開窗連續逾時 ({self.open_attempts}/{MAX_OPEN_ATTEMPTS})")
+            else:
+                self._back_to_init(now)
 
-    def _step_init(self, screen_img, rect, building_btn, quit_btn, left, top, pos_quit, is_board, now):
-        if is_board:
+    def _step_init(self, screen_img, rect, building_btn, quit_btn, left, top, obs, now):
+        if obs.classification == "BOARD_CONFIRMED":
             logging.info("📋 [懸賞告示牌] 排他性驗證成功：目前已在告示牌介面，準備進行重置判斷...")
             self.step_phase = "CHECK_RESET"
+            self.open_attempts = 0
             self.last_action_time = now
             return
 
-        if pos_quit and has_bag_features(screen_img, self.matcher):
+        if obs.classification == "KNOWN_INTERFERENCE":
             logging.warning("⚠️ [懸賞告示牌 INIT] 偵測到明確的背包干擾覆蓋層，閉環關閉以利重試！")
-            self.click_and_wait_until_gone(quit_btn, left + pos_quit[0], top + pos_quit[1], rect, timeout=3.0, threshold=0.80)
+            if obs.pos_quit:
+                self.click_and_wait_until_gone(quit_btn, left + obs.pos_quit[0], top + obs.pos_quit[1], rect, timeout=3.0, threshold=0.80)
             self.last_action_time = time.time()
             return
 

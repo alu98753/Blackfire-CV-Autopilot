@@ -47,6 +47,30 @@
 - **進店與整理前置清理**：各 Handler 於 `INIT` 階段若偵測到殘留的關閉按鈕 (`common/quit.png` 可見但非城鎮大門)，優先透過 `click_and_wait_until_gone` 消除覆蓋層，避免點擊被前景遮罩吸收。
 - **進店點擊遺失自癒**：`JewelryWorkshopHandler` 進入 `ENTERED_BUILDING` 階段後，若超過 4 秒畫面依然看見城門 (`common/door.png`) 且無店內特徵，判定為進店點擊遺失，自癒退回 `INIT` 重新點擊進店，防止原地死鎖。
 
+### 8. 懸賞告示牌子流程契約 (Bulletin Board Subflow Contract)
+
+懸賞告示牌子流程負責每日懸賞任務之開窗、重置與接取，依循 [Precondition Contracts](../../architecture/precondition_contracts.md) 嚴格落實以下不變量：
+
+本節是 `Precondition Contracts` 對告示牌流程的領域特化。它約束可觀測的感知、決策與復原行為；ROI 尺寸、沉澱時間、重試次數、模板路徑與診斷輸出均為實作或執行期策略，不構成不變量。術語判讀見 [Canonical Invariant Registry](../../architecture/canonical_invariant_registry.md)。
+
+#### 8.1 告示牌特有的決策語意 (Domain Decision Semantics)
+
+告示牌動作的 Click／postcondition／bounded retry／defer／recovery 義務由 [Precondition Contracts](../../architecture/precondition_contracts.md) 擁有，本節不重新定義。
+
+1. **Perception Classification**：證據不足 MUST NOT 被視為已知干擾層。目標動作剛產生的新彈窗，在缺乏反向證據前 MUST NOT 僅因目標特徵尚未就緒而被關閉；領域推進 MUST 由正向或排他證據支撐。
+2. **Decision Evidence Scope**：決策證據 MUST 遵守其宣告的感知範圍。診斷證據 MAY 使用較廣的搜尋範圍，但 MUST NOT 改寫或決定狀態轉移語意。
+
+#### 8.2 領域契約 (Domain Contracts)
+1. **開窗四互斥語意分流**：
+   - 彈窗狀態必須可明確區分為：目標確認（Confirmed Target）、已知衝突遮擋（Known Conflicting Overlay）、未知/證據不足遮擋（Unknown / Evidence-Insufficient Overlay）與無視窗（No Overlay）。
+   - 未知／證據不足狀態不得直接被轉譯為已知衝突遮擋。
+2. **背包排他判定正交性**：
+   - 背包排他判定必須使用經驗證為背包專屬的正交特徵，嚴禁使用會跨其他介面出現的共享圖示（如重新整理按鈕）作為單一排他證據。
+   - *(實作參考：目前以 `common/Disassembly.png` 作為背包專屬排他特徵；`common/tidy.png` 因可能於其他功能介面重疊出現，不得作為全域背包鑑別特徵)*。
+3. **重置的領域結果**：
+   - 重置成功的後置條件是告示牌進入可安全繼續任務接取的可觀測狀態。
+   - 若無法建立該後置條件，流程的領域結果 MUST 是未完成；後續處理依 Precondition Contracts 的 defer／recovery 規則進行。
+
 ---
 
 ## 🔄 流程與運作原理

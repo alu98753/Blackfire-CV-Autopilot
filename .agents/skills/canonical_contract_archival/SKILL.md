@@ -9,7 +9,7 @@ description: 當 Feature/Fix/Spec/TODO 已完成，準備把已驗證且應長�
 
 把「完成一次任務的開發文件」收斂成「未來開發者應遵守的長期標準」。
 
-**Canonical contract（權威契約）**：只針對一個明確 concern，記錄未來修改仍必須維持的行為、不變量、責任邊界與禁止事項。  
+**Canonical contract（權威契約）**：只針對一個明確 concern，記錄未來修改仍必須維持的行為、不變量、責任邊界與禁止事項。
 它不是目前 code 的逐行說明，也不是歷史開發日記。
 
 ## 先建立 Source of Truth 邊界
@@ -18,11 +18,18 @@ description: 當 Feature/Fix/Spec/TODO 已完成，準備把已驗證且應長�
 
 | 問題 | 權威來源 |
 | --- | --- |
-| 未來「應該」遵守什麼行為／架構約束 | Canonical Contract (`docs/architecture/` 或 `docs/features/`) |
-| 現在「實際怎麼做」、精確參數／模板／資料結構 | Production code / config |
+| 未來「應該」遵守什麼行為／架構約束 (SHOULD behavior) | Canonical Contract (`docs/architecture/` 或 `docs/features/`) |
+| 現在「實際怎麼做」、精確參數／模板／資料結構 (AS-IS behavior) | Production code / config |
 | 關鍵行為是否仍被自動驗證 | Focused behavior / contract tests |
 | 當初為什麼做這個決策、取捨與歷史過程 | ADR / PARS story (`docs/storys/`) / archived spec |
 | 還沒做、尚待決定的工作 | TODO / RFC |
+
+> [!IMPORTANT]
+> **【AS-IS 與 SHOULD 的本質區別】**
+> - **Production code 是 AS-IS behavior 的主要證據，但不是 SHOULD behavior 的自動權威來源**。
+> - **Canonical invariant 必須是**：`implemented + verified + intentionally designed + refactor-stable`。
+> - **衝突處理守則**：若 existing canonical contract、accepted design intent、production code、tests 或 runtime evidence 發生實質衝突，**不得自動 PROMOTE**，必須分類為 **`CONFLICT_REQUIRES_REVIEW`** 並向使用者確認。
+> - **禁止將可能的 bug、偶然 implementation behavior 或錯誤測試直接制度化為 Contract**。
 
 > [!CRITICAL]
 > **【PARS 開發故事定性禁令：非架構文件，不可當作證據】**
@@ -32,92 +39,148 @@ description: 當 Feature/Fix/Spec/TODO 已完成，準備把已驗證且應長�
 
 Tests 是 **executable verification**，不是天然的絕對 SSOT；測試也可能不完整或寫錯。
 
+## 語意分層架構 (Semantic Layer Classification)
+
+在評估任何 Candidate 之前，必須先進行**語意分層分類**：
+
+| 語意層級 (Semantic Layer) | 定義與範疇 | 處理動作 |
+| --- | --- | --- |
+| **`ARCHITECTURE_INVARIANT`** | 跨領域、全系統層級不可妥協的長效設計原則與行為不變量（如 Click ≠ Completion、Bounded Retry、Recovery 不得偽裝進度、決策 evidence 與診斷 evidence 分離）。 | **可 PROMOTE** 進入 Canonical Contract |
+| **`DOMAIN_CONTRACT`** | 特定業務領域中由需求與遊戲領域規則決定的持久行為契約（如 懸賞看板目標/干擾/未確認四分類語意、背包排他判定需專屬正交特徵）。 | **可 PROMOTE** 進入 Canonical Contract |
+| **`RUNTIME_POLICY`** | 執行時期的調校政策、逾時上限、重試預算、冷卻等待與退避時間（如 2.5s、重試 3 次、退避 180s）。可依環境動態調整，非永恆真理。 | **禁止 PROMOTE**。留在 Config / Code / Docstring |
+| **`IMPLEMENTATION_DETAIL`** | 具體函式/類別名稱、ROI 局部座標、模板圖片檔名、狀態機私有 phase 名稱、內部資料結構細節。 | **禁止 PROMOTE**。僅做 LINK，不寫入規範 |
+| **`DIAGNOSTIC_DETAIL`** | 因果診斷標籤（如 `SUSPECTED_TARGET_OVERLAY`）、debug artifact 輸出格式、除錯日誌層級。 | **禁止 PROMOTE**。留在 Code / History / Test |
+| **`HISTORY`** | 問題發生經過、root cause、commit SHA、測試數量、除錯過程。 | **移至 PARS / ADR / Git** |
+| **`TODO`** | 尚未實作的重構、未來擴充、待定決策。 | **移至獨立 TODO / RFC** |
+
+> [!WARNING]
+> **只有 `ARCHITECTURE_INVARIANT` 與 `DOMAIN_CONTRACT` 允許進入 Canonical Contract 的規範性章節 (Normative Section)**。其他內容一律降級或移出！
+
+## 強制 Invariant 語意壓縮 (Invariant Compression)
+
+任何被標記為 `PROMOTE` 的 Candidate，**必須從具體實作改寫為最小穩定語意**。
+
+### 🚫 Normative Invariant 絕對禁止清單
+Canonical Invariant 原則上**嚴禁**包含以下 implementation vocabulary：
+- timeout / settle 秒數（如 `2.5s`）
+- retry / attempt 次數（如 `3 次`）
+- cooldown 秒數（如 `180s`）
+- similarity / diff threshold（如 `0.90`）
+- ROI 絕對/相對像素座標（如 `(800, 200, 300, 100)`）
+- template 圖片完整檔名（如 `Disassembly.png`、`tidy.png`，應抽象為「背包專屬排他特徵」）
+- private class / function 名稱（如 `_detect_overlay()`）
+- debug artifact 檔名（如 `debug_board.png`）
+- log tag 或 temporary enum / tag vocabulary（如 `SUSPECTED_TARGET_OVERLAY`、`BOARD_CONFIRMED`）
+- implementation algorithm（如特定矩陣比對演算法）
+- current default config（如當前預設值）
+
+> [!NOTE]
+> **唯一例外**：只有當該數值本身是外部相容性（External Protocol/Safety Requirement），且未來任意修改該數值都應視為 Breaking Change 時，才可例外成為 Normative Invariant。其餘均屬可調 Policy。
+
+## 反事實重構自檢閘門 (Refactor Counterfactual Gate)
+
+每個準備 PROMOTE 的 Candidate，必須逐一通過以下 5 大反事實提問：
+
+1. **Rename**：若底層 class / function / phase 改名，這條規則仍成立嗎？
+2. **Policy**：若 timeout / retry budget / config default 改變，這條規則仍成立嗎？
+3. **Algorithm**：若 detector / CV 比對演算法被替換，這條規則仍成立嗎？
+4. **Telemetry**：若 logging / diagnostic format / tag 被替換，這條規則仍成立嗎？
+5. **Structure**：若 FSM 內部狀態機結構或執行順序被重構，這條規則仍成立嗎？
+
+> **若任一問題答案為「否」**，代表該條款尚未充分抽象化，或本質屬於 Policy / Implementation Detail，**嚴禁 PROMOTE**，必須再抽象化或降級！
+
+## 每條 Invariant 必須描述 Allowed Degrees of Freedom
+
+為防止 Canonical Contract 僵化並明確表達「哪些內容不是不變量」，Normative Invariant 統一採用以下標準結構：
+
+```markdown
+### Invariant: <語意名稱，如 Bounded Action Retry>
+
+Scope:
+<此契約約束的模組或領域，如 Bulletin Board Subflow>
+
+Rule:
+<使用 MUST / MUST NOT 描述的核心語意約束>
+
+Observable consequence:
+<外部模組、狀態機或驗收測試可觀察到的結果>
+
+Allowed variation:
+- timeout / retry budget 可依遊戲更新調校
+- 具體比對模板與檢測演算法可獨立置換
+- 內部 phase 狀態名稱可自由重構
+
+Verification:
+<驗證此行為的 focused behavior / contract tests>
+```
+
+> [!IMPORTANT]
+> **`Allowed variation` 是必要欄位**，用於向未來的維護者明確宣示自由度，避免未來僅是調整 config 參數就被誤判為「違反架構契約」。
+
+## 上位契約層級與去重閘門 (Canonical Hierarchy & Dedup Gate)
+
+在新增任何 Invariant 前，**必須先檢索既有上位 Canonical Contract**（如 `docs/architecture/precondition_contracts.md` 等）。
+
+若上位 Contract 已明確定義基礎原則：
+- `Click ≠ Completion`
+- `Bounded Retry / Wait`
+- `DEFER ≠ Completion`
+- `Recovery 不得偽裝成業務成功`
+- `Perception 與 Decision 職責分離`
+
+**Domain Contract 嚴禁全文重複複製上位鐵律！**
+Domain Contract 只能記錄 **Domain Specialization**，例如：
+> 「Bulletin Board reset 遵循上位 Action/Postcondition Invariant；其 domain postcondition 為 reset 按鈕消失且目標面板可見；其 recovery escalation 為重試耗盡時觸發 DEFER 退避，不得強行推進接任務。」
+
+Canonical 文件應形成有層次的樹狀體系，杜絕複製貼上。
+
+## 契約寫作風格 (Contract Writing Style)
+
+Canonical Contract 必須保持：
+- **短、中性、可掃讀、Refactor-resistant**。
+- **嚴格使用 RFC 2119 關鍵字**（MUST / MUST NOT / MAY）描述 semantic obligation。
+- **架構邊界與實作對應定位 (Architecture Boundaries & Implementation Mapping)**：
+  - 邊界示意圖或章節中提及之具體檔案路徑、類別名稱（如 `BattleSession`）或模組名，屬於「目前實作參照 (Current Implementation Reference / Mapping)」，用於指明當前系統承擔該職責之元件。
+  - 這些實作標籤**不構成 Normative Invariant 本體**；重構更名只要維持同一架構分層、職責邊界與單向依賴，即屬完全合法。
+- **剔除情緒化與偽權威詞彙**：禁用「不可動搖」、「永久鐵律」、「唯一法定」、「徹底杜絕」、「100%」等誇飾字眼（除非真的是外部通訊協定絕對限制）。
+- **排除歷程敘事**：嚴禁將 root cause、開發故事、commit SHA、除錯步驟寫進 Normative Contract（這些屬於 PARS / ADR）。
+
+---
+
 ## 升格為 Canonical Contract 的門檻
 
-一條內容只有在下列問題大致都回答「是」時才升格：
+一條內容只有在下列條件全部滿足時才允許升格：
 
-1. **已落地**：目前 production behavior 已實作，不只是提案。
-2. **有證據**：有直接相關測試、可觀察行為或其他驗證支持。
-3. **未來仍要成立**：重構內部實作後，這條規則仍應保留。
-4. **違反它算 regression**：不是單純換一個等價實作方式。
-5. **屬於行為／邊界／ownership**：不是 private helper、暫時檔名或某次 debugging 細節。
-6. **範圍清楚**：知道此契約約束誰、不約束誰。
+1. **已落地 (Implemented)**：目前 production behavior 已實作，不只是提案。
+2. **有證據 (Verified)**：有直接相關測試、可觀察行為或其他驗證支持。
+3. **刻意設計 (Intentionally Designed)**：經過架構意圖審查，非隨機或偶然之副作用。
+4. **耐重構 (Refactor-Stable)**：通過反事實自檢，重構內部實作後仍必須成立。
+5. **違規即迴歸 (Regression-Bound)**：違反它代表破壞系統承諾，而不僅僅是換一個實作方式。
+6. **範圍清楚 (Clear Scope)**：明確標記誰受約束、誰不受約束，並定義 Allowed variation。
 
-任何一項不確定時，**不要自行把它宣告成永久標準**；先保留為現況說明、TODO 或待決策項。
+任何一項不確定時，**不要自行把它宣告成永久標準**；先保留為現況說明、TODO 或標記為 `CONFLICT_REQUIRES_REVIEW`。
 
-## 如何分類完成 Spec 的內容
-
-### 放進 Contract
-
-優先提煉：
-
-- 穩定的不變量（Invariant）
-- Observable behavior / failure semantics
-- 唯一 owner 與跨模組責任邊界
-- Dispatch / completion / recovery 等重要語意
-- 必須保留的 acceptance criteria
-- 明確禁止的捷徑與 anti-pattern
-- 對未來相容性真正有約束力的資料契約
-
-### 只連結，不重複抄寫
-
-通常不要在 Contract 複製：
-
-- private function / class 的實作流程
-- 行號
-- 完整 template 清單
-- calibration threshold / timeout / magic value
-- config 的目前預設值
-- 內部資料結構細節
-
-若某個數值本身就是刻意承諾的安全／相容性要求，才可成為契約；否則以 code/config 為精確來源，Contract 只描述語意並連到 owner。
-
-### 移出 Contract
-
-- 問題發生經過、root cause、commit 統計 → PARS story / archived spec
-- rejected alternatives 與重大架構取捨 → ADR 或歷史設計文件
-- 尚未實作的 refactor → TODO / RFC
-- 測試數量、commit SHA、一次性的 debug artifact → 歷史紀錄
-- 已過時或與新 contract 重複的說明 → 刪除或標註 superseded
+---
 
 ## 工作流程
 
-1. **讀完整上下文並核對實作 (Read Context & Verify against Implementation)**
-   - 盤點本次分支涉及的 Spec / TODO / RFC。
-      - 原始 spec / TODO
-      - 對應 production code / config
-      - 直接相關 focused tests
-      - 上位 architecture / contract
-      - 必要時查看 branch diff，確認哪些確實已交付
+1. **讀完整上下文與衝突審查 (Read Context & Conflict Review)**
+   - 盤點本次分支涉及的原始 Spec / TODO、對應 code / config、focused tests 與上位 architecture contract。
    - 審視其提出的架構假設、職責邊界與後置條件。
-   - **以當前 Production 代碼與測試實作為唯一定本標準 (Implementation as Ground Truth)**：逐一核驗該不變量是否與實際代碼行為 100% 一致，嚴禁將初期過時假設或未落地的設計寫入 Contract。
+   - **AS-IS 與 SHOULD 衝突審查**：核對 production code 現況 (AS-IS) 與設計意圖 (SHOULD)。若發現現有契約、代碼行為或測試存在矛盾，**標記為 `CONFLICT_REQUIRES_REVIEW`，嚴禁將 bug 或偶然行為就地合法化**。
 
-2. **五分流分類與實作仲裁 (Five-Bucket Classification & Arbitration)**
-   依據上述規範，將 Spec 與文件內容逐項對照當前代碼實作進行結構化分類：
-   - `PROMOTE`：長效架構不變量 (Invariants)、職責邊界、後置條件驗證契約、異常自癒機制，升格至 Canonical Contract（`docs/architecture/` 或 `docs/features/`）。
-   - `LINK`：程式碼、常數與測試已有具體實作者，Contract 僅做參照，不複製貼上代碼細節。
-   - `HISTORY`：歷史脈絡留給 PARS 與 Git。
-   - `TODO`：尚未完成的工作或後續規劃，搬遷至獨立 `docs/todos/<task>_rfc.md` 或保留於未完成 TODO 清單。
-   - `DROP`：過期或重複內容，提煉後預設刪除；暫存測試日誌檔（`*.log`）亦於收尾時一併徹底清理刪除。
-
-   **仲裁與升格執行**：
-   - **遇矛盾以實作為準**：spec、code、tests 衝突時，以目前 executable behavior 為準，不得盲目複製未落地的提案。
-   - **建立／更新 Contract 規範**：針對 `PROMOTE` 項目主動建立或更新 Contract。Contract 優先保持短、穩定、可掃讀，建議只含：
-     - Status / Scope / Document responsibility
-     - Canonical invariants
-     - Ownership / boundaries
-     - Observable behavior / evidence semantics
-     - Acceptance criteria
-     - 明確不採用的捷徑 / Non-goals
-     - Executable verification links
-     - Change / supersession rule
-   - **若有 PROMOTE 項目**：主動更新/建立對應的 Canonical Contract（`docs/architecture/` 或 `docs/features/`），並同步更新 `future_work.md` 中指向舊 spec 的超連結與狀態。
-   - **若無 PROMOTE 項目**（或已完整涵蓋）：確認無遺漏後記錄「經審查無新增長效不變量」。
+2. **語意分層與 Invariant 壓縮 (Classification & Invariant Compression)**
+   - 將所有候選項目分類至 7 大語意層級。
+   - 僅將 `ARCHITECTURE_INVARIANT` 與 `DOMAIN_CONTRACT` 列為 `PROMOTE` 候選。
+   - 執行 **Invariant Compression**：剝離 timeout 秒數、retry 次數、模板檔名等實作細節，改寫為語意規則。
+   - 通過 **Refactor Counterfactual Gate** 5 大提問檢驗。
+   - 執行 **Parent-Contract Dedup**：上位已規範者僅寫 domain 具體化。
+   - 補齊 **Allowed variation** 自由度描述。
 
 3. **顯式確認清理範圍 (Mandatory User Scope Confirmation)**
    > [!CRITICAL]
-   > **嚴禁 AI 自行決定清理範圍**：完成契約升格與實作核對後，AI 必須停下來向使用者顯式呈報：
-   > 1. 【已升格更新之 Canonical Contract 清單與章節】（或說明經核對無需更新）；
+   > **嚴禁 AI 自行決定清理範圍**：完成契約升格與審查後，AI 必須停下來向使用者顯式呈報：
+   > 1. 【已升格更新之 Canonical Contract 清單與章節】（或說明經核對「經審查無新增長效不變量」）；
    > 2. 【已萃取完畢、建請刪除 (DROP) 的過期 Spec 清單與暫存測試日誌 (`*.log`)】（遵循「刪除是預設；封存是例外」原則）；
    > 3. 【仍未完成需保留 (RETAIN) 的 TODO 清單】。
    > **經使用者明確確認同意後，方可執行檔案刪除 (`git rm`)**。
@@ -143,7 +206,7 @@ Tests 是 **executable verification**，不是天然的絕對 SSOT；測試也�
             └─ YES (預設 Default) ──> DELETE (果斷刪除，不留過期副本)
      ```
 
-6. **同步索引與相關文件**
+5. **同步索引與相關文件**
    - 更新 `future_work.md` / TODO index / architecture links。
    - 若此次只是 docs-only，依專案既有測試政策處理，不自行擴大 runtime 工作範圍。
 

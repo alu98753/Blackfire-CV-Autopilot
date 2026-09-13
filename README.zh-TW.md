@@ -339,8 +339,9 @@ collect_only
 | 地下城流程                    | [`docs/features/dungeon_flow.md`](docs/features/dungeon_flow.md)                                                 |
 | Daily 排程 Pipeline             | [`docs/features/daily_task/daily8.md`](docs/features/daily_task/daily8.md)                                       |
 | 背包色彩分類                   | [`docs/features/bag_color_classification.md`](docs/features/bag_color_classification.md)                         |
-| 城鎮 Task Pipeline         | [`docs/features/town_building/pipeline.md`](docs/features/town_building/pipeline.md)                             |
+| Town Task Pipeline         | [`docs/features/town_building/pipeline.md`](docs/features/town_building/pipeline.md)                             |
 | 長時間運行                    | [`docs/長時間掛機與自動恢復使用說明.md`](docs/長時間掛機與自動恢復使用說明.md)                                                               |
+| 常見問題與運行維護 (FAQ)        | [`docs/faq.md`](docs/faq.md)                                                                                     |
 
 開發決策與已完成工作的紀錄另外保存在 [`docs/storys/`](docs/storys/)，避免 README 逐漸變成功能 Changelog。
 

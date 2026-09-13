@@ -343,6 +343,7 @@ The root README intentionally stays at the system and user-facing level. Detaile
 | Inventory color classification   | [`docs/features/bag_color_classification.md`](docs/features/bag_color_classification.md)                         |
 | Town task pipeline               | [`docs/features/town_building/pipeline.md`](docs/features/town_building/pipeline.md)                             |
 | Long-running operation           | [`docs/長時間掛機與自動恢復使用說明.md`](docs/長時間掛機與自動恢復使用說明.md)                                                               |
+| Frequently asked questions (FAQ) | [`docs/faq.md`](docs/faq.md)                                                                                     |
 
 Development decisions and completed implementation stories are recorded separately under [`docs/storys/`](docs/storys/) so that the README does not become a changelog.
 

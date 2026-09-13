@@ -46,6 +46,7 @@
 ### 3. 📖 操作與掛機指南 ([docs/guides/](guides/))
 使用者實機操作、效能調校與開發入門：
 * [getting_started_dev_guide.md](guides/getting_started_dev_guide.md)：開發起手式、OpenCV 視覺原理與架構思維。
+* [faq.md](faq.md)：掛機腳本與運行維護常見問題 (FAQ)（代碼更新、熱鍵退出與排錯）。
 * [background_hang_guide.md](guides/background_hang_guide.md)：Windows 後台模擬掛機指南。
 * [sandboxie_dual_instance_guide.md](guides/sandboxie_dual_instance_guide.md)：Sandboxie-Plus Steam 雙開掛機指南。
 * [battle_speed_guide.md](guides/battle_speed_guide.md)：戰鬥加速與畫面幀率指引。
