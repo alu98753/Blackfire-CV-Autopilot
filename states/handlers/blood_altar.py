@@ -2,6 +2,7 @@ import time
 import os
 import logging
 from states.handlers.base import BaseStateHandler
+from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
 
 
 class BloodAltarHandler(BaseStateHandler):
@@ -22,6 +23,7 @@ class BloodAltarHandler(BaseStateHandler):
         self.receive_scan_count = 0
         self.popup_clear_count = 0
         self.has_claimed_daily = False
+        self.mislocation_guard = MislocationGuard(threshold=2)
 
     def reset_state(self):
         self.step_phase = "INIT"
@@ -30,6 +32,7 @@ class BloodAltarHandler(BaseStateHandler):
         self.receive_scan_count = 0
         self.popup_clear_count = 0
         self.has_claimed_daily = False
+        self.mislocation_guard.reset()
 
     def _ensure_in_town(self, screen_img, rect=None):
         """若處於大廳選單，點擊 goback_town 返回城鎮 (配對確認直到消失)"""
@@ -137,7 +140,12 @@ class BloodAltarHandler(BaseStateHandler):
 
         # 防死鎖門禁：若獨立模式或城鎮流水線已不需要血之祭壇獻祭 且處於 INIT 階段，直接 return！
         cfg_type = self.machine.config.get("type") if getattr(self.machine, "config", None) else None
-        is_needed = getattr(self.machine, "need_blood_altar", False) or cfg_type in ("blood_altar", "blood_sacrifice")
+        current_subflow = getattr(self.machine, "current_town_subflow", None)
+        is_needed = (
+            getattr(self.machine, "need_blood_altar", False)
+            or cfg_type in ("blood_altar", "blood_sacrifice")
+            or current_subflow in ("blood_altar", "blood_sacrifice")
+        )
         if not is_needed and self.step_phase == "INIT":
             return False
 
@@ -180,15 +188,34 @@ class BloodAltarHandler(BaseStateHandler):
         # 1. INIT 階段：在城鎮點擊血之祭壇建築 (Blood_Altar.png) 並等待畫面渲染穩定
         # =========================================================================
         if self.step_phase == "INIT":
-            # 1.1 UI穩定驗證：必須辨識到建築內部元素（如 exitfromhouse_and_to_town.png 或頁籤）才切換至 ENTERED_BUILDING
+            # 1.1 自身專屬內部特徵驗證 (own-specific inside evidence)
             pos_sac_check, _ = self.matcher.match(screen_img, sacrifice_btn, threshold=0.75)
             pos_rec_entry_check, _ = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
-            pos_exit_check, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+            own_inside_evidence = bool(pos_sac_check or pos_rec_entry_check)
 
-            if pos_exit_check or pos_sac_check or pos_rec_entry_check:
-                logging.info(f"🩸 [血之祭壇] 辨識到已在血之祭壇內部 (離開建築按鈕已解析: {pos_exit_check is not None})，畫面渲染穩定，切換至 ENTERED_BUILDING 階段...")
+            # 1.2 通用建築環境特徵檢查 (generic building-context evidence)
+            pos_exit_check, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+            pos_goback_check, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80)
+            generic_building_evidence = bool(pos_exit_check or pos_goback_check)
+
+            decision = self.mislocation_guard.evaluate(own_inside_evidence, generic_building_evidence)
+            if decision == MislocationDecision.RETAIN:
+                logging.info("🩸 [血之祭壇] 辨識到血之祭壇專屬內部特徵，切換至 ENTERED_BUILDING 階段...")
                 self.step_phase = "ENTERED_BUILDING"
                 self.last_action_time = now
+                return True
+            elif decision == MislocationDecision.RELINQUISH:
+                logging.warning(
+                    "⚠️ [BloodAltar Mislocation] INIT 觀察到通用建築環境特徵但無血之祭壇專屬特徵，連續確認錯位成立，讓渡實體所有權給 REACH_TOWN..."
+                )
+                self.reset_state()
+                if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                    self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+                else:
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return True
+            elif generic_building_evidence:
+                logging.info("🩸 [血之祭壇] INIT 觀察到通用建築環境特徵但無祭壇內部特徵 (suspected mislocation 觀測中)...")
                 return True
 
             pos_door, _ = self.matcher.match(screen_img, "common/door.png", threshold=0.75)
@@ -205,20 +232,43 @@ class BloodAltarHandler(BaseStateHandler):
         elif self.step_phase == "ENTERED_BUILDING":
             is_sacrifice_only = getattr(self.machine, "current_town_subflow", None) == "blood_sacrifice"
             pos_rec_entry, conf_rec_entry = self.matcher.match(screen_img, receive_entry_btn, threshold=0.75)
+            pos_sac, conf_sac = self.matcher.match(screen_img, sacrifice_btn, threshold=0.75)
+
+            own_inside = bool(pos_rec_entry or pos_sac)
+            pos_exit_check, _ = self.matcher.match(screen_img, exit_building_btn, threshold=0.75)
+            generic_exit = bool(pos_exit_check)
+            decision = self.mislocation_guard.evaluate(own_inside, generic_exit)
+            if decision == MislocationDecision.RELINQUISH:
+                logging.warning(
+                    "⚠️ [BloodAltar Mislocation] ENTERED_BUILDING 未見祭壇頁籤但見通用退出按鈕，連續確認錯位成立，讓渡實體所有權給 REACH_TOWN..."
+                )
+                self.reset_state()
+                if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                    self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+                else:
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return True
+            elif generic_exit and not own_inside:
+                logging.info("🩸 [血之祭壇] ENTERED_BUILDING 觀察到通用建築環境特徵但無祭壇內部特徵 (suspected mislocation 觀測中)...")
+                return True
+
             if not is_sacrifice_only and not is_claimed_today and pos_rec_entry:
                 logging.info(f"🩸 [血之祭壇] 辨識到領血頁籤 [{receive_entry_btn}] [{conf_rec_entry:.4f}]，點擊切換至領血介面...")
                 self.mouse.click(left + pos_rec_entry[0], top + pos_rec_entry[1])
                 self.step_phase = "RECEIVE_TAB_OPEN"
                 self.receive_scan_count = 0
                 self.last_action_time = now
+                self.mislocation_guard.reset()
                 return True
 
-            # 若為 blood_sacrifice，或今日已領取過免費血水或無領血頁籤，直接轉移至 SACRIFICE_MENU_OPEN
-            logging.info("🩸 [血之祭壇] 今日免費血水已領取或執行純獻祭，轉移至 SACRIFICE_MENU_OPEN 階段...")
-            self.step_phase = "SACRIFICE_MENU_OPEN"
-            self.empty_blood_scan_count = 0
-            self.last_action_time = now
-            return True
+            if pos_sac or is_sacrifice_only:
+                # 若為 blood_sacrifice，或今日已領取過免費血水，直接轉移至 SACRIFICE_MENU_OPEN
+                logging.info("🩸 [血之祭壇] 今日免費血水已領取或執行純獻祭，轉移至 SACRIFICE_MENU_OPEN 階段...")
+                self.step_phase = "SACRIFICE_MENU_OPEN"
+                self.empty_blood_scan_count = 0
+                self.last_action_time = now
+                self.mislocation_guard.reset()
+                return True
 
         # =========================================================================
         # 3. RECEIVE_TAB_OPEN 階段：領血頁籤介面比對 receive_daily.png (帶配對確認直到消失閉環)

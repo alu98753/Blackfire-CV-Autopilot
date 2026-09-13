@@ -432,7 +432,126 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertFalse(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
 
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_hero_draw_mislocation_in_foreign_building_must_relinquish_without_defer(
+        self, mock_prec_detect
+    ):
+        """
+        [HeroDraw 錯位迴歸驗證]:
+        驗證 HeroDraw 處於 foreign building 時 (exitfromhouse 可見但無酒館專屬特徵)，
+        不得誤認 generic exit 為已在酒館內部；
+        必須在連續確認後主動 Relinquish 回 STATE_NAVIGATING，
+        嚴格不得懲罰性 defer 業務 Intent！
+        """
+        self.machine.current_state = self.machine.STATE_HERO_DRAW
+        self.machine.current_town_subflow = "hero_draw"
+        self.machine.daily_manager = MagicMock()
+        hero_handler = self.machine.handlers[self.machine.STATE_HERO_DRAW]
+
+        # 模擬畫面：身處 foreign building (exitfromhouse 可見，但無 recruitment / RECRUITED / Tavern)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        for _ in range(3):
+            hero_handler.last_action_time = 0.0
+            hero_handler.handle(self.screen, self.rect)
+            if self.machine.current_state == self.machine.STATE_NAVIGATING:
+                break
+
+        # 斷言 1: 必須主動 Relinquish 至 STATE_NAVIGATING，並獲取 ownership token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 斷言 2: 嚴格守護 Invariant 2：業務 Intent 絕不被懲罰性 defer 或 pop！
+        self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # Step 2: shared REACH_TOWN 退出錯誤建築並重新回到 Town
+        prec_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_res)
+        self.mouse.click.assert_called_with(50, 500)
+
+        # Step 3: 回到 Town Ready，重新派發回 STATE_HERO_DRAW
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(300, 400), confidence_building=0.9
+        )
+        redispatch_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_res)
+
+        # 斷言 3: 重新派發回 STATE_HERO_DRAW，業務 Intent 完好無損，Token 清除
+        self.assertEqual(self.machine.current_state, self.machine.STATE_HERO_DRAW)
+        self.assertEqual(self.machine.current_town_subflow, "hero_draw")
+        self.assertFalse(self.machine.town_normalization_pending)
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_blood_altar_mislocation_in_foreign_building_must_relinquish_without_defer(
+        self, mock_prec_detect
+    ):
+        """
+        [BloodAltar 錯位迴歸驗證]:
+        驗證 BloodAltar 處於 foreign building 時 (exitfromhouse 可見但無祭壇專屬特徵)，
+        不得誤認 generic exit 為已在祭壇內部；
+        必須在連續確認後主動 Relinquish 回 STATE_NAVIGATING，
+        嚴格不得推進 business phase 並懲罰性 defer/pop 業務 Intent！
+        """
+        self.machine.current_state = self.machine.STATE_BLOOD_ALTAR
+        self.machine.current_town_subflow = "blood_altar"
+        self.machine.daily_manager = MagicMock()
+        altar_handler = self.machine.handlers[self.machine.STATE_BLOOD_ALTAR]
+
+        # 模擬畫面：身處 foreign building (exitfromhouse 可見，但無 Blood_Altar / Sacrifice / receive_entry)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        for _ in range(3):
+            altar_handler.last_action_time = 0.0
+            altar_handler.handle(self.screen, self.rect)
+            if self.machine.current_state == self.machine.STATE_NAVIGATING:
+                break
+
+        # 斷言 1: 必須主動 Relinquish 至 STATE_NAVIGATING，並獲取 ownership token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 斷言 2: 嚴格守護 Invariant 2：業務 Intent 絕不被懲罰性 defer 或 pop！
+        self.assertEqual(self.machine.current_town_subflow, "blood_altar")
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+        self.machine.daily_manager.record_subflow_completed.assert_not_called()
+
+        # Step 2: shared REACH_TOWN 退出錯誤建築並重新回到 Town
+        prec_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_res)
+        self.mouse.click.assert_called_with(50, 500)
+
+        # Step 3: 回到 Town Ready，重新派發回 STATE_BLOOD_ALTAR
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(350, 450), confidence_building=0.9
+        )
+        redispatch_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_res)
+
+        # 斷言 3: 重新派發回 STATE_BLOOD_ALTAR，業務 Intent 完好無損，Token 清除
+        self.assertEqual(self.machine.current_state, self.machine.STATE_BLOOD_ALTAR)
+        self.assertEqual(self.machine.current_town_subflow, "blood_altar")
+        self.assertFalse(self.machine.town_normalization_pending)
+        self.machine.daily_manager.defer_subflow.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

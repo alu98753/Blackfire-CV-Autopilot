@@ -2,28 +2,31 @@ import os
 import time
 import logging
 from states.handlers.base import BaseStateHandler
+from states.handler_mislocation_guard import MislocationGuard, MislocationDecision
 
 class HeroDrawHandler(BaseStateHandler):
     """
-    抽英雄 (Hero Draw / 酒館免費招募 Subflow) 處理器：
-    1. 於城鎮畫面點擊進入酒館 (town_building/Tavern/Tavern.png)。
+    酒館免費招募英雄 (Hero Draw Subflow) 處理器：
+    1. 在城鎮畫面尋找酒館建築 (Tavern.png)，前置檢查下方是否有紅點。
     2. 若位於大廳 (看得到 goback_town.png)，自動點擊返回城鎮。
-    3. 進入酒館後，點擊免費招募 (town_building/Tavern/free_recruitment.png)。
-    4. 於彈窗中點擊專用「招募」按鈕 (town_building/Tavern/RECRUITED.png)。
-    5. 點擊獲得英雄領取確認 (common/confirm.png / common/ok.png)。
+    3. 點擊進入酒館，比對免費招募按鈕 (free_recruitment.png)。
+    4. 點擊免費招募後，點擊專用招募按鈕 (RECRUITED.png)。
+    5. 若抽到重複英雄出現「分解英雄」(deassemble_hero.png) 彈窗，點擊分解領取資源。
     6. 點擊離開/關閉按鈕 (common/quit.png / exitfromhouse_and_to_town.png) 退出酒館。
-    7. 記錄 DailyManager 狀態 (completed_today = True)，並自動呼叫 pop_and_next_town_subflow() 續行佇列。
+    7. 在城鎮再次核驗酒館紅點已消失，標記 completed_today 並推進佇列。
     """
     def __init__(self, machine):
         super().__init__(machine)
         self.step_phase = "INIT"  # INIT, ENTERED_TAVERN, CLICKED_FREE_RECRUITMENT, WAITING_CONFIRM, ALL_DONE_EXITING
         self.last_action_time = 0.0
         self.not_found_count = 0
+        self.mislocation_guard = MislocationGuard(threshold=2)
 
     def reset_state(self):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
         self.not_found_count = 0
+        self.mislocation_guard.reset()
 
     def handle(self, screen_img=None, rect=None):
         if screen_img is None and self.capturer:
@@ -58,18 +61,37 @@ class HeroDrawHandler(BaseStateHandler):
 
         # 2. INIT 階段：在城鎮尋找並進入酒館 (Tavern.png)
         if self.step_phase == "INIT":
-            # 2.1 防呆：若目前已在酒館內部 (看得到免費招募/招募按鈕/房屋退出按鈕)，直接切換至 ENTERED_TAVERN 階段
+            # 2.1 自身專屬特徵檢查 (own-specific evidence)
             pos_free_check, _ = self.matcher.match(screen_img, recruitment_btn, threshold=0.75, brightness_threshold=0.70)
             pos_rec_check, _ = self.matcher.match(screen_img, "town_building/Tavern/RECRUITED.png", threshold=0.85)
-            pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.80)
+            own_inside_evidence = bool(pos_free_check or pos_rec_check)
 
-            if pos_free_check or pos_rec_check or pos_exit_check:
-                logging.info("🍺 [抽英雄] 辨識到目前已在酒館內部，直接切換至酒館招募階段...")
+            # 2.2 通用建築環境特徵檢查 (generic building-context evidence)
+            pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.80)
+            pos_goback_check, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.80)
+            generic_building_evidence = bool(pos_exit_check or pos_goback_check)
+
+            decision = self.mislocation_guard.evaluate(own_inside_evidence, generic_building_evidence)
+            if decision == MislocationDecision.RETAIN:
+                logging.info("🍺 [抽英雄] 辨識到酒館專屬內部特徵，切換至酒館招募階段...")
                 self.step_phase = "ENTERED_TAVERN"
                 self.not_found_count = 0
                 return True
+            elif decision == MislocationDecision.RELINQUISH:
+                logging.warning(
+                    "⚠️ [HeroDraw Mislocation] 觀察到通用建築環境特徵但無酒館專屬特徵，連續確認錯位成立，讓渡實體所有權給 REACH_TOWN..."
+                )
+                self.reset_state()
+                if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                    self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+                else:
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return True
+            elif generic_building_evidence:
+                logging.info("⚠️ [HeroDraw] 觀察到通用建築環境特徵但無酒館面板 (suspected mislocation 觀測中)...")
+                return True
 
-            # 2.2 在城鎮尋找並點擊酒館建築 (Tavern.png，前置紅點預檢)
+            # 2.3 在城鎮尋找並點擊酒館建築 (Tavern.png，前置紅點預檢)
             if os.path.exists(os.path.join("templates", building_btn)):
                 from utils.town_building_detector import detect_building_with_red_dot
                 check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="hero_draw")
@@ -85,10 +107,7 @@ class HeroDrawHandler(BaseStateHandler):
                         pos_tavern = check.building_pos
                         conf_tavern = check.confidence_building
                         logging.info(f"🍺 [抽英雄] 於城鎮發現酒館建築且帶有紅點 [{building_btn}] [{conf_tavern:.4f}]，點擊進入...")
-                        self.machine.click_and_wait_until_gone(
-                            building_btn, left + pos_tavern[0], top + pos_tavern[1], rect,
-                            timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
-                        )
+                        self.mouse.click(left + pos_tavern[0], top + pos_tavern[1])
                         self.last_action_time = now
                         self.step_phase = "ENTERED_TAVERN"
                         self.not_found_count = 0
@@ -105,6 +124,7 @@ class HeroDrawHandler(BaseStateHandler):
 
         # 3. ENTERED_TAVERN 階段：精確比對免費招募按鈕 (free_recruitment.png)
         elif self.step_phase == "ENTERED_TAVERN":
+            pos_free = None
             if os.path.exists(os.path.join("templates", recruitment_btn)):
                 pos_free, conf_free = self.matcher.match(
                     screen_img, 
@@ -121,7 +141,28 @@ class HeroDrawHandler(BaseStateHandler):
                     self.last_action_time = now
                     self.step_phase = "CLICKED_FREE_RECRUITMENT"
                     self.not_found_count = 0
+                    self.mislocation_guard.reset()
                     return True
+
+            # 檢查是否因點偏而處於 foreign building
+            pos_exit_check, _ = self.matcher.match(screen_img, "town_building/exitfromhouse_and_to_town.png", threshold=0.80)
+            pos_rec_check, _ = self.matcher.match(screen_img, "town_building/Tavern/RECRUITED.png", threshold=0.85)
+            own_inside = bool(pos_free or pos_rec_check)
+            generic_exit = bool(pos_exit_check)
+            decision = self.mislocation_guard.evaluate(own_inside, generic_exit)
+            if decision == MislocationDecision.RELINQUISH:
+                logging.warning(
+                    "⚠️ [HeroDraw Mislocation] ENTERED_TAVERN 階段未見酒館招募特徵但見通用退出按鈕，連續確認成立，讓渡實體所有權給 REACH_TOWN..."
+                )
+                self.reset_state()
+                if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                    self.machine.relinquish_subflow_to_navigation("mislocated_in_foreign_building")
+                else:
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return True
+            elif generic_exit:
+                logging.info("⚠️ [HeroDraw] ENTERED_TAVERN 觀察到通用建築環境特徵但無招募按鈕 (suspected mislocation 觀測中)...")
+                return True
 
             self.not_found_count += 1
             if self.not_found_count >= 3:
