@@ -69,25 +69,41 @@ def has_bag_features(screen_img: np.ndarray, matcher, threshold: float = 0.80) -
     return (pos_tidy is not None) or (pos_disasm is not None)
 
 
-def is_inside_bulletin_board(
+from dataclasses import dataclass
+
+
+@dataclass
+class BulletinBoardObservation:
+    pos_quit: Optional[Tuple[int, int]] = None
+    conf_quit: float = 0.0
+    pos_reset: Optional[Tuple[int, int]] = None
+    conf_reset: float = 0.0
+    pos_task: Optional[Tuple[int, int]] = None
+    conf_task: float = 0.0
+    pos_task_after: Optional[Tuple[int, int]] = None
+    conf_task_after: float = 0.0
+    has_bag: bool = False
+    conf_bag_tidy: float = 0.0
+    conf_bag_disasm: float = 0.0
+    classification: str = "NO_OVERLAY"
+
+
+def observe_bulletin_board(
     screen_img: np.ndarray,
     matcher,
     cfg: Optional[Dict[str, Any]] = None
-) -> bool:
+) -> BulletinBoardObservation:
     """
-    排他性驗證是否身處告示牌介面：
-    必須滿足：
-    1. 基礎門禁：看得到 quit_btn（未出現 quit 立即回傳 False 省去後續比對）；
-    2. 負向排他：畫面絕無背包專屬特徵（tidy.png、Disassembly.png）；
-    3. 正向三通道 Early Return（自適應動態尺度，門檻 0.65）：
-       - 通道 1【Reset 按鈕】：左下角出現 reset.png
-       - 通道 2【Before 任務】：左側出現未接取任務捲軸 task.png
-       - 通道 3【After 任務】：左側出現已接取任務捲軸 task_after.png
-       只要任一通道命中，立即 Early Return True。
-    4. 若三者皆未命中，透過 DebugVisualizer 輸出至 debug_bulletin_board_verify.png。
+    觀察並結構化解析目前畫面相對於告示牌介面的所有特徵。
+    分類結果可能為：
+    - BOARD_CONFIRMED: quit 可見、無背包特徵、且至少一項告示牌正向特徵 (reset / task / task_after) 命中。
+    - KNOWN_INTERFERENCE: quit 可見，且偵測到明確的負向干擾特徵 (如背包 tidy / Disassembly)。
+    - UNKNOWN_OVERLAY: quit 可見，但既無正向告示牌特徵、亦無已知干擾特徵 (未知覆蓋層)。
+    - NO_OVERLAY: 未偵測到 quit 視窗按鈕。
     """
+    obs = BulletinBoardObservation()
     if screen_img is None or not isinstance(screen_img, np.ndarray) or getattr(screen_img, "size", 0) == 0:
-        return False
+        return obs
 
     h, w = screen_img.shape[:2]
     cfg = cfg or {}
@@ -96,43 +112,76 @@ def is_inside_bulletin_board(
     task_after_tpl = cfg.get("task_after_btn", "town_building/bulletin_board/task_after.png")
     reset_btn = cfg.get("reset_btn", "town_building/bulletin_board/reset.png")
 
-    # 0. 定義 Scoped ROI 範圍 (依畫面幾何劃分)
     quit_roi = (int(w * 0.5), 0, w - int(w * 0.5), int(h * 0.45))
     task_roi = (0, 0, min(w, int(w * 0.60)), h)
     reset_roi = (0, int(h * 0.60), min(w, int(w * 0.60)), h - int(h * 0.60))
 
-    # 針對解析度微幅縮放差異，採用自適應動態尺度
-    board_scales = matcher.compute_candidate_scales(w)
+    board_scales = None
+    if matcher is not None and hasattr(matcher, "compute_candidate_scales"):
+        board_scales = matcher.compute_candidate_scales(w)
+
     positive_threshold = 0.65
 
     # 1. 基礎門禁：quit 按鈕
-    pos_quit, bbox_quit, conf_quit = match_in_roi(screen_img, matcher, quit_btn, quit_roi, threshold=0.80, scales=board_scales)
+    pos_quit, _, conf_quit = match_in_roi(screen_img, matcher, quit_btn, quit_roi, threshold=0.80, scales=board_scales)
+    obs.pos_quit = pos_quit
+    obs.conf_quit = conf_quit
     if pos_quit is None:
-        return False
+        obs.classification = "NO_OVERLAY"
+        return obs
 
-    # 2. 背包排他特徵檢查
-    if has_bag_features(screen_img, matcher, threshold=0.80):
-        return False
+    # 2. 背包排他特徵檢查 (負向特徵)
+    pos_tidy, conf_tidy = matcher.match(screen_img, "common/tidy.png", threshold=0.80, quiet=True)
+    pos_disasm, conf_disasm = matcher.match(screen_img, "common/Disassembly.png", threshold=0.80, quiet=True)
+    obs.conf_bag_tidy = conf_tidy
+    obs.conf_bag_disasm = conf_disasm
+    obs.has_bag = (pos_tidy is not None) or (pos_disasm is not None)
 
-    # 3. 正向三通道獨立檢查（Early Return：其中一張為 True 即確認並立即返回）
-    pos_reset, bbox_reset, conf_reset = match_in_roi(screen_img, matcher, reset_btn, reset_roi, threshold=positive_threshold, scales=board_scales)
-    if pos_reset is not None:
-        logging.info("📋 [懸賞告示牌 介面驗證] 驗證成功 (通道: Reset(%.2f))", conf_reset)
-        return True
+    # 3. 正向三通道獨立檢查
+    pos_reset, _, conf_reset = match_in_roi(screen_img, matcher, reset_btn, reset_roi, threshold=positive_threshold, scales=board_scales)
+    obs.pos_reset = pos_reset
+    obs.conf_reset = conf_reset
 
-    pos_task, bbox_task, conf_task = match_in_roi(screen_img, matcher, task_tpl, task_roi, threshold=positive_threshold, scales=board_scales)
-    if pos_task is not None:
-        logging.info("📋 [懸賞告示牌 介面驗證] 驗證成功 (通道: Before(%.2f))", conf_task)
-        return True
+    pos_task, _, conf_task = match_in_roi(screen_img, matcher, task_tpl, task_roi, threshold=positive_threshold, scales=board_scales)
+    obs.pos_task = pos_task
+    obs.conf_task = conf_task
 
-    pos_after, bbox_after, conf_after = match_in_roi(screen_img, matcher, task_after_tpl, task_roi, threshold=positive_threshold, scales=board_scales)
-    if pos_after is not None:
-        logging.info("📋 [懸賞告示牌 介面驗證] 驗證成功 (通道: After(%.2f))", conf_after)
-        return True
+    pos_after, _, conf_after = match_in_roi(screen_img, matcher, task_after_tpl, task_roi, threshold=positive_threshold, scales=board_scales)
+    obs.pos_task_after = pos_after
+    obs.conf_task_after = conf_after
 
-    # 4. 若三者皆未命中，輸出除錯影像並返回 False
-    write_debug_image("debug_bulletin_board_verify.png", screen_img)
-    return False
+    # 4. 決策分類
+    if obs.has_bag:
+        obs.classification = "KNOWN_INTERFERENCE"
+    elif (pos_reset is not None) or (pos_task is not None) or (pos_after is not None):
+        obs.classification = "BOARD_CONFIRMED"
+        hit_channel = "Reset" if pos_reset else ("Before" if pos_task else "After")
+        hit_conf = conf_reset if pos_reset else (conf_task if pos_task else conf_after)
+        logging.info("📋 [懸賞告示牌 介面驗證] 驗證成功 (通道: %s(%.2f))", hit_channel, hit_conf)
+    else:
+        obs.classification = "UNKNOWN_OVERLAY"
+
+    if obs.classification != "BOARD_CONFIRMED":
+        logging.warning(
+            "[BulletinBoardDetector] Classification=%s | quit=%.2f, reset=%.2f, task=%.2f, task_after=%.2f, bag_tidy=%.2f, bag_disasm=%.2f",
+            obs.classification, obs.conf_quit, obs.conf_reset, obs.conf_task, obs.conf_task_after, obs.conf_bag_tidy, obs.conf_bag_disasm
+        )
+        if obs.classification == "UNKNOWN_OVERLAY":
+            write_debug_image("debug_bulletin_board_verify.png", screen_img)
+
+    return obs
+
+
+def is_inside_bulletin_board(
+    screen_img: np.ndarray,
+    matcher,
+    cfg: Optional[Dict[str, Any]] = None
+) -> bool:
+    """
+    排他性驗證是否身處告示牌介面 (向後相容包裝)。
+    """
+    obs = observe_bulletin_board(screen_img, matcher, cfg)
+    return obs.classification == "BOARD_CONFIRMED"
 
 
 def scan_and_filter_tasks(

@@ -32,6 +32,28 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         self.fake_img = np.zeros((600, 800, 3), dtype=np.uint8)
         self.rect = {"left": 0, "top": 0, "width": 800, "height": 600}
 
+    def _make_mock_match(self, quit=True, reset=False, task=False, task_after=False, tidy=False, disasm=False):
+        """輔助 mock matcher，根據 ROI 幾何回傳正確的局部座標"""
+        def mock_match(screen_img, template_name, **kw):
+            if template_name == "common/quit.png" and quit:
+                # quit_roi x starts at 400 for 800px width. Local 300 => Global 700
+                is_roi = screen_img.shape[1] < 800
+                return ((300, 100) if is_roi else (700, 100), 0.90)
+            elif template_name == "town_building/bulletin_board/reset.png" and reset:
+                # reset_roi y starts at 360 for 600px height. Local (300, 140) => Global (300, 500)
+                is_roi = screen_img.shape[0] < 600
+                return ((300, 140) if is_roi else (300, 500), 0.90)
+            elif template_name == "town_building/bulletin_board/task.png" and task:
+                return ((200, 300), 0.72)
+            elif template_name == "town_building/bulletin_board/task_after.png" and task_after:
+                return ((200, 300), 0.72)
+            elif template_name == "common/tidy.png" and tidy:
+                return ((500, 400), 0.88)
+            elif template_name == "common/Disassembly.png" and disasm:
+                return ((600, 400), 0.88)
+            return (None, 0.0)
+        return mock_match
+
     def test_wait_board_open_does_not_kill_overlay_during_settle_window(self):
         """
         [契約 1 驗證] 剛進入 WAIT_BOARD_OPEN 時 (經過 1.0 秒 < 2.5 秒)，
@@ -40,14 +62,7 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         """
         self.handler.step_phase = "WAIT_BOARD_OPEN"
         self.handler.wait_board_open_start_time = 100.0
-
-        # 模擬畫面：僅有 quit.png，無 reset/task 告示牌特徵
-        def mock_match(screen_img, template_name, **kw):
-            if template_name == "common/quit.png":
-                return ((700, 100), 0.90)
-            return (None, 0.0)
-
-        self.handler.matcher.match.side_effect = mock_match
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True)
 
         # 模擬當前時間為 101.0 秒 (經過 1.0 秒)
         with patch("states.handlers.bulletin_board.time.time", return_value=101.0), \
@@ -61,105 +76,159 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
     def test_wait_board_open_transitions_immediately_when_board_detected(self):
         """
         [契約 2 驗證] 處於 WAIT_BOARD_OPEN 時，只要告示牌專屬特徵 (如 reset.png) 一出現，
-        立即推進至 CHECK_RESET，完全零延遲。
+        立即推進至 CHECK_RESET，重置 open_attempts，完全零延遲。
         """
         self.handler.step_phase = "WAIT_BOARD_OPEN"
         self.handler.wait_board_open_start_time = 100.0
-
-        # 模擬畫面：同時有 quit.png 與 reset.png
-        def mock_match(screen_img, template_name, **kw):
-            if template_name == "common/quit.png":
-                return ((700, 100), 0.90)
-            elif template_name == "town_building/bulletin_board/reset.png":
-                return ((300, 500), 0.90)
-            return (None, 0.0)
-
-        self.handler.matcher.match.side_effect = mock_match
+        self.handler.open_attempts = 1
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=True)
 
         with patch("states.handlers.bulletin_board.time.time", return_value=100.5):
             self.handler.handle(self.fake_img, self.rect)
 
-            # 斷言：立即切換至 CHECK_RESET
+            # 斷言：立即切換至 CHECK_RESET 且 open_attempts 重置為 0
             self.assertEqual(self.handler.step_phase, "CHECK_RESET")
+            self.assertEqual(self.handler.open_attempts, 0)
             self.mock_machine.notify_ui_progress.assert_called_once()
 
-    def test_wait_board_open_dismisses_overlay_after_timeout(self):
+    def test_wait_board_open_unknown_overlay_single_retry_recovers_to_init(self):
         """
         [契約 3 驗證] 處於 WAIT_BOARD_OPEN 且經過時間超過 2.5 秒 (如 103.0 秒)，
-        若畫面依然只有 quit.png 且無任何告示牌特徵，判定為非告示牌之殘留干擾覆蓋層，
-        觸發 click_and_wait_until_gone 關閉並退回 INIT 重試。
+        若畫面只有 quit.png 且無任何告示牌正向特徵亦非背包，判定為 UNKNOWN_OVERLAY，
+        關閉後進行有界重試 (open_attempts + 1)，未超限前退回 INIT。
         """
         self.handler.step_phase = "WAIT_BOARD_OPEN"
         self.handler.wait_board_open_start_time = 100.0
+        self.handler.open_attempts = 0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True)
 
-        def mock_match(screen_img, template_name, **kw):
-            if template_name == "common/quit.png":
-                return ((700, 100), 0.90)
-            return (None, 0.0)
-
-        self.handler.matcher.match.side_effect = mock_match
-
-        # 模擬當前時間為 103.0 秒 (經過 3.0 秒 > 2.5 秒)
         with patch("states.handlers.bulletin_board.time.time", return_value=103.0), \
              patch.object(self.handler, "click_and_wait_until_gone") as mock_wait_gone:
             self.handler.handle(self.fake_img, self.rect)
 
-            # 斷言：超時後判定為干擾覆蓋層並閉環關閉，退回 INIT
+            # 斷言：關閉未知覆蓋層，open_attempts 計入 1，退回 INIT
             mock_wait_gone.assert_called_once_with("common/quit.png", 700, 100, self.rect, timeout=3.0, threshold=0.80)
+            self.assertEqual(self.handler.open_attempts, 1)
             self.assertEqual(self.handler.step_phase, "INIT")
 
-    def test_wait_board_open_hard_timeout_recovers_to_init(self):
+    def test_wait_board_open_known_interference_dismisses_immediately(self):
         """
-        [契約 4 驗證] 處於 WAIT_BOARD_OPEN 且超過 5.0 秒，畫面完全未見任何彈窗 (quit.png 都沒出現)，
-        判定進店點擊遺失，自癒退回 INIT 重新發起進店。
+        [契約 4 驗證] 處於 WAIT_BOARD_OPEN 時，若偵測到 quit.png 且有明確背包特徵 (tidy.png)，
+        立即判定為 KNOWN_INTERFERENCE，閉環關閉以利重試。
         """
         self.handler.step_phase = "WAIT_BOARD_OPEN"
         self.handler.wait_board_open_start_time = 100.0
+        self.handler.open_attempts = 0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, tidy=True)
 
-        # 模擬畫面：完全沒有 quit.png，可能還在城鎮
-        def mock_match(screen_img, template_name, **kw):
-            return (None, 0.0)
+        with patch("states.handlers.bulletin_board.time.time", return_value=101.0), \
+             patch.object(self.handler, "click_and_wait_until_gone") as mock_wait_gone:
+            self.handler.handle(self.fake_img, self.rect)
 
-        self.handler.matcher.match.side_effect = mock_match
+            # 斷言：判定為干擾層立即關閉，退回 INIT，不需等待 2.5 秒沉澱
+            mock_wait_gone.assert_called_once_with("common/quit.png", 700, 100, self.rect, timeout=3.0, threshold=0.80)
+            self.assertEqual(self.handler.open_attempts, 1)
+            self.assertEqual(self.handler.step_phase, "INIT")
 
-        # 模擬當前時間為 106.0 秒 (經過 6.0 秒 > 5.0 秒)
+    def test_unknown_overlay_exceeds_budget_defers_and_pops_subflow(self):
+        """
+        [契約 5 驗證 - Anti-Livelock] 連續 UNKNOWN_OVERLAY 達到 MAX_OPEN_ATTEMPTS 上限時，
+        系統主動觸發 defer_subflow 並 pop_and_next_town_subflow，絕不陷入無限閉環死鎖。
+        """
+        self.handler.step_phase = "WAIT_BOARD_OPEN"
+        self.handler.wait_board_open_start_time = 100.0
+        self.handler.open_attempts = 1  # 已經嘗試過 1 次
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True)
+
+        with patch("states.handlers.bulletin_board.time.time", return_value=103.0), \
+             patch.object(self.handler, "click_and_wait_until_gone") as mock_wait_gone:
+            self.handler.handle(self.fake_img, self.rect)
+
+            # 斷言：關閉彈窗
+            mock_wait_gone.assert_called_once()
+            # 斷言：調用 defer_subflow 180 秒冷卻退避
+            self.mock_machine.daily_manager.defer_subflow.assert_called_once_with("bulletin_board", 180)
+            # 斷言：消費佇列切換下一個任務
+            self.mock_machine.pop_and_next_town_subflow.assert_called_once()
+
+    def test_wait_board_open_hard_timeout_single_retry_recovers_to_init(self):
+        """
+        [契約 6 驗證] 處於 WAIT_BOARD_OPEN 且超過 5.0 秒，畫面完全未見任何彈窗 (quit.png 都沒出現)，
+        判定進店點擊遺失，未達上限前自癒退回 INIT 重新發起進店。
+        """
+        self.handler.step_phase = "WAIT_BOARD_OPEN"
+        self.handler.click_building_time = 100.0
+        self.handler.open_attempts = 0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=False)
+
         with patch("states.handlers.bulletin_board.time.time", return_value=106.0):
             self.handler.handle(self.fake_img, self.rect)
 
-            # 斷言：硬逾時退回 INIT 重新發起進店
+            # 斷言：硬逾時退回 INIT 重新發起進店，嘗試次數累加
+            self.assertEqual(self.handler.open_attempts, 1)
             self.assertEqual(self.handler.step_phase, "INIT")
+
+    def test_hard_timeout_exceeds_budget_defers_and_pops_subflow(self):
+        """
+        [契約 7 驗證 - Anti-Livelock] 點擊建築開窗連續逾時達到 MAX_OPEN_ATTEMPTS 上限，
+        觸發 defer_subflow 並切換佇列。
+        """
+        self.handler.step_phase = "WAIT_BOARD_OPEN"
+        self.handler.click_building_time = 100.0
+        self.handler.open_attempts = 1
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=False)
+
+        with patch("states.handlers.bulletin_board.time.time", return_value=106.0):
+            self.handler.handle(self.fake_img, self.rect)
+
+            self.mock_machine.daily_manager.defer_subflow.assert_called_once_with("bulletin_board", 180)
+            self.mock_machine.pop_and_next_town_subflow.assert_called_once()
 
     def test_is_inside_bulletin_board_with_before_only(self):
         """
-        [契約 5 驗證] 驗證 Before 獨立通道：
+        [契約 8 驗證] 驗證 Before 獨立通道：
         當剛進告示牌且任務全未接取時，畫面上只有 task.png (Before)，無 reset 與 task_after。
         只要 task.png 信心度 >= 0.70，單憑此特徵即可判定身處告示牌。
         """
-        def mock_match(screen_img, template_name, **kw):
-            if template_name == "common/quit.png":
-                return ((700, 100), 0.90)
-            elif template_name == "town_building/bulletin_board/task.png":
-                return ((200, 300), 0.72)
-            return (None, 0.0)
-
-        self.handler.matcher.match.side_effect = mock_match
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, task=True)
         self.assertTrue(self.handler._is_inside_bulletin_board(self.fake_img, self.mock_machine.config))
 
     def test_is_inside_bulletin_board_with_after_only(self):
         """
-        [契約 6 驗證] 驗證 After 獨立通道：
+        [契約 9 驗證] 驗證 After 獨立通道：
         當所有任務皆已接取時，畫面上只有 task_after.png (After)，無 reset 與 task.png。
         只要 task_after.png 信心度 >= 0.70，單憑此特徵即可判定身處告示牌。
         """
-        def mock_match(screen_img, template_name, **kw):
-            if template_name == "common/quit.png":
-                return ((700, 100), 0.90)
-            elif template_name == "town_building/bulletin_board/task_after.png":
-                return ((200, 300), 0.72)
-            return (None, 0.0)
-
-        self.handler.matcher.match.side_effect = mock_match
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, task_after=True)
         self.assertTrue(self.handler._is_inside_bulletin_board(self.fake_img, self.mock_machine.config))
+
+    def test_observe_bulletin_board_classification_semantics(self):
+        """
+        [契約 10 驗證] 驗證 observe_bulletin_board 之四種分類語意
+        """
+        from utils.bulletin_board_detector import observe_bulletin_board
+
+        # 1. NO_OVERLAY
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=False)
+        obs1 = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+        self.assertEqual(obs1.classification, "NO_OVERLAY")
+
+        # 2. KNOWN_INTERFERENCE
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, tidy=True)
+        obs2 = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+        self.assertEqual(obs2.classification, "KNOWN_INTERFERENCE")
+        self.assertTrue(obs2.has_bag)
+
+        # 3. UNKNOWN_OVERLAY
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True)
+        obs3 = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+        self.assertEqual(obs3.classification, "UNKNOWN_OVERLAY")
+        self.assertFalse(obs3.has_bag)
+
+        # 4. BOARD_CONFIRMED
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, reset=True)
+        obs4 = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+        self.assertEqual(obs4.classification, "BOARD_CONFIRMED")
 
 
 if __name__ == "__main__":
