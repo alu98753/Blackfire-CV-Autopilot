@@ -629,6 +629,65 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         self.assertFalse(self.machine.town_normalization_pending)
         self.machine.daily_manager.defer_subflow.assert_not_called()
 
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_bag_tidy_mislocation_in_foreign_building_must_relinquish_without_pop(
+        self, mock_prec_detect
+    ):
+        """
+        [BagTidy 錯位迴歸驗證 (C1)]:
+        驗證 BagTidy 處於 foreign building 時 (exitfromhouse_and_to_town 可見，但無 bag/tidy/door)，
+        不得在 foreign building 盲目等待 20 秒超時後 pop_and_next_town_subflow() 消耗業務意圖；
+        必須由 MislocationGuard 連續確認 (2 frames) 後主動讓渡實體所有權給 REACH_TOWN！
+        嚴格遵守 Invariant 2：業務 Intent 絕不被 pop 或 completed！
+        """
+        self.machine.current_state = self.machine.STATE_BAG_TIDY
+        self.machine.current_town_subflow = "bag_tidy"
+        self.machine.need_bag_tidy = True
+        self.machine.daily_manager = MagicMock()
+        self.machine.pop_and_next_town_subflow = MagicMock(wraps=self.machine.pop_and_next_town_subflow)
+        tidy_handler = self.machine.handlers[self.machine.STATE_BAG_TIDY]
+
+        # 模擬畫面：身處 foreign building (exitfromhouse 可見，但無 common/door, bag_text, bag, tidy)
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((50, 500), 0.92) if t == "town_building/exitfromhouse_and_to_town.png" else (None, 0.0)
+        )
+
+        for _ in range(3):
+            tidy_handler.last_action_time = 0.0
+            tidy_handler.handle(self.screen, self.rect)
+            if self.machine.current_state == self.machine.STATE_NAVIGATING:
+                break
+
+        # 斷言 1: 必須主動 Relinquish 至 STATE_NAVIGATING，並獲取 ownership token
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertTrue(self.machine.town_normalization_pending)
+
+        # 斷言 2: 嚴格守護 Invariant 2：業務 Intent 絕不被 pop 或 mark completed！
+        self.assertEqual(self.machine.current_town_subflow, "bag_tidy")
+        self.machine.pop_and_next_town_subflow.assert_not_called()
+
+        # Step 2: shared REACH_TOWN 退出錯誤建築並重新回到 Town
+        prec_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(prec_res)
+        self.mouse.click.assert_called_with(50, 500)
+
+        # Step 3: 回到 Town Ready，重新派發回 STATE_BAG_TIDY
+        self.matcher.match.side_effect = lambda _s, t, **_kw: (
+            ((200, 550), 0.95)
+            if t in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png")
+            else (None, 0.0)
+        )
+        mock_prec_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(200, 200), confidence_building=0.9
+        )
+        redispatch_res = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(redispatch_res)
+
+        # 斷言 3: 重新派發回 STATE_BAG_TIDY，業務 Intent 完好無損，Token 清除
+        self.assertEqual(self.machine.current_state, self.machine.STATE_BAG_TIDY)
+        self.assertEqual(self.machine.current_town_subflow, "bag_tidy")
+        self.assertFalse(self.machine.town_normalization_pending)
+
 
 class TestMislocationGuardSemantic(unittest.TestCase):
     """
