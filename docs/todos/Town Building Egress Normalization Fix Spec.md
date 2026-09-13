@@ -161,7 +161,10 @@ CLOSE_OVERLAY ≠ EXIT_BUILDING_TO_TOWN ≠ TOWN verified
 >
 > 發起轉場動作的組件，必須確保該 action 被明確持有並追蹤至 postcondition 成立：
 > - 既有 Handler-local 模式下：Handler 發出 `exit` 點擊後，必須在自身的 `VERIFY_EXIT` 階段追蹤到城門出現後才允許交棒；
-> - 共享 Controller 模式下：Controller 發出 `EXIT_BUILDING_TO_TOWN` 後，必須由 Controller 追蹤驗證 `SceneId.TOWN` 成立後才放行目標 Handler。
+> - 共享 Controller 模式下：Controller 發出 `EXIT_BUILDING_TO_TOWN` 後：
+>   1. 由 `NavigationProgress` 驗證 `SceneId.TOWN` 成立（action postcondition satisfied）；
+>   2. 隨後由 `ReachTownNormalizationController` 繼續驗證 Town interaction readiness（readiness satisfied）；
+>   3. 唯有二者皆成立，才放行交棒給目標業務 Handler。
 > 嚴禁任何元件「click 完即放手不管」。
 
 ### Invariant 6: Town Location Evidence ≠ Town Interaction Readiness
@@ -173,8 +176,10 @@ CLOSE_OVERLAY ≠ EXIT_BUILDING_TO_TOWN ≠ TOWN verified
 >    - **Town Ready / Clean Town**：角色人在城鎮，且當前無背包、無全螢幕彈窗、無阻擋浮層，可安全將控制權移交給下一個 Town workflow。
 > 2. **拒絕狀態爆炸**：不引入 `SceneId.TOWN_READY`。維持 Scene（位置）、Element（特徵）、Overlay（遮擋）的正交分層。
 > 3. **語意錨點抽象 (`ElementId.TOWN_CLEAR_ANCHOR`)**：
->    - 引入專屬語意 `ElementId.TOWN_CLEAR_ANCHOR`，代表「正常城鎮必然可見，但凡有背包、彈窗或黑罩時必然不可見」的前景負向遮擋錨點（目前由實體模板 `town_building/arena_of_glory/arena_of_glory.png` 實作）。
->    - 策略層僅認語意錨點，不與特定遊戲建築名稱強耦合。
+>    - 引入專屬語意 `ElementId.TOWN_CLEAR_ANCHOR`，代表具備負向遮擋特性（negative-occlusion property）的強正向可操作性訊號（strong positive readiness signal，目前由實體模板 `town_building/arena_of_glory/arena_of_glory.png` 實作）。
+>    - **非必然條件，單純缺席不等於被阻擋**：`TOWN_CLEAR_ANCHOR` 的缺席單獨絕不得直接解釋為存在阻擋浮層（Unless that recall property has been empirically validated across supported Town views and runtime conditions）。其缺席語意為 `Readiness UNKNOWN`（需有界重新觀察或重新定位），而非 `Blocker Exists`。
+>    - **v1 充分條件**：針對 v1，`SceneId.TOWN + TOWN_CLEAR_ANCHOR + 無顯式正面檢測到的阻擋物 (no positively detected blocker)` 即為判定 Town interaction readiness 的充分證據。
+>    - 策略層僅認抽象語意，不與特定遊戲建築名稱強耦合。
 > 4. **分層契約不變量 (Action Postcondition vs Handoff Readiness)**：
 >    - `NavigationProgress._postcondition_met(PostconditionId.TOWN)` **維持不變**（純粹回答「剛才的離場/返回動作有沒有抵達城鎮？」：`scene.scene == SceneId.TOWN`）。
 >    - `ReachTownNormalizationController` 負責從「抵達城鎮」推進至「乾淨城鎮（Clean Town）」，歸一化終止條件為：
@@ -360,18 +365,18 @@ And: System MUST NOT return ARRIVED and MUST NOT dispatch business workflow
 And: Policy issues DISMISS_OVERLAY first.
 ```
 
-### Scenario 8: Town Location Only without Clear Anchor (Readiness Verification)
+### Scenario 8: Town Location Only without Clear Anchor (Readiness UNKNOWN)
 ```text
 Given: Physical screen has common/door.png visible, but no strong clear-Town anchor
-Then: Town location is established, but interaction readiness is not automatically assumed
-And: System must verify absence of blockers before authorizing workflow handoff.
+Then: Town location is established, but interaction readiness is UNKNOWN (neither assumed ready, nor assumed blocked)
+And: System proceeds with bounded re-observation / relocalization instead of immediate dispatch or immediate blocker assumption.
 ```
 
 ### Scenario 9: Clean Town with Clear Anchor (Full Readiness Established)
 ```text
 Given: Physical screen is SceneId.TOWN
-When: ElementId.TOWN_CLEAR_ANCHOR is visible and no blocking overlay is present
-Then: Town interaction readiness is established (ARRIVED)
+When: ElementId.TOWN_CLEAR_ANCHOR is visible and no positively detected blocker is present
+Then: For v1, this is sufficient to establish Town interaction readiness (ARRIVED)
 And: Business workflow handoff is authorized.
 ```
 
