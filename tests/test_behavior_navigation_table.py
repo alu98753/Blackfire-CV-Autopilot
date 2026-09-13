@@ -23,7 +23,7 @@ class TestBehaviorNavigationTable(unittest.TestCase):
             for edge in V1_NAVIGATION_EDGES
         }
 
-        self.assertEqual(len(V1_NAVIGATION_EDGES), 16)
+        self.assertEqual(len(V1_NAVIGATION_EDGES), 15)
         self.assertIn(
             (IntentId.COLLECT_BREAD, SceneId.TOWN, SceneId.LOBBY), routes
         )
@@ -70,7 +70,7 @@ class TestBehaviorNavigationTable(unittest.TestCase):
             ),
             routes,
         )
-        self.assertIn(
+        self.assertNotIn(
             (
                 IntentId.PRIMARY_NAVIGATION,
                 SceneId.STAGE_SELECT,
@@ -136,6 +136,43 @@ class TestBehaviorNavigationTable(unittest.TestCase):
             NavigationTable().next_edge(scene, IntentId.PRIMARY_NAVIGATION)
         )
 
+    def test_primary_stage_select_with_close_overlay_does_not_dismiss(self):
+        """
+        [Regression] STAGE_SELECT 抽屜自帶 common/quit.png (CLOSE_OVERLAY)，不得被誤判為 blocking overlay。
+        必須 resolve 為 CONTINUE_PRIMARY (PRIMARY_ROUTE_DELEGATED)。
+        """
+        scene = SceneSnapshot(
+            1,
+            1.0,
+            SceneId.STAGE_SELECT,
+            elements=self._element(ElementId.CLOSE_OVERLAY),
+        )
+        edge = NavigationTable().next_edge(scene, IntentId.PRIMARY_NAVIGATION)
+        self.assertIsNone(edge)
+
+        from states.navigation_intent import NavigationIntentPolicy, ActiveIntent, ReasonCode
+        policy = NavigationIntentPolicy()
+        decision = policy.resolve(scene, ActiveIntent(IntentId.PRIMARY_NAVIGATION))
+        self.assertNotEqual(decision.action, ActionId.DISMISS_OVERLAY)
+        self.assertEqual(decision.action, ActionId.CONTINUE_PRIMARY)
+        self.assertEqual(decision.reason, ReasonCode.PRIMARY_ROUTE_DELEGATED)
+
+    def test_primary_stage_select_with_start_resolves_to_start_primary(self):
+        """
+        STAGE_SELECT 出現 start 按鈕時應觸發 START_PRIMARY。
+        """
+        scene = SceneSnapshot(
+            1,
+            1.0,
+            SceneId.STAGE_SELECT,
+            elements=self._element(ElementId.START),
+        )
+        edge = NavigationTable().next_edge(scene, IntentId.PRIMARY_NAVIGATION)
+        self.assertIsNotNone(edge)
+        self.assertEqual(edge.action, ActionId.START_PRIMARY)
+        self.assertEqual(edge.postcondition, PostconditionId.LOADING_OR_BATTLE)
+
 
 if __name__ == "__main__":
     unittest.main()
+
