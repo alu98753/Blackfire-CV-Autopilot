@@ -1,220 +1,315 @@
-# Blackfire Crusade 自動化副本掛機輔助工具
+# Blackfire CV Autopilot
 
-本專案是一個基於 OpenCV 圖像模板匹配與 PyAutoGUI 自動化點擊開發的 《Blackfire Crusade》 副本自動掛機輔助腳本。專為 PC 視窗模式（如 Steam 版本）設計，通過視覺偵測自動完成遊戲大廳、戰鬥、結算、下樓、清理背包及定時獎勵領取的完整閉環掛機流程。
+[English](README.md) | [繁體中文](README.zh-TW.md)
 
----
+**A computer-vision-driven autonomous game agent for Blackfire Crusade, designed for long-running unattended operation with state-machine orchestration, closed-loop recovery, multi-instance isolation, and automated resource/task management.**
 
-## 🚀 主要功能特點
+Blackfire CV Autopilot observes the game through screenshots and computer vision, determines the current game state, and executes the next action through foreground or Win32 background control.
 
-1. **模組化狀態機調度 (State Pattern)**：
-   * 採用狀態模式設計，將大廳 (`LOBBY`)、戰鬥 (`BATTLE`)、探索 (`EXPLORING`)、結算 (`RESULT`)、領體力/鑽石導航 (`NAVIGATING`)、背包清理 (`BAG_CLEANING`) 及背包滿自適應分選 (`BACKPACK_FULL_SORTING`) 拆分為獨立處理器類別，由主調度器分配執行。
-2. **自動戰鬥啟用與 CD 控制**：
-   * 進入戰鬥後，偵測「自動戰鬥」按鈕是否為未啟用狀態，若是則執行點擊啟用。內置 3 秒冷卻時間，防止因延遲重複點選而關閉已啟用的自動戰鬥。
-3. **多段結算 PK 比對 (Multi-Stage Result)**：
-   * 搜尋並加載所有結算繼續按鈕模板（`templates/common/continue*.png`）。比對時僅點選相似度最高的有效前台按鈕，完全無視背景殘留變暗按鈕的干擾，順暢通過多重結算頁面。
-4. **自動定時領體力與鑽石 (Timer Claiming)**：
-   * **領體力**：每隔 30 分鐘自動攔截尋路，點擊體力入口圖示並領取，具備體力已滿提示自動關閉的容錯處理。
-   * **領鑽石**：每隔 2 小時自動點選 `goback_town` 返回城鎮並點擊鑽石入口。
-   * **鑽石安全保護**：開啟鑽石視窗後，程序會鎖定在視窗內，只匹配 `diamond_free.png` (閥值 0.90) 或關閉按鈕，避免點擊到背景圖標或付費禮包。若鑽石處於冷卻時間（無免費領取按鈕），會點擊關閉按鈕安全退出。
-   * **優先級**：體力與鑽石定時器同時到期時，優先執行領鑽石流程，隨後執行領體力。
-5. **地圖探索事件記憶與下樓冷卻**：
-   * 地下城隨機事件（開寶箱、選技能卡、接受祝福）被點擊後，立即標記為本層已完成，後續畫面比對中予以跳過，防止重複點擊。
-   * 點選下樓按鈕後開啟 6 秒過渡期冷卻計時，防止載入下一層的時間差內重複點選舊圖示。
-6. **滑鼠手動介入偵測 (Manual Interruption)**：
-   * 當手動移動滑鼠（位移大於 5 像素）且距離腳本上次操作超過 1.2 秒時，腳本自動暫停並鎖定當前狀態，方便玩家臨時手動操作。
-   * 滑鼠靜止達 3 秒後，腳本自動恢復運行。此機制僅檢測滑鼠移動，玩家使用鍵盤操作（如打字聊天）不會觸發暫停。
-7. **背包滿自適應分選與低稀有度銷毀 (Smart Sorting)**：
-   * 當彈出「無法容納的物品 (背包已滿)」彈窗 (`backpack_full.png`) 時，立即進入分選狀態：
-     * **稀有度識別**：提取左側溢出格與右側背包格（內圈環狀取樣區 offset 10~20，標準差篩選：左側 > 40.0，右側 > 20.0）並在 HSV 色彩空間中判定裝備稀有度。
-     * **銷毀與收納**：若左側有藍色及以上物品（紫、黃、橘、紅邊框），點選右側的低稀有度物品（綠色或灰色），點擊 `destroy.png` ➔ `confirm.png` 進行銷毀，隨後點選左側貴重物品 ➔ 點擊 `collect.png` 領取。
-     * **滾動搜尋與安全關閉**：右側無低稀有度物品時，自動向下滾動（最多 3 次）。若仍無可銷毀物件，或左側已無貴重物品，則點擊關閉按鈕（精準座標 offset 1228, 50），並比對點擊二次確認彈窗，返回 `STATE_UNKNOWN`。
-8. **背包自動清理分解與貴重保留 (Bag Cleaning & Reservation)**：
-   * 當從自適應分選退出，或在戰鬥結算後回到大廳且 `need_bag_cleaning` 為 True 時，狀態機會自動轉移至 `BAG_CLEANING` 狀態。
-   * **貴重保留流程**：點擊打開背包 ➔ 點擊大量分解 ➔ 點擊全選 ➔ **使用自適應環狀遮罩色彩分類法，自動掃描網格並反選保留藍、紫、橘黃、紅等稀有貴重裝備** ➔ 點擊分解 ➔ 確認彈窗 ➔ 點擊整理 ➔ 點擊退出關閉背包。
-9. **貴重裝備色彩分類特徵工程 (Rare Gear Color Classification)**：
-   * 內置獨立的色彩判定特徵工程（環帶採樣遮罩避開中心打勾與邊緣發光），並為紫、藍、橘黃、紅等各品質顏色設置了專屬的飽和度 $S$ 與亮度 $V$ 閾值。
-   * 詳細算法與防禦大石棒等灰色裝備的過濾參數請參閱專屬文件：[bag_color_classification.md (色彩特徵說明文件)](docs/features/bag_color_classification.md)。
-10. **通用戰敗重新開始 (Defeat Retry)**：
-    * 當自動戰鬥失敗並跳轉到戰敗結算畫面（`defeat.png`）時，程式會自動識別，並以「雙保險」機制點選重新開始：
-      * 優先搜尋匹配 `defeat_retry.png` 或 `stages/retry.png` 按鈕進行精準點擊；
-      * 若無匹配，則以戰敗大圖的中心點進行左下角相對座標 `(X - 140, Y + 250)` 的防禦性點擊重啟，確保不卡死並順暢累加戰鬥場次。
-11. **多副本與地下城自主選關**：
-    * 支援一般關卡 Boss 1~4 的自適應橫向拉動尋路與點擊。
-    * 地下城模式下支援「黏糊糊的石窟 / 幽影地穴 / 森林迷宮 / 神秘遺跡」單獨指定點選，或「自動貪婪挑選」模式（優先進入最高級可探索地圖）。
-13. **血之祭壇獻祭與城鎮建築連動 (`Blood Altar`)**：
-    * 支援獨立 CLI 模式 (`--mode blood_altar`) 選擇品質獻祭（灰/綠/藍獻祭，紫色保留等），亦支援長途掛機中背包滿清理後自動一路退回城鎮進入祭壇獻祭，獻祭完畢自動轉移至動態導航續行掛機。
-    * 詳細架構與防誤觸機制請參閱專屬文件：[Blood_Altar.md (血之祭壇說明文件)](docs/features/town_building/Blood_Altar.md)。
-14. **城鎮任務流水線佇列 (`Town Subflow Pipeline`)**：
-    * 提供無解耦、可高度擴充的城鎮子流程鏈式動態佇列。當背包清理分解完成後，腳本將自動依序在城鎮中執行「血之祭壇獻祭 ➔ 珠寶加工廠出售 ➔ 未來新建築」，任務清空後自動恢復 `mix` / `stage` / `dungeon` 掛機。
-    * 詳細架構請參閱專屬文件：[pipeline.md (城鎮任務流水線說明文件)](docs/features/town_building/pipeline.md)。
-15. **例外處理與防卡死子系統 (`states/exceptions/`)**：
-    * **集中化例外處置**：所有意外彈窗（如 `Raid_Box.png` 掃蕩、`Wheel_of_Fortune.png` 幸運輪盤、卡死逾時等）均集中於 `states/exceptions/` 獨立模組處置，嚴禁在業務主迴圈寫硬編碼補釘。
-    * **雙層優先級機制**：優先級 1 專屬 Subflows (`RaidBoxSubflow`, `WheelOfFortuneSubflow`) 進行 ROI 點對點關閉；優先級 2 通用防卡死 (`GenericAntiStuckSubflow`) 在無專屬圖案時進行全域按鈕備援兜底。
-    * **詳細架構與 Subflow 開發指引**：請參閱專屬文件：[exception_subsystem_architecture.md (例外處理子系統說明文件)](docs/architecture/exception_subsystem_architecture.md)。
+The project covers repeated combat, dungeon exploration, daily activities, inventory management, town workflows, resource collection, and runtime recovery. Its current focus is not only automating individual clicks, but keeping multi-step gameplay flows running under changing visual states and recoverable failures.
 
 ---
 
+## Features
 
-## 🛠️ 環境配置與安裝指引 (How to Build & Setup)
+### Gameplay automation
 
-1. **建立 Python 虛擬環境**：
-   在專案根目錄下打開終端機執行：
-   ```powershell
-   python -m venv .venv
-   ```
-2. **啟動虛擬環境並安裝依賴套件**：
-   ```powershell
-   # 啟動虛擬環境 (PowerShell 執行 .\.venv\Scripts\Activate.ps1 / CMD 執行 .\.venv\Scripts\activate.bat)
-   .\.venv\Scripts\activate
-   # 安裝 OpenCV, PyAutoGUI, mss 等依賴套件
-   pip install -r requirements.txt
-   ```
-3. **確認遊戲視窗**：
-   開啟遊戲（必須保持前台可見，不能最小化），執行視窗偵測腳本：
-   ```powershell
-   .\.venv\Scripts\python scripts/list_windows.py
-   ```
-   確認輸出中包含遊戲視窗標題 `Blackfire Crusade`。
-4. **裁剪自定義範本圖片 (選用)**：
-   若因解析度差異需重新裁剪模板，可執行模板裁剪工具：
-   ```powershell
-   .\.venv\Scripts\python scripts/crop_tool.py
-   ```
-   * 程式倒數 5 秒後擷取視窗，在畫面上拖曳滑鼠框選按鈕，按 `Enter` 鍵確認選取，輸入檔名並儲存到 `templates/` 下的對應文件夾中。
+The agent currently supports several long-running gameplay flows:
+
+* **Stage farming** — enters stages, enables automatic combat, processes battle results, and retries after defeat.
+* **Dungeon exploration** — handles floor progression, random events, blessings, rewards, and dungeon selection.
+* **Mixed operation** — switches between supported gameplay activities according to the active configuration and runtime state.
+* **Daily and scheduled activities** — handles town tasks, resource collection, boss-related activities, and cooldown-dependent workflows.
+* **Inventory management** — detects full inventory conditions, classifies equipment rarity, keeps configured valuable equipment, and dismantles or destroys lower-priority items.
+* **Town workflows** — executes independent town subflows such as the Blood Altar and Jewelry Workshop through a shared task pipeline.
+
+Detailed behavior is documented under [`docs/features/`](docs/features/).
 
 ---
 
-## 📖 啟動指令與模式指南 (Usage & Modes Guide)
+## Long-running operation
 
-本工具支援多種執行模式與靈活的指令參數，可完美適配前台實體操作與後台不搶占掛機需求。
+Long-running automation introduces failures that do not appear in a short scripted demo: delayed transitions, unexpected dialogs, stale visual states, an unresponsive game window, screenshot failures, or a terminated bot process.
 
-> [!TIP]
-> **🚀 效能推薦：使用獨立 CLI 服務啟動**
-> 為了避免 IDE 內置終端文字渲染與 Electron 核心帶來的 CPU 及較高的記憶體開銷，推薦在不開啟 IDE 的情況下，**直接雙擊專案根目錄的 `run.bat` 檔案**。
-> * 它會自動激活虛擬環境並啟動掛機，且幾乎不佔用額外系統資源。
+The project therefore includes runtime recovery mechanisms in addition to gameplay logic.
 
-### 0. 獨立一鍵啟動 (CLI 獨立版)
-* 檔案路徑：專案根目錄下的 [run.bat](run.bat)
-* 啟動方式：**滑鼠雙擊 `run.bat` 執行即可**。
-* 注意事項：若要修改掛機模式或參數，可用記事本打開並修改最後一行的 `python main.py --backend --mode dungeon` 命令參數。
+### Supervisor and heartbeat
 
+For unattended operation, `run.bat` launches the bot through an external Supervisor.
 
+The Supervisor monitors a per-profile heartbeat and can restart the bot process when the child process exits or stops making progress. Restarted processes reuse the selected target and profile through the `--resume` path instead of repeating the interactive startup configuration.
 
-### 1. 指令參數說明 (Command-Line Arguments)
+The runtime also checks whether the selected game window is unresponsive and can escalate the startup path to a game relaunch.
 
-啟動腳本時，您可以搭配以下參數：
+See [Long-running operation and automatic recovery](docs/長時間掛機與自動恢復使用說明.md) for the operational behavior.
 
-| 參數 | 類型 | 預設值 | 說明 |
-| :--- | :--- | :--- | :--- |
-| `--mode` | 字串 | `mix` | **掛機模式**：可選 `daily` (每日懸賞任務)、`mix` (混合模式)、`dungeon` (地下城)、`stage` (普通關卡)、`golden_empire` (黃金古國領地探索)、`collect_only` (定時領取待機)、`bag_clean` (單次背包整理分解)。 |
-| `--backend` | 切換旗標 | 關閉 | **啟用後台掛機模式**。滑鼠不會被腳本強行移動，您可以將遊戲放置在延伸大螢幕（DPI=1.0）背景，並在主螢幕繼續您的日常辦公、瀏覽網頁或遠端遙控，點擊完全獨立且不干涉。 |
-| `--interval` | 浮點數 | `0.05` | 畫面偵測的間隔時間（秒）。預設 `0.05` 確保最高回饋速度，若想降低 CPU 佔用可調高（如 `0.2` 或 `0.3`）。 |
-| `--title` | 字串 | `Blackfire Crusade` | 遊戲視窗名稱。如果多開或標題不同時可手動指定。 |
-| `--human` | 切換旗標 | 關閉 | **模擬人類操作**（僅在前台模式有效）。滑鼠會以隨機二次曲線（EaseOutQuad）移動，並在點擊間隙產生防作弊隨機微小時間偏移。 |
+### Recovery inside the agent
 
----
+Recoverable gameplay failures are handled closer to the state in which they occur.
 
-### 2. 核心模式執行方法
+Examples include:
 
-#### 🔹 模式 A：每日懸賞任務 (`--mode daily`) [推薦]
-* **功能**：全自動調度懸賞告示牌、定時地下城與首領 Boss；等待期間依 CLI 選擇長駐普通關卡或領地探索。選擇會保存到各玩家的 `user_data/<profile>/config.toml`。
-* **啟動指令**：
-  ```powershell
-  .\.venv\Scripts\python main.py --mode daily --backend
-  ```
+* action retries with bounded attempts;
+* dedicated exception subflows for known unexpected dialogs;
+* generic fallback handling when a dedicated recovery path is unavailable;
+* post-action state verification for flows that require positive completion evidence;
+* fallback to an unknown/recovery state when a transition cannot be confirmed.
 
-#### 🔹 模式 B：黃金古國領地探索 (`--mode golden_empire`) [NEW]
-* **功能**：自動由大廳進入黃金古國主場景，循環消耗 3 麵包進行探索、自動處理 15% 挖寶事件（第 1 次免費開箱 ➔ 確認 ➔ 退出）、戰鬥獲勝雙 Continue 結算回歸與背包滿自動整理。
-* **前置要求**：將遊戲畫面停留在**大廳/城鎮畫面（能看到 `common/door.png` 傳送門）** 或 **黃金古國主場景**。
-* **啟動指令**：
-  ```powershell
-  .\.venv\Scripts\python main.py --mode golden_empire --backend
-  ```
+Recovery behavior is separated from normal gameplay handlers where possible instead of accumulating special-case patches in the main loop.
 
-#### 🔹 模式 C：地下城自動探索 (`--mode dungeon`)
-* **功能**：自動在大廳進入地下城、下樓、貪婪模式挑選、接受祝福/開啟寶箱、戰鬥、背包滿時自動銷毀垃圾並收集貴重物、定時自動回城領鑽石與體力。
-* **前置要求**：將遊戲畫面停留在**最外層的大廳/城鎮畫面（能看到右下角 `common/door.png` 傳送門圖標）**。
-* **啟動指令**：
-  ```powershell
-  .\.venv\Scripts\python main.py --mode dungeon --backend
-  ```
-
-#### 🔹 模式 D：普通關卡自動刷關 (`--mode stage`)
-* **功能**：自動點擊開始關卡、戰鬥、結算（識別 continue 並點擊）、戰敗自動重新開始（雙保險防禦點擊）。
-* **啟動指令**：
-  ```powershell
-  .\.venv\Scripts\python main.py --mode stage --backend
-  ```
-
-#### 🔹 模式 E：單次自動分解與整理背包 (`--mode bag_clean`)
-* **功能**：主動打開背包大量分解、反選貴重保留品質、點擊整理並退出。
-* **啟動指令**：
-  ```powershell
-  .\.venv\Scripts\python main.py --mode bag_clean --backend
-  ```
+See [`exception_subsystem_architecture.md`](docs/architecture/exception_subsystem_architecture.md).
 
 ---
 
-### ⚡ 3. 戰鬥時鐘倍速與自動化設定器 (50x 極速秒殺)
+## Multi-instance and background control
 
-本專案提供專屬輔助工具 [set_battle_settings.py](scripts/set_battle_settings.py)，可自由修改遊戲原生戰鬥主時鐘 (`battle_settings.save` ➔ `time_scale` 1.0x ~ 100.0x)：
+The application can target a specific game window through `--target`, including native and Sandboxie instances.
 
-```powershell
-# 設定為 12 倍極速上限 (預設推薦，直接執行即可)
-.\.venv\Scripts\python scripts/set_battle_settings.py
+Each instance can use an independent profile under:
 
-# 自由指定任意倍速 (例如 6x 或 12x)
-.\.venv\Scripts\python scripts/set_battle_settings.py --speed 6
-
-# 還原為原廠 2.0x 正常倍速
-.\.venv\Scripts\python scripts/set_battle_settings.py --reset
+```text
+user_data/<profile>/
 ```
 
-> [!TIP]
-> **免重開即時生效**：本工具內建「存檔唯讀鎖定 (`attrib +r`)」與「運行中進程即時記憶體熱注入 (Live Memory Injection)」。修改後**完全無需重開遊戲**，直接進入下一場戰鬥即可現場享受 50 倍超光速！
+Profile-specific state includes configuration and runtime data required to resume the same instance after a restart.
+
+Native and Sandbox instances also use separate heartbeat files, allowing two supervised bot instances to run without treating the other instance's heartbeat as their own.
+
+With `--backend`, supported actions are sent to the target Windows game window without requiring ownership of the physical mouse for every interaction.
 
 ---
 
-### 3. 視覺化調試輔助：`debug_click.png`
+## Computer vision
 
-在啟用 `--backend`（後台模式）時，程式在送出每次點擊前都會在當前視窗畫面上繪製標記：
-* **標記樣式**：點擊的物理相對座標處會畫上 **紅色圓圈與十字準星**，並標註 `Click: (X, Y)` 物理座標。
-* **儲存檔案**：輸出為專案根目錄下的 **`debug_click.png`**。
-* **用途**：此功能為純視覺排查工具，對掛機無任何負擔。如果您發現程式點擊了錯誤的按鈕（例如點偏），可以隨時打開 `debug_click.png`，一眼看清紅圈有沒有準確覆蓋在您的目標按鈕中心，協助您極速核對位置。
+The perception layer combines several techniques depending on the task rather than relying on one global detector.
+
+### Template and region-based detection
+
+UI elements and scene anchors are detected with OpenCV template matching. Detection can be scoped to regions of interest when the location of an element is constrained.
+
+Scene recognition and action logic are kept as separate responsibilities so gameplay handlers can operate on recognized state instead of embedding every visual check directly into the main control loop.
+
+### Equipment rarity classification
+
+Inventory automation uses HSV-based color features to distinguish equipment rarity.
+
+The classifier samples a ring-shaped region inside an equipment slot so that the feature is less affected by the center selection mark and unrelated parts of the item artwork.
+
+The resulting classification is used by inventory-cleaning flows to preserve configured rarity levels while removing lower-priority equipment.
+
+See [`bag_color_classification.md`](docs/features/bag_color_classification.md) for the current rules and thresholds.
+
+### OCR-assisted workflows
+
+Some task and cooldown flows use localized image crops and OCR-derived information when template matching alone is insufficient.
+
+OCR configuration is kept separate from higher-level navigation and task scheduling rules.
 
 ---
 
-### 4. 安全暫停與終止
-* **手動介入暫停**：掛機時若手動移動滑鼠，程式會偵測到使用者介入並自動暫停（鎖定當前狀態），滑鼠靜止 3 秒後自動恢復。
-* **安全終止**：在 PowerShell 視窗中隨時按下 `Ctrl + C`，即可安全退出掛機並在畫面輸出本次掛機的戰鬥場次統計資訊。
+## Architecture
 
-## 💻 開發者與貢獻者指南 (Developer Guide)
+At a high level, the runtime follows a perception → state → action loop, with recovery and supervision surrounding the normal gameplay path.
 
-如果您是本專案的開發者或使用 AI Coding Agent 進行 Pair-Programming 協同開發：
+```mermaid
+flowchart TD
+    A[Game Window] --> B[Screen Capture]
+    B --> C[Visual Perception]
+    C --> D[Scene / Runtime State]
+    D --> E[State Machine & Subflows]
+    E --> F[Action Layer]
+    F --> A
 
-### 1. 專案架構與 AI 規範 (.agents)
-本專案採用 `.agents` 結構化 Prompt 與 Skill 規範進行自動化輔助開發：
-* **狀態機規範 Skill**：位於 [.agents/skills/state_machine_development/SKILL.md](.agents/skills/state_machine_development/SKILL.md)，定義了狀態模式設計原則、Handler 職責分離與點擊防護規範。
-* **全域 Rules**：位於 [.agents/AGENTS.md](.agents/AGENTS.md)，定義全域代碼風格與驗證要求。
+    E --> G[Exception / Recovery Subflows]
+    G --> D
 
-### 2. 核心架構文檔 (Docs)
-* **決策流程圖**：[dungeon_flow.md (地下城探索與體力領取邏輯)](docs/features/dungeon_flow.md)
-* **城鎮流水線架構**：[pipeline.md (城鎮子流程佇列說明)](docs/features/town_building/pipeline.md)
-* **每日懸賞排程器**：[daily8.md (懸賞任務多階梯優先級)](docs/features/daily_task/daily8.md)
+    H[Configuration & Profile] --> E
+    H --> F
 
-### 3. 自動化單元測試 (Unit Tests)
-在進行任何代碼重構或新 Feature 開發後，請務必執行全套單元測試以確保邏輯綠燈通過：
+    I[Supervisor] --> J[Heartbeat / Process Health]
+    J --> I
+    I --> K[Restart / Resume]
+    K --> E
+```
+
+The implementation separates several responsibilities that were originally part of a single automation loop:
+
+* screen capture and visual recognition;
+* gameplay state handlers;
+* reusable subflows;
+* action execution;
+* profile and configuration management;
+* exception recovery;
+* runtime supervision and process recovery.
+
+The project documentation index is available at [`docs/README.md`](docs/README.md).
+
+---
+
+## Engineering highlights
+
+### State-machine orchestration
+
+Gameplay is represented as explicit states and subflows rather than one linear macro.
+
+This allows combat, navigation, result handling, inventory processing, town activities, and recovery logic to retain their own transition rules while sharing the same runtime.
+
+Longer operations are progressively moving toward tick-driven state transitions instead of blocking waits, allowing the main loop to remain responsive to new observations and recovery conditions.
+
+### Task and subflow composition
+
+Town activities and other multi-step features are implemented as composable subflows.
+
+A parent workflow can enqueue work such as inventory cleanup, Blood Altar processing, or Jewelry Workshop processing and return to the previous steady-state activity after the queued work completes.
+
+This avoids placing each new activity directly into the central state loop.
+
+### Time as a runtime dependency
+
+Time-dependent behavior uses a clock abstraction in migrated runtime paths rather than requiring every test to wait for real wall-clock delays.
+
+Production execution retains real delays, while tests can inject a controllable clock and advance time deterministically.
+
+This is also used to migrate blocking retry and result flows toward tick-driven behavior.
+
+---
+
+## Testing
+
+The test suite focuses on externally observable state transitions, recovery behavior, configuration boundaries, and gameplay subflows.
+
+The latest recorded full-suite run on `main` passed:
+
+```text
+1,092 tests
+243.013 seconds
+```
+
+The previous full-suite baseline was above 380 seconds. The reduction came primarily from removing real test-time waits, isolating time behind a clock seam, and converting selected blocking flows to tick-driven transitions without changing their production timing behavior.
+
+Tests can be executed with:
 
 ```powershell
-# 執行全套單元測試 (共 520+ 項測試)
-.\.venv\Scripts\python.exe -m unittest discover tests
-
-# 單獨執行懸賞任務與狀態機整合測試
-.\.venv\Scripts\python.exe -m unittest tests/test_quest_statemachine_integration.py
+.\.venv\Scripts\python.exe -X utf8 -m unittest discover tests
 ```
 
 ---
 
-## 📋 開發中與待辦功能 (TODOs)
+## Quick start
 
-請參考：[future_work.md](docs/todos/future_work.md)
+### Requirements
+
+The project targets the Windows version of Blackfire Crusade and uses Windows-specific automation interfaces.
+
+Clone the repository and create a virtual environment:
+
+```powershell
+git clone https://github.com/alu98753/Blackfire-CV-Autopilot.git
+cd Blackfire-CV-Autopilot
+
+python -m venv .venv
+.\.venv\Scripts\activate
+
+pip install -r requirements.txt
+```
+
+The main runtime dependencies include OpenCV, MSS, PyAutoGUI, NumPy, Pillow, and pywin32.
+
+### Recommended launch
+
+For normal long-running use, start from the repository root:
+
+```powershell
+.\run.bat
+```
+
+`run.bat` starts the supervised execution path and provides the interactive configuration required for the selected instance.
+
+Running `main.py` directly is useful for development and targeted execution, but bypasses the outer Supervisor.
+
+---
+
+## CLI examples
+
+Run the default mixed mode:
+
+```powershell
+.\.venv\Scripts\python main.py --mode mix
+```
+
+Run dungeon exploration:
+
+```powershell
+.\.venv\Scripts\python main.py --mode dungeon
+```
+
+Run stage farming:
+
+```powershell
+.\.venv\Scripts\python main.py --mode stage
+```
+
+Enable background control:
+
+```powershell
+.\.venv\Scripts\python main.py --mode mix --backend
+```
+
+Target the Sandbox instance:
+
+```powershell
+.\.venv\Scripts\python main.py --target sandbox --profile sandbox
+```
+
+Target the native Steam instance:
+
+```powershell
+.\.venv\Scripts\python main.py --target native --profile native
+```
+
+The current primary modes are:
+
+```text
+mix
+dungeon
+stage
+golden_empire
+collect_only
+```
+
+Additional switches can independently enable or disable supported activities such as dungeon exploration, stage farming, town daily work, Lord Boss, and Demon Lords.
+
+Run:
+
+```powershell
+.\.venv\Scripts\python main.py --help
+```
+
+for the current CLI contract.
+
+---
+
+## Documentation
+
+The root README intentionally stays at the system and user-facing level. Detailed implementation rules live in the project documentation.
+
+| Topic                            | Document                                                                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Documentation index              | [`docs/README.md`](docs/README.md)                                                                               |
+| System components                | [`docs/system_components_index.md`](docs/system_components_index.md)                                             |
+| Scene recognition and navigation | [`docs/architecture/scene_recognition_and_navigation.md`](docs/architecture/scene_recognition_and_navigation.md) |
+| Exception and recovery subsystem | [`docs/architecture/exception_subsystem_architecture.md`](docs/architecture/exception_subsystem_architecture.md) |
+| Dungeon flow                     | [`docs/features/dungeon_flow.md`](docs/features/dungeon_flow.md)                                                 |
+| Inventory color classification   | [`docs/features/bag_color_classification.md`](docs/features/bag_color_classification.md)                         |
+| Town task pipeline               | [`docs/features/town_building/pipeline.md`](docs/features/town_building/pipeline.md)                             |
+| Long-running operation           | [`docs/長時間掛機與自動恢復使用說明.md`](docs/長時間掛機與自動恢復使用說明.md)                                                               |
+
+Development decisions and completed implementation stories are recorded separately under [`docs/storys/`](docs/storys/) so that the README does not become a changelog.
+
+---
+
+## Project status
+
+The project is under active development.
+
+The current work is focused on improving long-running reliability, reducing blocking runtime behavior, strengthening recovery contracts, and keeping gameplay features isolated behind testable state and subflow boundaries.
