@@ -2157,6 +2157,25 @@ class GameStateMachine:
         )
         self.pop_and_next_town_subflow()
 
+    def relinquish_subflow_to_navigation(self, reason: str = "mislocation_detected"):
+        """
+        Relinquish physical ownership from a committed subflow handler back to
+        shared REACH_TOWN normalization path without mutating the active intent.
+
+        STRICT INVARIANTS:
+        1. MUST NOT mutate self.current_town_subflow.
+        2. MUST NOT pop self.town_subflow_queue.
+        3. MUST NOT defer self.current_town_subflow.
+        4. MUST NOT complete self.current_town_subflow.
+        """
+        logging.warning(
+            "⚠️ [Relinquish Protocol] 釋放當前子流程實體所有權 (%s)，"
+            "交由 REACH_TOWN 歸一化回城。保留業務 Intent: %s",
+            reason,
+            self.current_town_subflow,
+        )
+        self.transition_to(self.STATE_NAVIGATING)
+
     def handle_town_subflow_precondition(self, screen_img, rect):
         return self.town_subflow_precondition.handle(screen_img, rect)
 

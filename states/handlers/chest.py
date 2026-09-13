@@ -12,6 +12,7 @@ CHEST_BUILDING_TEMPLATE = "town_building/mysterious_treasure/mysterious_treasure
 CHEST_DIALOG_TEMPLATE = "town_building/mysterious_treasure/free_treasure.png"
 CHEST_FREE_BTN_TEMPLATE = "free.png"
 CHEST_GOBACK_TOWN_TEMPLATE = "goback_town.png"
+CHEST_EXIT_BUILDING_TEMPLATE = "town_building/exitfromhouse_and_to_town.png"
 CHEST_CONFIRM_TEMPLATES = ("common/confirm.png", "common/ok.png")
 CHEST_QUIT_TEMPLATES = (
     "common/quit.png",
@@ -21,6 +22,7 @@ CHEST_MAX_NOT_FOUND_INIT = 5
 CHEST_MAX_NOT_FOUND_DIALOG = 5
 CHEST_MAX_CONFIRM_WAIT = 3
 CHEST_MAX_VERIFY_ATTEMPTS = 3
+CHEST_MAX_MISLOCATION_FRAMES = 2
 CHEST_ACTION_COOLDOWN_SEC = 0.5
 CHEST_BUTTON_ROI_Y_RATIO = 0.70  # 卡片底部 30% 區域 (專屬按鈕與冷卻文字)
 
@@ -40,6 +42,7 @@ class ChestHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
         self.not_found_count = 0
+        self.mislocation_count = 0
         self.verify_attempt_count = 0
         self.claim_verified = False
         self._dialog_crop_rect = None
@@ -49,6 +52,7 @@ class ChestHandler(BaseStateHandler):
         self.step_phase = "INIT"
         self.last_action_time = 0.0
         self.not_found_count = 0
+        self.mislocation_count = 0
         self.verify_attempt_count = 0
         self.claim_verified = False
         self._dialog_crop_rect = None
@@ -69,13 +73,14 @@ class ChestHandler(BaseStateHandler):
         left = rect["left"] if rect else 0
         top = rect["top"] if rect else 0
 
-        # 0. 優先檢查是否在關卡大廳/選關畫面，點擊返回城鎮
-        pos_goback, _ = self.matcher.match(screen_img, CHEST_GOBACK_TOWN_TEMPLATE, threshold=0.80)
-        if pos_goback:
-            logging.info("🎁 [神秘寶箱] 偵測到處於大廳畫面，點擊返回城鎮...")
-            self.mouse.click(left + pos_goback[0], top + pos_goback[1])
-            self.last_action_time = now
-            return True
+        # 0. 優先檢查是否在關卡大廳/選關畫面，點擊返回城鎮 (僅在非 INIT 業務階段保留作為容錯)
+        if self.step_phase != "INIT":
+            pos_goback, _ = self.matcher.match(screen_img, CHEST_GOBACK_TOWN_TEMPLATE, threshold=0.80)
+            if pos_goback:
+                logging.info("🎁 [神秘寶箱] 偵測到處於大廳畫面，點擊返回城鎮...")
+                self.mouse.click(left + pos_goback[0], top + pos_goback[1])
+                self.last_action_time = now
+                return True
 
         if self.step_phase == "INIT":
             return self._handle_init(screen_img, rect, left, top, now)
@@ -135,9 +140,11 @@ class ChestHandler(BaseStateHandler):
         cfg = self.machine.config or {}
         building_btn = cfg.get("building_btn", CHEST_BUILDING_TEMPLATE)
 
+        # 1. 檢查自身合法特徵 (建築本體或對話框)
         if os.path.exists(os.path.join("templates", building_btn)):
             check = detect_building_with_red_dot(screen_img, building_btn, self.matcher, debug_tag="chest")
             if check.found_building:
+                self.mislocation_count = 0
                 is_dev = getattr(self.machine, "is_dev_subflow_run", False)
                 if not check.has_red_dot and not is_dev:
                     logging.info("🎁 [神秘寶箱 INIT] 寶箱下方無驚嘆號紅點，代表今日免費寶箱已領取！標記完成並推進下一任務...")
@@ -157,6 +164,38 @@ class ChestHandler(BaseStateHandler):
                 time.sleep(0.3)
                 return True
 
+        if os.path.exists(os.path.join("templates", CHEST_DIALOG_TEMPLATE)):
+            pos_ft, _ = self.matcher.match(screen_img, CHEST_DIALOG_TEMPLATE, threshold=0.75)
+            if pos_ft:
+                self.mislocation_count = 0
+                self.step_phase = "CLICK_FREE_CHEST"
+                return True
+
+        # 2. Relinquishment Protocol (Invariant 2 / Spec Section 5):
+        # 未見自身特徵，但明確觀察到非自身房間退出按鈕 (exitfromhouse) 或大廳返回按鈕 (goback_town)
+        pos_exit, _ = self.matcher.match(screen_img, CHEST_EXIT_BUILDING_TEMPLATE, threshold=0.75)
+        pos_goback, _ = self.matcher.match(screen_img, CHEST_GOBACK_TOWN_TEMPLATE, threshold=0.80)
+        if pos_exit or pos_goback:
+            self.mislocation_count += 1
+            logging.info(
+                "⚠️ [神秘寶箱 INIT] 偵測到非自身之其他場景特徵 (exit/goback 可見，確認第 %d/%d 幀)...",
+                self.mislocation_count,
+                CHEST_MAX_MISLOCATION_FRAMES,
+            )
+            if self.mislocation_count >= CHEST_MAX_MISLOCATION_FRAMES:
+                logging.warning(
+                    "⚠️ [Mislocation Detected] 處於非目標場景，釋放實體所有權交由 REACH_TOWN 歸一化..."
+                )
+                self.reset_state()
+                if hasattr(self.machine, "relinquish_subflow_to_navigation"):
+                    self.machine.relinquish_subflow_to_navigation("mislocation_in_other_building")
+                else:
+                    self.machine.transition_to(self.machine.STATE_NAVIGATING)
+                return True
+            return True
+
+        # 3. 自身特徵與退出特徵皆無時，走既有 bounded retry / defer 機制
+        self.mislocation_count = 0
         self.not_found_count += 1
         if self.not_found_count >= CHEST_MAX_NOT_FOUND_INIT:
             self._defer_subflow("入口證據在 Handler 啟動後消失")
