@@ -69,14 +69,14 @@ def match_roi_only(
 
 def has_bag_features(screen_img: np.ndarray, matcher, threshold: float = 0.80) -> bool:
     """
-    排他特徵檢查：檢測畫面是否存在背包專屬特徵 (tidy.png / Disassembly.png)。
+    排他特徵檢查：檢測畫面是否存在背包專屬特徵 (Disassembly.png)。
     若存在，代表此視窗為背包而非告示牌。
+    (注意：common/tidy.png 因告示牌任務介面亦有重新整理等相似文字/圖示，已自排他特徵中移除)
     """
     if screen_img is None or matcher is None:
         return False
-    pos_tidy, _ = matcher.match(screen_img, "common/tidy.png", threshold=threshold, quiet=True)
     pos_disasm, _ = matcher.match(screen_img, "common/Disassembly.png", threshold=threshold, quiet=True)
-    return (pos_tidy is not None) or (pos_disasm is not None)
+    return pos_disasm is not None
 
 
 @dataclass
@@ -185,9 +185,7 @@ def format_diagnostic_report(obs: BulletinBoardObservation) -> str:
 
     # 3. Negative evidence
     lines.append("Negative evidence:")
-    tidy_status = "DETECTED" if obs.conf_bag_tidy >= 0.80 else "ABSENT"
     disasm_status = "DETECTED" if obs.conf_bag_disasm >= 0.80 else "ABSENT"
-    lines.append(f"  bag_tidy: {tidy_status} (score={obs.conf_bag_tidy:.2f})")
     lines.append(f"  bag_disassembly: {disasm_status} (score={obs.conf_bag_disasm:.2f})")
     lines.append("")
 
@@ -265,12 +263,10 @@ def observe_bulletin_board(
         obs.classification = "NO_OVERLAY"
         return obs
 
-    # 2. 背包排他特徵檢查 (負向特徵)
-    pos_tidy, conf_tidy = matcher.match(screen_img, "common/tidy.png", threshold=0.80, quiet=True)
+    # 2. 背包排他特徵檢查 (負向特徵，僅比對 Disassembly.png，tidy.png 因文字干擾已移除)
     pos_disasm, conf_disasm = matcher.match(screen_img, "common/Disassembly.png", threshold=0.80, quiet=True)
-    obs.conf_bag_tidy = conf_tidy
     obs.conf_bag_disasm = conf_disasm
-    obs.has_bag = (pos_tidy is not None) or (pos_disasm is not None)
+    obs.has_bag = (pos_disasm is not None)
 
     # 3. 正向三通道獨立檢查 (僅限各自 Scoped ROI)
     pos_reset, conf_reset = match_roi_only(screen_img, matcher, reset_btn, reset_roi, threshold=positive_threshold, scales=board_scales)

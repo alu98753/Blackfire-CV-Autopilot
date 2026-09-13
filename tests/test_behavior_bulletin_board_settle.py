@@ -113,13 +113,13 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
 
     def test_wait_board_open_known_interference_dismisses_immediately(self):
         """
-        [契約 4 驗證] 處於 WAIT_BOARD_OPEN 時，若偵測到 quit.png 且有明確背包特徵 (tidy.png)，
+        [契約 4 驗證] 處於 WAIT_BOARD_OPEN 時，若偵測到 quit.png 且有明確背包特徵 (Disassembly.png)，
         立即判定為 KNOWN_INTERFERENCE，閉環關閉以利重試。
         """
         self.handler.step_phase = "WAIT_BOARD_OPEN"
         self.handler.wait_board_open_start_time = 100.0
         self.handler.open_attempts = 0
-        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, tidy=True)
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, disasm=True)
 
         with patch("states.handlers.bulletin_board.time.time", return_value=101.0), \
              patch.object(self.handler, "click_and_wait_until_gone") as mock_wait_gone:
@@ -214,7 +214,7 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         self.assertEqual(obs1.classification, "NO_OVERLAY")
 
         # 2. KNOWN_INTERFERENCE
-        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, tidy=True)
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True, disasm=True)
         obs2 = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
         self.assertEqual(obs2.classification, "KNOWN_INTERFERENCE")
         self.assertTrue(obs2.has_bag)
@@ -304,7 +304,7 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         self.assertIn("Gate:\n  quit: PASS", report)
         self.assertIn("Positive evidence:", report)
         self.assertIn("Negative evidence:", report)
-        self.assertIn("bag_tidy: ABSENT", report)
+        self.assertIn("bag_disassembly: ABSENT", report)
         self.assertIn("Candidate scales:", report)
         self.assertIn("Best scale: unavailable", report)
 
