@@ -279,10 +279,14 @@ class TestBehaviorNavigationTable(unittest.TestCase):
                 self.assertEqual(decision.action, ActionId.CONTINUE_PRIMARY)
                 self.assertEqual(decision.reason, ReasonCode.PRIMARY_ROUTE_DELEGATED)
 
-    def test_preserve_verified_overlay_recovery_for_other_modes(self):
+    def test_preserve_legacy_dungeon_lobby_close_recovery(self):
         """
-        [Test 5] 在非 domain/stage 模式 (例如 mode="dungeon") 時，
-        LOBBY + CLOSE_OVERLAY 仍保留已驗證之 blocking overlay 自癒邊，派發 DISMISS_OVERLAY。
+        [Test 5 - Compatibility] 在非 domain/stage 模式 (例如 mode="dungeon") 時，
+        LOBBY + CLOSE_OVERLAY 仍保留舊有已驗證之彈窗關閉行為，派發 DISMISS_OVERLAY。
+
+        Note: This preserves current verified legacy behavior; CLOSE_OVERLAY alone is not
+        considered sufficient long-term semantic evidence. Future OverlayId migration will
+        model real blocking overlays explicitly.
         """
         from states.navigation_intent import (
             ActiveIntent,
@@ -305,6 +309,7 @@ class TestBehaviorNavigationTable(unittest.TestCase):
         decision = policy.resolve(scene, intent)
         self.assertEqual(decision.action, ActionId.DISMISS_OVERLAY)
         self.assertEqual(decision.reason, ReasonCode.PRIMARY_CLOSE_OVERLAY)
+
 
 
 if __name__ == "__main__":
