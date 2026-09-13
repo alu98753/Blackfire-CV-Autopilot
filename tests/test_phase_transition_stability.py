@@ -155,11 +155,16 @@ class TestPhaseTransitionStability(unittest.TestCase):
 
         # 2. 同時識別到大彈窗與 free.png 按鈕 (唯一標準) -> 轉移至 WAITING_CONFIRM
         handler.last_action_time = 0.0
+        free_checks = 0
         def mock_match_with_free(img, template, **kwargs):
+            nonlocal free_checks
             if template == "town_building/mysterious_treasure/free_treasure.png":
                 return (500, 500), 0.85
             if template == "free.png":
-                return (200, 300), 0.90
+                free_checks += 1
+                if free_checks == 1:
+                    return (200, 300), 0.90
+                return None, 0.0
             return None, 0.0
 
         self.state_machine.matcher.match.side_effect = mock_match_with_free

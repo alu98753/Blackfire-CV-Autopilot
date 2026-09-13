@@ -124,7 +124,7 @@ class GameStateMachine:
         capturer,
         matcher,
         mouse,
-        preload_ocr: bool = True,
+        preload_ocr: bool = False,
         *,
         clock=None,
         process_port=None,
@@ -1784,6 +1784,17 @@ class GameStateMachine:
 
 
 
+    def _get_monotonic_time(self) -> float:
+        if hasattr(self.clock, "monotonic"):
+            return self.clock.monotonic()
+        return time.monotonic()
+
+    def _sleep(self, seconds: float) -> None:
+        if hasattr(self.clock, "sleep"):
+            self.clock.sleep(seconds)
+        else:
+            time.sleep(seconds)
+
     def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=6.0, threshold=0.75, brightness_threshold=0.0, check_interval=1.0, post_delay=1.0, retry_interval=1.0):
         """
         [配對確認直到消失 - 專案級輔助 API]
@@ -1793,32 +1804,33 @@ class GameStateMachine:
         logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環 (輪詢間隔 {check_interval}s)...")
         self.mouse.click(click_x, click_y)
 
-        start_t = time.time()
+        start_t = self._get_monotonic_time()
         last_click_t = start_t
         disappeared = False
-        while time.time() - start_t < timeout:
+        while self._get_monotonic_time() - start_t < timeout:
             if hasattr(self, "resume_event") and self.resume_event:
                 self.resume_event.wait()
-            time.sleep(check_interval)
+            self._sleep(check_interval)
             if self.capturer:
                 fresh_img = self.capturer.capture(rect)
                 if fresh_img is not None and os.path.exists(os.path.join("templates", template_name)):
                     pos, conf = self.matcher.match(fresh_img, template_name, threshold=threshold, brightness_threshold=brightness_threshold, quiet=True)
                     if pos is None:
-                        logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {time.time() - start_t:.2f} 秒。")
+                        elapsed = self._get_monotonic_time() - start_t
+                        logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {elapsed:.2f} 秒。")
                         disappeared = True
                         break
                     else:
-                        logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
-                        if time.time() - last_click_t >= retry_interval:
+                        logging.debug(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
+                        if self._get_monotonic_time() - last_click_t >= retry_interval:
                             logging.info(f"🔄 [自動補點] 模板 [{template_name}] 在 {retry_interval} 秒內未消失，重新發起點擊 ({click_x}, {click_y})...")
                             self.mouse.click(click_x, click_y)
-                            last_click_t = time.time()
+                            last_click_t = self._get_monotonic_time()
 
         if not disappeared:
             logging.warning(f"⚠️ [配對確認逾時] 模板 [{template_name}] 在 {timeout} 秒內未能確認消失。")
 
-        time.sleep(post_delay)
+        self._sleep(post_delay)
         return disappeared
 
     def _run_task_complete_subflow(self, rect):

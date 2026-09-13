@@ -1,3 +1,4 @@
+import time
 from vision.color_classifier import GearColorClassifier
 
 class BaseStateHandler:
@@ -49,47 +50,61 @@ class BaseStateHandler:
         if hasattr(self.machine, "notify_ui_progress"):
             self.machine.notify_ui_progress()
 
+    def _get_monotonic_time(self) -> float:
+        clock = getattr(self.machine, "clock", None)
+        if clock and hasattr(clock, "monotonic"):
+            return clock.monotonic()
+        return time.monotonic()
+
+    def _sleep(self, seconds: float) -> None:
+        clock = getattr(self.machine, "clock", None)
+        if clock and hasattr(clock, "sleep"):
+            clock.sleep(seconds)
+        else:
+            time.sleep(seconds)
+
     def click_and_wait_until_gone(self, template_name, click_x, click_y, rect, timeout=4.0, threshold=0.75, brightness_threshold=0.0, check_interval=0.25, post_delay=1.0, retry_interval=1.0):
         """
         [配對確認直到消失]
         發起點擊後，持續輪詢比對畫面，直到指定模板 template_name 從畫面上 100% 消失 (pos is None) 才解鎖返回。
         若超過 retry_interval 秒模板仍未消失，則對當前匹配座標發起自動補點擊 (Re-click)。
         """
-        import time, logging, os
+        import logging, os
         logging.info(f"👉 發起點擊 ({click_x}, {click_y})，啟動「配對確認直到 [{template_name}] 消失」輪詢閉環...")
         self.notify_ui_progress()
         self.mouse.click(click_x, click_y)
 
-        start_t = time.time()
+        start_t = self._get_monotonic_time()
         last_click_t = start_t
         disappeared = False
-        while time.time() - start_t < timeout:
+        while self._get_monotonic_time() - start_t < timeout:
             if hasattr(self.machine, "resume_event") and self.machine.resume_event:
                 self.machine.resume_event.wait()
-            time.sleep(check_interval)
+            self._sleep(check_interval)
             if self.capturer:
                 fresh_img = self.capturer.capture(rect)
                 if fresh_img is not None and os.path.exists(os.path.join("templates", template_name)):
                     pos, conf = self.matcher.match(fresh_img, template_name, threshold=threshold, brightness_threshold=brightness_threshold, quiet=True)
                     if pos is None:
-                        logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {time.time() - start_t:.2f} 秒。")
+                        elapsed = self._get_monotonic_time() - start_t
+                        logging.info(f"🟢 [配對確認完成] 模板 [{template_name}] 已徹底從畫面上消失！費時 {elapsed:.2f} 秒。")
                         disappeared = True
                         break
                     else:
-                        logging.info(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
-                        if time.time() - last_click_t >= retry_interval:
+                        logging.debug(f"⌛ [配對確認中] 模板 [{template_name}] 仍存在於畫面上 (相似度: {conf:.4f})，持續等待淡出...")
+                        if self._get_monotonic_time() - last_click_t >= retry_interval:
                             cur_x = rect["left"] + pos[0]
                             cur_y = rect["top"] + pos[1]
                             logging.info(f"🔄 [自動補點] 模板 [{template_name}] 在 {retry_interval} 秒內未消失，對當前目標位置 ({cur_x}, {cur_y}) 重新發起點擊...")
                             self.mouse.click(cur_x, cur_y)
-                            last_click_t = time.time()
+                            last_click_t = self._get_monotonic_time()
             else:
                 break
 
         if not disappeared:
             logging.warning(f"⚠️ [配對確認逾時] 模板 [{template_name}] 在 {timeout} 秒內未能確認消失。")
 
-        time.sleep(post_delay)
+        self._sleep(post_delay)
         return disappeared
 
 

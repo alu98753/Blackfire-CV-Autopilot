@@ -100,6 +100,33 @@ class TestBehaviorOCRPreload(unittest.TestCase):
             self.assertIn("EasyOCR 辨識模型載入失敗", str(ctx.exception))
             self.assertNotIn("ch_tra_en", sm._ocr_readers)
 
+    def test_constructor_default_does_not_preload(self):
+        """
+        [測試 4] 驗證建構子預設 preload_ocr=False，不主動啟動背景預載，快取為空
+        """
+        with patch.object(GameStateMachine, "preload_ocr_models") as mock_preload:
+            sm = GameStateMachine(
+                capturer=self.mock_capturer,
+                matcher=self.mock_matcher,
+                mouse=self.mock_mouse,
+            )
+            mock_preload.assert_not_called()
+            self.assertEqual(len(sm._ocr_readers), 0)
+
+    def test_constructor_explicit_preload_opt_in(self):
+        """
+        [測試 5] 驗證當明確傳入 preload_ocr=True 時，建構子會調用 preload_ocr_models()
+        """
+        with patch.object(GameStateMachine, "preload_ocr_models") as mock_preload:
+            sm = GameStateMachine(
+                capturer=self.mock_capturer,
+                matcher=self.mock_matcher,
+                mouse=self.mock_mouse,
+                preload_ocr=True,
+            )
+            mock_preload.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
+

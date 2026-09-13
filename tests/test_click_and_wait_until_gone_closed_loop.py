@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch, call
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from runtime.ports import FakeClock
 from states.state_machine import GameStateMachine
 from states.handlers.base import BaseStateHandler
 from states.handlers.blood_altar import BloodAltarHandler
@@ -18,7 +19,13 @@ class TestClickAndWaitUntilGoneClosedLoop(unittest.TestCase):
         mock_capturer = MagicMock()
         mock_matcher = MagicMock()
         mock_mouse = MagicMock()
-        self.state_machine = GameStateMachine(capturer=mock_capturer, matcher=mock_matcher, mouse=mock_mouse)
+        self.clock = FakeClock()
+        self.state_machine = GameStateMachine(
+            capturer=mock_capturer,
+            matcher=mock_matcher,
+            mouse=mock_mouse,
+            clock=self.clock,
+        )
         self.base_handler = BaseStateHandler(self.state_machine)
 
     def test_click_and_wait_until_gone_successful_disappearance(self):
@@ -41,7 +48,7 @@ class TestClickAndWaitUntilGoneClosedLoop(unittest.TestCase):
 
         self.state_machine.matcher.match.side_effect = mock_match
 
-        with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
+        with patch('os.path.exists', return_value=True):
             self.base_handler.click_and_wait_until_gone(
                 "common/quit.png", 500, 500, rect, timeout=4.0, check_interval=0.1, post_delay=0.0
             )
@@ -61,7 +68,7 @@ class TestClickAndWaitUntilGoneClosedLoop(unittest.TestCase):
         # 模擬 5 幀比對皆存在 (500, 500)
         self.state_machine.matcher.match.return_value = ((500, 500), 0.90)
 
-        with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
+        with patch('os.path.exists', return_value=True):
             self.base_handler.click_and_wait_until_gone(
                 "receive_daily.png", 500, 500, rect, timeout=2.5, retry_interval=1.0, check_interval=0.2, post_delay=0.0
             )
