@@ -382,8 +382,8 @@ class TestHandlerMislocationRelinquish(unittest.TestCase):
         step1_res = self.handler.handle(self.screen, self.rect)
         self.assertTrue(step1_res)
         self.mouse.click.assert_called_with(200, 300)
-        # 驗證 phase 已經前進 (離開 INIT)
-        self.assertNotEqual(self.handler.step_phase, "INIT")
+        # 驗證 phase 精確鎖定在 VERIFY_ENTRY 閘門 (點擊入口 != 成功進入)
+        self.assertEqual(self.handler.step_phase, "VERIFY_ENTRY")
         self.assertEqual(self.machine.current_town_subflow, "chest")
 
         # Step 2: 點擊後下一幀落入 foreign building (例如 Blood Altar):

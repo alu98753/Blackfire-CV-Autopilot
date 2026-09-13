@@ -212,12 +212,13 @@ class ChestHandler(BaseStateHandler):
         Step 1.5 (VERIFY_ENTRY): 驗證點擊建築入口後是否確實進入神秘寶箱內部。
         Invariant:
         - 點擊入口 != 成功進入寶箱。
-        - 自身合法特徵 (CHEST_DIALOG_TEMPLATE) 成立 -> 轉入 CLICK_FREE_CHEST 業務階段。
-        - 非自身實體特徵 (exitfromhouse / goback_town) 連續成立且無寶箱特徵 -> 判定物理錯位，
-          主動 Relinquish 實體所有權給 shared REACH_TOWN，嚴格不得 defer / pop / complete！
-        - 兩者皆無 -> 有界等待，超限退回 INIT 重試點擊。
+        - 自身專屬特徵 (CHEST_DIALOG_TEMPLATE) 成立 -> 轉入 CLICK_FREE_CHEST 業務階段。
+        - 通用建築環境特徵 (exitfromhouse / goback_town) 連續成立但無自身專屬特徵 ->
+          判定為疑似錯位 (suspected mislocation)，主動 Relinquish 實體所有權給 shared REACH_TOWN，
+          嚴格不得 defer / pop / complete！
+        - 兩者皆無 -> 有界等待 (bounded wait)，超限退回 INIT 重試點擊。
         """
-        # 1. 檢查自身合法特徵 (chest-specific evidence)
+        # 1. 檢查自身專屬特徵 (own-specific evidence)
         if os.path.exists(os.path.join("templates", CHEST_DIALOG_TEMPLATE)):
             pos_ft, _ = self.matcher.match(screen_img, CHEST_DIALOG_TEMPLATE, threshold=0.75)
             if pos_ft:
@@ -227,19 +228,20 @@ class ChestHandler(BaseStateHandler):
                 self.step_phase = "CLICK_FREE_CHEST"
                 return self._handle_click_free_chest(screen_img, rect, left, top, now)
 
-        # 2. 檢查非自身房間特徵 (foreign-building / mislocation evidence)
+        # 2. 檢查通用建築環境特徵 (generic building-context evidence: exit/goback)
+        # 唯有「generic building evidence + own evidence absent」連續成立時，才判定為物理錯位
         pos_exit, _ = self.matcher.match(screen_img, CHEST_EXIT_BUILDING_TEMPLATE, threshold=0.75)
         pos_goback, _ = self.matcher.match(screen_img, CHEST_GOBACK_TOWN_TEMPLATE, threshold=0.80)
         if pos_exit or pos_goback:
             self.mislocation_count += 1
             logging.info(
-                "⚠️ [神秘寶箱 VERIFY_ENTRY] 偵測到非自身之其他場景特徵 (exit/goback 可見，確認第 %d/%d 幀)...",
+                "⚠️ [神秘寶箱 VERIFY_ENTRY] 觀察到通用建築環境特徵但無寶箱專屬面板 (suspected mislocation 第 %d/%d 幀)...",
                 self.mislocation_count,
                 CHEST_MAX_MISLOCATION_FRAMES,
             )
             if self.mislocation_count >= CHEST_MAX_MISLOCATION_FRAMES:
                 logging.warning(
-                    "⚠️ [Mislocation Detected] 點擊入口後落入非目標場景，釋放實體所有權交由 REACH_TOWN 歸一化..."
+                    "⚠️ [Mislocation Confirmed] 點擊入口後連續確認處於非目標場景，釋放實體所有權交由 REACH_TOWN 歸一化..."
                 )
                 self.reset_state()
                 if hasattr(self.machine, "relinquish_subflow_to_navigation"):
