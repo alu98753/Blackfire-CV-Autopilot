@@ -386,7 +386,7 @@ class BulletinBoardHandler(BaseStateHandler):
             return
 
         if obs.classification == "KNOWN_INTERFERENCE":
-            logging.warning("⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到明確的背包干擾覆蓋層，閉環關閉以利重試！")
+            logging.warning("⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到明確的背包干擾覆蓋層，立即閉環關閉以利重試！")
             if obs.pos_quit:
                 self.click_and_wait_until_gone(quit_btn, left + obs.pos_quit[0], top + obs.pos_quit[1], rect, timeout=3.0, threshold=0.80)
             self.open_attempts += 1
@@ -397,22 +397,28 @@ class BulletinBoardHandler(BaseStateHandler):
             return
 
         if obs.classification == "UNKNOWN_OVERLAY":
+            is_suspected = (self.click_building_time is not None) and (not obs.has_bag)
+            overlay_tag = "SUSPECTED_TARGET_OVERLAY" if is_suspected else "UNKNOWN_OVERLAY"
+
             if self.wait_board_open_start_time is None:
                 self.wait_board_open_start_time = now
             elapsed = now - self.wait_board_open_start_time
             if elapsed < BOARD_OPEN_SETTLE_TIMEOUT:
-                logging.info("⌛ [懸賞告示牌 WAIT_BOARD_OPEN] 偵測到 quit 但特徵尚未穩定，等待沉澱 (%.2f / %.1f 秒)...", elapsed, BOARD_OPEN_SETTLE_TIMEOUT)
+                logging.info("⌛ [%s] 偵測到 quit 但特徵尚未穩定，進行有界再觀察沉澱 (%.2f / %.1f 秒)...", overlay_tag, elapsed, BOARD_OPEN_SETTLE_TIMEOUT)
                 return
 
             self.open_attempts += 1
             logging.warning(
-                "⚠️ [懸賞告示牌 WAIT_BOARD_OPEN] 出現 quit 但超過沉澱時間 (%.1fs) 仍無告示牌正向證據且非已知干擾層，判定為 UNKNOWN_OVERLAY (嘗試 %d/%d)...",
-                BOARD_OPEN_SETTLE_TIMEOUT, self.open_attempts, MAX_OPEN_ATTEMPTS
+                "⚠️ [%s] 出現 quit 但超過沉澱時間 (%.1fs) 仍無告示牌正向證據且非已知干擾層 (嘗試 %d/%d)...",
+                overlay_tag, BOARD_OPEN_SETTLE_TIMEOUT, self.open_attempts, MAX_OPEN_ATTEMPTS
             )
+            if obs.diagnostic_report:
+                logging.warning("%s", obs.diagnostic_report)
+
             if obs.pos_quit:
                 self.click_and_wait_until_gone(quit_btn, left + obs.pos_quit[0], top + obs.pos_quit[1], rect, timeout=3.0, threshold=0.80)
             if self.open_attempts >= MAX_OPEN_ATTEMPTS:
-                self._defer_and_yield(f"未知的開窗覆蓋層且重試超過上限 ({self.open_attempts}/{MAX_OPEN_ATTEMPTS})")
+                self._defer_and_yield(f"{overlay_tag} 且重試超過上限 ({self.open_attempts}/{MAX_OPEN_ATTEMPTS})")
             else:
                 self._back_to_init(now)
             return

@@ -230,6 +230,101 @@ class TestBehaviorBulletinBoardSettle(unittest.TestCase):
         obs4 = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
         self.assertEqual(obs4.classification, "BOARD_CONFIRMED")
 
+    def test_feature_evidence_roi_miss_with_global_hit_never_passes_decision(self):
+        """
+        [契約 11 驗證 - 決策與診斷嚴格分離]
+        當模板在預期 ROI 內 miss (例如 task 在左側只有 0.40)，但畫面右側 (ROI 外部) 出現高相似度 (0.85)：
+        決策模型絕不得判定為通過 (passed 必為 False, 分類必為 UNKNOWN_OVERLAY)！
+        且診斷資訊必須正確標註 STRONG_MATCH_OUTSIDE_EXPECTED_ROI。
+        """
+        from utils.bulletin_board_detector import observe_bulletin_board
+
+        def mock_match_roi_miss_global_hit(img, template_name, threshold=0.65, **kw):
+            if template_name == "common/quit.png":
+                return ((700, 100), 0.90)
+            elif template_name == "town_building/bulletin_board/task.png":
+                # 若傳入為 ROI 局部圖 (寬度 < 800)，回傳低分未通過
+                if img.shape[1] < 800:
+                    return (None, 0.40)
+                # 若傳入為全圖 (寬度 == 800)，在右側 (X=700 > 480) 出現強干擾
+                return ((700, 300), 0.85)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_match_roi_miss_global_hit
+        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+
+        # 斷言：決策絕不可通過
+        self.assertEqual(obs.classification, "UNKNOWN_OVERLAY")
+        ev_task = obs.evidence_map["task"]
+        self.assertFalse(ev_task.passed)
+        self.assertEqual(ev_task.primary_reason, "STRONG_MATCH_OUTSIDE_EXPECTED_ROI")
+        self.assertIn("STRONG_MATCH_OUTSIDE_EXPECTED_ROI", ev_task.diagnostic_flags)
+        self.assertEqual(ev_task.global_position, (700, 300))
+        self.assertGreaterEqual(ev_task.global_score, 0.80)
+
+    def test_feature_evidence_near_threshold_diagnosis(self):
+        """
+        [契約 12 驗證 - Near Miss 語意診斷]
+        當 ROI 比對分數僅差 threshold <= 0.05 (例如 threshold 0.65, 觀測 0.62)：
+        passed 為 False，但 primary_reason 必須標註為 NEAR_THRESHOLD。
+        """
+        from utils.bulletin_board_detector import observe_bulletin_board
+
+        def mock_match_near_miss(img, template_name, threshold=0.65, **kw):
+            if template_name == "common/quit.png":
+                return ((700, 100), 0.90)
+            elif template_name == "town_building/bulletin_board/task.png":
+                return (None, 0.62)
+            return (None, 0.0)
+
+        self.handler.matcher.match.side_effect = mock_match_near_miss
+        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+
+        ev_task = obs.evidence_map["task"]
+        self.assertFalse(ev_task.passed)
+        self.assertEqual(ev_task.primary_reason, "NEAR_THRESHOLD")
+
+    def test_diagnostic_report_formatting(self):
+        """
+        [契約 13 驗證 - 結構化診斷日誌格式]
+        驗證 format_diagnostic_report 包含 Gate, Positive evidence, Negative evidence,
+        Likely diagnosis, Candidate scales 與 Best scale。
+        """
+        from utils.bulletin_board_detector import observe_bulletin_board
+
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True)
+        obs = observe_bulletin_board(self.fake_img, self.handler.matcher, self.mock_machine.config)
+
+        report = obs.diagnostic_report
+        self.assertIn("[BulletinBoardDetector] classification=UNKNOWN_OVERLAY", report)
+        self.assertIn("Gate:\n  quit: PASS", report)
+        self.assertIn("Positive evidence:", report)
+        self.assertIn("Negative evidence:", report)
+        self.assertIn("bag_tidy: ABSENT", report)
+        self.assertIn("Candidate scales:", report)
+        self.assertIn("Best scale: unavailable", report)
+
+    def test_suspected_target_overlay_logging(self):
+        """
+        [契約 14 驗證 - SUSPECTED_TARGET_OVERLAY 因果語意]
+        在點擊建築後進入 WAIT_BOARD_OPEN，若出現 quit 且無背包特徵但缺乏正向特徵：
+        日誌必須包含 SUSPECTED_TARGET_OVERLAY 標籤並輸出 diagnostic_report。
+        """
+        self.handler.step_phase = "WAIT_BOARD_OPEN"
+        self.handler.click_building_time = 100.0  # 剛點擊過告示牌建築
+        self.handler.wait_board_open_start_time = 100.0
+        self.handler.open_attempts = 0
+        self.handler.matcher.match.side_effect = self._make_mock_match(quit=True)
+
+        with patch("states.handlers.bulletin_board.time.time", return_value=103.0), \
+             patch.object(self.handler, "click_and_wait_until_gone") as mock_wait_gone, \
+             patch("states.handlers.bulletin_board.logging.warning") as mock_log_warn:
+            self.handler.handle(self.fake_img, self.rect)
+
+            # 斷言：日誌中包含 SUSPECTED_TARGET_OVERLAY
+            has_suspected_tag = any("SUSPECTED_TARGET_OVERLAY" in str(c) for c in mock_log_warn.call_args_list)
+            self.assertTrue(has_suspected_tag)
+
 
 if __name__ == "__main__":
     unittest.main()
