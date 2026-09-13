@@ -480,14 +480,23 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.assertTrue(
             self.machine.handle_town_subflow_precondition(self.screen, self.rect)
         )
+        self.machine.stash_current_state = MagicMock()
         for _ in range(max_attempts):
             self.clock.advance(timeout + 0.1)
-            self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+            handled = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
 
         # 核心斷言：Normalization 失敗絕不污染 business intent！
+        # 1. 消耗該幀控制權，防止洩漏給下游 handler 產生 dual authority
+        self.assertTrue(handled)
+        # 2. 不得延遲或彈出業務 Intent
         self.machine.daily_manager.defer_subflow.assert_not_called()
         self.assertEqual(self.machine.current_town_subflow, "chest")
+        # 3. 有限重試次數，不再盲目點擊
         self.assertEqual(self.mouse.click.call_count, max_attempts)
+        # 4. 移交 safe recovery / watchdog 接管
+        self.machine.stash_current_state.assert_called_once_with(
+            reason="reach_town_normalization_failed"
+        )
 
     def test_unknown_state_relocalizes_result_before_town_navigation(self):
         self.machine.start_subflow_queue(["chest"])

@@ -13,11 +13,9 @@ from states.navigation_intent import (
     ReasonCode,
 )
 from states.navigation_progress import NavigationProgress, ProgressStatus
-from states.navigation_table import NavigationGoal, NavigationTable
 from states.reach_town_normalization import (
     NormalizationResult,
     ReachTownNormalizationController,
-    ReachTownNormalizationPolicy,
 )
 from states.town_subflow_perception import TownSubflowPerception
 from states.town_subflow_registry import TOWN_SUBFLOW_SPECS, spec_for
@@ -28,20 +26,16 @@ TOWN_SUBFLOW_DEFER_SECONDS = 180
 
 
 class TownSubflowPolicy:
-    """Resolve one task-agnostic REACH_TOWN action from one observation."""
-
-    def __init__(self, normalization_policy: ReachTownNormalizationPolicy | None = None):
-        self.normalization_policy = normalization_policy or ReachTownNormalizationPolicy()
+    """Resolve business dispatch or completion decisions on SceneId.TOWN."""
 
     def resolve(self, scene: SceneSnapshot, flow_key: str) -> ActionDecision:
-        # Phase 1: REACH_TOWN normalization
+        """
+        Assumes physical verification on Town (handled by ReachTownNormalizationController).
+        Determines business dispatch, completion (no red dot), or waiting.
+        """
         if scene.scene != SceneId.TOWN:
-            decision = self.normalization_policy.resolve(scene)
-            if decision.kind == DecisionKind.CLICK:
-                return decision
             return ActionDecision.wait()
 
-        # Phase 2: Town-specific business dispatch/completion
         spec = spec_for(flow_key)
         if spec.dispatch_on_town:
             return ActionDecision.delegate(
@@ -120,7 +114,17 @@ class TownSubflowPreconditionController:
             return True
         if norm_result == NormalizationResult.FAILED:
             # Physical normalization failed (retry exhausted); failure domain isolated.
-            return False
+            # Consume this frame so downstream handlers do not act concurrently on the same frame.
+            # Preserve business intent without deferring or popping.
+            logging.warning(
+                "⚠️ [TownSubflowPreconditionController] Physical REACH_TOWN normalization FAILED; "
+                "consuming frame to prevent downstream leakage. Escalating to safe recovery. "
+                "Business intent '%s' preserved.",
+                flow_key,
+            )
+            if hasattr(self.machine, "stash_current_state"):
+                self.machine.stash_current_state(reason="reach_town_normalization_failed")
+            return True
 
         # Phase 2: Physically verified in Town (SceneId.TOWN).
         # Execute business dispatch / red-dot check / entry wait.
@@ -135,9 +139,9 @@ class TownSubflowPreconditionController:
                 return True
             return scene.scene != SceneId.UNKNOWN
         self._reset_entry_wait()
-        return self._execute_decision(decision, scene, flow_key, rect, progress)
+        return self._execute_decision(decision, scene, flow_key)
 
-    def _execute_decision(self, decision, scene, flow_key, rect, progress) -> bool:
+    def _execute_decision(self, decision, scene, flow_key) -> bool:
         if decision.action == ActionId.DISPATCH_TOWN_SUBFLOW:
             self._reset_no_red_dot()
             self.machine.dispatch_current_town_subflow()
@@ -151,29 +155,6 @@ class TownSubflowPreconditionController:
         if decision.action == ActionId.DEFER_TOWN_SUBFLOW:
             self.machine.defer_current_town_subflow(TOWN_SUBFLOW_DEFER_SECONDS)
             return True
-
-        match = scene.elements.get(decision.element)
-        if match is None:
-            return True
-        self.machine.mouse.click(
-            rect["left"] + match.client_x,
-            rect["top"] + match.client_y,
-        )
-        if isinstance(progress, NavigationProgress):
-            progress.begin(
-                IntentId.TOWN_SUBFLOW,
-                decision.action,
-                decision.expected,
-                scene.frame_id,
-                scene.captured_at,
-            )
-        logging.info(
-            "[TownSubflowNavigation] flow=%s scene=%s action=%s reason=%s",
-            flow_key,
-            scene.scene.value,
-            decision.action.value,
-            decision.reason.value,
-        )
         return True
 
     def _committed_workflow_owns_frame(self, flow_key):

@@ -211,6 +211,73 @@ class TestReachTownNormalizationController(unittest.TestCase):
         self.assertEqual(res3, NormalizationResult.ARRIVED)
         self.assertIsNone(self.progress.in_flight)
 
+    def test_town_with_overlay_must_dismiss_overlay_before_arrived(self):
+        """
+        [Blocker 1 Fix Verification]:
+        當畫面雖然是 SceneId.TOWN，但同時存在 ElementId.CLOSE_OVERLAY 時：
+        - 物理遮擋動作優先於目的地滿足判定！
+        - 第 1 步：必須輸出 DISMISS_OVERLAY，回傳 IN_PROGRESS，絕不得提前回傳 ARRIVED。
+        - 第 2 步：待浮層關閉且重新 observe 為乾淨 Town 後，才回傳 ARRIVED。
+        """
+        elem_with_overlay = {
+            ElementId.CLOSE_OVERLAY: ElementMatch(500, 300, 0.95, "common/quit.png"),
+        }
+        scene_town_blocked = SceneSnapshot(
+            frame_id=1,
+            captured_at=self.clock.monotonic(),
+            scene=SceneId.TOWN,
+            elements=elem_with_overlay,
+        )
+
+        # 第 1 幀：必須點擊關閉浮層，回傳 IN_PROGRESS，絕不可直接 ARRIVED
+        res1 = self.controller.step(scene_town_blocked, self.rect, self.progress)
+        self.assertEqual(res1, NormalizationResult.IN_PROGRESS)
+        self.assertNotEqual(res1, NormalizationResult.ARRIVED)
+        self.assertIsNotNone(self.progress.in_flight)
+        self.assertEqual(self.progress.in_flight.action_id, ActionId.DISMISS_OVERLAY)
+
+        # 模擬浮層關閉，下一幀是乾淨無遮擋的 TOWN
+        self.clock.advance(0.5)
+        scene_clean_town = SceneSnapshot(
+            frame_id=2,
+            captured_at=self.clock.monotonic(),
+            scene=SceneId.TOWN,
+            elements={},
+        )
+        res2 = self.controller.step(scene_clean_town, self.rect, self.progress)
+        self.assertEqual(res2, NormalizationResult.ARRIVED)
+        self.assertIsNone(self.progress.in_flight)
+
+    def test_normalization_failure_retains_failed_state_until_recovery_or_arrival(self):
+        """
+        [Blocker 2 Fix Verification]:
+        驗證當 REACH_TOWN 重試耗盡回傳 FAILED 後：
+        - 若未經 recovery/reset 且畫面仍處於未抵達場景，後續呼叫保持 FAILED，不重啟盲目點擊。
+        - 經 reset_failure() 後方可再次發起正規化。
+        """
+        elements = {ElementId.EXIT_BUILDING_TO_TOWN: ElementMatch(50, 500, 0.92, "exit.png")}
+        scene = SceneSnapshot(frame_id=1, captured_at=self.clock.monotonic(), scene=SceneId.TOWN_BUILDING, elements=elements)
+
+        # 發起並耗盡重試
+        self.controller.step(scene, self.rect, self.progress)
+        for i in range(self.settings.action_max_attempts):
+            self.clock.advance(self.settings.action_timeout_seconds + 0.1)
+            scene_retry = SceneSnapshot(frame_id=10 + i, captured_at=self.clock.monotonic(), scene=SceneId.TOWN_BUILDING, elements=elements)
+            res = self.controller.step(scene_retry, self.rect, self.progress)
+
+        self.assertEqual(res, NormalizationResult.FAILED)
+
+        # 同樣場景下一幀再調用 step：依然維持 FAILED，不重複發起點擊
+        self.clock.advance(0.5)
+        scene_next = SceneSnapshot(frame_id=20, captured_at=self.clock.monotonic(), scene=SceneId.TOWN_BUILDING, elements=elements)
+        res_next = self.controller.step(scene_next, self.rect, self.progress)
+        self.assertEqual(res_next, NormalizationResult.FAILED)
+
+        # 經重置後
+        self.controller.reset_failure()
+        res_after_reset = self.controller.step(scene_next, self.rect, self.progress)
+        self.assertEqual(res_after_reset, NormalizationResult.IN_PROGRESS)
+
 
 if __name__ == "__main__":
     unittest.main()

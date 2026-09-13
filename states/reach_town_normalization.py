@@ -105,6 +105,10 @@ class ReachTownNormalizationController:
         self.policy = policy or ReachTownNormalizationPolicy()
         self.last_failure_reason: str | None = None
 
+    def reset_failure(self):
+        """Reset failure escalation memory after recovery."""
+        self.last_failure_reason = None
+
     @staticmethod
     def is_in_town(scene: SceneSnapshot) -> bool:
         """Return True only when snapshot physically proves SceneId.TOWN."""
@@ -138,24 +142,16 @@ class ReachTownNormalizationController:
                 return NormalizationResult.FAILED
             # If status == PROGRESSED or TIMED_OUT, proceed to verify state and resolve next decision
 
-        # 2. Verification of established destination
-        if self.is_in_town(scene):
-            self.last_failure_reason = None
-            return NormalizationResult.ARRIVED
+        # 2. If previously exhausted and not recovered/arrived, retain FAILED state
+        if self.last_failure_reason is not None and not self.is_in_town(scene):
+            return NormalizationResult.FAILED
 
-        # 3. Resolve next action from pure policy
+        # 3. Resolve next action from pure policy FIRST.
+        # Critical Invariant: Blocking physical actions (e.g. CLOSE_OVERLAY) take precedence
+        # over destination satisfaction (Town + overlay MUST dismiss overlay first!).
         decision = self.policy.resolve(scene)
 
-        # 3.1 Arrival verified through policy
-        if decision.expected == PostconditionId.TOWN and decision.kind == DecisionKind.DELEGATE:
-            self.last_failure_reason = None
-            return NormalizationResult.ARRIVED
-
-        # 3.2 Transient or unresolvable frame waiting
-        if decision.kind == DecisionKind.WAIT:
-            return NormalizationResult.WAITING
-
-        # 3.3 Execute physical action (overlay dismissal, building egress, or lobby return)
+        # 3.1 Execute physical action (overlay dismissal, building egress, or lobby return)
         if decision.kind == DecisionKind.CLICK and decision.element:
             match = scene.elements.get(decision.element)
             if match is None:
@@ -181,5 +177,14 @@ class ReachTownNormalizationController:
                 decision.expected.value if decision.expected else None,
             )
             return NormalizationResult.IN_PROGRESS
+
+        # 3.2 Physical destination verified (SceneId.TOWN without blocking overlay)
+        if self.is_in_town(scene):
+            self.last_failure_reason = None
+            return NormalizationResult.ARRIVED
+
+        # 3.3 Transient or unresolvable frame waiting
+        if decision.kind == DecisionKind.WAIT:
+            return NormalizationResult.WAITING
 
         return NormalizationResult.WAITING
