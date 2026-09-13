@@ -134,7 +134,13 @@
    > **測試執行三大精確規則**：
    > 1. **日常開發與核心修改 (Daily Development & Behavioral Slicing)**：日常開發、修改核心代碼（`states/`, `utils/`, `config.py`, `main.py`）或微調邏輯時，**僅限精準執行該業務領域最小相關的單元測試檔案** (例如: `.venv\Scripts\python -m unittest tests.test_behavior_xxx`)（耗時 0.5~5 秒），以取得即時反饋並快速迭代。
    > 2. **測試失敗修復 (Failed Tests Handling)**：修復測試時，**僅精確執行有錯的測試檔案或測試方法** (`.venv\Scripts\python -m unittest tests.test_xxx.TestClass.test_method`) 進行除錯，通過後再推進。
-   > 3. **全套測試執行時機 (Full Test Suite by USER ONLY)**：AI **嚴禁自行發起全套測試**。當 Feature/Fix 分支開發收尾、準備 Commit 或準備合併回 `main` 前，AI 必須在對話中**提醒使用者手動執行全套測試** (`.venv\Scripts\python -m unittest discover tests`)，並請使用者回報剩餘失敗。
+   > 3. **全套測試執行時機 (Full Test Suite by USER ONLY)**：
+   >    - AI **嚴禁自行發起全套測試**。
+   >    - 當 Feature/Fix 分支開發收尾、準備 Commit 或準備進入收尾流程前，AI 提示使用者手動執行全套測試時，**統一交付具備 UTF-8 重定向至記錄檔的標準指令**，以徹底防止 Windows 終端 Buffer 截斷與 PowerShell 亂碼：
+   >      ```powershell
+   >      cmd.exe /c "chcp 65001 >nul && cd /d E:\Side_Project\BlackfireCrusade_tool && .venv\Scripts\python.exe -X utf8 -m unittest discover tests > test_run.log 2>&1"
+   >      ```
+   >    - 使用者在終端執行完畢後告知 AI，由 AI 主動讀取 `test_run.log` 提取總耗時、通過狀態與失敗 Traceback 進行診斷與回報。
 
 4. **增量覆蓋率驗證流程 (Incremental Union Coverage Workflow)**：
    - 當僅更新、編寫或補強單一行為測試檔，而沒有修改邏輯實作時，**禁止執行全套測試**。

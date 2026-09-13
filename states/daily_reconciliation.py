@@ -80,9 +80,10 @@ class DailyReconciliationService:
                 "last_attempt_time": 0.0,
                 "retry_after": 0.0,
             })
-            # Invariant: If an expired message (date < today) is injected or recovered, invalidate latch
-            today_tag = resolve_business_dt().strftime("%Y-%m-%d")
-            if msg_date_tag < today_tag and history.get("last_reconciled_date") == today_tag:
+            # Invariant: If an expired message (date < today or date < latched_date) is injected or recovered, invalidate latch
+            today_tag = resolve_business_dt(now_dt).strftime("%Y-%m-%d")
+            latched_date = history.get("last_reconciled_date", "")
+            if (latched_date and msg_date_tag < latched_date) or (msg_date_tag < today_tag and latched_date == today_tag):
                 history["last_reconciled_date"] = ""
             self.history_store.save_history(history)
 
