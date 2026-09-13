@@ -49,7 +49,7 @@ class TestPhaseTransitionStability(unittest.TestCase):
         self.assertEqual(handler.step_phase, "INIT")
         self.state_machine.mouse.click.assert_called_once()
 
-        # 幀 2: 畫面渲染完成，成功比對到 exitfromhouse_and_to_town.png
+        # 幀 2: 畫面出現通用建築特徵 (exitfromhouse_and_to_town.png) 但無祭壇專屬特徵 -> suspected mislocation，不轉移至 ENTERED_BUILDING
         def mock_match_frame2(img, template, **kwargs):
             if template == "town_building/exitfromhouse_and_to_town.png":
                 return (900, 100), 0.90
@@ -61,7 +61,23 @@ class TestPhaseTransitionStability(unittest.TestCase):
         with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
             handler.handle(None, rect)
 
-        # 斷言 2: 比對到內部 UI 特徵後，才轉移至 ENTERED_BUILDING 階段
+        # 斷言 2: 僅有通用建築特徵時，禁止轉移至 ENTERED_BUILDING
+        self.assertNotEqual(handler.step_phase, "ENTERED_BUILDING")
+        self.assertEqual(handler.step_phase, "INIT")
+
+        # 幀 3: 出現血之祭壇自身專屬特徵 (Sacrifice.png) -> 轉移至 ENTERED_BUILDING
+        def mock_match_frame3(img, template, **kwargs):
+            if template in ("town_building/exitfromhouse_and_to_town.png", "town_building/Blood_Altar/Sacrifice.png"):
+                return (900, 100), 0.90
+            return None, 0.0
+
+        self.state_machine.matcher.match.side_effect = mock_match_frame3
+        handler.last_action_time = 0.0
+
+        with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
+            handler.handle(None, rect)
+
+        # 斷言 3: 比對到祭壇內部專屬特徵後，才轉移至 ENTERED_BUILDING 階段
         self.assertEqual(handler.step_phase, "ENTERED_BUILDING")
 
     def test_hero_draw_init_phase_uses_click_and_wait_until_gone(self):

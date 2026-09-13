@@ -52,10 +52,10 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         self.mock_mouse.click.assert_called_once_with(550, 688)
         self.assertEqual(handler.step_phase, "INIT")
 
-        # Step 1.5: 畫面完成渲染 (辨識到 exitfromhouse_and_to_town.png 或 Sacrifice.png) ➔ 切換至 ENTERED_BUILDING
+        # Step 1.5: 畫面完成渲染 (辨識到 Sacrifice.png 自身專屬特徵) ➔ 切換至 ENTERED_BUILDING
         handler.last_action_time = 0.0
         def mock_match_step1_5(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ("town_building/exitfromhouse_and_to_town.png", "town_building/Blood_Altar/Sacrifice.png"):
                 return ((50, 50), 0.9)
             return (None, 0.0)
 
@@ -65,13 +65,9 @@ class TestTownScenarios(BehavioralScenarioTestCase):
 
         # Step 2: 進入建築後轉移至 SACRIFICE_MENU_OPEN，並點擊 Sacrifice.png 開啟選單
         handler.last_action_time = 0.0
-        sac_matched = [0]
         def mock_match_step2(img, name, **kw):
             if name == "town_building/Blood_Altar/Sacrifice.png":
-                if sac_matched[0] == 0:
-                    sac_matched[0] += 1
-                    return ((830, 863), 0.9)
-                return (None, 0.0)
+                return ((830, 863), 0.9)
             return (None, 0.0)
 
         self.mock_matcher.match.side_effect = mock_match_step2
@@ -413,10 +409,10 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         handler.handle()
         self.assertEqual(handler.step_phase, "INIT")
 
-        # Step 1.5: 辨識到 exitfromhouse_and_to_town.png 畫面穩定 ➔ 切換至 ENTERED_BUILDING
+        # Step 1.5: 辨識到 receive_entry.png (自身專屬特徵) 畫面穩定 ➔ 切換至 ENTERED_BUILDING
         handler.last_action_time = 0.0
         def match_step1_5(img, name, **kw):
-            if name == "town_building/exitfromhouse_and_to_town.png":
+            if name in ("town_building/exitfromhouse_and_to_town.png", "town_building/Blood_Altar/receive_entry.png"):
                 return ((50, 50), 0.90)
             return (None, 0.0)
         self.mock_matcher.match.side_effect = match_step1_5
@@ -692,8 +688,18 @@ class TestTownScenarios(BehavioralScenarioTestCase):
         rect = self.mock_capturer.get_window_rect()
 
         self.state_machine.is_dev_subflow_run = True
+        # 幀 1: ALL_DONE_EXITING 看到 exit -> 點擊 exit，轉移至 VERIFY_EXIT，尚未退出
         handler.handle(fake_img, rect)
         self.mock_mouse.click.assert_called_once_with(74, 744)
+        self.assertEqual(handler.step_phase, "VERIFY_EXIT")
+        mock_sys_exit.assert_not_called()
+
+        # 幀 2: 退出後畫面回到城鎮 (common/door.png) -> VERIFY_EXIT 判定退出成功，觸發完成並退出
+        handler.last_action_time = 0.0
+        self.mock_matcher.match.side_effect = lambda _img, name, **_kw: (
+            ((100, 100), 0.90) if name in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png") else (None, 0.0)
+        )
+        handler.handle(fake_img, rect)
         mock_sys_exit.assert_called_once_with(0)
 
     @patch('os.path.exists')
