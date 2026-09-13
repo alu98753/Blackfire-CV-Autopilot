@@ -12,6 +12,9 @@ Verifies Spec Section 6 (Slice 4) and Section 7 Acceptance Scenarios:
 3. Scenario 5: Already in Town (Zero Redundancy)
    - When screen is already verified SceneId.TOWN with clear anchor, REACH_TOWN issues
      zero extra clicks and immediately dispatches the business workflow.
+4. End-to-End Recovery Lifecycle Integration:
+   - FAILED -> real stash -> STATE_POPUP_RECOVERY -> verify precondition stays skipped
+     -> restore -> reset latch -> fresh normalization attempt succeeds.
 """
 
 import unittest
@@ -217,6 +220,109 @@ class TestLoginAndTownBoundaryRegression(unittest.TestCase):
         self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
         self.assertEqual(self.machine.current_town_subflow, "chest")
 
+    @patch("states.town_subflow_perception.detect_building_with_red_dot")
+    def test_normalization_failure_escalation_recovery_lifecycle(
+        self, mock_building_detect
+    ):
+        """
+        [End-to-End Recovery Lifecycle Integration Test]:
+        Verifies the full lifecycle across modules:
+          1. FAILED:
+             NormalizationController encounters repeated Town frames without clear-anchor readiness evidence exceeding threshold,
+             returning NormalizationResult.FAILED.
+          2. real stash:
+             TownSubflowPreconditionController isolates failure domain:
+             - does NOT mutate / defer / pop the business subflow ("chest")
+             - sets _escalated_recovery = True
+             - calls real machine.stash_current_state(reason="reach_town_normalization_failed")
+             - transitions state to STATE_POPUP_RECOVERY (stashing STATE_NAVIGATING)
+          3. STATE_POPUP_RECOVERY & verify precondition stays skipped:
+             While in STATE_POPUP_RECOVERY, handle_town_subflow_precondition skips execution (returns False),
+             emitting 0 clicks and not interfering with popup recovery.
+          4. restore:
+             machine.restore_stashed_state() transitions back to the stashed state (STATE_NAVIGATING).
+          5. reset latch:
+             Upon returning to STATE_NAVIGATING, the precondition controller detects the completed
+             recovery cycle, clears _escalated_recovery, resets the normalization controller's failure latch,
+             and grants a fresh normalization attempt that successfully reaches town and dispatches the workflow.
+        """
+        self.machine.start_subflow_queue(["chest"])
+        self.machine.current_state = self.machine.STATE_NAVIGATING
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+        mock_building_detect.return_value = BuildingCheckResult(False, False)
+
+        # 1. 模擬前 2 幀: Town location 存在 (door.png 可見)，但 clear anchor 缺失 (Readiness UNKNOWN -> WAITING)
+        def match_town_unknown(_screen, template, **_kw):
+            if template == "common/door.png":
+                return (200, 550), 0.95
+            return None, 0.0
+
+        self.matcher.match.side_effect = match_town_unknown
+
+        for i in range(2):
+            handled_wait = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+            self.assertTrue(handled_wait)  # Consumed frame during bounded re-observation
+            self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+            self.assertIsNone(self.machine.stashed_state)
+
+        # 第 3 幀：Readiness UNKNOWN 超限 (3/3 frames) -> NormalizationResult.FAILED
+        # 2. 驗證 FAILED -> real stash
+        handled_failed = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(handled_failed)  # Consumed frame to isolate downstream
+        self.assertTrue(self.machine.town_subflow_precondition._escalated_recovery)
+        self.assertEqual(
+            self.machine.town_subflow_precondition.normalization_controller.last_failure_reason,
+            "readiness_unknown_exhausted",
+        )
+        self.assertEqual(self.machine.stashed_state, self.machine.STATE_NAVIGATING)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_POPUP_RECOVERY)
+        self.assertEqual(self.machine.current_town_subflow, "chest")  # Business intent intact
+
+        # 3. 驗證 STATE_POPUP_RECOVERY 期間 precondition stays skipped
+        for _ in range(3):
+            handled_in_recovery = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+            self.assertFalse(handled_in_recovery)  # Strictly skipped
+            self.mouse.click.assert_not_called()
+            self.assertEqual(self.machine.current_state, self.machine.STATE_POPUP_RECOVERY)
+            self.assertEqual(self.machine.current_town_subflow, "chest")
+
+        # 4. 執行真實 restore
+        restore_success = self.machine.restore_stashed_state()
+        self.assertTrue(restore_success)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertIsNone(self.machine.stashed_state)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+
+        # 5. 回到 STATE_NAVIGATING 後，重置 latch 並允許全新嘗試
+        # 畫面轉為可見城鎮 + Ready
+        def match_town_recovered(_screen, template, **_kw):
+            if template in ("common/door.png", "town_building/arena_of_glory/arena_of_glory.png"):
+                return (200, 550), 0.95
+            return None, 0.0
+
+        self.matcher.match.side_effect = match_town_recovered
+        mock_building_detect.return_value = BuildingCheckResult(
+            True, True, building_pos=(250, 350), confidence_building=0.9
+        )
+
+        handled_recovered = self.machine.handle_town_subflow_precondition(self.screen, self.rect)
+        self.assertTrue(handled_recovered)
+
+        # 斷言：_escalated_recovery 被清為 False、normalization failure latch 被 reset
+        self.assertFalse(self.machine.town_subflow_precondition._escalated_recovery)
+        self.assertIsNone(
+            self.machine.town_subflow_precondition.normalization_controller.last_failure_reason
+        )
+        self.assertEqual(
+            self.machine.town_subflow_precondition.normalization_controller._readiness_unknown_count,
+            0,
+        )
+
+        # 斷言：全新嘗試成功抵達城鎮並派發業務流程！
+        self.assertEqual(self.machine.current_state, self.machine.STATE_CHEST)
+        self.assertEqual(self.machine.current_town_subflow, "chest")
+
 
 if __name__ == "__main__":
     unittest.main()
+
