@@ -31,6 +31,8 @@
 ### Navigation
 
 - [x] 選關與地下城向右翻頁/滑動過慢且比對過多無關圖片。（已在 commit 6cea216 完成優化）
+- [x] **Stage 關卡抽屜與 Domain 備戰面板被誤判為 Blocking Overlay 循環關閉**：移除 `STAGE_SELECT` 錯誤關閉邊，補齊 `DOMAIN_SELECT` 宣告式 `START_PRIMARY` 路由與 `lobby_start_btn` 配置，並於 Policy 建立 `_should_delegate_primary_overlay` 門禁防護。（已升格至 [Lobby Scene Contract Invariant 7](../features/navigation/lobby_scene_contract.md#invariant-7次級出戰與選關視窗防誤關保證-sub-panel-dismissal-protection-invariant)）
+
 
 ---
 

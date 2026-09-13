@@ -77,6 +77,14 @@
 - **Allowed variation**：場景列舉、交接時機與處理器名稱可變更。
 - **Verification**：`tests/test_dungeon_relaunch_recovery.py` 與 `tests/test_behavior_navigation.py`。
 
+### Invariant 7：次級出戰與選關視窗防誤關保證 (Sub-panel Dismissal Protection Invariant)
+- **Scope**：大廳次級出戰與選關視窗（如 Stage 關卡抽屜、Domain 出戰準備面板）之關閉控制項處理。
+- **Rule**：主線導航在合法次級備戰或選關流程中，MUST NOT 僅因觀測到局部關閉控制項（`common/quit.png` / `ElementId.CLOSE_OVERLAY`）而派發 `DISMISS_OVERLAY`；在缺乏獨立阻擋性覆蓋層（`OverlayId`）證據時，系統 MUST 優先推進出戰或委派續行。
+- **Observable consequence**：正常開啟之出戰抽屜與領地準備視窗不會因右上角關閉鈕被誤殺關閉。
+- **Allowed variation**：判斷 predicate 名稱、受保護之 primary 模式集合與底層 SceneId 列舉可合理調整。
+- **Verification**：`tests/test_behavior_navigation_table.py`。
+
+
 ---
 
 ## 3. 領域對稱規格：大廳 5 大頁籤對照表
