@@ -25,7 +25,15 @@
 - [x] **背包滿後觸發珠寶店/血之祭壇時，背包未關閉即跳轉懸賞導致全域卡死**：背包整理升格為一級獨立子流程 `BagTidyHandler` 並以消失閉環確認關閉。（詳細見 [城鎮任務流水線佇列契約](../features/town_building/pipeline.md)）
 - [x] **懸賞告示牌尚未進入建築（還在背包/其他過渡畫面）就開始誤判任務**：告示牌處理器增加 `_is_inside_bulletin_board` 排他性專屬正交錨點門禁，見干擾覆蓋層點擊關閉自癒。（詳細見 [每日懸賞任務報告](../features/daily_task/daily_task_architecture_report.md#3-告示牌進場排他性正交錨點契約-building-entry-unique-anchor-invariant)）
 - [x] **血之祭壇 (Blood Altar) 判定被紅點掠過問題**：徹底拆分為日常任務速領 (`blood_altar`，需紅點) 與戰後背包滿時的獻祭 (`blood_sacrifice`，不查紅點)。（詳細見 [城鎮任務流水線佇列契約](../features/town_building/pipeline.md)）
-- 核心契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md) (已完成雙軌解耦、獨立 bag_tidy 與後置條件驗證契約)
+- [x] **公告牌進場開窗死鎖與重置按鈕連點修復**：引入 `BOARD_OPEN_SETTLE_TIMEOUT` 沉澱窗口消除誤殺、落實 Scoped ROI 四互斥感知語意、重置按鈕 Bounded Click-Observe-Retry 契約與超限退避。（已升格至 [Town Subflow Pipeline](../features/town_building/pipeline.md) 與 PARS 故事 [2026-09-13_bulletin_board_livelock_and_action_lifecycle_story.md](../storys/2026-09-13_bulletin_board_livelock_and_action_lifecycle_story.md)）
+- [x] **城鎮建築出口生命週期正規化與誤入讓渡協定 (Town Building Egress & Mislocation Relinquish)**：
+  - 徹底解決珠寶工坊等建築退出同幀偽就緒問題（分拆出 `VERIFY_EXIT` 有界多幀驗證，確認回到城鎮且建築特徵消失）。
+  - 將 `exitfromhouse_and_to_town.png` 明確定義為全域「通用建築內部特徵」，嚴禁當作個別建築專屬證據。
+  - 引入 `MislocationGuard`：當誤入外宿建築時透過連續 2 幀確認判定誤入，實施安全讓渡至 `REACH_TOWN`，**嚴格禁止 defer、pop 或 complete 業務 Intent**（已覆蓋 Chest, HeroDraw, BloodAltar, BagTidy, BulletinBoard, JewelryWorkshop 6 大處理器）。
+  - 城鎮位置特徵（`door.png`）與互動就緒（`arena_of_glory.png`）解耦為 `READY / UNKNOWN / FAILURE` 三態防抖模型。
+  - 確立登入／重啟邊界為 `WORLD_READY`（已知世界即算就緒，地牢重啟保持進度，按需回城）。
+  - 成果契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md#9-城鎮位置與退出正規化契約-town-location--egress-normalization-contract) (Section 9 & 10) 與 PARS 故事 [2026-09-14_town_building_egress_normalization_and_mislocation_story.md](../storys/2026-09-14_town_building_egress_normalization_and_mislocation_story.md)。
+- 核心契約：[城鎮任務流水線佇列契約](../features/town_building/pipeline.md) (已完成雙軌解耦、獨立 bag_tidy、後置條件驗證契約、城鎮三態就緒與誤入讓渡協定)
 - 長期架構 RFC：[模式與活動大一統規格書](activity_mode_consolidation_spec.md) (統一名詞為 ActivityPlan/Activity/Intent，徹底消除 Mode 與 Subflow 歷史割裂)
 
 ### Navigation
@@ -51,15 +59,12 @@
   - **目標**：推進至 200s ~ 210s 區間。
 
 ### Daily
-- [ ] 🔴 **公告牌進場判定與關閉形成活鎖修復 ([bulletboard_bug.md](bulletboard_bug.md))**：
-  - **24/7 風險 (活鎖/空轉)**：告示牌在開出帶有 `quit` 的視窗後，若未命中 `reset/task/task_after` 正向證據，會在 2.5 秒後誤判為干擾層關閉並返回 INIT；而城鎮紅點仍在導致再次點擊，形成 `INIT ➔ 點告示牌 ➔ WAIT_BOARD_OPEN ➔ 2.5s 關閉 ➔ INIT` 無限活鎖。
-  - **規劃方向**：修正真實世界進場特徵契約，消除錯誤假設（quit + 無特徵 ➔ 誤殺關閉），並補齊防活鎖機制。
+- [ ] 🔴🔴 **Boss 誤判已完成與次數判定修復 ([`fix_boss_bug.md`](fix_boss_bug.md))**：
+  - **24/7 風險 (持久化狀態污染)**：目前「Start 點了沒有進入戰鬥」會被推論為次數已滿，直接呼叫 `mark_boss_completed()`。這種假陽性推論會持久化寫入 [`user_data/native/daily_status.json`](../../user_data/native/daily_status.json)，導致當日後續完全不再嘗試打 Boss，嚴重破壞日常責任移交。
+  - **規劃方向**：廢除 Start 逾時反推次數的猜測邏輯，改以畫面中 5 個黑/白點作為 Boss 次數耗盡的客觀真理依據。
 - [ ] 🔴 **定時領體力打不開視窗觸發 DEFER 時，被誤當成 Blocking 導致主排程活鎖**：
   - **24/7 風險 (活鎖)**：定時領取體力在特定畫面打不開視窗時觸發 DEFER，若狀態機將 DEFER 誤判為阻塞性條件，會導致主排程停止派發後續所有 Activity，全系統陷入活鎖停擺。
   - **規劃方向**：明確切分 DEFER 與 BLOCKING 語意；DEFER 僅延後當前 Intent，主排程必須能自由降級並推進其他非依賴任務。
-- [ ] 🔴 **Boss 誤判已完成與次數判定修復 ([`fix_boss_bug.md`](fix_boss_bug.md))**：
-  - **24/7 風險 (持久化狀態污染)**：目前「Start 點了沒有進入戰鬥」會被推論為次數已滿，直接呼叫 `mark_boss_completed()`。這種假陽性推論會持久化寫入 [`user_data/native/daily_status.json`](../../user_data/native/daily_status.json)，導致當日後續完全不再嘗試打 Boss，嚴重破壞日常責任移交。
-  - **規劃方向**：廢除 Start 逾時反推次數的猜測邏輯，改以畫面中 5 個黑/白點作為 Boss 次數耗盡的客觀真理依據。
 - [ ] 🔴 **COLLECT_ONLY 期間洩漏進入 Tier 4 / 黃金古國問題排查**：
   - **24/7 風險 (Tier 階梯契約違規)**：操作員回報在 daily 模式進入 `COLLECT_ONLY` 後，系統竟偶發跑到黃金古國（Tier 4 設定）。此現象直接違反「高 Tier 未完成禁止洩漏 Tier 4」與「待機期間嚴禁執行非待機任務」之階梯契約。
   - **規劃方向**：於 `DailyMasterPipeline` 與狀態機調度層增加強型態門禁，當處於 `COLLECT_ONLY` 待機狀態時，絕對禁止任何 Tier 4 意圖派發。
@@ -204,13 +209,14 @@
 - **原始構想**：使用 Windows PC 遠端控制 iPad 上的遊戲進行自動化。
 - **擱置原因**：專案專注於 Steam PC 視窗端高解析度、高幀率與後台非搶占式掛機，目前無行動裝置跨端需求。
 
-### 3. 🔄 城鎮點錯重來與容錯退回機制
-- **原始構想**：手動或意外點錯建築時的全局重來。
-- **擱置原因**：各城鎮 Handler 與子流程目前均已建立獨立的退場按鈕與 [`exitfromhouse_and_to_town.png`](../../templates/town_building/exitfromhouse_and_to_town.png) 安全退回城鎮路徑。
-
-### 4. 🛡️ 地下城誤入非目標地圖防呆容錯
+### 3. 🛡️ 地下城誤入非目標地圖防呆容錯
 - **原始構想**：手動按錯或誤入非目標地下城地圖時，偵測並點擊退出按鈕安全返回大廳重開。
 - **擱置原因**：目前的 `mix` 混合模式、自適應卡片定位與貪婪選關已能全自動接管選關流程，無人工誤點問題。
+
+### 4. 🤖 GitHub Actions 遠端 CI 自動化建置與測試 ([`CI.md`](CI.md))
+- **原始構想**：在 GitHub 建立 Remote CI（`.github/workflows/`），在每次 commit/PR 時於乾淨虛擬環境自動安裝依賴並執行測試套件，提供第三方客觀驗證。
+- **擱置原因**：現階段專案核心風險集中於狀態生命週期、視覺證據語意、Intent 防護與架構審查（如 [CI.md](CI.md) 所述，架構審查與本地雙工作樹基準驗證更能捕捉真實 failure path）；且專案仰賴本機 Steam PC 與 Windows GUI 環境，遠端 CI 目前非最高優先級，暫時擱置並保留分析規格。
+
 
 ---
 
