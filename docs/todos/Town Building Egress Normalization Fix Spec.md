@@ -164,6 +164,42 @@ CLOSE_OVERLAY ≠ EXIT_BUILDING_TO_TOWN ≠ TOWN verified
 > - 共享 Controller 模式下：Controller 發出 `EXIT_BUILDING_TO_TOWN` 後，必須由 Controller 追蹤驗證 `SceneId.TOWN` 成立後才放行目標 Handler。
 > 嚴禁任何元件「click 完即放手不管」。
 
+### Invariant 6: Town Location Evidence ≠ Town Interaction Readiness
+> [!CRITICAL]
+> **`SceneId.TOWN` only establishes physical location (WHERE). It MUST NOT by itself authorize business-workflow handoff.**
+>
+> 1. **職責分離 (WHERE vs INTERACTION READINESS)**：
+>    - **Town Location**：物理位置確實在城鎮（`scene.scene == SceneId.TOWN`）。`common/door.png` 與 `diamond.png` 為 Location 證據，但因為在彈窗黑罩（dimmed overlay）下依然具備高機率被 CV 偵測到的特性，**絕不得單獨作為「城鎮已乾淨可操作」的充分證據**。
+>    - **Town Ready / Clean Town**：角色人在城鎮，且當前無背包、無全螢幕彈窗、無阻擋浮層，可安全將控制權移交給下一個 Town workflow。
+> 2. **拒絕狀態爆炸**：不引入 `SceneId.TOWN_READY`。維持 Scene（位置）、Element（特徵）、Overlay（遮擋）的正交分層。
+> 3. **語意錨點抽象 (`ElementId.TOWN_CLEAR_ANCHOR`)**：
+>    - 引入專屬語意 `ElementId.TOWN_CLEAR_ANCHOR`，代表「正常城鎮必然可見，但凡有背包、彈窗或黑罩時必然不可見」的前景負向遮擋錨點（目前由實體模板 `town_building/arena_of_glory/arena_of_glory.png` 實作）。
+>    - 策略層僅認語意錨點，不與特定遊戲建築名稱強耦合。
+> 4. **分層契約不變量 (Action Postcondition vs Handoff Readiness)**：
+>    - `NavigationProgress._postcondition_met(PostconditionId.TOWN)` **維持不變**（純粹回答「剛才的離場/返回動作有沒有抵達城鎮？」：`scene.scene == SceneId.TOWN`）。
+>    - `ReachTownNormalizationController` 負責從「抵達城鎮」推進至「乾淨城鎮（Clean Town）」，歸一化終止條件為：
+>      ```python
+>      town_location_verified(snapshot) and town_interaction_ready(snapshot)
+>      ```
+>
+> ```text
+> SceneSnapshot
+>     ↓
+> Town location verified? (SceneId.TOWN)
+>     no → REACH_TOWN routing
+>     yes
+>     ↓
+> Town interaction ready?
+>     no
+>     ├─ CLOSE_OVERLAY → dismiss
+>     ├─ other recognized blocker → normalize
+>     └─ uncertain → WAIT / bounded relocalization
+>     ↓
+>     yes
+>     ↓
+> ARRIVED / dispatch Town workflow
+> ```
+
 ---
 
 ## 4. Strategy Comparison: Strategy A vs Strategy B
@@ -313,6 +349,38 @@ Given: Physical screen is SceneId.UNKNOWN
 When: Observed repeatedly
 Then: System bounds observations (bounded retry)
 And: Does NOT falsely progress, does NOT blind click, and does NOT consume/defer business intent.
+```
+
+### Scenario 7: Town Location with Blocking Overlay (Readiness Blocked)
+```text
+Given: Physical screen is SceneId.TOWN (common/door.png visible)
+When: A blocking modal / popup is present (ElementId.CLOSE_OVERLAY visible)
+Then: Town readiness is FALSE
+And: System MUST NOT return ARRIVED and MUST NOT dispatch business workflow
+And: Policy issues DISMISS_OVERLAY first.
+```
+
+### Scenario 8: Town Location Only without Clear Anchor (Readiness Verification)
+```text
+Given: Physical screen has common/door.png visible, but no strong clear-Town anchor
+Then: Town location is established, but interaction readiness is not automatically assumed
+And: System must verify absence of blockers before authorizing workflow handoff.
+```
+
+### Scenario 9: Clean Town with Clear Anchor (Full Readiness Established)
+```text
+Given: Physical screen is SceneId.TOWN
+When: ElementId.TOWN_CLEAR_ANCHOR is visible and no blocking overlay is present
+Then: Town interaction readiness is established (ARRIVED)
+And: Business workflow handoff is authorized.
+```
+
+### Scenario 10: Occluded Town Anchors (Backpack / Darkened Modal Shield)
+```text
+Given: common/door.png and diamond.png remain faintly detectable through dimmed background
+When: Backpack or modal causes ElementId.TOWN_CLEAR_ANCHOR to be absent
+Then: System MUST NOT treat door/diamond alone as clean Town
+And: Normalizes blocking UI before dispatching Town-dependent workflows.
 ```
 
 ---
