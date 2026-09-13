@@ -19,11 +19,35 @@ The agent currently supports several long-running gameplay flows:
 * **Stage farming** — enters stages, enables automatic combat, processes battle results, and retries after defeat.
 * **Dungeon exploration** — handles floor progression, random events, blessings, rewards, and dungeon selection.
 * **Mixed operation** — switches between supported gameplay activities according to the active configuration and runtime state.
-* **Daily and scheduled activities** — handles town tasks, resource collection, boss-related activities, and cooldown-dependent workflows.
+* **Daily mode** — coordinates once-per-day town tasks, scheduled Lord Boss encounters, bounty quests, and a configurable long-running fallback activity through a prioritized pipeline.
 * **Inventory management** — detects full inventory conditions, classifies equipment rarity, keeps configured valuable equipment, and dismantles or destroys lower-priority items.
 * **Town workflows** — executes independent town subflows such as the Blood Altar and Jewelry Workshop through a shared task pipeline.
 
 Detailed behavior is documented under [`docs/features/`](docs/features/).
+
+### Daily mode
+
+`--mode daily` is the long-running mode for coordinating recurring and once-per-day activities. Instead of executing a fixed sequence and stopping, it maintains a priority hierarchy and selects work according to completion state, cooldowns, available resources, and the current gameplay state.
+
+| Priority | Responsibility |
+| :--- | :--- |
+| Tier 1 — Town tasks | Runs once-per-day activities such as the treasure chest, free hero recruitment, Blood Altar / Jewelry Workshop processing, and bounty-board preparation. |
+| Tier 2 — Lord Boss | Tracks available Lord Boss encounters and their cooldowns. Ready Boss work takes priority over bounty progression and the steady-state activity. |
+| Tier 3 — Bounty quests | Schedules accepted bounty objectives and routes them to the corresponding stage or dungeon flow. |
+| Tier 4 — Steady state | Runs the player's configured activity while higher-priority daily work is complete or waiting on cooldown. |
+
+Priority changes are applied at suitable transition points rather than interrupting an active battle. For example, when a higher-priority Boss becomes available during stage farming, the current battle is allowed to finish before control is handed back to the daily scheduler.
+
+Daily progress is persisted per profile, including completed subflows, Boss counters, and timing information. Restarting the bot therefore does not require rebuilding the daily workflow from the beginning; completed work can be skipped when the same profile resumes.
+
+The scheduler also handles two long-running conditions:
+
+* **Resource backoff** — when an activity cannot continue because stamina is insufficient, execution can fall back to `collect_only` to collect resources (bread) instead of repeatedly retrying the blocked activity.
+* **Daily rollover** — the daily state is reset at 08:05. If the agent is already in combat, the current battle is completed before the new daily pipeline takes over.
+
+Daily progress is exposed through Discord notifications, including intermediate and completion milestones and a pre-reset reconciliation check for unfinished daily work.
+
+The detailed task definitions and scheduling rules are documented in [`docs/features/daily_task/daily8.md`](docs/features/daily_task/daily8.md).
 
 ---
 
@@ -231,6 +255,20 @@ Running `main.py` directly is useful for development and targeted execution, but
 
 ## CLI examples
 
+Run the daily pipeline:
+
+```powershell
+.\.venv\Scripts\python main.py --mode daily --backend
+```
+
+Daily activities can also be selectively enabled or disabled:
+
+```powershell
+.\.venv\Scripts\python main.py --mode daily --no-boss
+.\.venv\Scripts\python main.py --mode daily --no-dungeon
+.\.venv\Scripts\python main.py --mode daily --no-town
+```
+
 Run the default mixed mode:
 
 ```powershell
@@ -270,6 +308,7 @@ Target the native Steam instance:
 The current primary modes are:
 
 ```text
+daily
 mix
 dungeon
 stage
@@ -300,6 +339,7 @@ The root README intentionally stays at the system and user-facing level. Detaile
 | Scene recognition and navigation | [`docs/architecture/scene_recognition_and_navigation.md`](docs/architecture/scene_recognition_and_navigation.md) |
 | Exception and recovery subsystem | [`docs/architecture/exception_subsystem_architecture.md`](docs/architecture/exception_subsystem_architecture.md) |
 | Dungeon flow                     | [`docs/features/dungeon_flow.md`](docs/features/dungeon_flow.md)                                                 |
+| Daily scheduling pipeline        | [`docs/features/daily_task/daily8.md`](docs/features/daily_task/daily8.md)                                       |
 | Inventory color classification   | [`docs/features/bag_color_classification.md`](docs/features/bag_color_classification.md)                         |
 | Town task pipeline               | [`docs/features/town_building/pipeline.md`](docs/features/town_building/pipeline.md)                             |
 | Long-running operation           | [`docs/長時間掛機與自動恢復使用說明.md`](docs/長時間掛機與自動恢復使用說明.md)                                                               |

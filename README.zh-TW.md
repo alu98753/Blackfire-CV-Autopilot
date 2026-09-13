@@ -19,11 +19,35 @@ Blackfire CV Autopilot 透過遊戲截圖與電腦視覺辨識目前畫面狀態
 * **普通關卡**：進入關卡、啟用自動戰鬥、處理結算，並在戰敗後重新嘗試。
 * **地下城探索**：處理樓層推進、隨機事件、祝福、獎勵與地下城選擇。
 * **混合模式**：依據設定與 Runtime 狀態，在支援的遊戲活動之間切換。
-* **日常與定時活動**：處理城鎮工作、資源領取、Boss 類活動與依冷卻時間觸發的流程。
+* **Daily Mode**：透過 Pipeline 區分優先級，以調度每日城鎮工作、定時 Lord Boss、懸賞任務，以及等待其他工作期間持續執行的長駐活動。
 * **背包管理**：偵測背包已滿、分類裝備品質、保留設定中的高品質裝備，並分解或銷毀低優先級物品。
 * **城鎮工作流**：透過共用任務 Pipeline 執行血之祭壇、珠寶加工廠等獨立 Subflow。
 
 各功能的完整行為規格收錄於 [`docs/features/`](docs/features/)。
+
+### Daily Mode
+
+`--mode daily` 用於協調每日一次性工作與週期性活動。它不是依固定順序執行一次後結束，而是根據每日完成狀態、Cooldown、可用資源與目前所在的遊戲流程，持續選擇下一項工作。
+
+| 優先級 | 工作 |
+| :--- | :--- |
+| Tier 1 — 城鎮日常 | 執行每日一次的寶箱、免費英雄召喚、血之祭壇／珠寶加工廠，以及懸賞告示牌準備流程。 |
+| Tier 2 — Lord Boss | 維護 Boss 次數與 Cooldown；有可執行的 Boss 時，優先於懸賞與長駐活動。 |
+| Tier 3 — 懸賞任務 | 根據已接取的懸賞目標進行排程，並轉入對應的普通關卡或地下城流程。 |
+| Tier 4 — 長駐模式 | 當較高優先工作已完成或仍在等待 Cooldown 時，持續執行玩家設定的打法。 |
+
+優先級切換會在適合交接的流程邊界進行，而不是直接中斷正在執行的戰鬥。例如長駐刷關期間若 Lord Boss 冷卻結束，系統會先完成目前這場戰鬥，再將控制權交回 Daily Scheduler。
+
+Daily 進度會依 Profile 持久化保存，包括已完成的 Subflow、Boss 次數與時間資訊。因此 Bot 中途結束後重新啟動時，可以沿用既有進度並跳過當日已完成的工作，而不需要重新執行整套 Daily Pipeline。
+
+排程器也處理兩種長時間運作情況：
+
+* **Resource backoff**：當體力不足以繼續目前活動時，可以暫時退到 `collect_only` 收集資源(麵包)，而不是持續重試無法執行的工作。
+* **每日換日**：每日 08:05 重置 Daily 狀態；若當時正在戰鬥，會先完成目前戰鬥，再切換至新一天的 Daily Pipeline。
+
+Daily 進度也會透過 Discord 通知提供階段性與完成狀態，並在每日重置前進行未完成項目的對帳檢查。
+
+完整的任務定義與排程規則請參考 [`docs/features/daily_task/daily8.md`](docs/features/daily_task/daily8.md)。
 
 ---
 
@@ -229,6 +253,20 @@ pip install -r requirements.txt
 
 ## CLI 範例
 
+執行 Daily Pipeline：
+
+```powershell
+.\.venv\Scripts\python main.py --mode daily --backend
+```
+
+可依需求停用部分 Daily 活動：
+
+```powershell
+.\.venv\Scripts\python main.py --mode daily --no-boss
+.\.venv\Scripts\python main.py --mode daily --no-dungeon
+.\.venv\Scripts\python main.py --mode daily --no-town
+```
+
 執行預設 Mix Mode：
 
 ```powershell
@@ -268,6 +306,7 @@ pip install -r requirements.txt
 目前 Primary Mode 為：
 
 ```text
+daily
 mix
 dungeon
 stage
@@ -298,6 +337,7 @@ collect_only
 | Scene Recognition 與導航    | [`docs/architecture/scene_recognition_and_navigation.md`](docs/architecture/scene_recognition_and_navigation.md) |
 | Exception / Recovery 子系統 | [`docs/architecture/exception_subsystem_architecture.md`](docs/architecture/exception_subsystem_architecture.md) |
 | 地下城流程                    | [`docs/features/dungeon_flow.md`](docs/features/dungeon_flow.md)                                                 |
+| Daily 排程 Pipeline             | [`docs/features/daily_task/daily8.md`](docs/features/daily_task/daily8.md)                                       |
 | 背包色彩分類                   | [`docs/features/bag_color_classification.md`](docs/features/bag_color_classification.md)                         |
 | 城鎮 Task Pipeline         | [`docs/features/town_building/pipeline.md`](docs/features/town_building/pipeline.md)                             |
 | 長時間運行                    | [`docs/長時間掛機與自動恢復使用說明.md`](docs/長時間掛機與自動恢復使用說明.md)                                                               |
