@@ -62,7 +62,16 @@ class TestDeadlockRiskPrevention(unittest.TestCase):
         self.state_machine.matcher.match.side_effect = mock_match
         self.state_machine.matcher.match_mutually_exclusive_tabs.return_value = (True, (500, 500), 0.95, "load/Lord_entry_after.png")
 
+        from tests.support.fake_clock import FakeClock
+        fake_clock = FakeClock()
+        self.state_machine.clock = fake_clock
+
         with patch('os.path.exists', return_value=True), patch('time.sleep', return_value=None):
+            # Tick 1: 點擊開始戰鬥按鈕，進入 VERIFY_BATTLE_ENTRY
+            boss_handler.handle(None, rect)
+            # 前進 2.6 秒以觸發超時
+            fake_clock.advance(2.6)
+            # Tick 2: 超時且 start.png 仍在，點擊 quit 退場並標記完成
             boss_handler.handle(None, rect)
 
         # 斷言 1: DailyManager 已標記該 Boss 為已打滿 completed_today == True
