@@ -19,20 +19,54 @@ docs/tasks/<task-id>/
 
 Only `SPEC.md` is the normative behavioral contract. The other files are execution metadata or evidence and must not silently redefine the spec.
 
+## Contract maturity
+
+An active task normally passes through two specification states:
+
+```text
+Draft SPEC -> Scout evidence -> Final SPEC -> implementation
+```
+
+`SPEC.md` should state its maturity near the top as either:
+
+```text
+Status: Draft
+```
+
+or:
+
+```text
+Status: Final
+```
+
+Rules:
+
+- `Draft` means the contract is framed well enough for repository localization, but assumptions may still change after Scout evidence.
+- OpenCode Scout may inspect a Draft task and produce `CONTEXT.md`.
+- Scout is an evidence provider, not the contract owner; it must not rewrite `SPEC.md`.
+- ChatGPT + user own the architecture/behavior decision and finalize the contract after reviewing Scout evidence and current code.
+- Gemini/Antigravity must not begin production implementation while `SPEC.md` is explicitly `Status: Draft`.
+- Once `Status: Final`, implementation may proceed. Any later material contract change must be surfaced explicitly rather than silently inferred by the writer.
+
 ## Lifecycle
 
 ```text
 idea / future work
   -> docs/tasks/BACKLOG.md
+  -> ChatGPT lightweight repository survey
   -> promote to docs/tasks/<task-id>/
-  -> write SPEC.md + task.json
-  -> Scout creates CONTEXT.md
-  -> Writer implements
+  -> Draft SPEC.md + task.json
+  -> OpenCode Scout creates CONTEXT.md
+  -> ChatGPT re-checks code / architecture using Scout evidence
+  -> Final SPEC.md
+  -> Gemini/Antigravity implements
   -> verification gate creates reviews/* + EVIDENCE.md
   -> ChatGPT / human final review
   -> branch closeout extracts durable contracts
   -> task package is deleted when no longer needed
 ```
+
+The initial ChatGPT survey should be deep enough to establish the real problem boundary, architecture parent, known invariants, and plausible scope, but should not duplicate the exhaustive localization work delegated to Scout.
 
 Do not create a global `current-task` marker. This repository uses multiple permanent worktrees, so every script requires an explicit task id.
 
