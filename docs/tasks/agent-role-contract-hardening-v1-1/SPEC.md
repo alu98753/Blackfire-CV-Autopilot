@@ -27,6 +27,20 @@ The following facts were collected locally from `opencode v2.0.3` using `opencod
 7. The OpenAPI schema types `Permission.Rule.action` as a free-form string rather than a closed enum. Therefore the set of actions appearing in `debug agents` output is not proof of the complete set of supported permission actions.
 8. The installed CLI/runtime evidence is sufficient to establish that `steps` and V2 `permissions` are real runtime concepts; the exact last-step behavior and the treatment of the observed `execute`-style path still require direct execution probes.
 
+## Verified Antigravity/Windows execution-substrate evidence
+
+A controlled 5-command smoke test from Antigravity succeeded when finite commands were wrapped with `cmd.exe /d /s /c`, and OpenCode calls additionally used `< NUL` plus `--standalone`:
+
+- `echo hello` -> exit 0, self-terminated.
+- `git status --short` -> exit 0, self-terminated.
+- nested `powershell.exe -NoProfile -Command ...` -> exit 0, self-terminated.
+- `opencode run --standalone --model opencode/mimo-v2.5-free ... < NUL` -> exit 0, self-terminated.
+- `opencode run --standalone --model opencode/big-pickle ... < NUL` -> exit 0, self-terminated.
+
+This is operational evidence that the Antigravity terminal substrate can reliably observe completion/EOF under that wrapper. It is **not** an architecture invariant for repository automation: `ai_scout.ps1` / `ai_gate.ps1` must still establish their own deterministic child-process working directory, stdin, isolation, timeout, and cleanup behavior independent of IDE global rules.
+
+The pre-probe working tree already contained unrelated user-owned untracked material under `meta_data/...`; subsequent probes must preserve the pre-existing status rather than deleting unrelated files merely to make `git status` globally clean.
+
 ## Scope
 
 Provisional change surface:
@@ -55,6 +69,8 @@ No game/runtime code is in scope.
 10. This task changes workflow/tooling behavior only; production/game behavior must remain unchanged.
 11. Native step-bounding is a convergence mechanism, not a replacement for the hard wall-clock timeout.
 12. No implementation may rely on undocumented assumptions about OpenCode permission action names or final-step behavior; disputed behavior must be runtime-probed first.
+13. Repository automation must not depend on Antigravity-specific global shell rules for correctness.
+14. Runtime probes must preserve unrelated pre-existing working-tree state.
 
 ## Provisional target behavior
 
@@ -93,6 +109,13 @@ No game/runtime code is in scope.
 - Explicitly deny mutation/execution/subagent/web/external access paths that are not required.
 - The observed `execute`-style tool must be tested directly. The OpenAPI action field being free-form means absence from current resolved rules is not proof that the runtime cannot expose or gate such an action.
 
+### Process invocation isolation
+
+- Repository-owned Scout/Gate execution should be deterministic outside Antigravity as well as inside it.
+- Final design should explicitly control the child working directory and stdin semantics rather than relying only on parent-shell inheritance.
+- `--standalone` is a strong candidate for formal local-agent jobs because it avoids shared-server state coupling, but its private-server cleanup/orphan behavior must be runtime-probed before becoming a Final SPEC requirement.
+- Do not hard-code a global npm/native binary path unless evidence shows the PowerShell wrapper itself is still problematic after process isolation is fixed.
+
 ## Non-goals
 
 - No model fallback routing; that is `agent-model-fallback-routing-v1-1`.
@@ -103,6 +126,7 @@ No game/runtime code is in scope.
 - No shared generalized process framework extraction.
 - No production/game behavior changes.
 - No custom timer/plugin solely to simulate a six-minute clock unless native step-bounding is proven inadequate.
+- No requirement that developers globally use Antigravity-specific `cmd /c` wrapping outside agent automation.
 
 ## Provisional acceptance criteria
 
@@ -117,12 +141,15 @@ No game/runtime code is in scope.
 9. Gate 0/1/2 classification and canonical artifact safety remain unchanged.
 10. No game/runtime files change.
 11. Durable workflow docs are updated only for verified final semantics, not provisional OpenCode assumptions.
-12. Runtime probes leave the tracked working tree unchanged after cleanup.
+12. Runtime probes introduce no new working-tree delta after cleanup and preserve unrelated pre-existing files.
+13. If repository scripts adopt standalone execution, timeout/cancellation probes prove no orphan private OpenCode server remains.
+14. Repository scripts do not require Antigravity Global Rules to terminate correctly.
 
 ## Remaining uncertainty / required bootstrap probes
 
 1. **Final-step semantics:** with a small `steps` budget on OpenCode 2.0.3, does the last allowed step remove tools and yield a usable final text response, or terminate/truncate in another way?
 2. **Execution permission semantics:** can an explicit deny rule for the `execute` action be loaded and enforced by OpenCode 2.0.3, and does it prevent the previously observed `execute`-style code path independently of `shell` denial?
-3. What smallest step budget gives Mimo enough evidence to produce a valid Scout/reviewer result without reintroducing open-ended exploration? Big Pickle calibration is secondary and should occur only after Mimo behavior is understood.
-4. Are agent-definition changes sufficient, or do `ai_scout.ps1` / `ai_gate.ps1` need any invocation change for the verified step/permission behavior to take effect?
-5. What is the smallest disposable local probe that answers the above without creating a generalized OpenCode test framework?
+3. **Standalone lifecycle:** when a formal agent process times out or is killed, does its private standalone server terminate with it, or can it leave an orphan process?
+4. What smallest step budget gives Mimo enough evidence to produce a valid Scout/reviewer result without reintroducing open-ended exploration? Big Pickle calibration is secondary and should occur only after Mimo behavior is understood.
+5. Are agent-definition changes sufficient, or do `ai_scout.ps1` / `ai_gate.ps1` need invocation changes for verified step/permission/isolation behavior to take effect?
+6. What is the smallest disposable local probe that answers the above without creating a generalized OpenCode test framework?
