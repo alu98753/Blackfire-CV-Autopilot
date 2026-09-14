@@ -8,9 +8,24 @@ Make local OpenCode Scout/reviewer roles intentionally fast, concise, scope-disc
 
 ## Observed problem
 
-The current Scout is already bounded but still allows up to 10 files and targets up to 1500 words. The current reviewers encourage broad/exhaustive coverage: the spec reviewer asks for per-clause coverage, while the regression reviewer asks for callers/callees/sibling paths/state/timing/dead logic/testability/architecture drift. Real runs showed useful analysis but also format drift and long exploratory loops that reached the 480-second hard timeout.
+The current Scout is already externally bounded but still allows up to 10 files and targets up to 1500 words. The current reviewers encourage broad/exhaustive coverage: the spec reviewer asks for per-clause coverage, while the regression reviewer asks for callers/callees/sibling paths/state/timing/dead logic/testability/architecture drift. Real runs showed useful analysis but also format drift and long exploratory loops that reached the 480-second hard timeout.
 
-The current agent frontmatter also uses `permission` / `bash` / `task` style controls, while an observed reviewer run still gained an `execute`-style capability despite the intended read-only contract. The exact OpenCode v2 permission/step behavior must be verified before Final SPEC.
+A real Scout run for this task using `opencode/mimo-v2.5-free` on OpenCode 2.0.3 reached the full 480-second external timeout and produced no canonical `CONTEXT.md`. This confirms the current role contract/process bound prevents indefinite hangs but does not yet reliably force early convergence.
+
+The current agent frontmatter uses legacy `permission` / `bash` / `task` style controls. OpenCode 2.0.3 runtime inspection confirms a compatibility layer maps these to V2-style `permissions` rules such as `shell` and `subagent`, but the runtime behavior of all execution-capability paths still requires a direct probe because a previous reviewer session visibly reached an `execute`-style tool despite the intended read-only role.
+
+## Verified OpenCode 2.0.3 runtime facts
+
+The following facts were collected locally from `opencode v2.0.3` using `opencode --help`, `opencode run --help`, `opencode debug agents`, `opencode debug config`, `opencode api get /openapi.json`, and the installed CLI/runtime. They are evidence for this task and should not be re-litigated by Scout unless contradictory runtime behavior is observed.
+
+1. Installed runtime is `opencode v2.0.3`.
+2. Agent config schema supports a positive integer `steps` field.
+3. Current project agents have `steps: null`, so no native step budget is active today.
+4. V2 agent config schema uses `permissions` as an ordered array of `{ action, resource, effect }` rules where `effect` is `allow`, `deny`, or `ask`.
+5. The installed runtime accepts legacy `permission` frontmatter and maps legacy `bash` to `shell` and legacy `task` to `subagent` in the resolved permission list.
+6. `opencode debug agents` shows current Scout rules resolve to explicit denies for `edit`, `shell`, `subagent`, `external_directory`, `webfetch`, and `websearch`, after the runtime's broader base rules.
+7. The OpenAPI schema types `Permission.Rule.action` as a free-form string rather than a closed enum. Therefore the set of actions appearing in `debug agents` output is not proof of the complete set of supported permission actions.
+8. The installed CLI/runtime evidence is sufficient to establish that `steps` and V2 `permissions` are real runtime concepts; the exact last-step behavior and the treatment of the observed `execute`-style path still require direct execution probes.
 
 ## Scope
 
@@ -22,7 +37,7 @@ Provisional change surface:
 - `scripts/ai_scout.ps1`
 - `scripts/ai_gate.ps1`
 - `docs/architecture/ai_development_workflow.md` if durable workflow semantics change
-- focused deterministic probes/config validation needed to prove role limits and read-only behavior
+- focused deterministic/runtime probes needed to prove role limits and read-only behavior
 
 No game/runtime code is in scope.
 
@@ -36,8 +51,10 @@ No game/runtime code is in scope.
 6. A semantic BLOCK must not be weakened merely to shorten output.
 7. Local-agent uncertainty should be reported explicitly instead of triggering open-ended repository exploration.
 8. Existing 480-second process timeout remains the hard safety boundary unless Final SPEC identifies a better compatible mechanism.
-9. Read-only agents must not gain a repository-mutating shell/code-execution/subagent capability through an unguarded OpenCode permission path.
+9. Read-only agents must not gain repository-mutating shell/code-execution/subagent capability through an unguarded OpenCode permission path.
 10. This task changes workflow/tooling behavior only; production/game behavior must remain unchanged.
+11. Native step-bounding is a convergence mechanism, not a replacement for the hard wall-clock timeout.
+12. No implementation may rely on undocumented assumptions about OpenCode permission action names or final-step behavior; disputed behavior must be runtime-probed first.
 
 ## Provisional target behavior
 
@@ -48,6 +65,7 @@ No game/runtime code is in scope.
 - Target 600-800 words; hard output ceiling 1000 words where enforceable by contract/probe.
 - Stop once ownership/control flow/relevant tests/material risks/minimal surface are sufficiently localized.
 - Put unproven items in `Uncertainty` rather than expanding the audit.
+- Do not reconstruct full repository history or prove every sibling-path non-problem that ChatGPT will independently re-check later.
 
 ### Reviewers
 
@@ -60,13 +78,20 @@ No game/runtime code is in scope.
 
 ### Convergence controls
 
-Investigate and, only if supported by the installed OpenCode runtime, use native controls such as an agent step/tool-call budget that forces final text generation before the external 480-second hard timeout. Initial calibration target is approximately 5-7 model steps, not a fixed architectural constant. The desired operating result is normal completion around 2-4 minutes per reviewer and well before the hard timeout.
-
-A prompt-only statement such as "finish within 6 minutes" is not sufficient by itself because the model may not have reliable wall-clock awareness.
+- Use OpenCode's native positive-integer `steps` budget if the direct runtime probe confirms the final-step behavior is suitable for graceful text finalization.
+- Calibrate `steps` per role rather than treating model steps as wall-clock minutes. Initial probe range is approximately 5-7 total model steps, chosen to leave enough room for minimal evidence gathering plus final response generation.
+- Desired normal operating result is roughly 2-4 minutes per reviewer and materially earlier than the 480-second hard timeout.
+- Keep the external 480-second child-process timeout as the hard safety boundary because one slow provider/model request may consume substantial wall-clock time even with a small step budget.
+- Do not substitute a prompt-only statement such as "finish within 6 minutes" for a runtime-enforced iteration budget.
+- Do not add a custom timer/plugin/session-interrupt control plane in this v1.1 task unless direct evidence shows native `steps` cannot provide graceful convergence; explicit pause/amend/resume belongs to later V2 work.
 
 ### Read-only boundary
 
-Verify the actual OpenCode v2 permission schema and runtime behavior. Prefer the narrowest practical default-deny/read-search-only contract. Explicitly prove that edit, shell/code execution, subagent/task, web, and external-directory mutation paths cannot be used by Scout/reviewers.
+- Prefer explicit V2 `permissions` rules in custom agents for clarity and forward maintenance, even though OpenCode 2.0.3 currently maps legacy keys through a compatibility layer.
+- Use a broad deny followed by narrow discovery allows where runtime rule ordering/probes confirm the intended behavior.
+- Discovery roles should need only local read/search capabilities required for their task (`read`, `glob`, `grep`) plus any strictly necessary internal capability proven by probe.
+- Explicitly deny mutation/execution/subagent/web/external access paths that are not required.
+- The observed `execute`-style tool must be tested directly. The OpenAPI action field being free-form means absence from current resolved rules is not proof that the runtime cannot expose or gate such an action.
 
 ## Non-goals
 
@@ -77,25 +102,27 @@ Verify the actual OpenCode v2 permission schema and runtime behavior. Prefer the
 - No user pause/amend/resume control plane.
 - No shared generalized process framework extraction.
 - No production/game behavior changes.
+- No custom timer/plugin solely to simulate a six-minute clock unless native step-bounding is proven inadequate.
 
 ## Provisional acceptance criteria
 
 1. Scout contract clearly encodes the tighter file/output/early-stop policy without losing required ownership/control-flow/test/risk evidence.
 2. Spec/regression reviewer PASS outputs are materially shorter and blocker-first while preserving valid BLOCK detail.
 3. Representative real/deterministic role probes show normal convergence materially earlier than the 480-second timeout.
-4. If OpenCode supports a native `steps`/equivalent limit, its actual installed-runtime semantics are verified and calibrated; if not, the Final SPEC documents the supported alternative rather than assuming it.
-5. Read-only permissions are proven against the installed OpenCode runtime, including the previously observed `execute`-style path.
-6. No local reviewer can mutate tracked repository content or launch an unrestricted child/subagent through the configured role.
-7. `scripts/ai_scout.ps1 -Task <id>` and `scripts/ai_gate.ps1 -Task <id>` remain compatible.
-8. Gate 0/1/2 classification and canonical artifact safety remain unchanged.
-9. No game/runtime files change.
-10. Durable workflow docs are updated only for verified final semantics, not provisional OpenCode assumptions.
+4. Installed OpenCode 2.0.3 `steps` behavior is directly verified, including what occurs on the final allowed step and whether valid structured text is still produced.
+5. A calibrated step budget is chosen from evidence, not guessed from elapsed minutes.
+6. Read-only permissions are directly proven against the installed runtime, including the previously observed `execute`-style path and ordinary shell/edit/subagent mutation attempts.
+7. No local reviewer can mutate tracked repository content or launch an unrestricted child/subagent through the configured role.
+8. `scripts/ai_scout.ps1 -Task <id>` and `scripts/ai_gate.ps1 -Task <id>` remain compatible.
+9. Gate 0/1/2 classification and canonical artifact safety remain unchanged.
+10. No game/runtime files change.
+11. Durable workflow docs are updated only for verified final semantics, not provisional OpenCode assumptions.
+12. Runtime probes leave the tracked working tree unchanged after cleanup.
 
-## Uncertainty / Scout questions
+## Remaining uncertainty / required bootstrap probes
 
-1. What exact permission keys/schema does the installed OpenCode 2.0.3 runtime honor for custom agents, and why did the observed reviewer obtain an `execute` capability despite the intended read-only configuration?
-2. Does the installed runtime support an agent-level `steps` or equivalent max-step/finalization control in the repository agent frontmatter, and what happens on the last step?
-3. What step budget gives Mimo and Big Pickle enough evidence to produce a valid Scout/reviewer result without reintroducing timeout risk?
-4. Which output constraints can be made reliably enforceable by contract/runtime versus merely advisory prose targets?
-5. Are script invocation changes required to activate these controls, or are agent-definition changes sufficient?
-6. What focused probes provide convincing evidence without turning this task into a generalized OpenCode test framework?
+1. **Final-step semantics:** with a small `steps` budget on OpenCode 2.0.3, does the last allowed step remove tools and yield a usable final text response, or terminate/truncate in another way?
+2. **Execution permission semantics:** can an explicit deny rule for the `execute` action be loaded and enforced by OpenCode 2.0.3, and does it prevent the previously observed `execute`-style code path independently of `shell` denial?
+3. What smallest step budget gives Mimo enough evidence to produce a valid Scout/reviewer result without reintroducing open-ended exploration? Big Pickle calibration is secondary and should occur only after Mimo behavior is understood.
+4. Are agent-definition changes sufficient, or do `ai_scout.ps1` / `ai_gate.ps1` need any invocation change for the verified step/permission behavior to take effect?
+5. What is the smallest disposable local probe that answers the above without creating a generalized OpenCode test framework?
