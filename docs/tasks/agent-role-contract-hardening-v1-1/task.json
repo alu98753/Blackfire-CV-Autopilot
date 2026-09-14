@@ -1,0 +1,17 @@
+{
+  "id": "agent-role-contract-hardening-v1-1",
+  "base_ref": "origin/main",
+  "scope": [
+    ".opencode/agents/scout.md",
+    ".opencode/agents/spec-reviewer.md",
+    ".opencode/agents/regression-reviewer.md",
+    "scripts/ai_scout.ps1",
+    "scripts/ai_gate.ps1",
+    "docs/architecture/ai_development_workflow.md"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": "opencode/mimo-v2.5-free",
+    "review": "opencode/mimo-v2.5-free"
+  }
+}
