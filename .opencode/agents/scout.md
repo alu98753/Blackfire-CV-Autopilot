@@ -1,6 +1,6 @@
 ---
 description: Read-only codebase localization scout for one task contract
-mode: subagent
+mode: primary
 permission:
   edit: deny
   bash: deny
