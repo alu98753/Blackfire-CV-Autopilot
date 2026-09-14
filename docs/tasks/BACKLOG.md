@@ -19,6 +19,22 @@ Existing backlog material under `docs/todos/` predates this workflow and remains
 
 This roadmap fixes the intended order and responsibility boundaries before individual tasks are activated. Planned tasks stay here until the user explicitly starts one. At activation time, create a fresh task branch from the then-current `main`, promote only that item into `docs/tasks/<task-id>/SPEC.md` + `task.json`, run Scout, and continue the normal Draft -> Scout -> Final -> implementation -> Gate -> ChatGPT review lifecycle. Do not pre-create long-lived branches for later roadmap items because their base and assumptions would become stale.
 
+### Resource / responsibility principle
+
+Local free agents are deliberately optimized for **fast first-pass evidence**, not exhaustive reasoning. They should localize the likely owner, surface concrete blockers/risks, and stop early with explicit uncertainty. ChatGPT then performs the deeper architecture/specification/final semantic analysis using current GitHub evidence. Gemini/Antigravity remains the production implementation writer after Final SPEC.
+
+```text
+OpenCode local agents
+  -> fast / bounded / concise evidence
+  -> uncertainty instead of open-ended exploration
+ChatGPT + user
+  -> deep analysis / contract ownership / final architecture review
+Gemini / Antigravity
+  -> production implementation writer
+```
+
+A local role should not spend free-model time proving every non-problem that ChatGPT will independently re-check later.
+
 Completed prerequisites:
 
 - `scout-efficiency-v1` — merged. Scout execution is bounded, observable, and artifact-safe.
@@ -26,21 +42,25 @@ Completed prerequisites:
 
 ### 1. `agent-role-contract-hardening-v1-1`
 
-**Goal:** make Scout and reviewer roles more concise, scope-disciplined, and genuinely read-only so weaker/faster models can still be reliable fallback candidates without changing role ownership.
+**Goal:** make Scout and reviewer roles intentionally fast, concise, scope-disciplined, and genuinely read-only so local free models provide enough first-pass evidence without duplicating ChatGPT's deeper analysis.
 
 **Depends on:** `ai-gate-execution-resilience`.
 
 **Planned scope / invariants:**
-- Preserve role ownership: Scout is evidence-only; reviewers are read-only; Gemini remains the sole production writer after Final SPEC; ChatGPT + user own contract/final review.
-- Make reviewer output blocker-first and concise: structured verdict header first, short coverage summary on PASS, expand only concrete blockers, cap advisory/evidence-gap verbosity.
-- Add explicit exploration/early-stop guidance so reviewers stop once enough evidence exists for PASS/BLOCK instead of performing open-ended repository archaeology.
-- Re-evaluate Scout output/exploration budget only where evidence supports tightening; keep uncertainty explicit rather than expanding scope.
+- Preserve role ownership: Scout is evidence-only; reviewers are read-only bounded blocker detectors; Gemini remains the sole production writer after Final SPEC; ChatGPT + user own contract/final review.
+- **Scout target budget:** inspect about 5-6 directly relevant files, target 600-800 words; absolute ceilings are 8 directly relevant files and 1000 words. Once owner/control flow/tests/material risks are sufficiently localized, stop. Unproven items go to `Uncertainty` instead of expanding the audit.
+- Scout is explicitly a first-pass localizer. It does not need to prove every sibling path, reconstruct full repository history, or finish the architecture analysis that ChatGPT will perform after `CONTEXT.md` is available.
+- **Reviewer output is asymmetric and blocker-first:** PASS should normally fit within roughly 300-600 words with the required structured header, a compact coverage summary, `Blocking findings: None`, and at most a small number of advisories/evidence gaps. BLOCK may expand only the concrete blocking findings needed to support the verdict.
+- Preserve two independent sequential reviewer roles (`spec-reviewer` and `regression-reviewer`) rather than merging them. Each should target roughly 2-4 minutes under normal conditions while the existing 480-second process timeout remains the hard safety bound unless the Final SPEC finds a better supported mechanism.
+- Add explicit early-stop guidance: once enough grounded evidence exists to return PASS/BLOCK within the role's bounded responsibility, stop repository exploration and produce the final structured response.
+- Avoid unnecessary baseline/history archaeology, broad sibling traversal, exhaustive PASS tables, and low-value prose. Reviewers should inspect only the highest-risk directly relevant paths needed to detect concrete contract/regression blockers.
+- Investigate whether OpenCode exposes a supported soft-limit mechanism (step/tool-call budget, graceful finish signal, runtime control, hook/plugin API, or equivalent) that can encourage/finalize a response before the 480-second hard timeout. Desired operating shape is approximately a 6-minute soft completion boundary plus safety buffer, but do not implement prompt-only wall-clock claims as if models had reliable clock awareness.
 - Investigate the observed OpenCode capability gap where a reviewer with `bash: deny` still reached an `execute`-style tool. Enforce or document the narrowest practical read-only boundary; reviewer execution must not mutate repository state.
 - Preserve current reviewer semantic contract (`VERDICT`, `BLOCKING_FINDINGS`) and Gate 0/1/2 outcome semantics.
 
-**Non-goals:** no model fallback routing yet; no parallel reviewers; no retries after semantic BLOCK; no user interrupt/resume system.
+**Non-goals:** no model fallback routing yet; no parallel reviewers; no retries after semantic BLOCK; no user interrupt/resume system; no weakening of the final ChatGPT semantic/architecture review.
 
-**Done when:** role contracts are measurably shorter/bounded, read-only capability is verified or explicitly guarded, and representative models can complete deterministic role-contract probes without weakening review semantics.
+**Done when:** role contracts are measurably shorter/bounded, Scout/reviewer early-stop behavior is explicit, read-only capability is verified or guarded, any supported OpenCode soft-completion control has been evaluated, and representative role-contract probes show faster convergence without weakening semantic blockers.
 
 ### 2. `agent-model-fallback-routing-v1-1`
 
