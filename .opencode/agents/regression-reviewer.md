@@ -1,6 +1,6 @@
 ---
 description: Read-only reviewer focused on regression risk, lifecycle integrity, and architecture boundaries
-mode: subagent
+mode: primary
 permission:
   edit: deny
   bash: deny
