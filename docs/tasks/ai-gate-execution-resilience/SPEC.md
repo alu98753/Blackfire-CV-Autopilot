@@ -1,12 +1,12 @@
 # AI Gate Execution Resilience
 
-Status: Draft
+Status: Final
 
 ## Goal
 
 Make `scripts/ai_gate.ps1` a bounded, observable, artifact-safe verification orchestrator so a hung OpenCode reviewer or focused test cannot block the task workflow indefinitely.
 
-The gate must distinguish candidate verification outcomes from infrastructure/execution failures. A reviewer `BLOCK` is evidence about the candidate; a reviewer/test process timeout, crash, malformed output, or termination failure is an infrastructure failure and must not masquerade as either PASS or semantic BLOCK.
+The gate must distinguish candidate verification outcomes from infrastructure/execution failures. A reviewer `BLOCK` or completed focused-test failure is evidence about the candidate; a reviewer/test timeout, launch failure, malformed reviewer payload, or unconfirmed termination is an infrastructure failure and must not masquerade as either PASS or semantic BLOCK.
 
 ## Observed problem
 
@@ -14,17 +14,19 @@ A real `scout-efficiency-v1` gate run exposed the current failure mode: the firs
 
 The same gate script also runs configured focused tests through a blocking external-process invocation without a timeout. Therefore bounding reviewers alone would not make the complete gate execution bounded.
 
-## Initial scope
+A subsequent Scout run for this task itself hit the newly enforced 480-second Scout timeout and terminated safely, confirming that bounded orchestration is necessary for all external model/test child execution.
 
-Primary likely change surface:
+## Scope
+
+Primary change surface:
 
 - `scripts/ai_gate.ps1`
 - `docs/architecture/ai_development_workflow.md`
-- `docs/tasks/README.md` only if user-facing gate execution/failure semantics need documentation
+- `docs/tasks/README.md` only where user-facing gate execution/failure semantics need documentation
 
-A small script-level deterministic verification seam may be added to exercise reviewer/test process success, timeout, non-zero exit, streaming, and artifact-preservation behavior without real long-running model/test calls.
+A small deterministic script-level verification seam may be added to exercise reviewer/test process success, timeout, non-zero exit, malformed output, streaming, and artifact-preservation behavior without live long-running model/test calls.
 
-Reviewer prompt semantics under `.opencode/agents/spec-reviewer.md` and `.opencode/agents/regression-reviewer.md` are not expected to change unless Scout finds a direct execution-contract reason.
+Reviewer semantic contracts under `.opencode/agents/spec-reviewer.md` and `.opencode/agents/regression-reviewer.md` are not changed by this task unless a strictly execution-related compatibility fix is required.
 
 No game/runtime behavior may change.
 
@@ -33,82 +35,184 @@ No game/runtime behavior may change.
 1. `spec-reviewer` and `regression-reviewer` remain read-only independent reviewers.
 2. Reviewer semantic contract remains `VERDICT: PASS|BLOCK` plus `BLOCKING_FINDINGS`.
 3. A semantic reviewer `BLOCK` must remain distinguishable from reviewer infrastructure failure.
-4. Gate infrastructure failure must never be reported as PASS.
+4. Gate infrastructure failure must never be reported as PASS or candidate semantic BLOCK.
 5. Timeout, non-zero process exit, malformed/incomplete reviewer output, or unconfirmed process termination must not overwrite a previously valid canonical `reviews/*.md` with partial output.
-6. `EVIDENCE.md` must not claim complete successful verification if one required reviewer/test execution failed at the infrastructure layer.
-7. User-visible terminal progress must improve; long-running child processes must not remain opaque until completion.
-8. Timeout/termination must target only the child process launched by the gate and must not kill the persistent `opencode serve` service.
+6. `EVIDENCE.md` must not claim complete verification if any required reviewer/test execution failed at the infrastructure layer.
+7. Long-running reviewer execution must be user-observable from the terminal.
+8. Timeout/termination must target only the launched child process and must not kill the persistent `opencode serve` service.
 9. The gate must continue to reject obvious full-suite test targets and must never run the repository full suite automatically.
 10. Existing normal invocation `./scripts/ai_gate.ps1 -Task <id>` remains valid.
 11. Multi-worktree/task-id isolation under `.runtime/ai_gate/<task-id>/` remains intact.
 12. This task must not change reviewer findings merely to make a candidate pass.
 
-## Provisional target behavior
+## Target behavior
 
-### Reviewer execution
+### 1. Reviewer execution
 
-Each OpenCode reviewer should run through a bounded child-process wrapper that provides:
+Each OpenCode reviewer must run through a bounded child-process wrapper that provides:
 
 - real-time stdout/stderr visibility;
-- a hard wall-clock timeout;
+- hard wall-clock timeout;
 - client-only termination on timeout;
 - confirmed child exit or explicit termination-failure reporting;
 - candidate output staged outside canonical `reviews/*.md`;
-- canonical review promotion only after successful process exit and minimal reviewer-structure validation.
+- canonical review promotion only after successful process exit and minimal structural validation.
 
-A default reviewer timeout around 8 minutes is provisional pending Scout/local evidence. The two reviewers are sequential in v1; no parallel-review redesign is required.
+Default reviewer timeout: **480 seconds per reviewer**.
 
-### Focused-test execution
+The two reviewers remain sequential in v1. With defaults, the reviewer phase therefore has a nominal upper bound of approximately 16 minutes plus small cleanup overhead.
 
-Configured focused tests are also child processes and must not remain unbounded.
+Provide a simple timeout override seam suitable for deterministic probes and local diagnosis. Existing `-Task <id>` usage must remain unchanged.
 
-The smallest acceptable v1 behavior is:
+### 2. Reviewer structural validation
 
-- per-focused-test wall-clock timeout with a sensible default/override seam;
-- live or sufficiently observable test output;
-- timeout/non-zero exit recorded as test failure/infrastructure evidence without hanging the gate;
+A reviewer process exit code of 0 is necessary but not sufficient for canonical promotion.
+
+Minimal validation:
+
+1. output is non-empty after trimming;
+2. contains `VERDICT: PASS|BLOCK`;
+3. contains `BLOCKING_FINDINGS: <integer>`;
+4. `PASS` requires `BLOCKING_FINDINGS: 0`;
+5. `BLOCK` requires `BLOCKING_FINDINGS >= 1`.
+
+Do not parse every natural-language finding field with brittle regexes. Detailed prose remains reviewer evidence for later inspection.
+
+Malformed reviewer output is an infrastructure failure, not a semantic candidate block.
+
+### 3. Focused-test execution
+
+Every configured focused test is also a bounded child process.
+
+Default per-focused-test timeout: **60 seconds**.
+
+This is a workflow default, not a claim that all valid focused tests objectively finish within 60 seconds. The script must support an override seam for legitimate slower focused tests or deterministic probes.
+
+Focused-test requirements:
+
+- hard per-test wall-clock timeout;
+- client-only termination on timeout;
+- confirmed termination or explicit infrastructure failure;
+- stdout/stderr captured to `.runtime/ai_gate/<task-id>/test-*.log`;
+- clear terminal status at start/completion including result, elapsed time, and log path;
+- no requirement for line-by-line test streaming in v1;
 - no expansion into a new test framework.
 
-Exact timeout values and public parameter shape remain provisional until Scout confirms nearby conventions and simplest implementation.
+A focused test that **completes normally and exits non-zero** is a candidate verification failure (`CANDIDATE_BLOCKED`).
 
-### Failure classification
+A focused test that **cannot complete validly because of timeout, launch failure, or unconfirmed termination** is `INFRASTRUCTURE_BLOCKED`.
 
-The gate should make at least these states unambiguous to humans and automation:
+### 4. Failure classification and exit codes
 
-1. `PASS` — both reviewers validly PASS and required focused tests pass.
-2. `CANDIDATE_BLOCKED` — one or more valid reviewer reports return semantic BLOCK, or a focused test completes and fails.
-3. `INFRASTRUCTURE_BLOCKED` — a required reviewer/test cannot complete validly because of timeout, process-launch failure, non-reviewer process failure, malformed reviewer output, or unconfirmed termination.
+The gate has three externally meaningful terminal outcomes:
 
-The exact exit-code mapping is provisional. Scout must inspect existing callers before Final SPEC chooses whether to preserve exit `2` for all blocked states or introduce a distinct non-zero code for infrastructure failure.
+- `PASS` → exit **0**
+- `CANDIDATE_BLOCKED` → exit **2**
+- `INFRASTRUCTURE_BLOCKED` → exit **1**
 
-### Artifact safety
+`CANDIDATE_BLOCKED` includes:
 
-Canonical artifacts must be success/validity gated:
+- valid reviewer `BLOCK`;
+- valid reviewer output that semantically blocks according to the existing contract;
+- focused test completed and exited non-zero.
 
-- `reviews/spec-review.md`
-- `reviews/regression-review.md`
-- `EVIDENCE.md`
+`INFRASTRUCTURE_BLOCKED` includes:
 
-Partial reviewer stdout/stderr and diagnostics belong under ignored `.runtime/ai_gate/<task-id>/` state.
+- reviewer/test launch failure;
+- reviewer/test timeout;
+- reviewer malformed/structurally inconsistent output;
+- reviewer/test process crash that prevents a valid result;
+- unconfirmed child termination;
+- required verification child result otherwise unavailable.
 
-A failed rerun must not silently destroy a previously valid canonical review report. `EVIDENCE.md` may be updated to describe an incomplete/infrastructure-blocked verification attempt only if its semantics are explicit and cannot be mistaken for completed verification; otherwise preserve the previous canonical evidence and emit runtime diagnostics.
+Repository survey found no automated caller currently depending on a different `ai_gate.ps1` exit-code interpretation, so this mapping may be made explicit without breaking known automation.
 
-This exact `EVIDENCE.md` policy is intentionally open for Scout evidence because current downstream closeout behavior must be checked before deciding.
+### 5. Canonical artifact safety
 
-## Provisional acceptance criteria
+Canonical review artifacts:
 
-1. Both reviewer invocations have a real wrapper-enforced timeout and real-time terminal visibility.
-2. A completely silent reviewer child cannot block the gate beyond its configured timeout.
-3. Reviewer timeout kills only the launched client process and does not kill persistent OpenCode service state.
-4. Timeout/non-zero/malformed reviewer execution cannot replace a valid canonical review report with partial content.
-5. Valid reviewer `BLOCK` remains a semantic candidate result, not an infrastructure error.
-6. Focused-test child execution is also bounded; a silent/hung focused test cannot hang the gate indefinitely.
-7. The gate produces an explicit machine/human-visible distinction between candidate blocking and infrastructure blocking.
-8. `EVIDENCE.md` semantics cannot claim complete verification when required reviewer/test execution was infrastructure-blocked.
-9. Existing `-Task <id>` usage remains compatible.
-10. Full-suite policy is unchanged.
-11. Deterministic focused probes cover at least reviewer success, silent reviewer timeout, reviewer non-zero/malformed output, canonical review preservation, focused-test timeout, and failure classification.
-12. No production/game behavior changes.
+- `docs/tasks/<task-id>/reviews/spec-review.md`
+- `docs/tasks/<task-id>/reviews/regression-review.md`
+
+must be staged under `.runtime/ai_gate/<task-id>/` and promoted only after:
+
+- process exit 0;
+- no timeout/infrastructure failure;
+- minimal reviewer structural validation passes.
+
+On reviewer infrastructure failure, any previous valid canonical review file remains untouched.
+
+### 6. `EVIDENCE.md` semantics
+
+Canonical `EVIDENCE.md` represents a completed gate evaluation, not an incomplete attempt.
+
+Therefore:
+
+- on `PASS`, write/update canonical `EVIDENCE.md` with reviewer/test results;
+- on `CANDIDATE_BLOCKED`, write/update canonical `EVIDENCE.md` because verification completed and reached a valid candidate verdict;
+- on `INFRASTRUCTURE_BLOCKED`, do **not** overwrite an existing canonical `EVIDENCE.md` and do not create a canonical completed-verification artifact from partial results.
+
+Infrastructure diagnostics belong under ignored `.runtime/ai_gate/<task-id>/` state and should be sufficient for local diagnosis.
+
+A rerun that fails at infrastructure level must not erase the last valid canonical verification evidence.
+
+### 7. Observability
+
+Reviewer stdout/stderr must be visible in real time while the reviewer runs.
+
+Focused tests need not stream every line, but the user must see:
+
+- test start;
+- configured timeout;
+- completion/failure classification;
+- elapsed time;
+- runtime log path.
+
+No required child process should appear as an indefinitely silent black box.
+
+### 8. Implementation boundary
+
+Reuse the proven execution design from `scripts/ai_scout.ps1` conceptually:
+
+- `System.Diagnostics.Process` ownership;
+- async reviewer stdout/stderr handling;
+- wall-clock timeout on the control thread;
+- client-only kill;
+- termination confirmation;
+- runtime staging before canonical promotion;
+- cleanup of event jobs/handlers.
+
+Implement the smallest coherent private/local helper(s) inside `scripts/ai_gate.ps1`.
+
+Do **not** extract a generalized cross-repository/shared process framework in v1. The second use of the pattern is not by itself sufficient reason to create a new abstraction boundary before this gate behavior is proven in real use.
+
+## Acceptance criteria
+
+1. Both reviewer invocations have a wrapper-enforced 480-second default timeout and real-time stdout/stderr visibility.
+2. A completely silent reviewer child cannot block the gate beyond configured timeout plus small termination/cleanup overhead.
+3. Reviewer timeout terminates only the launched client process and does not kill persistent OpenCode service state.
+4. Reviewer timeout/non-zero/malformed execution cannot replace a valid canonical review report with partial content.
+5. Reviewer output is structurally validated for verdict/count consistency before canonical promotion.
+6. Valid reviewer `BLOCK` remains `CANDIDATE_BLOCKED`, not infrastructure failure.
+7. Every focused test has a default 60-second per-test timeout with override seam.
+8. A focused test that completes non-zero is `CANDIDATE_BLOCKED`; a timeout/launch/termination failure is `INFRASTRUCTURE_BLOCKED`.
+9. Gate exit semantics are explicit: `0=PASS`, `2=CANDIDATE_BLOCKED`, `1=INFRASTRUCTURE_BLOCKED`.
+10. `EVIDENCE.md` is written for PASS or completed candidate BLOCK, but not overwritten/created from an infrastructure-incomplete run.
+11. Reviewer canonical artifacts and `EVIDENCE.md` preserve the previous valid version across infrastructure-failed reruns.
+12. Existing `-Task <id>` invocation remains compatible.
+13. Full-suite policy is unchanged and obvious full-suite focused-test targets remain rejected.
+14. Deterministic probes verify at least:
+    - reviewer success + canonical promotion;
+    - silent reviewer timeout + client-only kill + canonical preservation;
+    - reviewer non-zero process exit → infrastructure block;
+    - malformed reviewer output → infrastructure block;
+    - valid reviewer semantic BLOCK → candidate block;
+    - focused-test pass;
+    - focused-test completed failure → candidate block;
+    - focused-test silent timeout → infrastructure block;
+    - distinct exit-code classification 0/1/2;
+    - no lingering event jobs/processes after probe execution.
+15. No production/game behavior changes.
 
 ## Non-goals
 
@@ -119,18 +223,20 @@ This exact `EVIDENCE.md` policy is intentionally open for Scout evidence because
 - Do not run or automate the full test suite.
 - Do not change production/game code.
 - Do not start `intent-routing-observability` in this task.
-- Do not extract a generalized repository-wide process framework unless Scout proves duplication already warrants it; local/simple implementation is preferred in v1.
+- Do not extract a generalized repository-wide process framework in v1.
 - Do not solve hangs by only increasing timeout values.
+- Do not add per-task timeout schema to `task.json` in v1; script defaults + explicit invocation/test seams are sufficient.
 
-## Uncertainty / Scout questions
+## Evidence basis
 
-Before this spec becomes Final, Scout/local evidence should answer:
+Confirmed by repository and local Scout evidence:
 
-1. Which existing scripts/callers depend on `ai_gate.ps1` exit code `0`/`2`, and can infrastructure failure safely use a distinct exit code?
-2. Should `EVIDENCE.md` be replaced on an infrastructure-blocked rerun with an explicit incomplete-verification report, or should the last valid canonical evidence remain untouched while failure diagnostics stay under `.runtime/`?
-3. What is the smallest safe reviewer structural validation beyond process exit 0 — only verdict header, or additional required headings/count consistency?
-4. What reviewer timeout is appropriate by default given the newly bounded Scout path and observed 27-minute hang?
-5. What per-focused-test timeout/default override is appropriate without creating unnecessary configuration surface?
-6. Can the proven `ai_scout.ps1` async process pattern be reused locally inside `ai_gate.ps1` without prematurely extracting a shared helper?
-7. Are focused tests expected to stream output for user observability, or is bounded execution plus per-test runtime log sufficient?
-8. What deterministic PowerShell probe strategy best verifies these behaviors without invoking real OpenCode/model calls or long-running tests?
+- current reviewer invocation uses blocking `Out-String` without timeout/live output;
+- current focused-test invocation is also unbounded;
+- a real reviewer invocation previously hung for about 27 minutes;
+- this task's Scout itself hit 480-second timeout and terminated safely under the new Scout wrapper;
+- no repository automation was found that requires a different `ai_gate.ps1` exit-code mapping;
+- existing reviewer contracts already provide explicit `VERDICT` and `BLOCKING_FINDINGS` fields suitable for minimal structural validation;
+- the `ai_scout.ps1` process-lifecycle pattern has deterministic probe coverage and is the appropriate conceptual basis for a local gate implementation.
+
+Timeout defaults in this spec are workflow defaults chosen for bounded operation and practical testing; they are not claims of universal model/test latency.
