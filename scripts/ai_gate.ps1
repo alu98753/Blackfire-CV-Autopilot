@@ -14,6 +14,8 @@ param(
     # Internal test seams for deterministic verification probes without invoking live OpenCode or Python
     [string]$_ReviewerExecutableOverride,
     [string[]]$_ReviewerArgumentsOverride,
+    [string[]]$_SpecReviewerArgumentsOverride,
+    [string[]]$_RegressionReviewerArgumentsOverride,
     [string]$_PythonExecutableOverride,
     [string[]]$_PythonArgumentsOverride
 )
@@ -206,7 +208,14 @@ function Get-OpenCodeInvocation {
     )
 
     if (-not [string]::IsNullOrWhiteSpace($_ReviewerExecutableOverride)) {
-        $args = if ($null -ne $_ReviewerArgumentsOverride) { $_ReviewerArgumentsOverride } else { @() }
+        $args = @()
+        if ($Agent -eq "spec-reviewer" -and $null -ne $_SpecReviewerArgumentsOverride) {
+            $args = $_SpecReviewerArgumentsOverride
+        } elseif ($Agent -eq "regression-reviewer" -and $null -ne $_RegressionReviewerArgumentsOverride) {
+            $args = $_RegressionReviewerArgumentsOverride
+        } elseif ($null -ne $_ReviewerArgumentsOverride) {
+            $args = $_ReviewerArgumentsOverride
+        }
         return @{
             Executable = $_ReviewerExecutableOverride
             Arguments = $args
@@ -274,6 +283,7 @@ $reviewTargets = @(
 )
 
 $verdicts = @{}
+$candidates = @{}
 
 foreach ($rev in $reviewTargets) {
     $agentName = $rev.Agent
@@ -302,7 +312,11 @@ Review the candidate patch using the current repository state. Follow the '$agen
 
     if ($procResult.TimedOut) {
         $infraBlocked = $true
-        $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (client PID $($procResult.Pid) terminated). Canonical review left untouched."
+        if ($procResult.KillConfirmed) {
+            $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (client PID $($procResult.Pid) terminated). Canonical reviews left untouched."
+        } else {
+            $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (termination failure: client PID $($procResult.Pid) could not be confirmed exited). Canonical reviews left untouched."
+        }
         break
     }
 
@@ -319,9 +333,12 @@ Review the candidate patch using the current repository state. Follow the '$agen
         break
     }
 
-    # Atomic promotion to canonical review file
+    # Stage candidate review output; gate-level promotion is deferred until all reviewers and tests complete
     Set-Content -Path $candidatePath -Value $procResult.StdOut.TrimEnd() -Encoding UTF8
-    Move-Item -Path $candidatePath -Destination $canonicalPath -Force
+    $candidates[$agentName] = @{
+        CandidatePath = $candidatePath
+        CanonicalPath = $canonicalPath
+    }
     $verdicts[$agentName] = $validation
 
     if ($validation.Verdict -eq "BLOCK") {
@@ -367,9 +384,14 @@ if (-not $infraBlocked -and -not $SkipTests -and $null -ne $config.focused_tests
             Set-Content -Path $logPath -Value $testLog.TrimEnd() -Encoding UTF8
 
             if ($testRes.TimedOut) {
-                Write-Warning "  -> TIMEOUT ($($testRes.ElapsedSeconds.ToString('F2'))s) - Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (PID $($testRes.Pid))."
                 $infraBlocked = $true
-                $infraReason = "Focused test '$targetText' timed out after ${TestTimeoutSeconds}s."
+                if ($testRes.KillConfirmed) {
+                    Write-Warning "  -> TIMEOUT ($($testRes.ElapsedSeconds.ToString('F2'))s) - Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (client PID $($testRes.Pid) terminated)."
+                    $infraReason = "Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (client PID $($testRes.Pid) terminated)."
+                } else {
+                    Write-Warning "  -> TIMEOUT ($($testRes.ElapsedSeconds.ToString('F2'))s) - Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (termination failure: client PID $($testRes.Pid) could not be confirmed exited)."
+                    $infraReason = "Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (termination failure: client PID $($testRes.Pid) could not be confirmed exited)."
+                }
                 break
             }
 
@@ -400,6 +422,13 @@ if ($infraBlocked) {
     Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: $infraReason"
     Write-Warning "Canonical reviews and EVIDENCE.md preserved untouched. Diagnostics saved under .runtime/ai_gate/$Task/."
     exit 1
+}
+
+# Both reviewers and focused tests completed without infrastructure failures!
+# Gate-level atomic promotion: promote all staged reviewer candidates to canonical reviews/*
+foreach ($agentName in $candidates.Keys) {
+    $c = $candidates[$agentName]
+    Move-Item -Path $c.CandidatePath -Destination $c.CanonicalPath -Force
 }
 
 $specVerdict = $verdicts["spec-reviewer"]
