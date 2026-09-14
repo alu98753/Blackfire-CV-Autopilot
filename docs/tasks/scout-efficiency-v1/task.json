@@ -1,0 +1,15 @@
+{
+  "id": "scout-efficiency-v1",
+  "base_ref": "origin/main",
+  "scope": [
+    ".opencode/agents/scout.md",
+    "scripts/ai_scout.ps1",
+    "docs/architecture/ai_development_workflow.md",
+    "docs/tasks/README.md"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": "opencode/big-pickle",
+    "review": "opencode/big-pickle"
+  }
+}
