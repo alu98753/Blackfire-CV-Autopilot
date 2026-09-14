@@ -226,7 +226,12 @@ Run:
 .\scripts\ai_gate.ps1 -Task <task-id>
 ```
 
-The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers, optionally runs only `focused_tests` declared in `task.json`, and writes `reviews/*` plus `EVIDENCE.md`.
+The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded child-process wrapper with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`.
+
+Verification outcomes and exit codes:
+- **`0` (PASS)**: Both reviewers returned valid `PASS` verdicts with 0 blocking findings, and all configured focused tests passed. Canonical `reviews/*` and `EVIDENCE.md` are updated.
+- **`2` (CANDIDATE_BLOCKED)**: Verification completed normally, but one or more reviewers returned `BLOCK` (blocking findings >= 1) or a focused test completed and exited non-zero. Canonical `reviews/*` and `EVIDENCE.md` are updated with the candidate blocking evidence.
+- **`1` (INFRASTRUCTURE_BLOCKED)**: A reviewer or test process timed out, crashed, failed to launch, had unconfirmed termination, or produced malformed/structurally inconsistent output. On infrastructure failure, previous canonical `reviews/*` and `EVIDENCE.md` are preserved untouched; failure diagnostics are saved under `.runtime/ai_gate/<task-id>/`.
 
 The gate never runs the full test suite. Full-suite execution remains user-only under project policy.
 

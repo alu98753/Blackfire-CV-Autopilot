@@ -5,16 +5,25 @@ param(
 
     [string]$ReviewModel,
 
-    [switch]$SkipTests
+    [switch]$SkipTests,
+
+    [int]$ReviewTimeoutSeconds = 480,
+
+    [int]$TestTimeoutSeconds = 60,
+
+    # Internal test seams for deterministic verification probes without invoking live OpenCode or Python
+    [string]$_ReviewerExecutableOverride,
+    [string[]]$_ReviewerArgumentsOverride,
+    [string[]]$_SpecReviewerArgumentsOverride,
+    [string[]]$_RegressionReviewerArgumentsOverride,
+    [string]$_PythonExecutableOverride,
+    [string[]]$_PythonArgumentsOverride,
+    [string]$_FailPromotionOnTarget
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
-
-if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
-    throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
-}
 
 $taskDir = Join-Path $repoRoot "docs\tasks\$Task"
 $taskFile = Join-Path $taskDir "task.json"
@@ -61,11 +70,228 @@ if ($LASTEXITCODE -ne 0) {
 }
 Set-Content -Path $diffPath -Value $gitDiff.TrimEnd() -Encoding UTF8
 
-function Invoke-ReviewAgent {
+function Invoke-BoundedProcess {
     param(
-        [Parameter(Mandatory = $true)][string]$Agent,
-        [Parameter(Mandatory = $true)][string]$OutputPath
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [string[]]$Arguments = @(),
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+        [switch]$StreamToConsole
     )
+
+    if ($Executable -match '(?i)\.(cmd|bat)$') {
+        $Arguments = @("/c", $Executable) + $Arguments
+        $Executable = "cmd.exe"
+    }
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $Executable
+    if ($null -ne $Arguments -and $Arguments.Count -gt 0) {
+        $escapedArgs = @()
+        foreach ($arg in $Arguments) {
+            if ($arg -match '[\s"]') {
+                $escaped = $arg -replace '(\\*)(")', '$1$1\"'
+                $escaped = $escaped -replace '(\\+)$', '$1$1'
+                $escapedArgs += "`"$escaped`""
+            } else {
+                $escapedArgs += $arg
+            }
+        }
+        $psi.Arguments = $escapedArgs -join " "
+    }
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.RedirectStandardInput = $true
+    $psi.UseShellExecute = $false
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    if ($null -eq $proc) {
+        throw "Failed to start process: $Executable"
+    }
+    # Close stdin immediately so child processes expecting EOF never hang
+    $proc.StandardInput.Close()
+
+    $lockObj = [object]::new()
+    $capturedLines = [System.Collections.Generic.List[string]]::new()
+    $errLines = [System.Collections.Generic.List[string]]::new()
+
+    $outEvent = Register-ObjectEvent -InputObject $proc -EventName 'OutputDataReceived' -Action {
+        if ($null -ne $EventArgs.Data) {
+            if ($Event.MessageData.Stream) {
+                [Console]::WriteLine($EventArgs.Data)
+            }
+            [System.Threading.Monitor]::Enter($Event.MessageData.Lock)
+            try {
+                $Event.MessageData.Captured.Add($EventArgs.Data)
+            } finally {
+                [System.Threading.Monitor]::Exit($Event.MessageData.Lock)
+            }
+        }
+    } -MessageData @{ Lock = $lockObj; Captured = $capturedLines; Stream = [bool]$StreamToConsole }
+
+    $errEvent = Register-ObjectEvent -InputObject $proc -EventName 'ErrorDataReceived' -Action {
+        if ($null -ne $EventArgs.Data) {
+            if ($Event.MessageData.Stream) {
+                [Console]::Error.WriteLine($EventArgs.Data)
+            }
+            [System.Threading.Monitor]::Enter($Event.MessageData.Lock)
+            try {
+                $Event.MessageData.Err.Add($EventArgs.Data)
+            } finally {
+                [System.Threading.Monitor]::Exit($Event.MessageData.Lock)
+            }
+        }
+    } -MessageData @{ Lock = $lockObj; Err = $errLines; Stream = [bool]$StreamToConsole }
+
+    $proc.BeginOutputReadLine()
+    $proc.BeginErrorReadLine()
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $timedOut = $false
+    $killConfirmed = $false
+
+    try {
+        while ($true) {
+            if ($stopwatch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
+                $timedOut = $true
+                Write-Warning "Process timed out after ${TimeoutSeconds}s. Terminating client PID $($proc.Id)..."
+                try {
+                    if (-not $proc.HasExited) {
+                        $proc.Kill()
+                    }
+                } catch {
+                    Write-Warning "Failed to kill process $($proc.Id): $_"
+                }
+                $killConfirmed = $proc.WaitForExit(3000) -or $proc.HasExited
+                if (-not $killConfirmed) {
+                    Write-Warning "Process termination unconfirmed: client PID $($proc.Id) did not exit within 3000ms after kill signal."
+                }
+                break
+            }
+
+            if ($proc.WaitForExit(50)) {
+                $proc.WaitForExit()
+                break
+            }
+        }
+    } finally {
+        Unregister-Event -SourceIdentifier $outEvent.Name -Force -ErrorAction SilentlyContinue
+        Unregister-Event -SourceIdentifier $errEvent.Name -Force -ErrorAction SilentlyContinue
+        Get-Job -Name $outEvent.Name -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue
+        Get-Job -Name $errEvent.Name -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue
+    }
+
+    [System.Threading.Monitor]::Enter($lockObj)
+    try {
+        $capturedArray = $capturedLines.ToArray()
+        $errArray = $errLines.ToArray()
+    } finally {
+        [System.Threading.Monitor]::Exit($lockObj)
+    }
+
+    $exitCode = if ($timedOut) { -1 } else { $proc.ExitCode }
+    $elapsed = $stopwatch.Elapsed.TotalSeconds
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        TimedOut = $timedOut
+        KillConfirmed = $killConfirmed
+        Pid = $proc.Id
+        StdOut = ($capturedArray -join "`n")
+        StdErr = ($errArray -join "`n")
+        ElapsedSeconds = $elapsed
+    }
+}
+
+function Get-OpenCodeInvocation {
+    param(
+        [string]$Agent,
+        [string]$PromptText
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($_ReviewerExecutableOverride)) {
+        $args = @()
+        if ($Agent -eq "spec-reviewer" -and $null -ne $_SpecReviewerArgumentsOverride) {
+            $args = $_SpecReviewerArgumentsOverride
+        } elseif ($Agent -eq "regression-reviewer" -and $null -ne $_RegressionReviewerArgumentsOverride) {
+            $args = $_RegressionReviewerArgumentsOverride
+        } elseif ($null -ne $_ReviewerArgumentsOverride) {
+            $args = $_ReviewerArgumentsOverride
+        }
+        return @{
+            Executable = $_ReviewerExecutableOverride
+            Arguments = $args
+        }
+    }
+
+    $cmdInfo = Get-Command opencode -ErrorAction SilentlyContinue
+    if (-not $cmdInfo) {
+        throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
+    }
+
+    $innerArgs = @("run", "--agent", $Agent)
+    if (-not [string]::IsNullOrWhiteSpace($ReviewModel)) {
+        $innerArgs += @("--model", $ReviewModel)
+    }
+    $innerArgs += $PromptText
+
+    if ($cmdInfo.Source -like "*.ps1") {
+        return @{
+            Executable = "powershell.exe"
+            Arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $cmdInfo.Source) + $innerArgs
+        }
+    }
+
+    return @{
+        Executable = $cmdInfo.Source
+        Arguments = $innerArgs
+    }
+}
+
+function Test-ReviewVerdictStructure {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return [pscustomobject]@{ IsValid = $false; Verdict = "EMPTY"; Blocking = -1; Error = "Reviewer produced empty output." }
+    }
+
+    $verdictMatch = [regex]::Match($Text, '(?m)^VERDICT:\s*(PASS|BLOCK)\s*$')
+    $countMatch = [regex]::Match($Text, '(?m)^BLOCKING_FINDINGS:\s*(\d+)\s*$')
+
+    if (-not $verdictMatch.Success -or -not $countMatch.Success) {
+        return [pscustomobject]@{ IsValid = $false; Verdict = "MALFORMED"; Blocking = -1; Error = "Missing or malformed VERDICT / BLOCKING_FINDINGS header." }
+    }
+
+    $verdict = $verdictMatch.Groups[1].Value
+    $blocking = [int]$countMatch.Groups[1].Value
+
+    if ($verdict -eq "PASS" -and $blocking -ne 0) {
+        return [pscustomobject]@{ IsValid = $false; Verdict = $verdict; Blocking = $blocking; Error = "Contract violation: VERDICT is PASS but BLOCKING_FINDINGS is $blocking (must be 0)." }
+    }
+    if ($verdict -eq "BLOCK" -and $blocking -lt 1) {
+        return [pscustomobject]@{ IsValid = $false; Verdict = $verdict; Blocking = $blocking; Error = "Contract violation: VERDICT is BLOCK but BLOCKING_FINDINGS is $blocking (must be >= 1)." }
+    }
+
+    return [pscustomobject]@{ IsValid = $true; Verdict = $verdict; Blocking = $blocking; Error = $null }
+}
+
+$infraBlocked = $false
+$infraReason = ""
+$candidateBlocked = $false
+
+$reviewTargets = @(
+    @{ Agent = "spec-reviewer"; File = "spec-review.md" },
+    @{ Agent = "regression-reviewer"; File = "regression-review.md" }
+)
+
+$verdicts = @{}
+$candidates = @{}
+
+foreach ($rev in $reviewTargets) {
+    $agentName = $rev.Agent
+    $fileName = $rev.File
+    $canonicalPath = Join-Path $reviewDir $fileName
+    $candidatePath = Join-Path $runtimeDir "candidate_${agentName}.md"
+    $rawLogPath = Join-Path $runtimeDir "${agentName}_raw.log"
 
     $prompt = @"
 Task descriptor: docs/tasks/$Task/task.json
@@ -74,78 +300,133 @@ Repository status snapshot: .runtime/ai_gate/$Task/status.txt
 Candidate diff snapshot: .runtime/ai_gate/$Task/diff.patch
 Comparison baseline: $baseRef
 
-Review the candidate patch using the current repository state. Follow the '$Agent' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands.
+Review the candidate patch using the current repository state. Follow the '$agentName' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands.
 "@
 
-    $args = @("run", "--agent", $Agent)
-    if (-not [string]::IsNullOrWhiteSpace($ReviewModel)) {
-        $args += @("--model", $ReviewModel)
-    }
-    $args += $prompt
+    $invocation = Get-OpenCodeInvocation -Agent $agentName -PromptText $prompt
+    Write-Host "Running OpenCode agent '$agentName' (timeout: ${ReviewTimeoutSeconds}s)..."
 
-    Write-Host "Running OpenCode agent '$Agent'..."
-    $result = & opencode @args 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) {
-        throw "OpenCode agent '$Agent' failed with exit code $LASTEXITCODE.`n$result"
+    $procResult = Invoke-BoundedProcess -Executable $invocation.Executable -Arguments $invocation.Arguments -TimeoutSeconds $ReviewTimeoutSeconds -StreamToConsole:$true
+
+    $fullRaw = ($procResult.StdOut, $procResult.StdErr | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
+    Set-Content -Path $rawLogPath -Value $fullRaw -Encoding UTF8
+
+    if ($procResult.TimedOut) {
+        $infraBlocked = $true
+        if ($procResult.KillConfirmed) {
+            $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (client PID $($procResult.Pid) terminated). Canonical reviews left untouched."
+        } else {
+            $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (termination failure: client PID $($procResult.Pid) could not be confirmed exited). Canonical reviews left untouched."
+        }
+        break
     }
 
-    Set-Content -Path $OutputPath -Value $result.TrimEnd() -Encoding UTF8
-    return $result
+    if ($procResult.ExitCode -ne 0) {
+        $infraBlocked = $true
+        $infraReason = "OpenCode agent '$agentName' failed with exit code $($procResult.ExitCode). Canonical review left untouched."
+        break
+    }
+
+    $validation = Test-ReviewVerdictStructure -Text $procResult.StdOut
+    if (-not $validation.IsValid) {
+        $infraBlocked = $true
+        $infraReason = "OpenCode agent '$agentName' output malformed: $($validation.Error). Canonical review left untouched."
+        break
+    }
+
+    # Stage candidate review output; gate-level promotion is deferred until all reviewers and tests complete
+    Set-Content -Path $candidatePath -Value $procResult.StdOut.TrimEnd() -Encoding UTF8
+    $candidates[$agentName] = @{
+        CandidatePath = $candidatePath
+        CanonicalPath = $canonicalPath
+    }
+    $verdicts[$agentName] = $validation
+
+    if ($validation.Verdict -eq "BLOCK") {
+        $candidateBlocked = $true
+    }
 }
-
-$specReviewPath = Join-Path $reviewDir "spec-review.md"
-$regressionReviewPath = Join-Path $reviewDir "regression-review.md"
-$specReview = Invoke-ReviewAgent -Agent "spec-reviewer" -OutputPath $specReviewPath
-$regressionReview = Invoke-ReviewAgent -Agent "regression-reviewer" -OutputPath $regressionReviewPath
-
-function Get-ReviewVerdict {
-    param([string]$Text)
-    $verdict = [regex]::Match($Text, '(?m)^VERDICT:\s*(PASS|BLOCK)\s*$')
-    $count = [regex]::Match($Text, '(?m)^BLOCKING_FINDINGS:\s*(\d+)\s*$')
-    if (-not $verdict.Success -or -not $count.Success) {
-        return [pscustomobject]@{ Verdict = "INVALID"; Blocking = -1 }
-    }
-    return [pscustomobject]@{ Verdict = $verdict.Groups[1].Value; Blocking = [int]$count.Groups[1].Value }
-}
-
-$specVerdict = Get-ReviewVerdict $specReview
-$regressionVerdict = Get-ReviewVerdict $regressionReview
 
 $testResults = @()
 $testsPassed = $true
-if (-not $SkipTests -and $null -ne $config.focused_tests -and $config.focused_tests.Count -gt 0) {
-    $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
-    if (-not (Test-Path $python)) {
-        throw "Focused tests are configured but .venv\Scripts\python.exe was not found."
+
+if (-not $infraBlocked -and -not $SkipTests -and $null -ne $config.focused_tests -and $config.focused_tests.Count -gt 0) {
+    $python = ""
+    if (-not [string]::IsNullOrWhiteSpace($_PythonExecutableOverride)) {
+        $python = $_PythonExecutableOverride
+    } else {
+        $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
+        if (-not (Test-Path $python)) {
+            $infraBlocked = $true
+            $infraReason = "Focused tests are configured but .venv\Scripts\python.exe was not found."
+        }
     }
 
-    foreach ($target in $config.focused_tests) {
-        $targetText = [string]$target
-        if ($targetText -match '(?i)discover\s+tests|unittest\s+discover|^tests$|\*') {
-            throw "Rejected unsafe/full-suite focused test target: '$targetText'"
-        }
-        if ([string]::IsNullOrWhiteSpace($targetText)) {
-            continue
-        }
+    if (-not $infraBlocked) {
+        foreach ($target in $config.focused_tests) {
+            $targetText = [string]$target
+            if ($targetText -match '(?i)discover\s+tests|unittest\s+discover|^tests$|\*') {
+                $infraBlocked = $true
+                $infraReason = "Rejected unsafe/full-suite focused test target: '$targetText'"
+                break
+            }
+            if ([string]::IsNullOrWhiteSpace($targetText)) {
+                continue
+            }
 
-        $safeName = ($targetText -replace '[^A-Za-z0-9_.-]', '_')
-        $logPath = Join-Path $runtimeDir ("test-" + $safeName + ".log")
-        Write-Host "Running focused test: $targetText"
-        $testOutput = & $python -m unittest $targetText 2>&1 | Out-String
-        $exitCode = $LASTEXITCODE
-        Set-Content -Path $logPath -Value $testOutput.TrimEnd() -Encoding UTF8
-        $passed = ($exitCode -eq 0)
-        if (-not $passed) {
-            $testsPassed = $false
-        }
-        $testResults += [pscustomobject]@{
-            Target = $targetText
-            Passed = $passed
-            ExitCode = $exitCode
-            Log = ".runtime/ai_gate/$Task/$(Split-Path $logPath -Leaf)"
+            $safeName = ($targetText -replace '[^A-Za-z0-9_.-]', '_')
+            $logPath = Join-Path $runtimeDir ("test-" + $safeName + ".log")
+            Write-Host "Running focused test: $targetText (timeout: ${TestTimeoutSeconds}s)..."
+
+            $pyArgs = if ($null -ne $_PythonArgumentsOverride) { $_PythonArgumentsOverride } else { @("-m", "unittest", $targetText) }
+            $testRes = Invoke-BoundedProcess -Executable $python -Arguments $pyArgs -TimeoutSeconds $TestTimeoutSeconds -StreamToConsole:$false
+
+            $testLog = ($testRes.StdOut, $testRes.StdErr | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
+            Set-Content -Path $logPath -Value $testLog.TrimEnd() -Encoding UTF8
+
+            if ($testRes.TimedOut) {
+                $infraBlocked = $true
+                if ($testRes.KillConfirmed) {
+                    Write-Warning "  -> TIMEOUT ($($testRes.ElapsedSeconds.ToString('F2'))s) - Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (client PID $($testRes.Pid) terminated)."
+                    $infraReason = "Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (client PID $($testRes.Pid) terminated)."
+                } else {
+                    Write-Warning "  -> TIMEOUT ($($testRes.ElapsedSeconds.ToString('F2'))s) - Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (termination failure: client PID $($testRes.Pid) could not be confirmed exited)."
+                    $infraReason = "Focused test '$targetText' timed out after ${TestTimeoutSeconds}s (termination failure: client PID $($testRes.Pid) could not be confirmed exited)."
+                }
+                break
+            }
+
+            if ($testRes.ExitCode -eq 0) {
+                Write-Host "  -> PASS ($($testRes.ElapsedSeconds.ToString('F2'))s) - Log: .runtime/ai_gate/$Task/$(Split-Path $logPath -Leaf)"
+                $testResults += [pscustomobject]@{
+                    Target = $targetText
+                    Passed = $true
+                    ExitCode = 0
+                    Log = ".runtime/ai_gate/$Task/$(Split-Path $logPath -Leaf)"
+                }
+            } else {
+                Write-Host "  -> FAIL ($($testRes.ElapsedSeconds.ToString('F2'))s, exit $($testRes.ExitCode)) - Log: .runtime/ai_gate/$Task/$(Split-Path $logPath -Leaf)"
+                $testsPassed = $false
+                $candidateBlocked = $true
+                $testResults += [pscustomobject]@{
+                    Target = $targetText
+                    Passed = $false
+                    ExitCode = $testRes.ExitCode
+                    Log = ".runtime/ai_gate/$Task/$(Split-Path $logPath -Leaf)"
+                }
+            }
         }
     }
 }
+
+if ($infraBlocked) {
+    Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: $infraReason"
+    Write-Warning "Canonical reviews and EVIDENCE.md preserved untouched. Diagnostics saved under .runtime/ai_gate/$Task/."
+    exit 1
+}
+
+$specVerdict = $verdicts["spec-reviewer"]
+$regressionVerdict = $verdicts["regression-reviewer"]
 
 $head = (& git rev-parse HEAD 2>&1 | Out-String).Trim()
 $branch = (& git branch --show-current 2>&1 | Out-String).Trim()
@@ -191,20 +472,95 @@ $evidence.Add("## Candidate snapshot")
 $evidence.Add("")
 $evidence.Add("Ephemeral status/diff snapshots are stored under .runtime/ai_gate/$Task/ and are intentionally git-ignored.")
 
+# Write candidate EVIDENCE.md to runtime directory before promotion
+$candidateEvidencePath = Join-Path $runtimeDir "candidate_EVIDENCE.md"
 $evidencePath = Join-Path $taskDir "EVIDENCE.md"
-Set-Content -Path $evidencePath -Value ($evidence -join "`n") -Encoding UTF8
+Set-Content -Path $candidateEvidencePath -Value ($evidence -join "`n") -Encoding UTF8
 
-$blocked = (
-    $specVerdict.Verdict -ne "PASS" -or
-    $specVerdict.Blocking -ne 0 -or
-    $regressionVerdict.Verdict -ne "PASS" -or
-    $regressionVerdict.Blocking -ne 0 -or
-    -not $testsPassed
+# Both reviewers and focused tests completed without infrastructure failures!
+# Transaction-safe promotion: backup existing canonical artifacts and promote candidates
+$promotionItems = @(
+    @{
+        Name = "spec-review"
+        CandidatePath = $candidates["spec-reviewer"].CandidatePath
+        CanonicalPath = $candidates["spec-reviewer"].CanonicalPath
+    },
+    @{
+        Name = "regression-review"
+        CandidatePath = $candidates["regression-reviewer"].CandidatePath
+        CanonicalPath = $candidates["regression-reviewer"].CanonicalPath
+    },
+    @{
+        Name = "evidence"
+        CandidatePath = $candidateEvidencePath
+        CanonicalPath = $evidencePath
+    }
 )
 
-Write-Host "Verification evidence written to docs/tasks/$Task/EVIDENCE.md"
-if ($blocked) {
-    Write-Host "AI verification gate BLOCKED. Inspect EVIDENCE.md and reviewer reports."
+$backupDir = Join-Path $runtimeDir "canonical_backup"
+if (Test-Path $backupDir) {
+    Remove-Item -Path $backupDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+
+foreach ($item in $promotionItems) {
+    if (Test-Path $item.CanonicalPath) {
+        $backupPath = Join-Path $backupDir "$($item.Name).bak"
+        Copy-Item -Path $item.CanonicalPath -Destination $backupPath -Force
+        $item["Existed"] = $true
+        $item["BackupPath"] = $backupPath
+    } else {
+        $item["Existed"] = $false
+    }
+}
+
+$promotionFailed = $false
+$promotionError = ""
+$rollbackFailures = New-Object System.Collections.Generic.List[string]
+
+try {
+    foreach ($item in $promotionItems) {
+        Copy-Item -Path $item.CandidatePath -Destination $item.CanonicalPath -Force
+        if (-not [string]::IsNullOrWhiteSpace($_FailPromotionOnTarget) -and $_FailPromotionOnTarget -eq $item.Name) {
+            throw "Simulated promotion failure on target '$($item.Name)' after copy"
+        }
+    }
+} catch {
+    $promotionFailed = $true
+    $promotionError = $_.Exception.Message
+
+    # Rollback all promotion items to pre-gate state; each item independently try/catched
+    foreach ($item in $promotionItems) {
+        try {
+            if ($item.Existed) {
+                Copy-Item -Path $item.BackupPath -Destination $item.CanonicalPath -Force
+            } else {
+                if (Test-Path $item.CanonicalPath) {
+                    Remove-Item -Path $item.CanonicalPath -Force
+                }
+            }
+        } catch {
+            $rollbackFailures.Add("Rollback failure on '$($item.Name)' ($($item.CanonicalPath)): $($_.Exception.Message)")
+        }
+    }
+}
+
+if ($promotionFailed) {
+    if ($rollbackFailures.Count -gt 0) {
+        Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: Promotion to canonical artifacts failed: $promotionError."
+        foreach ($rf in $rollbackFailures) {
+            Write-Warning "  -> $rf"
+        }
+    } else {
+        Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: Promotion to canonical artifacts failed: $promotionError. Rolled back all canonical artifacts to pre-gate state."
+    }
+    exit 1
+}
+
+Write-Host "Canonical reviewer reports and EVIDENCE.md successfully promoted."
+
+if ($candidateBlocked -or $specVerdict.Verdict -ne "PASS" -or $specVerdict.Blocking -ne 0 -or $regressionVerdict.Verdict -ne "PASS" -or $regressionVerdict.Blocking -ne 0 -or -not $testsPassed) {
+    Write-Host "AI verification gate CANDIDATE_BLOCKED. Inspect EVIDENCE.md and reviewer reports."
     exit 2
 }
 

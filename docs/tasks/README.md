@@ -45,6 +45,7 @@ Rules:
 - OpenCode Scout may inspect a Draft task and produce `CONTEXT.md` under a light-by-default budget (<= 10 files, <= 1500 words, 8-minute timeout, real-time terminal streaming).
 - Scout is an evidence provider, not the contract owner; it must not rewrite `SPEC.md`.
 - Failed or timed-out Scout runs never overwrite an existing canonical `CONTEXT.md`.
+- Failed or timed-out verification gate runs at the infrastructure layer never overwrite existing canonical `reviews/*` or `EVIDENCE.md`.
 - ChatGPT + user own the architecture/behavior decision and finalize the contract after reviewing Scout evidence and current code.
 - Gemini/Antigravity must not begin production implementation while `SPEC.md` is explicitly `Status: Draft`.
 - Once `Status: Final`, implementation may proceed. Any later material contract change must be surfaced explicitly rather than silently inferred by the writer.
