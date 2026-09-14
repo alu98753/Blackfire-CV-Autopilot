@@ -548,10 +548,7 @@ class ChestHandler(BaseStateHandler):
         if self.not_found_count >= 3:
             logging.warning("⚠️ [神秘寶箱 VERIFY_EXIT] 退出後超時未見城鎮寶箱特徵，保留階段釋放實體所有權至 REACH_TOWN 歸一化...")
             self.not_found_count = 0
-            if hasattr(self.machine, "relinquish_subflow_to_navigation"):
-                self.machine.relinquish_subflow_to_navigation("chest_exit_unverified")
-            else:
-                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            self.machine.relinquish_subflow_to_navigation("chest_exit_unverified")
             return True
 
         return False

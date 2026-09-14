@@ -23,6 +23,7 @@ OPEN_ATTEMPT_DEFER_SECONDS = 180
 # 重置按鈕有界點擊重試窗口 (秒) 與重試上限
 RESET_CLICK_RETRY_INTERVAL = 3.0
 MAX_RESET_CLICK_ATTEMPTS = 3
+MAX_EXIT_CLICK_ATTEMPTS = 3
 
 
 class BulletinBoardHandler(BaseStateHandler):
@@ -67,6 +68,7 @@ class BulletinBoardHandler(BaseStateHandler):
         self.click_building_time = None
         self.accepted_quest_titles = []
         self.open_attempts = 0
+        self.exit_click_attempts = 0
         self.exit_verify_attempts = 0
         self.mislocation_guard.reset()
 
@@ -195,10 +197,7 @@ class BulletinBoardHandler(BaseStateHandler):
                 "⚠️ [懸賞告示牌 ALL_DONE_EXITING] 退出後超時未取得城鎮證據，保留階段釋放實體所有權至 REACH_TOWN..."
             )
             self.exit_verify_attempts = 0
-            if hasattr(self.machine, "relinquish_subflow_to_navigation"):
-                self.machine.relinquish_subflow_to_navigation("bulletin_board_exit_unverified")
-            else:
-                self.machine.transition_to(self.machine.STATE_NAVIGATING)
+            self.machine.relinquish_subflow_to_navigation("bulletin_board_exit_unverified")
             self.last_action_time = now
 
     def _step_exit_board(self, screen_img, rect, quit_btn, left, top, now):
@@ -209,11 +208,31 @@ class BulletinBoardHandler(BaseStateHandler):
                 timeout=5.0, threshold=0.75, check_interval=0.25, post_delay=0.5
             )
             if not disappeared:
-                logging.warning("⚠️ [懸賞告示牌] 點擊退出按鈕後逾時未消失，保留在 EXIT_BOARD 重試...")
+                self.exit_click_attempts = getattr(self, "exit_click_attempts", 0) + 1
+                if self.exit_click_attempts < MAX_EXIT_CLICK_ATTEMPTS:
+                    logging.warning(
+                        "⚠️ [懸賞告示牌 EXIT_BOARD] 點擊退出按鈕後逾時未消失 (嘗試 %d/%d)，保留在 EXIT_BOARD 重試...",
+                        self.exit_click_attempts,
+                        MAX_EXIT_CLICK_ATTEMPTS,
+                    )
+                    self.last_action_time = now
+                    return
+
+                logging.warning(
+                    "⚠️ [懸賞告示牌 EXIT_BOARD] 點擊退出按鈕連續逾時達到上限 (%d/%d)，保留階段釋放實體所有權至 REACH_TOWN...",
+                    self.exit_click_attempts,
+                    MAX_EXIT_CLICK_ATTEMPTS,
+                )
+                self.exit_click_attempts = 0
+                self.machine.relinquish_subflow_to_navigation("bulletin_board_exit_click_timeout")
                 self.last_action_time = now
                 return
+
+            self.exit_click_attempts = 0
         else:
             logging.info("📋 [懸賞告示牌] 已無視窗退出按鈕 (回到城鎮)，進入城鎮驗證階段...")
+            self.exit_click_attempts = 0
+
         self.step_phase = "ALL_DONE_EXITING"
         self.exit_verify_attempts = 0
         self.last_action_time = now

@@ -405,8 +405,40 @@ class TestBulletinBoardSubflow(unittest.TestCase):
         self.assertEqual(handler.step_phase, "ALL_DONE_EXITING")
         self.assertEqual(handler.accepted_quest_titles, ["已接任務1", "已接任務2"])
 
+    @patch('os.path.exists', return_value=True)
+    def test_bulletin_board_exit_quit_timeout_exhausted_relinquishes(self, mock_exists):
+        """測試：EXIT_BOARD 點擊 quit 按鈕連續逾時超限時，讓渡實體所有權至 REACH_TOWN，保留 EXIT_BOARD 階段，不 reset、不 pop、不 defer"""
+        self.state_machine.config = GAME_CONFIGS["bulletin_board"].copy()
+        self.state_machine.current_state = self.state_machine.STATE_BULLETIN_BOARD
+        self.state_machine.pop_and_next_town_subflow = MagicMock()
+        self.state_machine.relinquish_subflow_to_navigation = MagicMock()
+
+        handler = self.state_machine.handlers[self.state_machine.STATE_BULLETIN_BOARD]
+        handler.step_phase = "EXIT_BOARD"
+        handler.accepted_quest_titles = ["已接任務A"]
+
+        def fake_match(img, name, **kw):
+            if name == "common/quit.png":
+                return ((700, 100), 0.90)
+            return (None, 0.0)
+
+        self.mock_matcher.match.side_effect = fake_match
+        with patch.object(handler, "click_and_wait_until_gone", return_value=False) as mock_wait:
+            for _ in range(3):
+                handler.last_action_time = 0.0
+                handler.handle()
+
+            self.assertEqual(mock_wait.call_count, 3)
+            self.state_machine.relinquish_subflow_to_navigation.assert_called_once_with("bulletin_board_exit_click_timeout")
+            self.mock_daily_manager.record_subflow_completed.assert_not_called()
+            self.mock_daily_manager.defer_subflow.assert_not_called()
+            self.state_machine.pop_and_next_town_subflow.assert_not_called()
+            # 關鍵生命週期不變量：保留 EXIT_BOARD 與已接取任務清單
+            self.assertEqual(handler.step_phase, "EXIT_BOARD")
+            self.assertEqual(handler.accepted_quest_titles, ["已接任務A"])
 
 
 if __name__ == "__main__":
     unittest.main()
+
 
