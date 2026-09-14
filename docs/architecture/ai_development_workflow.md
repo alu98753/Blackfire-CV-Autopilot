@@ -76,7 +76,7 @@ The Draft must be grounded by a lightweight ChatGPT repository survey before cre
 
 ### Scout evidence
 
-OpenCode Scout acts as a light-by-default task localizer, not an exhaustive codebase auditor. It reads the Draft, current code, tests, and architecture documents, and writes `CONTEXT.md` under a bounded exploration budget (inspecting <= 10 directly relevant files, concise output <= 1500 words, and an 8-minute execution timeout). It should identify:
+OpenCode Scout acts as a light-by-default task localizer, not an exhaustive codebase auditor. It reads the Draft, current code, tests, and architecture documents, and writes `CONTEXT.md` under a bounded exploration budget (initial `steps: 6`, target 5-6 files, ceiling 8 files, concise output target 600-800 words, ceiling 1000 words, and an 8-minute execution timeout). It should identify:
 
 - relevant files and symbols (within budget);
 - actual control flow;
@@ -157,11 +157,11 @@ If `SPEC.md` is marked Draft, the writer must stop before production implementat
 
 ### Spec reviewer
 
-OpenCode `spec-reviewer` compares the candidate diff against explicit scope, invariants, acceptance criteria, and non-goals. It is read-only.
+OpenCode `spec-reviewer` compares the candidate diff against explicit scope, invariants, acceptance criteria, and non-goals. It is a read-only, bounded blocker detector (initial `steps: 5`, target 300-600 words on PASS).
 
 ### Regression reviewer
 
-OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift. It is read-only.
+OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift for highest-risk reachable paths. It is a read-only, bounded blocker detector (initial `steps: 5`, target 300-600 words on PASS).
 
 ### Final reviewer and remote orchestrator
 
@@ -204,7 +204,7 @@ docs/tasks/<task-id>/task.json
  .\scripts\ai_scout.ps1 -Task <task-id>
  ```
  
- This runs Scout with real-time terminal streaming under an 8-minute default timeout. On successful execution and structural validation, it creates or replaces `docs/tasks/<task-id>/CONTEXT.md` via atomic promotion. If Scout times out or fails, any pre-existing canonical `CONTEXT.md` remains untouched.
+ This runs Scout in an isolated process (`--standalone`, explicit repo working directory, closed non-interactive stdin) with real-time terminal streaming under an 8-minute default timeout. On successful execution and structural validation, it creates or replaces `docs/tasks/<task-id>/CONTEXT.md` via atomic promotion. If Scout times out or fails, any pre-existing canonical `CONTEXT.md` remains untouched.
 
 ### Phase A2 — Contract finalization
 
@@ -221,12 +221,12 @@ Behavior-preserving refactors remain behavior-preserving unless the Final spec e
 ### Phase D — Read-only verification
 
 Run:
-
-```powershell
-.\scripts\ai_gate.ps1 -Task <task-id>
-```
-
-The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded child-process wrapper with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`.
+ 
+ ```powershell
+ .\scripts\ai_gate.ps1 -Task <task-id>
+ ```
+ 
+ The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded, isolated child-process wrapper (`--standalone`, explicit repo working directory, closed stdin) with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`.
 
 Verification outcomes and exit codes:
 - **`0` (PASS)**: Both reviewers returned valid `PASS` verdicts with 0 blocking findings, and all configured focused tests passed. Canonical `reviews/*` and `EVIDENCE.md` are updated.

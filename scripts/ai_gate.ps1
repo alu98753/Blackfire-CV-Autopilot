@@ -85,6 +85,7 @@ function Invoke-BoundedProcess {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Executable
+    $psi.WorkingDirectory = $repoRoot
     if ($null -ne $Arguments -and $Arguments.Count -gt 0) {
         $escapedArgs = @()
         foreach ($arg in $Arguments) {
@@ -228,7 +229,7 @@ function Get-OpenCodeInvocation {
         throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
     }
 
-    $innerArgs = @("run", "--agent", $Agent)
+    $innerArgs = @("run", "--standalone", "--agent", $Agent)
     if (-not [string]::IsNullOrWhiteSpace($ReviewModel)) {
         $innerArgs += @("--model", $ReviewModel)
     }
