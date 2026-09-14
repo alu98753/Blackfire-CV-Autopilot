@@ -46,6 +46,8 @@
 
 ## 📌 一、 進行中與待開發項目 (Active TODOs)
 
+> 0913 我已經實體運行確認 0912 改的 REACH_TOWN統一化 運作ok無regression
+
 > 💡 **24/7 排序指標**：各章節第一項標註 `🔴` 者，代表最可能導致無人值守時陷入死鎖、活鎖、假陽性完成或無效空轉之最高風險項目，優先推進。
 
 ### 測試架構與執行效率優化 (Test Architecture & Performance)
@@ -133,7 +135,7 @@
   - **規劃方向**：解耦大廳領取特徵比對，落實最小感知（僅比對 `goback_town` 與 `bread`），並使 `bread_click_attempted` 成為推進下一階段的狀態機守衛。
 
 ### .agent
-
+- [ ] 🔴 建立AI workflow framework
 - [ ] 🔴 **審核 `state_machine_development` skill 規範對齊**：
   - 檢視該技能是否與 [Greenfield-lite Architecture v1](../architecture/project_arch_greenfield_lite_v1.md) 的感知/決策分離、分層依賴與不變量一致，消除過時指示。
 
@@ -163,6 +165,8 @@
   - **規劃方向**：在 `subflow_configs.bag_maintenance` 流程中，於整理與出售前加入合成子步驟。
 
 ### DEV
+
+- [ ] 建立自動戰鬥畫面錄製 讓我有素材可以宣傳
 
 - [ ] 🔴 **測試執行效率優化與消除阻塞式 `while` 迴圈 ([`test_redundent.md`](test_redundent.md))**：
   - **24/7 與工程品質風險**：部分舊測試執行過慢（全套需 380s+），且部分輔助函式殘留 `while` 死等邏輯，不符合 BDI 單次 tick 與事件驅動架構。
