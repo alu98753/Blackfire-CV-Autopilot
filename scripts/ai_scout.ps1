@@ -117,68 +117,83 @@ if ($null -eq $proc) {
     throw "Failed to start OpenCode process: $execFile"
 }
 
+$lockObj = [object]::new()
 $capturedLines = [System.Collections.Generic.List[string]]::new()
 $errLines = [System.Collections.Generic.List[string]]::new()
+
+$outEvent = Register-ObjectEvent -InputObject $proc -EventName 'OutputDataReceived' -Action {
+    if ($null -ne $EventArgs.Data) {
+        [Console]::WriteLine($EventArgs.Data)
+        [System.Threading.Monitor]::Enter($Event.MessageData.Lock)
+        try {
+            $Event.MessageData.Captured.Add($EventArgs.Data)
+        } finally {
+            [System.Threading.Monitor]::Exit($Event.MessageData.Lock)
+        }
+    }
+} -MessageData @{ Lock = $lockObj; Captured = $capturedLines }
+
+$errEvent = Register-ObjectEvent -InputObject $proc -EventName 'ErrorDataReceived' -Action {
+    if ($null -ne $EventArgs.Data) {
+        [Console]::Error.WriteLine($EventArgs.Data)
+        [System.Threading.Monitor]::Enter($Event.MessageData.Lock)
+        try {
+            $Event.MessageData.Err.Add($EventArgs.Data)
+        } finally {
+            [System.Threading.Monitor]::Exit($Event.MessageData.Lock)
+        }
+    }
+} -MessageData @{ Lock = $lockObj; Err = $errLines }
+
+$proc.BeginOutputReadLine()
+$proc.BeginErrorReadLine()
+
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $timedOut = $false
 
-while ($true) {
-    # Read available stdout lines in real-time
-    while ($proc.StandardOutput.Peek() -ge 0) {
-        $line = $proc.StandardOutput.ReadLine()
-        if ($null -ne $line) {
-            [Console]::WriteLine($line)
-            $capturedLines.Add($line)
+try {
+    while ($true) {
+        # Check timeout independent of stream activity
+        if ($stopwatch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
+            $timedOut = $true
+            Write-Warning "OpenCode scout timed out after ${TimeoutSeconds}s. Terminating client PID $($proc.Id)..."
+            try {
+                if (-not $proc.HasExited) {
+                    $proc.Kill()
+                }
+            } catch {
+                Write-Warning "Failed to kill process $($proc.Id): $_"
+            }
+            # Wait for child process to actually exit before cleanup
+            $proc.WaitForExit(3000) | Out-Null
+            break
         }
-    }
-    # Read available stderr lines in real-time
-    while ($proc.StandardError.Peek() -ge 0) {
-        $eline = $proc.StandardError.ReadLine()
-        if ($null -ne $eline) {
-            [Console]::Error.WriteLine($eline)
-            $errLines.Add($eline)
-        }
-    }
 
-    # Check timeout
-    if ($stopwatch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
-        $timedOut = $true
-        Write-Warning "OpenCode scout timed out after ${TimeoutSeconds}s. Terminating client PID $($proc.Id)..."
-        try {
-            if (-not $proc.HasExited) {
-                $proc.Kill()
-            }
-        } catch {
-            Write-Warning "Failed to kill process $($proc.Id): $_"
+        # Short-period wait loop on main thread
+        if ($proc.WaitForExit(50)) {
+            # Process exited; ensure async read events finish flushing
+            $proc.WaitForExit()
+            break
         }
-        break
     }
+} finally {
+    Unregister-Event -SourceIdentifier $outEvent.Name -Force -ErrorAction SilentlyContinue
+    Unregister-Event -SourceIdentifier $errEvent.Name -Force -ErrorAction SilentlyContinue
+}
 
-    # Check if process exited
-    if ($proc.WaitForExit(50)) {
-        # Drain remaining streams
-        while (-not $proc.StandardOutput.EndOfStream) {
-            $line = $proc.StandardOutput.ReadLine()
-            if ($null -ne $line) {
-                [Console]::WriteLine($line)
-                $capturedLines.Add($line)
-            }
-        }
-        while (-not $proc.StandardError.EndOfStream) {
-            $eline = $proc.StandardError.ReadLine()
-            if ($null -ne $eline) {
-                [Console]::Error.WriteLine($eline)
-                $errLines.Add($eline)
-            }
-        }
-        break
-    }
+# Snapshot captured lines under lock
+[System.Threading.Monitor]::Enter($lockObj)
+try {
+    $capturedArray = $capturedLines.ToArray()
+    $errArray = $errLines.ToArray()
+} finally {
+    [System.Threading.Monitor]::Exit($lockObj)
 }
 
 $exitCode = if ($timedOut) { -1 } else { $proc.ExitCode }
 
 # Write raw log for diagnostics
-$fullRaw = ($capturedLines + $errLines) -join "`n"
+$fullRaw = ($capturedArray + $errArray) -join "`n"
 Set-Content -Path $rawLogPath -Value $fullRaw -Encoding UTF8
 
 if ($timedOut) {
@@ -186,12 +201,12 @@ if ($timedOut) {
 }
 
 if ($exitCode -ne 0) {
-    $errSummary = $errLines -join "`n"
+    $errSummary = $errArray -join "`n"
     throw "OpenCode scout failed with exit code $exitCode.`n$errSummary"
 }
 
 # Candidate report verification
-$candidateText = ($capturedLines -join "`n").Trim()
+$candidateText = ($capturedArray -join "`n").Trim()
 if ([string]::IsNullOrWhiteSpace($candidateText)) {
     throw "OpenCode scout produced empty output. Canonical CONTEXT.md left untouched."
 }
