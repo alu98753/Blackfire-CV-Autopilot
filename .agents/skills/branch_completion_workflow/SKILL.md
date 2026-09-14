@@ -390,25 +390,42 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
    - **Ready to merge**: YES
    ```
 
-2. **生成標準 `--no-ff` 合併與後續分支管理指令（永久雙工作樹模型）**：
-   > [!IMPORTANT]
-   > **永久雙工作樹免切回原則 (Dual-Worktree Non-Checkout Rule)**：
-   > 因 `main` 分支已被 `temp-main` 永久 checkout，**嚴禁在 `BlackfireCrusade_tool` 執行 `git checkout main`**（Git 會直接拒絕）。
-   > 所有合併與遠端推送統一在 `temp-main` 進行；主專案開發工作樹在合併後，直接以最新 `main` 為基底建立下一個 feature 分支。
+2. **分支整合路徑與後續分支管理（權限分工與永久雙工作樹模型）**：
+   > [!CRITICAL]
+   > **合併權限分工與禁令 (Merge Authority Invariants)**：
+   > 1. **本機 AI (Gemini / Antigravity / OpenCode)**：**永遠不能自行 merge、push main 或刪除分支**。
+   > 2. **遠端協調者 (ChatGPT Remote Orchestrator)**：為推薦整合路徑。僅在所有收尾閘門通過、且**使用者明確授權**後，方可透過 GitHub API 執行整合。**GitHub 整合必須使用 merge commit（嚴禁 squash 或 rebase）**。
+   > 3. **使用者手動 Fallback**：若 ChatGPT 遠端整合不可用或使用者選擇手動處理，由本機提供 safe `temp-main` `--no-ff` 合併指令由使用者於終端手動執行。
+   > 4. **永久雙工作樹免切回原則 (Dual-Worktree Non-Checkout Rule)**：
+   >    因 `main` 分支已被 `temp-main` 永久 checkout，**嚴禁在 `BlackfireCrusade_tool` 執行 `git checkout main`**。
+   >    無論採用遠端或本機手動合併，`temp-main` 始終是本機唯一的 `main` 擁有者與測試基準；遠端合併完成後，`temp-main` 僅需執行 fast-forward 同步。
 
-   - **步驟一：於 `temp-main` 執行 `--no-ff` 合併與推送（感應用戶 OS）**：
-      - **Windows (PowerShell)**：目錄切換統一使用 `Set-Location`（禁止使用 `cd /d`），並使用**多個 `-m` 參數**串聯避免換行截斷：
+   - **整合路徑 A（推薦：ChatGPT 遠端 GitHub 合併）**：
+     1. 本機完成 Phase 0~9 所有收尾閘門並確保變更已 push 至 remote review branch。
+     2. 向使用者交付 Convergence Summary 與 Readiness Report。
+     3. 使用者審閱後，向 ChatGPT 發出明確授權指示（例如「請執行 GitHub merge」）。
+     4. ChatGPT 確認 PR/branch 狀態無漂移，透過 GitHub 執行 merge commit 整合至 `main`。
+     5. 遠端整合完成後，本機更新 `temp-main` 基準：
         ```powershell
         Set-Location E:\Side_Project\temp-main
-        git merge --no-ff <branch_name> -m "Merge branch '<branch_name>' into main" -m "<簡短變更摘要>" -m "Verification: All unit tests verified against main baseline (0 regressions)."
-        git push origin main
+        git fetch origin
+        git pull --ff-only
         ```
-      - **Windows (CMD)**：若在命令提示字元下，切換磁碟目錄使用 `cd /d E:\Side_Project\temp-main`。
-      - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
 
-   - **步驟二：Development Worktree Parking & Branch Cleanup（停泊於基準並對稱清理舊分支）**：
+   - **整合路徑 B（Fallback：使用者於 `temp-main` 手動 `--no-ff` 合併）**：
+     若 ChatGPT 遠端整合不可用，交付以下指令由使用者在終端手動執行：
+     - **Windows (PowerShell)**：目錄切換統一使用 `Set-Location`（禁止使用 `cd /d`），並使用**多個 `-m` 參數**串聯避免換行截斷：
+       ```powershell
+       Set-Location E:\Side_Project\temp-main
+       git merge --no-ff <branch_name> -m "Merge branch '<branch_name>' into main" -m "<簡短變更摘要>" -m "Verification: All unit tests verified against main baseline (0 regressions)."
+       git push origin main
+       ```
+     - **Windows (CMD)**：切換磁碟目錄使用 `cd /d E:\Side_Project\temp-main`。
+     - **Linux / macOS**：可使用標準多行引號或多個 `-m`。
 
-     在 `temp-main` 完成 `--no-ff` merge 並成功 `git push origin main` 後，必須先確認遠端 `origin/main` 已包含本次完成分支：
+   - **共通收尾步驟：Development Worktree Parking & Branch Cleanup（停泊於基準並對稱清理舊分支）**：
+
+     無論透過整合路徑 A（ChatGPT 遠端 GitHub 合併）或路徑 B（使用者於 `temp-main` 手動合併），當 `origin/main` 已成功包含本次完成分支後，必須先透過 Git 指令驗證遠端 `origin/main` 確實已包含該 branch 的完整 ancestry：
 
      ```powershell
      git fetch origin
