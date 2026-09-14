@@ -1,159 +1,202 @@
 # agent-role-contract-hardening-v1-1
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Make local OpenCode Scout/reviewer roles intentionally fast, concise, scope-disciplined, and genuinely read-only. Local free models should provide enough first-pass evidence for ChatGPT to perform the deeper architecture/specification/final review, rather than attempting an exhaustive repository audit themselves.
+Make local OpenCode Scout/reviewer roles intentionally fast, concise, scope-disciplined, deterministic to invoke, and genuinely read-only. Local free models provide bounded first-pass evidence; ChatGPT + user retain contract ownership and deeper architecture/final semantic review; Gemini/Antigravity remains the production implementation writer after this Final SPEC.
 
-## Observed problem
+## Problem statement
 
-The current Scout is already externally bounded but still allows up to 10 files and targets up to 1500 words. The current reviewers encourage broad/exhaustive coverage: the spec reviewer asks for per-clause coverage, while the regression reviewer asks for callers/callees/sibling paths/state/timing/dead logic/testability/architecture drift. Real runs showed useful analysis but also format drift and long exploratory loops that reached the 480-second hard timeout.
+Current local-role contracts and invocation paths are safe against indefinite hangs but are still too permissive and slow:
 
-A real Scout run for this task using `opencode/mimo-v2.5-free` on OpenCode 2.0.3 reached the full 480-second external timeout and produced no canonical `CONTEXT.md`. This confirms the current role contract/process bound prevents indefinite hangs but does not yet reliably force early convergence.
+- Scout allows up to 10 files / 1500 words and has no native step budget.
+- Reviewers encourage broad/exhaustive exploration and have no native step budget.
+- Agent frontmatter uses legacy permission syntax.
+- Scout budget numbers are duplicated in both the agent contract and `ai_scout.ps1` prompt, creating drift risk.
+- Formal Scout/Gate runs depend on default OpenCode service/process behavior rather than an explicit isolated invocation contract.
+- Real Mimo runs reached the 480-second hard timeout before this task; a bounded bootstrap Scout using `steps: 6` completed in about 139 seconds and produced valid canonical context.
 
-A separate Antigravity IDE smoke-test matrix also showed that finite Windows terminal commands complete reliably when Gemini invokes them through `cmd.exe /d /s /c`, with stdin redirected from `NUL` for CLIs that may inspect stdin. Both `opencode/mimo-v2.5-free` and `opencode/big-pickle` completed normally under `opencode run --standalone ... < NUL`. This is an IDE/terminal operational workaround, not a repository architecture invariant; repository scripts must remain correct outside Antigravity.
+No game/runtime behavior is in scope.
 
-The current agent frontmatter uses legacy `permission` / `bash` / `task` style controls. OpenCode 2.0.3 runtime inspection confirms a compatibility layer maps these to V2-style `permissions` rules such as `shell` and `subagent`. Direct runtime probes now also confirm that V2 rules can deny execution capability and that native step bounding forces graceful final text generation.
+## Verified runtime evidence
 
-## Verified OpenCode 2.0.3 runtime facts
+All of the following were verified locally on OpenCode 2.0.3 before Finalization:
 
-The following facts were collected locally from `opencode v2.0.3` using CLI/API inspection plus disposable runtime probes. They are evidence for this task and should not be re-litigated by Scout unless contradictory runtime behavior is observed.
-
-1. Installed runtime is `opencode v2.0.3`.
-2. Agent config schema supports a positive integer `steps` field.
-3. Current project agents have `steps: null`, so no native step budget is active today.
-4. V2 agent config schema uses `permissions` as an ordered array of `{ action, resource, effect }` rules where `effect` is `allow`, `deny`, or `ask`.
-5. The installed runtime accepts legacy `permission` frontmatter and maps legacy `bash` to `shell` and legacy `task` to `subagent` in the resolved permission list.
-6. `opencode debug agents` shows current Scout rules resolve to explicit denies for `edit`, `shell`, `subagent`, `external_directory`, `webfetch`, and `websearch`, after the runtime's broader base rules.
-7. The OpenAPI schema types `Permission.Rule.action` as a free-form string rather than a closed enum, so resolved-rule listings are not a complete enum of supported action names.
-8. A disposable `steps: 2` probe proved native final-step behavior: step 1 used a discovery tool; on step 2 the runtime rejected another tool call with `Tools are disabled after the maximum agent steps`, then the model still emitted a complete final text response and exited 0 in about 33 seconds.
-9. A disposable V2 permissions probe with broad deny plus narrow `read` / `glob` / `grep` allows loaded an explicit `execute: deny` rule successfully. When asked to execute `node -v`, the model reported that no shell execution tool was available; no command, child process, or repository mutation occurred.
-10. A disposable standalone lifecycle probe showed `opencode run --standalone` owns a private child/server lifecycle that terminates with the client; killing the client left no orphan private-server PID.
-11. The above probes were cleaned up completely and produced zero working-tree delta relative to their pre-probe status.
-12. Antigravity-specific `cmd.exe /d /s /c ... < NUL` wrapping is useful for reliable IDE tool completion, but it must not be required for repository correctness. Repository automation should establish its own deterministic child-process boundary.
+1. Agent config supports positive integer `steps`.
+2. V2 agent config supports ordered `permissions` rules of `{ action, resource, effect }`.
+3. Legacy `permission` / `bash` / `task` is compatibility-mapped, but V2 rules are clearer and are the target representation.
+4. A `steps: 2` probe showed final-step tool calls are rejected with `Tools are disabled after the maximum agent steps`, after which the model still emitted usable final text and exited 0.
+5. A V2 read-only probe with broad deny plus narrow `read` / `glob` / `grep` allows loaded `execute: deny`; shell/code execution was not exposed and no side effect occurred.
+6. A `--standalone` lifecycle probe showed the private child/server exits with the client and leaves no orphan PID when the client is killed.
+7. Antigravity finite-command smoke tests succeeded with `cmd.exe /d /s /c ... < NUL`; that is an IDE workaround only, not a repository correctness dependency.
+8. A bounded bootstrap Scout using Mimo + `steps: 6` completed in about 139 seconds versus the prior 480-second timeout and produced valid `CONTEXT.md`.
 
 ## Scope
 
-Provisional change surface:
+Production change surface is limited to:
 
 - `.opencode/agents/scout.md`
 - `.opencode/agents/spec-reviewer.md`
 - `.opencode/agents/regression-reviewer.md`
 - `scripts/ai_scout.ps1`
 - `scripts/ai_gate.ps1`
-- `docs/architecture/ai_development_workflow.md` if durable workflow semantics change
-- focused deterministic/runtime probes needed to prove role limits, invocation isolation, and read-only behavior
+- `docs/architecture/ai_development_workflow.md`
+- small deterministic/runtime verification probes only where needed to prove this SPEC
 
-No game/runtime code is in scope.
+`task.json` may be updated only if needed to reflect focused verification metadata; no model fallback policy belongs in this task.
 
-## Known invariants
+## Invariants
 
-1. Scout remains evidence-only. It does not own or finalize `SPEC.md`.
-2. Spec reviewer and regression reviewer remain independent, read-only roles.
+1. Scout remains evidence-only and never owns/finalizes `SPEC.md`.
+2. Spec reviewer and regression reviewer remain separate sequential read-only roles.
 3. Gemini/Antigravity remains the sole production implementation writer after Final SPEC.
-4. ChatGPT + user remain contract owners and ChatGPT remains the final semantic/architecture reviewer.
-5. Gate verdict semantics remain `VERDICT: PASS|BLOCK` + `BLOCKING_FINDINGS`, with process outcomes 0=PASS, 1=INFRASTRUCTURE_BLOCKED, 2=CANDIDATE_BLOCKED.
-6. A semantic BLOCK must not be weakened merely to shorten output.
-7. Local-agent uncertainty should be reported explicitly instead of triggering open-ended repository exploration.
-8. Existing 480-second process timeout remains the hard safety boundary.
-9. Read-only agents must not gain repository-mutating shell/code-execution/subagent capability through an unguarded OpenCode permission path.
-10. This task changes workflow/tooling behavior only; production/game behavior must remain unchanged.
-11. Native step-bounding is a convergence mechanism, not a replacement for the hard wall-clock timeout.
-12. Repository automation must not rely on Antigravity Global Rules, an interactive terminal, a shared OpenCode daemon, or implicit parent-process CWD/stdin state for correctness.
-13. Probe/verification logic must preserve pre-existing unrelated working-tree state and may judge safety by before/after delta rather than requiring a globally clean tree.
+4. ChatGPT + user remain contract owners; ChatGPT remains final semantic/architecture reviewer.
+5. Gate semantic contract remains `VERDICT: PASS|BLOCK` + `BLOCKING_FINDINGS`.
+6. Gate process outcomes remain 0=PASS, 1=INFRASTRUCTURE_BLOCKED, 2=CANDIDATE_BLOCKED.
+7. A real semantic BLOCK must never be weakened merely to shorten output.
+8. Uncertainty is preferred over open-ended exploration when local evidence budget is exhausted.
+9. External 480-second timeout remains the hard wall-clock safety boundary.
+10. `steps` is an agentic-iteration convergence bound, not a wall-clock replacement.
+11. Local roles must not gain repository-mutating edit/shell/code-execution/subagent/web/external-directory capability.
+12. Formal Scout/Gate automation must not depend on Antigravity Global Rules, interactive terminal state, shared OpenCode daemon state, inherited CWD, or open stdin for correctness.
+13. Existing stdout/stderr observability, kill-confirmation behavior, Gate artifact safety, and transaction-safe promotion semantics remain intact.
+14. Existing unrelated working-tree state must be preserved; verification compares before/after delta rather than assuming a globally clean tree.
+15. No production/game behavior changes.
 
-## Provisional target behavior
+## Required behavior
 
-### Scout
+### 1. Scout contract
 
-- First-pass localization, not exhaustive audit.
-- Target about 5-6 directly relevant files; absolute ceiling 8.
-- Target 600-800 words; hard output ceiling 1000 words where enforceable by contract/probe.
-- Stop once ownership/control flow/relevant tests/material risks/minimal surface are sufficiently localized.
-- Put unproven items in `Uncertainty` rather than expanding the audit.
-- Do not reconstruct full repository history or prove every sibling-path non-problem that ChatGPT will independently re-check later.
-- Initial native step budget should be `steps: 6`, subject to one real Scout calibration run after implementation; lowering to 5 is allowed if evidence remains sufficient, while raising above 6 requires evidence of missing essential localization.
+`scout.md` must:
 
-### Reviewers
+- use explicit V2 `permissions`;
+- use `steps: 6` initially;
+- act as a first-pass localizer, not an exhaustive auditor;
+- target 5-6 directly relevant files;
+- stop at an absolute ceiling of 8 directly relevant files;
+- target 600-800 words and remain <=1000 words by role contract;
+- stop once owner/control-flow/tests/material risks/minimal surface are sufficiently localized;
+- place unresolved items in `Uncertainty` rather than continuing broad exploration;
+- avoid repository-history archaeology and proving every sibling-path non-problem that ChatGPT will independently re-check.
 
-- Preserve two sequential roles: `spec-reviewer` and `regression-reviewer`.
-- Operate as bounded blocker detectors, not exhaustive proof engines.
-- PASS output should normally be about 300-600 words: required header, compact coverage summary, `Blocking findings: None`, and only a small number of advisories/evidence gaps.
-- BLOCK may expand only concrete blocking findings needed to support the verdict.
-- Stop exploring once enough grounded evidence exists to return PASS/BLOCK within the role boundary.
-- Avoid exhaustive PASS tables, repository-history archaeology, broad sibling traversal, and low-value prose.
-- Initial native step budget should be `steps: 5` for both reviewer roles, subject to real Gate calibration; lowering to 4 is allowed if blocker-detection evidence remains adequate.
+A post-change real Scout run may justify lowering `steps` to 5 if evidence quality remains sufficient. Raising above 6 requires concrete evidence that essential localization is being lost.
 
-### Convergence controls
+### 2. Reviewer contracts
 
-- Use OpenCode's native positive-integer `steps` budget in each local role. Runtime probing confirmed that the last allowed step disables tools and still permits a final text response.
-- Treat `steps` as an iteration bound, not a wall-clock deadline. A slow provider/model request can still consume substantial time.
-- Desired normal operating result is roughly 1-3 minutes for Scout and 2-4 minutes per reviewer, materially earlier than the 480-second hard timeout.
-- Keep the external 480-second child-process timeout as the hard safety boundary.
-- Do not add a custom timer/plugin/session-interrupt control plane in this v1.1 task.
+Both reviewers must use `steps: 5` initially and explicit V2 read-only permissions.
 
-### Read-only boundary
+They are bounded blocker detectors, not exhaustive proof engines.
 
-- Migrate custom agents to explicit V2 `permissions` rules for clarity and forward maintenance.
-- Use broad deny followed by narrow allows for only `read`, `glob`, and `grep`, plus any strictly necessary non-mutating capability proven by implementation-time probes.
-- Explicitly deny `edit`, `shell`, `subagent`, `execute`, `external_directory`, `webfetch`, and `websearch` even if some capabilities are already removed by broad deny; the explicit entries document critical boundaries and aid runtime inspection.
-- A real runtime probe must continue to prove that command execution is unavailable and repository mutation does not occur.
+PASS behavior:
 
-### Invocation isolation
+- first two lines remain exactly the existing machine-readable header;
+- normally 300-600 words total;
+- compact coverage/behavior summary;
+- `Blocking findings: None`;
+- at most a small number of evidence-based advisories/evidence gaps;
+- no exhaustive per-clause PASS tables or repository-history narrative.
 
-- OpenCode calls launched by `ai_scout.ps1` and `ai_gate.ps1` should use `--standalone` by default so formal workflow jobs do not depend on shared background-service state.
-- Each child process must receive an explicit repository `WorkingDirectory` rather than relying only on inherited current directory.
-- Child stdin must be deterministically non-interactive/closed so wrapper or CLI behavior cannot wait on input EOF indefinitely.
-- Existing stdout/stderr streaming, timeout handling, client-only ownership semantics, and artifact-safety rules remain required.
-- Direct invocation of a discovered native `opencode.exe` may be considered if it materially simplifies deterministic stdin/process behavior, but hard-coded installation paths are forbidden and the installed wrapper must remain supported unless evidence shows it is unsafe.
-- Antigravity may continue using `cmd.exe /d /s /c ... < NUL` as a local IDE workaround, but repository scripts must not encode Antigravity-specific behavior as a correctness dependency.
+BLOCK behavior:
+
+- may expand only the concrete blocking findings required to justify the verdict;
+- preserve falsifiable claim, location, evidence, validation suggestion, and confidence;
+- stop after enough grounded blocker evidence exists.
+
+Regression reviewer may inspect callers/siblings/state/timing only where they are the highest-risk reachable paths for the actual diff; broad traversal is not mandatory coverage.
+
+A real Gate calibration may justify lowering reviewer `steps` to 4 if blocker detection and structured output remain adequate. Raising above 5 requires evidence.
+
+### 3. Read-only permission boundary
+
+All three local roles must migrate to explicit V2 `permissions` rules.
+
+Required policy:
+
+- broad deny by default;
+- narrow allow only `read`, `glob`, `grep` unless a strictly necessary non-mutating capability is proven;
+- explicit deny entries for critical boundaries including `edit`, `shell`, `subagent`, `execute`, `external_directory`, `webfetch`, and `websearch`.
+
+Implementation verification must prove that a role asked to run a harmless command cannot execute it and introduces no repository/process side effect attributable to the role.
+
+### 4. Scout prompt authority
+
+The current duplicated Scout budget numbers in `scout.md` and `ai_scout.ps1` are a drift risk.
+
+The production solution must make the agent role contract the canonical budget policy. `ai_scout.ps1` must not maintain a second independently editable copy of the concrete 5-6 / 8 / 600-800 / 1000 numbers.
+
+The script prompt may say to follow the Scout contract and stop early, but concrete policy numbers must live in one authoritative surface unless implementation provides a real single-source mechanism.
+
+### 5. Formal OpenCode invocation isolation
+
+`ai_scout.ps1` and reviewer invocation in `ai_gate.ps1` must:
+
+- use `opencode run --standalone` by default for formal jobs;
+- explicitly set child `WorkingDirectory = $repoRoot`;
+- make child stdin deterministically non-interactive/closed;
+- preserve stdout/stderr streaming and existing timeout behavior;
+- keep executable/argument override seams working;
+- avoid hard-coded OpenCode installation paths.
+
+Using the discovered npm PowerShell wrapper is acceptable if the above contract is satisfied. Direct native-binary discovery is not required and should not be added unless needed by evidence.
+
+`--standalone` is for formal Scout/Gate automation only; this task does not remove or forbid shared OpenCode service use for interactive development.
+
+### 6. Workflow documentation
+
+`docs/architecture/ai_development_workflow.md` must reflect the durable responsibility model:
+
+- local free agents = fast/bounded first-pass evidence and blocker detection;
+- uncertainty over exhaustive exploration;
+- ChatGPT + user = deeper contract/architecture analysis and final semantic review;
+- Gemini/Antigravity = production implementation writer after Final SPEC;
+- Scout initial bound: `steps: 6`, 5-6 target / 8 file ceiling, 600-800 target / 1000-word ceiling;
+- reviewers remain two separate roles with initial `steps: 5` and concise/blocker-first output;
+- formal Scout/Gate OpenCode execution is isolated/non-interactive and still protected by the 480-second hard timeout.
+
+## Acceptance criteria
+
+1. `scout.md` implements the Final Scout limits, `steps: 6`, early-stop semantics, and V2 read-only permissions.
+2. `spec-reviewer.md` and `regression-reviewer.md` implement `steps: 5`, V2 read-only permissions, blocker-first output, and concise PASS behavior.
+3. `ai_scout.ps1` no longer duplicates concrete Scout budget numbers as an independent policy surface.
+4. `ai_scout.ps1 -Task <id>` remains compatible and formal Scout invocation uses standalone + explicit repo WorkingDirectory + closed/non-interactive stdin.
+5. `ai_gate.ps1 -Task <id>` remains compatible and both reviewer invocations use the same isolated process boundary.
+6. Existing Gate VERDICT parsing, 0/1/2 outcome semantics, focused-test behavior, canonical artifact preservation, promotion/rollback, and timeout classification remain unchanged.
+7. Read-only runtime probe demonstrates shell/code execution is unavailable and no new working-tree/process side effect occurs.
+8. Standalone timeout/lifecycle probe demonstrates no orphan private-server process remains after forced client termination.
+9. A representative real Scout run with Mimo successfully produces structurally valid `CONTEXT.md` materially before 480 seconds; expected order of magnitude is the already observed ~139 seconds, not a strict SLA.
+10. A representative real Gate run with the current preferred compatible reviewer model produces valid structured outputs from both reviewers without Antigravity-specific shell rules.
+11. Reviewer PASS output is materially shorter than the previous exhaustive format while semantic BLOCK detail remains sufficient.
+12. Architecture workflow documentation matches the implemented durable semantics.
+13. Verification preserves pre-existing unrelated working-tree state and leaves zero new delta after disposable probes are cleaned up.
+14. No game/runtime files change.
+
+## Required verification
+
+Use small deterministic/runtime probes and real smoke runs; do not introduce a generalized PowerShell test framework solely for this task.
+
+At minimum verify:
+
+- resolved agent configs show expected `steps` and V2 permission rules;
+- forbidden command-execution attempt is unavailable;
+- Scout step-bound finalization still yields valid final text;
+- Scout script uses isolated process invocation and can produce valid `CONTEXT.md`;
+- Gate reviewers use isolated process invocation and still satisfy header validation;
+- forced standalone termination leaves no orphan server;
+- override seams still work for bounded deterministic process tests;
+- before/after git status delta contains no probe pollution.
+
+AI agents must not run the repository full test suite. User-owned branch completion/full-suite rules remain unchanged.
 
 ## Non-goals
 
-- No model fallback routing; that is `agent-model-fallback-routing-v1-1`.
-- No retries after a semantic BLOCK.
-- No parallel reviewers or reviewer voting/racing.
-- No Gemini self-review as a normal independent Gate PASS.
-- No user pause/amend/resume control plane.
-- No shared generalized process framework extraction.
-- No production/game behavior changes.
-- No custom timer/plugin solely to simulate a six-minute clock.
-- No requirement to eliminate the shared OpenCode service for interactive developer use; isolation applies to formal Scout/Gate automation.
-
-## Provisional acceptance criteria
-
-1. Scout contract clearly encodes the tighter file/output/early-stop policy without losing required ownership/control-flow/test/risk evidence.
-2. Spec/regression reviewer PASS outputs are materially shorter and blocker-first while preserving valid BLOCK detail.
-3. Real role runs normally converge materially earlier than the 480-second timeout.
-4. Scout uses an evidence-backed native step budget, initially 6; reviewer roles initially use 5.
-5. Read-only permissions are expressed in V2 rules and real probes demonstrate that shell/code execution and repository mutation are unavailable.
-6. Formal Scout/Gate OpenCode jobs use isolated standalone execution with explicit repository working directory and deterministic non-interactive stdin handling.
-7. Killing/timing out a standalone OpenCode client leaves no private-server orphan process.
-8. `scripts/ai_scout.ps1 -Task <id>` and `scripts/ai_gate.ps1 -Task <id>` remain compatible.
-9. Gate 0/1/2 classification and canonical artifact safety remain unchanged.
-10. No game/runtime files change.
-11. Durable workflow docs are updated to describe local agents as bounded first-pass evidence providers and ChatGPT as the deeper analysis/final-review layer.
-12. Runtime probes preserve pre-existing unrelated working-tree state and introduce zero new status delta after cleanup.
-13. A representative post-change Scout run successfully produces structurally valid `CONTEXT.md`; a representative Gate run produces valid structured reviewer output without requiring Antigravity-specific shell rules.
-
-## Bootstrap note before Final SPEC
-
-This task initially could not obtain canonical Scout evidence because the current Scout itself is one of the components being hardened and timed out at the 480-second bound. Runtime probes have now established a safe bounded configuration (`steps`, V2 read-only permissions, standalone lifecycle). Before promoting this SPEC to Final, run Scout once using a **temporary local bootstrap override** of the Scout agent contract that applies the verified bounded settings without committing production implementation:
-
-- use `steps: 6`;
-- use V2 read-only permissions with only `read` / `glob` / `grep` allowed;
-- tighten the Scout prompt to the provisional 5-6 file / 600-800 word / early-stop policy;
-- invoke through the existing `ai_scout.ps1` path, with a temporary local invocation adjustment only if needed to supply `--standalone` / explicit process isolation;
-- restore all temporary local agent/script changes immediately after the run;
-- commit/push only the resulting canonical `CONTEXT.md` if structurally valid;
-- verify before/after working-tree delta contains no leftover bootstrap modifications.
-
-This bootstrap exception exists only to resolve the self-hosting dependency of the Scout-hardening task. It must not become a general lifecycle shortcut.
-
-## Remaining uncertainty before Final
-
-1. Whether `steps: 6` gives Scout enough repository evidence on this real task while remaining concise.
-2. Whether `steps: 5` is sufficient for both reviewer roles on real candidate diffs; this may be finalized as an implementation-time calibration requirement if Scout finds no stronger evidence.
-3. Whether the repository scripts should invoke the npm PowerShell wrapper or discovered native binary after explicit WorkingDirectory/stdin/standalone isolation is added; portability and testability should decide, not convenience.
-4. Whether any non-mutating OpenCode permission beyond `read` / `glob` / `grep` is genuinely required by Scout/reviewers.
+- model fallback routing (`agent-model-fallback-routing-v1-1` owns that);
+- retry after semantic BLOCK;
+- parallel reviewer execution, voting, or racing;
+- Gemini self-review as a normal independent Gate PASS;
+- human pause/amend/resume control plane;
+- custom timer/plugin to simulate a six-minute wall-clock soft deadline;
+- shared generalized process-framework extraction;
+- new Pester/test-framework infrastructure solely for these scripts;
+- eliminating shared OpenCode service for interactive developer use;
+- production/game behavior changes.
