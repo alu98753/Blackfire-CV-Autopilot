@@ -1,6 +1,6 @@
 ---
 description: Read-only reviewer that checks a candidate patch against the canonical task contract
-mode: subagent
+mode: primary
 permission:
   edit: deny
   bash: deny
