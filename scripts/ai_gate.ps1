@@ -16,21 +16,20 @@ if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
     throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
 }
 
-$taskDir = Join-Path $repoRoot ".ai\tasks\$Task"
+$taskDir = Join-Path $repoRoot "docs\tasks\$Task"
 $taskFile = Join-Path $taskDir "task.json"
+$specPath = Join-Path $taskDir "SPEC.md"
+
 if (-not (Test-Path $taskFile)) {
-    throw "Task descriptor not found: .ai/tasks/$Task/task.json"
+    throw "Task descriptor not found: docs/tasks/$Task/task.json"
+}
+if (-not (Test-Path $specPath)) {
+    throw "Canonical spec not found: docs/tasks/$Task/SPEC.md"
 }
 
 $config = Get-Content $taskFile -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($config.id -ne $Task) {
     throw "task.json id '$($config.id)' does not match directory/task argument '$Task'."
-}
-
-$specRel = [string]$config.spec
-$specPath = Join-Path $repoRoot $specRel
-if ([string]::IsNullOrWhiteSpace($specRel) -or -not (Test-Path $specPath)) {
-    throw "Canonical spec not found: $specRel"
 }
 
 $baseRef = [string]$config.base_ref
@@ -69,8 +68,8 @@ function Invoke-ReviewAgent {
     )
 
     $prompt = @"
-Task descriptor: .ai/tasks/$Task/task.json
-Canonical spec: $specRel
+Task descriptor: docs/tasks/$Task/task.json
+Canonical spec: docs/tasks/$Task/SPEC.md
 Repository status snapshot: .runtime/ai_gate/$Task/status.txt
 Candidate diff snapshot: .runtime/ai_gate/$Task/diff.patch
 Comparison baseline: $baseRef
@@ -203,7 +202,7 @@ $blocked = (
     -not $testsPassed
 )
 
-Write-Host "Verification evidence written to .ai/tasks/$Task/EVIDENCE.md"
+Write-Host "Verification evidence written to docs/tasks/$Task/EVIDENCE.md"
 if ($blocked) {
     Write-Host "AI verification gate BLOCKED. Inspect EVIDENCE.md and reviewer reports."
     exit 2
