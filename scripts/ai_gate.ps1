@@ -154,11 +154,11 @@ $timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssK")
 $evidence = New-Object System.Collections.Generic.List[string]
 $evidence.Add("# Verification Evidence")
 $evidence.Add("")
-$evidence.Add("Task: `$Task`")
+$evidence.Add("Task: $Task")
 $evidence.Add("Generated: $timestamp")
-$evidence.Add("Branch: `$branch`")
-$evidence.Add("HEAD: `$head`")
-$evidence.Add("Base ref: `$baseRef`")
+$evidence.Add("Branch: $branch")
+$evidence.Add("HEAD: $head")
+$evidence.Add("Base ref: $baseRef")
 $evidence.Add("")
 $evidence.Add("## Review verdicts")
 $evidence.Add("")
@@ -167,19 +167,19 @@ $evidence.Add("- Regression reviewer: $($regressionVerdict.Verdict) (blocking=$(
 $evidence.Add("")
 $evidence.Add("Detailed reports:")
 $evidence.Add("")
-$evidence.Add("- `reviews/spec-review.md`")
-$evidence.Add("- `reviews/regression-review.md`")
+$evidence.Add("- reviews/spec-review.md")
+$evidence.Add("- reviews/regression-review.md")
 $evidence.Add("")
 $evidence.Add("## Focused tests")
 $evidence.Add("")
 if ($SkipTests) {
-    $evidence.Add("Focused tests skipped by explicit `-SkipTests`.")
+    $evidence.Add("Focused tests skipped by explicit -SkipTests.")
 } elseif ($testResults.Count -eq 0) {
     $evidence.Add("No focused tests declared in task.json.")
 } else {
     foreach ($result in $testResults) {
         $status = if ($result.Passed) { "PASS" } else { "FAIL" }
-        $evidence.Add("- $status `$($result.Target)` (exit=$($result.ExitCode)); local log: `$($result.Log)`")
+        $evidence.Add("- $status $($result.Target) (exit=$($result.ExitCode)); local log: $($result.Log)")
     }
 }
 $evidence.Add("")
@@ -189,7 +189,7 @@ $evidence.Add("Not run by the AI gate. Repository policy requires the user to ru
 $evidence.Add("")
 $evidence.Add("## Candidate snapshot")
 $evidence.Add("")
-$evidence.Add("Ephemeral status/diff snapshots are stored under `.runtime/ai_gate/$Task/` and are intentionally git-ignored.")
+$evidence.Add("Ephemeral status/diff snapshots are stored under .runtime/ai_gate/$Task/ and are intentionally git-ignored.")
 
 $evidencePath = Join-Path $taskDir "EVIDENCE.md"
 Set-Content -Path $evidencePath -Value ($evidence -join "`n") -Encoding UTF8
