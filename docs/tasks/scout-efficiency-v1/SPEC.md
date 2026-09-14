@@ -1,21 +1,23 @@
 # Scout Efficiency v1
 
-Status: Draft
+Status: Final
 
 ## Goal
 
 Make the OpenCode Scout stage a fast, bounded, observable repository-localization step instead of an open-ended codebase audit, while preserving its read-only evidence-provider role and the Draft -> Scout -> Final contract lifecycle.
 
-The default Scout path should be appropriate for a free/low-cost model: it should localize the task quickly, surface uncertainty, and stop once there is enough evidence for ChatGPT + user to finalize the spec. Deeper reasoning and broad architecture investigation should remain the responsibility of ChatGPT or Gemini when explicitly escalated.
+The default Scout path is optimized for a free/low-cost model: localize the task quickly, surface uncertainty, and stop once there is enough evidence for ChatGPT + user to finalize the spec. Deeper reasoning and broad architecture investigation belong to ChatGPT or Gemini when explicitly escalated.
 
 ## Observed problem
 
-Two real executions exposed the same workflow weakness:
+Real executions exposed two workflow weaknesses:
 
-1. A simple Scout smoke prompt asking for the primary architecture document expanded into a much broader audit than necessary.
-2. `workflow-merge-authority` Scout remained running for roughly 30 minutes without producing `CONTEXT.md`; the user could not observe useful progress because `scripts/ai_scout.ps1` buffers the entire OpenCode output through `Out-String` and writes the context only after process completion.
+1. A simple Scout smoke prompt asking for the primary architecture document expanded into a broader audit than necessary.
+2. A real `scout-efficiency-v1` execution using `opencode/big-pickle` exceeded the 8-minute observation budget, remained silent to the user, and produced no canonical `CONTEXT.md` before termination. The observed run started at `2026-09-14 13:43:44` and was terminated at `13:54:09` after about 10 minutes 25 seconds.
 
-The current Scout contract defines what to inspect but has no explicit exploration budget, early-stop rule, default depth, output budget, or timeout. The current PowerShell wrapper also provides no useful streaming progress to the user.
+This single timed execution proves that the current path can exceed the acceptable interactive latency budget; it does not prove that every Big Pickle execution does so.
+
+The current Scout contract defines what to inspect but has no explicit exploration budget, early-stop rule, output budget, or timeout. The current PowerShell wrapper captures `opencode` output through a blocking `Out-String` pipeline and only writes `CONTEXT.md` after successful completion, so a long-running Scout appears opaque and silent.
 
 ## Scope
 
@@ -24,93 +26,140 @@ Primary change surface:
 - `.opencode/agents/scout.md`
 - `scripts/ai_scout.ps1`
 - `docs/architecture/ai_development_workflow.md`
-- `docs/tasks/README.md` only if task metadata/schema needs to document Scout execution options
+- `docs/tasks/README.md` only if user-facing Scout execution defaults need documentation
 
-Tests or a small script-level verification seam may be added only if needed to verify timeout/output behavior without running a real long-lived model call.
+A small script-level verification seam/test may be added if needed to verify success, timeout, and failure behavior without invoking a real long-lived model call.
+
+No game/runtime behavior may change.
 
 ## Known invariants
 
 1. Scout remains strictly read-only: no repository edits, shell execution, repair subagents, merge actions, or production implementation.
 2. Scout remains an evidence provider, not spec owner. It must not promote `SPEC.md` from Draft to Final.
 3. `SPEC.md` remains the only normative task contract.
-4. Default Scout behavior should favor minimal task localization over exhaustive repository audit.
+4. Default Scout behavior favors minimal task localization over exhaustive repository audit.
 5. Scout may report uncertainty instead of recursively exploring every possibly related subsystem.
 6. Successful Scout output still lands at `docs/tasks/<task-id>/CONTEXT.md`.
-7. Partial/timeout output must not silently become authoritative `CONTEXT.md` evidence.
-8. User-visible progress must improve: a long-running Scout should not appear as an opaque silent process until completion.
-9. The change must not alter game/runtime behavior.
-10. Full-suite tests remain user-only and are not required for a workflow/script-only focused verification unless repository closeout policy later requires them.
+7. Timeout, process failure, or partial output must never silently replace a previously valid canonical `CONTEXT.md`.
+8. Long-running Scout execution must be user-observable from the terminal.
+9. The timeout mechanism must terminate only the launched `opencode run` client process and must not kill the persistent `opencode serve` service.
+10. Existing callers using `scripts/ai_scout.ps1 -Task <id>` remain valid.
+11. Full-suite tests remain user-only.
 
-## Provisional target behavior
+## Target behavior
 
-### Default Scout mode
+### 1. Light-by-default Scout contract
 
-Default execution is `light` localization:
+Scout is a task localizer, not a general codebase auditor.
 
-- start from `SPEC.md`, `task.json`, declared scope, and directly relevant architecture contracts;
+Default behavior:
+
+- begin with `SPEC.md`, `task.json`, declared task scope, and the directly relevant architecture contract;
 - inspect only directly necessary neighboring implementation/tests;
 - do not start from global runtime entry points unless the task itself concerns bootstrap/runtime ownership;
-- stop once responsibility owner, current path, relevant tests/safety mechanisms, minimal change surface, material risks, and remaining uncertainty are sufficiently established;
-- avoid traversing sibling subsystems solely because they might be related;
-- prefer concise evidence over completeness theater.
+- stop once the following are sufficiently established:
+  - responsibility owner;
+  - current control/data path relevant to the task;
+  - directly relevant tests or safety mechanisms;
+  - smallest plausible change surface;
+  - material regression/architecture risks;
+  - remaining uncertainty;
+- do not traverse sibling subsystems solely because they might be related;
+- prefer explicit uncertainty over speculative exploration.
 
-### Budget
+### 2. Exploration/output budget
 
-The implementation should support an explicit bounded Scout budget. Provisional defaults:
+Default Scout prompt contract:
 
-- mode: `light`
-- max files: approximately 10 directly inspected files
-- timeout: approximately 8 minutes
-- report size: concise enough for fast downstream review, roughly 1200-1800 words maximum
+- inspect at most **10 directly relevant repository files**;
+- target report length **<= ~1500 words**;
+- when the file budget is reached, stop and report remaining uncertainty instead of expanding scope.
 
-Exact enforcement mechanism is intentionally provisional until Scout/local implementation evidence confirms what OpenCode exposes reliably.
+`max_files` is a **soft prompt-enforced budget** in v1 because OpenCode v2.0.3 exposes no native `--max-files` / tool-call cap. The implementation must not pretend this is a hard sandbox guarantee.
 
-### Observable execution
+### 3. Hard execution timeout
 
-`ai_scout.ps1` should expose useful live output while the Scout runs rather than buffering everything invisibly until completion.
+`ai_scout.ps1` must enforce a real wall-clock timeout with a default of **8 minutes / 480 seconds**.
 
-Preferred semantics:
+Requirements:
 
-- user sees OpenCode stdout/stderr progress in the terminal as it arrives;
-- output is captured to a temporary file or buffer concurrently;
-- only a successful, complete Scout report is promoted to canonical `CONTEXT.md`;
-- timeout/non-zero exit clearly reports failure and does not overwrite a previously valid `CONTEXT.md` with partial output;
-- temporary output is either cleaned or stored only under ignored runtime state.
+- timeout is enforced by the wrapper, not merely stated in the prompt;
+- on timeout, terminate only the launched `opencode run` client process;
+- do not terminate the persistent OpenCode service;
+- return a clear non-zero failure to the caller;
+- do not promote partial output to canonical `CONTEXT.md`;
+- support a shorter timeout override/test seam so timeout behavior can be verified in seconds rather than waiting 8 minutes.
 
-### Escalation
+The exact public parameter name is implementation detail, but normal `-Task <id>` callers must continue to work unchanged.
 
-If light Scout cannot establish enough evidence, it should return explicit uncertainty / `GO WITH SPEC CHANGES` / `NO-GO` rather than silently becoming a deep audit.
+### 4. Observable streaming
 
-ChatGPT + user may then explicitly choose deeper investigation by ChatGPT/Gemini or a future `deep` Scout mode. Deep mode is not the default.
+While Scout runs, output emitted by the child process must be visible to the user in the terminal instead of being fully buffered until exit.
 
-## Provisional task metadata
+The implementation should use one coherent child-process ownership mechanism for:
 
-If practical, task metadata may gain a small Scout execution section such as:
+- obtaining the launched client PID/process handle;
+- observing stdout/stderr as they arrive;
+- enforcing timeout;
+- collecting candidate output;
+- reading the final exit code.
 
-```json
-"scout": {
-  "mode": "light",
-  "max_files": 10,
-  "timeout_minutes": 8
-}
+Prefer `System.Diagnostics.Process` or an equivalently robust mechanism if needed to satisfy all of the above together. Do not keep a simple streaming pipeline if it makes reliable timeout/process ownership ambiguous.
+
+### 5. Candidate output and canonical promotion
+
+Candidate output must be staged outside the canonical task artifact, preferably under ignored runtime state such as:
+
+```text
+.runtime/ai_scout/<task-id>/
 ```
 
-This shape is provisional. Do not add configuration knobs that cannot be meaningfully enforced or consumed.
+Canonical promotion rules:
 
-Model selection remains separate from execution budget. A free model may remain the default Scout model, but this task should fix the agent/script contract before relying on model replacement as the primary solution.
+- only a successful process exit may promote candidate output to `docs/tasks/<task-id>/CONTEXT.md`;
+- candidate output must be non-empty and contain the expected Scout report structure sufficiently to reject obvious empty/broken output;
+- timeout/non-zero exit must leave any previously valid `CONTEXT.md` untouched;
+- partial/debug output may remain only under ignored runtime state or be cleaned up;
+- avoid fragile parsing that depends on undocumented OpenCode presentation strings.
 
-## Provisional acceptance criteria
+If stdout/stderr need separate handling to keep diagnostics visible without contaminating canonical Markdown, the implementation may separate them, but must verify actual local behavior rather than assume which stream OpenCode uses for progress.
 
-1. Scout agent instructions explicitly define light localization, early-stop behavior, and prohibition on unnecessary broad audit.
-2. Default Scout execution is bounded by a documented timeout, with a reasonable default near 8 minutes unless implementation evidence supports a better value.
-3. A timed-out or failed Scout does not replace canonical `CONTEXT.md` with partial output.
-4. A successful Scout still writes a complete `CONTEXT.md` to the canonical task package.
-5. The user can observe ongoing Scout output/progress in the terminal while it runs.
-6. The script preserves the OpenCode exit result and fails clearly on timeout/non-zero exit.
-7. Budget metadata, if added, has one clear canonical schema and does not duplicate model selection semantics.
-8. Existing callers using `scripts/ai_scout.ps1 -Task <id>` remain valid with sensible defaults.
-9. No production/runtime behavior changes.
-10. Focused verification demonstrates at least the success path and timeout/failure safety semantics without requiring a real 30-minute model call.
+### 6. Escalation policy
+
+If light Scout cannot establish enough evidence, it returns explicit uncertainty and `GO WITH SPEC CHANGES` or `NO-GO` rather than silently deepening into a broad audit.
+
+ChatGPT + user may then assign deeper investigation to ChatGPT/Gemini. A configurable `deep` Scout mode is explicitly **not part of v1**.
+
+### 7. Configuration policy
+
+Do **not** add `task.json.scout` execution-budget schema in v1.
+
+Rationale:
+
+- timeout can have a sensible script default plus an optional override;
+- file/report budgets are prompt-level soft constraints;
+- adding per-task metadata now would create configuration surface before there is evidence that tasks need different Scout budgets.
+
+Model selection remains under the existing `models.scout` field and is separate from Scout execution policy.
+
+## Acceptance criteria
+
+1. `.opencode/agents/scout.md` explicitly defines light localization, early-stop behavior, <=10 directly relevant files, concise output, and uncertainty instead of broad speculative traversal.
+2. Scout report target is concise (approximately <=1500 words) and still contains enough evidence for Draft -> Final spec convergence.
+3. `ai_scout.ps1` enforces a default hard timeout of 480 seconds while preserving the existing `-Task <id>` invocation.
+4. Timeout terminates only the launched `opencode run` client and returns a clear failure without killing the persistent OpenCode server.
+5. The user can observe child output in the terminal during execution as it is emitted.
+6. Successful output is staged and promoted to `docs/tasks/<task-id>/CONTEXT.md` only after successful completion and minimal structural/non-empty validation.
+7. Timeout and non-zero exit never overwrite a previously valid canonical `CONTEXT.md` with partial output.
+8. The script preserves/returns the child process failure result clearly enough for local automation to detect failure.
+9. No `task.json.scout` schema or configurable deep mode is introduced in v1.
+10. Focused verification demonstrates at least:
+    - successful child completion + canonical promotion;
+    - timeout + client-only termination + no canonical overwrite;
+    - non-zero child exit + no canonical overwrite;
+    - visible streaming behavior through a short deterministic probe or test seam.
+11. Verification must not require a real 8-minute model call or full test suite.
+12. No production/game behavior changes.
 
 ## Non-goals
 
@@ -122,14 +171,21 @@ Model selection remains separate from execution budget. A free model may remain 
 - Do not select a permanent paid model/provider architecture.
 - Do not add complex telemetry, dashboards, queues, or background services.
 - Do not solve latency by simply raising timeouts.
+- Do not add a configurable `deep` Scout mode in v1.
+- Do not add per-task Scout budget configuration in v1.
 
-## Uncertainty / Scout questions
+## Evidence basis / remaining uncertainty
 
-Before this spec becomes Final, evidence should answer:
+Confirmed locally:
 
-1. What streaming behavior does the installed `opencode run` expose through PowerShell stdout/stderr, and what is the simplest reliable way to tee it to terminal + capture it?
-2. What timeout implementation can terminate the child `opencode run` reliably on Windows without killing the persistent `opencode serve` process?
-3. Can a practical `max_files` budget be enforced by prompt contract alone, or is only a soft budget realistic with current OpenCode tooling?
-4. Does OpenCode emit final Markdown mixed with progress/status output, and if so how should canonical `CONTEXT.md` isolate the report without fragile parsing?
-5. Is task-level `scout` metadata needed in v1, or are script defaults + optional command-line overrides simpler and more testable?
-6. What focused PowerShell/script tests or mocks already exist nearby, if any, that can verify success/timeout/failure semantics cheaply?
+- at least one real Big Pickle Scout execution exceeded the 8-minute observation budget;
+- current wrapper produced no user-visible terminal streaming during that run;
+- no canonical `CONTEXT.md` existed before termination;
+- terminating the client process did not kill the persistent OpenCode service;
+- OpenCode v2.0.3 exposes no native max-files/tool-call cap, so file budget is prompt-soft in v1.
+
+Still to be verified during implementation/focused testing:
+
+- exact stdout vs stderr behavior of the installed OpenCode CLI under the new process wrapper;
+- the smallest robust Windows invocation/quoting mechanism for the installed `opencode` command shim;
+- minimal structural validation that rejects broken/empty candidate output without brittle parsing.
