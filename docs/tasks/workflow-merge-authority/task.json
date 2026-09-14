@@ -1,0 +1,14 @@
+{
+  "id": "workflow-merge-authority",
+  "base_ref": "origin/main",
+  "scope": [
+    ".agents/AGENTS.md",
+    ".agents/skills/branch_completion_workflow/SKILL.md",
+    "docs/architecture/ai_development_workflow.md"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": "opencode/big-pickle",
+    "review": "opencode/big-pickle"
+  }
+}
