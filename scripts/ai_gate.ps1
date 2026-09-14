@@ -205,7 +205,7 @@ $blocked = (
 
 Write-Host "Verification evidence written to .ai/tasks/$Task/EVIDENCE.md"
 if ($blocked) {
-    Write-Error "AI verification gate BLOCKED. Inspect EVIDENCE.md and reviewer reports."
+    Write-Host "AI verification gate BLOCKED. Inspect EVIDENCE.md and reviewer reports."
     exit 2
 }
 
