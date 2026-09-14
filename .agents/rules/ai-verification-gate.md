@@ -1,14 +1,14 @@
 # AI Verification Gate Writer Rule
 
-This rule applies when the current branch contains an active task descriptor at `.ai/tasks/<task-id>/task.json`.
+This rule applies when the current branch contains an active task package at `docs/tasks/<task-id>/` with both `SPEC.md` and `task.json`.
 
 Before implementation:
 
 1. Read `.agents/AGENTS.md` and all repository skills that apply to the task.
-2. Read the task descriptor completely.
-3. Read the canonical specification referenced by `task.json`.
-4. Read `.ai/tasks/<task-id>/CONTEXT.md` when it exists.
-5. Treat the canonical spec's scope, invariants, acceptance criteria, and non-goals as authoritative. Scout output is supporting evidence, not a replacement specification.
+2. Read `docs/tasks/<task-id>/task.json` completely.
+3. Read the canonical `docs/tasks/<task-id>/SPEC.md` completely.
+4. Read `docs/tasks/<task-id>/CONTEXT.md` when it exists.
+5. Treat `SPEC.md` scope, invariants, acceptance criteria, and non-goals as authoritative. `task.json` is automation metadata only; Scout output is supporting evidence only.
 6. If the spec and current implementation materially conflict in a way that changes the requested behavior, stop and report the conflict instead of silently reinterpreting the task.
 
 During implementation:
@@ -26,9 +26,9 @@ Before declaring the task ready for final review:
    .\scripts\ai_gate.ps1 -Task <task-id>
    ```
 
-2. If the gate returns BLOCK, do not claim completion. Read `.ai/tasks/<task-id>/EVIDENCE.md` and both reviewer reports, validate every blocking claim against code/tests, and fix only findings that are supported by evidence.
+2. If the gate returns BLOCK, do not claim completion. Read `docs/tasks/<task-id>/EVIDENCE.md` and both reviewer reports, validate every blocking claim against code/tests, and fix only findings supported by evidence.
 3. Do not let OpenCode reviewers edit production code in v1.
 4. A PASS from the local gate is not final approval; ChatGPT/human final review remains required.
 5. After focused verification passes, ask the user to run the full suite manually when required by `.agents/AGENTS.md`.
 
-Never create a global `.ai/current-task` marker. This project uses multiple permanent worktrees; all workflow commands must name the task explicitly.
+Never create `.ai/current-task`, `docs/tasks/current`, or another global mutable task marker. This project uses multiple permanent worktrees; all workflow commands must name the task explicitly.
