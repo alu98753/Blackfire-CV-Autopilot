@@ -76,15 +76,15 @@ The Draft must be grounded by a lightweight ChatGPT repository survey before cre
 
 ### Scout evidence
 
-OpenCode Scout reads the Draft, current code, tests, and architecture documents and writes `CONTEXT.md`. It should identify:
+OpenCode Scout acts as a light-by-default task localizer, not an exhaustive codebase auditor. It reads the Draft, current code, tests, and architecture documents, and writes `CONTEXT.md` under a bounded exploration budget (inspecting <= 10 directly relevant files, concise output <= 1500 words, and an 8-minute execution timeout). It should identify:
 
-- relevant files and symbols;
+- relevant files and symbols (within budget);
 - actual control flow;
 - existing tests and safety mechanisms;
 - callers / sibling paths / shared state;
 - timing, lifecycle, ownership, and regression risks;
 - architecture conflicts;
-- uncertainty;
+- uncertainty (reported explicitly when budget is reached instead of expanding audit);
 - minimal plausible change surface.
 
 Scout is an evidence provider, not the contract owner. It must not rewrite `SPEC.md` or decide product/architecture intent.
@@ -197,14 +197,14 @@ docs/tasks/<task-id>/task.json
 ```
 
 ### Phase B — Localization
-
-From the task worktree:
-
-```powershell
-.\scripts\ai_scout.ps1 -Task <task-id>
-```
-
-This creates or replaces `docs/tasks/<task-id>/CONTEXT.md`.
+ 
+ From the task worktree:
+ 
+ ```powershell
+ .\scripts\ai_scout.ps1 -Task <task-id>
+ ```
+ 
+ This runs Scout with real-time terminal streaming under an 8-minute default timeout. On successful execution and structural validation, it creates or replaces `docs/tasks/<task-id>/CONTEXT.md` via atomic promotion. If Scout times out or fails, any pre-existing canonical `CONTEXT.md` remains untouched.
 
 ### Phase A2 — Contract finalization
 
