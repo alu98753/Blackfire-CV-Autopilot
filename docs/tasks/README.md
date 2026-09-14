@@ -42,8 +42,9 @@ Status: Final
 Rules:
 
 - `Draft` means the contract is framed well enough for repository localization, but assumptions may still change after Scout evidence.
-- OpenCode Scout may inspect a Draft task and produce `CONTEXT.md`.
+- OpenCode Scout may inspect a Draft task and produce `CONTEXT.md` under a light-by-default budget (<= 10 files, <= 1500 words, 8-minute timeout, real-time terminal streaming).
 - Scout is an evidence provider, not the contract owner; it must not rewrite `SPEC.md`.
+- Failed or timed-out Scout runs never overwrite an existing canonical `CONTEXT.md`.
 - ChatGPT + user own the architecture/behavior decision and finalize the contract after reviewing Scout evidence and current code.
 - Gemini/Antigravity must not begin production implementation while `SPEC.md` is explicitly `Status: Draft`.
 - Once `Status: Final`, implementation may proceed. Any later material contract change must be surfaced explicitly rather than silently inferred by the writer.
