@@ -51,16 +51,28 @@ Completed prerequisites:
 - **Scout target budget:** inspect about 5-6 directly relevant files, target 600-800 words; absolute ceilings are 8 directly relevant files and 1000 words. Once owner/control flow/tests/material risks are sufficiently localized, stop. Unproven items go to `Uncertainty` instead of expanding the audit.
 - Scout is explicitly a first-pass localizer. It does not need to prove every sibling path, reconstruct full repository history, or finish the architecture analysis that ChatGPT will perform after `CONTEXT.md` is available.
 - **Reviewer output is asymmetric and blocker-first:** PASS should normally fit within roughly 300-600 words with the required structured header, a compact coverage summary, `Blocking findings: None`, and at most a small number of advisories/evidence gaps. BLOCK may expand only the concrete blocking findings needed to support the verdict.
-- Preserve two independent sequential reviewer roles (`spec-reviewer` and `regression-reviewer`) rather than merging them. Each should target roughly 2-4 minutes under normal conditions while the existing 480-second process timeout remains the hard safety bound unless the Final SPEC finds a better supported mechanism.
+- Preserve two independent sequential reviewer roles (`spec-reviewer` and `regression-reviewer`) rather than merging them. Each should target roughly 2-4 minutes under normal conditions while the existing 480-second process timeout remains the hard safety bound.
 - Add explicit early-stop guidance: once enough grounded evidence exists to return PASS/BLOCK within the role's bounded responsibility, stop repository exploration and produce the final structured response.
 - Avoid unnecessary baseline/history archaeology, broad sibling traversal, exhaustive PASS tables, and low-value prose. Reviewers should inspect only the highest-risk directly relevant paths needed to detect concrete contract/regression blockers.
-- Investigate whether OpenCode exposes a supported soft-limit mechanism (step/tool-call budget, graceful finish signal, runtime control, hook/plugin API, or equivalent) that can encourage/finalize a response before the 480-second hard timeout. Desired operating shape is approximately a 6-minute soft completion boundary plus safety buffer, but do not implement prompt-only wall-clock claims as if models had reliable clock awareness.
-- Investigate the observed OpenCode capability gap where a reviewer with `bash: deny` still reached an `execute`-style tool. Enforce or document the narrowest practical read-only boundary; reviewer execution must not mutate repository state.
+
+**OpenCode v2 convergence mechanism (research-backed planning constraint):**
+- Use OpenCode v2's first-class per-agent `steps` limit as the primary **soft convergence budget**. `steps` caps model iterations; on the final allowed step OpenCode removes tools and asks the model to return text, which is a better supported mechanism than merely telling a model that six wall-clock minutes have passed.
+- Calibrate `steps` per role with real probes rather than treating minutes as equivalent to steps. Initial experiments should prefer a small budget (roughly 5-7 total model steps) that leaves one forced text-only finalization step, then tune only if evidence shows insufficient localization or missed concrete blockers.
+- Keep the existing 480-second child-process timeout as the **hard wall-clock safety boundary**. `steps` is not a clock: a single slow model request can still consume substantial time, so step-bounding and hard timeout remain complementary.
+- Do not use provider request timeout as the role soft deadline. Provider `timeout` is request-level failure control; it can abort a slow request but does not ask the agent to converge to a valid final report.
+- Do not add a custom timer/plugin that interrupts at ~360 seconds in this v1.1 task. OpenCode v2 exposes session interruption APIs, but interruption aborts work rather than inherently producing a valid structured final response. A true runtime `soft deadline -> interrupt/amend/resume` control plane belongs with the later interruptibility work unless Scout evidence reveals a simpler supported primitive.
+
+**OpenCode v2 read-only boundary (research-backed planning constraint):**
+- Migrate custom agent frontmatter from legacy v1 permission naming to OpenCode v2 `permissions` rules. V2 uses actions such as `shell` and `subagent`, not legacy `bash` and `task`.
+- Explicitly deny `execute`, because OpenCode v2 documents `execute` as the permission controlling Code Mode availability. The observed reviewer `execute` call is therefore not safely covered by legacy `bash: deny` alone.
+- Prefer a default-deny role policy followed by narrow allows for only the discovery capabilities actually needed (`read`, `glob`, `grep`). Keep `edit`, `shell`, `execute`, `subagent`, external-directory access, web access, skills, and other nonessential actions denied unless the Final SPEC proves one is required.
+- Verify these rules with a real probe that attempts prohibited mutation/execution, not only by static config inspection.
+
 - Preserve current reviewer semantic contract (`VERDICT`, `BLOCKING_FINDINGS`) and Gate 0/1/2 outcome semantics.
 
-**Non-goals:** no model fallback routing yet; no parallel reviewers; no retries after semantic BLOCK; no user interrupt/resume system; no weakening of the final ChatGPT semantic/architecture review.
+**Non-goals:** no model fallback routing yet; no parallel reviewers; no retries after semantic BLOCK; no user interrupt/resume system; no weakening of the final ChatGPT semantic/architecture review; no custom timer plugin solely to simulate a six-minute clock.
 
-**Done when:** role contracts are measurably shorter/bounded, Scout/reviewer early-stop behavior is explicit, read-only capability is verified or guarded, any supported OpenCode soft-completion control has been evaluated, and representative role-contract probes show faster convergence without weakening semantic blockers.
+**Done when:** role contracts are measurably shorter/bounded, Scout/reviewer early-stop behavior is explicit, OpenCode v2 `steps` is calibrated enough to force graceful text finalization before open-ended exploration, V2 read-only permissions including explicit `execute` denial are verified, and representative role-contract probes show faster convergence without weakening semantic blockers.
 
 ### 2. `agent-model-fallback-routing-v1-1`
 
@@ -72,7 +84,7 @@ Completed prerequisites:
 - Support ordered model candidates per role (Scout, spec reviewer, regression reviewer) without making model identity an architecture invariant.
 - Fallback is allowed only for `INFRASTRUCTURE_BLOCKED`-class failures such as provider/auth failure, launch failure, timeout, malformed output, or unavailable result.
 - A valid semantic `PASS` or `BLOCK` is terminal for that reviewer role; never ask additional models until one returns the preferred answer.
-- Bound the total role budget across all fallback attempts so N models cannot multiply the current timeout without limit.
+- Bound the total role budget across all fallback attempts so N models cannot multiply the current timeout without limit. Per-attempt role contracts should inherit the bounded `steps`/exploration policy established by `agent-role-contract-hardening-v1-1`.
 - Record attempt provenance: model, start/end/result, infrastructure failure reason, and which attempt produced the accepted canonical artifact.
 - Canonical review/evidence promotion must still use only one accepted valid attempt per role and remain artifact-safe.
 - Scout may fall back to Gemini/Antigravity only as explicitly marked degraded evidence if OpenCode candidates are exhausted; ChatGPT must still re-check repository evidence before Final SPEC.
