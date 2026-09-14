@@ -1,6 +1,6 @@
 # Workflow Merge Authority
 
-Status: Draft
+Status: Final
 
 ## Goal
 

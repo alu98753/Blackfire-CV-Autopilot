@@ -57,7 +57,10 @@
 
 ### 1. Git 分支與 Commit 規範 🔀
 > [!CRITICAL]
-> **禁止自行合併**：AI 絕對禁止自行執行分支合併 (`git merge`)，必須等待使用者明確指示。
+> **合併權限分工 (Merge Authority Rules)**：
+> 1. **本機實作與審查代理人 (Gemini / Antigravity / OpenCode)**：**絕對禁止**執行任何分支合併 (`git merge`)、推送至 `main` (`git push origin main`)、刪除分支或變更整合操作。
+> 2. **遠端協調者 (ChatGPT Remote Orchestrator)**：僅能在所有收尾閘門（Closeout Gates）全部通過、且**使用者明確授權合併**後，方可透過 GitHub 執行整合，且**必須使用 merge-commit semantics（嚴禁 squash 或 rebase）**。
+> 3. **使用者 (User)**：為最終整合權限擁有者。若 ChatGPT 遠端整合不可用或使用者選擇手動處理，保留使用者於 `temp-main` 執行 `git merge --no-ff` 之手動 fallback。
 
 - **Commit 格式**：Angular Standard (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`).
 - **精確 Commit 檔案範疇禁令 (Scope-Isolated Commit Only)**：
@@ -100,7 +103,7 @@
   3. **程式碼潔淨度審計 (Phase 6)**：暫時 Spec / Issue 代號（如 todo 檔名、Task ID、分支名）嚴禁遺留在 production code 的 docstrings 或註解中進入 main。僅限引用長效 Canonical Contract。
   4. **文件收斂與契約歸檔 (Phase 7)**：調用 [`canonical_contract_archival`](skills/canonical_contract_archival/SKILL.md)。⚠️ **嚴禁 AI 自行決定清理範圍**，必須先列出候選清單向使用者確認。遵循「刪除是預設；封存是例外」果斷清理已提煉之過期 spec。
   5. **開發故事歸檔 (Phase 8)**：於 `docs/storys/` 建立 PARS 文檔。⚠️ **PARS 僅為歷史敘事日誌，絕非架構規範，絕不可作為架構證據**。
-  6. **合併指令交付 (Phase 10)**：僅當所有前置閘門完成後，方可交付包含結構化日誌的 `--no-ff` 合併指令，AI 嚴禁自行執行 merge。
+  6. **合併指令交付與整合授權 (Phase 10)**：僅當所有前置閘門完成後，依授權模式推進整合。本機 AI 嚴禁自行執行 merge；優先由 ChatGPT 在獲得使用者明確授權後透過 GitHub 以 merge commit 整合，或由本機交付包含結構化日誌的 `temp-main` `--no-ff` 指令供使用者手動執行 fallback。整合後 `temp-main` 僅需 `git fetch origin` 與 `git pull --ff-only` 同步。
 
 
 

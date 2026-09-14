@@ -17,9 +17,10 @@ Human / ChatGPT
   -> focused tests under project policy
   -> EVIDENCE.md
   -> ChatGPT final semantic / architecture review from GitHub
+  -> user-authorized merge via ChatGPT GitHub integration (or manual temp-main fallback)
 ```
 
-GitHub is the message bus. Tool roles are deliberately separated: Scout discovers evidence, ChatGPT/user own the contract, Gemini writes implementation code, and OpenCode reviewers independently verify the candidate.
+GitHub is the message bus. Tool roles are deliberately separated: Scout discovers evidence, ChatGPT/user own the contract, Gemini writes implementation code, and OpenCode reviewers independently verify the candidate. Local agents (Gemini/Antigravity/OpenCode) never merge or push main; ChatGPT integrates via GitHub merge commit only after closeout gates pass and the user explicitly authorizes merge.
 
 ## 2. Canonical task package
 
@@ -162,9 +163,15 @@ OpenCode `spec-reviewer` compares the candidate diff against explicit scope, inv
 
 OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift. It is read-only.
 
-### Final reviewer
+### Final reviewer and remote orchestrator
 
 ChatGPT performs final architecture/semantic review from GitHub using the Final spec, current diff/commit, evidence artifacts, and current implementation. `EVIDENCE.md` is supporting evidence, not a substitute for direct review.
+
+### Integration authority
+
+- **Local agents (Gemini / Antigravity / OpenCode)**: **Strictly forbidden** from merging branches, pushing to `main`, deleting branches, or performing integration actions.
+- **ChatGPT Remote Orchestrator**: Authorized to integrate via GitHub API only after all closeout gates pass and the user gives explicit merge authorization. Integration must use GitHub merge-commit semantics (no squash/rebase).
+- **User**: Ultimate integration authority. If ChatGPT integration is unavailable or manual flow is preferred, the user performs `git merge --no-ff` in `temp-main`. `temp-main` remains the permanent local `main` baseline.
 
 ## 6. Task lifecycle
 
@@ -227,7 +234,13 @@ The gate never runs the full test suite. Full-suite execution remains user-only 
 
 Commit/push the candidate patch and tracked task evidence. The user can ask ChatGPT to review the branch or PR directly from GitHub.
 
-During branch closeout, durable invariants/contracts are extracted to long-lived architecture/feature documentation, historical narrative may be recorded under `docs/storys/`, and temporary task artifacts are removed when no longer needed. Active task packages are not permanent architecture documentation.
+Branch closeout follows the gated workflow defined in `.agents/skills/branch_completion_workflow/SKILL.md`:
+- Local agents extract durable contracts, update canonical documentation, and verify zero regressions against `temp-main`.
+- Local agents must never perform the merge.
+- Once all closeout gates pass and the user gives explicit authorization, ChatGPT performs the GitHub merge using merge-commit semantics.
+- `temp-main` remains the local permanent `main` baseline and simply fast-forwards (`git fetch origin && git pull --ff-only`).
+- If remote integration is unavailable, the user executes manual `git merge --no-ff` in `temp-main` as a fallback.
+- Active task packages are not permanent architecture documentation; durable invariants are archived to canonical docs.
 
 ## 7. Reviewer finding contract
 
