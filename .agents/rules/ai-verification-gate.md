@@ -9,14 +9,16 @@ Before implementation:
 3. Read the canonical `docs/tasks/<task-id>/SPEC.md` completely.
 4. Read `docs/tasks/<task-id>/CONTEXT.md` when it exists.
 5. Treat `SPEC.md` scope, invariants, acceptance criteria, and non-goals as authoritative. `task.json` is automation metadata only; Scout output is supporting evidence only.
-6. If the spec and current implementation materially conflict in a way that changes the requested behavior, stop and report the conflict instead of silently reinterpreting the task.
+6. If `SPEC.md` is explicitly marked `Status: Draft`, stop before production implementation and report that the contract still requires ChatGPT/user finalization after Scout evidence.
+7. If the spec and current implementation materially conflict in a way that changes the requested behavior, stop and report the conflict instead of silently reinterpreting the task.
 
 During implementation:
 
-1. Implement the smallest coherent change that satisfies the contract.
+1. Implement the smallest coherent change that satisfies the Final contract.
 2. Preserve verified existing behavior outside the explicit change scope.
 3. Do not opportunistically perform unrelated lifecycle migration, architecture cleanup, or shared-framework extraction.
 4. Run only the smallest directly relevant focused tests allowed by the project test policy. Never run the full suite on your own.
+5. Do not modify `SPEC.md` merely to make the implementation appear compliant. Material contract changes belong to the contract owner.
 
 Before declaring the task ready for final review:
 
