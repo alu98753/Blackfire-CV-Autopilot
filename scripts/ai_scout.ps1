@@ -150,6 +150,7 @@ $proc.BeginErrorReadLine()
 
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $timedOut = $false
+$killConfirmed = $false
 
 try {
     while ($true) {
@@ -165,7 +166,10 @@ try {
                 Write-Warning "Failed to kill process $($proc.Id): $_"
             }
             # Wait for child process to actually exit before cleanup
-            $proc.WaitForExit(3000) | Out-Null
+            $killConfirmed = $proc.WaitForExit(3000) -or $proc.HasExited
+            if (-not $killConfirmed) {
+                Write-Warning "Process termination unconfirmed: client PID $($proc.Id) did not exit within 3000ms after kill signal."
+            }
             break
         }
 
@@ -179,6 +183,8 @@ try {
 } finally {
     Unregister-Event -SourceIdentifier $outEvent.Name -Force -ErrorAction SilentlyContinue
     Unregister-Event -SourceIdentifier $errEvent.Name -Force -ErrorAction SilentlyContinue
+    Get-Job -Name $outEvent.Name -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue
+    Get-Job -Name $errEvent.Name -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue
 }
 
 # Snapshot captured lines under lock
@@ -197,7 +203,11 @@ $fullRaw = ($capturedArray + $errArray) -join "`n"
 Set-Content -Path $rawLogPath -Value $fullRaw -Encoding UTF8
 
 if ($timedOut) {
-    throw "OpenCode scout timed out after ${TimeoutSeconds}s (client PID $($proc.Id) terminated). Canonical CONTEXT.md left untouched."
+    if ($killConfirmed) {
+        throw "OpenCode scout timed out after ${TimeoutSeconds}s (client PID $($proc.Id) terminated). Canonical CONTEXT.md left untouched."
+    } else {
+        throw "OpenCode scout timed out after ${TimeoutSeconds}s (termination failure: client PID $($proc.Id) could not be confirmed exited). Canonical CONTEXT.md left untouched."
+    }
 }
 
 if ($exitCode -ne 0) {

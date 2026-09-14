@@ -57,4 +57,4 @@
 
 **GO WITH SPEC CHANGES**
 
-- **Reason**: The empirical observation of this execution definitively proves that OpenCode Scout with the default model (`big-pickle`) consistently exceeds the acceptable 8-minute SLA when unconstrained, while providing zero terminal visibility due to `Out-String` buffering in `ai_scout.ps1`. The draft spec's direction—introducing bounded timeouts, real-time terminal streaming, atomic promotion, and soft-budget prompt constraints—is validated by direct local evidence and is ready for spec finalization and implementation.
+- **Reason**: The empirical observation of this execution demonstrates that OpenCode Scout with the default model (`big-pickle`) exceeded the 8-minute budget when unconstrained, while providing zero terminal visibility due to `Out-String` buffering in `ai_scout.ps1`. The draft spec's direction—introducing bounded timeouts, real-time terminal streaming, atomic promotion, and soft-budget prompt constraints—is directly supported by this observed execution evidence and is ready for spec finalization and implementation.
