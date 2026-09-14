@@ -1,23 +1,16 @@
-# 專案待辦事項與臨時草稿專區 (Todos & Scratch Notes) 📝
+# Legacy Todos
 
-本目錄集中收納《黑火遠征》專案在開發、測試、長掛機與除錯過程中的**待辦事項 (Todos)**、**臨時分析 (Temp Notes)**、**測試防護網計畫 (Test Matrix Plans)** 與**資源變化草稿 (Scratch Records)**。
+> Status: deprecated / frozen for new work.
 
----
+`docs/todos/` contains task notes, specs, bug investigations, and backlog material created before the canonical task-package workflow was introduced.
 
-## 📂 檔案清單與用途索引
+From this point forward:
 
-| 檔案名稱 | 內容摘要與維護目的 | 當前狀態 |
-| :--- | :--- | :--- |
-| [future_work.md](future_work.md) | **待辦事項與未來規劃**：包含長掛機注意事項、高/低優先度優化、已解決但觀察中項目與暫時擱置需求。 | 📌 長期維護 |
-| [precondition_contracts_todo.md](precondition_contracts_todo.md) | **條件契約現況與未完成事項**：盤點 selection、dispatch、maintenance、postcondition、completion、recovery 與 `REACH_TOWN` 情境分類。 | 📌 專題 inventory／TODO |
-| [test_dev_temp.md](test_dev_temp.md) | **輕量化行為測試防護網建構計畫**：依 Google 軟體工程標準定義的 5 大領域行為測試開發矩陣與勾選清單。 | 🧪 測試開發計畫 |
+- **Do not add new tasks or specs under `docs/todos/`.**
+- **Do not add new backlog items to `future_work.md`.**
+- New unscheduled ideas go to [`docs/tasks/BACKLOG.md`](../tasks/BACKLOG.md).
+- New active work uses [`docs/tasks/<task-id>/`](../tasks/README.md) with `SPEC.md` and `task.json`.
+- When a legacy item becomes active work, migrate only the still-relevant material into the new task package. Do not treat the legacy file as a second active source of truth.
+- Cleanup/deletion of the old source follows normal branch closeout and canonical-contract archival rules.
 
----
-
-## 🛠️ 維護與生命週期規範
-
-1. **草稿與除錯筆記**：
-   - 當特定問題（如卡死問題）完成修復並於 `docs/storys/` 產出正式 PARS 開發故事後，可將對應的筆記更新或歸檔。
-2. **待辦與優化項目**：
-   - 新增待辦需求時，統一記錄於 [future_work.md](future_work.md)。
-   - 功能完成後，請於收尾時更新狀態為 `[已完成]`，並在 `docs/storys/` 撰寫 PARS 故事。
+Existing files remain here temporarily to avoid a risky one-shot historical migration. They are legacy references, not the canonical location for newly started work.
