@@ -514,36 +514,46 @@ foreach ($item in $promotionItems) {
     }
 }
 
-$promotedItems = New-Object System.Collections.Generic.List[hashtable]
 $promotionFailed = $false
 $promotionError = ""
+$rollbackFailures = New-Object System.Collections.Generic.List[string]
 
 try {
     foreach ($item in $promotionItems) {
-        if (-not [string]::IsNullOrWhiteSpace($_FailPromotionOnTarget) -and $_FailPromotionOnTarget -eq $item.Name) {
-            throw "Simulated promotion failure on target '$($item.Name)'"
-        }
         Copy-Item -Path $item.CandidatePath -Destination $item.CanonicalPath -Force
-        $promotedItems.Add($item)
+        if (-not [string]::IsNullOrWhiteSpace($_FailPromotionOnTarget) -and $_FailPromotionOnTarget -eq $item.Name) {
+            throw "Simulated promotion failure on target '$($item.Name)' after copy"
+        }
     }
 } catch {
     $promotionFailed = $true
     $promotionError = $_.Exception.Message
 
-    # Rollback all modified canonical artifacts to pre-gate state
-    foreach ($promoted in $promotedItems) {
-        if ($promoted.Existed) {
-            Copy-Item -Path $promoted.BackupPath -Destination $promoted.CanonicalPath -Force
-        } else {
-            if (Test-Path $promoted.CanonicalPath) {
-                Remove-Item -Path $promoted.CanonicalPath -Force
+    # Rollback all promotion items to pre-gate state; each item independently try/catched
+    foreach ($item in $promotionItems) {
+        try {
+            if ($item.Existed) {
+                Copy-Item -Path $item.BackupPath -Destination $item.CanonicalPath -Force
+            } else {
+                if (Test-Path $item.CanonicalPath) {
+                    Remove-Item -Path $item.CanonicalPath -Force
+                }
             }
+        } catch {
+            $rollbackFailures.Add("Rollback failure on '$($item.Name)' ($($item.CanonicalPath)): $($_.Exception.Message)")
         }
     }
 }
 
 if ($promotionFailed) {
-    Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: Promotion to canonical artifacts failed: $promotionError. Rolled back all canonical artifacts to pre-gate state."
+    if ($rollbackFailures.Count -gt 0) {
+        Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: Promotion to canonical artifacts failed: $promotionError."
+        foreach ($rf in $rollbackFailures) {
+            Write-Warning "  -> $rf"
+        }
+    } else {
+        Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: Promotion to canonical artifacts failed: $promotionError. Rolled back all canonical artifacts to pre-gate state."
+    }
     exit 1
 }
 
