@@ -1,18 +1,17 @@
 # AI Development Verification Workflow v1
 
-> Status: experimental development workflow. This document defines the repository contract for AI-assisted task localization and read-only verification. It does not change game runtime behavior.
+> Status: experimental development workflow. This document defines the repository contract for AI-assisted task specification, localization, implementation handoff, and read-only verification. It does not change game runtime behavior.
 
 ## 1. Purpose
 
-The project uses ChatGPT for architecture/specification/final review, Gemini/Antigravity as the primary implementation writer, and OpenCode for read-only localization and verification. The main workflow problem is manual context transfer between tools.
-
-GitHub-tracked task packages are the shared handoff surface:
+The project uses ChatGPT for architecture/specification/final review, Gemini/Antigravity as the primary implementation writer, and OpenCode for read-only localization and verification. GitHub-tracked task packages are the shared handoff surface so the user does not need to manually copy specifications, reviewer output, or evidence between tools.
 
 ```text
 Human / ChatGPT
-  -> docs/tasks/<task-id>/SPEC.md
-  -> docs/tasks/<task-id>/task.json
+  -> lightweight repository survey
+  -> Draft SPEC.md + task.json
   -> OpenCode Scout -> CONTEXT.md
+  -> ChatGPT re-checks evidence and finalizes SPEC.md
   -> Gemini/Antigravity implementation
   -> OpenCode read-only reviewers -> reviews/*
   -> focused tests under project policy
@@ -20,7 +19,7 @@ Human / ChatGPT
   -> ChatGPT final semantic / architecture review from GitHub
 ```
 
-GitHub is the message bus. The user should not need to copy specifications, reviewer output, or verification evidence between ChatGPT and the IDE when the same information can be committed in the task package.
+GitHub is the message bus. Tool roles are deliberately separated: Scout discovers evidence, ChatGPT/user own the contract, Gemini writes implementation code, and OpenCode reviewers independently verify the candidate.
 
 ## 2. Canonical task package
 
@@ -37,15 +36,69 @@ docs/tasks/<task-id>/
    └─ regression-review.md
 ```
 
-`SPEC.md` is the only normative behavioral contract. All other files are supporting metadata or evidence and must not silently redefine the spec.
+`SPEC.md` is the only normative behavioral contract. All other files are supporting metadata or evidence and must not silently redefine it.
 
-This layout deliberately avoids `.ai/tasks/`: task intent belongs to the project, not to one AI tool. Tool-specific configuration remains under `.opencode/` and `.agents/`.
+Task intent belongs to the project, not to one AI tool. Tool-specific configuration remains under `.opencode/` and `.agents/`.
 
-## 3. Artifact responsibilities
+## 3. Specification maturity
 
-### 3.1 `SPEC.md`
+A normal task passes through:
 
-Defines what completion means. It should include, as applicable:
+```text
+Draft SPEC -> Scout evidence -> Final SPEC -> implementation
+```
+
+`SPEC.md` should declare near the top either:
+
+```text
+Status: Draft
+```
+
+or:
+
+```text
+Status: Final
+```
+
+### Draft
+
+A Draft is complete enough to localize the problem but may still contain uncertainty. It should define at least:
+
+- goal / observed problem;
+- initial scope;
+- known invariants;
+- non-goals;
+- provisional acceptance criteria;
+- explicit uncertainty / open questions.
+
+The Draft must be grounded by a lightweight ChatGPT repository survey before creation. That survey should identify the current architecture parent, relevant implementation area, known behavior constraints, and whether the problem appears real. It should not duplicate the exhaustive codebase localization delegated to Scout.
+
+### Scout evidence
+
+OpenCode Scout reads the Draft, current code, tests, and architecture documents and writes `CONTEXT.md`. It should identify:
+
+- relevant files and symbols;
+- actual control flow;
+- existing tests and safety mechanisms;
+- callers / sibling paths / shared state;
+- timing, lifecycle, ownership, and regression risks;
+- architecture conflicts;
+- uncertainty;
+- minimal plausible change surface.
+
+Scout is an evidence provider, not the contract owner. It must not rewrite `SPEC.md` or decide product/architecture intent.
+
+### Final
+
+After `CONTEXT.md` is pushed, ChatGPT + user re-read the Draft, Scout evidence, current implementation, tests, and architecture contracts. They resolve unsupported assumptions and update `SPEC.md` to `Status: Final`.
+
+Production implementation must not begin while `SPEC.md` is explicitly `Status: Draft`.
+
+## 4. Artifact responsibilities
+
+### `SPEC.md`
+
+Defines what completion means. A Final spec should include, as applicable:
 
 - goal and observed behavior;
 - expected behavior;
@@ -56,9 +109,9 @@ Defines what completion means. It should include, as applicable:
 - required focused tests;
 - forbidden shortcuts.
 
-### 3.2 `task.json`
+### `task.json`
 
-Contains automation metadata only. The spec path is not configurable: scripts always resolve `docs/tasks/<task-id>/SPEC.md`.
+Contains automation metadata only. The spec path is not configurable; scripts always resolve `docs/tasks/<task-id>/SPEC.md`.
 
 Typical fields:
 
@@ -75,31 +128,31 @@ Typical fields:
 }
 ```
 
-### 3.3 `CONTEXT.md`
+### `CONTEXT.md`
 
-Generated by the read-only Scout before implementation where possible. It records relevant files/symbols, actual control flow, existing tests/safety mechanisms, regression risks, uncertainty, and minimal likely change surface.
+Read-only localization evidence generated by Scout. It may challenge assumptions in the Draft but cannot redefine the task contract.
 
-Scout output is evidence, not authority. A conflict between Scout findings, current code, and the canonical spec must be surfaced rather than silently resolved.
-
-### 3.4 `reviews/*` and `EVIDENCE.md`
+### `reviews/*` and `EVIDENCE.md`
 
 The verification gate stores independent reviewer output under `reviews/` and writes a summary to `EVIDENCE.md`.
 
 A blocking reviewer finding must identify concrete contract/regression evidence. Style preference, unsupported speculation, or architecture taste without a reachable path is advisory and must not block the gate.
 
-## 4. Roles and write ownership
+## 5. Roles and write ownership
 
 ### Contract owner
 
-Usually ChatGPT + user. Defines the task contract and architecture trade-offs.
+ChatGPT + user. They define behavior, architecture trade-offs, scope, invariants, and acceptance criteria. They alone promote a Draft spec to Final.
 
 ### Scout
 
-OpenCode `scout` is read-only. It localizes the codebase and tests but may not edit files, execute shell commands, or launch repair subagents.
+OpenCode `scout` is read-only. It localizes the current repository and returns evidence. It may not edit files, execute shell commands, launch repair subagents, or own the task contract.
 
 ### Writer
 
-Gemini/Antigravity is the only implementation writer in v1. It reads `SPEC.md` and `CONTEXT.md`, implements the smallest coherent patch, runs only allowed focused tests, and invokes the verification gate before declaring the candidate ready.
+Gemini/Antigravity is the only implementation writer in v1. It reads the Final `SPEC.md` and `CONTEXT.md`, implements the smallest coherent patch, preserves verified behavior outside scope, runs only allowed focused tests, and invokes the verification gate before declaring the candidate ready.
+
+If `SPEC.md` is marked Draft, the writer must stop before production implementation.
 
 ### Spec reviewer
 
@@ -107,13 +160,13 @@ OpenCode `spec-reviewer` compares the candidate diff against explicit scope, inv
 
 ### Regression reviewer
 
-OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, and architecture drift. It is read-only.
+OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift. It is read-only.
 
 ### Final reviewer
 
-ChatGPT performs the final architecture/semantic review from GitHub using the canonical spec, current diff/commit, evidence artifacts, and current repository implementation. `EVIDENCE.md` is supporting evidence, not a substitute for final review.
+ChatGPT performs final architecture/semantic review from GitHub using the Final spec, current diff/commit, evidence artifacts, and current implementation. `EVIDENCE.md` is supporting evidence, not a substitute for direct review.
 
-## 5. Task lifecycle
+## 6. Task lifecycle
 
 ### Backlog
 
@@ -123,11 +176,18 @@ New ideas and not-yet-specified work go to:
 docs/tasks/BACKLOG.md
 ```
 
-When an item becomes active development work, promote it into a unique `docs/tasks/<task-id>/` package. Do not maintain duplicate active descriptions in both the backlog and task package.
+When work becomes active, promote it into a unique `docs/tasks/<task-id>/` package. Do not maintain duplicate active descriptions in both backlog and task package.
 
-### Phase A — Contract
+### Phase A1 — Lightweight contract framing
 
-Create `SPEC.md` and `task.json` in the task directory. There is no global `current-task` file because the repository uses multiple permanent worktrees.
+Before creating a task, ChatGPT checks current GitHub `main`, the relevant architecture baseline, nearby implementation, and existing task/backlog material. The purpose is to establish the real problem boundary, not to perform a full duplicate code audit.
+
+Create:
+
+```text
+docs/tasks/<task-id>/SPEC.md   # Status: Draft
+docs/tasks/<task-id>/task.json
+```
 
 ### Phase B — Localization
 
@@ -139,9 +199,17 @@ From the task worktree:
 
 This creates or replaces `docs/tasks/<task-id>/CONTEXT.md`.
 
+### Phase A2 — Contract finalization
+
+Push Scout evidence. ChatGPT then re-inspects the task against `CONTEXT.md`, current code/tests, and architecture contracts. Unsupported assumptions are removed or corrected and `SPEC.md` becomes `Status: Final`.
+
+Only after this point may production implementation begin.
+
 ### Phase C — Implementation
 
-Gemini/Antigravity implements only the requested scope. `.agents/AGENTS.md`, applicable project skills, architecture contracts, and the task `SPEC.md` remain authoritative.
+Gemini/Antigravity implements only the Final contract. `.agents/AGENTS.md`, applicable skills, architecture contracts, and `SPEC.md` remain authoritative.
+
+Behavior-preserving refactors remain behavior-preserving unless the Final spec explicitly changes behavior. The writer must not modify the spec merely to make its patch appear compliant.
 
 ### Phase D — Read-only verification
 
@@ -161,7 +229,7 @@ Commit/push the candidate patch and tracked task evidence. The user can ask Chat
 
 During branch closeout, durable invariants/contracts are extracted to long-lived architecture/feature documentation, historical narrative may be recorded under `docs/storys/`, and temporary task artifacts are removed when no longer needed. Active task packages are not permanent architecture documentation.
 
-## 6. Reviewer finding contract
+## 7. Reviewer finding contract
 
 Reviewer output begins with:
 
@@ -187,7 +255,7 @@ Confidence:
 
 The orchestration script parses only the explicit verdict header; it does not ask another model to reinterpret reviewer prose.
 
-## 7. Test policy
+## 8. Test policy
 
 This workflow inherits [AGENTS.md](../../.agents/AGENTS.md) and [project-test-rules](../../.agents/skills/project-test-rules/SKILL.md):
 
@@ -196,7 +264,7 @@ This workflow inherits [AGENTS.md](../../.agents/AGENTS.md) and [project-test-ru
 - The full suite is executed manually by the user when required.
 - A reviewer finding is not proof of a bug; blocking claims should be grounded by tests, direct control-flow evidence, or reproducible behavior where practical.
 
-## 8. Multi-worktree invariant
+## 9. Multi-worktree invariant
 
 Task state is namespaced by task id:
 
@@ -206,15 +274,15 @@ docs/tasks/<task-id>/
 
 Do not introduce `.ai/current-task`, `docs/tasks/current`, global mutable task state, or another singleton that could collide across permanent worktrees. Scripts always require an explicit `-Task` parameter.
 
-## 9. Model selection
+## 10. Model selection
 
 Agent roles are stable; model names are not. `.opencode/agents/*.md` defines role and permission boundaries without hard-coding a model.
 
-Model choice may be supplied by `task.json` or PowerShell arguments. This allows a current low-cost/free model such as Big Pickle to be used without making repository architecture depend on its continued availability.
+Model choice may be supplied by `task.json` or PowerShell arguments. A current low-cost/free model may be used without making repository architecture depend on its continued availability.
 
 Provider credentials are local user configuration and must never be committed.
 
-## 10. Installation boundary
+## 11. Installation boundary
 
 Repository configuration does not silently install or authenticate OpenCode during task execution. Bootstrap is explicit:
 
@@ -224,7 +292,7 @@ Repository configuration does not silently install or authenticate OpenCode duri
 
 After installation, the user completes the interactive OpenCode `/connect` flow. Secrets remain outside the repository.
 
-## 11. Legacy `docs/todos/`
+## 12. Legacy `docs/todos/`
 
 `docs/todos/` predates this workflow and is frozen legacy storage after this workflow lands:
 
@@ -235,7 +303,7 @@ After installation, the user completes the interactive OpenCode `/connect` flow.
 
 This avoids a disruptive one-shot historical-document migration while ensuring all new work has one canonical location from now on.
 
-## 12. v1 non-goals
+## 13. v1 non-goals
 
 Version 1 does not implement:
 
@@ -250,14 +318,16 @@ Version 1 does not implement:
 
 A later version may add a bounded repair loop only after reviewer quality is validated on several real tasks.
 
-## 13. Pilot success criteria
+## 14. Pilot success criteria
 
 The workflow is useful if several real tasks show that:
 
-1. Scout context reduces writer localization mistakes.
-2. Independent reviewers identify concrete spec/regression problems before final ChatGPT review.
-3. Reviewer noise remains low enough that findings are actionable.
-4. Final ChatGPT review usually requires fewer implementation-repair cycles.
-5. The user no longer needs to copy specifications, implementation summaries, or review findings between ChatGPT and the IDE.
+1. Draft framing is fast enough that ChatGPT does not duplicate Scout work.
+2. Scout context materially reduces wrong assumptions before implementation.
+3. Final spec changes are driven by repository evidence rather than model guesswork.
+4. Independent reviewers identify concrete spec/regression problems before final ChatGPT review.
+5. Reviewer noise remains low enough that findings are actionable.
+6. Final ChatGPT review usually requires fewer implementation-repair cycles.
+7. The user no longer needs to copy specifications, implementation summaries, or review findings between ChatGPT and the IDE.
 
 IntentRouting Observability is a suitable first pilot because its change surface is small, behavior should remain unchanged, and its logging contract can be verified independently of routing policy.
