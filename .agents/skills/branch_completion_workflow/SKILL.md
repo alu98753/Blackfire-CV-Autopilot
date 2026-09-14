@@ -425,7 +425,7 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
 
    - **共通收尾步驟：Development Worktree Parking & Branch Cleanup（停泊於基準並對稱清理舊分支）**：
 
-     在 `temp-main` 完成 `--no-ff` merge 並成功 `git push origin main` 後，必須先確認遠端 `origin/main` 已包含本次完成分支：
+     無論透過整合路徑 A（ChatGPT 遠端 GitHub 合併）或路徑 B（使用者於 `temp-main` 手動合併），當 `origin/main` 已成功包含本次完成分支後，必須先透過 Git 指令驗證遠端 `origin/main` 確實已包含該 branch 的完整 ancestry：
 
      ```powershell
      git fetch origin
