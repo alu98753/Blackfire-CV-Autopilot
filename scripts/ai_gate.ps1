@@ -17,7 +17,8 @@ param(
     [string[]]$_SpecReviewerArgumentsOverride,
     [string[]]$_RegressionReviewerArgumentsOverride,
     [string]$_PythonExecutableOverride,
-    [string[]]$_PythonArgumentsOverride
+    [string[]]$_PythonArgumentsOverride,
+    [string]$_FailPromotionOnTarget
 )
 
 $ErrorActionPreference = "Stop"
@@ -424,13 +425,6 @@ if ($infraBlocked) {
     exit 1
 }
 
-# Both reviewers and focused tests completed without infrastructure failures!
-# Gate-level atomic promotion: promote all staged reviewer candidates to canonical reviews/*
-foreach ($agentName in $candidates.Keys) {
-    $c = $candidates[$agentName]
-    Move-Item -Path $c.CandidatePath -Destination $c.CanonicalPath -Force
-}
-
 $specVerdict = $verdicts["spec-reviewer"]
 $regressionVerdict = $verdicts["regression-reviewer"]
 
@@ -478,9 +472,82 @@ $evidence.Add("## Candidate snapshot")
 $evidence.Add("")
 $evidence.Add("Ephemeral status/diff snapshots are stored under .runtime/ai_gate/$Task/ and are intentionally git-ignored.")
 
+# Write candidate EVIDENCE.md to runtime directory before promotion
+$candidateEvidencePath = Join-Path $runtimeDir "candidate_EVIDENCE.md"
 $evidencePath = Join-Path $taskDir "EVIDENCE.md"
-Set-Content -Path $evidencePath -Value ($evidence -join "`n") -Encoding UTF8
-Write-Host "Verification evidence written to docs/tasks/$Task/EVIDENCE.md"
+Set-Content -Path $candidateEvidencePath -Value ($evidence -join "`n") -Encoding UTF8
+
+# Both reviewers and focused tests completed without infrastructure failures!
+# Transaction-safe promotion: backup existing canonical artifacts and promote candidates
+$promotionItems = @(
+    @{
+        Name = "spec-review"
+        CandidatePath = $candidates["spec-reviewer"].CandidatePath
+        CanonicalPath = $candidates["spec-reviewer"].CanonicalPath
+    },
+    @{
+        Name = "regression-review"
+        CandidatePath = $candidates["regression-reviewer"].CandidatePath
+        CanonicalPath = $candidates["regression-reviewer"].CanonicalPath
+    },
+    @{
+        Name = "evidence"
+        CandidatePath = $candidateEvidencePath
+        CanonicalPath = $evidencePath
+    }
+)
+
+$backupDir = Join-Path $runtimeDir "canonical_backup"
+if (Test-Path $backupDir) {
+    Remove-Item -Path $backupDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+
+foreach ($item in $promotionItems) {
+    if (Test-Path $item.CanonicalPath) {
+        $backupPath = Join-Path $backupDir "$($item.Name).bak"
+        Copy-Item -Path $item.CanonicalPath -Destination $backupPath -Force
+        $item["Existed"] = $true
+        $item["BackupPath"] = $backupPath
+    } else {
+        $item["Existed"] = $false
+    }
+}
+
+$promotedItems = New-Object System.Collections.Generic.List[hashtable]
+$promotionFailed = $false
+$promotionError = ""
+
+try {
+    foreach ($item in $promotionItems) {
+        if (-not [string]::IsNullOrWhiteSpace($_FailPromotionOnTarget) -and $_FailPromotionOnTarget -eq $item.Name) {
+            throw "Simulated promotion failure on target '$($item.Name)'"
+        }
+        Copy-Item -Path $item.CandidatePath -Destination $item.CanonicalPath -Force
+        $promotedItems.Add($item)
+    }
+} catch {
+    $promotionFailed = $true
+    $promotionError = $_.Exception.Message
+
+    # Rollback all modified canonical artifacts to pre-gate state
+    foreach ($promoted in $promotedItems) {
+        if ($promoted.Existed) {
+            Copy-Item -Path $promoted.BackupPath -Destination $promoted.CanonicalPath -Force
+        } else {
+            if (Test-Path $promoted.CanonicalPath) {
+                Remove-Item -Path $promoted.CanonicalPath -Force
+            }
+        }
+    }
+}
+
+if ($promotionFailed) {
+    Write-Warning "AI verification gate INFRASTRUCTURE_BLOCKED: Promotion to canonical artifacts failed: $promotionError. Rolled back all canonical artifacts to pre-gate state."
+    exit 1
+}
+
+Write-Host "Canonical reviewer reports and EVIDENCE.md successfully promoted."
 
 if ($candidateBlocked -or $specVerdict.Verdict -ne "PASS" -or $specVerdict.Blocking -ne 0 -or $regressionVerdict.Verdict -ne "PASS" -or $regressionVerdict.Blocking -ne 0 -or -not $testsPassed) {
     Write-Host "AI verification gate CANDIDATE_BLOCKED. Inspect EVIDENCE.md and reviewer reports."
