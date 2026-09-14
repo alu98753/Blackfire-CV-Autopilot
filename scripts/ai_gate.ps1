@@ -301,7 +301,10 @@ Repository status snapshot: .runtime/ai_gate/$Task/status.txt
 Candidate diff snapshot: .runtime/ai_gate/$Task/diff.patch
 Comparison baseline: $baseRef
 
-Review the candidate patch using the current repository state. Follow the '$agentName' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands.
+Review the candidate patch using the current repository state. Follow the '$agentName' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands. Stop using tools early once enough evidence exists to determine PASS or BLOCK.
+Your final output MUST begin on line 1 with the exact two-line header without any preamble, markdown formatting, or step summary:
+VERDICT: PASS|BLOCK
+BLOCKING_FINDINGS: <count>
 "@
 
     $invocation = Get-OpenCodeInvocation -Agent $agentName -PromptText $prompt
