@@ -40,9 +40,9 @@ The following timeline reconstructs the lifecycle of `intent-routing-observabili
 | **3. Descriptor Repair** | `e078f8b` | 2026-09-15 11:20:04 | Coarse | User | Added `models.scout` and `models.review` to `task.json`. | HIGH |
 | **4. Scout Re-run** | `49291a0` | 2026-09-15 11:25:34 | UNKNOWN (unrecorded) | OpenCode Scout | Generated `CONTEXT.md` mapping architecture boundaries. | MEDIUM |
 | **5. Final SPEC & Tests** | `0aebca2`, `fd88356` | 2026-09-15 11:26:28 | Coarse | ChatGPT / User | SPEC promoted to `Status: Final`; focused tests specified. | HIGH |
-| **6. Implementation** | Working tree edits | ~11:26 - 11:33 | ~7m (proxy) | Gemini Writer | Implemented diagnostics, updated executor logging, added 5 focused tests. | HIGH |
+| **6. Implementation** | Working tree edits | ~11:26 - 11:33 | ~7m (proxy) | Gemini Writer | Implemented diagnostics, updated executor logging, added focused tests in `test_behavior_routing_observability.py`. | HIGH |
 | **7. Focused Tests** | Local CLI | 2026-09-15 11:33:25 | 0.144s (measured) | Gemini Writer | 32 tests passed cleanly (unit/behavioral). | HIGH |
-| **8. Gate Attempt 1 (Mimo)** | `.runtime/...` log | 2026-09-15 11:36:16 | 158.6s (measured) | OpenCode Mimo | Semantic PASS, but `**VERDICT: PASS**` header triggered regex extraction failure (`Exit 1`). | HIGH |
+| **8. Gate Attempt 1 (Mimo)** | Local `.runtime/...` log (ephemeral) | 2026-09-15 11:36:16 | ~158.6s (local uncommitted log) | OpenCode Mimo | Child process completed normally (exit code 0), but `**VERDICT: PASS**` header caused Gate payload extraction to fail, terminating Gate with Exit 1 (`INFRASTRUCTURE_BLOCKED`). | LOW |
 | **9. Degraded Review** | `8975206` | 2026-09-15 11:37:50 | Coarse | Gemini Writer | Created `degraded-gemini-review.md` labeled `NOT_INDEPENDENT`. | HIGH |
 | **10. Re-sync & Model Select** | `6c17c0d` | 2026-09-15 11:44:58 | Coarse | User | Merged remote `main`; selected `opencode/big-pickle` for rerun. | HIGH |
 | **11. Gate Attempt 2 (BigPickle)** | `74bbbae` | 2026-09-15 11:49:52 | Spec: 80.2s, Regr: 119.1s | OpenCode BigPickle | Spec review: PASS (blocking=0); Regression review: PASS (blocking=0). Exit 0. | HIGH |
@@ -55,10 +55,10 @@ The following timeline reconstructs the lifecycle of `intent-routing-observabili
 | Item | Quantitative Metric / Artifact Evidence | Data Source | Confidence |
 | :--- | :--- | :--- | :--- |
 | **Task Descriptor Omission** | `task.json` initially lacked `models` block; fixed in `e078f8b`. | Commit `e078f8b`, `SPEC.md` § Authoritative pilot basis | HIGH |
-| **Mimo Gate Duration** | Spec-reviewer attempt 1 ran for 158.6s before exiting with code 0. | Local task log `task-819.log`, `.runtime/...` log | HIGH |
-| **Mimo Semantic Output** | Found 0 blocking findings, concluding with `**VERDICT: PASS**`. | `spec-reviewer_attempt_1.log` (line 20), `degraded-gemini-review.md` | HIGH |
-| **Mimo Extraction Failure** | Regex `\AVERDICT:\s*(PASS|BLOCK)` failed due to `**` prefix. | `scripts/ai_gate.ps1` (line 401, 411, 448), `task-819.log` | HIGH |
-| **Stage Halt** | Regression reviewer did not run because spec reviewer failed extraction. | `task-819.log`, `ai_gate.ps1` line 480 candidate loop | HIGH |
+| **Mimo Gate Duration** | Spec-reviewer attempt 1 ran for ~158.6s before child process exited 0; Gate script exited 1. | Local uncommitted task log `task-819.log`, `.runtime/...` log | LOW |
+| **Mimo Semantic Output** | Found 0 blocking findings, concluding with `**VERDICT: PASS**`. | Quoted in tracked `degraded-gemini-review.md` / `spec-reviewer_attempt_1.log` | MEDIUM |
+| **Mimo Extraction Failure** | Regex `\AVERDICT:\s*(PASS|BLOCK)` failed due to `**` prefix. | `scripts/ai_gate.ps1` (lines 401, 411, 448), local task log | HIGH |
+| **Stage Halt** | Regression reviewer did not run because spec reviewer failed extraction. | Local task log, `ai_gate.ps1` line 480 candidate loop | HIGH |
 | **BigPickle Spec Review** | Ran for 80.2s; produced valid canonical header `VERDICT: PASS` (blocking=0). | Canonical `EVIDENCE.md`, `reviews/spec-review.md` | HIGH |
 | **BigPickle Regr Review** | Ran for 119.1s; produced valid canonical header `VERDICT: PASS` (blocking=0). | Canonical `EVIDENCE.md`, `reviews/regression-review.md` | HIGH |
 | **Focused Test Suite** | 4 files, 32 unit/behavior tests; execution time 0.144s. | CLI output, `EVIDENCE.md` | HIGH |
@@ -79,7 +79,7 @@ The following timeline reconstructs the lifecycle of `intent-routing-observabili
     ```markdown
     ---\n\n**VERDICT: PASS**\n**BLOCKING_FINDINGS: 0**
     ```
-  - `Get-CanonicalReviewPayload` tried direct match (`\AVERDICT:`) which failed. It then fell back to embedded match (`(?m)^VERDICT:`), which failed because `**` preceded `VERDICT`. Even if embedded match matched, `Test-ReviewVerdictStructure` anchored with `\AVERDICT:`, rejecting leading asterisks.
+  - `Get-CanonicalReviewPayload` tried direct match (`\AVERDICT:`) which failed. It then fell back to embedded match (`(?m)^VERDICT:`), which failed because `**` preceded `VERDICT` on that line, meaning the regex never matched and extraction returned empty.
 - **Root Cause**: **Contract/parser brittleness**. The parser strictly assumed literal raw text without markdown header tolerance, while the prompt did not forbid markdown styling (bolding), creating a fragility trap for models that format conclusions in markdown.
 - **Classification**: `contract/parser brittleness`.
 
@@ -136,7 +136,7 @@ During the pilot, human interaction was required at multiple points. These are d
 
 ### 6.4 Model Routing, Timeout, and Step Budgets
 - **Decision**: **MEASURE MORE**.
-- **Rationale**: LOW to MEDIUM confidence. BigPickle succeeded in ~80.2s and ~119.1s, while Mimo ran for ~158.6s. However, this constitutes exactly one data point. The current 480s timeout policy and model fallback ordering must not be prematurely optimized based on a single pilot.
+- **Rationale**: LOW to MEDIUM confidence. BigPickle succeeded in ~80.2s and ~119.1s (HIGH confidence, canonical `EVIDENCE.md`), while Mimo ran for ~158.6s (LOW confidence, local ephemeral log). However, this constitutes exactly one data point. The current 480s timeout policy and model fallback ordering must not be prematurely optimized based on a single pilot.
 
 ### 6.5 Workflow Evidence Retention
 - **Decision**: **CHANGE** (Incorporate attempt history preservation into follow-up).
@@ -167,7 +167,7 @@ During the pilot, human interaction was required at multiple points. These are d
 ### Task 2: `gate-payload-robustness-v1` (P1 - Core Reliability)
 - **Problem Statement**: Strict regex parsing rejects semantically valid reviews that use Markdown formatting (bold, headings, backticks) on the `VERDICT` header.
 - **Responsibility Boundary**: Update `Get-CanonicalReviewPayload` and `Test-ReviewVerdictStructure` in `scripts/ai_gate.ps1` to tolerate common markdown wrapping (e.g. `**VERDICT: PASS**`, `# VERDICT: PASS`) while preserving strict semantic rejection of ambiguous or multiple verdicts. Preserve attempt history in `EVIDENCE.md`.
-- **Evidence & Confidence**: HIGH (Mimo failed with `**VERDICT: PASS**` after 158.6s of valid review).
+- **Evidence & Confidence**: HIGH for mechanism failure (tracked `degraded-gemini-review.md`), LOW for exact duration (~158.6s from local log).
 - **Separation Justification**: Strictly targets the parser and evidence persistence; does not alter model routing, timeouts, or task schemas.
 
 ### Task 3: `task-descriptor-schema-linting` (P2 - Developer Experience & Safety)
@@ -182,7 +182,7 @@ During the pilot, human interaction was required at multiple points. These are d
 
 ### 8.1 Semantic Commit Agent: Explicit Decision
 - **Decision**: **KEEP DEFERRED**.
-- **Evidence**: In the pilot, manual commit messages took negligible time (~1 minute) compared to diagnosing the 158.6s Gate parser failure and performing branch re-sync. Building an LLM-based commit summarizer addresses quality-of-life convenience, not workflow throughput or reliability. It remains deferred until P0/P1 reliability tasks are completed.
+- **Evidence**: In the pilot, manual commit messages took negligible time (~1 minute) compared to diagnosing the Gate parser failure and performing branch re-sync. Building an LLM-based commit summarizer addresses quality-of-life convenience, not workflow throughput or reliability. It remains deferred until P0/P1 reliability tasks are completed.
 
 ### 8.2 Workflow Interruptibility: Concrete Requirements
 For future implementation of `workflow-interruptibility-v2`:

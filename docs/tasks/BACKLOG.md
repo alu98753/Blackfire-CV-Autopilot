@@ -262,7 +262,7 @@ Before wider adoption, benchmark against real task commits:
 
 A larger model is justified only if evidence shows small-model error rate defeats the convenience benefit.
 
-### 6. `workflow-interruptibility-v2`
+### 9. `workflow-interruptibility-v2`
 
 Depends on task 4 evidence; ordering relative to Semantic Commit Agent may be swapped by the retrospective if interruption pain is materially higher than commit friction.
 
@@ -280,7 +280,7 @@ Open questions to settle in SPEC:
 - whether reviewer attempts are resumable or must restart from clean input;
 - how worktree/branch state is recovered after interruption.
 
-### 7. `workflow-orchestrator-v2`
+### 10. `workflow-orchestrator-v2`
 
 Deferred until reliability, retrospective, and interruptibility contracts are proven.
 
