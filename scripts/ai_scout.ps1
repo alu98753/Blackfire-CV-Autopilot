@@ -11,7 +11,8 @@ param(
     [string]$_ExecutableOverride,
     [string[]]$_ArgumentsOverride,
     [string[]]$_ModelCandidatesOverride,
-    [string]$_OpenCodeVersionOverride
+    [string]$_OpenCodeVersionOverride,
+    [switch]$_InvocationProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -114,6 +115,28 @@ Follow the scout agent contract exactly:
 Return only the requested Markdown scout report.
 "@
 
+function Get-ScoutOpenCodeArguments {
+    param(
+        [string]$CandidateModel,
+        [string]$PromptText
+    )
+
+    $arguments = @("run", "--agent", "scout")
+    if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
+        $arguments += @("--model", $CandidateModel)
+    }
+    $arguments += $PromptText
+    return $arguments
+}
+
+if ($_InvocationProbe) {
+    $probeModel = @($candidates)[0]
+    [pscustomobject]@{
+        Arguments = @(Get-ScoutOpenCodeArguments -CandidateModel $probeModel -PromptText $prompt)
+    } | ConvertTo-Json -Compress
+    exit 0
+}
+
 # Staging area for atomic promotion
 $runtimeDir = Join-Path $repoRoot ".runtime\ai_scout\$Task"
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
@@ -140,11 +163,7 @@ function Invoke-ScoutProcessAttempt {
         }
     } else {
         $cmdInfo = Get-Command opencode -ErrorAction SilentlyContinue
-        $innerArgs = @("run", "--agent", "scout")
-        if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
-            $innerArgs += @("--model", $CandidateModel)
-        }
-        $innerArgs += $prompt
+        $innerArgs = Get-ScoutOpenCodeArguments -CandidateModel $CandidateModel -PromptText $prompt
 
         if ($cmdInfo.Source -like "*.ps1") {
             $execFile = "powershell.exe"

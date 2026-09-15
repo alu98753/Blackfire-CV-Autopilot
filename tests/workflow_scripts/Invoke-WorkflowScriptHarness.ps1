@@ -46,6 +46,21 @@ function Invoke-Script([string]$Script, [string[]]$Arguments) {
     return $LASTEXITCODE
 }
 
+function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
+    $commandParts = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $Script.Replace('"', '\"') + '"'))
+    foreach ($argument in $Arguments) {
+        if ($argument -match '[\s"]') {
+            $commandParts += ('"' + $argument.Replace('"', '\"') + '"')
+        } else {
+            $commandParts += $argument
+        }
+    }
+    $command = ($commandParts -join ' ') + ' < NUL'
+    try { $output = & cmd.exe /d /s /c $command 2>&1 | Out-String }
+    catch { return [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) } }
+    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+}
+
 function Run-Case([string]$Name, [scriptblock]$Body) {
     try { & $Body; Write-Host "PASS $Name"; $script:passed++ }
     catch { Write-Host "FAIL $Name - $($_.Exception.Message)"; $script:failed++ }
@@ -75,6 +90,7 @@ try {
         $gateText = Get-Content $gateScript -Raw
         $workflowText = Get-Content $workflowContract -Raw
         Assert-True ($contractText -match '\$OpenCodeSupportedVersion\s*=\s*"1\.18\.31"') 'supported OpenCode version declaration drifted'
+        Assert-True ($contractText -match 'npm install -g opencode-ai@\$OpenCodeSupportedVersion') 'version mismatch remediation is not exact-version actionable'
         Assert-True ($bootstrapText -match 'opencode-ai@\$OpenCodeSupportedVersion') 'bootstrap install is not pinned to the authoritative version'
         Assert-True ($scoutText -notmatch '--standalone|--pure') 'Scout production launcher contains a forbidden OpenCode flag'
         Assert-True ($gateText -notmatch '--standalone|--pure') 'Gate production launcher contains a forbidden OpenCode flag'
@@ -88,6 +104,18 @@ try {
     Run-Case 'Scout rejects an unsupported OpenCode version before routing' {
         $code = Invoke-Script $scout (@('-Task',$fixtureId,'-_ExecutableOverride',$scoutCmd,'-_OpenCodeVersionOverride','1.18.30'))
         Assert-True ($code -ne 0) "expected version mismatch failure, got $code"
+    }
+
+    Run-Case 'Scout invocation probe exercises the production argument builder' {
+        $result = Invoke-ScriptOutput $scout @('-Task',$fixtureId,'-_InvocationProbe','-_ModelCandidatesOverride','probe-scout')
+        Assert-True ($result.ExitCode -eq 0) "expected probe success, got $($result.ExitCode): $($result.Output)"
+        $probe = $result.Output.Trim() | ConvertFrom-Json
+        $args = @($probe.Arguments)
+        Assert-True ($args -contains 'run') 'Scout production args missing run'
+        Assert-True (($args -join ' ') -match '--agent scout') 'Scout production args missing scout agent'
+        Assert-True (($args -join ' ') -match '--model probe-scout') 'Scout production args missing model'
+        Assert-True (($args -join ' ') -match 'Task descriptor: docs/tasks/') 'Scout production args missing prompt'
+        Assert-True (($args -join ' ') -notmatch '--standalone|--pure') 'Scout production args contain unsupported flags'
     }
 
     @'
@@ -114,6 +142,17 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     Run-Case 'Gate rejects an unsupported OpenCode version before routing' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_OpenCodeVersionOverride','2.0.3'))
         Assert-True ($code -ne 0) "expected version mismatch failure, got $code"
+    }
+    Run-Case 'Gate invocation probe exercises the production argument builder' {
+        $result = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_InvocationProbe')
+        Assert-True ($result.ExitCode -eq 0) "expected probe success, got $($result.ExitCode): $($result.Output)"
+        $probe = $result.Output.Trim() | ConvertFrom-Json
+        $args = @($probe.Arguments)
+        Assert-True ($probe.Agent -eq 'spec-reviewer') "expected spec-reviewer probe, got $($probe.Agent)"
+        Assert-True (($args -join ' ') -match '--agent spec-reviewer') 'Gate production args missing reviewer agent'
+        Assert-True (($args -join ' ') -match '--model first') 'Gate production args missing model'
+        Assert-True (($args -join ' ') -match 'Task descriptor: docs/tasks/') 'Gate production args missing prompt'
+        Assert-True (($args -join ' ') -notmatch '--standalone|--pure') 'Gate production args contain unsupported flags'
     }
     Run-Case 'Gate PASS and candidate override resolution' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId) + $reviewBase)

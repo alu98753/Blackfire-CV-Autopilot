@@ -20,7 +20,8 @@ param(
     [string]$_PythonExecutableOverride,
     [string[]]$_PythonArgumentsOverride,
     [string]$_FailPromotionOnTarget,
-    [string]$_OpenCodeVersionOverride
+    [string]$_OpenCodeVersionOverride,
+    [switch]$_InvocationProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -510,6 +511,14 @@ The final response MUST begin with:
 VERDICT: PASS|BLOCK
 BLOCKING_FINDINGS: <count>
 "@
+
+    if ($_InvocationProbe) {
+        [pscustomobject]@{
+            Agent = $agentName
+            Arguments = @(Get-OpenCodeInvocation -Agent $agentName -PromptText $prompt -CandidateModel $normalCandidates[0]).Arguments
+        } | ConvertTo-Json -Compress
+        exit 0
+    }
 
     $roleCompleted = $false
 

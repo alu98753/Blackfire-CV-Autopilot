@@ -26,6 +26,6 @@ function Assert-OpenCodeSupportedVersion {
     )
 
     if ($Version -ne $OpenCodeSupportedVersion) {
-        throw "Unsupported OpenCode CLI version '$Version'. This repository requires exactly OpenCode $OpenCodeSupportedVersion. Install that version with .\scripts\bootstrap_opencode.ps1."
+        throw "Unsupported OpenCode CLI version '$Version'. This repository requires exactly OpenCode $OpenCodeSupportedVersion. Install the supported version with: npm install -g opencode-ai@$OpenCodeSupportedVersion ; then rerun .\scripts\bootstrap_opencode.ps1 to verify."
     }
 }
