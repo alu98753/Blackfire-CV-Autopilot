@@ -67,6 +67,13 @@ try {
         Assert-True ($workflowText -match '`regression-reviewer`[\s\S]*?`steps: 10`') 'architecture regression-reviewer budget drifted'
         Assert-True ($workflowText -match 'Forced max-step finalization remains an infrastructure failure, never a verdict source') 'architecture finalization contract missing'
     }
+    Run-Case 'Gate source has no free-form verdict authority path' {
+        $gateText = Get-Content $gate -Raw
+        foreach ($legacy in @('_ReviewerExecutableOverride','_ReviewerArgumentsOverride','_SpecReviewerArgumentsOverride','_RegressionReviewerArgumentsOverride','Get-FinalAssistantMessageFromStructuredJson','Get-CanonicalReviewPayload','Test-ReviewVerdictStructure')) {
+            Assert-True (-not ($gateText -match [regex]::Escape($legacy))) "obsolete Gate seam/function remains: $legacy"
+        }
+        Assert-True (-not ($gateText -match '\[regex\].*VERDICT')) 'Gate must not regex-parse verdict prose'
+    }
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8

@@ -12,10 +12,6 @@ param(
     [int]$TestTimeoutSeconds = 60,
 
     # Internal test seams for deterministic verification probes without invoking live OpenCode or Python
-    [string]$_ReviewerExecutableOverride,
-    [string[]]$_ReviewerArgumentsOverride,
-    [string[]]$_SpecReviewerArgumentsOverride,
-    [string[]]$_RegressionReviewerArgumentsOverride,
     [string]$_StructuredReviewExecutableOverride,
     [string[]]$_StructuredReviewArgumentsOverride,
     [string]$_StructuredReviewModeOverride,
@@ -283,24 +279,6 @@ function Get-OpenCodeInvocation {
         IsStructured = $true
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($_ReviewerExecutableOverride)) {
-        $args = @()
-        if ($Agent -eq "spec-reviewer" -and $null -ne $_SpecReviewerArgumentsOverride) {
-            $args = $_SpecReviewerArgumentsOverride
-        } elseif ($Agent -eq "regression-reviewer" -and $null -ne $_RegressionReviewerArgumentsOverride) {
-            $args = $_RegressionReviewerArgumentsOverride
-        } elseif ($null -ne $_ReviewerArgumentsOverride) {
-            $args = $_ReviewerArgumentsOverride
-        } else {
-            $args = @("run", "--standalone", "--format", "json", "--agent", $Agent, "--model", $CandidateModel)
-        }
-        return @{
-            Executable = $_ReviewerExecutableOverride
-            Arguments = $args
-            IsStructured = $true
-        }
-    }
-
 }
 
 function Get-StructuredReviewResult {
@@ -314,164 +292,6 @@ function Get-StructuredReviewResult {
     $blocking = [int64]$o.blocking_findings
     if (($o.verdict -eq "PASS" -and $blocking -ne 0) -or ($o.verdict -eq "BLOCK" -and $blocking -lt 1)) { return [pscustomobject]@{ Success=$false; Error="Structured outcome violates PASS/BLOCK blocking_findings invariant." } }
     return [pscustomobject]@{ Success=$true; Verdict=[string]$o.verdict; Blocking=$blocking; Report=[string]$o.report_markdown; Error=$null }
-}
-
-function Get-FinalAssistantMessageFromStructuredJson {
-    param([string]$JsonlText)
-
-    if ([string]::IsNullOrWhiteSpace($JsonlText)) {
-        return [pscustomobject]@{
-            Success = $false
-            Text = $null
-            Error = "Structured reviewer output was empty."
-        }
-    }
-
-    $lines = $JsonlText -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-    if ($lines.Count -eq 0) {
-        return [pscustomobject]@{
-            Success = $false
-            Text = $null
-            Error = "Structured reviewer output contained no non-empty lines."
-        }
-    }
-
-    $events = [System.Collections.Generic.List[object]]::new()
-    $lineNum = 0
-    foreach ($line in $lines) {
-        $lineNum++
-        try {
-            $parsed = $line | ConvertFrom-Json
-            $events.Add($parsed)
-        } catch {
-            return [pscustomobject]@{
-                Success = $false
-                Text = $null
-                Error = "Invalid JSON on line $lineNum : $_"
-            }
-        }
-    }
-
-    $textEvents = [System.Collections.Generic.List[object]]::new()
-    foreach ($evt in $events) {
-        if ($evt.type -eq "text" -and $null -ne $evt.part -and -not [string]::IsNullOrEmpty($evt.part.text)) {
-            $textEvents.Add($evt)
-        }
-    }
-
-    if ($textEvents.Count -eq 0) {
-        return [pscustomobject]@{
-            Success = $false
-            Text = $null
-            Error = "No assistant text events found in structured output."
-        }
-    }
-
-    $lastTextEvt = $textEvents[$textEvents.Count - 1]
-    $finalMessageId = $lastTextEvt.part.messageID
-    if ([string]::IsNullOrWhiteSpace($finalMessageId)) {
-        return [pscustomobject]@{
-            Success = $true
-            Text = [string]$lastTextEvt.part.text
-            Error = $null
-        }
-    }
-
-    $finalParts = [System.Collections.Generic.List[string]]::new()
-    foreach ($te in $textEvents) {
-        if ($te.part.messageID -eq $finalMessageId) {
-            $finalParts.Add([string]$te.part.text)
-        }
-    }
-
-    $concatenated = $finalParts -join ""
-    return [pscustomobject]@{
-        Success = $true
-        Text = $concatenated
-        Error = $null
-    }
-}
-
-function Get-CanonicalReviewPayload {
-    param([string]$FinalAssistantMessage)
-
-    if ([string]::IsNullOrWhiteSpace($FinalAssistantMessage)) {
-        return [pscustomobject]@{
-            Success = $false
-            Payload = $null
-            Error = "Final assistant message was empty."
-        }
-    }
-
-    # Normalize line endings to LF for uniform regex evaluation
-    $cleanText = $FinalAssistantMessage -replace "`r`n", "`n"
-    # Strip leading UTF-8 BOM if present
-    $cleanText = $cleanText.TrimStart([char]0xFEFF)
-
-    # 1. Preferred contract: output already begins directly with VERDICT on line 1
-    $directMatch = [regex]::Match($cleanText, '\AVERDICT:\s*(PASS|BLOCK)\nBLOCKING_FINDINGS:\s*(\d+)(?:\n|$)')
-    if ($directMatch.Success) {
-        return [pscustomobject]@{
-            Success = $true
-            Payload = $cleanText
-            Error = $null
-        }
-    }
-
-    # 2. Extract embedded report: find the unique canonical VERDICT header anywhere in message
-    $headerMatches = [regex]::Matches($cleanText, '(?m)^VERDICT:\s*(PASS|BLOCK)\nBLOCKING_FINDINGS:\s*(\d+)(?:\n|$)')
-
-    if ($headerMatches.Count -eq 0) {
-        return [pscustomobject]@{
-            Success = $false
-            Payload = $null
-            Error = "No valid VERDICT/BLOCKING_FINDINGS header found in final assistant message."
-        }
-    }
-
-    if ($headerMatches.Count -gt 1) {
-        return [pscustomobject]@{
-            Success = $false
-            Payload = $null
-            Error = "Ambiguous review payload: multiple ($($headerMatches.Count)) VERDICT/BLOCKING_FINDINGS headers found in final assistant message."
-        }
-    }
-
-    $payload = $cleanText.Substring($headerMatches[0].Index)
-
-    return [pscustomobject]@{
-        Success = $true
-        Payload = $payload
-        Error = $null
-    }
-}
-
-function Test-ReviewVerdictStructure {
-    param([string]$Text)
-
-    if ([string]::IsNullOrWhiteSpace($Text)) {
-        return [pscustomobject]@{ IsValid = $false; Verdict = "EMPTY"; Blocking = -1; Error = "Reviewer produced empty output." }
-    }
-
-    # Strip optional leading UTF-8 BOM only; do not allow any whitespace, blank lines, preamble, or prose
-    $cleanText = $Text.TrimStart([char]0xFEFF)
-
-    $headerMatch = [regex]::Match($cleanText, '\AVERDICT:\s*(PASS|BLOCK)\r?\nBLOCKING_FINDINGS:\s*(\d+)(?:\r?\n|$)')
-    if (-not $headerMatch.Success) {
-        return [pscustomobject]@{ IsValid = $false; Verdict = "MALFORMED"; Blocking = -1; Error = "Output does not begin on line 1 with required VERDICT / BLOCKING_FINDINGS header." }
-    }
-
-    $verdict = $headerMatch.Groups[1].Value
-    $blocking = [int]$headerMatch.Groups[2].Value
-
-    if ($verdict -eq "PASS" -and $blocking -ne 0) {
-        return [pscustomobject]@{ IsValid = $false; Verdict = $verdict; Blocking = $blocking; Error = "Contract violation: VERDICT is PASS but BLOCKING_FINDINGS is $blocking (must be 0)." }
-    }
-    if ($verdict -eq "BLOCK" -and $blocking -lt 1) {
-        return [pscustomobject]@{ IsValid = $false; Verdict = $verdict; Blocking = $blocking; Error = "Contract violation: VERDICT is BLOCK but BLOCKING_FINDINGS is $blocking (must be >= 1)." }
-    }
-
-    return [pscustomobject]@{ IsValid = $true; Verdict = $verdict; Blocking = $blocking; Error = $null }
 }
 
 $infraBlocked = $false
