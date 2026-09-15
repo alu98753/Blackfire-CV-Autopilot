@@ -5,7 +5,11 @@
     ".opencode/agents/spec-reviewer.md",
     ".opencode/agents/regression-reviewer.md",
     "scripts/ai_gate.ps1",
-    "tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1",
+    "scripts/opencode_structured_review.mjs",
+    "scripts/bootstrap_opencode.ps1",
+    "package.json",
+    "package-lock.json",
+    "tests/workflow_scripts/",
     "docs/architecture/ai_development_workflow.md",
     "docs/tasks/gate-reviewer-output-contract-reliability/"
   ],
