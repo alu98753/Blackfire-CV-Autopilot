@@ -1,0 +1,21 @@
+{
+  "id": "gate-reviewer-step-budget-reliability",
+  "base_ref": "origin/main",
+  "scope": [
+    ".opencode/agents/spec-reviewer.md",
+    ".opencode/agents/regression-reviewer.md",
+    "docs/architecture/ai_development_workflow.md",
+    "tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1",
+    "docs/tasks/gate-reviewer-step-budget-reliability/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
