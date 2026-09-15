@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Phase 1 completed on the production-pinned OpenCode CLI `1.18.31`. Neither authorized candidate produced `PASS_PROVEN` on the required first qualification role, `spec-reviewer`. No Phase 1 regression-reviewer probe was run because no candidate passed the required first role. Phase 2 C1 cleanup hardening later completed bounded smoke and spec attempts without a qualifying lifecycle; its evidence is recorded below.
+Phase 1 completed on the production-pinned OpenCode CLI `1.18.31`. Neither authorized candidate produced `PASS_PROVEN` on the required first qualification role, `spec-reviewer`. No Phase 1 regression-reviewer probe was run because no candidate passed the required first role. Phase 2 C1 cleanup hardening completed bounded smoke and spec attempts without reaching a model lifecycle, preserving C1 as infrastructure-blocked. C2 static preflight confirmed absence of an official JSON-Schema structured transport, failing closed. The final matrix outcome is `PASS_PROVEN = 0`; evidence is recorded below.
 
 The fresh canonical Scout context remains [CONTEXT.md](CONTEXT.md). This task used the actual production reviewer definition in [`.opencode/agents/spec-reviewer.md`](../../../.opencode/agents/spec-reviewer.md), without changing its permissions, step budget, or final-response contract.
 
@@ -68,6 +68,18 @@ New bounded Phase 2 records are retained as [attempt 007](attempt-007-c1-big-pic
 
 The C1 runner now launches its isolated server through a runner-owned `cmd.exe` process-tree root. It applies a bounded startup deadline and probe deadline, then calls `taskkill /PID <owned-root> /T /F` only for that recorded PID. Cleanup failure overrides the result to `FAIL_INFRASTRUCTURE` with `ISOLATION_CLEANUP_UNSAFE`; the runner restores PATH, `OPENCODE_DB`, and auto-update state in the same finalization path. Focused deterministic verification passed with the additional timeout, exception, normal-completion, exact-owned-PID, cleanup-failure, and environment-restoration cases.
 
-Attempt 012 was the single fresh C1 Big Pickle regression-reviewer smoke. Attempts 013 and 014 were the frozen Big Pickle and MiMo spec-reviewer sequence after the smoke returned `FAIL_INFRASTRUCTURE`. Each attempt ended at the runner's owned server startup deadline before a provider/model lifecycle, and each post-attempt process check found no `opencode` or Node child process. The records therefore classify infrastructure startup failure rather than a provider/model result. C1 has no qualifying `PASS_PROVEN` route. C2 was not started under the explicit execution limit for this hardening task.
+Attempt 012 was the single fresh C1 Big Pickle regression-reviewer smoke. Attempts 013 and 014 were the frozen Big Pickle and MiMo spec-reviewer sequence after the smoke returned `FAIL_INFRASTRUCTURE`. Each attempt ended at the runner's owned server startup deadline before a provider/model lifecycle, and each post-attempt process check found no `opencode` or Node child process. The records therefore classify infrastructure startup failure rather than a provider/model result. C1 has no qualifying `PASS_PROVEN` route and is preserved as infrastructure readiness blocked.
 
 The new records are [attempt 012](attempt-012-c1-big-pickle-regression-smoke.json), [attempt 013](attempt-013-c1-big-pickle-spec-reviewer.json), and [attempt 014](attempt-014-c1-mimo-v2.5-free-spec-reviewer.json).
+
+## C2 static preflight and matrix exhaustion
+
+C2 evaluation used OpenCode CLI `@opencode/cli@2.0.2` and official client `@opencode/client@2.0.2`. Static inspection of tagged v2.0.2 client type definitions (`@opencode/client/dist/effect/api/api.d.ts` and `types.d.ts`) established that `SessionPromptInput` accepts only `sessionID`, `id`, `text`, `files`, `agents`, `skills`, `metadata`, `delivery`, and `resume`. It provides no `format`, `schema`, or `json_schema` request parameter, and its assistant response provides no official machine structured-output payload field.
+
+Under the C2 early fail-closed rule, C2 is classified as `FAIL_INFRASTRUCTURE` with subreason `STRUCTURED_ADAPTER_UNAVAILABLE` without issuing live model calls. No synthetic markdown/regex parser was introduced.
+
+Both authorized alternate runtimes in the frozen matrix are now exhausted:
+- C1 `1.14.41`: blocked at isolated server readiness before provider/model lifecycle; process cleanup proven.
+- C2 `2.0.2`: preflight established absence of official JSON-Schema structured transport.
+
+The final matrix outcome is **PASS_PROVEN = 0**; neither candidate established a production-viable structured-review route. Production OpenCode remains pinned to `1.18.31`.
