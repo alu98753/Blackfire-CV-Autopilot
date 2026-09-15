@@ -32,6 +32,8 @@ Known evidence from that task includes:
 - explicit `StructuredOutput` permission allow did not change the MiMo failure in an A/B probe;
 - Qwen3-Coder-Next, Kimi K2.5/K3, MiniMax M2.5, and GLM-5.3-Flash were not locally selectable in that pinned environment and were not authorized for paid probing.
 
+`task.json.models.review` is only a provisional descriptor value inherited from the current workflow shape so task tooling remains structurally valid. It is NOT a qualified reviewer recommendation for this compatibility task. Do not run Gate for this task until Scout evidence and the Final SPEC establish an explicitly qualified review route.
+
 ## Scope
 
 Provisional scope:
