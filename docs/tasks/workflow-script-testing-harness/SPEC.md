@@ -1,113 +1,215 @@
 # workflow-script-testing-harness
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Create a deterministic offline regression-testing harness for the AI workflow scripts so `scripts/ai_gate.ps1` and `scripts/ai_scout.ps1` can be changed safely without invoking live OpenCode models or depending on external AI availability.
+Create a deterministic, offline, repository-native regression harness for `scripts/ai_gate.ps1` and `scripts/ai_scout.ps1` so later workflow changes can be made against a known behavioral baseline without invoking live OpenCode models, external AI services, or network access.
 
-This task is a reliability prerequisite. It establishes testability around existing workflow behavior; it does not change that behavior.
+This is a reliability prerequisite. It establishes testability around existing workflow behavior; it does not change that behavior.
 
-## Problem statement
+## Evidence basis
 
-The production pilot and retrospective confirmed that the workflow scripts contain non-trivial process, parser, timeout, fallback, and artifact-promotion logic, while no dedicated repository test harness currently exercises those behaviors offline.
+Scout confirmed:
 
-Both scripts already expose explicit internal test seams:
+- no PowerShell test harness or Pester convention currently exists in the repository;
+- `tests/` is currently Python-oriented;
+- `ai_gate.ps1` already exposes eight explicit internal test seams;
+- `ai_scout.ps1` already exposes three explicit internal test seams;
+- those seams are sufficient for a useful v1 harness without production-script modification;
+- Gate has an un-seamed top-level `git status` / `git diff` phase, so v1 should run script-level tests inside the real repository rather than introduce a new git-command seam;
+- timeout tests can become flaky if they depend on large real wall-clock windows;
+- canonical task artifacts must never be used as mutable test fixtures.
 
-- `scripts/ai_gate.ps1`
-  - `_ReviewerExecutableOverride`
-  - `_ReviewerArgumentsOverride`
-  - `_SpecReviewerArgumentsOverride`
-  - `_RegressionReviewerArgumentsOverride`
-  - `_ReviewCandidatesOverride`
-  - `_PythonExecutableOverride`
-  - `_PythonArgumentsOverride`
-  - `_FailPromotionOnTarget`
-- `scripts/ai_scout.ps1`
-  - `_ExecutableOverride`
-  - `_ArgumentsOverride`
-  - `_ModelCandidatesOverride`
+## Scope
 
-The harness should use these seams to verify current contracts deterministically without live AI calls.
+### New test structure
 
-## Initial scope
+Create a dedicated PowerShell harness under:
 
-- Establish a repository-native test entry point for workflow-script regression tests.
-- Add deterministic tests for representative existing `ai_gate.ps1` behavior, including as practical:
-  - canonical PASS/BLOCK payload classification;
-  - malformed/structurally inconsistent reviewer output rejection;
-  - normal review candidate selection / configured override behavior;
-  - bounded child-process success/failure/timeout behavior;
-  - focused-test execution seam behavior;
-  - artifact promotion / rollback seam behavior where safely testable.
-- Add deterministic tests for representative existing `ai_scout.ps1` behavior, including as practical:
-  - model candidate resolution and override behavior;
-  - child-process success/failure/timeout behavior;
-  - canonical `CONTEXT.md` promotion safety where testable.
-- Ensure tests run without network access, OpenCode model inference, or production/game execution.
-- Document a stable command that future workflow tasks can run as their focused regression suite.
+```text
+tests/workflow_scripts/
+```
+
+Use a dependency-free plain PowerShell runner rather than introducing Pester in v1.
+
+Required stable entry point:
+
+```powershell
+.\tests\workflow_scripts\Invoke-WorkflowScriptHarness.ps1
+```
+
+The runner must:
+
+- execute all workflow-script regression cases;
+- return exit code `0` only when every case passes;
+- return non-zero on any failed assertion, unexpected script exit, fixture leak, or cleanup failure;
+- print concise per-case PASS/FAIL output suitable for local debugging;
+- require no OpenCode installation when executable overrides are used;
+- require no network access or live AI inference.
+
+### Fixture isolation
+
+Tests may create temporary task packages only under uniquely named disposable paths matching the scripts' current `docs/tasks/<task-id>/` contract. Temporary task directories and `.runtime` artifacts must be cleaned in `finally`-style cleanup.
+
+Tests must never modify or reuse canonical evidence belonging to a real task.
+
+### `ai_gate.ps1` baseline behaviors to cover
+
+At minimum, the harness must lock the current behavior of:
+
+1. valid canonical reviewer `PASS` -> Gate accepts the verdict;
+2. valid canonical reviewer `BLOCK` with blocking findings -> Gate classifies candidate blocked according to current exit semantics;
+3. malformed or structurally inconsistent reviewer output -> infrastructure failure;
+4. currently unsupported Markdown-wrapped verdict headers remain rejected in this task;
+5. configured/override review candidate selection through existing seams;
+6. at least one infrastructure/fallback-related candidate path using fake child processes;
+7. focused-test execution through `_PythonExecutableOverride` / `_PythonArgumentsOverride` without running production tests;
+8. at least one artifact-safety path using existing promotion/rollback seams, if reachable without changing production code;
+9. Gate exit-code contract remains:
+   - `0` = PASS
+   - `1` = INFRASTRUCTURE_BLOCKED
+   - `2` = CANDIDATE_BLOCKED.
+
+### `ai_scout.ps1` baseline behaviors to cover
+
+At minimum, the harness must lock the current behavior of:
+
+1. normal candidate resolution / override selection;
+2. successful fake Scout output containing the required Scout structure -> canonical promotion for the disposable fixture task;
+3. malformed Scout output -> failure and no invalid canonical promotion;
+4. non-zero child-process failure and/or candidate fallback through existing seams;
+5. bounded-process timeout behavior where it can be exercised with a short, controlled fake process without making the suite materially flaky;
+6. existing canonical `CONTEXT.md` preservation on failed Scout execution where safely testable.
 
 ## Known invariants
 
-- This task is behavior-preserving for the workflow scripts.
-- Existing Gate exit-code semantics remain authoritative:
-  - `0` = PASS
-  - `1` = INFRASTRUCTURE_BLOCKED
-  - `2` = CANDIDATE_BLOCKED
+- This task is behavior-preserving for both workflow scripts.
+- Existing Gate exit-code semantics remain authoritative.
 - Existing Scout/Gate model-routing and fallback semantics must not change.
 - Existing timeout values and kill-confirmation semantics must not change.
-- Existing review payload acceptance/rejection rules must not change in this task, including the currently strict Markdown behavior.
+- Existing review payload acceptance/rejection rules must not change, including current rejection of Markdown-wrapped verdict headers.
 - Existing artifact promotion / rollback semantics must not change.
 - Tests must not invoke live OpenCode reviewers or require external model/network availability.
-- The harness must exercise public script behavior or existing explicit internal test seams rather than duplicating production logic into a second implementation.
-- Test-only fixtures/helpers must not become workflow state owners.
+- Tests must exercise real script behavior through public invocation and existing explicit test seams; they must not copy parser, routing, timeout, or promotion logic into a second implementation.
+- Test-only helpers/fixtures must not become workflow state owners.
+- No production/game runtime behavior may change.
+
+## Test architecture decisions
+
+### Framework
+
+Use plain PowerShell assertions/helpers in v1.
+
+Rationale:
+
+- Pester is not currently installed, declared, or used by the repository;
+- adding a framework dependency is unnecessary to establish the first deterministic safety net;
+- the harness should remain runnable on the user's current Windows PowerShell environment with no bootstrap step beyond the repository itself.
+
+A future task may migrate the harness to Pester if evidence shows material maintainability value.
+
+### Location
+
+Use `tests/workflow_scripts/`.
+
+This keeps tests under the canonical repository test tree while isolating `.ps1` files from Python test discovery by extension and subdirectory convention.
+
+### Production-script modification
+
+Default expectation: **no changes** to `scripts/ai_gate.ps1` or `scripts/ai_scout.ps1`.
+
+A production-script edit is allowed only if implementation proves an existing behavior cannot be tested through current seams and the change is strictly testability-only, behavior-neutral, and smaller than duplicating production logic. Such a change must be explicitly justified in the implementation evidence and reviewed as a potential architecture regression.
+
+### Timeout testing
+
+Prefer controlled short-lived fake child processes. Do not build tests around the normal 480-second production timeout. Timeout assertions must use small override timeout values and tolerate normal scheduler jitter; they must not assert millisecond-precise elapsed time.
 
 ## Non-goals
 
 - Do not fix Markdown-wrapped `VERDICT` parsing; that belongs to `gate-payload-robustness-v1`.
-- Do not preserve Gate attempt history in this task unless a minimal test fixture is required; behavior change belongs to the later robustness task.
+- Do not preserve Gate attempt history as a behavior change.
 - Do not add task.json schema linting; that belongs to `task-descriptor-schema-linting`.
 - Do not change Gate reviewer sequencing after infrastructure failure.
 - Do not change model ordering, fallback policy, timeout budgets, reviewer prompts, or step budgets.
+- Do not add a git-command override seam merely to simplify this test task unless absolutely required by an otherwise untestable acceptance criterion.
+- Do not extract/shared-refactor process logic between Gate and Scout in this task merely for cleanliness.
+- Do not introduce Pester or another external test framework dependency in v1.
 - Do not add Semantic Commit Agent, workflow interruptibility, orchestrator behavior, or autonomous repair.
 - Do not refactor production/game code.
-- Do not introduce a live-AI integration test dependency as the primary regression harness.
+- Do not make live-AI integration tests part of the required regression suite.
 
-## Provisional acceptance criteria
+## Acceptance criteria
 
-1. A deterministic workflow-script test harness exists in the repository and can be run locally with one documented command.
-2. The harness requires no live OpenCode model call, external AI service, or network access.
-3. Tests verify representative existing Gate behavior through real script execution and/or existing test seams rather than copied parser/process logic.
-4. Tests distinguish valid reviewer PASS, valid reviewer BLOCK, malformed reviewer output, and infrastructure/process failure according to current behavior.
-5. Tests cover at least one normal candidate-resolution path and one failure/fallback-related path for Gate or Scout without changing fallback semantics.
-6. Tests cover bounded process behavior sufficiently to detect regression in success/failure/timeout classification where feasible without brittle wall-clock assumptions.
-7. Tests cover at least one canonical artifact safety property (promotion, preservation, or rollback) without risking real task artifacts.
-8. Tests isolate temporary fixtures/task packages so running the harness does not modify canonical repository task evidence.
-9. Existing `ai_gate.ps1` / `ai_scout.ps1` production semantics remain unchanged except for strictly necessary testability exposure that is behavior-neutral and justified by the Final SPEC.
-10. Future tasks such as `gate-payload-robustness-v1` can add a regression case to this harness before changing parser behavior.
-11. The chosen test framework/structure is compatible with the project's Windows PowerShell development environment and does not add an unnecessary heavy dependency.
-12. No production/game runtime behavior changes occur.
+1. `tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1` exists as the stable one-command entry point.
+2. Running the harness requires no network access, live OpenCode model invocation, or external AI availability.
+3. The harness returns `0` only when all cases pass and non-zero on any failure.
+4. Gate tests distinguish canonical PASS, canonical BLOCK, malformed/inconsistent output, and infrastructure/process failure under current behavior.
+5. Gate tests explicitly preserve the current strict rejection of Markdown-wrapped verdict headers, creating the red/green baseline for `gate-payload-robustness-v1`.
+6. At least one Gate candidate-selection/fallback path is exercised through existing overrides.
+7. Gate focused-test execution is exercised through the existing Python executable/argument override seams without running production tests.
+8. At least one Gate artifact-safety behavior (promotion, preservation, or rollback) is tested using disposable fixtures if reachable without production behavior changes.
+9. Scout tests cover successful structured output promotion, malformed output rejection, and at least one failure/fallback path.
+10. Scout failure testing demonstrates invalid output does not replace valid canonical context where safely reachable.
+11. Timeout/process bounding is covered with short controlled fake processes if stable; exact elapsed-time assertions are forbidden.
+12. All disposable `docs/tasks/<fixture-id>/` directories and test-created runtime artifacts are removed after the suite, including on assertion failure.
+13. No real task's `SPEC.md`, `CONTEXT.md`, `EVIDENCE.md`, or `reviews/*` is modified by the harness.
+14. No production/game code changes occur.
+15. `ai_gate.ps1` and `ai_scout.ps1` behavior remains unchanged; production-script edits, if any, are limited to strictly necessary behavior-neutral testability exposure and require explicit justification.
+16. The command below passes on the implementation candidate:
 
-## Uncertainty to resolve with Scout
+```powershell
+.\tests\workflow_scripts\Invoke-WorkflowScriptHarness.ps1
+```
 
-- Whether the narrowest harness should use plain PowerShell assertions, Pester, or an existing repository test convention not found in the lightweight survey.
-- Whether existing script-level internal seams are sufficient as-is or a tiny behavior-neutral extraction/import seam is needed to make specific functions testable.
-- Where workflow-script tests should live (`tests/`, `scripts/tests/`, or another existing convention) without confusing Python `unittest` discovery.
-- Which current Gate/Scout behaviors can be tested safely through full script invocation versus function-level/helper-level tests.
-- How to create temporary task packages and fake child processes portably on the user's Windows environment.
-- Whether timeout/kill-confirmation behavior can be tested deterministically without making the suite slow or flaky.
-- Whether artifact-promotion rollback should be covered in v1 of the harness or deferred if it requires invasive test plumbing.
+17. Future workflow tasks can add regression cases to this harness without live model calls.
 
-## Scout questions
+## Verification contract
 
-1. Locate any existing repository conventions for PowerShell/script tests, fixtures, temporary directories, or command wrappers.
-2. Map the existing explicit test seams in `ai_gate.ps1` and `ai_scout.ps1` to the narrowest deterministic regression cases.
-3. Identify which behaviors require full process invocation and which can be tested through isolated functions without copying production logic.
-4. Determine whether Pester is already available/declared; if not, assess whether adding it is justified versus a dependency-free PowerShell harness.
-5. Identify the minimal production-script change surface, if any, needed purely for testability while preserving behavior.
-6. Propose a focused test command suitable for `task.json` and future workflow tasks.
-7. Flag any test design that could accidentally mutate canonical `docs/tasks/*` artifacts or depend on live AI/network state.
+The workflow harness is not placed in `task.json.focused_tests` because the current Gate focused-test runner is Python-oriented. Changing Gate test execution semantics is outside this task.
 
-## Lifecycle gate
+Therefore the Writer must, before running AI Gate:
 
-This SPEC remains Draft until OpenCode Scout generates and pushes `CONTEXT.md`, and ChatGPT + user re-evaluate the evidence. Gemini/Antigravity must not implement the harness before the SPEC becomes Final.
+```powershell
+.\tests\workflow_scripts\Invoke-WorkflowScriptHarness.ps1
+```
+
+and record the command/result in the implementation handoff or tracked task evidence as appropriate.
+
+Then run the normal independent Gate:
+
+```powershell
+.\scripts\ai_gate.ps1 -Task workflow-script-testing-harness
+```
+
+The Gate reviewers verify the harness implementation and behavior-preservation contract; they do not replace execution of the harness itself.
+
+## Regression risks
+
+- tests accidentally touching canonical real-task artifacts;
+- tests silently calling real OpenCode because an override was omitted;
+- flaky timeout assertions tied to wall-clock precision;
+- helper code duplicating production parser/process logic and drifting independently;
+- using the P0 task to smuggle in parser/schema/fallback behavior changes;
+- leaving temporary task directories or `.runtime` fixtures after failed tests;
+- making the harness dependent on a globally installed PowerShell testing framework.
+
+## Expected change surface
+
+Expected:
+
+```text
+tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1
+tests/workflow_scripts/... case/helper/fixture files as needed
+docs/tasks/workflow-script-testing-harness/* task evidence
+```
+
+Expected unchanged:
+
+```text
+scripts/ai_gate.ps1
+scripts/ai_scout.ps1
+production/game code
+```
+
+Any deviation must be justified against this Final SPEC.
