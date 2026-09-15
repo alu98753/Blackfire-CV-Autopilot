@@ -108,7 +108,13 @@ $text = switch ($mode) {
     'backtick' { "``VERDICT: PASS``n``BLOCKING_FINDINGS: 0``n" }
     default { "VERDICT: PASS`nBLOCKING_FINDINGS: 0`n" }
 }
-$text
+if ($mode -eq 'pass') {
+    Write-Output 'VERDICT: PASS'
+    Start-Sleep -Milliseconds 50
+    Write-Output 'BLOCKING_FINDINGS: 0'
+} else {
+    $text
+}
 '@
     $reviewerContent = $reviewerContent.Replace('STATEFILE',$fallbackCounter)
     Set-Content -Path $reviewer -Value $reviewerContent -Encoding UTF8
