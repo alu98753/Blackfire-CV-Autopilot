@@ -1,0 +1,20 @@
+{
+  "id": "agent-model-fallback-routing-v1-1",
+  "base_ref": "origin/main",
+  "scope": [
+    "scripts/ai_scout.ps1",
+    "scripts/ai_gate.ps1",
+    "docs/architecture/ai_development_workflow.md",
+    "docs/tasks/*/task.json"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  }
+}

@@ -25,20 +25,20 @@ Completed prerequisites:
 - `scout-efficiency-v1` — merged.
 - `ai-gate-execution-resilience` — merged.
 - AI workflow roadmap planning — merged via PR #5.
-- `agent-role-contract-hardening-v1-1` — completed, ready for merge.
+- `agent-role-contract-hardening-v1-1` — completed and merged.
 
 ### Active
 
-None (awaiting merge of `agent-role-contract-hardening-v1-1`).
-
-### Planned next
-
 2. `agent-model-fallback-routing-v1-1`
    - Depends on task 1.
-   - Add ordered role-specific model fallback only for infrastructure failures.
+   - Add ordered, configurable role-specific normal-model fallback only for infrastructure failures; Mimo is the current default first candidate but is not hard-coded.
    - Valid semantic PASS/BLOCK is terminal; no review-shopping.
-   - Bound total fallback time and record attempt provenance.
-   - Gemini fallback may provide degraded Scout/advisory evidence but must not masquerade as an independent normal Gate PASS for its own implementation.
+   - Each model attempt retains the full currently validated timeout (480s by default); longer worst-case fallback latency is an accepted reliability tradeoff for v1.1.
+   - After all normal independent Gate reviewer candidates fail infrastructurally, an explicitly configured Gemini/Antigravity degraded reviewer may provide `LOW_EVIDENCE / NOT_INDEPENDENT` last-resort evidence rather than making reviewer infrastructure a single point of failure.
+   - Degraded evidence must never masquerade as a normal independent Gate PASS; ChatGPT + user remain final semantic/architecture review authority.
+   - Record ordered attempt provenance and preserve transactional artifact safety.
+
+### Planned next
 
 3. `intent-routing-observability`
    - Depends on task 2.
@@ -48,7 +48,10 @@ None (awaiting merge of `agent-role-contract-hardening-v1-1`).
 
 4. `agent-workflow-pilot-retrospective-v1`
    - Depends on successful closeout of task 3.
-   - Analyze actual elapsed time, fallbacks, manual interventions, handoffs, and workflow friction.
+   - Analyze actual elapsed time, fallbacks, degraded-review usage, manual interventions, handoffs, and workflow friction.
+   - Calibrate model routing from production evidence rather than speculation: per-model attempt elapsed time, timeout frequency, fallback frequency and which candidates actually recover failures, degraded-review frequency, normal vs degraded evidence quality, candidate ordering, observable agent step-budget utilization, and whether 480 seconds per attempt is materially over/under-provisioned.
+   - Re-evaluate the initial 480s-per-attempt policy and role/model step limits; adjust timeout/steps/order only when pilot evidence justifies it.
+   - Intended optimization sequence: reliability first -> production pilot -> collect evidence -> calibrate time/steps/order.
    - Produce evidence-backed V2 interruptibility decisions; no pause/resume implementation yet.
 
 5. `workflow-interruptibility-v2`

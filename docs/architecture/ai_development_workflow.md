@@ -292,13 +292,25 @@ docs/tasks/<task-id>/
 
 Do not introduce `.ai/current-task`, `docs/tasks/current`, global mutable task state, or another singleton that could collide across permanent worktrees. Scripts always require an explicit `-Task` parameter.
 
-## 10. Model selection
+## 10. Model selection and fallback routing
 
 Agent roles are stable; model names are not. `.opencode/agents/*.md` defines role and permission boundaries without hard-coding a model.
 
-Model choice may be supplied by `task.json` or PowerShell arguments. A current low-cost/free model may be used without making repository architecture depend on its continued availability.
-
-Provider credentials are local user configuration and must never be committed.
+Model configuration is supplied by `task.json` or PowerShell arguments:
+- `models.scout` and `models.review` accept either a scalar string or an ordered array of model identifiers. A scalar string is equivalent to a single-element candidate list.
+- `opencode/mimo-v2.5-free` is the current configured default first candidate because of operational stability, but it is not hard-coded in routing logic: all candidates are data passed into the routing scripts.
+- Only models that pass bounded live qualification under their specific formal role contracts may be admitted to recommended/default chains. Qualification is role-specific (a model may qualify for Scout without qualifying for Gate review, or vice versa).
+- CLI `-Model` (in `ai_scout.ps1`) and `-ReviewModel` (in `ai_gate.ps1`) act as strict single-model overrides, replacing the configured normal candidate chain with that explicit candidate.
+- Model fallback is attempted **only** upon mechanically classified infrastructure failures (e.g., launch failure, process timeout with confirmed termination, non-zero exit, empty output, malformed transport JSONL, canonical payload extraction failure, or invalid verdict structure).
+- A valid semantic `PASS` or `BLOCK` verdict is strictly terminal for that reviewer role. Fallback is never triggered after a valid verdict; review-shopping is forbidden.
+- Each attempted model receives its own **full 480-second default timeout** (not a shared remainder). Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
+- If unconfirmed process termination occurs upon timeout, routing terminates immediately as terminal infrastructure failure without launching subsequent processes.
+- Model fallback in `ai_gate.ps1` manages ONLY automated independent OpenCode reviewer candidates.
+- If all normal independent OpenCode reviewer candidates fail infrastructurally for a role, `ai_gate.ps1` MUST NOT invoke Gemini and MUST exit `1 = INFRASTRUCTURE_BLOCKED`, outputting an explicit diagnostic `MANUAL_DEGRADED_REVIEW_REQUIRED`.
+- Outer workflow handoff: When Gate exits 1 due to infrastructure exhaustion, the outer Blackfire Agent Workflow prompts the interactive Antigravity Gemini implementation agent to conduct an interactive degraded self-review tracked under `docs/tasks/<task>/reviews/degraded-gemini-review.md`.
+- Degraded review evidence is unambiguously labeled `DEGRADED`, `LOW_EVIDENCE`, and `NOT_INDEPENDENT`. It possesses NO independent Gate authority and never masquerades as a Gate PASS. Merge authority remains strictly with ChatGPT + user semantic review.
+- Structured attempt provenance (role, attempt type, 1-based index, model, elapsed seconds, outcome reason, selected status) is recorded compactly in `EVIDENCE.md` without committing raw failed output or credentials.
+- Provider credentials remain local user configuration and must never be committed.
 
 ## 11. Installation boundary
 
