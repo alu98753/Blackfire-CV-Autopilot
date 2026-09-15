@@ -1,0 +1,22 @@
+{
+  "id": "agent-workflow-pilot-retrospective-v1",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/agent-workflow-pilot-retrospective-v1/",
+    "docs/tasks/BACKLOG.md",
+    "docs/architecture/ai_development_workflow.md",
+    "scripts/ai_scout.ps1",
+    "scripts/ai_gate.ps1",
+    "tests/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
