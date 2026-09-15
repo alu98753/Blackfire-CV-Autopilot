@@ -15,7 +15,7 @@ Task Specification -> OpenCode Scout -> Human/ChatGPT Final SPEC -> Gemini Write
 ```
 
 The product change itself succeeded completely with zero regressions:
-- A small immutable structured routing diagnostic contract (`RoutingDiagnostic`, `RoutingInFlightDiagnostic`) was introduced in [`states/navigation_routing.py`](file:///e:/Side_Project/BlackfireCrusade_tool/states/navigation_routing.py).
+- A small immutable structured routing diagnostic contract (`RoutingDiagnostic`, `RoutingInFlightDiagnostic`) was introduced in [`states/navigation_routing.py`](../../../states/navigation_routing.py).
 - `resolve_navigation_context()` ordering and pre-observation action snapshots were preserved.
 - Free-form runtime logging was cleanly migrated to structured diagnostic sourcing.
 - 32 focused tests passed in 0.144s.

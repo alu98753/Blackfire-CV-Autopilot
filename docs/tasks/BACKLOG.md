@@ -264,7 +264,7 @@ A larger model is justified only if evidence shows small-model error rate defeat
 
 ### 9. `workflow-interruptibility-v2`
 
-Depends on task 4 evidence; ordering relative to Semantic Commit Agent may be swapped by the retrospective if interruption pain is materially higher than commit friction.
+Interruptibility remains deferred to v2; reliability P0/P1/P2 work comes first.
 
 Goal:
 - safe `Pause -> Amend -> Resume` semantics for long-running workflow stages;
@@ -314,7 +314,6 @@ Hard boundaries:
 Not scheduled until production evidence justifies them:
 
 - workflow/status dashboard derived from canonical task artifacts;
-- automatic task schema validation/linting if retrospective shows recurrent descriptor drift;
 - autonomous repair/retry loops;
 - parallel or multi-model reviewer voting/racing;
 - dynamic local/cloud model routing based on measured cost/latency/quality;
