@@ -8,7 +8,7 @@ Add deterministic, role-specific model fallback to formal Scout and Gate executi
 
 The normal path uses an ordered, configurable chain of independent reviewer models, with `opencode/mimo-v2.5-free` as the current default first candidate because it has been operationally stable. The architecture must not hard-code Mimo: candidate models are data/configuration passed into the routing logic and may be reordered or replaced later.
 
-If all normal independent reviewer candidates fail infrastructurally, the workflow may use Gemini/Antigravity as an explicit last-resort degraded reviewer so useful evidence can still reach ChatGPT + user. Such evidence must be unmistakably marked low-confidence/non-independent and must never masquerade as a normal independent Gate PASS.
+If all normal independent reviewer candidates fail infrastructurally, the Gate exits with code `1 = INFRASTRUCTURE_BLOCKED` and signals `MANUAL_DEGRADED_REVIEW_REQUIRED`. The outer workflow then hands off to the active interactive Antigravity Gemini implementation agent to conduct an interactive degraded self-review tracked under `docs/tasks/<task>/reviews/degraded-gemini-review.md`. Such evidence must be unmistakably marked low-confidence/non-independent and must never masquerade as an independent Gate PASS. Gemini is NOT an OpenCode model and is never invoked by `ai_gate.ps1`.
 
 This task also qualifies candidate fallback models before placing them into the default production chain. Existing operational evidence makes `opencode/big-pickle` the first candidate to qualify, but prior ability to inspect a repository is not by itself evidence that it can reliably satisfy the formal Scout or Gate output contracts.
 
@@ -91,33 +91,23 @@ Do not introduce parallel normal-policy fields such as `review_candidates` in ad
 
 Only models that have passed the role-specific qualification gate defined below may be added to the repository's recommended/default normal fallback chain. Arbitrary task-local explicit model configuration remains possible for experimentation, but it must not be documented as a qualified default without evidence.
 
-### 2. Degraded reviewer metadata
-
-The last-resort degraded reviewer is a separate policy from the normal independent candidate chain because its evidence semantics are different.
-
-Allow an optional explicit configuration under `models`, for example:
-
-```json
-{
-  "models": {
-    "review": [
-      "opencode/mimo-v2.5-free",
-      "qualified-fallback-model"
-    ],
-    "degraded_review": "gemini"
-  }
-}
-```
-
-The implementation may choose the smallest concrete identifier/configuration shape compatible with the existing local invocation mechanism, but it must preserve these semantics:
-
-- degraded review is optional and explicit;
-- it is attempted only after every normal independent reviewer candidate for that reviewer role has failed for eligible infrastructure reasons;
-- it is never mixed into the normal candidate list;
-- it must be recorded as `DEGRADED`, `LOW_EVIDENCE`, and `NOT_INDEPENDENT` (or equivalently unambiguous canonical labels);
-- absence/unavailability/failure of the degraded reviewer falls back to the existing infrastructure-blocked outcome.
-
-Do not infer degraded status from arbitrary model-name substring matching. The policy distinction must come from explicit configuration/routing position.
+### 2. Workflow-level manual degraded review contract
+ 
+The last-resort degraded review is a workflow-level manual fallback, NOT an automated Gate/model fallback.
+ 
+- `ai_gate.ps1` manages ONLY automated independent OpenCode reviewer candidates.
+- `ANTIGRAVITY_GEMINI` is the interactive Gemini implementation agent inside Antigravity IDE; it is NOT an OpenCode model and MUST NOT be invoked via `opencode run --model gemini`.
+- If all normal independent OpenCode reviewer candidates fail infrastructurally for a role, `ai_gate.ps1` MUST NOT invoke Gemini and MUST exit `1 = INFRASTRUCTURE_BLOCKED`.
+- Gate diagnostics explicitly output `MANUAL_DEGRADED_REVIEW_REQUIRED`.
+- After Gate infrastructure exhaustion, the outer workflow prompts the active Antigravity Gemini agent to produce an interactive degraded self-review tracked under `docs/tasks/<task>/reviews/degraded-gemini-review.md`.
+- Tracked degraded reviews must state:
+  ```text
+  REVIEW_MODE: DEGRADED
+  EVIDENCE_CONFIDENCE: LOW
+  INDEPENDENCE: NOT_INDEPENDENT
+  REVIEWER: ANTIGRAVITY_GEMINI
+  ```
+- It possesses no independent Gate authority and serves purely as low-evidence context for final ChatGPT + user semantic/architecture review.
 
 ### 3. CLI override semantics
 
@@ -125,9 +115,7 @@ Existing `-Model` and `-ReviewModel` remain strict single-model overrides for th
 
 If supplied, the explicit CLI model replaces the configured normal candidate chain with exactly one normal candidate. This preserves current operator expectations and makes manual debugging deterministic.
 
-CLI override does not silently erase the explicitly configured degraded-review policy unless implementation constraints make that unavoidable; if such a constraint exists, document the behavior explicitly in the architecture contract. Do not add a public chain-valued CLI syntax in v1.1.
-
-Existing internal executable/argument override seams must continue to work. Minimal additional internal seams are allowed where necessary to deterministically exercise multiple candidates, degraded routing, and qualification without live provider failures.
+Existing internal executable/argument override seams must continue to work. Minimal additional internal seams are allowed where necessary to deterministically exercise multiple candidates and qualification without live provider failures.
 
 ### 4. Normal fallback eligibility
 
@@ -143,7 +131,7 @@ Eligible examples:
 - canonical review payload extraction failure;
 - invalid/missing required reviewer verdict structure.
 
-A timeout whose process termination cannot be confirmed is terminal infrastructure failure: do not launch another process while ownership of the previous process is uncertain, including the degraded reviewer.
+A timeout whose process termination cannot be confirmed is terminal infrastructure failure: do not launch another process while ownership of the previous process is uncertain.
 
 Fallback is forbidden after:
 
@@ -170,14 +158,14 @@ reviewer role
   -> ...
   -> normal candidate N
   -> all normal candidates infrastructurally exhausted
-     -> optional degraded Gemini reviewer (full timeout)
-        -> valid degraded PASS/BLOCK: terminal degraded evidence
-        -> infrastructure failure: INFRASTRUCTURE_BLOCKED
+     -> exit 1 = INFRASTRUCTURE_BLOCKED
+     -> signal MANUAL_DEGRADED_REVIEW_REQUIRED
+     -> outer workflow triggers interactive Antigravity Gemini degraded self-review
 ```
 
-Only after one reviewer obtains a valid terminal normal or degraded result may Gate proceed according to the outcome semantics below.
+Only after one reviewer obtains a valid terminal normal result may Gate proceed to the next reviewer role or focused tests.
 
-A valid semantic BLOCK is always terminal. A normal candidate BLOCK must never be bypassed to obtain a more favorable result from another normal or degraded model.
+A valid semantic BLOCK is always terminal. A normal candidate BLOCK must never be bypassed to obtain a more favorable result from another model.
 
 Focused tests remain outside model fallback routing and run only under the existing Gate conditions.
 
@@ -265,63 +253,48 @@ The implementation must update the task/default model metadata only according to
 
 This task is not required to search indefinitely for additional free models. One evidence-backed candidate qualification target is sufficient for v1.1. Additional candidates belong in later evidence-driven calibration unless a trivially available already-tested candidate exists.
 
-### 9. Degraded Gate evidence semantics
-
-The degraded reviewer exists to preserve workflow continuity, not to manufacture independence.
-
+### 9. Degraded evidence semantics
+ 
+The workflow-level manual degraded review exists to preserve workflow continuity, not to manufacture independence.
+ 
 When invoked, tracked evidence must state at minimum:
-
+ 
 ```text
-Review mode: DEGRADED
-Evidence confidence: LOW
-Independence: NOT_INDEPENDENT
-Reason: independent reviewer infrastructure exhausted
-Reviewer: <configured degraded reviewer>
+REVIEW_MODE: DEGRADED
+EVIDENCE_CONFIDENCE: LOW
+INDEPENDENCE: NOT_INDEPENDENT
+REVIEWER: ANTIGRAVITY_GEMINI
 ```
-
-Equivalent machine-readable/unambiguous wording is acceptable.
-
-A degraded PASS means only:
-
-> the last-resort reviewer found no blocking issue under degraded/non-independent conditions.
-
-It does NOT mean:
-
-> independent Gate review passed.
-
-A degraded BLOCK remains meaningful negative evidence and must stop candidate progression as a candidate-blocked result.
-
+ 
+A degraded self-review by the implementation writer possesses NO independent Gate authority. It does NOT convert Gate status to PASS. It serves solely as low-evidence reference context for ChatGPT + user final semantic review.
+ 
 ### 10. Gate process outcomes
-
+ 
 Preserve the existing public exit-code vocabulary:
-
+ 
 - `0 = PASS`
 - `1 = INFRASTRUCTURE_BLOCKED`
 - `2 = CANDIDATE_BLOCKED`
-
-Interpretation is tightened as follows:
-
-- normal independent reviewers all valid PASS + focused tests pass -> exit `0`, normal PASS;
-- any valid normal or degraded reviewer BLOCK, or focused-test failure -> exit `2`, CANDIDATE_BLOCKED;
-- all normal reviewer candidates fail infrastructurally and degraded reviewer is absent or also fails -> exit `1`, INFRASTRUCTURE_BLOCKED;
-- degraded reviewer PASS is **not sufficient to claim a normal independent Gate PASS**.
-
-For v1.1, when degraded PASS is the only review result available for a reviewer role, Gate may complete the mechanical checks and produce tracked degraded evidence, but its evidence/status must explicitly require ChatGPT + user final semantic review before merge. The script must not label that path as `NORMAL PASS` or `INDEPENDENT PASS` anywhere.
-
-To avoid introducing a fourth public exit code in this task, degraded PASS may use exit `0` only as a process-success signal **provided** `EVIDENCE.md` and console status unambiguously identify the result as `DEGRADED / LOW_EVIDENCE / NOT_INDEPENDENT` and the architecture contract states that exit `0` alone is not merge authority. Merge authority remains governed by the workflow lifecycle and ChatGPT + user final review.
-
+ 
+Interpretation is as follows:
+ 
+- normal independent OpenCode reviewers all valid PASS + focused tests pass -> exit `0`, normal PASS;
+- any valid normal reviewer BLOCK, or focused-test failure -> exit `2`, CANDIDATE_BLOCKED;
+- all normal reviewer candidates fail infrastructurally -> exit `1`, INFRASTRUCTURE_BLOCKED with explicit diagnostic `MANUAL_DEGRADED_REVIEW_REQUIRED`.
+- Gate never invokes Gemini and never produces a degraded exit `0`.
+ 
 ### 11. Attempt provenance
-
-Every attempted candidate, including degraded review, must produce compact provenance containing at least:
-
+ 
+Every attempted candidate must produce compact provenance containing at least:
+ 
 - role / reviewer identity;
-- attempt type (`NORMAL` or `DEGRADED`);
+- attempt type (`NORMAL`);
 - 1-based attempt index within its route;
-- model/reviewer identifier;
+- model identifier;
 - elapsed seconds;
 - normalized outcome classification/reason;
 - whether it produced the selected canonical result.
-
+ 
 Raw stdout/stderr from failed attempts remains under ignored `.runtime/` diagnostics and must not be copied wholesale into tracked evidence.
 
 For Scout, successful console output should make selected attempt and preceding fallback failures operator-visible; tracked `CONTEXT.md` remains only the validated Scout report.
@@ -388,18 +361,18 @@ reliability first -> production pilot -> collect evidence -> calibrate time/step
 6. Scout does not invoke later candidates after valid output.
 7. Each Gate reviewer independently falls back after eligible infrastructure failure without restarting or skipping the other reviewer role.
 8. Valid reviewer PASS invokes no later candidate for that reviewer.
-9. Valid reviewer BLOCK invokes no later candidate/degraded reviewer and preserves candidate-blocked semantics.
-10. Each attempted normal or degraded model receives the full configured timeout independently; timeout is not shared across the chain.
-11. Exhausting normal candidates invokes the explicitly configured degraded reviewer exactly once when safe to do so.
-12. Degraded review is never invoked after a valid normal semantic result.
-13. Degraded PASS produces unmistakable `DEGRADED / LOW_EVIDENCE / NOT_INDEPENDENT` evidence and never claims normal independent Gate PASS.
-14. Degraded BLOCK produces candidate-blocked semantics.
-15. Failure/absence of the degraded reviewer after normal infrastructure exhaustion produces infrastructure-blocked semantics and preserves prior canonical artifacts.
-16. Unconfirmed process termination is terminal infrastructure failure and never launches another normal or degraded process.
-17. Provenance identifies every attempted model, order/type, elapsed time, failure reason, and selected result; Gate persists compact provenance in `EVIDENCE.md` while failed raw logs remain runtime-only.
+9. Valid reviewer BLOCK invokes no later candidate and preserves candidate-blocked semantics.
+10. Each attempted normal model receives the full configured timeout independently; timeout is not shared across the chain.
+11. Exhausting normal candidates exits with code 1 (`INFRASTRUCTURE_BLOCKED`), leaves canonical reviews untouched, and emits `MANUAL_DEGRADED_REVIEW_REQUIRED`.
+12. Gate never invokes Gemini as a reviewer model or via OpenCode.
+13. Outer workflow handles degraded review manually via active Antigravity Gemini agent, tracked under `reviews/degraded-gemini-review.md`.
+14. Degraded review artifact contains explicit `DEGRADED / LOW_EVIDENCE / NOT_INDEPENDENT` labels and claims no Gate authority.
+15. Failure of normal reviewer candidates produces infrastructure-blocked semantics (exit 1) and preserves prior canonical artifacts.
+16. Unconfirmed process termination is terminal infrastructure failure and never launches another process.
+17. Provenance identifies every attempted model, order, elapsed time, failure reason, and selected result; Gate persists compact provenance in `EVIDENCE.md` while failed raw logs remain runtime-only.
 18. Malformed reviewer transport/payload/header can trigger fallback mechanically; semantic prose is never reinterpreted by another model.
 19. Existing standalone isolation, working directory, closed stdin, streaming observability, kill confirmation, verdict parsing, focused-test behavior, transactional promotion/rollback, and 0/1/2 process codes remain intact.
-20. Deterministic probes cover scalar compatibility, ordered fallback, semantic terminality, normal-chain exhaustion, degraded success/block/failure, per-attempt timeout semantics, and artifact safety without requiring live provider failure.
+20. Deterministic probes cover scalar compatibility, ordered fallback, semantic terminality, normal-chain exhaustion, per-attempt timeout semantics, and artifact safety without requiring live provider failure.
 21. `opencode/big-pickle` receives bounded live role-specific qualification rather than being assumed qualified from unrelated prior use.
 22. BigPickle is added only to the role chains it actually qualifies for; failed/inconclusive qualification does not weaken role/parser contracts and does not fabricate a fallback.
 23. Qualification evidence records model, role, elapsed time, structural result, and classification without committing raw failed provider output.

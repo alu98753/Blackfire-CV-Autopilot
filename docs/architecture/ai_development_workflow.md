@@ -305,8 +305,10 @@ Model configuration is supplied by `task.json` or PowerShell arguments:
 - A valid semantic `PASS` or `BLOCK` verdict is strictly terminal for that reviewer role. Fallback is never triggered after a valid verdict; review-shopping is forbidden.
 - Each attempted model receives its own **full 480-second default timeout** (not a shared remainder). Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
 - If unconfirmed process termination occurs upon timeout, routing terminates immediately as terminal infrastructure failure without launching subsequent processes.
-- An optional, explicitly configured last-resort degraded reviewer (`models.degraded_review`, e.g., `"gemini"`) is invoked only after all normal independent reviewer candidates for that role fail infrastructurally.
-- Degraded review evidence is unambiguously labeled `DEGRADED`, `LOW_EVIDENCE`, and `NOT_INDEPENDENT`. It never masquerades as a normal independent Gate PASS, and exit code `0` on a degraded pass is merely a process-completion signal; merge authority remains strictly with ChatGPT + user semantic review.
+- Model fallback in `ai_gate.ps1` manages ONLY automated independent OpenCode reviewer candidates.
+- If all normal independent OpenCode reviewer candidates fail infrastructurally for a role, `ai_gate.ps1` MUST NOT invoke Gemini and MUST exit `1 = INFRASTRUCTURE_BLOCKED`, outputting an explicit diagnostic `MANUAL_DEGRADED_REVIEW_REQUIRED`.
+- Outer workflow handoff: When Gate exits 1 due to infrastructure exhaustion, the outer Blackfire Agent Workflow prompts the interactive Antigravity Gemini implementation agent to conduct an interactive degraded self-review tracked under `docs/tasks/<task>/reviews/degraded-gemini-review.md`.
+- Degraded review evidence is unambiguously labeled `DEGRADED`, `LOW_EVIDENCE`, and `NOT_INDEPENDENT`. It possesses NO independent Gate authority and never masquerades as a Gate PASS. Merge authority remains strictly with ChatGPT + user semantic review.
 - Structured attempt provenance (role, attempt type, 1-based index, model, elapsed seconds, outcome reason, selected status) is recorded compactly in `EVIDENCE.md` without committing raw failed output or credentials.
 - Provider credentials remain local user configuration and must never be committed.
 

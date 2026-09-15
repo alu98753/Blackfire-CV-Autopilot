@@ -17,7 +17,6 @@ param(
     [string[]]$_SpecReviewerArgumentsOverride,
     [string[]]$_RegressionReviewerArgumentsOverride,
     [string[]]$_ReviewCandidatesOverride,
-    [string]$_DegradedReviewOverride,
     [string]$_PythonExecutableOverride,
     [string[]]$_PythonArgumentsOverride,
     [string]$_FailPromotionOnTarget
@@ -100,25 +99,7 @@ function Resolve-ReviewCandidates {
     return $list
 }
 
-function Resolve-DegradedReviewer {
-    param(
-        $RawConfigDegraded,
-        [string]$TestDegradedOverride
-    )
-
-    if (-not [string]::IsNullOrWhiteSpace($TestDegradedOverride)) {
-        return $TestDegradedOverride.Trim()
-    }
-
-    if ($null -ne $RawConfigDegraded -and -not [string]::IsNullOrWhiteSpace([string]$RawConfigDegraded)) {
-        return ([string]$RawConfigDegraded).Trim()
-    }
-
-    return $null
-}
-
 $normalCandidates = Resolve-ReviewCandidates -RawConfigReview $config.models.review -CliReviewModel $ReviewModel -TestCandidatesOverride $_ReviewCandidatesOverride
-$configuredDegraded = Resolve-DegradedReviewer -RawConfigDegraded $config.models.degraded_review -TestDegradedOverride $_DegradedReviewOverride
 
 $runtimeDir = Join-Path $repoRoot ".runtime\ai_gate\$Task"
 $reviewDir = Join-Path $taskDir "reviews"
@@ -485,7 +466,6 @@ function Test-ReviewVerdictStructure {
 $infraBlocked = $false
 $infraReason = ""
 $candidateBlocked = $false
-$hasDegradedReview = $false
 
 $reviewTargets = @(
     @{ Agent = "spec-reviewer"; File = "spec-review.md" },
@@ -516,38 +496,21 @@ VERDICT: PASS|BLOCK
 BLOCKING_FINDINGS: <count>
 "@
 
-    $routeList = @()
-    $idx = 0
-    foreach ($cand in $normalCandidates) {
-        $idx++
-        $routeList += @{
-            Type = "NORMAL"
-            Index = $idx
-            Model = $cand
-        }
-    }
-    if (-not [string]::IsNullOrWhiteSpace($configuredDegraded)) {
-        $routeList += @{
-            Type = "DEGRADED"
-            Index = 1
-            Model = $configuredDegraded
-        }
-    }
-
     $roleCompleted = $false
 
-    foreach ($routeItem in $routeList) {
-        $attemptType = $routeItem.Type
-        $attemptIndexInRoute = $routeItem.Index
-        $currentModel = $routeItem.Model
+    $attemptIndex = 0
+    foreach ($cand in $normalCandidates) {
+        $attemptIndex++
+        $currentModel = $cand
+        $attemptType = "NORMAL"
 
-        $rawLogPath = Join-Path $runtimeDir ("${agentName}_" + $attemptType.ToLower() + "_attempt_${attemptIndexInRoute}.log")
+        $rawLogPath = Join-Path $runtimeDir ("${agentName}_attempt_${attemptIndex}.log")
         $invocation = Get-OpenCodeInvocation -Agent $agentName -PromptText $prompt -CandidateModel $currentModel
 
-        Write-Host "Running OpenCode agent '$agentName' [$attemptType #$($attemptIndexInRoute): '$currentModel'] (timeout limit: ${ReviewTimeoutSeconds}s)..."
+        Write-Host "Running OpenCode agent '$agentName' [#${attemptIndex}: '$currentModel'] (timeout limit: ${ReviewTimeoutSeconds}s)..."
 
         $procResult = Invoke-BoundedProcess -Executable $invocation.Executable -Arguments $invocation.Arguments -TimeoutSeconds $ReviewTimeoutSeconds -StreamToConsole:$true
-        Write-Host "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] finished in $([math]::Round($procResult.ElapsedSeconds, 1))s (exit code: $($procResult.ExitCode))."
+        Write-Host "OpenCode agent '$agentName' [#$attemptIndex] finished in $([math]::Round($procResult.ElapsedSeconds, 1))s (exit code: $($procResult.ExitCode))."
 
         $fullRaw = ($procResult.StdOut, $procResult.StdErr | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
         Set-Content -Path $rawLogPath -Value $fullRaw -Encoding UTF8
@@ -557,7 +520,7 @@ BLOCKING_FINDINGS: <count>
                 $provenanceRecords.Add([pscustomobject]@{
                     Role = $agentName
                     Type = $attemptType
-                    Index = $attemptIndexInRoute
+                    Index = $attemptIndex
                     Model = $currentModel
                     ElapsedSeconds = $procResult.ElapsedSeconds
                     Outcome = "TIMEOUT_UNCONFIRMED_KILL"
@@ -572,14 +535,14 @@ BLOCKING_FINDINGS: <count>
             $provenanceRecords.Add([pscustomobject]@{
                 Role = $agentName
                 Type = $attemptType
-                Index = $attemptIndexInRoute
+                Index = $attemptIndex
                 Model = $currentModel
                 ElapsedSeconds = $procResult.ElapsedSeconds
                 Outcome = "TIMEOUT"
                 Reason = "Timed out after ${ReviewTimeoutSeconds}s."
                 Selected = $false
             })
-            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] timed out. Falling back if eligible."
+            Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] timed out. Falling back if eligible."
             continue
         }
 
@@ -587,14 +550,14 @@ BLOCKING_FINDINGS: <count>
             $provenanceRecords.Add([pscustomobject]@{
                 Role = $agentName
                 Type = $attemptType
-                Index = $attemptIndexInRoute
+                Index = $attemptIndex
                 Model = $currentModel
                 ElapsedSeconds = $procResult.ElapsedSeconds
                 Outcome = "NON_ZERO_EXIT"
                 Reason = "Process exited with code $($procResult.ExitCode)."
                 Selected = $false
             })
-            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] exited with code $($procResult.ExitCode). Falling back if eligible."
+            Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] exited with code $($procResult.ExitCode). Falling back if eligible."
             continue
         }
 
@@ -605,14 +568,14 @@ BLOCKING_FINDINGS: <count>
                 $provenanceRecords.Add([pscustomobject]@{
                     Role = $agentName
                     Type = $attemptType
-                    Index = $attemptIndexInRoute
+                    Index = $attemptIndex
                     Model = $currentModel
                     ElapsedSeconds = $procResult.ElapsedSeconds
                     Outcome = "MALFORMED_STRUCTURED_JSON"
                     Reason = $extraction.Error
                     Selected = $false
                 })
-                Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] structured output malformed: $($extraction.Error). Falling back if eligible."
+                Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] structured output malformed: $($extraction.Error). Falling back if eligible."
                 continue
             }
             $assistantMessage = $extraction.Text
@@ -623,14 +586,14 @@ BLOCKING_FINDINGS: <count>
             $provenanceRecords.Add([pscustomobject]@{
                 Role = $agentName
                 Type = $attemptType
-                Index = $attemptIndexInRoute
+                Index = $attemptIndex
                 Model = $currentModel
                 ElapsedSeconds = $procResult.ElapsedSeconds
                 Outcome = "PAYLOAD_EXTRACTION_FAILED"
                 Reason = $payloadResult.Error
                 Selected = $false
             })
-            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] payload extraction failed: $($payloadResult.Error). Falling back if eligible."
+            Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] payload extraction failed: $($payloadResult.Error). Falling back if eligible."
             continue
         }
 
@@ -639,14 +602,14 @@ BLOCKING_FINDINGS: <count>
             $provenanceRecords.Add([pscustomobject]@{
                 Role = $agentName
                 Type = $attemptType
-                Index = $attemptIndexInRoute
+                Index = $attemptIndex
                 Model = $currentModel
                 ElapsedSeconds = $procResult.ElapsedSeconds
                 Outcome = "INVALID_VERDICT_STRUCTURE"
                 Reason = $validation.Error
                 Selected = $false
             })
-            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] verdict structure invalid: $($validation.Error). Falling back if eligible."
+            Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] verdict structure invalid: $($validation.Error). Falling back if eligible."
             continue
         }
 
@@ -654,7 +617,7 @@ BLOCKING_FINDINGS: <count>
         $provenanceRecords.Add([pscustomobject]@{
             Role = $agentName
             Type = $attemptType
-            Index = $attemptIndexInRoute
+            Index = $attemptIndex
             Model = $currentModel
             ElapsedSeconds = $procResult.ElapsedSeconds
             Outcome = "VALID_VERDICT"
@@ -673,16 +636,12 @@ BLOCKING_FINDINGS: <count>
             Model = $currentModel
         }
 
-        if ($attemptType -eq "DEGRADED") {
-            $hasDegradedReview = $true
-        }
-
         if ($validation.Verdict -eq "BLOCK") {
             $candidateBlocked = $true
         }
 
         $roleCompleted = $true
-        # Terminal for this reviewer: no further candidates or degraded attempts
+        # Terminal for this reviewer: no further candidates
         break
     }
 
@@ -692,7 +651,7 @@ BLOCKING_FINDINGS: <count>
 
     if (-not $roleCompleted) {
         $infraBlocked = $true
-        $infraReason = "All configured reviewer candidates (and degraded reviewer if configured) for '$agentName' failed infrastructurally. Canonical reviews left untouched."
+        $infraReason = "All configured reviewer candidates for '$agentName' failed infrastructurally. Canonical reviews left untouched. MANUAL_DEGRADED_REVIEW_REQUIRED: Workflow-level degraded review by Antigravity Gemini implementation agent is required."
         break
     }
 }
@@ -793,17 +752,6 @@ $evidence.Add("Branch: $branch")
 $evidence.Add("HEAD: $head")
 $evidence.Add("Base ref: $baseRef")
 $evidence.Add("")
-
-if ($hasDegradedReview) {
-    $evidence.Add("## Review mode notice")
-    $evidence.Add("")
-    $evidence.Add("- Review mode: DEGRADED")
-    $evidence.Add("- Evidence confidence: LOW")
-    $evidence.Add("- Independence: NOT_INDEPENDENT")
-    $evidence.Add("- Reason: independent reviewer infrastructure exhausted")
-    $evidence.Add("- Final review requirement: ChatGPT + user final semantic review required before merge.")
-    $evidence.Add("")
-}
 
 $evidence.Add("## Review verdicts")
 $evidence.Add("")
@@ -935,11 +883,6 @@ Write-Host "Canonical reviewer reports and EVIDENCE.md successfully promoted."
 if ($candidateBlocked -or $specVerdict.Verdict -ne "PASS" -or $specVerdict.Blocking -ne 0 -or $regressionVerdict.Verdict -ne "PASS" -or $regressionVerdict.Blocking -ne 0 -or -not $testsPassed) {
     Write-Host "AI verification gate CANDIDATE_BLOCKED. Inspect EVIDENCE.md and reviewer reports."
     exit 2
-}
-
-if ($hasDegradedReview) {
-    Write-Host "AI verification gate PASSED (DEGRADED / LOW_EVIDENCE / NOT_INDEPENDENT). Process exit 0 signal emitted. Final ChatGPT/human semantic review is strictly required before merge."
-    exit 0
 }
 
 Write-Host "AI verification gate PASSED. Final ChatGPT/human review is still required."
