@@ -1,34 +1,32 @@
-# Verification Evidence
+﻿# Verification Evidence
 
 Task: intent-routing-observability
-Generated: 2026-09-15T11:37:00+08:00
+Generated: 2026-09-15T11:49:02+08:00
 Branch: task-intent-routing-observability
-HEAD: fd883569d92253b59e6f6492854649cee8f3b30f
+HEAD: 6c17c0d59690c1850fc8643ba39a71afb3f711cd
 Base ref: origin/main
 
 ## Review verdicts
 
-- Spec reviewer: DEGRADED (Independent candidates exhausted due to extraction failure: `**VERDICT: PASS**` header format)
-- Regression reviewer: NOT_REACHED (Gate halted at spec-reviewer infrastructure failure)
+- Spec reviewer: PASS (blocking=0; type=NORMAL; model=opencode/big-pickle)
+- Regression reviewer: PASS (blocking=0; type=NORMAL; model=opencode/big-pickle)
 
-Degraded review report:
+Detailed reports:
 
-- reviews/degraded-gemini-review.md
+- reviews/spec-review.md
+- reviews/regression-review.md
 
 ## Attempt provenance
 
-- Role: spec-reviewer | Type: NORMAL #1 | Model: opencode/mimo-v2.5-free | Elapsed: 158.6s | Outcome: PAYLOAD_EXTRACTION_FAILED | Status: NOT_SELECTED
-  - Reason: OpenCode agent finished analysis with semantic PASS but wrapped header in markdown bold (`**VERDICT: PASS**`), triggering mechanical classification failure.
-  - Manual Degraded Review: Conducted by Antigravity Gemini implementation agent under `reviews/degraded-gemini-review.md`.
+- Role: spec-reviewer | Type: NORMAL #1 | Model: opencode/big-pickle | Elapsed: 80.2s | Outcome: VALID_VERDICT | Status: SELECTED
+- Role: regression-reviewer | Type: NORMAL #1 | Model: opencode/big-pickle | Elapsed: 119.1s | Outcome: VALID_VERDICT | Status: SELECTED
 
 ## Focused tests
 
-- `tests/test_behavior_runtime_ports.py`
-- `tests/test_behavior_navigation_intent.py`
-- `tests/test_behavior_navigation_progress.py`
-- `tests/test_behavior_routing_observability.py`
-
-Result: 32 tests passed in 0.144s (OK).
+- PASS tests/test_behavior_runtime_ports.py (exit=0); local log: .runtime/ai_gate/intent-routing-observability/test-tests_test_behavior_runtime_ports.py.log
+- PASS tests/test_behavior_navigation_intent.py (exit=0); local log: .runtime/ai_gate/intent-routing-observability/test-tests_test_behavior_navigation_intent.py.log
+- PASS tests/test_behavior_navigation_progress.py (exit=0); local log: .runtime/ai_gate/intent-routing-observability/test-tests_test_behavior_navigation_progress.py.log
+- PASS tests/test_behavior_routing_observability.py (exit=0); local log: .runtime/ai_gate/intent-routing-observability/test-tests_test_behavior_routing_observability.py.log
 
 ## Full suite
 
