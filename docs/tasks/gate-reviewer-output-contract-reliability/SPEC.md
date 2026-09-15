@@ -1,53 +1,42 @@
 # gate-reviewer-output-contract-reliability
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Make Gate reviewer outcomes machine-reliable without forcing human-readable review Markdown to place `VERDICT` at a particular textual position.
+Make Gate reviewer outcomes machine-reliable without coupling PASS/BLOCK semantics to the textual placement or formatting of human-readable Markdown.
 
-The desired responsibility boundary is:
+The required responsibility boundary is:
 
 ```text
 reviewer semantic judgment
-    -> machine-readable validated outcome
-    -> deterministic Gate validation
+    -> OpenCode JSON-Schema structured outcome
+    -> deterministic Gate semantic validation
     -> deterministic human-readable review rendering
 ```
 
-Human report layout must not be the transport protocol for PASS/BLOCK.
+Human review Markdown is presentation evidence, not the machine transport protocol for verdict authority.
 
 ## Observed problem
 
-`gate-payload-robustness-v1` exposed repeated cases where the reviewer completed a useful semantic review but the Gate could not obtain a canonical verdict reliably from free-form assistant text.
+`gate-payload-robustness-v1` exposed repeated cases where the reviewer completed a useful semantic review but Gate could not obtain a canonical verdict reliably from free-form assistant text.
 
 Observed failure modes include:
 
 1. reviewer output affected by forced max-step finalization;
 2. incomplete/unclosed trailing assistant messages;
-3. a semantically valid review whose `VERDICT: PASS` / `BLOCKING_FINDINGS: 0` block appeared after the review body instead of at the beginning;
-4. prior Markdown-format variation around the verdict header.
+3. semantically valid reviews whose verdict appeared after the review body rather than at the beginning;
+4. Markdown-format variation around the verdict header.
 
-The step-budget failure is already handled by `gate-reviewer-step-budget-reliability`; this task must not reopen that fix.
+`gate-reviewer-step-budget-reliability` already addressed reviewer step ceilings and voluntary finalization. This task must not reopen that policy. The remaining architecture defect is that Gate still derives machine verdict semantics from free-form reviewer prose.
 
-The remaining architectural problem is that Gate currently uses the placement and formatting of free-form Markdown as part of its machine contract.
+## Final architecture decision
 
-## Human-readable report decision
+The canonical machine path MUST use OpenCode SDK JSON-Schema structured output rather than `opencode run --format json` assistant-text extraction.
 
-For human readers, both styles are legitimate:
+OpenCode CLI `--format json` is a raw JSON event stream. It is not the canonical semantic output contract for this task. The adapter MUST request SDK structured output with `format.type = "json_schema"`, obtain the validated `structured_output`, and convert SDK/transport/validation failures into deterministic infrastructure failure.
 
-- status-first is useful for dashboards / PR summaries;
-- evidence-first and verdict-last is natural for review reports where the conclusion follows the reasoning.
-
-This task therefore does **not** define semantic correctness by whether the verdict appears at the top or bottom of Markdown.
-
-Provisional UX preference: canonical `reviews/*.md` may present the detailed assessment first and a clear verdict section at the end, as long as the machine verdict is obtained independently and rendered deterministically.
-
-## Provisional architecture direction
-
-Prefer a structured reviewer result over parser tolerance.
-
-A minimal conceptual result is:
+The minimal reviewer outcome contract is:
 
 ```json
 {
@@ -57,86 +46,172 @@ A minimal conceptual result is:
 }
 ```
 
-The exact schema is not Final yet.
+Required schema rules:
 
-Gate should validate machine fields deterministically, then render/store the human-readable review deterministically. The model should own semantic judgment and evidence, not Markdown protocol placement.
+- `verdict` is required and is exactly `PASS` or `BLOCK`;
+- `blocking_findings` is required and is a non-negative integer;
+- `report_markdown` is required and is a string;
+- no machine verdict may be reconstructed from `report_markdown`;
+- Gate applies the semantic cross-field invariant after schema validation:
+  - `PASS` requires `blocking_findings == 0`;
+  - `BLOCK` requires `blocking_findings >= 1`.
 
-OpenCode currently documents JSON-Schema structured output in its SDK, including schema validation and bounded validation retries. However, the repository currently invokes `opencode run --format json`, whose documented CLI `--format json` mode is a stream of raw JSON events rather than an explicit JSON-Schema flag. Scout must establish the smallest supported integration path instead of assuming an SDK migration is required.
+The model owns semantic judgment and supporting review prose. OpenCode structured-output validation owns shape/type validity. Gate owns semantic consistency, routing/fallback policy, artifact promotion, and deterministic rendering.
 
-If native structured output is not practical in the current Windows/non-interactive workflow, Final SPEC may choose a narrower transport contract. Any fallback must remain deterministic and must not become an arbitrary search for PASS/BLOCK anywhere in model prose.
+A structured-output validation exhaustion such as OpenCode `StructuredOutputError`, missing `structured_output`, adapter crash/non-zero exit, timeout, malformed adapter transport, or semantic contradiction is an infrastructure failure for that candidate attempt. Normal candidate fallback may proceed only under the existing infrastructure-failure routing rules. A valid semantic PASS or BLOCK remains terminal and MUST NOT trigger review-shopping.
 
-## Provisional scope
+## Adapter boundary
 
-Likely change surface:
+Introduce one small one-shot adapter at:
+
+```text
+scripts/opencode_structured_review.mjs
+```
+
+The adapter is an infrastructure boundary, not a second reviewer. It MUST:
+
+1. receive the reviewer role, candidate model, review prompt, and repository working directory from Gate;
+2. use the official OpenCode SDK to create/use the required one-shot client/server lifecycle;
+3. request the fixed JSON-Schema outcome above;
+4. use the selected repository reviewer agent contract and selected candidate model;
+5. return exactly one deterministic machine-readable adapter result to Gate on success;
+6. return non-zero / deterministic infrastructure diagnostics on SDK failure, structured-output validation exhaustion, missing outcome, or teardown failure that makes completion untrustworthy;
+7. close any process-local OpenCode server/client resources before exit;
+8. never reinterpret review prose and never search prior/partial messages for a verdict.
+
+A long-lived shared `opencode serve` process is NOT required by this contract and MUST NOT become a new global mutable dependency.
+
+The adapter may require repository-local Node package metadata for the official SDK. If so, `package.json` / lockfile and explicit bootstrap support are in scope. Task execution MUST NOT silently download/install dependencies. `scripts/bootstrap_opencode.ps1` remains the explicit installation boundary and may be extended to install/verify the pinned local SDK dependency.
+
+## Human-readable rendering decision
+
+Canonical `reviews/spec-review.md` and `reviews/regression-review.md` are produced by a deterministic Gate-side renderer from the validated structured outcome.
+
+The renderer MUST NOT parse `report_markdown` to determine verdict semantics.
+
+Detailed review files SHOULD use evidence-first presentation with a deterministic verdict section appended at the end, for example:
+
+```text
+<validated report_markdown>
+
+## Verdict
+VERDICT: PASS
+BLOCKING_FINDINGS: 0
+```
+
+The exact heading text may differ if implementation keeps existing report headings coherent, but the verdict block MUST be generated from structured machine fields rather than copied from model prose.
+
+`EVIDENCE.md` remains status-first because it is a Gate summary/dashboard artifact. Its PASS/BLOCK fields likewise come only from validated structured fields.
+
+If `report_markdown` itself contains text such as `VERDICT: BLOCK`, that text has zero machine authority and MUST NOT alter Gate outcome.
+
+## Scope
+
+Primary change surface:
 
 - `.opencode/agents/spec-reviewer.md`
 - `.opencode/agents/regression-reviewer.md`
 - `scripts/ai_gate.ps1`
+- `scripts/opencode_structured_review.mjs` (new)
+- `scripts/bootstrap_opencode.ps1` if required for explicit SDK dependency installation/verification
+- `package.json` / repository lockfile if required for the official SDK dependency
 - `tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1`
+- test fixtures/helpers under `tests/workflow_scripts/` as needed
 - `docs/architecture/ai_development_workflow.md`
 - `docs/tasks/gate-reviewer-output-contract-reliability/`
 
-If Scout proves a small dedicated adapter is required, its exact path must be added explicitly before Final SPEC.
+The existing free-form verdict extractors in `ai_gate.ps1` may be deleted or retained only for unrelated legacy/test seams. They MUST NOT remain an authoritative fallback path for Gate reviewer verdicts after this task.
 
 ## Known invariants
 
 1. OpenCode reviewers remain independent, read-only blocker detectors.
-2. Reviewer semantic authority is unchanged: the reviewer decides PASS or BLOCK from grounded evidence.
-3. Semantic consistency remains strict:
-   - `PASS` requires `blocking_findings == 0`;
-   - `BLOCK` requires `blocking_findings >= 1`.
+2. Reviewer semantic authority is unchanged: the reviewer decides PASS or BLOCK from grounded repository/spec evidence.
+3. `PASS` requires `blocking_findings == 0`; `BLOCK` requires `blocking_findings >= 1`.
 4. Forced max-step finalization remains an infrastructure failure and is never a verdict source.
-5. Partial/incomplete assistant output, tool-result text, synthetic trailing output, or older messages must never be searched to salvage a verdict.
+5. Partial/incomplete assistant output, tool-result text, synthetic trailing output, stale output, or older messages must never be searched to salvage a verdict.
 6. Infrastructure/model fallback must not become semantic review-shopping.
-7. Canonical `reviews/*` and `EVIDENCE.md` must remain protected on infrastructure failure.
-8. Human-readable Markdown layout must not silently redefine machine verdict semantics.
-9. Existing `gate-payload-robustness-v1` parser/extractor work is a downstream task and must not be duplicated or weakened here merely to make its current Gate pass.
-10. No production/game behavior changes.
-11. Windows non-interactive execution continues to use `cmd.exe /d /s /c` and closed stdin where appropriate.
+7. Canonical `reviews/*` and `EVIDENCE.md` remain protected on infrastructure failure according to existing transactional promotion semantics.
+8. Human-readable Markdown layout cannot redefine machine verdict semantics.
+9. Reviewer timeout policy remains unchanged.
+10. Reviewer model routing/order remains unchanged unless required only to pass the selected model identifier through the new adapter.
+11. Reviewer step budgets remain `spec: 8`, `regression: 10`.
+12. No production/game behavior changes.
+13. Windows non-interactive execution remains bounded with explicit repository working directory and closed stdin. PowerShell/non-interactive child execution from local agents continues through `cmd.exe /d /s /c` where applicable.
+14. Provider credentials remain local and MUST NOT be committed.
+15. The adapter must not introduce singleton task/session state that can collide across worktrees.
 
 ## Non-goals
 
-- changing reviewer model routing/order;
+- changing reviewer model routing policy or candidate order;
 - changing reviewer timeout values;
-- changing the recently established reviewer step budgets (`spec: 8`, `regression: 10`);
+- changing reviewer step budgets;
 - accepting forced-finalization output as valid evidence;
-- broadening free-form regex parsing until arbitrary prose happens to pass;
-- changing Scout behavior;
+- broadening regex/parser tolerance for free-form verdict prose;
+- implementing JSON-in-Markdown, XML-in-Markdown, fenced-block, or arbitrary prose parsing as a fallback verdict protocol;
+- changing Scout behavior, including the separate observed Scout artifact-promotion/forced-finalization weaknesses;
+- making Scout auto-commit/push `CONTEXT.md`;
 - implementing `task.json` schema linting;
 - modifying production/game code;
-- closing or merging `gate-payload-robustness-v1` inside this task.
+- closing or merging `gate-payload-robustness-v1` inside this task;
+- introducing a permanently running shared OpenCode server;
+- running the full product test suite by default.
 
-## Provisional acceptance criteria
+## Forbidden shortcuts
 
-1. Gate obtains PASS/BLOCK from a machine contract that is independent of where the human review displays its verdict.
-2. A reviewer may produce evidence-first / verdict-last human presentation without causing infrastructure failure solely because of Markdown ordering.
-3. Machine validation deterministically rejects missing, malformed, contradictory, or ambiguous verdict data.
-4. `PASS + blocking_findings > 0` and `BLOCK + blocking_findings == 0` remain invalid.
-5. Forced max-step, incomplete output, synthetic trailing output, and stale/older verdicts remain non-authoritative.
-6. Canonical review Markdown is produced by a deterministic boundary rather than relying on the model to place a magic two-line header correctly.
-7. Existing read-only reviewer and fail-safe artifact promotion semantics remain intact.
-8. Deterministic offline workflow coverage demonstrates at least:
-   - valid PASS structured outcome;
-   - valid BLOCK structured outcome;
-   - contradictory semantic fields rejected;
-   - missing/invalid structured outcome fails infrastructurally;
-   - human report body may contain ordinary prose without being parsed for verdict semantics;
-   - earlier/stale PASS cannot override a later authoritative malformed/failing outcome;
-   - forced/incomplete output is not salvaged.
-9. Full product test suite is not required by default; workflow harness/focused verification is sufficient unless Final SPEC discovers a broader dependency.
-10. A fresh real Gate run for this task produces canonical PASS evidence before merge.
+The implementation MUST NOT:
 
-## Uncertainty / Scout questions
+1. search `report_markdown` or raw assistant text for the first/last/unique `VERDICT` token;
+2. accept a JSON code fence or delimiter embedded in free-form Markdown as equivalent to SDK structured output;
+3. fall back from failed structured output to the old Markdown verdict parser;
+4. recover a verdict from earlier messages/events after the authoritative structured attempt fails;
+5. classify schema/semantic failure as PASS or BLOCK;
+6. promote candidate review artifacts when an infrastructure failure should preserve prior canonical evidence;
+7. invoke a different model after a valid semantic PASS or BLOCK;
+8. silently install the SDK/dependencies during `ai_gate.ps1` execution.
 
-1. Can the currently installed OpenCode CLI expose JSON-Schema structured output directly, or is that capability available only through SDK/server APIs?
-2. If an SDK/API adapter is required, what is the smallest dependency and process model compatible with the existing Windows non-interactive workflow?
-3. Do the configured free models used by this repository support OpenCode structured output consistently?
-4. What exact OpenCode event/result carries `structured_output`, validation errors, and retry exhaustion?
-5. Should the structured schema contain one `report_markdown` field or structured review sections that are rendered by Gate?
-6. Should canonical Markdown place the verdict at the end, or should `EVIDENCE.md` remain status-first while detailed `reviews/*.md` are evidence-first? This is a presentation decision, not a machine-validation decision.
-7. Which existing P1 parser/extractor functions remain necessary as compatibility paths after structured output becomes authoritative?
-8. Can the change be implemented without introducing a long-lived `opencode serve` process?
+## Required focused verification
 
-## Scout objective
+Deterministic offline workflow coverage MUST demonstrate at least:
 
-Localize the smallest supported transport/validation boundary for reliable reviewer outcomes. Scout should inspect current OpenCode invocation, agent contracts, Gate extraction/validation, workflow harness seams, and architecture contract. It should not implement the solution or reopen model routing, timeout, or step-budget policy.
+1. valid structured PASS -> Gate PASS path;
+2. valid structured BLOCK -> Gate candidate-blocked path;
+3. `PASS + blocking_findings > 0` rejected infrastructurally;
+4. `BLOCK + blocking_findings == 0` rejected infrastructurally;
+5. missing `structured_output` rejected;
+6. malformed adapter result / non-zero adapter exit rejected;
+7. structured-output validation exhaustion represented as infrastructure failure;
+8. arbitrary prose and verdict-like strings inside `report_markdown` cannot alter machine verdict;
+9. evidence-first / verdict-last canonical review rendering succeeds;
+10. stale/earlier PASS cannot override a later authoritative malformed/failing attempt;
+11. forced/incomplete output is not salvaged;
+12. normal infrastructure candidate fallback still works;
+13. valid semantic PASS/BLOCK remains terminal and does not fall through to another candidate;
+14. canonical review/EVIDENCE promotion rollback semantics remain intact;
+15. the adapter/structured-output path itself is exercised by a deterministic test seam rather than leaving only the legacy `_ReviewerExecutableOverride` free-text path covered.
+
+The existing workflow harness may be refactored to provide an adapter-result fixture seam. Tests should remain deterministic and offline; they must not require a live model/provider.
+
+## Acceptance criteria
+
+1. Gate obtains reviewer PASS/BLOCK exclusively from validated machine-readable structured fields, never Markdown placement.
+2. Reviewer human prose may naturally be evidence-first and verdict-last without affecting machine outcome.
+3. OpenCode JSON-Schema validation is the canonical shape/type boundary; Gate then enforces cross-field semantic consistency deterministically.
+4. Missing, malformed, contradictory, ambiguous, or exhausted structured output is classified as infrastructure failure, not a semantic verdict.
+5. The model cannot change machine verdict by placing verdict-like text anywhere in `report_markdown`.
+6. Canonical review Markdown is rendered deterministically from structured fields plus human report content.
+7. `EVIDENCE.md` remains deterministic/status-first and obtains reviewer status only from structured fields.
+8. Existing read-only reviewer permissions, candidate fallback policy, timeout policy, step budgets, and fail-safe artifact promotion semantics remain intact.
+9. The official SDK dependency/process lifecycle is explicit, reproducible, non-interactive during Gate execution, and does not require a long-lived shared OpenCode server.
+10. Workflow architecture documentation is updated so future code does not reintroduce free-form Markdown as verdict transport.
+11. Deterministic workflow harness coverage passes for the cases listed above.
+12. No production/game behavior changes occur.
+13. A fresh real `scripts/ai_gate.ps1 -Task gate-reviewer-output-contract-reliability` run completes with canonical PASS evidence before merge.
+
+## Follow-up debt discovered during Scout
+
+Scout exposed two separate workflow weaknesses:
+
+- `ai_scout.ps1` writes/promotes `CONTEXT.md` but does not itself commit/push it;
+- Scout structural validation can currently accept output containing preamble/forced-max-step text as long as a Scout heading is later present.
+
+These are real workflow debts but are explicitly outside this task. They should be handled by a separate Scout reliability task rather than coupled to Gate reviewer outcome transport.
