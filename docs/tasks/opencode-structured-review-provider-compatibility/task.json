@@ -1,0 +1,23 @@
+{
+  "id": "opencode-structured-review-provider-compatibility",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/opencode-structured-review-provider-compatibility/",
+    "scripts/",
+    "tests/workflow_scripts/",
+    "package.json",
+    "package-lock.json",
+    "scripts/bootstrap_opencode.ps1",
+    "docs/architecture/ai_development_workflow.md"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
