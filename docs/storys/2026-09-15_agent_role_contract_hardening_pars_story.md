@@ -13,15 +13,23 @@
 
 ## 2. Action (關鍵行動與設計決策)
 
-本次改動的核心原則是：**停止針對 LLM 的無效 Prompt 調優，改由系統建立嚴格的傳輸邊界層（Transport Boundary Layer），將「辨識正式答案邊界」與「驗收正式答案合規性」徹底解耦**。
+### 2.1 關鍵失敗路徑與診斷轉折 (Failed Paths that Changed Diagnosis)
 
-### 2.1 結構化 JSON 傳輸邊界
+在早期嘗試中，直覺判定問題出在「模型不夠聽話」，因此採取了多輪 Prompt Engineering 嘗試：
+- 加入嚴格負向約束（「不要輸出前言」、「絕對不要輸出說明文字」）。
+- 人工設計假性的「Turn-1 閱讀證據 / Turn-2 僅輸出標頭」分段策略。
+
+這些嘗試全部失敗：模型仍時常在最終交卷時夾帶一句過渡說明，導致 Gate 反覆報錯。這段失敗嘗試至關重要，因為它**實質排除了「靠調整提示詞就能徹底解決格式合規」的假設**，並促使我們退一步執行唯讀 JSON 探針，最終才看清真正的結構病灶：
+- OpenCode stdout 本身就是整場交談的 transcript，而非單一純粹的回答字串。
+- 不應要求 LLM 在缺乏傳輸協議保護下做到字元級的格式完美，真正的解法必須在系統層建立嚴格的傳輸與有效負載邊界。
+
+### 2.2 結構化 JSON 傳輸邊界
 
 在 `scripts/ai_gate.ps1` 中，將真實 OpenCode 調用加上 `--standalone --format json`：
 - 將代理人執行的中間推理、工具調用（`call`）、工具執行結果（`tool`）與回答（`text`）作為結構化 JSONL 接收。
 - 完整原始 JSONL 留存於 `.runtime/ai_gate/<Task>/<agent>.jsonl`，確保黑盒除錯線索完整保留。
 
-### 2.2 三層式有效負載邊界架構 (Three-Layer Payload Architecture)
+### 2.3 三層式有效負載邊界架構 (Three-Layer Payload Architecture)
 
 將驗證管線明確切分為三層責任：
 
@@ -42,7 +50,7 @@ OpenCode JSONL 串流
    - 驗證成功後，僅將純淨 Payload 晉升寫入 docs/tasks/<Task>/reviews/*.md。
 ```
 
-### 2.3 代理人契約與 Prompt 潔淨化
+### 2.4 代理人契約與 Prompt 潔淨化
 
 - 移除 `.opencode/agents/spec-reviewer.md` 與 `regression-reviewer.md` 中的實驗性「Turn 1/Turn 2」假性分段、負向提示詞與恐嚇性警示。
 - 恢復為清晰、精確的正向格式規範：具備 bounded-blocker-detector 語意、明確 early-stop 機制與 positive output-format 要求。
