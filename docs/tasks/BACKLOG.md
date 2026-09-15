@@ -25,10 +25,11 @@ Completed prerequisites:
 - `scout-efficiency-v1` — merged.
 - `ai-gate-execution-resilience` — merged.
 - AI workflow roadmap planning — merged via PR #5.
+- `agent-role-contract-hardening-v1-1` — completed, ready for merge.
 
 ### Active
 
-1. [`agent-role-contract-hardening-v1-1`](./agent-role-contract-hardening-v1-1/SPEC.md) — ACTIVE / Draft. Harden Scout/reviewer contracts for concise first-pass evidence, blocker-first review, early stop, OpenCode-native convergence controls, and verified read-only permissions.
+None (awaiting merge of `agent-role-contract-hardening-v1-1`).
 
 ### Planned next
 
