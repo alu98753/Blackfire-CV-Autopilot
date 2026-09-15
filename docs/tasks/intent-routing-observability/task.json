@@ -1,14 +1,20 @@
 {
   "id": "intent-routing-observability",
-  "title": "Intent Routing Observability",
-  "status": "draft",
-  "branch": "task-intent-routing-observability",
-  "base_branch": "main",
-  "phase": "scout_pending",
-  "implementation_authorized": false,
-  "artifacts": {
-    "spec": "docs/tasks/intent-routing-observability/SPEC.md",
-    "context": "docs/tasks/intent-routing-observability/CONTEXT.md"
-  },
-  "next_step": "Run scripts/ai_scout.ps1 -Task intent-routing-observability after remote-to-local handoff; push CONTEXT.md; then reconverge Draft SPEC to Final with ChatGPT + user."
+  "base_ref": "origin/main",
+  "scope": [
+    "states/navigation_intent.py",
+    "states/navigation_routing.py",
+    "states/navigation_table.py",
+    "tests/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  }
 }
