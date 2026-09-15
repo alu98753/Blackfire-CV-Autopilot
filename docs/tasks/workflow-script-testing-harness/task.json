@@ -1,0 +1,18 @@
+{
+  "id": "workflow-script-testing-harness",
+  "base_ref": "origin/main",
+  "scope": [
+    "tests/workflow_scripts/",
+    "docs/tasks/workflow-script-testing-harness/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
