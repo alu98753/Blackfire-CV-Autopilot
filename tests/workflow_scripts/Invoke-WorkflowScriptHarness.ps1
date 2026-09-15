@@ -81,6 +81,14 @@ try {
         }
         Assert-True (-not ($gateText -match '\[regex\].*VERDICT')) 'Gate must not regex-parse verdict prose'
     }
+    Run-Case 'Configured reviewer candidates are non-empty and capability-ordered' {
+        $taskConfig = Get-Content (Join-Path $repoRoot 'docs/tasks/gate-reviewer-output-contract-reliability/task.json') -Raw | ConvertFrom-Json
+        $reviewCandidates = @($taskConfig.models.review)
+        Assert-True ($reviewCandidates.Count -ge 2) 'Gate review candidate list must include an infrastructure fallback'
+        Assert-True ($reviewCandidates[0] -eq 'opencode/muse-spark-1.3-contributor-free') 'structured-output-capable preferred reviewer drifted'
+        Assert-True ($reviewCandidates[1] -eq 'opencode/nemotron-3.5-lightning-free') 'structured-output-capable fallback reviewer drifted'
+        Assert-True (-not ($reviewCandidates -contains 'opencode/big-pickle')) 'known unreliable big-pickle candidate must not be routed'
+    }
     Run-Case 'Structured reviewer adapter uses isolated ephemeral database' {
         $adapterText = Get-Content (Join-Path $repoRoot 'scripts\opencode_structured_review.mjs') -Raw
         Assert-True ($adapterText -match 'const sessionId = session\.data\.id') 'adapter must use the pinned SDK response.data Session shape'
