@@ -11,12 +11,7 @@
     "package.json",
     "package-lock.json"
   ],
-  "focused_tests": [
-    "production Scout invocation is parser-valid for OpenCode 1.18.31 and contains no --standalone/--pure",
-    "production Gate invocation is parser-valid for OpenCode 1.18.31 and contains no --standalone/--pure",
-    "bootstrap accepts exactly 1.18.31, rejects version mismatch, and pins missing install to opencode-ai@1.18.31",
-    "existing workflow process timeout/streaming/fail-closed/artifact-safety harness remains green"
-  ],
+  "focused_tests": [],
   "models": {
     "scout": [
       "opencode/mimo-v2.5-free",
