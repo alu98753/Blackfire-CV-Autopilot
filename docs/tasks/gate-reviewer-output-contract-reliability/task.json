@@ -1,0 +1,22 @@
+{
+  "id": "gate-reviewer-output-contract-reliability",
+  "base_ref": "origin/main",
+  "scope": [
+    ".opencode/agents/spec-reviewer.md",
+    ".opencode/agents/regression-reviewer.md",
+    "scripts/ai_gate.ps1",
+    "tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1",
+    "docs/architecture/ai_development_workflow.md",
+    "docs/tasks/gate-reviewer-output-contract-reliability/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
