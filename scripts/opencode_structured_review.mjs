@@ -44,7 +44,7 @@ async function main() {
       query: { directory },
       body: { agent, model: { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) } }
     });
-    const sessionId = session.data?.id;
+    const sessionId = session.id;
     if (!sessionId) throw new Error("OpenCode SDK did not return a session id.");
     const result = await client.session.prompt({
       path: { id: sessionId }, query: { directory },

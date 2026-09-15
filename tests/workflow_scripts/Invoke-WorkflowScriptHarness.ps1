@@ -76,6 +76,8 @@ try {
     }
     Run-Case 'Structured reviewer adapter uses isolated ephemeral database' {
         $adapterText = Get-Content (Join-Path $repoRoot 'scripts\opencode_structured_review.mjs') -Raw
+        Assert-True ($adapterText -match 'const sessionId = session\.id') 'adapter must use the direct SDK Session id shape'
+        Assert-True ($adapterText -notmatch 'session\.data\?\.id') 'adapter must not use the obsolete nested Session id shape'
         Assert-True ($adapterText -match 'process\.env\.OPENCODE_DB\s*=\s*":memory:"') 'adapter must set an in-memory OpenCode database'
         Assert-True ($adapterText -match 'await createOpencode') 'adapter must launch the SDK server while the override is scoped'
         Assert-True ($adapterText -match 'delete process\.env\.OPENCODE_DB') 'adapter must restore an unset database override'
