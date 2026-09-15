@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Phase 1 completed on the production-pinned OpenCode CLI `1.18.31`. Neither authorized candidate produced `PASS_PROVEN` on the required first qualification role, `spec-reviewer`. The task result is **(c) no authorized viable route proven**. No regression-reviewer probe was run because no candidate passed the required first role, and no Phase 2 version probe was started.
+Phase 1 completed on the production-pinned OpenCode CLI `1.18.31`. Neither authorized candidate produced `PASS_PROVEN` on the required first qualification role, `spec-reviewer`. No Phase 1 regression-reviewer probe was run because no candidate passed the required first role. The later Phase 2 implementation and C1 startup work stopped for isolation safety before a qualifying lifecycle was obtained; its evidence is recorded below.
 
 The fresh canonical Scout context remains [CONTEXT.md](CONTEXT.md). This task used the actual production reviewer definition in [`.opencode/agents/spec-reviewer.md`](../../../.opencode/agents/spec-reviewer.md), without changing its permissions, step budget, or final-response contract.
 
@@ -50,6 +50,16 @@ The predecessor matrix at `task-gate-reviewer-output-contract-reliability` was r
 
 The next dependency is a deliberately selected isolated OpenCode version candidate, decided by ChatGPT and the user. That work must retain the same production reviewer contract, model/schema lifecycle, bounded evidence, and isolated state. It must not change the production `1.18.31` pin or normal Gate routing before a candidate passes both reviewer roles.
 
-## Deterministic verification
+## Phase 1 deterministic verification
 
 `cmd.exe /d /s /c ".venv\\Scripts\\python.exe -X utf8 -m unittest tests.test_opencode_structured_review_probe < NUL"` passed with 1 focused unittest (which runs 11 Node deterministic tests). The checks cover request construction, fixed schema validation, semantic PASS/BLOCK consistency, successful and failed lifecycle audits, missing and malformed output classification, bounded credential redaction, and version/state isolation seams.
+
+## Phase 2 implementation and stop condition
+
+The Phase 2 probe now limits runtime selection to the production control, C1 `1.14.41` with `@opencode-ai/sdk@1.14.41`, and C2 `2.0.2` with `@opencode/client@2.0.2`. Its focused wrapper passed after the implementation update: 1 Python unittest invoking 15 Node deterministic tests. The coverage includes matrix and exact-version checks, the C1 `assistant.info.structured` adapter, C2 fail-closed adapter absence, fixed qualification and smoke prompts, lifecycle taxonomy, environment restoration, and repeatability aggregation.
+
+C1's isolated CLI and SDK were both mechanically reported as `1.14.41`. Attempts 007–010 did not reach a trustworthy reviewer lifecycle: they exposed SDK module loading, server-startup, and session-creation infrastructure failures. The bounded records preserve each diagnostic. Attempt 011 progressed past session startup but did not return a bounded result before the host command timeout. Its isolated Node/OpenCode child processes remained alive and had to be explicitly terminated. No complete same-attempt lifecycle audit or structured result was available, so no model or reviewer conclusion is inferred from that timeout.
+
+The task stopped under the matrix isolation-safety rule. C2 was not started, because the C1 timeout showed that the runner could not guarantee automatic isolated-child cleanup in this host. Separately, static inspection of tagged C2 `@opencode/client@2.0.2` found no official `session.prompt` JSON-schema structured-result transport; the probe's C2 adapter therefore fails closed rather than parsing prose. No route reached a qualifying `PASS_PROVEN`, and no C1/C2 route has the required spec #1 + regression #1 + spec #2 + regression #2 result.
+
+New bounded Phase 2 records are retained as [attempt 007](attempt-007-c1-big-pickle-regression-smoke.json), [attempt 008](attempt-008-c1-big-pickle-regression-smoke.json), [attempt 009](attempt-009-c1-big-pickle-regression-smoke.json), [attempt 010](attempt-010-c1-big-pickle-regression-smoke.json), and [attempt 011](attempt-011-c1-big-pickle-regression-smoke.json). No production pin, reviewer file, or normal routing was changed.

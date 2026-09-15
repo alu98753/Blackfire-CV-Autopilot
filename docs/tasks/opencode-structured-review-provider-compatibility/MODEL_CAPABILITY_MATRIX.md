@@ -10,3 +10,11 @@ This matrix records only fresh probes made for this task. It does not reproduce 
 | `1.18.31` | `1.18.31` | `opencode/mimo-v2.5-free` | `spec-reviewer` | unproven | unproven | audit failed | no | not evaluated | not evaluated | `FAIL_LIFECYCLE_AUDIT` |
 
 The first two rows are attempts 003 and 004; the latter two are the post-audit-fix attempts 005 and 006. No candidate reached the second-role `regression-reviewer` check because neither first-role probe met the complete lifecycle. The Phase 1 result is `PASS_PROVEN = 0`; no reviewer route is recommended.
+
+## Phase 2 bounded execution
+
+| Candidate | OpenCode | Official client | Provider / model | Reviewer role | Attempt kind | Lifecycle result | Classification |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `C1` | `1.14.41` | `@opencode-ai/sdk@1.14.41` | `opencode/big-pickle` | `regression-reviewer` | smoke | no trustworthy lifecycle | `FAIL_INFRASTRUCTURE` |
+
+Attempts 007–010 ended before a reviewer lifecycle was available. Attempt 011 reached the host timeout without a bounded result and left isolated child processes that required termination. The matrix stopped for isolation safety; C2 was not started. These records do not establish a provider/model capability result.

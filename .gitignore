@@ -16,6 +16,7 @@ Thumbs.db
 
 # Allow local AI verification runtime snapshots/logs without polluting Git
 .runtime/ai_gate/
+.runtime/opencode-structured-review-provider-compatibility/
 
 # Ignore all png files by default
 *.png
