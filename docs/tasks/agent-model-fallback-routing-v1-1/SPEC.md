@@ -10,6 +10,8 @@ The normal path uses an ordered, configurable chain of independent reviewer mode
 
 If all normal independent reviewer candidates fail infrastructurally, the workflow may use Gemini/Antigravity as an explicit last-resort degraded reviewer so useful evidence can still reach ChatGPT + user. Such evidence must be unmistakably marked low-confidence/non-independent and must never masquerade as a normal independent Gate PASS.
 
+This task also qualifies candidate fallback models before placing them into the default production chain. Existing operational evidence makes `opencode/big-pickle` the first candidate to qualify, but prior ability to inspect a repository is not by itself evidence that it can reliably satisfy the formal Scout or Gate output contracts.
+
 No game/runtime behavior is in scope.
 
 ## Verified current state
@@ -22,6 +24,8 @@ Scout evidence confirms:
 - Existing task descriptors use scalar `models.scout` / `models.review`.
 - Gate already exposes a reusable bounded-process primitive and deterministic executable/argument override seams; Scout has equivalent lifecycle behavior inline.
 - Existing canonical artifact promotion and Gate rollback semantics must remain unchanged.
+- `opencode/mimo-v2.5-free` has repeated real workflow evidence across Scout/Gate and remains the current default first candidate.
+- `opencode/big-pickle` has useful prior repository-inspection/Scout-like evidence, but its reliability against the formal structured Scout and reviewer contracts is not yet established. It is a qualification candidate, not an assumed production fallback.
 
 ## Scope
 
@@ -32,7 +36,7 @@ Production change surface is limited to:
 - `docs/architecture/ai_development_workflow.md`
 - `docs/tasks/<task-id>/task.json` model-routing metadata consumption contract
 - `docs/tasks/BACKLOG.md` retrospective calibration note
-- small deterministic/runtime probes needed to verify fallback routing, timeout semantics, provenance, degraded evidence, and artifact safety
+- small deterministic/runtime probes needed to verify fallback routing, timeout semantics, provenance, degraded evidence, artifact safety, and candidate qualification
 
 `.opencode/agents/*` role contracts are out of scope unless implementation proves a minimal compatibility change is strictly required. Their permissions, step budgets, and responsibility boundaries must not be loosened.
 
@@ -54,7 +58,9 @@ Production change surface is limited to:
 14. Every model attempt receives the full configured per-attempt timeout. Fallback latency may therefore grow linearly with the number of attempted candidates; this is an accepted v1.1 reliability-over-latency tradeoff.
 15. A degraded Gemini review is explicitly non-independent/low-evidence and cannot be represented as a normal independent Gate PASS.
 16. ChatGPT + user remain final semantic/architecture review authority after Gate evidence, including degraded evidence.
-17. No game/runtime behavior changes.
+17. A model is not admitted to the default normal fallback chain merely because it is available or can read code. It must first demonstrate role-contract compatibility under the qualification rules in this SPEC.
+18. Qualification is role-specific. A model may qualify for Scout without qualifying for Gate review, or vice versa.
+19. No game/runtime behavior changes.
 
 ## Required behavior
 
@@ -67,13 +73,11 @@ Production change surface is limited to:
   "models": {
     "scout": [
       "opencode/mimo-v2.5-free",
-      "fallback-model-a",
-      "fallback-model-b"
+      "qualified-fallback-model"
     ],
     "review": [
       "opencode/mimo-v2.5-free",
-      "fallback-model-a",
-      "fallback-model-b"
+      "qualified-fallback-model"
     ]
   }
 }
@@ -84,6 +88,8 @@ A scalar string remains equivalent to a one-element ordered candidate list.
 Mimo is the current recommended/default first candidate because of observed response stability, but routing code must treat it exactly like any other model identifier. Future changes to default model/order must be configuration changes, not routing-code changes.
 
 Do not introduce parallel normal-policy fields such as `review_candidates` in addition to `models.review`. Candidate lists must be finite, ordered, non-empty after normalization, and contain non-blank identifiers. Invalid configured metadata is an infrastructure/configuration error and must not silently choose an implicit model.
+
+Only models that have passed the role-specific qualification gate defined below may be added to the repository's recommended/default normal fallback chain. Arbitrary task-local explicit model configuration remains possible for experimentation, but it must not be documented as a qualified default without evidence.
 
 ### 2. Degraded reviewer metadata
 
@@ -96,7 +102,7 @@ Allow an optional explicit configuration under `models`, for example:
   "models": {
     "review": [
       "opencode/mimo-v2.5-free",
-      "fallback-model-a"
+      "qualified-fallback-model"
     ],
     "degraded_review": "gemini"
   }
@@ -121,7 +127,7 @@ If supplied, the explicit CLI model replaces the configured normal candidate cha
 
 CLI override does not silently erase the explicitly configured degraded-review policy unless implementation constraints make that unavoidable; if such a constraint exists, document the behavior explicitly in the architecture contract. Do not add a public chain-valued CLI syntax in v1.1.
 
-Existing internal executable/argument override seams must continue to work. Minimal additional internal seams are allowed where necessary to deterministically exercise multiple candidates and degraded routing without live provider failures.
+Existing internal executable/argument override seams must continue to work. Minimal additional internal seams are allowed where necessary to deterministically exercise multiple candidates, degraded routing, and qualification without live provider failures.
 
 ### 4. Normal fallback eligibility
 
@@ -208,7 +214,58 @@ A structurally valid Scout report terminates routing and is promoted exactly onc
 
 Automated degraded Gemini Scout routing is not required for v1.1. Gemini may still provide manual degraded Scout/advisory evidence. The required automated degraded safety net in this task applies to Gate review, where avoiding a review-infrastructure single point of failure is the primary goal.
 
-### 8. Degraded Gate evidence semantics
+### 8. Fallback candidate qualification
+
+This task must distinguish routing-mechanism verification from live model qualification.
+
+The routing mechanism itself must be deterministically testable without depending on provider availability. Separately, before a model is added to the recommended/default fallback chain, perform a bounded live smoke qualification using the actual formal role contract.
+
+The first qualification target is `opencode/big-pickle` because it has prior useful repository-inspection/Scout-like evidence and is currently available as a plausible free fallback. Do not assume it passes.
+
+Qualification is role-specific:
+
+#### Scout qualification
+
+A candidate qualifies for `models.scout` default fallback only if a live bounded invocation using the real Scout role contract:
+
+- starts and completes within the existing per-attempt timeout;
+- respects standalone/read-only execution boundaries;
+- produces a non-empty structurally usable Scout report;
+- does not require manual prompt repair or output rewriting;
+- leaves canonical promotion and repository state safe.
+
+#### Gate reviewer qualification
+
+A candidate qualifies for `models.review` default fallback only if live bounded invocation(s) using the real formal reviewer contract demonstrate that it can:
+
+- complete within the existing per-attempt timeout;
+- preserve read-only/standalone boundaries;
+- emit transport/payload/verdict structure accepted by the existing mechanical parser without manual repair;
+- produce a valid terminal PASS or BLOCK rather than malformed/unclassifiable prose;
+- leave canonical review/evidence transaction safety intact.
+
+At least one successful live smoke is required for the relevant role before default admission. If a candidate fails qualification because of provider infrastructure, record the result as inconclusive/failed qualification rather than weakening the parser or role contract merely to admit that model.
+
+Qualification evidence must record at least model, role, elapsed time, structural result, and pass/fail/inconclusive classification. Keep it compact; raw provider output remains runtime-only unless already part of a validated canonical artifact.
+
+A candidate may have different outcomes per role. For example:
+
+```text
+model                    Scout       Gate Review
+opencode/mimo-v2.5-free  qualified   qualified/current default
+opencode/big-pickle      PASS/FAIL   PASS/FAIL
+```
+
+The implementation must update the task/default model metadata only according to observed qualification:
+
+- if BigPickle qualifies for both roles: Mimo -> BigPickle becomes the recommended normal chain for both;
+- if BigPickle qualifies only for Scout: add it only to `models.scout`;
+- if BigPickle qualifies only for Gate review: add it only to `models.review`;
+- if it qualifies for neither or qualification is inconclusive: keep Mimo as the only qualified normal default and rely on degraded review only where configured; do not fabricate a second normal fallback.
+
+This task is not required to search indefinitely for additional free models. One evidence-backed candidate qualification target is sufficient for v1.1. Additional candidates belong in later evidence-driven calibration unless a trivially available already-tested candidate exists.
+
+### 9. Degraded Gate evidence semantics
 
 The degraded reviewer exists to preserve workflow continuity, not to manufacture independence.
 
@@ -234,7 +291,7 @@ It does NOT mean:
 
 A degraded BLOCK remains meaningful negative evidence and must stop candidate progression as a candidate-blocked result.
 
-### 9. Gate process outcomes
+### 10. Gate process outcomes
 
 Preserve the existing public exit-code vocabulary:
 
@@ -253,7 +310,7 @@ For v1.1, when degraded PASS is the only review result available for a reviewer 
 
 To avoid introducing a fourth public exit code in this task, degraded PASS may use exit `0` only as a process-success signal **provided** `EVIDENCE.md` and console status unambiguously identify the result as `DEGRADED / LOW_EVIDENCE / NOT_INDEPENDENT` and the architecture contract states that exit `0` alone is not merge authority. Merge authority remains governed by the workflow lifecycle and ChatGPT + user final review.
 
-### 10. Attempt provenance
+### 11. Attempt provenance
 
 Every attempted candidate, including degraded review, must produce compact provenance containing at least:
 
@@ -273,7 +330,7 @@ For Gate, compact provenance must be included in `EVIDENCE.md`. Existing canonic
 
 No secrets, tokens, environment values, or credential material may be recorded.
 
-### 11. Implementation shape
+### 12. Implementation shape
 
 Scout currently owns its process lifecycle inline. Refactoring that lifecycle into a small bounded attempt helper is allowed and preferred if it avoids duplicating timeout/kill/streaming logic across fallback attempts.
 
@@ -281,13 +338,14 @@ Gate should reuse `Invoke-BoundedProcess` and place candidate iteration around t
 
 Do not introduce a generalized provider abstraction, model-quality framework, or repository-wide process framework solely for this task. The routing mechanism should be a small parameter/config-driven layer.
 
-### 12. Architecture documentation
+### 13. Architecture documentation
 
 `docs/architecture/ai_development_workflow.md` must document:
 
 - Mimo as the current configurable default first candidate, not a hard-coded dependency;
 - scalar-or-array ordered normal model metadata;
 - explicit separate degraded-review configuration;
+- qualification-before-default-admission and role-specific qualification;
 - strict single-model CLI override semantics;
 - infrastructure-only fallback;
 - semantic PASS/BLOCK terminality and no review-shopping;
@@ -298,7 +356,7 @@ Do not introduce a generalized provider abstraction, model-quality framework, or
 - unchanged 0/1/2 process exit-code vocabulary and the fact that exit code alone is not merge authority;
 - ChatGPT + user final semantic/architecture review requirement.
 
-### 13. Roadmap retrospective requirement
+### 14. Roadmap retrospective requirement
 
 Update `docs/tasks/BACKLOG.md` under `agent-workflow-pilot-retrospective-v1` to explicitly include evidence-based calibration of model routing after the first production pilot.
 
@@ -342,15 +400,18 @@ reliability first -> production pilot -> collect evidence -> calibrate time/step
 18. Malformed reviewer transport/payload/header can trigger fallback mechanically; semantic prose is never reinterpreted by another model.
 19. Existing standalone isolation, working directory, closed stdin, streaming observability, kill confirmation, verdict parsing, focused-test behavior, transactional promotion/rollback, and 0/1/2 process codes remain intact.
 20. Deterministic probes cover scalar compatibility, ordered fallback, semantic terminality, normal-chain exhaustion, degraded success/block/failure, per-attempt timeout semantics, and artifact safety without requiring live provider failure.
-21. Architecture documentation matches these semantics.
-22. Backlog retrospective explicitly records later evidence-based timeout/step/model-order calibration.
-23. Verification leaves no disposable probe pollution and changes no game/runtime files.
+21. `opencode/big-pickle` receives bounded live role-specific qualification rather than being assumed qualified from unrelated prior use.
+22. BigPickle is added only to the role chains it actually qualifies for; failed/inconclusive qualification does not weaken role/parser contracts and does not fabricate a fallback.
+23. Qualification evidence records model, role, elapsed time, structural result, and classification without committing raw failed provider output.
+24. Architecture documentation matches these semantics.
+25. Backlog retrospective explicitly records later evidence-based timeout/step/model-order calibration.
+26. Verification leaves no disposable probe pollution and changes no game/runtime files.
 
 ## Required verification
 
 Use existing internal override seams plus minimal additional internal routing seams where necessary. Do not introduce a generalized PowerShell test framework solely for this task.
 
-At minimum verify:
+At minimum verify deterministically:
 
 - scalar model normalization;
 - ordered array normalization and order preservation;
@@ -371,10 +432,14 @@ At minimum verify:
 - promotion rollback and focused-test behavior remain unchanged;
 - before/after git status delta contains no disposable probe pollution.
 
+Additionally perform bounded live qualification for `opencode/big-pickle` against the actual Scout contract and actual formal Gate reviewer contract as described in Section 8. Qualification failure is an acceptable task result; silently weakening contracts to force qualification is not.
+
 AI agents must not run the repository full test suite. User-owned branch completion/full-suite rules remain unchanged.
 
 ## Non-goals
 
+- guaranteeing BigPickle qualifies;
+- searching indefinitely for more free fallback models in this task;
 - retrying or overriding semantic BLOCK;
 - reviewer voting, consensus, racing, or parallel reviewers;
 - autonomous implementation repair loops;
