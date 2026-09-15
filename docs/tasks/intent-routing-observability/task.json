@@ -1,0 +1,24 @@
+{
+  "id": "intent-routing-observability",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/navigation_routing.py",
+    "tests/test_behavior_runtime_ports.py",
+    "tests/test_behavior_routing_observability.py"
+  ],
+  "focused_tests": [
+    "tests/test_behavior_runtime_ports.py",
+    "tests/test_behavior_navigation_intent.py",
+    "tests/test_behavior_navigation_progress.py",
+    "tests/test_behavior_routing_observability.py"
+  ],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  }
+}

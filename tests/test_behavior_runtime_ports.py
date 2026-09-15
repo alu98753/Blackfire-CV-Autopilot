@@ -113,6 +113,12 @@ class TestBehaviorRuntimePorts(unittest.TestCase):
 
         self.assertEqual(context.progress_status, ProgressStatus.WAITING)
         self.assertEqual(context.decision.reason.value, "in_flight_action_waiting")
+        diag = context.to_diagnostic()
+        self.assertEqual(diag.progress_status, ProgressStatus.WAITING)
+        self.assertEqual(diag.decision_reason.value, "in_flight_action_waiting")
+        self.assertIsNotNone(diag.in_flight)
+        self.assertEqual(diag.in_flight.action_id, ActionId.ENTER_LOBBY)
+        self.assertEqual(diag.in_flight.expected, PostconditionId.LOBBY)
         log = "\n".join(captured.output)
         self.assertIn("in_flight=enter_lobby", log)
         self.assertIn("expected=lobby", log)
@@ -139,6 +145,11 @@ class TestBehaviorRuntimePorts(unittest.TestCase):
         self.assertEqual(context.progress_status, ProgressStatus.TIMED_OUT)
         self.assertEqual(context.decision.action, ActionId.ENTER_LOBBY)
         self.assertEqual(context.decision.reason.value, "action_timeout_retry")
+        diag = context.to_diagnostic()
+        self.assertEqual(diag.progress_status, ProgressStatus.TIMED_OUT)
+        self.assertEqual(diag.decision_reason.value, "action_timeout_retry")
+        self.assertIsNotNone(diag.in_flight)
+        self.assertEqual(diag.in_flight.action_id, ActionId.ENTER_LOBBY)
 
 
 if __name__ == "__main__":
