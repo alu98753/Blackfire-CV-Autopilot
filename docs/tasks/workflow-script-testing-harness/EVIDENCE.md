@@ -1,9 +1,9 @@
 ﻿# Verification Evidence
 
 Task: workflow-script-testing-harness
-Generated: 2026-09-15T13:28:39+08:00
+Generated: 2026-09-15T13:40:12+08:00
 Branch: task-workflow-script-testing-harness
-HEAD: b5522eb55d83360b210d1c2ef578dbade8fbcbdf
+HEAD: 6a0035f0d3dc5bfc552b79e83437bb6ff859413e
 Base ref: origin/main
 
 ## Review verdicts
@@ -18,8 +18,8 @@ Detailed reports:
 
 ## Attempt provenance
 
-- Role: spec-reviewer | Type: NORMAL #1 | Model: opencode/big-pickle | Elapsed: 141.7s | Outcome: VALID_VERDICT | Status: SELECTED
-- Role: regression-reviewer | Type: NORMAL #1 | Model: opencode/big-pickle | Elapsed: 70s | Outcome: VALID_VERDICT | Status: SELECTED
+- Role: spec-reviewer | Type: NORMAL #1 | Model: opencode/big-pickle | Elapsed: 117.2s | Outcome: VALID_VERDICT | Status: SELECTED
+- Role: regression-reviewer | Type: NORMAL #1 | Model: opencode/big-pickle | Elapsed: 63.6s | Outcome: VALID_VERDICT | Status: SELECTED
 
 ## Focused tests
 
