@@ -18,6 +18,8 @@ $reviewerCmd = Join-Path $helperDir 'fake-reviewer.cmd'
 $scoutCmd = Join-Path $helperDir 'fake-scout.cmd'
 $pythonCmd = Join-Path $helperDir 'fake-test.cmd'
 $fallbackCounter = Join-Path $helperDir 'fallback-count.txt'
+$structuredChild = Join-Path $helperDir 'fake-opencode.ps1'
+$structuredCmd = Join-Path $helperDir 'opencode.cmd'
 $passed = 0
 $failed = 0
 
@@ -46,6 +48,19 @@ function Invoke-Script([string]$Script, [string[]]$Arguments) {
 function Run-Case([string]$Name, [scriptblock]$Body) {
     try { & $Body; Write-Host "PASS $Name"; $script:passed++ }
     catch { Write-Host "FAIL $Name - $($_.Exception.Message)"; $script:failed++ }
+}
+
+function Invoke-StructuredGate([string]$Mode) {
+    $oldPath = $env:Path
+    $oldMode = $env:WORKFLOW_STRUCTURED_MODE
+    try {
+        $env:Path = "$helperDir;$oldPath"
+        $env:WORKFLOW_STRUCTURED_MODE = $Mode
+        return Invoke-Script $gate @('-Task',$fixtureId,'-_PythonExecutableOverride',$pythonCmd)
+    } finally {
+        $env:Path = $oldPath
+        if ($null -eq $oldMode) { Remove-Item Env:WORKFLOW_STRUCTURED_MODE -ErrorAction SilentlyContinue } else { $env:WORKFLOW_STRUCTURED_MODE = $oldMode }
+    }
 }
 
 try {
@@ -89,6 +104,21 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$reviewer`" %*" | Set-Content $reviewerCmd -Encoding ASCII
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$scoutChild`" %*" | Set-Content $scoutCmd -Encoding ASCII
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$pythonChild`" %*" | Set-Content $pythonCmd -Encoding ASCII
+    @'
+$mode = $env:WORKFLOW_STRUCTURED_MODE
+function Event($messageId, $text, $synthetic = $false) {
+    @{ type = 'text'; synthetic = $synthetic; part = @{ messageID = $messageId; text = $text } } | ConvertTo-Json -Compress
+}
+function Finish($messageId) { @{ type = 'step_finish'; part = @{ messageID = $messageId } } | ConvertTo-Json -Compress }
+if ($mode -eq 'incomplete') {
+    Event 'm1' "VERDICT: PASS`nBLOCKING_FINDINGS: 0`n"; Finish 'm1'; Event 'm2' 'headerless incomplete text'
+} elseif ($mode -eq 'malformed-latest') {
+    Event 'm1' "VERDICT: PASS`nBLOCKING_FINDINGS: 0`n"; Finish 'm1'; Event 'm2' 'later completed headerless text'; Finish 'm2'
+} elseif ($mode -eq 'synthetic-trailing') {
+    Event 'm1' "VERDICT: PASS`nBLOCKING_FINDINGS: 0`n"; Finish 'm1'; Event 'm2' 'synthetic trailing text' $true; Finish 'm2'
+} else { Event 'm1' "VERDICT: PASS`nBLOCKING_FINDINGS: 0`n" }
+'@ | Set-Content $structuredChild -Encoding UTF8
+    "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$structuredChild`" %*" | Set-Content $structuredCmd -Encoding ASCII
 
     $reviewBase = @('-_ReviewerExecutableOverride',$reviewerCmd,'-ReviewTimeoutSeconds','10','-_ReviewerArgumentsOverride','pass','-_ReviewCandidatesOverride','first','second')
     Run-Case 'Gate PASS and candidate override resolution' {
@@ -150,6 +180,22 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $history = Get-Content (Join-Path $fixtureDir 'ATTEMPT_HISTORY.md') -Raw
         Assert-True ($history -match 'NON_ZERO_EXIT') 'failed fallback attempt was not recorded'
         Assert-True ($history -match 'VALID_VERDICT') 'successful fallback attempt was not recorded'
+    }
+    Run-Case 'Structured completed canonical beats later incomplete text' {
+        $code = Invoke-StructuredGate 'incomplete'
+        Assert-True ($code -eq 0) "expected 0, got $code"
+    }
+    Run-Case 'Structured later completed malformed message is authoritative' {
+        $code = Invoke-StructuredGate 'malformed-latest'
+        Assert-True ($code -eq 1) "expected 1, got $code"
+    }
+    Run-Case 'Structured synthetic trailing text is excluded' {
+        $code = Invoke-StructuredGate 'synthetic-trailing'
+        Assert-True ($code -eq 0) "expected 0, got $code"
+    }
+    Run-Case 'Structured output with no completed assistant fails' {
+        $code = Invoke-StructuredGate 'none-completed'
+        Assert-True ($code -eq 1) "expected 1, got $code"
     }
 
     Run-Case 'Scout success promotes structured output' {

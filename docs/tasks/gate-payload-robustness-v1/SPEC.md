@@ -82,6 +82,20 @@ Existing semantic invariants remain unchanged:
 - one raw header plus one bold-normalizable header is still multiple competing headers and must be rejected;
 - normalization must not make an otherwise ambiguous payload appear unique.
 
+### 2.1 Structured reviewer message completion
+
+When reviewer output uses structured JSON, the extractor must group assistant
+text events by `messageID` and consider only message IDs with a corresponding
+`step_finish` event. Synthetic assistant text or messages are excluded. The
+selected message is the chronologically latest completed, non-synthetic
+assistant message, and only text parts for that message ID are concatenated.
+
+If no completed non-synthetic assistant message exists, extraction fails
+infrastructurally. If the latest completed non-synthetic message is malformed
+or lacks a verdict, it remains authoritative and Gate must not salvage an
+older message containing a verdict. Tool-result content is not assistant
+message text and is never used as verdict evidence.
+
 ### 3. Durable attempt history
 
 Add one tracked historical artifact under the task package:

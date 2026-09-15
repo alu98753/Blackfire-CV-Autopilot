@@ -342,8 +342,15 @@ function Get-FinalAssistantMessageFromStructuredJson {
     }
 
     $textEvents = [System.Collections.Generic.List[object]]::new()
+    $completedMessageIds = [System.Collections.Generic.HashSet[string]]::new()
     foreach ($evt in $events) {
-        if ($evt.type -eq "text" -and $null -ne $evt.part -and -not [string]::IsNullOrEmpty($evt.part.text)) {
+        if (($evt.type -eq "step_finish" -or $evt.type -eq "step-finish") -and $null -ne $evt.part -and -not [string]::IsNullOrWhiteSpace([string]$evt.part.messageID)) {
+            [void]$completedMessageIds.Add([string]$evt.part.messageID)
+        }
+    }
+    foreach ($evt in $events) {
+        $synthetic = ($evt.synthetic -eq $true -or $evt.part.synthetic -eq $true)
+        if ($evt.type -eq "text" -and $null -ne $evt.part -and -not [string]::IsNullOrWhiteSpace([string]$evt.part.messageID) -and -not [string]::IsNullOrEmpty($evt.part.text) -and -not $synthetic) {
             $textEvents.Add($evt)
         }
     }
@@ -356,15 +363,16 @@ function Get-FinalAssistantMessageFromStructuredJson {
         }
     }
 
-    $lastTextEvt = $textEvents[$textEvents.Count - 1]
-    $finalMessageId = $lastTextEvt.part.messageID
-    if ([string]::IsNullOrWhiteSpace($finalMessageId)) {
+    $completedTextEvents = @($textEvents | Where-Object { $completedMessageIds.Contains([string]$_.part.messageID) })
+    if ($completedTextEvents.Count -eq 0) {
         return [pscustomobject]@{
-            Success = $true
-            Text = [string]$lastTextEvt.part.text
-            Error = $null
+            Success = $false
+            Text = $null
+            Error = "No completed non-synthetic assistant message found in structured output."
         }
     }
+
+    $finalMessageId = [string]$completedTextEvents[$completedTextEvents.Count - 1].part.messageID
 
     $finalParts = [System.Collections.Generic.List[string]]::new()
     foreach ($te in $textEvents) {
