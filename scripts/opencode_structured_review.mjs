@@ -71,7 +71,6 @@ async function main() {
     try {
       session = await client.session.create({
         query: { directory },
-        body: { agent, model: { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) } },
         throwOnError: true
       });
     } catch (error) {

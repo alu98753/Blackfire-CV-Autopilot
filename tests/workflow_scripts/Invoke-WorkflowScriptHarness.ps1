@@ -78,6 +78,10 @@ try {
         $adapterText = Get-Content (Join-Path $repoRoot 'scripts\opencode_structured_review.mjs') -Raw
         Assert-True ($adapterText -match 'const sessionId = session\.data\.id') 'adapter must use the pinned SDK response.data Session shape'
         Assert-True ($adapterText -notmatch 'session\.id') 'adapter must not use the direct Session shape for the response wrapper'
+        $createCall = [regex]::Match($adapterText, 'client\.session\.create\(\{[\s\S]*?\}\);').Value
+        Assert-True ($createCall -match 'query:\s*\{\s*directory\s*\}') 'session.create must use the pinned minimal query shape'
+        Assert-True ($createCall -notmatch '\bagent\b|\bmodel\b') 'session.create must not send prompt-only agent/model fields'
+        Assert-True ($adapterText -match 'client\.session\.prompt\([\s\S]*?agent, model:[\s\S]*?parts:[\s\S]*?format:\s*\{\s*type:\s*"json_schema"') 'session.prompt must retain reviewer agent/model and structured output fields'
         Assert-True (($adapterText -match 'session\.create\([\s\S]*?throwOnError:\s*true') -and ($adapterText -match 'session\.prompt\([\s\S]*?throwOnError:\s*true')) 'adapter must request SDK errors for create and prompt'
         Assert-True ($adapterText -match 'session\.create response did not contain response data') 'adapter must distinguish missing create response data'
         Assert-True ($adapterText -match 'session\.prompt response did not contain response data') 'adapter must distinguish missing prompt response data'
