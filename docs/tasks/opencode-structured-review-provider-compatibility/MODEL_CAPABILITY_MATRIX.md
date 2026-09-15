@@ -16,5 +16,10 @@ The first two rows are attempts 003 and 004; the latter two are the post-audit-f
 | Candidate | OpenCode | Official client | Provider / model | Reviewer role | Attempt kind | Lifecycle result | Classification |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `C1` | `1.14.41` | `@opencode-ai/sdk@1.14.41` | `opencode/big-pickle` | `regression-reviewer` | smoke | no trustworthy lifecycle | `FAIL_INFRASTRUCTURE` |
+| `C1` | `1.14.41` | `@opencode-ai/sdk@1.14.41` | `opencode/big-pickle` | `regression-reviewer` | smoke | owned server startup timeout; cleanup proven | `FAIL_INFRASTRUCTURE` |
+| `C1` | `1.14.41` | `@opencode-ai/sdk@1.14.41` | `opencode/big-pickle` | `spec-reviewer` | qualifying | owned server startup timeout; cleanup proven | `FAIL_INFRASTRUCTURE` |
+| `C1` | `1.14.41` | `@opencode-ai/sdk@1.14.41` | `opencode/mimo-v2.5-free` | `spec-reviewer` | qualifying | owned server startup timeout; cleanup proven | `FAIL_INFRASTRUCTURE` |
 
 Attempts 007–010 ended before a reviewer lifecycle was available. Attempt 011 reached the host timeout without a bounded result and left isolated child processes that required termination. The matrix stopped for isolation safety; C2 was not started. These records do not establish a provider/model capability result.
+
+After runner hardening, attempts 012–014 each terminated their recorded isolated process tree without an observed orphan process. They still did not reach a reviewer lifecycle because the C1 server did not announce readiness before the owned startup deadline. C1 has no `PASS_PROVEN` route; C2 was not started by this hardening task.

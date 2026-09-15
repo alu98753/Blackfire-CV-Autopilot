@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import {
@@ -17,6 +18,7 @@ import {
   openCodeVersionCommand,
   redactDiagnostic,
   runProbe,
+  terminateOwnedProcessTree,
   validateOutcomeSchema,
   validateOutcomeSemantics,
   withIsolatedRuntimeEnvironment,
@@ -56,6 +58,22 @@ function controlConfig(overrides = {}) {
 
 function runtimeFor(config) {
   return { opencode_version: config.expectedOpenCodeVersion, client_version: config.expectedClientVersion };
+}
+
+function transportWith({ create, cleanup }) {
+  return async () => ({
+    server: { cleanup },
+    client: {
+      session: {
+        create,
+        prompt: async () => ({ data: {
+          info: { id: "message-1", finish: "stop", time: { completed: 1 }, structured_output: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Review" } },
+          parts: [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }],
+        } }),
+        messages: async () => ({ data: [] }),
+      },
+    },
+  });
 }
 
 test("frozen matrix accepts only control, C1, and C2", () => {
@@ -179,6 +197,76 @@ test("isolated environment restores PATH and all caller state after success and 
   assert.deepEqual(environment, { PATH: "C:\\normal", OPENCODE_DB: "C:\\user.db", OPENCODE_CONFIG_DIR: "C:\\config", OPENCODE_DISABLE_AUTOUPDATE: "0" });
   await assert.rejects(() => withIsolatedRuntimeEnvironment({ candidate: "C1", runtimeRoot: ".runtime/c1", environment }, async () => { throw new Error("boom"); }), /boom/);
   assert.deepEqual(environment, { PATH: "C:\\normal", OPENCODE_DB: "C:\\user.db", OPENCODE_CONFIG_DIR: "C:\\config", OPENCODE_DISABLE_AUTOUPDATE: "0" });
+});
+
+test("owned Windows process-tree cleanup targets only the runner-created root", async () => {
+  const child = new EventEmitter();
+  child.pid = 4242;
+  child.exitCode = null;
+  let targeted;
+  const result = await terminateOwnedProcessTree(child, {
+    taskKill: async (pid) => {
+      targeted = pid;
+      child.exitCode = 0;
+      child.emit("exit", 0);
+    },
+    waitForChildExit: async () => true,
+  });
+  assert.deepEqual(result, { proven: true, pid: 4242 });
+  assert.equal(targeted, 4242);
+});
+
+test("probe runner cleans owned transport after normal completion and exception", async () => {
+  const config = controlConfig();
+  let normalCleanup = 0;
+  const normal = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: transportWith({ create: async () => ({ data: { id: "session-1" } }), cleanup: async () => { normalCleanup += 1; return { proven: true }; } }),
+  });
+  let exceptionCleanup = 0;
+  const exception = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: transportWith({ create: async () => { throw new Error("session failure"); }, cleanup: async () => { exceptionCleanup += 1; return { proven: true }; } }),
+  });
+  assert.equal(normal.classification, "PASS_PROVEN");
+  assert.equal(exception.classification, "FAIL_INFRASTRUCTURE");
+  assert.equal(normal.isolation_cleanup_proven, true);
+  assert.equal(exception.isolation_cleanup_proven, true);
+  assert.equal(normalCleanup, 1);
+  assert.equal(exceptionCleanup, 1);
+});
+
+test("probe timeout cleans owned transport without a live model call", async () => {
+  const config = controlConfig();
+  let cleanupCalls = 0;
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    probeTimeoutMs: 5,
+    createTransport: transportWith({
+      create: async () => new Promise(() => {}),
+      cleanup: async () => { cleanupCalls += 1; return { proven: true }; },
+    }),
+  });
+  assert.equal(result.classification, "FAIL_INFRASTRUCTURE");
+  assert.equal(result.subreason, "PROBE_TIMEOUT");
+  assert.equal(result.isolation_cleanup_proven, true);
+  assert.equal(cleanupCalls, 1);
+});
+
+test("cleanup failure fails closed and still restores caller environment", async () => {
+  const config = controlConfig();
+  const environment = { PATH: "C:\\normal", OPENCODE_DB: "C:\\user.db", OPENCODE_DISABLE_AUTOUPDATE: "0" };
+  const result = await runProbe(config, {
+    environment,
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: transportWith({
+      create: async () => ({ data: { id: "session-1" } }),
+      cleanup: async () => ({ proven: false, diagnostic: "tree still alive" }),
+    }),
+  });
+  assert.equal(result.classification, "FAIL_INFRASTRUCTURE");
+  assert.equal(result.subreason, "ISOLATION_CLEANUP_UNSAFE");
+  assert.deepEqual(environment, { PATH: "C:\\normal", OPENCODE_DB: "C:\\user.db", OPENCODE_DISABLE_AUTOUPDATE: "0" });
 });
 
 test("repeatability requires exactly spec, regression, spec, regression PASS attempts and ignores smoke", () => {

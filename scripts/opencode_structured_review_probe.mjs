@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve, delimiter } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -6,6 +6,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const ISOLATED_DATABASE = ":memory:";
 const MAX_DIAGNOSTIC_LENGTH = 600;
+const PROBE_TIMEOUT_MS = 40_000;
+const CLEANUP_TIMEOUT_MS = 5_000;
+const SERVER_STARTUP_TIMEOUT_MS = 10_000;
 const ALLOWED_REVIEWER_AGENTS = new Set(["spec-reviewer", "regression-reviewer"]);
 const ALLOWED_MODELS = new Set(["opencode/big-pickle", "opencode/mimo-v2.5-free"]);
 const READ_SEARCH_TOOLS = new Set(["read", "glob", "grep"]);
@@ -256,6 +259,18 @@ function emptyLifecycle() {
   return { finish_reasons: [], finalization_voluntary: false, forced_finalization: false, read_search_tool_called: false, successful_tool_result: false, structured_output_present: false };
 }
 
+function infrastructureEvidence(config, runtime, diagnostic, subreason) {
+  return {
+    ...evidenceBase(config, runtime),
+    classification: "FAIL_INFRASTRUCTURE",
+    diagnostic: redactDiagnostic(diagnostic),
+    subreason,
+    lifecycle: emptyLifecycle(),
+    schema_validation: { valid: false, errors: [] },
+    semantic_validation: { valid: false, errors: [] },
+  };
+}
+
 function evidenceBase(config, runtime) {
   return {
     attempt_kind: config.attemptKind,
@@ -298,6 +313,84 @@ function execFileText(command, args, environment = process.env) {
   });
 }
 
+function waitForExit(child, timeoutMs = CLEANUP_TIMEOUT_MS) {
+  if (child?.exitCode !== null && child?.exitCode !== undefined) return Promise.resolve(true);
+  return new Promise((resolvePromise) => {
+    const timer = setTimeout(() => resolvePromise(false), timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolvePromise(true);
+    });
+  });
+}
+
+async function taskKillProcessTree(pid, commandRunner = execFileText) {
+  const commandShell = process.env.ComSpec ?? "cmd.exe";
+  await commandRunner(commandShell, ["/d", "/s", "/c", `taskkill /PID ${pid} /T /F < NUL`]);
+}
+
+export async function terminateOwnedProcessTree(child, dependencies = {}) {
+  if (!Number.isInteger(child?.pid) || child.pid <= 0) {
+    return { proven: false, diagnostic: "probe runner did not receive an owned process-tree root" };
+  }
+  if (child.exitCode !== null && child.exitCode !== undefined) return { proven: true, pid: child.pid };
+  const taskKill = dependencies.taskKill ?? taskKillProcessTree;
+  const waitForChildExit = dependencies.waitForChildExit ?? waitForExit;
+  try {
+    await taskKill(child.pid);
+    const exited = await waitForChildExit(child, dependencies.cleanupTimeoutMs ?? CLEANUP_TIMEOUT_MS);
+    return exited
+      ? { proven: true, pid: child.pid }
+      : { proven: false, diagnostic: `owned process tree ${child.pid} did not exit after taskkill` };
+  } catch (error) {
+    return { proven: false, diagnostic: `owned process tree cleanup failed: ${diagnosticFromError(error)}` };
+  }
+}
+
+function waitForServerAddress(child, timeoutMs) {
+  return new Promise((resolvePromise, reject) => {
+    let output = "";
+    const timer = setTimeout(() => reject(new Error(`Timeout waiting for owned server to start after ${timeoutMs}ms`)), timeoutMs);
+    const settle = (callback, value) => {
+      clearTimeout(timer);
+      child.stdout?.off("data", onOutput);
+      child.stderr?.off("data", onOutput);
+      child.off("exit", onExit);
+      callback(value);
+    };
+    const onOutput = (chunk) => {
+      output = redactDiagnostic(`${output}${chunk}`.slice(-MAX_DIAGNOSTIC_LENGTH));
+      const line = output.split(/\r?\n/).find((entry) => entry.startsWith("opencode server listening"));
+      const match = line?.match(/on\s+(https?:\/\/[^\s]+)/);
+      if (match) settle(resolvePromise, match[1]);
+    };
+    const onExit = (code) => settle(reject, new Error(`owned OpenCode server exited with code ${code}: ${output}`));
+    child.stdout?.on("data", onOutput);
+    child.stderr?.on("data", onOutput);
+    child.once("exit", onExit);
+  });
+}
+
+class ProbeTimeoutError extends Error {
+  constructor(timeoutMs) {
+    super(`probe runner timeout after ${timeoutMs}ms`);
+  }
+}
+
+async function runWithinDeadline(operation, timeoutMs) {
+  let timer;
+  const operationPromise = Promise.resolve().then(operation);
+  operationPromise.catch(() => {});
+  try {
+    return await Promise.race([
+      operationPromise,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new ProbeTimeoutError(timeoutMs)), timeoutMs); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function openCodeVersionCommand(platform = process.platform, commandShell = process.env.ComSpec ?? "cmd.exe") {
   return platform === "win32"
     ? { command: commandShell, args: ["/d", "/s", "/c", "opencode --version < NUL"] }
@@ -315,7 +408,36 @@ async function runtimeMetadata(config, commandRunner = execFileText, environment
 
 async function createC1Transport(config) {
   const sdk = await import(pathToFileURL(resolve(config.runtimeRoot, "node_modules", "@opencode-ai", "sdk", "dist", "index.js")).href);
-  return sdk.createOpencode({ hostname: "127.0.0.1", port: 0, timeout: 30_000 });
+  const commandShell = process.env.ComSpec ?? "cmd.exe";
+  const child = spawn(commandShell, ["/d", "/s", "/c", "opencode serve --hostname=127.0.0.1 --port=0 < NUL"], {
+    detached: true,
+    env: { ...process.env, OPENCODE_CONFIG_CONTENT: "{}" },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  try {
+    const baseUrl = await waitForServerAddress(child, SERVER_STARTUP_TIMEOUT_MS);
+    return {
+      client: sdk.createOpencodeClient({ baseUrl }),
+      server: {
+        cleanup: () => terminateOwnedProcessTree(child),
+      },
+    };
+  } catch (error) {
+    await terminateOwnedProcessTree(child);
+    throw error;
+  }
+}
+
+async function cleanupTransport(transport) {
+  if (!transport?.server) return { proven: true };
+  try {
+    if (typeof transport.server.cleanup === "function") return await transport.server.cleanup();
+    await transport.server.close?.();
+    return { proven: true };
+  } catch (error) {
+    return { proven: false, diagnostic: `probe transport cleanup failed: ${diagnosticFromError(error)}` };
+  }
 }
 
 export async function runProbe(config, dependencies = {}) {
@@ -323,38 +445,51 @@ export async function runProbe(config, dependencies = {}) {
   const createTransport = dependencies.createTransport ?? createC1Transport;
   let runtime = { opencode_version: "unavailable", client_version: "unavailable" };
   try {
-    runtime = await withIsolatedRuntimeEnvironment(config, async () => getRuntimeMetadata(config));
-    if (!validateRuntimeMetadata(config, runtime)) {
-      return { ...evidenceBase(config, runtime), classification: "FAIL_INFRASTRUCTURE", diagnostic: "exact runtime/client version mismatch", subreason: "VERSION_MISMATCH", lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] } };
-    }
+    const environment = dependencies.environment ?? process.env;
+    runtime = await withIsolatedRuntimeEnvironment({ ...config, environment }, async () => getRuntimeMetadata(config));
+    if (!validateRuntimeMetadata(config, runtime)) return infrastructureEvidence(config, runtime, "exact runtime/client version mismatch", "VERSION_MISMATCH");
     const adapter = normalizeStructuredResult(config.candidate, {});
     if (!adapter.available) {
-      return { ...evidenceBase(config, runtime), classification: "FAIL_INFRASTRUCTURE", diagnostic: adapter.diagnostic, subreason: "STRUCTURED_ADAPTER_UNAVAILABLE", lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] } };
+      return infrastructureEvidence(config, runtime, adapter.diagnostic, "STRUCTURED_ADAPTER_UNAVAILABLE");
     }
-    return await withIsolatedRuntimeEnvironment(config, async () => {
-      const opencode = await createTransport(config);
+    return await withIsolatedRuntimeEnvironment({ ...config, environment }, async () => {
+      let opencode;
+      let evidence;
       try {
-        const session = await opencode.client.session.create({ query: { directory: config.directory }, throwOnError: true });
-        const sessionId = session?.data?.id;
-        if (typeof sessionId !== "string" || sessionId.length === 0) throw new Error("OpenCode session.create returned no session id");
-        const prompt = config.attemptKind === "smoke" ? buildSmokePrompt() : buildReviewerPrompt();
-        const promptResult = await opencode.client.session.prompt({ ...buildPromptRequest(config, sessionId, prompt), throwOnError: true });
-        const finalInfo = promptResult?.data?.info;
-        if (!finalInfo || typeof finalInfo !== "object") throw new Error("OpenCode session.prompt returned no assistant message info");
-        const promptMessage = { info: finalInfo, parts: promptResult?.data?.parts ?? [] };
-        const audit = await auditSessionMessages({ client: opencode.client, directory: config.directory, finalInfo, promptMessage, sessionId });
-        if (!audit.valid) return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: false, lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] }, classification: "FAIL_LIFECYCLE_AUDIT", diagnostic: audit.diagnostic, subreason: "AUDIT_UNTRUSTWORTHY" };
-        const normalized = normalizeStructuredResult(config.candidate, finalInfo);
-        const lifecycle = inspectLifecycle({ messages: audit.messages, finalInfo, structuredOutput: normalized.value });
-        const schema = lifecycle.structured_output_present ? validateOutcomeSchema(normalized.value) : { valid: false, errors: ["structured result is missing"] };
-        const semantics = schema.valid ? validateOutcomeSemantics(normalized.value) : { valid: false, errors: [] };
-        return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: true, official_structured_machine_field: normalized.field, lifecycle, schema_validation: schema, semantic_validation: semantics, classification: classifyLifecycle({ lifecycle, schema, semantics }) };
+        opencode = await createTransport(config);
+        evidence = await runWithinDeadline(async () => {
+          const session = await opencode.client.session.create({ query: { directory: config.directory }, throwOnError: true });
+          const sessionId = session?.data?.id;
+          if (typeof sessionId !== "string" || sessionId.length === 0) throw new Error("OpenCode session.create returned no session id");
+          const prompt = config.attemptKind === "smoke" ? buildSmokePrompt() : buildReviewerPrompt();
+          const promptResult = await opencode.client.session.prompt({ ...buildPromptRequest(config, sessionId, prompt), throwOnError: true });
+          const finalInfo = promptResult?.data?.info;
+          if (!finalInfo || typeof finalInfo !== "object") throw new Error("OpenCode session.prompt returned no assistant message info");
+          const promptMessage = { info: finalInfo, parts: promptResult?.data?.parts ?? [] };
+          const audit = await auditSessionMessages({ client: opencode.client, directory: config.directory, finalInfo, promptMessage, sessionId });
+          if (!audit.valid) return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: false, lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] }, classification: "FAIL_LIFECYCLE_AUDIT", diagnostic: audit.diagnostic, subreason: "AUDIT_UNTRUSTWORTHY" };
+          const normalized = normalizeStructuredResult(config.candidate, finalInfo);
+          const lifecycle = inspectLifecycle({ messages: audit.messages, finalInfo, structuredOutput: normalized.value });
+          const schema = lifecycle.structured_output_present ? validateOutcomeSchema(normalized.value) : { valid: false, errors: ["structured result is missing"] };
+          const semantics = schema.valid ? validateOutcomeSemantics(normalized.value) : { valid: false, errors: [] };
+          return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: true, official_structured_machine_field: normalized.field, lifecycle, schema_validation: schema, semantic_validation: semantics, classification: classifyLifecycle({ lifecycle, schema, semantics }) };
+        }, dependencies.probeTimeoutMs ?? PROBE_TIMEOUT_MS);
+      } catch (error) {
+        evidence = error instanceof ProbeTimeoutError
+          ? infrastructureEvidence(config, runtime, error.message, "PROBE_TIMEOUT")
+          : infrastructureEvidence(config, runtime, diagnosticFromError(error), "RUNTIME_OR_TRANSPORT_FAILURE");
       } finally {
-        await opencode.server?.close?.();
+        const cleanup = await cleanupTransport(opencode);
+        if (evidence) {
+          evidence.isolation_cleanup_proven = cleanup.proven;
+          evidence.owned_process_tree_pid = cleanup.pid ?? null;
+        }
+        if (!cleanup.proven) evidence = infrastructureEvidence(config, runtime, cleanup.diagnostic, "ISOLATION_CLEANUP_UNSAFE");
       }
+      return evidence;
     });
   } catch (error) {
-    return { ...evidenceBase(config, runtime), classification: "FAIL_INFRASTRUCTURE", diagnostic: diagnosticFromError(error), subreason: "RUNTIME_OR_TRANSPORT_FAILURE", lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] } };
+    return infrastructureEvidence(config, runtime, diagnosticFromError(error), "RUNTIME_OR_TRANSPORT_FAILURE");
   }
 }
 

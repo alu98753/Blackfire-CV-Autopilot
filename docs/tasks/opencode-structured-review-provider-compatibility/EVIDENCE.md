@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Phase 1 completed on the production-pinned OpenCode CLI `1.18.31`. Neither authorized candidate produced `PASS_PROVEN` on the required first qualification role, `spec-reviewer`. No Phase 1 regression-reviewer probe was run because no candidate passed the required first role. The later Phase 2 implementation and C1 startup work stopped for isolation safety before a qualifying lifecycle was obtained; its evidence is recorded below.
+Phase 1 completed on the production-pinned OpenCode CLI `1.18.31`. Neither authorized candidate produced `PASS_PROVEN` on the required first qualification role, `spec-reviewer`. No Phase 1 regression-reviewer probe was run because no candidate passed the required first role. Phase 2 C1 cleanup hardening later completed bounded smoke and spec attempts without a qualifying lifecycle; its evidence is recorded below.
 
 The fresh canonical Scout context remains [CONTEXT.md](CONTEXT.md). This task used the actual production reviewer definition in [`.opencode/agents/spec-reviewer.md`](../../../.opencode/agents/spec-reviewer.md), without changing its permissions, step budget, or final-response contract.
 
@@ -63,3 +63,11 @@ C1's isolated CLI and SDK were both mechanically reported as `1.14.41`. Attempts
 The task stopped under the matrix isolation-safety rule. C2 was not started, because the C1 timeout showed that the runner could not guarantee automatic isolated-child cleanup in this host. Separately, static inspection of tagged C2 `@opencode/client@2.0.2` found no official `session.prompt` JSON-schema structured-result transport; the probe's C2 adapter therefore fails closed rather than parsing prose. No route reached a qualifying `PASS_PROVEN`, and no C1/C2 route has the required spec #1 + regression #1 + spec #2 + regression #2 result.
 
 New bounded Phase 2 records are retained as [attempt 007](attempt-007-c1-big-pickle-regression-smoke.json), [attempt 008](attempt-008-c1-big-pickle-regression-smoke.json), [attempt 009](attempt-009-c1-big-pickle-regression-smoke.json), [attempt 010](attempt-010-c1-big-pickle-regression-smoke.json), and [attempt 011](attempt-011-c1-big-pickle-regression-smoke.json). No production pin, reviewer file, or normal routing was changed.
+
+## Probe-runner isolation hardening
+
+The C1 runner now launches its isolated server through a runner-owned `cmd.exe` process-tree root. It applies a bounded startup deadline and probe deadline, then calls `taskkill /PID <owned-root> /T /F` only for that recorded PID. Cleanup failure overrides the result to `FAIL_INFRASTRUCTURE` with `ISOLATION_CLEANUP_UNSAFE`; the runner restores PATH, `OPENCODE_DB`, and auto-update state in the same finalization path. Focused deterministic verification passed with the additional timeout, exception, normal-completion, exact-owned-PID, cleanup-failure, and environment-restoration cases.
+
+Attempt 012 was the single fresh C1 Big Pickle regression-reviewer smoke. Attempts 013 and 014 were the frozen Big Pickle and MiMo spec-reviewer sequence after the smoke returned `FAIL_INFRASTRUCTURE`. Each attempt ended at the runner's owned server startup deadline before a provider/model lifecycle, and each post-attempt process check found no `opencode` or Node child process. The records therefore classify infrastructure startup failure rather than a provider/model result. C1 has no qualifying `PASS_PROVEN` route. C2 was not started under the explicit execution limit for this hardening task.
+
+The new records are [attempt 012](attempt-012-c1-big-pickle-regression-smoke.json), [attempt 013](attempt-013-c1-big-pickle-spec-reviewer.json), and [attempt 014](attempt-014-c1-mimo-v2.5-free-spec-reviewer.json).
