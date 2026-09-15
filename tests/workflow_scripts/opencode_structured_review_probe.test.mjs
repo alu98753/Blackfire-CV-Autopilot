@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   OUTCOME_SCHEMA,
+  auditSessionMessages,
   buildProbeConfig,
   buildPromptRequest,
   classifyLifecycle,
@@ -9,6 +10,7 @@ import {
   inspectLifecycle,
   openCodeVersionCommand,
   redactDiagnostic,
+  runProbe,
   validateOutcomeSchema,
   validateOutcomeSemantics,
 } from "../../scripts/opencode_structured_review_probe.mjs";
@@ -91,6 +93,53 @@ test("lifecycle inspection requires a completed repository read/search tool resu
     messages: [{ parts: [{ type: "tool", tool: "read", state: { status: "error" } }] }],
   });
   assert.equal(noResult.successful_tool_result, false);
+});
+
+test("successful session-message retrieval is the authoritative lifecycle audit", async () => {
+  const audit = await auditSessionMessages({
+    client: {
+      session: {
+        messages: async () => ({ data: [{ parts: [{ type: "tool", tool: "read", state: { status: "completed" } }] }] }),
+      },
+    },
+    directory: "E:\\repo",
+    promptMessage: { parts: [{ type: "text" }] },
+    sessionId: "session-1",
+  });
+  assert.equal(audit.valid, true);
+  assert.equal(audit.source, "session.messages");
+  assert.equal(audit.messages[0].parts[0].state.status, "completed");
+});
+
+test("session-message retrieval failure fails closed instead of becoming FAIL_TOOL_CHOICE", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: "." });
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => ({ opencode_version: "1.18.31", sdk_version: "1.18.31" }),
+    createServer: async () => ({
+      server: { close() {} },
+      client: {
+        session: {
+          create: async () => ({ data: { id: "session-1" } }),
+          prompt: async () => ({ data: { info: { finish: "stop", time: { completed: 1 } }, parts: [{ type: "text" }] } }),
+          messages: async () => { throw new Error("fetch failed"); },
+        },
+      },
+    }),
+  });
+  assert.equal(result.classification, "FAIL_LIFECYCLE_AUDIT");
+  assert.match(result.diagnostic, /session\.messages failed/);
+});
+
+test("malformed session-message response fails closed", async () => {
+  const audit = await auditSessionMessages({
+    client: { session: { messages: async () => ({ data: [{ parts: [null] }] }) } },
+    directory: "E:\\repo",
+    promptMessage: { parts: [{ type: "text" }] },
+    sessionId: "session-1",
+  });
+  assert.equal(audit.valid, false);
+  assert.equal(audit.classification, "FAIL_LIFECYCLE_AUDIT");
+  assert.match(audit.diagnostic, /unusable response shape/);
 });
 
 test("missing and malformed structured output have deterministic classifications", () => {

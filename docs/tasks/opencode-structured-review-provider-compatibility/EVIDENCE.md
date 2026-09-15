@@ -28,10 +28,12 @@ It starts the SDK server with `OPENCODE_DB=:memory:` and restores the caller env
 | 002 | `opencode/big-pickle` | `spec-reviewer` | unavailable / unavailable | no | no | not reached | no | not reached | `FAIL_INFRASTRUCTURE` |
 | 003 | `opencode/big-pickle` | `spec-reviewer` | `1.18.31` / `1.18.31` | no | no | voluntary; `stop` | no | invalid: missing output / not evaluated | `FAIL_TOOL_CHOICE` |
 | 004 | `opencode/mimo-v2.5-free` | `spec-reviewer` | `1.18.31` / `1.18.31` | no | no | voluntary; `stop` | no | invalid: missing output / not evaluated | `FAIL_TOOL_CHOICE` |
+| 005 | `opencode/big-pickle` | `spec-reviewer` | `1.18.31` / `1.18.31` | no | no | forced; `tool-calls` | no | invalid: missing output / not evaluated | `FAIL_TOOL_CHOICE` |
+| 006 | `opencode/mimo-v2.5-free` | `spec-reviewer` | `1.18.31` / `1.18.31` | no | no | audit unavailable | no | not evaluated | `FAIL_LIFECYCLE_AUDIT` |
 
-Attempts 001 and 002 exposed and localized two Windows-only probe preflight defects before a model request: direct Node spawning could not resolve `opencode`, and direct `.cmd` execution returned `EINVAL`. The helper now runs the non-interactive version check through `cmd.exe /d /s /c "opencode --version < NUL"`. Attempts 003 and 004 are the fresh candidate evidence used for the Phase 1 conclusion.
+Attempts 001 and 002 exposed and localized two Windows-only probe preflight defects before a model request: direct Node spawning could not resolve `opencode`, and direct `.cmd` execution returned `EINVAL`. The helper now runs the non-interactive version check through `cmd.exe /d /s /c "opencode --version < NUL"`. Attempts 003 and 004 remain preserved historical fresh-attempt records; attempts 005 and 006 are the post-audit-fix candidate evidence used for the Phase 1 conclusion.
 
-For attempts 003 and 004, the models reached a completed assistant response (`finish: stop`) but did not perform the prompt-required repository read/search action. The probe deliberately assigns `FAIL_TOOL_CHOICE` before inspecting missing structured output because a schema-valid response without the required lifecycle cannot qualify. Neither attempt produced `response.data.info.structured_output`.
+Attempt 005 had usable tool parts in the authoritative prompt response, so no separate message retrieval was needed; it still contained no permitted read/search tool and ended at forced `tool-calls` without `response.data.info.structured_output`. Attempt 006 required `session.messages`; its bounded SDK response error made the lifecycle unprovable, so it is `FAIL_LIFECYCLE_AUDIT`, not a claim that the model chose no tool. Attempts 003 and 004 remain prior fresh records and are not overwritten.
 
 Individual bounded records are retained beside this summary:
 
@@ -39,6 +41,8 @@ Individual bounded records are retained beside this summary:
 - [attempt 002](attempt-002-big-pickle-spec-reviewer.json)
 - [attempt 003](attempt-003-big-pickle-spec-reviewer.json)
 - [attempt 004](attempt-004-mimo-v2.5-free-spec-reviewer.json)
+- [attempt 005](attempt-005-big-pickle-spec-reviewer.json)
+- [attempt 006](attempt-006-mimo-v2.5-free-spec-reviewer.json)
 
 ## Historical separation and next dependency
 
@@ -48,4 +52,4 @@ The next dependency is a deliberately selected isolated OpenCode version candida
 
 ## Deterministic verification
 
-`cmd.exe /d /s /c "node --test tests\\workflow_scripts\\opencode_structured_review_probe.test.mjs < NUL"` passed with 8 tests. The focused checks cover request construction, fixed schema validation, semantic PASS/BLOCK consistency, missing and malformed output classification, bounded credential redaction, and version/state isolation seams.
+`cmd.exe /d /s /c ".venv\\Scripts\\python.exe -X utf8 -m unittest tests.test_opencode_structured_review_probe < NUL"` passed with 1 focused unittest (which runs 11 Node deterministic tests). The checks cover request construction, fixed schema validation, semantic PASS/BLOCK consistency, successful and failed lifecycle audits, missing and malformed output classification, bounded credential redaction, and version/state isolation seams.

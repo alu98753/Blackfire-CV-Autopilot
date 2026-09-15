@@ -123,6 +123,46 @@ function toolParts(messages) {
     .filter((part) => part?.type === "tool");
 }
 
+function hasUsablePromptParts(promptMessage) {
+  if (!Array.isArray(promptMessage?.parts) || promptMessage.parts.length === 0) return false;
+  return promptMessage.parts.every((part) => part && typeof part === "object" && typeof part.type === "string")
+    && promptMessage.parts.some((part) => part.type === "tool" && typeof part.tool === "string"
+      && part.state && typeof part.state.status === "string");
+}
+
+export async function auditSessionMessages({ client, sessionId, directory, promptMessage }) {
+  if (hasUsablePromptParts(promptMessage)) {
+    return { valid: true, source: "prompt-response", messages: [promptMessage] };
+  }
+
+  let response;
+  try {
+    response = await client.session.messages({
+      path: { id: sessionId },
+      query: { directory },
+      throwOnError: true,
+    });
+  } catch (error) {
+    return {
+      valid: false,
+      source: "session.messages",
+      classification: "FAIL_LIFECYCLE_AUDIT",
+      diagnostic: redactDiagnostic(`session.messages failed: ${error?.message ?? error}`),
+    };
+  }
+  if (!Array.isArray(response?.data)
+    || response.data.some((message) => !message || typeof message !== "object" || !Array.isArray(message.parts)
+      || message.parts.some((part) => !part || typeof part !== "object" || typeof part.type !== "string"))) {
+    return {
+      valid: false,
+      source: "session.messages",
+      classification: "FAIL_LIFECYCLE_AUDIT",
+      diagnostic: "session.messages returned an unusable response shape",
+    };
+  }
+  return { valid: true, source: "session.messages", messages: response.data };
+}
+
 function finishReasons(messages, finalInfo) {
   const reasons = [];
   if (typeof finalInfo?.finish === "string" && finalInfo.finish.length > 0) reasons.push(finalInfo.finish);
@@ -250,17 +290,31 @@ export async function runProbe(config, dependencies = {}) {
       throw new Error("OpenCode session.prompt returned no assistant message info");
     }
     const promptMessage = { info: finalInfo, parts: promptResult?.data?.parts ?? [] };
-    let messages = [promptMessage];
-    try {
-      const sessionMessages = await opencode.client.session.messages({
-        path: { id: sessionId },
-        query: { directory: config.directory },
-        throwOnError: true,
-      });
-      if (Array.isArray(sessionMessages?.data)) messages = sessionMessages.data;
-    } catch {
-      // The prompt response still exposes its parts; do not turn a retrievable final response into a raw dump.
+    const audit = await auditSessionMessages({
+      client: opencode.client,
+      directory: config.directory,
+      promptMessage,
+      sessionId,
+    });
+    if (!audit.valid) {
+      return {
+        ...evidenceBase(config, runtime),
+        lifecycle_audit_source: audit.source,
+        lifecycle: {
+          finish_reasons: [],
+          finalization_voluntary: false,
+          forced_finalization: false,
+          read_search_tool_called: false,
+          structured_output_present: false,
+          successful_tool_result: false,
+        },
+        schema_validation: { valid: false, errors: [] },
+        semantic_validation: { valid: false, errors: [] },
+        classification: audit.classification,
+        diagnostic: audit.diagnostic,
+      };
     }
+    const messages = audit.messages;
     const structuredOutput = finalInfo.structured_output;
     const lifecycle = inspectLifecycle({ messages, finalInfo, structuredOutput });
     const schema = lifecycle.structured_output_present
@@ -271,6 +325,7 @@ export async function runProbe(config, dependencies = {}) {
       : { valid: false, errors: [] };
     return {
       ...evidenceBase(config, runtime),
+      lifecycle_audit_source: audit.source,
       lifecycle,
       schema_validation: schema,
       semantic_validation: semantics,
