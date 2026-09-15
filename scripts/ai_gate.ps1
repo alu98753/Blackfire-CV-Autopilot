@@ -397,18 +397,27 @@ function Get-CanonicalReviewPayload {
     # Strip leading UTF-8 BOM if present
     $cleanText = $cleanText.TrimStart([char]0xFEFF)
 
-    # 1. Preferred contract: output already begins directly with VERDICT on line 1
-    $directMatch = [regex]::Match($cleanText, '\AVERDICT:\s*(PASS|BLOCK)\nBLOCKING_FINDINGS:\s*(\d+)(?:\n|$)')
-    if ($directMatch.Success) {
+    # Match only the two canonical line forms. Both lines must use the same form.
+    $headerMatches = [System.Collections.Generic.List[object]]::new()
+    $lines = $cleanText -split "`n", -1
+    $verdictLines = @($lines | Where-Object { $_ -match '^VERDICT:\s*(PASS|BLOCK)$' -or $_ -match '^\*\*VERDICT:\s*(PASS|BLOCK)\*\*$' })
+    if ($verdictLines.Count -gt 1) {
         return [pscustomobject]@{
-            Success = $true
-            Payload = $cleanText
-            Error = $null
+            Success = $false
+            Payload = $null
+            Error = "Ambiguous review payload: multiple ($($verdictLines.Count)) VERDICT headers found in final assistant message."
         }
     }
-
-    # 2. Extract embedded report: find the unique canonical VERDICT header anywhere in message
-    $headerMatches = [regex]::Matches($cleanText, '(?m)^VERDICT:\s*(PASS|BLOCK)\nBLOCKING_FINDINGS:\s*(\d+)(?:\n|$)')
+    $offset = 0
+    for ($i = 0; $i -lt ($lines.Count - 1); $i++) {
+        $line = $lines[$i]
+        $next = $lines[$i + 1]
+        if (($line -match '^VERDICT:\s*(PASS|BLOCK)$' -and $next -match '^BLOCKING_FINDINGS:\s*(\d+)$') -or
+            ($line -match '^\*\*VERDICT:\s*(PASS|BLOCK)\*\*$' -and $next -match '^\*\*BLOCKING_FINDINGS:\s*(\d+)\*\*$')) {
+            $headerMatches.Add([pscustomobject]@{ Index = $offset; Value = "$line`n$next" })
+        }
+        $offset += $line.Length + 1
+    }
 
     if ($headerMatches.Count -eq 0) {
         return [pscustomobject]@{
@@ -427,6 +436,11 @@ function Get-CanonicalReviewPayload {
     }
 
     $payload = $cleanText.Substring($headerMatches[0].Index)
+    if ($headerMatches[0].Value -match '^\*\*') {
+        $payload = $payload -replace '^\*\*VERDICT:', 'VERDICT:'
+        $payload = $payload -replace '\*\*\n\*\*BLOCKING_FINDINGS:', "`nBLOCKING_FINDINGS:"
+        $payload = $payload -replace '(\d+)\*\*', '$1'
+    }
 
     return [pscustomobject]@{
         Success = $true
@@ -798,6 +812,27 @@ $candidateEvidencePath = Join-Path $runtimeDir "candidate_EVIDENCE.md"
 $evidencePath = Join-Path $taskDir "EVIDENCE.md"
 Set-Content -Path $candidateEvidencePath -Value ($evidence -join "`n") -Encoding UTF8
 
+# Build historical attempt evidence from this run's provenance records only.
+$historyPath = Join-Path $taskDir "ATTEMPT_HISTORY.md"
+$candidateHistoryPath = Join-Path $runtimeDir "candidate_ATTEMPT_HISTORY.md"
+$history = New-Object System.Collections.Generic.List[string]
+if (Test-Path $historyPath) {
+    foreach ($line in (Get-Content $historyPath -Encoding UTF8)) { $history.Add($line) }
+}
+if ($history.Count -gt 0 -and $history[$history.Count - 1] -ne "") { $history.Add("") }
+$history.Add("## Gate run $timestamp")
+$history.Add("")
+$history.Add("Historical observability only; EVIDENCE.md remains current-run authority.")
+$history.Add("")
+$history.Add("- Branch: $branch")
+$history.Add("- HEAD: $head")
+$history.Add("")
+foreach ($pr in $provenanceRecords) {
+    $selStr = if ($pr.Selected) { "SELECTED" } else { "FALLBACK" }
+    $history.Add("- Role: $($pr.Role) | Attempt: $($pr.Index) | Type: $($pr.Type) | Model: $($pr.Model) | Elapsed: $([math]::Round($pr.ElapsedSeconds, 1))s | Outcome: $($pr.Outcome) | Status: $selStr")
+}
+Set-Content -Path $candidateHistoryPath -Value ($history -join "`n") -Encoding UTF8
+
 # Both reviewers and focused tests completed without infrastructure failures!
 # Transaction-safe promotion: backup existing canonical artifacts and promote candidates
 $promotionItems = @(
@@ -815,6 +850,11 @@ $promotionItems = @(
         Name = "evidence"
         CandidatePath = $candidateEvidencePath
         CanonicalPath = $evidencePath
+    },
+    @{
+        Name = "attempt-history"
+        CandidatePath = $candidateHistoryPath
+        CanonicalPath = $historyPath
     }
 )
 
