@@ -76,8 +76,12 @@ try {
     }
     Run-Case 'Structured reviewer adapter uses isolated ephemeral database' {
         $adapterText = Get-Content (Join-Path $repoRoot 'scripts\opencode_structured_review.mjs') -Raw
-        Assert-True ($adapterText -match 'const sessionId = session\.id') 'adapter must use the direct SDK Session id shape'
-        Assert-True ($adapterText -notmatch 'session\.data\?\.id') 'adapter must not use the obsolete nested Session id shape'
+        Assert-True ($adapterText -match 'const sessionId = session\.data\.id') 'adapter must use the pinned SDK response.data Session shape'
+        Assert-True ($adapterText -notmatch 'session\.id') 'adapter must not use the direct Session shape for the response wrapper'
+        Assert-True (($adapterText -match 'session\.create\([\s\S]*?throwOnError:\s*true') -and ($adapterText -match 'session\.prompt\([\s\S]*?throwOnError:\s*true')) 'adapter must request SDK errors for create and prompt'
+        Assert-True ($adapterText -match 'session\.create response did not contain response data') 'adapter must distinguish missing create response data'
+        Assert-True ($adapterText -match 'session\.prompt response did not contain response data') 'adapter must distinguish missing prompt response data'
+        Assert-True ($adapterText -match 'session\.create response contained a malformed session object') 'adapter must distinguish malformed session data'
         Assert-True ($adapterText -match 'process\.env\.OPENCODE_DB\s*=\s*":memory:"') 'adapter must set an in-memory OpenCode database'
         Assert-True ($adapterText -match 'await createOpencode') 'adapter must launch the SDK server while the override is scoped'
         Assert-True ($adapterText -match 'delete process\.env\.OPENCODE_DB') 'adapter must restore an unset database override'

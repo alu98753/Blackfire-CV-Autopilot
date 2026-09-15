@@ -21,6 +21,14 @@ function required(name) {
   return value;
 }
 
+function sdkError(operation, error) {
+  const status = error?.cause?.status;
+  const detail = typeof error?.message === "string" && error.message.length > 0
+    ? error.message.slice(0, 240)
+    : "unknown SDK error";
+  return new Error(`OpenCode ${operation} API error${Number.isInteger(status) ? ` (HTTP ${status})` : ""}: ${detail}`);
+}
+
 async function main() {
   if (process.argv.includes("--check-sdk")) { console.log("SDK_OK"); return; }
   const agent = required("--agent");
@@ -40,20 +48,40 @@ async function main() {
   }
   const { client, server } = opencode;
   try {
-    const session = await client.session.create({
-      query: { directory },
-      body: { agent, model: { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) } }
-    });
-    const sessionId = session.id;
-    if (!sessionId) throw new Error("OpenCode SDK did not return a session id.");
-    const result = await client.session.prompt({
-      path: { id: sessionId }, query: { directory },
-      body: {
-        agent, model: { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) },
-        parts: [{ type: "text", text: prompt }],
-        format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 }
-      }
-    });
+    let session;
+    try {
+      session = await client.session.create({
+        query: { directory },
+        body: { agent, model: { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) } },
+        throwOnError: true
+      });
+    } catch (error) {
+      throw sdkError("session.create", error);
+    }
+    if (!session || typeof session !== "object" || !("data" in session) || session.data === undefined || session.data === null) {
+      throw new Error("OpenCode SDK session.create response did not contain response data.");
+    }
+    const sessionId = session.data.id;
+    if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
+      throw new Error("OpenCode SDK session.create response contained a malformed session object without a session id.");
+    }
+    let result;
+    try {
+      result = await client.session.prompt({
+        path: { id: sessionId }, query: { directory },
+        body: {
+          agent, model: { providerID: model.slice(0, separator), modelID: model.slice(separator + 1) },
+          parts: [{ type: "text", text: prompt }],
+          format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 }
+        },
+        throwOnError: true
+      });
+    } catch (error) {
+      throw sdkError("session.prompt", error);
+    }
+    if (!result || typeof result !== "object" || !("data" in result) || result.data === undefined || result.data === null) {
+      throw new Error("OpenCode SDK session.prompt response did not contain response data.");
+    }
     const structured = result.data?.info?.structured_output;
     if (structured === undefined || structured === null) throw new Error("OpenCode SDK response did not contain structured_output.");
     process.stdout.write(JSON.stringify({ structured_output: structured }) + "\n");
