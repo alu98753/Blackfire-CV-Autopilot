@@ -53,3 +53,4 @@ config/local.toml
 
 tools/x64dbg
 tools/gdre
+node_modules/
