@@ -47,9 +47,8 @@ Canonical spec: docs/tasks/$Task/SPEC.md
 Perform a read-only localization audit for this task using the repository state currently checked out.
 Follow the scout agent contract exactly:
 - Be a light task localizer, not a general codebase auditor.
-- Inspect at most 10 directly relevant repository files. When the 10-file budget is reached, stop immediately and report uncertainty.
-- Keep the report concise (target <= 1500 words).
-- Stop once the minimal change surface, risks, and uncertainty are established.
+- Strictly follow the file and word budget limits defined in the scout agent contract.
+- Stop once the minimal change surface, risks, and uncertainty are established; prefer reporting uncertainty over continued exploration.
 - Do not edit files or run shell commands.
 Return only the requested Markdown scout report.
 "@
@@ -72,7 +71,7 @@ if (-not [string]::IsNullOrWhiteSpace($_ExecutableOverride)) {
     $cmdInfo = Get-Command opencode -ErrorAction SilentlyContinue
     if ($cmdInfo.Source -like "*.ps1") {
         $execFile = "powershell.exe"
-        $innerArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $cmdInfo.Source, "run", "--agent", "scout")
+        $innerArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $cmdInfo.Source, "run", "--standalone", "--agent", "scout")
         if (-not [string]::IsNullOrWhiteSpace($Model)) {
             $innerArgs += @("--model", $Model)
         }
@@ -80,7 +79,7 @@ if (-not [string]::IsNullOrWhiteSpace($_ExecutableOverride)) {
         $execArgs = $innerArgs
     } else {
         $execFile = $cmdInfo.Source
-        $innerArgs = @("run", "--agent", "scout")
+        $innerArgs = @("run", "--standalone", "--agent", "scout")
         if (-not [string]::IsNullOrWhiteSpace($Model)) {
             $innerArgs += @("--model", $Model)
         }
@@ -93,6 +92,7 @@ Write-Host "Running OpenCode scout for task '$Task' (timeout: ${TimeoutSeconds}s
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $execFile
+$psi.WorkingDirectory = $repoRoot
 if ($execArgs.Count -gt 0) {
     # In .NET Framework 4.8 / Windows PowerShell 5.1, ArgumentList is available in newer .NET,
     # but Arguments with escaped tokens or string join is universally supported.
@@ -110,12 +110,14 @@ if ($execArgs.Count -gt 0) {
 }
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
+$psi.RedirectStandardInput = $true
 $psi.UseShellExecute = $false
 
 $proc = [System.Diagnostics.Process]::Start($psi)
 if ($null -eq $proc) {
     throw "Failed to start OpenCode process: $execFile"
 }
+$proc.StandardInput.Close()
 
 $lockObj = [object]::new()
 $capturedLines = [System.Collections.Generic.List[string]]::new()

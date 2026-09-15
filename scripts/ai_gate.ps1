@@ -64,11 +64,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 Set-Content -Path $statusPath -Value $gitStatus.TrimEnd() -Encoding UTF8
 
-$gitDiff = & git diff --no-ext-diff --unified=80 $baseRef -- . 2>&1 | Out-String
+$gitDiff = & git diff --no-ext-diff $baseRef -- . 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) {
     throw "git diff against '$baseRef' failed.`n$gitDiff"
 }
-Set-Content -Path $diffPath -Value $gitDiff.TrimEnd() -Encoding UTF8
+Set-Content -Path $diffPath -Value "$($gitDiff.TrimEnd())`n`n# END OF DIFF SNAPSHOT`n" -Encoding UTF8
 
 function Invoke-BoundedProcess {
     param(
@@ -85,6 +85,7 @@ function Invoke-BoundedProcess {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Executable
+    $psi.WorkingDirectory = $repoRoot
     if ($null -ne $Arguments -and $Arguments.Count -gt 0) {
         $escapedArgs = @()
         foreach ($arg in $Arguments) {
@@ -220,6 +221,7 @@ function Get-OpenCodeInvocation {
         return @{
             Executable = $_ReviewerExecutableOverride
             Arguments = $args
+            IsStructured = $false
         }
     }
 
@@ -228,7 +230,7 @@ function Get-OpenCodeInvocation {
         throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
     }
 
-    $innerArgs = @("run", "--agent", $Agent)
+    $innerArgs = @("run", "--standalone", "--format", "json", "--agent", $Agent)
     if (-not [string]::IsNullOrWhiteSpace($ReviewModel)) {
         $innerArgs += @("--model", $ReviewModel)
     }
@@ -238,12 +240,132 @@ function Get-OpenCodeInvocation {
         return @{
             Executable = "powershell.exe"
             Arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $cmdInfo.Source) + $innerArgs
+            IsStructured = $true
         }
     }
 
     return @{
         Executable = $cmdInfo.Source
         Arguments = $innerArgs
+        IsStructured = $true
+    }
+}
+
+function Get-FinalAssistantMessageFromStructuredJson {
+    param([string]$JsonlText)
+
+    if ([string]::IsNullOrWhiteSpace($JsonlText)) {
+        return [pscustomobject]@{
+            Success = $false
+            Text = $null
+            Error = "Structured reviewer output was empty."
+        }
+    }
+
+    $lines = $JsonlText -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    if ($lines.Count -eq 0) {
+        return [pscustomobject]@{
+            Success = $false
+            Text = $null
+            Error = "Structured reviewer output contained no non-empty lines."
+        }
+    }
+
+    $events = [System.Collections.Generic.List[object]]::new()
+    $lineNum = 0
+    foreach ($line in $lines) {
+        $lineNum++
+        try {
+            $parsed = $line | ConvertFrom-Json
+            $events.Add($parsed)
+        } catch {
+            return [pscustomobject]@{
+                Success = $false
+                Text = $null
+                Error = "Invalid JSON on line $lineNum : $_"
+            }
+        }
+    }
+
+    $textEvents = [System.Collections.Generic.List[object]]::new()
+    foreach ($evt in $events) {
+        if ($evt.type -eq "text" -and $null -ne $evt.part -and -not [string]::IsNullOrEmpty($evt.part.text)) {
+            $textEvents.Add($evt)
+        }
+    }
+
+    if ($textEvents.Count -eq 0) {
+        return [pscustomobject]@{
+            Success = $false
+            Text = $null
+            Error = "No assistant text events found in structured output."
+        }
+    }
+
+    $lastTextEvt = $textEvents[$textEvents.Count - 1]
+    $finalMessageId = $lastTextEvt.part.messageID
+    if ([string]::IsNullOrWhiteSpace($finalMessageId)) {
+        return [pscustomobject]@{
+            Success = $true
+            Text = [string]$lastTextEvt.part.text
+            Error = $null
+        }
+    }
+
+    $finalParts = [System.Collections.Generic.List[string]]::new()
+    foreach ($te in $textEvents) {
+        if ($te.part.messageID -eq $finalMessageId) {
+            $finalParts.Add([string]$te.part.text)
+        }
+    }
+
+    $concatenated = $finalParts -join ""
+    return [pscustomobject]@{
+        Success = $true
+        Text = $concatenated
+        Error = $null
+    }
+}
+
+function Get-CanonicalReviewPayload {
+    param([string]$FinalAssistantMessage)
+
+    if ([string]::IsNullOrWhiteSpace($FinalAssistantMessage)) {
+        return [pscustomobject]@{
+            Success = $false
+            Payload = $null
+            Error = "Final assistant message was empty."
+        }
+    }
+
+    # Strip optional leading UTF-8 BOM only
+    $cleanText = $FinalAssistantMessage.TrimStart([char]0xFEFF)
+
+    # Header must begin at the start of a line and have consecutive VERDICT and BLOCKING_FINDINGS lines
+    $headerMatches = [regex]::Matches($cleanText, '(?m)^VERDICT:\s*(PASS|BLOCK)\r?\nBLOCKING_FINDINGS:\s*(\d+)(?:\r?\n|$)')
+
+    if ($headerMatches.Count -eq 0) {
+        return [pscustomobject]@{
+            Success = $false
+            Payload = $null
+            Error = "No valid VERDICT/BLOCKING_FINDINGS header found in final assistant message."
+        }
+    }
+
+    if ($headerMatches.Count -gt 1) {
+        return [pscustomobject]@{
+            Success = $false
+            Payload = $null
+            Error = "Ambiguous review payload: multiple ($($headerMatches.Count)) VERDICT/BLOCKING_FINDINGS headers found in final assistant message."
+        }
+    }
+
+    $payload = $cleanText.Substring($headerMatches[0].Index)
+
+    return [pscustomobject]@{
+        Success = $true
+        Payload = $payload
+        Error = $null
     }
 }
 
@@ -254,15 +376,16 @@ function Test-ReviewVerdictStructure {
         return [pscustomobject]@{ IsValid = $false; Verdict = "EMPTY"; Blocking = -1; Error = "Reviewer produced empty output." }
     }
 
-    $verdictMatch = [regex]::Match($Text, '(?m)^VERDICT:\s*(PASS|BLOCK)\s*$')
-    $countMatch = [regex]::Match($Text, '(?m)^BLOCKING_FINDINGS:\s*(\d+)\s*$')
+    # Strip optional leading UTF-8 BOM only; do not allow any whitespace, blank lines, preamble, or prose
+    $cleanText = $Text.TrimStart([char]0xFEFF)
 
-    if (-not $verdictMatch.Success -or -not $countMatch.Success) {
-        return [pscustomobject]@{ IsValid = $false; Verdict = "MALFORMED"; Blocking = -1; Error = "Missing or malformed VERDICT / BLOCKING_FINDINGS header." }
+    $headerMatch = [regex]::Match($cleanText, '\AVERDICT:\s*(PASS|BLOCK)\r?\nBLOCKING_FINDINGS:\s*(\d+)(?:\r?\n|$)')
+    if (-not $headerMatch.Success) {
+        return [pscustomobject]@{ IsValid = $false; Verdict = "MALFORMED"; Blocking = -1; Error = "Output does not begin on line 1 with required VERDICT / BLOCKING_FINDINGS header." }
     }
 
-    $verdict = $verdictMatch.Groups[1].Value
-    $blocking = [int]$countMatch.Groups[1].Value
+    $verdict = $headerMatch.Groups[1].Value
+    $blocking = [int]$headerMatch.Groups[2].Value
 
     if ($verdict -eq "PASS" -and $blocking -ne 0) {
         return [pscustomobject]@{ IsValid = $false; Verdict = $verdict; Blocking = $blocking; Error = "Contract violation: VERDICT is PASS but BLOCKING_FINDINGS is $blocking (must be 0)." }
@@ -300,13 +423,17 @@ Repository status snapshot: .runtime/ai_gate/$Task/status.txt
 Candidate diff snapshot: .runtime/ai_gate/$Task/diff.patch
 Comparison baseline: $baseRef
 
-Review the candidate patch using the current repository state. Follow the '$agentName' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands.
+Review the candidate patch using the current repository state. Follow the '$agentName' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands. Stop using tools early once enough evidence exists to determine PASS or BLOCK.
+The final response MUST begin with:
+VERDICT: PASS|BLOCK
+BLOCKING_FINDINGS: <count>
 "@
 
     $invocation = Get-OpenCodeInvocation -Agent $agentName -PromptText $prompt
-    Write-Host "Running OpenCode agent '$agentName' (timeout: ${ReviewTimeoutSeconds}s)..."
+    Write-Host "Running OpenCode agent '$agentName' (timeout limit: ${ReviewTimeoutSeconds}s)..."
 
     $procResult = Invoke-BoundedProcess -Executable $invocation.Executable -Arguments $invocation.Arguments -TimeoutSeconds $ReviewTimeoutSeconds -StreamToConsole:$true
+    Write-Host "OpenCode agent '$agentName' finished in $([math]::Round($procResult.ElapsedSeconds, 1))s (exit code: $($procResult.ExitCode))."
 
     $fullRaw = ($procResult.StdOut, $procResult.StdErr | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
     Set-Content -Path $rawLogPath -Value $fullRaw -Encoding UTF8
@@ -327,7 +454,25 @@ Review the candidate patch using the current repository state. Follow the '$agen
         break
     }
 
-    $validation = Test-ReviewVerdictStructure -Text $procResult.StdOut
+    $assistantMessage = $procResult.StdOut
+    if ($invocation.IsStructured) {
+        $extraction = Get-FinalAssistantMessageFromStructuredJson -JsonlText $procResult.StdOut
+        if (-not $extraction.Success) {
+            $infraBlocked = $true
+            $infraReason = "OpenCode agent '$agentName' structured output malformed: $($extraction.Error). Canonical review left untouched."
+            break
+        }
+        $assistantMessage = $extraction.Text
+    }
+
+    $payloadResult = Get-CanonicalReviewPayload -FinalAssistantMessage $assistantMessage
+    if (-not $payloadResult.Success) {
+        $infraBlocked = $true
+        $infraReason = "OpenCode agent '$agentName' canonical payload extraction failed: $($payloadResult.Error). Canonical review left untouched."
+        break
+    }
+
+    $validation = Test-ReviewVerdictStructure -Text $payloadResult.Payload
     if (-not $validation.IsValid) {
         $infraBlocked = $true
         $infraReason = "OpenCode agent '$agentName' output malformed: $($validation.Error). Canonical review left untouched."
@@ -335,7 +480,7 @@ Review the candidate patch using the current repository state. Follow the '$agen
     }
 
     # Stage candidate review output; gate-level promotion is deferred until all reviewers and tests complete
-    Set-Content -Path $candidatePath -Value $procResult.StdOut.TrimEnd() -Encoding UTF8
+    Set-Content -Path $candidatePath -Value $payloadResult.Payload.TrimEnd() -Encoding UTF8
     $candidates[$agentName] = @{
         CandidatePath = $candidatePath
         CanonicalPath = $canonicalPath

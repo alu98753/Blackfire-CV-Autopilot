@@ -60,6 +60,15 @@ Use wording proportional to the actual uncertainty.
 Never use hedging merely as decoration. If there is insufficient evidence
 even to support a qualified claim, omit the claim or state that it is unknown.
 
+### Distinguish observation, inference, assumption, and uncertainty
+Prose should allow the reader to naturally distinguish:
+- **Verified / Observed facts**: directly observed empirical data or behavior.
+- **Inferences**: conclusions logically deduced from verified facts.
+- **Assumptions**: operational or environmental premises currently taken for granted (e.g. tool version compatibility).
+- **Uncertainties**: open questions that have not yet been demonstrated or bounded.
+
+The reader should be able to perceive this distinction through natural contextual phrasing, without requiring decorative disclaimers or rigid labeling.
+
 ---
 
 ## 2. Never increase evidence strength during rewriting

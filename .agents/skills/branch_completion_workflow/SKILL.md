@@ -317,20 +317,38 @@ Regression 分析與修復必須遵循 `project-test-rules` 的
 
 ---
 
-### Phase 8 — PARS Development Story (開發故事歸檔)
+### Phase 8 — PARS Development Story (開發故事與技術敘事歸檔)
 
 **目標**：記錄本次開發歷程，供後續回溯複盤。
 
-1. **撰寫 PARS**：
-   - 於 `docs/storys/` 建立或更新本次工作之 PARS 文件：
-     - **P**urpose (目的與背景問題)
-     - **A**ction (採取的關鍵行動與設計決策)
-     - **R**esult (驗證結果與測試數據)
-     - **S**o What (業務價值與深遠意義)
-     - **I**nfluence (架構影響與後續注意事項)
-2. **遵約要求**：
-   - 調用 [`write_docs`](../write_docs/SKILL.md) 技能，保持客觀中立，文字確定性嚴格受實測證據約束，禁止 AI 味誇飾。
-   - ⚠️ **PARS 定性禁令**：PARS 只是歷史敘事紀錄，**絕非系統架構規範，絕不可作為架構約束依據**。寫完 PARS 不等於完成架構收斂！
+#### 1. PARS 定位與歷史邊界鐵律 (Historical Boundary)
+- **PARS 是 branch 完成後的歷史敘事與工程複盤**，不是 architecture contract，**絕對不得作為 canonical architecture evidence**。
+- **目標**：不是只記錄「做了什麼」，而是讓未參與開發的人理解：**在什麼條件下遇到了什麼問題、為什麼做出這個選擇、這個選擇換來什麼與付出什麼，以及證據實際支持到哪裡**。
+- **歷史約束**：PARS 可以記錄當時的 architecture reasoning、trade-off 與 assumptions，但只能描述「當時為什麼這樣決定」。若 PARS 與目前 architecture contract 或 implementation 衝突，一律以目前 canonical architecture / code 為準。寫完 PARS 不等於完成架構收斂！
+
+#### 2. 工程推理骨架 (Reasoning Checklist, Not Mandatory Template)
+- 保留 **Purpose / Action / Result / So What / Influence** 作為高階敘事目的，**但不要把它當成固定標題模板**。
+- 對具有實質工程決策的故事，敘事應視需要自然涵蓋：
+  ```text
+  Context → Premise/Assumption → Problem/Tension → Reasoning → Decision/Approach → Benefit & Trade-off → Result → Remaining Uncertainty
+  ```
+- **Reasoning Checklist 而非死板 H2**：不要求每篇使用 Premise、Trade-off、Unknown 等固定標題。可以依故事採用 Before/After、問題→診斷→決策→結果、或其他自然結構。推理完整性優先於模板一致性。不得為了填滿結構而捏造不存在的 trade-off、assumption 或 uncertainty。
+
+#### 3. 核心寫作與證據規範 (Core Writing Rules)
+1. **Evidence discipline (Certainty <= Evidence)**：
+   - 敘事必須讓讀者能自然區分：`observed/verified facts`（實測觀察）、`evidence-backed inference`（證據推論）、`currently relied assumption`（依賴假設）、以及 `unproven uncertainty`（尚未證明之未知）。
+   - 不要求固定使用 `Verified / Inferred / Assumed / Unknown` 等僵化標籤。
+2. **Premises and boundaries (先揭露成立前提)**：
+   - 若重要結論依賴特定版本、環境、模型行為、scope、known invariant 或 compatibility assumption，應在該結論成立的脈絡附近自然交代，不應全部藏到文章最後當作免責聲明。
+3. **Decision and trade-off (Trade-off 是決策的一部分)**：
+   - 對重要 architecture、workflow 或 implementation decision，說明為什麼選擇它而不是合理替代方案，以及它帶來的實際 benefit、cost、complexity 或新的 failure surface。若沒有實質 trade-off，不要硬湊。
+4. **Result closes the loop (結果與假設形成閉環)**：
+   - Result 不只描述「PASS」、「成功」或「改善」，而應回扣原先的問題或假設，說明證據證明了什麼，以及沒有證明什麼。優先使用實測數據、failure behavior、before/after evidence 或 deterministic observations。
+5. **Mechanics over adjectives (機制與因果優先於形容詞)**：
+   - 技術力度應來自機制、因果與證據，而不是形容詞。避免「完美、革命性、徹底解決、極佳、大幅提升」等沒有證據邊界的強化語。
+   - 範例：寫「原本在 480 秒 hard timeout 前無法收斂；加入 step budget 後，本次 Scout 在 139 秒完成」，而不是寫「新的設計大幅提升 Scout 效率並徹底解決 timeout」。
+6. **Preserve failed paths when they explain the final design (保留推動最終設計的失敗嘗試)**：
+   - 僅當失敗嘗試**實質改變了對問題的診斷、暴露了原本隱含的假設、排除了看似合理的替代方案、或解釋了最終設計為何存在時**，才將其寫入故事。嚴禁為了紀錄完整性而流水帳列舉無意義的除錯細節（如打錯指令修 typo）。
 
 ---
 
