@@ -266,7 +266,15 @@ function Get-OpenCodeInvocation {
     }
 
     $node = Get-Command node -ErrorAction SilentlyContinue
-    if (-not $node) { throw "Node.js is not installed. Run .\scripts\bootstrap_opencode.ps1 first." }
+    if (-not $node) { throw "Node.js 18+ is required by the OpenCode SDK. Run .\scripts\bootstrap_opencode.ps1 first." }
+    $nodeVersion = (& node --version 2>&1 | Out-String).Trim()
+    $nodeVersionMatch = [regex]::Match($nodeVersion, '^v(?<major>\d+)(?:\.\d+){0,2}')
+    if ($LASTEXITCODE -ne 0 -or -not $nodeVersionMatch.Success) {
+        throw "Unable to determine the Node.js version from 'node --version'. Run .\scripts\bootstrap_opencode.ps1 first."
+    }
+    if ([int]$nodeVersionMatch.Groups['major'].Value -lt 18) {
+        throw "Node.js 18+ is required by the OpenCode SDK. Current version: $nodeVersion. Run .\scripts\bootstrap_opencode.ps1 first."
+    }
     $promptPath = Join-Path $runtimeDir ("${Agent}_${CandidateModel.Replace('/', '_')}.prompt.md")
     Set-Content -Path $promptPath -Value $PromptText -Encoding UTF8
     return @{

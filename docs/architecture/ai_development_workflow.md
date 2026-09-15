@@ -323,6 +323,8 @@ Repository configuration does not silently install or authenticate OpenCode duri
 .\scripts\bootstrap_opencode.ps1
 ```
 
+The repository-local OpenCode SDK requires Node.js 18 or newer. Current development should use a supported current LTS release (preferably Node.js 22 LTS or Node.js 24 LTS). Bootstrap performs this version preflight before `npm ci`; Gate repeats the check before launching the adapter and directs unsupported environments back to bootstrap.
+
 After installation, the user completes the interactive OpenCode `/connect` flow. Secrets remain outside the repository.
 
 ## 12. Legacy `docs/todos/`

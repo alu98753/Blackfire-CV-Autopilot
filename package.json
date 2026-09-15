@@ -2,6 +2,9 @@
   "name": "blackfirecrusade-opencode-gate",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@opencode-ai/sdk": "1.18.31"
   }

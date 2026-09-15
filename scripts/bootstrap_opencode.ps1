@@ -10,8 +10,22 @@ if (-not $npm) {
     throw "npm is unavailable. Install Node.js/npm first, then rerun this script."
 }
 
+$node = Get-Command node -ErrorAction SilentlyContinue
+if (-not $node) {
+    throw "Node.js 18+ is required by the OpenCode SDK. Node.js was not found. Upgrade Node.js (recommended: current LTS) and rerun scripts/bootstrap_opencode.ps1."
+}
+$nodeVersion = (& node --version 2>&1 | Out-String).Trim()
+$nodeVersionMatch = [regex]::Match($nodeVersion, '^v(?<major>\d+)(?:\.\d+){0,2}')
+if ($LASTEXITCODE -ne 0 -or -not $nodeVersionMatch.Success) {
+    throw "Unable to determine the Node.js version from 'node --version'. Install Node.js 18+ (recommended: current LTS) and rerun scripts/bootstrap_opencode.ps1."
+}
+$nodeMajor = [int]$nodeVersionMatch.Groups['major'].Value
+if ($nodeMajor -lt 18) {
+    throw "Node.js 18+ is required by the OpenCode SDK. Current version: $nodeVersion. Upgrade Node.js (recommended: current LTS) and rerun scripts/bootstrap_opencode.ps1."
+}
+
 $packageLock = Join-Path $repoRoot "package-lock.json"
-$npmArgs = if (Test-Path $packageLock) { @("ci", "--ignore-scripts") } else { @("install", "--ignore-scripts") }
+$npmArgs = @("ci", "--ignore-scripts")
 & npm @npmArgs
 if ($LASTEXITCODE -ne 0) { throw "Failed to install the pinned repository-local OpenCode SDK dependency." }
 

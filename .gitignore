@@ -9,6 +9,9 @@ __pycache__/
 venv/
 ENV/
 
+# Repository-local Node dependencies
+node_modules/
+
 # OS files
 .DS_Store
 Thumbs.db
