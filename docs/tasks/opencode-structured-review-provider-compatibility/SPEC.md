@@ -4,342 +4,346 @@ Status: Final
 
 ## Goal
 
-Identify and prove at least one `OpenCode version + provider + model` combination that can satisfy the machine-readable structured-review lifecycle required by the blocked `gate-reviewer-output-contract-reliability` task:
+Identify and prove at least one stable `OpenCode runtime + official client/SDK + provider + model` route that can satisfy Blackfire's machine-readable structured-review lifecycle without weakening Gate semantics:
 
 ```text
 read/search tool call
-    -> successful tool result
-    -> voluntary final assistant turn
-    -> valid JSON-Schema structured result
+-> successful tool result
+-> voluntary final assistant turn
+-> official structured machine result present
+-> fixed JSON Schema valid
+-> PASS/BLOCK semantic invariants valid
+-> lifecycle audit source trustworthy
+-> repeatability confirmed
 ```
 
-This is a compatibility / capability-evidence task. It determines where this lifecycle is actually supported. It must not weaken Blackfire's Gate contract merely to accommodate a provider/model limitation.
+This is a bounded compatibility qualification task, not an open-ended OpenCode history investigation.
 
-## Current baseline
+Production OpenCode remains pinned to `1.18.31` throughout this task. Any production upgrade/downgrade is a separate follow-up task after a stable route is proven.
 
-Base branch: `main` after `opencode-launcher-version-compatibility` merged.
+## Baseline
 
-Production OpenCode remains explicitly pinned to CLI `1.18.31`. The launcher/version prerequisite is closed:
+The launcher/version prerequisite is complete. Normal Blackfire Scout/Gate execution works on production-pinned OpenCode `1.18.31`, but normal text-verdict success is not structured-output proof.
 
-- Scout/Gate use parser-valid 1.18.31 invocation construction;
-- process isolation belongs to the PowerShell wrappers rather than an OpenCode run flag;
-- version mismatch fails before normal model routing;
-- current text-verdict Gate can execute/finalize with Big Pickle;
-- canonical Scout can execute with MiMo.
+Phase 1 already re-probed the repaired `1.18.31` baseline:
 
-Those are normal-runtime facts only. They are not proof of the target JSON-Schema structured-review lifecycle.
+- `opencode/big-pickle` / `spec-reviewer`: no permitted read/search lifecycle, forced `finish = tool-calls`, no structured result;
+- `opencode/mimo-v2.5-free` / `spec-reviewer`: lifecycle audit failed while reading session messages with the upstream-style `Expected OutputFormatJsonSchema, got {"type":"json_schema", ...}` failure.
 
-## Final structured-output mechanism
-
-The compatibility target is the official OpenCode SDK JSON-Schema structured-output path used by the predecessor design, not CLI `opencode run --format json` JSONL text extraction.
-
-The essential qualification mechanism is:
-
-```text
-official version-matched OpenCode SDK/runtime
-    -> session.create(...)
-    -> session.prompt(..., format = { type: "json_schema", schema: OUTCOME_SCHEMA, ... })
-    -> reviewer read/search tool interaction
-    -> successful tool result
-    -> voluntary reviewer finalization
-    -> official machine structured-result field
-    -> fixed JSON-Schema validation / semantic checks
-```
-
-`opencode run --format json` remains a raw event-stream mechanism and MUST NOT be treated as equivalent to JSON-Schema structured output.
-
-The fixed reviewer outcome schema remains:
-
-```json
-{
-  "verdict": "PASS",
-  "blocking_findings": 0,
-  "report_markdown": "# Spec Review\n..."
-}
-```
-
-Required shape/semantic rules:
-
-- `verdict` is exactly `PASS` or `BLOCK`;
-- `blocking_findings` is a non-negative integer;
-- `report_markdown` is a string;
-- no verdict is reconstructed from Markdown/prose;
-- `PASS -> blocking_findings == 0`;
-- `BLOCK -> blocking_findings >= 1`.
-
-### Version-native official result normalization
-
-The task is qualifying the OpenCode structured-output capability across versions, and upstream machine-field naming is not stable across every candidate runtime. The probe MAY normalize only a version-native **official SDK/server machine structured-result field** into the task's canonical evidence value before applying the unchanged schema and semantic checks.
-
-Known allowed mappings for this investigation are:
-
-- current 1.18.x path already exercised by this task/predecessor contract: `response.data.info.structured_output`;
-- evidence-selected 1.14.41 source contract: assistant `info.structured`.
-
-This is transport-version normalization only. It does not weaken the structured-output requirement.
-
-The following remain forbidden as result sources:
-
-- free-form assistant prose or Markdown;
-- JSON code fences or embedded JSON text;
-- regex verdict extraction;
-- earlier/stale messages used to salvage a failed authoritative attempt;
-- synthetic diagnostic-agent success presented as production qualification.
-
-If a future alternate runtime exposes neither a verified official structured machine field nor an equivalent official SDK result documented in that runtime, it cannot be qualified by inventing a fallback parser.
-
-## Qualification surface
-
-The primary live capability probe MUST use an actual production reviewer agent contract rather than a simplified synthetic agent, because the capability being qualified is the real Gate lifecycle under production read-only reviewer permissions and step/finalization behavior.
-
-`spec-reviewer` is the first qualification role. Before recommending a candidate as the future Gate reviewer route, the exact same `OpenCode version + provider + model` combination MUST also succeed with `regression-reviewer`.
-
-A dedicated minimal probe agent may be used only as a diagnostic aid. Success on that agent is not `PASS_PROVEN`.
-
-## Capability classification contract
-
-A candidate is `PASS_PROVEN` only when one bounded live probe using an actual production reviewer agent demonstrates all of:
-
-```text
-1. reviewer performs at least one required read/search tool call
-2. the tool result is successfully returned to the reviewer
-3. reviewer voluntarily leaves the tool-calling loop before forced max-step finalization
-4. reviewer emits the requested machine-readable structured result
-5. OpenCode exposes the verified official structured machine field for that runtime
-6. normalized payload validates against the fixed reviewer JSON Schema
-7. PASS/BLOCK cross-field semantics are internally consistent
-```
-
-The following are NOT `PASS_PROVEN`:
-
-- ordinary prose/Markdown final output;
-- current text-Gate `VERDICT: PASS` success;
-- `finish = tool-calls` with no valid final structured result;
-- forced max-step finalization;
-- provider `tool_choice` rejection;
-- transport/fetch failure;
-- lifecycle evidence that cannot be audited reliably;
-- missing or malformed structured result;
-- schema-invalid or semantically contradictory structured result;
-- a schema-valid payload produced without the required read/search lifecycle;
-- success only on a simplified diagnostic agent;
-- metadata/provider documentation without bounded live proof.
-
-Failure classes must remain mechanically distinguishable. Existing classes include `FAIL_FINALIZATION`, `FAIL_TOOL_CHOICE`, `FAIL_TOOL_RESULT`, `FAIL_TRANSPORT`, `FAIL_LIFECYCLE_AUDIT`, `FAIL_SCHEMA`, `FAIL_MISSING_STRUCTURED_OUTPUT`, and concrete infrastructure failures.
-
-## Phase 1 — production-pinned 1.18.31 — completed
-
-The task freshly re-probed the required Phase 1 candidates after launcher/local-state repair:
-
-1. `opencode/big-pickle`
-2. `opencode/mimo-v2.5-free`
-
-Post-audit-fix authoritative results:
-
-- Big Pickle / `spec-reviewer`: prompt-response lifecycle evidence available; no permitted read/search lifecycle; forced `finish = tool-calls`; no structured result. Not `PASS_PROVEN`.
-- MiMo / `spec-reviewer`: session-message lifecycle retrieval failed with the upstream-style `Expected OutputFormatJsonSchema, got {"type":"json_schema", ...}` response-shape error. Correctly fail-closed as `FAIL_LIFECYCLE_AUDIT`; no claim is made that the model chose no tool. Not `PASS_PROVEN`.
-
-Therefore Phase 1 is complete with:
+Therefore:
 
 ```text
 OpenCode 1.18.31: PASS_PROVEN = 0
 ```
 
-No `regression-reviewer` attempt was required because no Phase 1 candidate passed the first role.
+The existing Phase 1 attempts remain immutable historical/fresh evidence. New Phase 2 taxonomy must not rewrite old classifications.
 
-Fresh evidence remains tracked in `EVIDENCE.md`, `MODEL_CAPABILITY_MATRIX.md`, and bounded per-attempt records.
+## Frozen reviewer output contract
 
-## Phase 2 research amendment — 2026-09-16
+The fixed outcome schema is unchanged:
 
-Deep upstream research materially changed the version-selection hypothesis. The original Final SPEC spoke only about a newer-version probe. That restriction is superseded by this evidence amendment: **Phase 2 may test one evidence-selected alternate OpenCode version, older or newer, in reversible isolation.**
-
-The detailed upstream evidence and selection rationale are tracked in:
-
-`docs/tasks/opencode-structured-review-provider-compatibility/PHASE2_RESEARCH.md`
-
-Key findings:
-
-1. upstream OpenCode issue #26929 reports the same `Expected OutputFormatJsonSchema` read-back failure on 1.14.48 and identifies it as a regression; a reproducer states `1.14.41` was the last working version in their environment;
-2. related upstream evidence shows the persisted output-format encoding defect survived through later 1.x releases, including 1.18.x;
-3. upstream PR #37541 contains a direct fix (`Schema.Class` -> `Schema.Struct`) but remains unmerged, so a blind upgrade has no evidence advantage for this exact defect;
-4. tagged 1.14.41 source already contains the structured-output tool/schema lifecycle and an official assistant machine field `structured`;
-5. newer/current development paths still have separate forced-`tool_choice` compatibility defects, so newest-version preference is not a valid qualification strategy.
-
-### Selected first alternate runtime
-
-Phase 2 candidate #1 is exactly:
-
-```text
-OpenCode CLI:          1.14.41
-@opencode-ai/sdk:      1.14.41
-candidate order:       opencode/big-pickle, then opencode/mimo-v2.5-free
-first role:            spec-reviewer
-second role:           regression-reviewer only after the exact combination passes spec-reviewer
+```json
+{
+  "verdict": "PASS",
+  "blocking_findings": 0,
+  "report_markdown": "# Review\n..."
+}
 ```
 
-This is an evidence-driven downgrade probe, not a production downgrade decision.
+Rules:
 
-### Required Phase 2 isolation
+- `verdict` is exactly `PASS` or `BLOCK`;
+- `blocking_findings` is a non-negative integer;
+- `report_markdown` is a string;
+- `PASS -> blocking_findings == 0`;
+- `BLOCK -> blocking_findings >= 1`;
+- no verdict may be reconstructed from Markdown/prose;
+- no JSON-fence or regex fallback;
+- no stale/earlier-message salvage;
+- no diagnostic-agent success may qualify a production route.
 
-The 1.14.41 probe MUST NOT modify production OpenCode installation, global package state, repository production pin, or user OpenCode data.
+## Qualification surface
 
-Required isolation boundary:
+Qualification uses the actual production reviewer contracts:
 
-1. create/use an ignored `.runtime/` task directory or OS temporary directory;
-2. install exact `opencode-ai@1.14.41` and `@opencode-ai/sdk@1.14.41` only into that runtime;
-3. prepend only that runtime's `node_modules/.bin` to the child environment `PATH`, so the version-matched SDK launches the version-matched CLI;
-4. record and verify both CLI and SDK versions before each live attempt;
-5. use `OPENCODE_DB=:memory:` where supported; if the older runtime cannot safely use memory DB, stop and establish an equally isolated task-local state before continuing;
-6. disable automatic runtime upgrade through configuration supported by the selected version;
-7. keep the SDK/session repository directory pointed at the actual task worktree so `.opencode/agents/spec-reviewer.md` / `regression-reviewer.md` remain the production contracts under test;
-8. attempts remain bounded and non-interactive;
-9. caller environment is restored after each probe;
-10. temporary runtime dependencies are never committed.
+- `.opencode/agents/spec-reviewer.md`
+- `.opencode/agents/regression-reviewer.md`
 
-Production `scripts/opencode_contract.ps1` remains authoritative at `1.18.31` for normal Scout/Gate execution. Do not modify or bypass it for production workflow commands.
+Reviewer permissions, step budgets, exploration semantics, prompt/schema, and lifecycle criteria must not be weakened or tuned per runtime/model.
 
-### Phase 2 execution order and stop conditions
+A simplified diagnostic agent is allowed only for failure localization and can never produce route qualification evidence.
 
-Run only after deterministic tests for the alternate-runtime seam pass.
+## Official structured-result normalization
 
-Then:
+The task qualifies a semantic capability across OpenCode versions, so version-native official transport differences may be adapted, but only through documented/source-verified official machine fields.
 
-1. one bounded `1.14.41 + opencode/big-pickle + spec-reviewer` attempt;
-2. if not `PASS_PROVEN`, one bounded `1.14.41 + opencode/mimo-v2.5-free + spec-reviewer` attempt;
-3. if either is `PASS_PROVEN`, immediately test the exact same version/provider/model with `regression-reviewer`;
-4. only if the same combination passes both roles may it become the recommended future Gate route;
-5. if both first-role candidates fail, STOP and return evidence to ChatGPT/user before selecting another runtime.
+Known mappings already supported by evidence:
 
-Do not begin a broad version sweep. Do not automatically test 2.x/dev builds. Do not build the unmerged upstream PR unless ChatGPT + user explicitly select that as a later diagnostic step.
+- `1.18.x`: `response.data.info.structured_output`;
+- `1.14.41`: assistant `info.structured`.
 
-## Phase 3 — recommendation, not silent production migration
+For any other matrix runtime, including `2.0.2`, implementation must first identify the version-native official client/server structured-result surface from that runtime's source/API. If no trustworthy official machine field can be verified, the runtime cannot be qualified by inventing a parser.
 
-If an alternate version obtains a candidate that passes both production reviewer roles, record outcome `(b) viable only on an isolated alternate version` and recommend a separate follow-up task for production launcher/bootstrap/pin migration and regression evidence.
+Transport adaptation may include official package names, request shape, lifecycle-history API shape, and structured-result field names. It may not change reviewer semantics, prompt/schema, or success criteria.
 
-That follow-up may be an upgrade or downgrade. This compatibility task itself MUST NOT change the production `1.18.31` pin.
+## Trustworthy lifecycle audit
 
-If no authorized evaluated combination succeeds, record outcome `(c) no authorized viable route proven` and identify the next external dependency/runtime/provider to test. Do not weaken Gate semantics.
+An attempt cannot be `PASS_PROVEN` unless the audit source is explicitly recorded and trustworthy.
+
+The same-attempt authoritative lifecycle must prove:
+
+1. at least one permitted repository `read` / `glob` / `grep` call occurred;
+2. its result completed successfully and returned to the reviewer;
+3. the reviewer voluntarily left the tool loop rather than being forced by max-step/step-limit behavior;
+4. the final structured machine result belongs to that same authoritative attempt.
+
+A prompt response that itself contains complete typed lifecycle parts may be authoritative. A version-native official session/history/event API may also be authoritative if it returns a complete valid sequence.
+
+Missing, malformed, incomplete, rejected, or reconstructed lifecycle evidence fails closed. Never infer "the model chose no tool" merely because the audit source failed.
+
+## Phase 2 fixed compatibility matrix
+
+The Phase 2 runtime search space is frozen before live probing in:
+
+`docs/tasks/opencode-structured-review-provider-compatibility/PHASE2_COMPATIBILITY_MATRIX.md`
+
+Authorized runtime order is exactly:
+
+```text
+C1: OpenCode 1.14.41
+    official client: @opencode-ai/sdk@1.14.41
+
+C2: OpenCode 2.0.2
+    official CLI/client: @opencode/cli@2.0.2 + @opencode/client@2.0.2
+```
+
+Production `1.18.31` is the already-completed control and is not another Phase 2 runtime attempt unless a later implementation defect invalidates its evidence.
+
+Why C1 first:
+
+- upstream issue #26929 reproduces the exact persisted `OutputFormatJsonSchema` read-back error on `1.14.48`;
+- a reproducer identifies `1.14.41` as the last working version for that defect;
+- `1.14.41` already contains structured-output machinery and an official assistant machine field.
+
+Why C2 second:
+
+- it is a major session/schema architecture discontinuity rather than another guessed adjacent 1.x release;
+- its tagged source identifies version-matched official `@opencode/cli` and `@opencode/client` packages;
+- current OpenCode documentation still exposes JSON-Schema structured output;
+- v2 also has known tool-choice compatibility risks, so it is deliberately second rather than preferred merely because it is newer.
+
+No other runtime is authorized in this matrix. The unmerged upstream PR #37541, dev/beta/nightly builds, adjacent 1.x releases, later 2.x releases, and paid/authenticated providers require a new explicit matrix decision after current evidence is exhausted.
+
+## Fixed provider/model order
+
+For each authorized runtime:
+
+1. `opencode/big-pickle`
+2. `opencode/mimo-v2.5-free`
+
+Do not silently substitute another provider/model if one is unavailable. Runtime/model unavailability is evidence, not permission to broaden the search.
+
+## Phase 2 attempt taxonomy
+
+Every new Phase 2 live attempt must end in exactly one of these top-level classifications:
+
+- `PASS_PROVEN`
+- `FAIL_TOOL_CHOICE`
+- `FAIL_LIFECYCLE_AUDIT`
+- `FAIL_STRUCTURED_OUTPUT`
+- `FAIL_SCHEMA`
+- `FAIL_SEMANTIC`
+- `FAIL_INFRASTRUCTURE`
+
+Use bounded `subreason` / diagnostic fields for detail rather than creating more top-level classes.
+
+Classification rules:
+
+- `FAIL_TOOL_CHOICE`: required read/search was never issued, an incompatible tool path was chosen, or the provider rejects the tool-choice mode required by the structured-output path.
+- `FAIL_LIFECYCLE_AUDIT`: required tool result did not complete successfully, finalization was forced, or the authoritative lifecycle source is missing/untrusted/unusable.
+- `FAIL_STRUCTURED_OUTPUT`: audited lifecycle otherwise completed, but the verified official structured machine field is absent or unusable.
+- `FAIL_SCHEMA`: official structured result exists but violates the frozen schema.
+- `FAIL_SEMANTIC`: schema-valid result violates PASS/BLOCK cross-field invariants.
+- `FAIL_INFRASTRUCTURE`: runtime/client mismatch, install/startup/state isolation failure, model/provider unavailable, transport/auth failure, or another failure before trustworthy reviewer lifecycle evaluation.
+
+## Early regression-reviewer smoke
+
+Do not wait until a full spec-reviewer success to discover a role-specific transport/config incompatibility.
+
+Before full spec-reviewer qualification for each runtime, run exactly one bounded diagnostic-only `regression-reviewer` smoke using `opencode/big-pickle`.
+
+The smoke must:
+
+- load the actual production regression reviewer contract;
+- use the same official structured-output transport and frozen output schema;
+- require one repository read/search lifecycle;
+- use one fixed minimal smoke prompt shared unchanged across C1 and C2;
+- use the same audit/classification rules;
+- remain non-qualifying: smoke success never counts toward route repeatability.
+
+Smoke failure does not automatically skip the required spec-reviewer matrix attempts because a second model may still provide a viable full route.
+
+## Full candidate execution algorithm
+
+For C1, then C2:
+
+1. run the fixed Big Pickle regression-reviewer smoke;
+2. run Big Pickle `spec-reviewer` full probe;
+3. if Big Pickle spec fails, run MiMo `spec-reviewer` full probe;
+4. when a model gets spec `PASS_PROVEN`, run one full `regression-reviewer` probe using the exact same runtime + official client + provider + model;
+5. if full regression fails, reject that route and continue the frozen matrix;
+6. if both roles pass once, run the repeatability confirmation below;
+7. if repeatability fails, do not add an ad-hoc retry; continue the frozen matrix.
+
+All full probes use the same qualification prompt, output schema, reviewer files, lifecycle criteria, and isolation rules across runtime candidates.
+
+## Repeatability requirement
+
+A single successful attempt is not enough to declare a production-capable route.
+
+After one full success on both roles for the exact same combination, rerun the exact pair once:
+
+```text
+spec-reviewer #1       PASS_PROVEN
+regression-reviewer #1 PASS_PROVEN
+spec-reviewer #2       PASS_PROVEN
+regression-reviewer #2 PASS_PROVEN
+```
+
+The early regression smoke does not count.
+
+Only after all four qualifying attempts pass under the same runtime/client/provider/model/prompt/schema/isolation/audit contract may the task announce:
+
+```text
+PASS_PROVEN: OpenCode X + provider/model
+```
+
+If either confirmation attempt fails, the route is not repeatable. Preserve the failing attempt and continue the matrix without an extra retry.
+
+## Isolation requirements
+
+Every alternate runtime probe must be reversible and isolated from production state.
+
+Required behavior:
+
+- use an ignored `.runtime/` subtree or OS temporary directory;
+- install exact version-matched official runtime/client packages only there;
+- never replace or mutate the global/production OpenCode installation;
+- mechanically verify runtime and official client versions before each live attempt;
+- point the repository/session directory at the actual Blackfire task worktree so the real reviewer definitions are used;
+- use `OPENCODE_DB=:memory:` where safely supported, otherwise an explicitly task-local isolated state path;
+- never fall back to the user's normal OpenCode database;
+- disable candidate auto-update where supported;
+- restore PATH/environment after each probe;
+- keep all commands non-interactive;
+- never commit temporary dependency contents, credentials, local state, or raw provider dumps.
+
+Production `scripts/opencode_contract.ps1` remains authoritative for normal Scout/Gate and stays pinned to `1.18.31`.
+
+## Phase 2 matrix stop rules
+
+Stop immediately and return evidence to ChatGPT/user when any of these is true:
+
+1. one stable route passes both reviewer roles twice each;
+2. C1 and C2 are exhausted without a stable route;
+3. continued probing would risk production state/isolation;
+4. the next action would incur paid/API cost without explicit user authorization.
+
+When C1 and C2 are exhausted, do not automatically test another version, source PR, dev build, model, or provider. A new matrix decision is required.
 
 ## Scope
 
 In scope:
 
-- preserve fresh Scout and Phase 1 evidence;
-- maintain the bounded official-SDK compatibility probe;
-- deterministic coverage of schema, semantics, lifecycle audit, redaction, and alternate-runtime/state seams;
-- execute the selected isolated 1.14.41 runtime probe under the exact production reviewer contract;
-- normalize only verified version-native official machine structured-result fields;
-- classify attempts by reproducible evidence;
-- update bounded compatibility evidence/matrix;
-- recommend only a route live-proven with both production reviewer roles.
+- maintain one bounded official structured-output compatibility probe;
+- add version-native adapters only where required by C1/C2 official client surfaces;
+- deterministic tests for matrix selection, package/runtime matching, lifecycle audit, structured-result normalization, taxonomy, isolation, and environment restoration;
+- execute the frozen matrix under the actual production reviewer contracts;
+- preserve bounded per-attempt evidence and update the compatibility matrix/evidence summary;
+- recommend a future Gate route only after both roles and repeatability are proven.
 
 Allowed change surfaces:
 
 - `docs/tasks/opencode-structured-review-provider-compatibility/`
-- `scripts/opencode_structured_review_probe.mjs` and minimal related helper code
+- `scripts/opencode_structured_review_probe.mjs` and minimal helper code
 - `tests/workflow_scripts/` and the existing focused Python wrapper
-- `.opencode/` only if a diagnostic config is genuinely required; production reviewer semantics must remain unchanged
-- package metadata only where necessary for the repository's existing 1.18.31 probe tooling; alternate 1.14.41 dependency contents belong in ignored temporary runtime state, not a production pin change
-- `docs/architecture/ai_development_workflow.md` only if a durable compatibility-qualification rule must be documented
-
-The predecessor branch's structured-review adapter remains reference evidence only; do not silently merge the blocked predecessor implementation into production.
-
-## Known invariants
-
-1. Machine verdict authority comes from validated structured fields, not free-form prose.
-2. No Markdown/prose verdict fallback may be introduced.
-3. A valid semantic PASS/BLOCK remains terminal; normal reviewer fallback remains infrastructure-only.
-4. Reviewers remain independent and read-only.
-5. Provider credentials remain local and MUST NOT be committed.
-6. Paid/API-cost probes require explicit user authorization before execution.
-7. Metadata/documentation is only a prefilter; `PASS_PROVEN` requires the bounded live complete lifecycle.
-8. Current text-verdict Gate success is not structured-output proof.
-9. Historical attempt classifications remain distinct from fresh attempts; never overwrite prior evidence.
-10. No production/game behavior changes are in scope.
-11. Do not change production OpenCode pin inside this task.
-12. Do not merge or resume the blocked `gate-reviewer-output-contract-reliability` implementation until this task establishes a viable reviewer capability route and the predecessor later obtains its own fresh Gate evidence.
-13. CLI JSONL output is not a substitute for SDK JSON-Schema structured output.
-14. Diagnostic-agent success cannot qualify a production route.
-15. Version/state probing must be reversible and must not destroy/mutate production user state.
-16. Missing lifecycle evidence fails closed; it must never be reclassified as model no-tool behavior merely because an audit endpoint failed.
-17. Alternate-runtime compatibility must use a version-matched CLI and SDK unless concrete upstream evidence explicitly justifies a cross-version pair.
+- `.opencode/` only for diagnostic configuration when genuinely necessary; production reviewer semantics must not change
+- package metadata only where needed for existing repository probe tooling; alternate runtime dependency contents stay local/ignored
+- architecture docs only if a durable qualification rule must be documented.
 
 ## Non-goals
 
-- fixing OpenCode upstream bugs in this repository;
-- changing normal Gate reviewer routing;
-- changing reviewer timeout or step budgets as a workaround;
-- weakening structured-output schema/semantic requirements;
-- restoring free-form verdict parsing;
-- silently authenticating providers or spending paid API budget;
-- silently upgrading or downgrading production OpenCode;
+- fixing OpenCode upstream inside Blackfire;
+- changing production OpenCode pin;
+- changing normal Gate routing;
+- changing reviewer step budgets/timeouts to manufacture success;
+- changing prompt/schema per runtime or model;
+- Markdown/prose/regex verdict fallback;
 - broad provider/version benchmarking;
-- broad workflow refactoring;
-- modifying production/game automation behavior;
+- automatic dev/beta/source-build probing;
+- paid probes without explicit authorization;
+- production/game behavior changes;
 - merging/closing the blocked predecessor task inside this task.
 
-## Required evidence and verification
+## Deterministic verification requirements
 
-Each fresh live attempt MUST record enough bounded evidence to answer:
+Before live Phase 2 attempts, focused offline tests must cover at least:
 
-- OpenCode CLI version;
-- SDK version;
-- runtime isolation method;
+- frozen matrix/runtime selection and rejection of unlisted versions;
+- exact official runtime/client version matching;
+- fixed prompt/schema construction;
+- both production reviewer roles being discoverable/loadable under the candidate adapter;
+- structured-result normalization for each implemented runtime adapter;
+- no prose/Markdown/regex fallback;
+- lifecycle audit trustworthy/untrustworthy cases;
+- new Phase 2 taxonomy mapping;
+- isolation and caller PATH/environment restoration;
+- repeatability aggregation logic;
+- preservation of the existing 1.18.31 path.
+
+Live provider calls are evidence runs, not deterministic unit tests.
+
+## Required evidence
+
+Every fresh Phase 2 attempt must record:
+
+- matrix candidate ID (`C1`/`C2`);
+- exact CLI/runtime version;
+- exact official client/SDK package + version;
 - provider/model;
-- reviewer role;
-- lifecycle-audit source;
-- whether required read/search tool call occurred;
-- whether a successful tool result returned;
-- whether finalization was voluntary or forced;
-- finish reason when available;
-- exact official structured machine field used (`structured_output`, `structured`, or another future explicitly verified field);
-- whether structured result existed;
-- schema validation result;
-- semantic validation result;
-- final classification;
-- bounded/redacted diagnostic on failure.
+- reviewer role and whether attempt is `smoke`, `qualifying`, or `confirmation`;
+- isolation method;
+- lifecycle-audit source and whether it is trustworthy;
+- required read/search occurrence;
+- successful tool result;
+- voluntary vs forced finalization and finish reason;
+- exact official structured machine field used;
+- structured result presence;
+- schema validation;
+- semantic validation;
+- exact top-level classification;
+- bounded/redacted diagnostic + subreason on failure.
 
-Probe tooling MUST retain deterministic offline coverage for:
-
-- argument/config construction;
-- fixed schema validation;
-- PASS/BLOCK cross-field validation;
-- successful lifecycle audit;
-- lifecycle retrieval failure/malformed response fail-closed behavior;
-- missing/malformed structured-result classification;
-- bounded credential redaction;
-- production-vs-alternate runtime selection;
-- version-matched CLI/SDK verification;
-- environment/PATH/state restoration.
-
-Live provider/model calls are evidence runs, not deterministic unit tests.
+Historical attempts are never overwritten.
 
 ## Acceptance criteria
 
-1. Fresh canonical Scout evidence exists after launcher/version repair.
-2. The task uses one reproducible bounded official-SDK JSON-Schema probe with actual production reviewer agents.
-3. Phase 1 on 1.18.31 Big Pickle and MiMo is preserved as `PASS_PROVEN = 0` with post-audit-fix evidence.
-4. Phase 2 first probes the evidence-selected isolated `1.14.41` CLI + SDK pair rather than performing an uncontrolled version sweep.
-5. At least one authorized evaluated combination becomes `PASS_PROVEN`, OR tracked evidence demonstrates no viable route for the evaluated set and identifies the next concrete dependency/runtime/provider.
-6. A future Gate route is recommended only after the same exact candidate combination passes both `spec-reviewer` and `regression-reviewer` under the complete lifecycle.
-7. Version-native official structured-result normalization never uses prose/Markdown/regex or stale-message fallback and still validates the unchanged fixed schema.
-8. Compatibility evidence distinguishes provider/model capability failure from lifecycle-audit/runtime/version/local-state infrastructure failure.
-9. No paid probe is executed without explicit user approval.
-10. No secrets, credentials, temporary runtimes, or unnecessarily large provider payloads are committed.
-11. Focused deterministic checks for the probe tooling pass.
-12. Final evidence records exactly one outcome category: `(a) viable on 1.18.31`, `(b) viable only on an isolated alternate version`, or `(c) no authorized viable route proven`.
-13. Production OpenCode remains pinned to `1.18.31` throughout this task.
+1. Phase 1 `1.18.31` evidence remains preserved as `PASS_PROVEN = 0`.
+2. Phase 2 uses the pre-frozen C1/C2 matrix and does not select versions reactively after each failure.
+3. The exact same full spec-reviewer probe contract is applied across matrix runtimes, with only official version-native transport adaptation.
+4. Each runtime receives the fixed early regression-reviewer compatibility smoke before full spec qualification.
+5. New attempts use only the frozen seven-result taxonomy.
+6. Attempt `PASS_PROVEN` requires required read/search, successful result, voluntary finalization, official structured result, valid schema, valid semantics, and trustworthy same-attempt lifecycle audit.
+7. A public route-level `PASS_PROVEN: OpenCode X + provider/model` is declared only after the exact same combination passes both reviewer roles twice each.
+8. Matrix exhaustion stops the task; no open-ended version/provider search occurs.
+9. No paid probe executes without explicit user authorization.
+10. No production pin/routing/reviewer semantics are changed.
+11. No secrets, temporary runtimes, or unbounded raw provider data are committed.
+12. Focused deterministic tests pass.
+13. If a stable alternate route is proven, production migration is proposed as a separate follow-up task rather than performed here.
 
 ## Workflow state
 
-This SPEC remains `Status: Final` after the Phase 2 evidence amendment.
+This SPEC remains `Status: Final`.
 
-Phase 1 is complete with `PASS_PROVEN = 0`.
-
-The next task-local action is:
-
-1. synchronize this amended Final SPEC and `PHASE2_RESEARCH.md` into the dedicated worktree;
-2. have the sole implementation writer add only the minimal alternate-runtime isolation/version-native-result normalization seam plus deterministic coverage;
-3. execute the bounded 1.14.41 Phase 2 probe in the order and stop conditions above;
-4. commit/push bounded evidence;
-5. return to ChatGPT for semantic review before any additional runtime candidate or production migration decision.
+The next local step is to synchronize this Final SPEC and `PHASE2_COMPATIBILITY_MATRIX.md`, then have the implementation writer update only the bounded probe/test/evidence surface needed for the frozen Phase 2 matrix. Do not begin live C1/C2 probes until the deterministic matrix/adapter/repeatability tests pass.
