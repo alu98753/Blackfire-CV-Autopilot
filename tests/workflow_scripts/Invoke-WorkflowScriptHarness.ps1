@@ -19,6 +19,9 @@ $scoutCmd = Join-Path $helperDir 'fake-scout.cmd'
 $pythonCmd = Join-Path $helperDir 'fake-test.cmd'
 $passed = 0
 $failed = 0
+$specReviewer = Join-Path $repoRoot '.opencode\agents\spec-reviewer.md'
+$regressionReviewer = Join-Path $repoRoot '.opencode\agents\regression-reviewer.md'
+$workflowContract = Join-Path $repoRoot 'docs\architecture\ai_development_workflow.md'
 
 function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -45,6 +48,22 @@ function Run-Case([string]$Name, [scriptblock]$Body) {
 }
 
 try {
+    Run-Case 'Reviewer budgets and bounded finalization contract' {
+        $specText = Get-Content $specReviewer -Raw
+        $regressionText = Get-Content $regressionReviewer -Raw
+        $workflowText = Get-Content $workflowContract -Raw
+        Assert-True ($specText -match '(?m)^steps: 8$') 'spec-reviewer budget drifted'
+        Assert-True ($regressionText -match '(?m)^steps: 10$') 'regression-reviewer budget drifted'
+        foreach ($text in @($specText, $regressionText)) {
+            Assert-True ($text -match 'bounded blocker detector') 'bounded reviewer contract missing'
+            Assert-True ($text -match 'configured step count is a maximum safety ceiling') 'ceiling contract missing'
+            Assert-True ($text -match 'emit the canonical verdict voluntarily before forced max-step finalization') 'voluntary finalization contract missing'
+            Assert-True ($text -match 'Never rely on forced max-step finalization') 'forced finalization prohibition missing'
+        }
+        Assert-True ($workflowText -match '`spec-reviewer`[\s\S]*?`steps: 8`') 'architecture spec-reviewer budget drifted'
+        Assert-True ($workflowText -match '`regression-reviewer`[\s\S]*?`steps: 10`') 'architecture regression-reviewer budget drifted'
+        Assert-True ($workflowText -match 'Forced max-step finalization remains an infrastructure failure, never a verdict source') 'architecture finalization contract missing'
+    }
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
