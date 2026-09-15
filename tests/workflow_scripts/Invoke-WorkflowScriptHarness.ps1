@@ -2,7 +2,6 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
-$powerShell = (Get-Process -Id $PID).Path
 $gate = Join-Path $repoRoot 'scripts\ai_gate.ps1'
 $scout = Join-Path $repoRoot 'scripts\ai_scout.ps1'
 $fixtureId = "workflow-harness-fixture-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))-$PID"
@@ -26,7 +25,16 @@ function Assert-True([bool]$Condition, [string]$Message) {
 }
 
 function Invoke-Script([string]$Script, [string[]]$Arguments) {
-    try { & $powerShell -NoProfile -ExecutionPolicy Bypass -File $Script @Arguments 2>&1 | Out-Null }
+    $commandParts = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $Script.Replace('"', '\"') + '"'))
+    foreach ($argument in $Arguments) {
+        if ($argument -match '[\s"]') {
+            $commandParts += ('"' + $argument.Replace('"', '\"') + '"')
+        } else {
+            $commandParts += $argument
+        }
+    }
+    $command = ($commandParts -join ' ') + ' < NUL'
+    try { & cmd.exe /d /s /c $command 2>&1 | Out-Null }
     catch { return 1 }
     return $LASTEXITCODE
 }
