@@ -1,0 +1,24 @@
+{
+  "id": "opencode-launcher-version-compatibility",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/opencode-launcher-version-compatibility/",
+    "scripts/ai_scout.ps1",
+    "scripts/ai_gate.ps1",
+    "scripts/bootstrap_opencode.ps1",
+    "tests/workflow_scripts/",
+    "docs/architecture/ai_development_workflow.md",
+    "package.json",
+    "package-lock.json"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}

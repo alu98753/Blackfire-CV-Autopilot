@@ -1,6 +1,7 @@
 param()
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "opencode_contract.ps1")
 
 function Get-OpenCodeCommand {
     return Get-Command opencode -ErrorAction SilentlyContinue
@@ -8,8 +9,10 @@ function Get-OpenCodeCommand {
 
 $existing = Get-OpenCodeCommand
 if ($existing) {
+    $installedVersion = Get-OpenCodeVersion -Executable $existing.Source
+    Assert-OpenCodeSupportedVersion -Version $installedVersion
     Write-Host "OpenCode is already installed:"
-    & opencode --version
+    Write-Host "OpenCode $installedVersion"
     Write-Host ""
     Write-Host "If no provider is connected yet, run 'opencode' in the repository and use /connect."
     exit 0
@@ -21,9 +24,9 @@ if (-not $npm) {
 }
 
 Write-Host "Installing OpenCode with the official npm package (opencode-ai)..."
-& npm install -g opencode-ai
+& npm install -g "opencode-ai@$OpenCodeSupportedVersion"
 if ($LASTEXITCODE -ne 0) {
-    throw "npm install -g opencode-ai failed with exit code $LASTEXITCODE."
+    throw "npm install -g opencode-ai@$OpenCodeSupportedVersion failed with exit code $LASTEXITCODE."
 }
 
 $installed = Get-OpenCodeCommand
@@ -31,9 +34,12 @@ if (-not $installed) {
     throw "Installation completed but 'opencode' is not available on PATH. Open a new terminal and run 'opencode --version'."
 }
 
+$installedVersion = Get-OpenCodeVersion -Executable $installed.Source
+Assert-OpenCodeSupportedVersion -Version $installedVersion
+
 Write-Host ""
 Write-Host "OpenCode installation verified:"
-& opencode --version
+Write-Host "OpenCode $installedVersion"
 Write-Host ""
 Write-Host "Next interactive step (credentials are never stored in this repository):"
 Write-Host "  1. Set-Location to the repository root"
