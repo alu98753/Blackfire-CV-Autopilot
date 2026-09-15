@@ -1,112 +1,273 @@
 # gate-payload-robustness-v1
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Make `scripts/ai_gate.ps1` resilient to semantically valid reviewer verdict headers that are wrapped in common Markdown formatting, while preserving strict rejection of ambiguous or contradictory review payloads and improving durability of Gate attempt provenance across reruns.
+Make `scripts/ai_gate.ps1` resilient to the real production failure where a semantically valid reviewer header is wrapped in Markdown bold, while preserving strict rejection of ambiguous/contradictory payloads and durably retaining compact Gate attempt history across reruns.
 
-This is a workflow reliability task. It changes Gate parsing/evidence behavior only; it does not change game/runtime behavior or reviewer semantic authority.
+This is a workflow reliability task. It changes Gate parsing and tracked verification evidence only. It does not change game/runtime behavior, reviewer semantic authority, reviewer sequencing, fallback policy, or timeout policy.
 
-## Observed problem
+## Evidence basis
 
-The `intent-routing-observability` production pilot exposed a real infrastructure failure:
+The `intent-routing-observability` production pilot demonstrated:
 
-- the reviewer semantically concluded `PASS` with `BLOCKING_FINDINGS: 0`;
-- the final header was emitted as Markdown bold (`**VERDICT: PASS**`, `**BLOCKING_FINDINGS: 0**`);
-- `Get-CanonicalReviewPayload` / `Test-ReviewVerdictStructure` only accept raw canonical headers beginning with literal `VERDICT:`;
-- Gate therefore classified the attempt as `PAYLOAD_EXTRACTION_FAILED` / infrastructure failure even though the semantic review itself was valid.
+- reviewer semantics were `PASS` with `BLOCKING_FINDINGS: 0`;
+- output used Markdown bold headers:
+  - `**VERDICT: PASS**`
+  - `**BLOCKING_FINDINGS: 0**`
+- `Get-CanonicalReviewPayload` required literal raw `VERDICT:` at line start, so Gate classified the attempt as `PAYLOAD_EXTRACTION_FAILED` / infrastructure failure;
+- a later successful rerun replaced canonical `EVIDENCE.md`, so prior failed-attempt provenance was no longer durably represented in the tracked task package.
 
-The pilot retrospective also confirmed that a later successful Gate rerun regenerates canonical `EVIDENCE.md`, so failed-attempt provenance is not durably retained in the tracked task package.
+Scout confirmed:
 
-The newly merged `workflow-script-testing-harness` provides an offline regression baseline for current Gate/Scout behavior and must be extended before changing parser semantics.
+- parser normalization is localized to `Get-CanonicalReviewPayload` / `Test-ReviewVerdictStructure`;
+- `$provenanceRecords` already contains the fields needed for durable attempt history;
+- current duplicate-header rejection, PASS/BLOCK consistency checks, transaction-safe promotion, and rollback are existing invariants;
+- the merged offline workflow harness contains the exact Markdown production-failure case and is the required regression safety net.
 
-## Initial scope
+## Scope
 
-### Payload robustness
+### 1. Narrow payload normalization
 
-- Update Gate review-payload extraction/validation so a narrow, explicitly defined set of superficial Markdown wrappers around the canonical two-line header can be normalized and accepted.
-- Keep semantic validation strict after normalization.
-- Add/modify offline harness cases so the current Markdown-rejection baseline becomes the intended red→green regression test.
-- Preserve rejection of malformed, contradictory, ambiguous, duplicated, or otherwise semantically unsafe verdict structures.
+Gate must accept exactly these two header forms:
 
-### Attempt provenance retention
+#### Canonical raw form
 
-- Preserve materially useful Gate attempt provenance across reruns so a successful rerun does not erase the fact that earlier normal candidates failed infrastructurally.
-- Keep canonical current verdicts unambiguous: historical attempts are evidence, not current reviewer authority.
-- Avoid turning `EVIDENCE.md` into an unbounded raw-log dump; retain compact structured attempt history or another tracked representation justified by Scout evidence.
+```text
+VERDICT: PASS|BLOCK
+BLOCKING_FINDINGS: <non-negative integer>
+```
+
+#### Markdown-bold form
+
+Both canonical header lines may be fully wrapped in Markdown bold markers:
+
+```text
+**VERDICT: PASS|BLOCK**
+**BLOCKING_FINDINGS: <non-negative integer>**
+```
+
+The two lines must use the same accepted form within one header. Mixed raw/bold header lines are rejected.
+
+Normalization requirements:
+
+- normalization is limited to removing one complete outer `**...**` wrapper from each of the two header lines;
+- after normalization, the existing semantic validator remains authoritative;
+- matching remains line-anchored and deterministic;
+- normalization must be applied uniformly when detecting multiple candidate headers, so ambiguity cannot disappear merely because one candidate was formatted differently;
+- arbitrary inline Markdown/prose must never be converted into a verdict.
+
+Explicitly **not accepted in v1**:
+
+- Markdown headings such as `# VERDICT: PASS`;
+- inline-code/backtick wrappers such as `` `VERDICT: PASS` ``;
+- blockquotes;
+- bullets/list prefixes;
+- arbitrary leading prose or same-line prose around a header;
+- arbitrary indentation or blank preamble invented as tolerance;
+- partially/mismatched bold wrappers;
+- only one line bolded while the other is raw.
+
+This task fixes the observed bold-wrapper incident only. Broader formatting tolerance requires separate evidence and a new contract.
+
+### 2. Semantic strictness after normalization
+
+Existing semantic invariants remain unchanged:
+
+- `PASS` is valid only when `BLOCKING_FINDINGS: 0`;
+- `BLOCK` is valid only when `BLOCKING_FINDINGS >= 1`;
+- malformed/contradictory combinations are rejected;
+- multiple canonical or normalizable verdict headers in one final assistant message are rejected as ambiguous;
+- one raw header plus one bold-normalizable header is still multiple competing headers and must be rejected;
+- normalization must not make an otherwise ambiguous payload appear unique.
+
+### 3. Durable attempt history
+
+Add one tracked historical artifact under the task package:
+
+```text
+docs/tasks/<task-id>/ATTEMPT_HISTORY.md
+```
+
+Responsibility boundary:
+
+- `EVIDENCE.md` remains the canonical summary of the **current Gate run** and current selected reviewer verdicts;
+- `reviews/spec-review.md` / `reviews/regression-review.md` remain the current canonical reviewer reports;
+- `ATTEMPT_HISTORY.md` is historical observability only and must never be interpreted as current review authority.
+
+Each Gate run that reaches normal evidence generation/promotion must append one compact run section containing:
+
+- Gate run timestamp;
+- branch;
+- candidate HEAD;
+- role;
+- attempt index;
+- attempt type;
+- model;
+- elapsed seconds;
+- outcome;
+- selected/fallback status.
+
+The artifact must use existing `$provenanceRecords`; do not reconstruct history from raw logs or parse previous `EVIDENCE.md` Markdown.
+
+History requirements:
+
+- previous tracked history survives later successful reruns;
+- current run records are appended in execution order;
+- raw `.runtime` logs are not committed;
+- do not copy full reviewer prose into history;
+- a rerun must create a distinct run section even if the same HEAD/model combination is repeated; repeated executions are real historical events, not deduplication errors;
+- history remains append-only from the perspective of successful canonical promotion;
+- no pruning/rotation policy is introduced in v1.
+
+### 4. Transaction-safe promotion
+
+`ATTEMPT_HISTORY.md` becomes part of the same canonical promotion/rollback transaction as:
+
+- `reviews/spec-review.md`;
+- `reviews/regression-review.md`;
+- `EVIDENCE.md`.
+
+If promotion fails, all canonical artifacts, including prior attempt history, must be restored to their exact pre-Gate state.
+
+Infrastructure failures that occur before normal evidence promotion must continue to leave canonical artifacts untouched. This task does not change that fail-safe contract.
+
+### 5. Offline regression harness
+
+Update `tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1` through real Gate invocation and existing override seams.
+
+Required parser cases:
+
+1. raw canonical PASS -> Gate exit `0`;
+2. Markdown-bold PASS -> Gate exit `0` (red→green change from P0 baseline);
+3. raw canonical BLOCK with blocking>=1 -> Gate exit `2`;
+4. PASS with non-zero blocking -> rejected / infrastructure blocked;
+5. BLOCK with zero blocking -> rejected / infrastructure blocked;
+6. malformed prose -> rejected;
+7. duplicated raw headers -> rejected as ambiguous;
+8. duplicated bold-normalizable headers -> rejected as ambiguous;
+9. one raw + one bold-normalizable competing header -> rejected as ambiguous;
+10. mixed-line raw/bold header -> rejected;
+11. heading/backtick/non-contract wrappers remain rejected.
+
+Required history cases:
+
+12. first successful Gate run creates `ATTEMPT_HISTORY.md`;
+13. later successful rerun appends a new run without deleting earlier history;
+14. failed candidate followed by fallback success records both attempts with correct selected/fallback meaning;
+15. simulated promotion failure restores the previous `ATTEMPT_HISTORY.md` exactly, together with existing evidence/reviews.
+
+The harness must remain offline, deterministic, and free of live OpenCode/network dependencies.
 
 ## Known invariants
 
-- ChatGPT + user remain contract owners; Gate reviewers remain read-only independent blocker detectors.
-- Normal semantic `PASS` / `BLOCK` remains terminal for that reviewer role; model fallback remains infrastructure reliability, not review-shopping.
-- Gate exit-code contract remains:
+- ChatGPT + user remain contract owners.
+- OpenCode Gate reviewers remain read-only independent blocker detectors.
+- Normal semantic `PASS` / `BLOCK` remains terminal for that reviewer role.
+- Model fallback remains infrastructure reliability, not semantic review-shopping.
+- Gate exit codes remain:
   - `0` = PASS
   - `1` = INFRASTRUCTURE_BLOCKED
   - `2` = CANDIDATE_BLOCKED
-- `VERDICT: PASS` is valid only with `BLOCKING_FINDINGS: 0`.
-- `VERDICT: BLOCK` is valid only with `BLOCKING_FINDINGS >= 1`.
-- Multiple competing verdict headers must remain rejected as ambiguous.
-- Parsing normalization must not reinterpret arbitrary prose as a verdict.
-- Reviewer sequencing after infrastructure failure is unchanged in this task.
-- Timeout, kill-confirmation, model ordering, fallback policy, reviewer prompts/step budgets, and focused-test semantics are unchanged unless Final SPEC explicitly narrows a behavior-neutral wording change needed for the parser contract.
-- Historical/degraded/non-independent evidence must never masquerade as the current independent Gate PASS.
-- Offline workflow harness remains the required regression safety net.
-- Windows non-interactive execution policy remains authoritative: agent/tool PowerShell execution is routed through `cmd.exe /d /s /c`, with stdin closed from NUL where applicable.
+- Reviewer role sequencing remains unchanged.
+- Model candidates/order, timeout values, retry counts, kill-confirmation behavior, prompts, step budgets, and focused-test semantics remain unchanged.
+- Degraded/manual evidence must never masquerade as a current independent Gate PASS.
+- Current canonical verdict authority remains separate from historical attempt observability.
+- Offline workflow harness is required before Gate.
+- Windows non-interactive execution policy is authoritative: agent/tool PowerShell execution uses `cmd.exe /d /s /c`, with stdin closed from NUL where applicable.
+- No production/game behavior changes.
 
 ## Non-goals
 
-- Do not change Gate reviewer sequencing or make later reviewer roles run after an infrastructure block.
-- Do not change model candidates, fallback ordering, timeout values, step budgets, or retry counts.
-- Do not add task.json schema linting; that is the next P2 task.
+- Do not accept headings, backticks, blockquotes, bullets, arbitrary indentation, arbitrary prose, or general Markdown formatting.
+- Do not build a general Markdown parser.
+- Do not change reviewer prompt wording solely to suppress Markdown output; parser robustness is the owned fix here.
+- Do not change Gate reviewer sequencing after infrastructure failure.
+- Do not change model candidates, fallback order, timeout values, step budgets, or retry counts.
+- Do not add task.json schema linting.
 - Do not introduce degraded reviewer automation.
-- Do not loosen semantic consistency rules for PASS/BLOCK.
-- Do not accept arbitrary Markdown/prose patterns without a narrow normalization contract.
-- Do not create multi-model voting/racing or review aggregation semantics.
+- Do not add multi-model voting/racing or semantic aggregation.
 - Do not change Scout behavior.
+- Do not commit raw runtime logs.
+- Do not parse old `EVIDENCE.md` as a persistence database.
+- Do not add ATTEMPT_HISTORY pruning/rotation in v1.
 - Do not modify production/game runtime code.
-- Do not run or require the product full test suite for this workflow-only task unless later evidence justifies it.
+- Do not require the product full test suite.
 
-## Provisional acceptance criteria
+## Acceptance criteria
 
-1. Offline harness contains an explicit regression case derived from the production failure where Markdown-wrapped canonical headers are accepted after the change.
-2. Raw canonical headers continue to pass unchanged.
-3. Canonical `BLOCK` with blocking findings continues to produce candidate-blocked semantics.
-4. PASS with non-zero blocking count remains rejected.
-5. BLOCK with zero blocking count remains rejected.
-6. Multiple canonical/normalized verdict headers remain rejected as ambiguous.
-7. Malformed prose without a valid two-line verdict header remains rejected.
-8. Normalization is narrow and deterministic; accepted superficial wrappers are explicitly documented in Final SPEC/tests.
-9. Existing Gate exit codes, reviewer sequencing, fallback semantics, timeouts, focused-test semantics, and promotion rollback behavior remain unchanged.
-10. Offline workflow harness passes without live AI/network use.
-11. Gate attempt provenance from infrastructurally failed candidates is durably represented after a later successful rerun, with enough information to identify role, attempt index/type, model, outcome, and selection/fallback state where available.
-12. Historical attempt provenance is clearly separated from current canonical reviewer verdicts/reviews.
-13. Evidence retention remains bounded/structured and does not commit raw `.runtime` logs by default.
-14. Existing canonical review promotion remains transaction-safe.
-15. No production/game runtime behavior changes occur.
+1. Exact production-style bold header `**VERDICT: PASS**` + `**BLOCKING_FINDINGS: 0**` is accepted and produces normal PASS semantics.
+2. Raw canonical PASS remains accepted unchanged.
+3. Canonical BLOCK with blocking findings retains exit code `2` behavior.
+4. PASS/non-zero and BLOCK/zero remain invalid.
+5. Multiple competing raw, bold, or mixed raw+bold headers remain rejected as ambiguous.
+6. Mixed-line raw/bold headers are rejected.
+7. Heading/backtick/other wrappers remain rejected.
+8. Arbitrary prose is not reinterpreted as a verdict.
+9. Normalization is narrowly implemented and does not weaken semantic consistency checks.
+10. Existing Gate sequencing/fallback/timeout/focused-test semantics remain unchanged.
+11. `ATTEMPT_HISTORY.md` is created from existing `$provenanceRecords` and clearly labeled historical/non-authoritative.
+12. Successful reruns append history rather than replacing prior run sections.
+13. History preserves role, attempt index/type, model, elapsed, outcome, and selected/fallback status where available.
+14. No raw runtime logs or full reviewer prose are committed into history.
+15. `EVIDENCE.md` continues to describe only the current run/current canonical reviewer result.
+16. `ATTEMPT_HISTORY.md` participates in the same promotion/rollback transaction; simulated promotion failure restores prior history exactly.
+17. Infrastructure failures before promotion continue to leave canonical tracked artifacts untouched.
+18. Offline harness covers the required parser/history cases and passes without network/live AI use.
+19. `scripts/ai_scout.ps1` remains unchanged.
+20. No production/game code changes occur.
 
-## Uncertainty to resolve with Scout
+## Expected change surface
 
-- Which exact Markdown wrappers should be accepted safely (bold `**`, headings `#`, backticks, leading/trailing whitespace) without creating ambiguous parser behavior.
-- Whether normalization belongs entirely in `Get-CanonicalReviewPayload`, partly in `Test-ReviewVerdictStructure`, or in a small shared normalization helper.
-- How to guarantee multiple/duplicated headers remain rejected after normalization.
-- Whether the reviewer prompt should explicitly prohibit formatting in addition to parser tolerance, or whether that would be redundant/out of scope.
-- The narrowest durable design for historical attempt provenance: append/merge into `EVIDENCE.md`, a separate tracked history artifact, or another bounded representation.
-- How reruns should deduplicate/identify attempts so repeated Gate executions do not create misleading duplication.
-- Which existing harness cases need to be split/added to test contradictory counts and ambiguous normalized headers.
-- Whether current evidence promotion/rollback code can retain history without invasive refactoring.
+Expected:
 
-## Scout questions
+```text
+scripts/ai_gate.ps1
+tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1
+docs/tasks/gate-payload-robustness-v1/*
+```
 
-1. Trace `Get-CanonicalReviewPayload`, `Test-ReviewVerdictStructure`, candidate loop, provenance collection, evidence generation, and artifact promotion to identify the minimal safe change surface.
-2. Propose the narrowest normalization grammar for superficial Markdown wrappers while keeping ambiguity rejection strict.
-3. Identify concrete ambiguous/contradictory payload examples that must remain rejected.
-4. Determine the best location for red→green and negative regression cases in `tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1`.
-5. Trace why prior failed attempt provenance disappears after a successful rerun and recommend the smallest durable tracked representation.
-6. Check whether history retention can reuse existing `$provenanceRecords` and promotion transaction boundaries without changing reviewer semantics.
-7. Identify any architecture/workflow contract wording that would need clarification after the behavior change.
-8. Flag any coupling between parser normalization and reviewer sequencing/fallback that should remain out of scope.
+Expected unchanged:
 
-## Lifecycle gate
+```text
+scripts/ai_scout.ps1
+production/game code
+```
 
-This SPEC remains Draft until OpenCode Scout pushes `CONTEXT.md` and ChatGPT + user re-check the evidence. Gemini/Antigravity must not implement parser/evidence changes while this SPEC is Draft.
+`docs/tasks/BACKLOG.md` should only be updated during task closeout if lifecycle state needs synchronization; it is not required for the implementation patch.
+
+## Verification contract
+
+Before running the independent Gate, Writer must run the offline harness using the Windows execution policy:
+
+```text
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\workflow_scripts\Invoke-WorkflowScriptHarness.ps1 < NUL"
+```
+
+All cases must pass and no disposable fixture/runtime artifacts may remain.
+
+Then commit and push the implementation candidate.
+
+Only after the implementation commit exists, run independent Gate:
+
+```text
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ai_gate.ps1 -Task gate-payload-robustness-v1 < NUL"
+```
+
+Push refreshed `EVIDENCE.md`, `ATTEMPT_HISTORY.md`, and `reviews/*` after Gate.
+
+The canonical Gate evidence must reference the committed implementation HEAD, not an uncommitted working-tree candidate.
+
+## Writer instructions
+
+1. Read Final SPEC, CONTEXT, current `ai_gate.ps1`, merged workflow harness, and workflow architecture contract.
+2. Extend regression tests before or together with parser/history changes so the red→green contract is explicit.
+3. Implement the smallest coherent parser normalization and attempt-history patch.
+4. Do not broaden accepted Markdown grammar beyond this Final SPEC.
+5. Do not modify Scout, model routing, sequencing, timeout, prompts, or product code.
+6. Run the offline harness through `cmd.exe /d /s /c ... < NUL`.
+7. Inspect diff/status and verify no fixture leaks.
+8. Commit/push implementation before Gate.
+9. Run Gate against the committed candidate, then push canonical evidence/reviews/history.
+10. Do not declare completion until harness and Gate both pass.
