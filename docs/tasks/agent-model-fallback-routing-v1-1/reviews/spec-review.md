@@ -5,30 +5,23 @@ BLOCKING_FINDINGS: 0
 
 ## Clause coverage
 
-The candidate diff modifies 5 files within declared scope: `scripts/ai_scout.ps1`, `scripts/ai_gate.ps1`, `docs/architecture/ai_development_workflow.md`, `docs/tasks/BACKLOG.md`, and `docs/tasks/agent-model-fallback-routing-v1-1/task.json` (plus new artifacts SPEC.md, CONTEXT.md, degraded-gemini-review.md). All material spec sections are addressed:
+The candidate diff addresses all 14 required behavior sections and 26 acceptance criteria. Material coverage:
 
-- **Metadata contract (§1)**: `Resolve-NormalModelList` and `Resolve-ReviewCandidates` handle scalar-or-array, CLI override (`-Model`/`-ReviewModel` → single-element list), and blank-identifier rejection. Correct.
-- **Degraded review contract (§2)**: `ai_gate.ps1` never invokes Gemini. On infrastructure exhaustion it exits code 1 with `MANUAL_DEGRADED_REVIEW_REQUIRED`. Degraded-gemini-review.md has required `DEGRADED/LOW_EVIDENCE/NOT_INDEPENDENT/ANTIGRAVITY_GEMINI` labels.
-- **CLI override (§3)**: Both `Resolve-NormalModelList` and `Resolve-ReviewCandidates` prioritize CLI override as a single-element candidate list.
-- **Fallback eligibility (§4)**: Infrastructure failure classifications (timeout, unconfirmed kill, non-zero exit, malformed JSON, payload extraction failure, invalid verdict) each `continue` to next candidate. Valid PASS/BLOCK sets `$roleCompleted = $true` and breaks.
-- **Gate routing boundary (§5)**: Candidate iteration is inside the reviewer foreach loop, not wrapping the entire Gate. BLOCK is terminal per reviewer. After all candidates exhausted for a role, exits 1.
-- **Timeout per attempt (§6)**: `Invoke-BoundedProcess` receives full `$ReviewTimeoutSeconds` each iteration; no shared remainder.
-- **Scout routing (§7)**: Fallback loop with structural validation (`# Scout Context` heading check). Valid result promotes exactly once. All-fail throws.
-- **Qualification (§8)**: `task.json` arrays correctly reflect qualification: BigPickle in `models.scout` (qualified), absent from `models.review` (unqualified due to JSONL parse failure). No fabrication.
-- **Attempt provenance (§11)**: Both scripts record role, type, index, model, elapsed, outcome, selected status. Gate writes compact provenance to `EVIDENCE.md`. Raw logs per attempt under `.runtime/`.
-- **Architecture documentation (§13)**: Section 10 updated with comprehensive fallback routing semantics, timeout policy, provenance, degraded review, and CLI override documentation.
-- **Backlog retrospective (§14)**: `agent-workflow-pilot-retrospective-v1` updated with all 9 required calibration points.
-
+- **禮1 Metadata contract**: `Resolve-NormalModelList` / `Resolve-ReviewCandidates` ??scalar/array normalization, blank rejection, CLI override priority. ?n- **禮2 Degraded review**: Gate never invokes Gemini; exits 1 with `MANUAL_DEGRADED_REVIEW_REQUIRED`; outer workflow produces `degraded-gemini-review.md` with required labels. ?n- **禮3 CLI override**: `-Model`/`-ReviewModel` ??single-element candidate list. ?n- **禮4 Fallback eligibility**: All 7 infrastructure failure classifications trigger `continue`; valid PASS/BLOCK are terminal. ?n- **禮5 Gate routing boundary**: Candidate iteration inside per-reviewer foreach; BLOCK is terminal per reviewer; exhaustion exits 1. ?n- **禮6 Timeout per attempt**: Full `ReviewTimeoutSeconds` per candidate; no shared remainder. ?n- **禮7 Scout routing**: Fallback loop with structural `# Scout Context` check; valid report promotes exactly once; all-fail throws. ?n- **禮8 Qualification**: `task.json` arrays reflect actual qualification (BigPickle qualified for Scout only). ?n- **禮10 Exit codes**: 0/1/2 vocabulary preserved; infrastructure exhaustion ??exit 1. ?n- **禮11 Provenance**: Compact records in `EVIDENCE.md` with role/type/index/model/elapsed/outcome/selected. ?n- **禮13 Architecture docs**: Section 10 comprehensively updated with all required semantics. ?n- **禮14 Retrospective**: BACKLOG.md updated with all 9 calibration points under `agent-workflow-pilot-retrospective-v1`. ?n
 ## Blocking findings
 
 None.
 
 ## Advisory findings
 
-1. **Windows git encoding workaround**: `ai_gate.ps1` wraps git commands with `cmd.exe /c "chcp 65001 >nul && <nul git ..."`. This is a platform-specific workaround for UTF-8 encoding on Windows. Not a spec concern but may need attention on non-Windows platforms if the scripts are ever run cross-platform.
+1. **Windows-specific git encoding workaround**: `ai_gate.ps1` wraps git commands with `cmd.exe /c "chcp 65001 >nul && <nul git ..."`. This is a platform-specific UTF-8 mitigation unrelated to fallback routing. Not a spec concern but worth noting for cross-platform portability.
 
-2. **Scout non-zero exit code indented inside confirmed-kill path**: In `ai_scout.ps1`, the `$attempt.ExitCode -ne 0` check sits at the same indentation level as the `$attempt.KillConfirmed` check inside the timeout block. Logically this is correct (a timed-out+confirmed-kill process that returned non-zero should still throw rather than continue), but the nesting makes it read as unreachable in the common path. This is a readability concern, not a correctness issue.
+2. **`Get-CanonicalReviewPayload` regex broadening**: A new `\A`-anchored direct-match path and LF normalization were added before the existing `(?m)` embedded-match path. This is a non-breaking enhancement that improves robustness but could theoretically surface false positives on unusual model output ??monitor during pilot.
+
+3. **Test evidence gap**: The diff does not include deterministic probe scripts for fallback routing (AC20 requires probes for scalar compatibility, ordered fallback, semantic terminality, exhaustion, unconfirmed termination, and artifact safety). The spec reviewer noted that test seams (`$_ModelCandidatesOverride`, `$_ReviewCandidatesOverride`) are correctly plumbable, providing the foundation for verification scripts to be written separately.
 
 ## Test evidence gaps
 
-The diff does not include deterministic probe scripts for the fallback routing (e.g., override-seed invocations exercising scalar normalization, ordered fallback, semantic terminality, exhaustion, unconfirmed termination). The spec's Required Verification section (AC20) calls for such probes. However, as reviewer I am evaluating the diff against the spec, not running the verification suite. The candidate implementation's test seams (`$_ModelCandidatesOverride`, `$_ReviewCandidatesOverride`, `$_ExecutableOverride`) are present and correctly plumb candidate lists, which provides the foundation for deterministic verification to be written separately.
+Present: Test seams (`$_ModelCandidatesOverride`, `$_ReviewCandidatesOverride`, `$_ExecutableOverride`) are correctly added and plumb candidate lists through the routing logic.
+
+Missing: Deterministic probe scripts exercising the full verification matrix (AC20: scalar normalization, ordered fallback, semantic terminality, normal-chain exhaustion, per-attempt timeout semantics, artifact safety, unconfirmed termination). These were flagged by both the spec reviewer and regression reviewer in the diff's review artifacts as absent.
