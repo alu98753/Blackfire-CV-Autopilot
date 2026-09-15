@@ -13,6 +13,7 @@ from states.navigation_intent import (
     IntentSnapshot,
     NavigationIntentPolicy,
     IntentId,
+    PostconditionId,
     ReasonCode,
 )
 from states.navigation_progress import (
@@ -29,6 +30,64 @@ from utils.scene_snapshot import (
     next_navigation_frame_id,
     snapshot_from_scene_info,
 )
+from utils.scene_types import SceneId
+
+
+@dataclass(frozen=True)
+class RoutingInFlightDiagnostic:
+    action_id: ActionId
+    expected: PostconditionId
+    attempt: int
+    issued_at: float
+    deadline: float
+    source_frame_id: int
+    expected_tab: Optional[TabId] = None
+
+    @classmethod
+    def from_in_flight_action(cls, action: InFlightAction) -> "RoutingInFlightDiagnostic":
+        return cls(
+            action_id=action.action_id,
+            expected=action.expected,
+            attempt=action.attempt,
+            issued_at=action.issued_at,
+            deadline=action.deadline,
+            source_frame_id=action.source_frame_id,
+            expected_tab=action.expected_tab,
+        )
+
+
+@dataclass(frozen=True)
+class RoutingDiagnostic:
+    intent_id: IntentId
+    scene: SceneId
+    decision_kind: DecisionKind
+    decision_reason: ReasonCode
+    progress_status: ProgressStatus
+    decision_action: Optional[ActionId] = None
+    in_flight: Optional[RoutingInFlightDiagnostic] = None
+
+    def format_log_message(self, now: float | None = None) -> str:
+        if self.in_flight is not None:
+            age = max(0.0, (now if now is not None else 0.0) - self.in_flight.issued_at)
+            return (
+                f"[IntentRouting] intent={self.intent_id.value} "
+                f"scene={self.scene.value} "
+                f"action={self.decision_action.value if self.decision_action else 'none'} "
+                f"reason={self.decision_reason.value} "
+                f"progress={self.progress_status.value} "
+                f"in_flight={self.in_flight.action_id.value} "
+                f"expected={self.in_flight.expected.value} "
+                f"age={age:.1f}s "
+                f"deadline={self.in_flight.deadline:.3f} "
+                f"attempt={self.in_flight.attempt}"
+            )
+        return (
+            f"[IntentRouting] intent={self.intent_id.value} "
+            f"scene={self.scene.value} "
+            f"action={self.decision_action.value if self.decision_action else 'none'} "
+            f"reason={self.decision_reason.value} "
+            f"progress={self.progress_status.value}"
+        )
 
 
 @dataclass(frozen=True)
@@ -39,6 +98,22 @@ class NavigationRoutingContext:
     decision: ActionDecision
     progress_status: ProgressStatus = ProgressStatus.IDLE
     observed_action: InFlightAction | None = None
+
+    def to_diagnostic(self) -> RoutingDiagnostic:
+        in_flight_diag = (
+            RoutingInFlightDiagnostic.from_in_flight_action(self.observed_action)
+            if self.observed_action is not None
+            else None
+        )
+        return RoutingDiagnostic(
+            intent_id=self.active_intent.intent_id,
+            scene=self.scene.scene,
+            decision_kind=self.decision.kind,
+            decision_action=self.decision.action,
+            decision_reason=self.decision.reason,
+            progress_status=self.progress_status,
+            in_flight=in_flight_diag,
+        )
 
 
 def build_intent_snapshot(machine) -> IntentSnapshot:
@@ -232,33 +307,9 @@ class NavigationDecisionExecutor:
 
     def execute(self, context, screen_img, rect, *, start_callback=None) -> bool:
         decision = context.decision
-        action = context.observed_action
-        if action is not None:
-            now = _monotonic_now(self.machine)
-            logging.info(
-                "[IntentRouting] intent=%s scene=%s action=%s reason=%s "
-                "progress=%s in_flight=%s expected=%s age=%.1fs "
-                "deadline=%.3f attempt=%d",
-                context.active_intent.intent_id.value,
-                context.scene.scene.value,
-                decision.action.value if decision.action else "none",
-                decision.reason.value,
-                context.progress_status.value,
-                action.action_id.value,
-                action.expected.value,
-                max(0.0, now - action.issued_at),
-                action.deadline,
-                action.attempt,
-            )
-        else:
-            logging.info(
-                "[IntentRouting] intent=%s scene=%s action=%s reason=%s progress=%s",
-                context.active_intent.intent_id.value,
-                context.scene.scene.value,
-                decision.action.value if decision.action else "none",
-                decision.reason.value,
-                context.progress_status.value,
-            )
+        diagnostic = context.to_diagnostic()
+        now = _monotonic_now(self.machine)
+        logging.info(diagnostic.format_log_message(now))
         if decision.kind == DecisionKind.WAIT:
             return True
         if decision.action == ActionId.CONTINUE_PRIMARY:
