@@ -3,6 +3,7 @@
   "base_ref": "origin/main",
   "scope": [
     "docs/tasks/opencode-structured-review-provider-compatibility/",
+    ".opencode/",
     "scripts/",
     "tests/workflow_scripts/",
     "package.json",
