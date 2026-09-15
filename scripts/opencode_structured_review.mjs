@@ -21,12 +21,31 @@ function required(name) {
   return value;
 }
 
+const MAX_ERROR_DETAIL_LENGTH = 600;
+const SAFE_ERROR_FIELDS = new Set(["name", "type", "message", "kind", "data", "error", "errors", "issues", "status", "statusText"]);
+
+function safeErrorValue(value, depth = 0) {
+  if (depth > 2 || value === null || value === undefined) return value;
+  if (typeof value === "string") return value.slice(0, 240);
+  if (typeof value !== "object") return undefined;
+  if (Array.isArray(value)) return value.slice(0, 8).map((item) => safeErrorValue(item, depth + 1));
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (SAFE_ERROR_FIELDS.has(key)) result[key] = safeErrorValue(item, depth + 1);
+  }
+  return result;
+}
+
 function sdkError(operation, error) {
-  const status = error?.cause?.status;
+  const cause = error?.cause ?? {};
+  const status = cause.status;
   const detail = typeof error?.message === "string" && error.message.length > 0
     ? error.message.slice(0, 240)
     : "unknown SDK error";
-  return new Error(`OpenCode ${operation} API error${Number.isInteger(status) ? ` (HTTP ${status})` : ""}: ${detail}`);
+  const body = safeErrorValue(cause.body);
+  const payload = JSON.stringify({ status, statusText: cause.statusText, error: body });
+  const boundedPayload = payload.length > MAX_ERROR_DETAIL_LENGTH ? `${payload.slice(0, MAX_ERROR_DETAIL_LENGTH - 3)}...` : payload;
+  return new Error(`OpenCode ${operation} API error${Number.isInteger(status) ? ` (HTTP ${status})` : ""}: ${detail}; server=${boundedPayload}`);
 }
 
 async function main() {
