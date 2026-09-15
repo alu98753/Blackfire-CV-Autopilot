@@ -16,6 +16,9 @@ param(
     [string[]]$_ReviewerArgumentsOverride,
     [string[]]$_SpecReviewerArgumentsOverride,
     [string[]]$_RegressionReviewerArgumentsOverride,
+    [string]$_StructuredReviewExecutableOverride,
+    [string[]]$_StructuredReviewArgumentsOverride,
+    [string]$_StructuredReviewModeOverride,
     [string[]]$_ReviewCandidatesOverride,
     [string]$_PythonExecutableOverride,
     [string[]]$_PythonArgumentsOverride,
@@ -261,6 +264,25 @@ function Get-OpenCodeInvocation {
         [string]$CandidateModel
     )
 
+    if (-not [string]::IsNullOrWhiteSpace($_StructuredReviewExecutableOverride)) {
+        $args = if ($null -ne $_StructuredReviewArgumentsOverride -and $_StructuredReviewArgumentsOverride.Count -gt 0) { $_StructuredReviewArgumentsOverride } elseif (-not [string]::IsNullOrWhiteSpace($_StructuredReviewModeOverride)) { @('--fixture-mode', $_StructuredReviewModeOverride) } else { @('--model', $CandidateModel) }
+        return @{ Executable = $_StructuredReviewExecutableOverride; Arguments = $args; IsStructured = $true }
+    }
+
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) { throw "Node.js is not installed. Run .\scripts\bootstrap_opencode.ps1 first." }
+    $promptPath = Join-Path $runtimeDir ("${Agent}_${CandidateModel.Replace('/', '_')}.prompt.md")
+    Set-Content -Path $promptPath -Value $PromptText -Encoding UTF8
+    return @{
+        Executable = $node.Source
+        Arguments = @(
+            (Join-Path $repoRoot "scripts\opencode_structured_review.mjs"),
+            "--agent", $Agent, "--model", $CandidateModel,
+            "--directory", $repoRoot, "--prompt-file", $promptPath
+        )
+        IsStructured = $true
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($_ReviewerExecutableOverride)) {
         $args = @()
         if ($Agent -eq "spec-reviewer" -and $null -ne $_SpecReviewerArgumentsOverride) {
@@ -275,34 +297,23 @@ function Get-OpenCodeInvocation {
         return @{
             Executable = $_ReviewerExecutableOverride
             Arguments = $args
-            IsStructured = $false
-        }
-    }
-
-    $cmdInfo = Get-Command opencode -ErrorAction SilentlyContinue
-    if (-not $cmdInfo) {
-        throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
-    }
-
-    $innerArgs = @("run", "--standalone", "--format", "json", "--agent", $Agent)
-    if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
-        $innerArgs += @("--model", $CandidateModel)
-    }
-    $innerArgs += $PromptText
-
-    if ($cmdInfo.Source -like "*.ps1") {
-        return @{
-            Executable = "powershell.exe"
-            Arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $cmdInfo.Source) + $innerArgs
             IsStructured = $true
         }
     }
 
-    return @{
-        Executable = $cmdInfo.Source
-        Arguments = $innerArgs
-        IsStructured = $true
-    }
+}
+
+function Get-StructuredReviewResult {
+    param([string]$JsonText)
+    try { $root = $JsonText | ConvertFrom-Json -ErrorAction Stop } catch { return [pscustomobject]@{ Success=$false; Error="Malformed adapter result: $($_.Exception.Message)" } }
+    $o = $root.structured_output
+    if ($null -eq $o) { return [pscustomobject]@{ Success=$false; Error="Adapter result is missing structured_output." } }
+    if ($o.verdict -notin @("PASS", "BLOCK")) { return [pscustomobject]@{ Success=$false; Error="Structured outcome verdict must be PASS or BLOCK." } }
+    if ($o.blocking_findings -is [bool] -or $o.blocking_findings -isnot [ValueType] -or [int64]$o.blocking_findings -ne [double]$o.blocking_findings -or [int64]$o.blocking_findings -lt 0) { return [pscustomobject]@{ Success=$false; Error="Structured outcome blocking_findings must be a non-negative integer." } }
+    if ($o.report_markdown -isnot [string]) { return [pscustomobject]@{ Success=$false; Error="Structured outcome report_markdown must be a string." } }
+    $blocking = [int64]$o.blocking_findings
+    if (($o.verdict -eq "PASS" -and $blocking -ne 0) -or ($o.verdict -eq "BLOCK" -and $blocking -lt 1)) { return [pscustomobject]@{ Success=$false; Error="Structured outcome violates PASS/BLOCK blocking_findings invariant." } }
+    return [pscustomobject]@{ Success=$true; Verdict=[string]$o.verdict; Blocking=$blocking; Report=[string]$o.report_markdown; Error=$null }
 }
 
 function Get-FinalAssistantMessageFromStructuredJson {
@@ -490,10 +501,7 @@ Repository status snapshot: .runtime/ai_gate/$Task/status.txt
 Candidate diff snapshot: .runtime/ai_gate/$Task/diff.patch
 Comparison baseline: $baseRef
 
-Review the candidate patch using the current repository state. Follow the '$agentName' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands. Stop using tools early once enough evidence exists to determine PASS or BLOCK.
-The final response MUST begin with:
-VERDICT: PASS|BLOCK
-BLOCKING_FINDINGS: <count>
+Review the candidate patch using the current repository state. Follow the '$agentName' agent contract exactly. Treat the snapshots as evidence, but inspect current repository files with read/search tools when needed. Do not edit files or run shell commands. Stop using tools early once enough evidence exists to determine PASS or BLOCK. Return the semantic outcome through the OpenCode SDK JSON-Schema contract; report_markdown is presentation evidence only and may be evidence-first or verdict-last.
 "@
 
     $roleCompleted = $false
@@ -561,55 +569,19 @@ BLOCKING_FINDINGS: <count>
             continue
         }
 
-        $assistantMessage = $procResult.StdOut
-        if ($invocation.IsStructured) {
-            $extraction = Get-FinalAssistantMessageFromStructuredJson -JsonlText $procResult.StdOut
-            if (-not $extraction.Success) {
-                $provenanceRecords.Add([pscustomobject]@{
-                    Role = $agentName
-                    Type = $attemptType
-                    Index = $attemptIndex
-                    Model = $currentModel
-                    ElapsedSeconds = $procResult.ElapsedSeconds
-                    Outcome = "MALFORMED_STRUCTURED_JSON"
-                    Reason = $extraction.Error
-                    Selected = $false
-                })
-                Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] structured output malformed: $($extraction.Error). Falling back if eligible."
-                continue
-            }
-            $assistantMessage = $extraction.Text
-        }
-
-        $payloadResult = Get-CanonicalReviewPayload -FinalAssistantMessage $assistantMessage
-        if (-not $payloadResult.Success) {
+        $validation = Get-StructuredReviewResult -JsonText $procResult.StdOut
+        if (-not $validation.Success) {
             $provenanceRecords.Add([pscustomobject]@{
                 Role = $agentName
                 Type = $attemptType
                 Index = $attemptIndex
                 Model = $currentModel
                 ElapsedSeconds = $procResult.ElapsedSeconds
-                Outcome = "PAYLOAD_EXTRACTION_FAILED"
-                Reason = $payloadResult.Error
-                Selected = $false
-            })
-            Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] payload extraction failed: $($payloadResult.Error). Falling back if eligible."
-            continue
-        }
-
-        $validation = Test-ReviewVerdictStructure -Text $payloadResult.Payload
-        if (-not $validation.IsValid) {
-            $provenanceRecords.Add([pscustomobject]@{
-                Role = $agentName
-                Type = $attemptType
-                Index = $attemptIndex
-                Model = $currentModel
-                ElapsedSeconds = $procResult.ElapsedSeconds
-                Outcome = "INVALID_VERDICT_STRUCTURE"
+                Outcome = "STRUCTURED_OUTCOME_INVALID"
                 Reason = $validation.Error
                 Selected = $false
             })
-            Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] verdict structure invalid: $($validation.Error). Falling back if eligible."
+            Write-Warning "OpenCode agent '$agentName' [#$attemptIndex] structured outcome invalid: $($validation.Error). Falling back if eligible."
             continue
         }
 
@@ -625,7 +597,8 @@ BLOCKING_FINDINGS: <count>
             Selected = $true
         })
 
-        Set-Content -Path $candidatePath -Value $payloadResult.Payload.TrimEnd() -Encoding UTF8
+        $rendered = @($validation.Report.TrimEnd(), "", "## Verdict", "VERDICT: $($validation.Verdict)", "BLOCKING_FINDINGS: $($validation.Blocking)") -join "`n"
+        Set-Content -Path $candidatePath -Value $rendered -Encoding UTF8
         $candidates[$agentName] = @{
             CandidatePath = $candidatePath
             CanonicalPath = $canonicalPath

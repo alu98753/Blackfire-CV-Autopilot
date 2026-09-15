@@ -15,6 +15,9 @@ $reviewer = Join-Path $helperDir 'fake-reviewer.ps1'
 $scoutChild = Join-Path $helperDir 'fake-scout.ps1'
 $pythonChild = Join-Path $helperDir 'fake-test.ps1'
 $reviewerCmd = Join-Path $helperDir 'fake-reviewer.cmd'
+$structuredReviewer = Join-Path $helperDir 'fake-structured-reviewer.ps1'
+$structuredReviewerCmd = Join-Path $helperDir 'fake-structured-reviewer.cmd'
+$modeFile = Join-Path $helperDir 'structured-mode.txt'
 $scoutCmd = Join-Path $helperDir 'fake-scout.cmd'
 $pythonCmd = Join-Path $helperDir 'fake-test.cmd'
 $passed = 0
@@ -71,12 +74,26 @@ try {
 
     @'
 param([string[]]$ChildArgs)
-$rawArgs = $ChildArgs -join ' '
-$mode = if ($rawArgs -match 'block') { 'block' } elseif ($rawArgs -match 'malformed') { 'malformed' } elseif ($rawArgs -match 'markdown') { 'markdown' } elseif ($rawArgs -match 'first') { 'fail' } else { 'pass' }
-if ($mode -eq 'fail') { exit 7 }
-$text = switch ($mode) { 'block' { "VERDICT: BLOCK`nBLOCKING_FINDINGS: 1`n" }; 'malformed' { 'not a review' }; 'markdown' { "**VERDICT: PASS**`n**BLOCKING_FINDINGS: 0**`n" }; default { "VERDICT: PASS`nBLOCKING_FINDINGS: 0`n" } }
-$text
+Write-Output '{"structured_output":{"verdict":"PASS","blocking_findings":0,"report_markdown":"# Legacy fixture"}}'
 '@ | Set-Content $reviewer -Encoding UTF8
+    @'
+param([string[]]$ChildArgs)
+$rawArgs = $ChildArgs -join ' '
+$mode = if (Test-Path (Join-Path $PSScriptRoot 'structured-mode.txt')) { (Get-Content (Join-Path $PSScriptRoot 'structured-mode.txt') -Raw).Trim() } else { 'pass' }
+for ($i = 0; $i -lt ($ChildArgs.Count - 1); $i++) { if ($ChildArgs[$i] -eq '--fixture-mode') { $mode = $ChildArgs[$i + 1]; break } }
+for ($i = 0; $i -lt ($ChildArgs.Count - 1); $i++) { if ($ChildArgs[$i] -eq '--model' -and $ChildArgs[$i + 1] -in @('block','malformed','contradict-pass','contradict-block','missing','nonzero','exhausted','incomplete','stale','prose','verdict-last','model-fallback')) { $mode = $ChildArgs[$i + 1]; break } }
+if ($rawArgs -match '--model[= ]+([A-Za-z-]+)') { $candidateMode = $Matches[1]; if ($candidateMode -in @('block','malformed','contradict-pass','contradict-block','missing','nonzero','exhausted','incomplete','stale','prose','verdict-last','model-fallback')) { $mode = $candidateMode } }
+if ($mode -eq 'model-fallback' -and $rawArgs -match '--model\s+first') { exit 7 }
+if ($mode -eq 'nonzero' -or $mode -eq 'exhausted') { [Console]::Error.WriteLine('StructuredOutputError: validation exhausted'); exit 7 }
+if ($mode -eq 'malformed') { Write-Output 'not json'; exit 0 }
+if ($mode -eq 'missing') { Write-Output '{"status":"completed"}'; exit 0 }
+if ($mode -eq 'incomplete') { Write-Output '{"structured_output":{"verdict":"PASS"}}'; exit 0 }
+if ($mode -eq 'stale') { Write-Output '{"structured_output":{"verdict":"PASS","blocking_findings":0,"report_markdown":"old"}}'; Write-Output 'later malformed'; exit 0 }
+$verdict = if ($mode -eq 'block' -or $mode -eq 'contradict-block') { 'BLOCK' } else { 'PASS' }
+$blocking = if ($mode -eq 'contradict-pass') { 1 } elseif ($mode -eq 'contradict-block') { 0 } elseif ($verdict -eq 'BLOCK') { 1 } else { 0 }
+$report = if ($mode -match 'prose|verdict-last') { 'Evidence first. VERDICT: BLOCK is prose only.' } else { '# Deterministic review' }
+Write-Output (ConvertTo-Json @{ structured_output = @{ verdict = $verdict; blocking_findings = $blocking; report_markdown = $report } } -Compress)
+'@ | Set-Content $structuredReviewer -Encoding UTF8
 @'
 param([string[]]$ChildArgs)
 if ($ChildArgs -contains 'bad') { 'malformed scout'; exit 0 }
@@ -86,36 +103,59 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 '@ | Set-Content $scoutChild -Encoding UTF8
     'exit 0' | Set-Content $pythonChild -Encoding UTF8
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$reviewer`" %*" | Set-Content $reviewerCmd -Encoding ASCII
+    "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$structuredReviewer`" %*" | Set-Content $structuredReviewerCmd -Encoding ASCII
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$scoutChild`" %*" | Set-Content $scoutCmd -Encoding ASCII
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$pythonChild`" %*" | Set-Content $pythonCmd -Encoding ASCII
 
-    $reviewBase = @('-_ReviewerExecutableOverride',$reviewerCmd,'-ReviewTimeoutSeconds','10','-_ReviewCandidatesOverride','first','second')
+    $reviewBase = @('-_StructuredReviewExecutableOverride',$structuredReviewerCmd,'-ReviewTimeoutSeconds','10','-_ReviewCandidatesOverride','first','second')
     Run-Case 'Gate PASS and candidate override resolution' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId) + $reviewBase)
         Assert-True ($code -eq 0) "expected 0, got $code"
     }
     Run-Case 'Gate BLOCK returns 2' {
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','block'))
+        'block' | Set-Content $modeFile -Encoding ASCII
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_StructuredReviewExecutableOverride',$structuredReviewerCmd,'-_ReviewCandidatesOverride','block'))
         Assert-True ($code -eq 2) "expected 2, got $code"
     }
     Run-Case 'Gate malformed output returns 1' {
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','malformed'))
+        'malformed' | Set-Content $modeFile -Encoding ASCII
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_StructuredReviewExecutableOverride',$structuredReviewerCmd,'-_ReviewCandidatesOverride','malformed'))
         Assert-True ($code -eq 1) "expected 1, got $code"
     }
-    Run-Case 'Gate Markdown verdict remains rejected' {
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','markdown'))
-        Assert-True ($code -eq 1) "expected 1, got $code"
+    Run-Case 'Gate report prose cannot override structured PASS' {
+        'prose' | Set-Content $modeFile -Encoding ASCII
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_StructuredReviewExecutableOverride',$structuredReviewerCmd,'-_ReviewCandidatesOverride','prose'))
+        Assert-True ($code -eq 0) "expected 0, got $code"
+    }
+    foreach ($case in @(
+        @('PASS contradiction is infrastructure failure','contradict-pass',1),
+        @('BLOCK contradiction is infrastructure failure','contradict-block',1),
+        @('Missing structured output is infrastructure failure','missing',1),
+        @('Adapter non-zero is infrastructure failure','nonzero',1),
+        @('Structured validation exhaustion is infrastructure failure','exhausted',1),
+        @('Incomplete output is not salvaged','incomplete',1),
+        @('Stale output is not salvaged','stale',1),
+        @('Evidence-first verdict-last report is rendered','verdict-last',0),
+        @('Normal infrastructure candidate fallback works','model-fallback',0),
+        @('Valid BLOCK remains terminal','block',2)
+    )) {
+        Run-Case $case[0] {
+            $case[1] | Set-Content $modeFile -Encoding ASCII
+            $code = Invoke-Script $gate (@('-Task',$fixtureId,'-SkipTests','-_StructuredReviewExecutableOverride',$structuredReviewerCmd,'-_ReviewCandidatesOverride',$(if ($case[1] -eq 'model-fallback') { 'first','second' } else { $case[1] })))
+            Assert-True ($code -eq $case[2]) "expected $($case[2]), got $code"
+        }
     }
     Run-Case 'Gate focused-test override passes' {
+        'pass' | Set-Content $modeFile -Encoding ASCII
         $json = Get-Content (Join-Path $fixtureDir 'task.json') -Raw | ConvertFrom-Json
         $json.focused_tests = @('disposable-target')
         $json | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_PythonExecutableOverride',$pythonCmd))
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_StructuredReviewExecutableOverride',$structuredReviewerCmd,'-_PythonExecutableOverride',$pythonCmd))
         Assert-True ($code -eq 0) "expected 0, got $code"
     }
     Run-Case 'Gate promotion rollback preserves prior artifacts' {
         $old = Get-Content (Join-Path $fixtureDir 'EVIDENCE.md') -Raw
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_FailPromotionOnTarget','evidence'))
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_StructuredReviewExecutableOverride',$structuredReviewerCmd,'-_FailPromotionOnTarget','evidence'))
         Assert-True ($code -eq 1) "expected 1, got $code"
         Assert-True ((Get-Content (Join-Path $fixtureDir 'EVIDENCE.md') -Raw) -eq $old) 'rollback did not preserve evidence'
     }

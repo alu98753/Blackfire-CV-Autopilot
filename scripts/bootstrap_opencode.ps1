@@ -2,6 +2,22 @@ param()
 
 $ErrorActionPreference = "Stop"
 
+$repoRoot = Split-Path $PSScriptRoot -Parent
+Set-Location $repoRoot
+
+$npm = Get-Command npm -ErrorAction SilentlyContinue
+if (-not $npm) {
+    throw "npm is unavailable. Install Node.js/npm first, then rerun this script."
+}
+
+$packageLock = Join-Path $repoRoot "package-lock.json"
+$npmArgs = if (Test-Path $packageLock) { @("ci", "--ignore-scripts") } else { @("install", "--ignore-scripts") }
+& npm @npmArgs
+if ($LASTEXITCODE -ne 0) { throw "Failed to install the pinned repository-local OpenCode SDK dependency." }
+
+& node (Join-Path $repoRoot "scripts\opencode_structured_review.mjs") --check-sdk
+if ($LASTEXITCODE -ne 0) { throw "Repository-local OpenCode SDK verification failed." }
+
 function Get-OpenCodeCommand {
     return Get-Command opencode -ErrorAction SilentlyContinue
 }
@@ -13,11 +29,6 @@ if ($existing) {
     Write-Host ""
     Write-Host "If no provider is connected yet, run 'opencode' in the repository and use /connect."
     exit 0
-}
-
-$npm = Get-Command npm -ErrorAction SilentlyContinue
-if (-not $npm) {
-    throw "OpenCode is not installed and npm is unavailable. Install Node.js/npm first, then rerun this script."
 }
 
 Write-Host "Installing OpenCode with the official npm package (opencode-ai)..."

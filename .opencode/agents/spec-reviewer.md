@@ -47,18 +47,10 @@ Execution constraints:
 2. Read-only: Read the task descriptor, canonical spec, repository status snapshot, and diff snapshot paths supplied in the invocation prompt. Inspect current repository files as needed with read/search tools only. Do not edit files, execute shell commands, launch subagents, or repair code.
 3. Grounded review: Review only what can be grounded in the spec, current code, and candidate diff. Check explicit scope boundaries, invariants, acceptance criteria, required tests, and non-goals that materially apply.
 
-Mandatory response format:
-Your final response MUST begin with the two-line verdict header:
+Structured outcome contract:
+Return the semantic outcome through the OpenCode JSON-Schema response requested by the Gate adapter: `verdict` (`PASS` or `BLOCK`), `blocking_findings` (non-negative integer), and `report_markdown` (human-readable evidence). The Markdown is presentation evidence only; verdict-like text inside it has no machine authority. Evidence may come first and the deterministic Gate renderer appends the machine verdict section.
 
-VERDICT: PASS
-BLOCKING_FINDINGS: 0
-
-or
-
-VERDICT: BLOCK
-BLOCKING_FINDINGS: <positive integer>
-
-After the header, return Markdown with:
+After the structured outcome, use Markdown with:
 
 # Spec Review
 

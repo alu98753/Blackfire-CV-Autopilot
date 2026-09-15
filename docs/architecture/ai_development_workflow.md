@@ -228,7 +228,7 @@ Run:
  .\scripts\ai_gate.ps1 -Task <task-id>
  ```
  
- The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded, isolated child-process wrapper (`--standalone`, explicit repo working directory, closed stdin) with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`.
+The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded, isolated one-shot OpenCode SDK JSON-Schema adapter (explicit repo working directory, closed stdin) with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`. The adapter uses the pinned repository-local SDK dependency and closes its process-local server before exit; Gate does not silently install dependencies.
 
 Verification outcomes and exit codes:
 - **`0` (PASS)**: Both reviewers returned valid `PASS` verdicts with 0 blocking findings, and all configured focused tests passed. Canonical `reviews/*` and `EVIDENCE.md` are updated.
@@ -251,12 +251,13 @@ Branch closeout follows the gated workflow defined in `.agents/skills/branch_com
 
 ## 7. Reviewer finding contract
 
-Reviewer output begins with:
+The adapter requests and returns this machine outcome:
 
-```text
-VERDICT: PASS | BLOCK
-BLOCKING_FINDINGS: <integer>
+```json
+{"verdict":"PASS","blocking_findings":0,"report_markdown":"# Review\n..."}
 ```
+
+`verdict` and `blocking_findings` are validated as structured fields. Gate enforces `PASS` with zero findings and `BLOCK` with at least one finding. `report_markdown` is presentation evidence only; it may be evidence-first or verdict-last and verdict-like text inside it has no authority. Gate appends the deterministic verdict section when rendering canonical review files.
 
 Each blocking finding should contain:
 
@@ -273,7 +274,7 @@ Confidence:
 
 `BLOCK` is appropriate only for concrete correctness, regression, contract, or architecture-boundary problems. Unsupported possibilities must remain advisory.
 
-The orchestration script parses only the explicit verdict header; it does not ask another model to reinterpret reviewer prose.
+The orchestration script never parses reviewer prose for verdict authority and never salvages earlier, partial, forced-finalization, or tool-result output after the authoritative structured attempt fails.
 
 ## 8. Test policy
 
@@ -303,7 +304,7 @@ Model configuration is supplied by `task.json` or PowerShell arguments:
 - `opencode/mimo-v2.5-free` is the current configured default first candidate because of operational stability, but it is not hard-coded in routing logic: all candidates are data passed into the routing scripts.
 - Only models that pass bounded live qualification under their specific formal role contracts may be admitted to recommended/default chains. Qualification is role-specific (a model may qualify for Scout without qualifying for Gate review, or vice versa).
 - CLI `-Model` (in `ai_scout.ps1`) and `-ReviewModel` (in `ai_gate.ps1`) act as strict single-model overrides, replacing the configured normal candidate chain with that explicit candidate.
-- Model fallback is attempted **only** upon mechanically classified infrastructure failures (e.g., launch failure, process timeout with confirmed termination, non-zero exit, empty output, malformed transport JSONL, canonical payload extraction failure, or invalid verdict structure).
+- Model fallback is attempted **only** upon mechanically classified infrastructure failures (e.g., launch failure, process timeout with confirmed termination, non-zero exit, empty output, malformed adapter result, missing structured output, schema/semantic validation failure, or adapter teardown failure).
 - A valid semantic `PASS` or `BLOCK` verdict is strictly terminal for that reviewer role. Fallback is never triggered after a valid verdict; review-shopping is forbidden.
 - Each attempted model receives its own **full 480-second default timeout** (not a shared remainder). Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
 - If unconfirmed process termination occurs upon timeout, routing terminates immediately as terminal infrastructure failure without launching subsequent processes.
