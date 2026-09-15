@@ -60,6 +60,19 @@ Long-term automation may orchestrate these steps, but orchestration must never s
 5. **Observability before autonomy**
    - Before adding more self-driving workflow behavior, collect enough structured evidence to explain what each agent did, which model ran, why fallback occurred, what artifacts changed, and where human intervention was needed.
 
+## Writer model calibration — measurement track
+
+Purpose: determine which Writer model/effort tier is actually most efficient for this repository using accepted production tasks, rather than routing by intuition or nominal model strength.
+
+Canonical measurement log: [`WRITER_MODEL_BENCHMARK.md`](WRITER_MODEL_BENCHMARK.md).
+
+Policy:
+- ChatGPT maintains the compact log from Writer closeout reports plus tracked Gate/final-review evidence.
+- Missing timing is recorded as `unknown`; models must not estimate values they cannot observe.
+- Compare total time, implementation time, verification time, iteration count, and accepted outcome.
+- Do not promote a model-routing rule from one or two anecdotes. Collect at least 5-10 representative completed Writer tasks before changing the default Writer tier or designing dynamic routing.
+- This is a measurement track, not a new authority layer: Final SPEC still defines the work, Gate remains independent, and ChatGPT/user own final routing policy.
+
 ## Completed foundation
 
 - `scout-efficiency-v1` — merged.
@@ -316,7 +329,7 @@ Not scheduled until production evidence justifies them:
 - workflow/status dashboard derived from canonical task artifacts;
 - autonomous repair/retry loops;
 - parallel or multi-model reviewer voting/racing;
-- dynamic local/cloud model routing based on measured cost/latency/quality;
+- dynamic local/cloud model routing based on measured cost/latency/quality; only after the Writer benchmark has enough representative samples;
 - automatic commit grouping/splitting suggestions;
 - richer execution telemetry and per-agent performance history;
 - near-autonomous task orchestration beyond sequencing.
