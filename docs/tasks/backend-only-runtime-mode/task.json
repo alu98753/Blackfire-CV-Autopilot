@@ -1,0 +1,20 @@
+{
+  "id": "backend-only-runtime-mode",
+  "base_ref": "origin/main",
+  "scope": [
+    "cli/arguments.py",
+    "runtime/bootstrap.py",
+    "capture/",
+    "actions/mouse.py",
+    "states/state_machine.py",
+    "tests/",
+    "docs/todos/future_work.md"
+  ],
+  "focused_tests": [
+    "tests.test_behavior_runtime_ports"
+  ],
+  "models": {
+    "scout": "opencode/big-pickle",
+    "review": "opencode/big-pickle"
+  }
+}
