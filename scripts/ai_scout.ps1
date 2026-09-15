@@ -10,15 +10,26 @@ param(
     # Internal test seam: override executable and arguments to verify process execution, timeout, streaming, and failure
     [string]$_ExecutableOverride,
     [string[]]$_ArgumentsOverride,
-    [string[]]$_ModelCandidatesOverride
+    [string[]]$_ModelCandidatesOverride,
+    [string]$_OpenCodeVersionOverride,
+    [switch]$_InvocationProbe
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
+. (Join-Path $PSScriptRoot "opencode_contract.ps1")
 
 if ([string]::IsNullOrWhiteSpace($_ExecutableOverride) -and -not (Get-Command opencode -ErrorAction SilentlyContinue)) {
     throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
+}
+
+if ([string]::IsNullOrWhiteSpace($_ExecutableOverride)) {
+    $openCodeCommand = Get-Command opencode -ErrorAction Stop
+    $installedVersion = Get-OpenCodeVersion -Executable $openCodeCommand.Source
+    Assert-OpenCodeSupportedVersion -Version $installedVersion
+} elseif (-not [string]::IsNullOrWhiteSpace($_OpenCodeVersionOverride)) {
+    Assert-OpenCodeSupportedVersion -Version $_OpenCodeVersionOverride.Trim()
 }
 
 $taskDir = Join-Path $repoRoot "docs\tasks\$Task"
@@ -104,6 +115,28 @@ Follow the scout agent contract exactly:
 Return only the requested Markdown scout report.
 "@
 
+function Get-ScoutOpenCodeArguments {
+    param(
+        [string]$CandidateModel,
+        [string]$PromptText
+    )
+
+    $arguments = @("run", "--agent", "scout")
+    if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
+        $arguments += @("--model", $CandidateModel)
+    }
+    $arguments += $PromptText
+    return $arguments
+}
+
+if ($_InvocationProbe) {
+    $probeModel = @($candidates)[0]
+    [pscustomobject]@{
+        Arguments = @(Get-ScoutOpenCodeArguments -CandidateModel $probeModel -PromptText $prompt)
+    } | ConvertTo-Json -Compress
+    exit 0
+}
+
 # Staging area for atomic promotion
 $runtimeDir = Join-Path $repoRoot ".runtime\ai_scout\$Task"
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
@@ -130,11 +163,7 @@ function Invoke-ScoutProcessAttempt {
         }
     } else {
         $cmdInfo = Get-Command opencode -ErrorAction SilentlyContinue
-        $innerArgs = @("run", "--standalone", "--agent", "scout")
-        if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
-            $innerArgs += @("--model", $CandidateModel)
-        }
-        $innerArgs += $prompt
+        $innerArgs = Get-ScoutOpenCodeArguments -CandidateModel $CandidateModel -PromptText $prompt
 
         if ($cmdInfo.Source -like "*.ps1") {
             $execFile = "powershell.exe"
