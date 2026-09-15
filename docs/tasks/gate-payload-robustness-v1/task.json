@@ -1,0 +1,20 @@
+{
+  "id": "gate-payload-robustness-v1",
+  "base_ref": "origin/main",
+  "scope": [
+    "scripts/ai_gate.ps1",
+    "tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1",
+    "docs/tasks/gate-payload-robustness-v1/",
+    "docs/tasks/BACKLOG.md"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
