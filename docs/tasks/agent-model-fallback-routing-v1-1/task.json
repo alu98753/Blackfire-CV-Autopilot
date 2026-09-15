@@ -9,7 +9,13 @@
   ],
   "focused_tests": [],
   "models": {
-    "scout": "opencode/mimo-v2.5-free",
-    "review": "opencode/mimo-v2.5-free"
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ],
+    "degraded_review": "gemini"
   }
 }

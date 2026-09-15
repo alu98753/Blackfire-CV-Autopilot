@@ -16,6 +16,8 @@ param(
     [string[]]$_ReviewerArgumentsOverride,
     [string[]]$_SpecReviewerArgumentsOverride,
     [string[]]$_RegressionReviewerArgumentsOverride,
+    [string[]]$_ReviewCandidatesOverride,
+    [string]$_DegradedReviewOverride,
     [string]$_PythonExecutableOverride,
     [string[]]$_PythonArgumentsOverride,
     [string]$_FailPromotionOnTarget
@@ -46,9 +48,77 @@ if ([string]::IsNullOrWhiteSpace($baseRef)) {
     throw "task.json must define base_ref."
 }
 
-if ([string]::IsNullOrWhiteSpace($ReviewModel) -and $null -ne $config.models) {
-    $ReviewModel = [string]$config.models.review
+function Resolve-ReviewCandidates {
+    param(
+        $RawConfigReview,
+        [string]$CliReviewModel,
+        [string[]]$TestCandidatesOverride
+    )
+
+    if ($null -ne $TestCandidatesOverride -and $TestCandidatesOverride.Count -gt 0) {
+        $clean = @()
+        foreach ($m in $TestCandidatesOverride) {
+            $trimmed = ([string]$m).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                $clean += $trimmed
+            }
+        }
+        if ($clean.Count -eq 0) {
+            throw "Review candidate list override contained no non-blank identifiers."
+        }
+        return $clean
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($CliReviewModel)) {
+        return @($CliReviewModel.Trim())
+    }
+
+    if ($null -eq $RawConfigReview) {
+        throw "Missing models.review configuration in task.json."
+    }
+
+    $raw = $RawConfigReview
+    $list = @()
+    if ($raw -is [System.Collections.IEnumerable] -and -not ($raw -is [string])) {
+        foreach ($item in $raw) {
+            $trimmed = ([string]$item).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                $list += $trimmed
+            }
+        }
+    } else {
+        $single = ([string]$raw).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($single)) {
+            $list += $single
+        }
+    }
+
+    if ($list.Count -eq 0) {
+        throw "Review candidate list is empty or contains only blank entries."
+    }
+
+    return $list
 }
+
+function Resolve-DegradedReviewer {
+    param(
+        $RawConfigDegraded,
+        [string]$TestDegradedOverride
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($TestDegradedOverride)) {
+        return $TestDegradedOverride.Trim()
+    }
+
+    if ($null -ne $RawConfigDegraded -and -not [string]::IsNullOrWhiteSpace([string]$RawConfigDegraded)) {
+        return ([string]$RawConfigDegraded).Trim()
+    }
+
+    return $null
+}
+
+$normalCandidates = Resolve-ReviewCandidates -RawConfigReview $config.models.review -CliReviewModel $ReviewModel -TestCandidatesOverride $_ReviewCandidatesOverride
+$configuredDegraded = Resolve-DegradedReviewer -RawConfigDegraded $config.models.degraded_review -TestDegradedOverride $_DegradedReviewOverride
 
 $runtimeDir = Join-Path $repoRoot ".runtime\ai_gate\$Task"
 $reviewDir = Join-Path $taskDir "reviews"
@@ -58,13 +128,13 @@ New-Item -ItemType Directory -Force -Path $reviewDir | Out-Null
 $statusPath = Join-Path $runtimeDir "status.txt"
 $diffPath = Join-Path $runtimeDir "diff.patch"
 
-$gitStatus = & git status --short 2>&1 | Out-String
+$gitStatus = & cmd.exe /c "chcp 65001 >nul && <nul git status --short" 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) {
     throw "git status failed.`n$gitStatus"
 }
 Set-Content -Path $statusPath -Value $gitStatus.TrimEnd() -Encoding UTF8
 
-$gitDiff = & git diff --no-ext-diff $baseRef -- . 2>&1 | Out-String
+$gitDiff = & cmd.exe /c "chcp 65001 >nul && <nul git diff --no-ext-diff $baseRef -- ." 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) {
     throw "git diff against '$baseRef' failed.`n$gitDiff"
 }
@@ -206,7 +276,8 @@ function Invoke-BoundedProcess {
 function Get-OpenCodeInvocation {
     param(
         [string]$Agent,
-        [string]$PromptText
+        [string]$PromptText,
+        [string]$CandidateModel
     )
 
     if (-not [string]::IsNullOrWhiteSpace($_ReviewerExecutableOverride)) {
@@ -217,6 +288,8 @@ function Get-OpenCodeInvocation {
             $args = $_RegressionReviewerArgumentsOverride
         } elseif ($null -ne $_ReviewerArgumentsOverride) {
             $args = $_ReviewerArgumentsOverride
+        } else {
+            $args = @("run", "--standalone", "--format", "json", "--agent", $Agent, "--model", $CandidateModel)
         }
         return @{
             Executable = $_ReviewerExecutableOverride
@@ -231,8 +304,8 @@ function Get-OpenCodeInvocation {
     }
 
     $innerArgs = @("run", "--standalone", "--format", "json", "--agent", $Agent)
-    if (-not [string]::IsNullOrWhiteSpace($ReviewModel)) {
-        $innerArgs += @("--model", $ReviewModel)
+    if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
+        $innerArgs += @("--model", $CandidateModel)
     }
     $innerArgs += $PromptText
 
@@ -338,11 +411,23 @@ function Get-CanonicalReviewPayload {
         }
     }
 
-    # Strip optional leading UTF-8 BOM only
-    $cleanText = $FinalAssistantMessage.TrimStart([char]0xFEFF)
+    # Normalize line endings to LF for uniform regex evaluation
+    $cleanText = $FinalAssistantMessage -replace "`r`n", "`n"
+    # Strip leading UTF-8 BOM if present
+    $cleanText = $cleanText.TrimStart([char]0xFEFF)
 
-    # Header must begin at the start of a line and have consecutive VERDICT and BLOCKING_FINDINGS lines
-    $headerMatches = [regex]::Matches($cleanText, '(?m)^VERDICT:\s*(PASS|BLOCK)\r?\nBLOCKING_FINDINGS:\s*(\d+)(?:\r?\n|$)')
+    # 1. Preferred contract: output already begins directly with VERDICT on line 1
+    $directMatch = [regex]::Match($cleanText, '\AVERDICT:\s*(PASS|BLOCK)\nBLOCKING_FINDINGS:\s*(\d+)(?:\n|$)')
+    if ($directMatch.Success) {
+        return [pscustomobject]@{
+            Success = $true
+            Payload = $cleanText
+            Error = $null
+        }
+    }
+
+    # 2. Extract embedded report: find the unique canonical VERDICT header anywhere in message
+    $headerMatches = [regex]::Matches($cleanText, '(?m)^VERDICT:\s*(PASS|BLOCK)\nBLOCKING_FINDINGS:\s*(\d+)(?:\n|$)')
 
     if ($headerMatches.Count -eq 0) {
         return [pscustomobject]@{
@@ -400,6 +485,7 @@ function Test-ReviewVerdictStructure {
 $infraBlocked = $false
 $infraReason = ""
 $candidateBlocked = $false
+$hasDegradedReview = $false
 
 $reviewTargets = @(
     @{ Agent = "spec-reviewer"; File = "spec-review.md" },
@@ -408,13 +494,14 @@ $reviewTargets = @(
 
 $verdicts = @{}
 $candidates = @{}
+$reviewerMetadata = @{}
+$provenanceRecords = [System.Collections.Generic.List[object]]::new()
 
 foreach ($rev in $reviewTargets) {
     $agentName = $rev.Agent
     $fileName = $rev.File
     $canonicalPath = Join-Path $reviewDir $fileName
     $candidatePath = Join-Path $runtimeDir "candidate_${agentName}.md"
-    $rawLogPath = Join-Path $runtimeDir "${agentName}_raw.log"
 
     $prompt = @"
 Task descriptor: docs/tasks/$Task/task.json
@@ -429,66 +516,184 @@ VERDICT: PASS|BLOCK
 BLOCKING_FINDINGS: <count>
 "@
 
-    $invocation = Get-OpenCodeInvocation -Agent $agentName -PromptText $prompt
-    Write-Host "Running OpenCode agent '$agentName' (timeout limit: ${ReviewTimeoutSeconds}s)..."
-
-    $procResult = Invoke-BoundedProcess -Executable $invocation.Executable -Arguments $invocation.Arguments -TimeoutSeconds $ReviewTimeoutSeconds -StreamToConsole:$true
-    Write-Host "OpenCode agent '$agentName' finished in $([math]::Round($procResult.ElapsedSeconds, 1))s (exit code: $($procResult.ExitCode))."
-
-    $fullRaw = ($procResult.StdOut, $procResult.StdErr | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
-    Set-Content -Path $rawLogPath -Value $fullRaw -Encoding UTF8
-
-    if ($procResult.TimedOut) {
-        $infraBlocked = $true
-        if ($procResult.KillConfirmed) {
-            $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (client PID $($procResult.Pid) terminated). Canonical reviews left untouched."
-        } else {
-            $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (termination failure: client PID $($procResult.Pid) could not be confirmed exited). Canonical reviews left untouched."
+    $routeList = @()
+    $idx = 0
+    foreach ($cand in $normalCandidates) {
+        $idx++
+        $routeList += @{
+            Type = "NORMAL"
+            Index = $idx
+            Model = $cand
         }
-        break
     }
-
-    if ($procResult.ExitCode -ne 0) {
-        $infraBlocked = $true
-        $infraReason = "OpenCode agent '$agentName' failed with exit code $($procResult.ExitCode). Canonical review left untouched."
-        break
-    }
-
-    $assistantMessage = $procResult.StdOut
-    if ($invocation.IsStructured) {
-        $extraction = Get-FinalAssistantMessageFromStructuredJson -JsonlText $procResult.StdOut
-        if (-not $extraction.Success) {
-            $infraBlocked = $true
-            $infraReason = "OpenCode agent '$agentName' structured output malformed: $($extraction.Error). Canonical review left untouched."
-            break
+    if (-not [string]::IsNullOrWhiteSpace($configuredDegraded)) {
+        $routeList += @{
+            Type = "DEGRADED"
+            Index = 1
+            Model = $configuredDegraded
         }
-        $assistantMessage = $extraction.Text
     }
 
-    $payloadResult = Get-CanonicalReviewPayload -FinalAssistantMessage $assistantMessage
-    if (-not $payloadResult.Success) {
-        $infraBlocked = $true
-        $infraReason = "OpenCode agent '$agentName' canonical payload extraction failed: $($payloadResult.Error). Canonical review left untouched."
+    $roleCompleted = $false
+
+    foreach ($routeItem in $routeList) {
+        $attemptType = $routeItem.Type
+        $attemptIndexInRoute = $routeItem.Index
+        $currentModel = $routeItem.Model
+
+        $rawLogPath = Join-Path $runtimeDir ("${agentName}_" + $attemptType.ToLower() + "_attempt_${attemptIndexInRoute}.log")
+        $invocation = Get-OpenCodeInvocation -Agent $agentName -PromptText $prompt -CandidateModel $currentModel
+
+        Write-Host "Running OpenCode agent '$agentName' [$attemptType #$($attemptIndexInRoute): '$currentModel'] (timeout limit: ${ReviewTimeoutSeconds}s)..."
+
+        $procResult = Invoke-BoundedProcess -Executable $invocation.Executable -Arguments $invocation.Arguments -TimeoutSeconds $ReviewTimeoutSeconds -StreamToConsole:$true
+        Write-Host "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] finished in $([math]::Round($procResult.ElapsedSeconds, 1))s (exit code: $($procResult.ExitCode))."
+
+        $fullRaw = ($procResult.StdOut, $procResult.StdErr | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "`n"
+        Set-Content -Path $rawLogPath -Value $fullRaw -Encoding UTF8
+
+        if ($procResult.TimedOut) {
+            if (-not $procResult.KillConfirmed) {
+                $provenanceRecords.Add([pscustomobject]@{
+                    Role = $agentName
+                    Type = $attemptType
+                    Index = $attemptIndexInRoute
+                    Model = $currentModel
+                    ElapsedSeconds = $procResult.ElapsedSeconds
+                    Outcome = "TIMEOUT_UNCONFIRMED_KILL"
+                    Reason = "Timed out and termination could not be confirmed."
+                    Selected = $false
+                })
+                $infraBlocked = $true
+                $infraReason = "OpenCode agent '$agentName' timed out after ${ReviewTimeoutSeconds}s (termination failure: client PID $($procResult.Pid) could not be confirmed exited). Canonical reviews left untouched."
+                break
+            }
+
+            $provenanceRecords.Add([pscustomobject]@{
+                Role = $agentName
+                Type = $attemptType
+                Index = $attemptIndexInRoute
+                Model = $currentModel
+                ElapsedSeconds = $procResult.ElapsedSeconds
+                Outcome = "TIMEOUT"
+                Reason = "Timed out after ${ReviewTimeoutSeconds}s."
+                Selected = $false
+            })
+            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] timed out. Falling back if eligible."
+            continue
+        }
+
+        if ($procResult.ExitCode -ne 0) {
+            $provenanceRecords.Add([pscustomobject]@{
+                Role = $agentName
+                Type = $attemptType
+                Index = $attemptIndexInRoute
+                Model = $currentModel
+                ElapsedSeconds = $procResult.ElapsedSeconds
+                Outcome = "NON_ZERO_EXIT"
+                Reason = "Process exited with code $($procResult.ExitCode)."
+                Selected = $false
+            })
+            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] exited with code $($procResult.ExitCode). Falling back if eligible."
+            continue
+        }
+
+        $assistantMessage = $procResult.StdOut
+        if ($invocation.IsStructured) {
+            $extraction = Get-FinalAssistantMessageFromStructuredJson -JsonlText $procResult.StdOut
+            if (-not $extraction.Success) {
+                $provenanceRecords.Add([pscustomobject]@{
+                    Role = $agentName
+                    Type = $attemptType
+                    Index = $attemptIndexInRoute
+                    Model = $currentModel
+                    ElapsedSeconds = $procResult.ElapsedSeconds
+                    Outcome = "MALFORMED_STRUCTURED_JSON"
+                    Reason = $extraction.Error
+                    Selected = $false
+                })
+                Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] structured output malformed: $($extraction.Error). Falling back if eligible."
+                continue
+            }
+            $assistantMessage = $extraction.Text
+        }
+
+        $payloadResult = Get-CanonicalReviewPayload -FinalAssistantMessage $assistantMessage
+        if (-not $payloadResult.Success) {
+            $provenanceRecords.Add([pscustomobject]@{
+                Role = $agentName
+                Type = $attemptType
+                Index = $attemptIndexInRoute
+                Model = $currentModel
+                ElapsedSeconds = $procResult.ElapsedSeconds
+                Outcome = "PAYLOAD_EXTRACTION_FAILED"
+                Reason = $payloadResult.Error
+                Selected = $false
+            })
+            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] payload extraction failed: $($payloadResult.Error). Falling back if eligible."
+            continue
+        }
+
+        $validation = Test-ReviewVerdictStructure -Text $payloadResult.Payload
+        if (-not $validation.IsValid) {
+            $provenanceRecords.Add([pscustomobject]@{
+                Role = $agentName
+                Type = $attemptType
+                Index = $attemptIndexInRoute
+                Model = $currentModel
+                ElapsedSeconds = $procResult.ElapsedSeconds
+                Outcome = "INVALID_VERDICT_STRUCTURE"
+                Reason = $validation.Error
+                Selected = $false
+            })
+            Write-Warning "OpenCode agent '$agentName' [$attemptType #$attemptIndexInRoute] verdict structure invalid: $($validation.Error). Falling back if eligible."
+            continue
+        }
+
+        # Valid semantic outcome reached (PASS or BLOCK)!
+        $provenanceRecords.Add([pscustomobject]@{
+            Role = $agentName
+            Type = $attemptType
+            Index = $attemptIndexInRoute
+            Model = $currentModel
+            ElapsedSeconds = $procResult.ElapsedSeconds
+            Outcome = "VALID_VERDICT"
+            Reason = "Verdict $($validation.Verdict) (blocking=$($validation.Blocking))"
+            Selected = $true
+        })
+
+        Set-Content -Path $candidatePath -Value $payloadResult.Payload.TrimEnd() -Encoding UTF8
+        $candidates[$agentName] = @{
+            CandidatePath = $candidatePath
+            CanonicalPath = $canonicalPath
+        }
+        $verdicts[$agentName] = $validation
+        $reviewerMetadata[$agentName] = @{
+            Type = $attemptType
+            Model = $currentModel
+        }
+
+        if ($attemptType -eq "DEGRADED") {
+            $hasDegradedReview = $true
+        }
+
+        if ($validation.Verdict -eq "BLOCK") {
+            $candidateBlocked = $true
+        }
+
+        $roleCompleted = $true
+        # Terminal for this reviewer: no further candidates or degraded attempts
         break
     }
 
-    $validation = Test-ReviewVerdictStructure -Text $payloadResult.Payload
-    if (-not $validation.IsValid) {
-        $infraBlocked = $true
-        $infraReason = "OpenCode agent '$agentName' output malformed: $($validation.Error). Canonical review left untouched."
+    if ($infraBlocked) {
         break
     }
 
-    # Stage candidate review output; gate-level promotion is deferred until all reviewers and tests complete
-    Set-Content -Path $candidatePath -Value $payloadResult.Payload.TrimEnd() -Encoding UTF8
-    $candidates[$agentName] = @{
-        CandidatePath = $candidatePath
-        CanonicalPath = $canonicalPath
-    }
-    $verdicts[$agentName] = $validation
-
-    if ($validation.Verdict -eq "BLOCK") {
-        $candidateBlocked = $true
+    if (-not $roleCompleted) {
+        $infraBlocked = $true
+        $infraReason = "All configured reviewer candidates (and degraded reviewer if configured) for '$agentName' failed infrastructurally. Canonical reviews left untouched."
+        break
     }
 }
 
@@ -572,9 +777,11 @@ if ($infraBlocked) {
 
 $specVerdict = $verdicts["spec-reviewer"]
 $regressionVerdict = $verdicts["regression-reviewer"]
+$specMeta = $reviewerMetadata["spec-reviewer"]
+$regressionMeta = $reviewerMetadata["regression-reviewer"]
 
-$head = (& git rev-parse HEAD 2>&1 | Out-String).Trim()
-$branch = (& git branch --show-current 2>&1 | Out-String).Trim()
+$head = (& cmd.exe /c "chcp 65001 >nul && <nul git rev-parse HEAD" 2>&1 | Out-String).Trim()
+$branch = (& cmd.exe /c "chcp 65001 >nul && <nul git branch --show-current" 2>&1 | Out-String).Trim()
 $timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssK")
 
 $evidence = New-Object System.Collections.Generic.List[string]
@@ -586,16 +793,37 @@ $evidence.Add("Branch: $branch")
 $evidence.Add("HEAD: $head")
 $evidence.Add("Base ref: $baseRef")
 $evidence.Add("")
+
+if ($hasDegradedReview) {
+    $evidence.Add("## Review mode notice")
+    $evidence.Add("")
+    $evidence.Add("- Review mode: DEGRADED")
+    $evidence.Add("- Evidence confidence: LOW")
+    $evidence.Add("- Independence: NOT_INDEPENDENT")
+    $evidence.Add("- Reason: independent reviewer infrastructure exhausted")
+    $evidence.Add("- Final review requirement: ChatGPT + user final semantic review required before merge.")
+    $evidence.Add("")
+}
+
 $evidence.Add("## Review verdicts")
 $evidence.Add("")
-$evidence.Add("- Spec reviewer: $($specVerdict.Verdict) (blocking=$($specVerdict.Blocking))")
-$evidence.Add("- Regression reviewer: $($regressionVerdict.Verdict) (blocking=$($regressionVerdict.Blocking))")
+$evidence.Add("- Spec reviewer: $($specVerdict.Verdict) (blocking=$($specVerdict.Blocking); type=$($specMeta.Type); model=$($specMeta.Model))")
+$evidence.Add("- Regression reviewer: $($regressionVerdict.Verdict) (blocking=$($regressionVerdict.Blocking); type=$($regressionMeta.Type); model=$($regressionMeta.Model))")
 $evidence.Add("")
 $evidence.Add("Detailed reports:")
 $evidence.Add("")
 $evidence.Add("- reviews/spec-review.md")
 $evidence.Add("- reviews/regression-review.md")
 $evidence.Add("")
+
+$evidence.Add("## Attempt provenance")
+$evidence.Add("")
+foreach ($pr in $provenanceRecords) {
+    $selStr = if ($pr.Selected) { "SELECTED" } else { "FALLBACK" }
+    $evidence.Add("- Role: $($pr.Role) | Type: $($pr.Type) #$($pr.Index) | Model: $($pr.Model) | Elapsed: $([math]::Round($pr.ElapsedSeconds, 1))s | Outcome: $($pr.Outcome) | Status: $selStr")
+}
+$evidence.Add("")
+
 $evidence.Add("## Focused tests")
 $evidence.Add("")
 if ($SkipTests) {
@@ -707,6 +935,11 @@ Write-Host "Canonical reviewer reports and EVIDENCE.md successfully promoted."
 if ($candidateBlocked -or $specVerdict.Verdict -ne "PASS" -or $specVerdict.Blocking -ne 0 -or $regressionVerdict.Verdict -ne "PASS" -or $regressionVerdict.Blocking -ne 0 -or -not $testsPassed) {
     Write-Host "AI verification gate CANDIDATE_BLOCKED. Inspect EVIDENCE.md and reviewer reports."
     exit 2
+}
+
+if ($hasDegradedReview) {
+    Write-Host "AI verification gate PASSED (DEGRADED / LOW_EVIDENCE / NOT_INDEPENDENT). Process exit 0 signal emitted. Final ChatGPT/human semantic review is strictly required before merge."
+    exit 0
 }
 
 Write-Host "AI verification gate PASSED. Final ChatGPT/human review is still required."

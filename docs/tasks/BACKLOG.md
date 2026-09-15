@@ -49,7 +49,7 @@ Completed prerequisites:
 4. `agent-workflow-pilot-retrospective-v1`
    - Depends on successful closeout of task 3.
    - Analyze actual elapsed time, fallbacks, degraded-review usage, manual interventions, handoffs, and workflow friction.
-   - Calibrate model routing from production evidence rather than speculation: per-model latency, timeout frequency, fallback recovery rate, degraded evidence quality, candidate ordering, and observable agent step-budget utilization.
+   - Calibrate model routing from production evidence rather than speculation: per-model attempt elapsed time, timeout frequency, fallback frequency and which candidates actually recover failures, degraded-review frequency, normal vs degraded evidence quality, candidate ordering, observable agent step-budget utilization, and whether 480 seconds per attempt is materially over/under-provisioned.
    - Re-evaluate the initial 480s-per-attempt policy and role/model step limits; adjust timeout/steps/order only when pilot evidence justifies it.
    - Intended optimization sequence: reliability first -> production pilot -> collect evidence -> calibrate time/steps/order.
    - Produce evidence-backed V2 interruptibility decisions; no pause/resume implementation yet.
