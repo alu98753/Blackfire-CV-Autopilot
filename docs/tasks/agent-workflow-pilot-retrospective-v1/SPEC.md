@@ -1,129 +1,194 @@
 # agent-workflow-pilot-retrospective-v1
 
-Status: Draft
+Status: Final
 
 ## Goal
 
 Perform an evidence-backed retrospective of the first production pilot run through the hardened Blackfire AI development workflow (`intent-routing-observability`) and convert observed workflow friction into an explicit, prioritized improvement plan.
 
-This task is an analysis / workflow-governance task. Its purpose is to decide **what should be improved next and why**. It must not silently implement the recommended fixes.
+This is an analysis / workflow-governance task. It decides **what should be improved next and why**. It must not implement the recommended fixes.
 
-## Observed pilot basis
+## Authoritative pilot basis
 
-The completed `intent-routing-observability` task provides the first real production evidence after the recent workflow-hardening tasks. The lightweight survey already confirms several concrete friction points worth retrospective analysis:
+The completed `intent-routing-observability` task is the first production pilot after the recent workflow-hardening work. Confirmed evidence includes:
 
-- the initial task descriptor omitted required `models` configuration and Scout failed before localization;
-- remote-to-local synchronization and branch/worktree state required explicit human handoff;
-- the first independent Mimo spec review reached a semantic PASS with zero blocking findings but Gate classified the payload as infrastructure failure because the canonical verdict lines were wrapped in Markdown bold;
-- the infrastructure failure prevented the regression reviewer from running in that Gate attempt;
-- a non-independent Gemini degraded review was created and correctly labelled `LOW_EVIDENCE / NOT_INDEPENDENT`, but could not count as a normal Gate PASS;
-- after syncing latest `main` and explicitly selecting BigPickle, the normal Gate completed successfully with spec-reviewer PASS in ~80.2s and regression-reviewer PASS in ~119.1s;
-- human intervention was required to diagnose the failure, choose the rerun strategy, synchronize the branch, rerun Gate, and complete integration;
-- commit quality / semantic consistency emerged as a separate convenience concern during the pilot, motivating but not yet authorizing the proposed Semantic Commit Agent roadmap item.
+- the initial task descriptor omitted required `models` configuration, causing Scout to fail before localization;
+- remote-to-local synchronization and worktree/branch state required explicit human handoff;
+- the first independent Mimo spec review semantically concluded PASS with zero blocking findings, but its Markdown-bold verdict lines caused Gate payload extraction to fail mechanically;
+- that infrastructure failure stopped the Gate before the regression reviewer ran;
+- a Gemini degraded review was created and correctly labelled `DEGRADED / LOW_EVIDENCE / NOT_INDEPENDENT`; it never counted as a normal Gate PASS;
+- after syncing the task branch to current `main` and explicitly selecting BigPickle, the normal Gate completed with spec-reviewer PASS in ~80.2s and regression-reviewer PASS in ~119.1s;
+- all declared focused tests passed in the successful Gate run;
+- human intervention was required to diagnose the failed Gate attempt, select the rerun strategy, synchronize branch state, rerun Gate, and authorize final integration;
+- semantic commit consistency emerged as a convenience concern during the pilot, but not as a proven reliability blocker.
 
-These observations are inputs to the retrospective, not pre-decided fixes.
+Scout further confirmed:
+
+- the successful Gate run overwrote canonical `EVIDENCE.md` / normal review artifacts, so the earlier failed Mimo attempt survives only through secondary tracked evidence such as `degraded-gemini-review.md` and any local `.runtime/` logs that may still exist;
+- no workflow-script regression tests for `ai_gate.ps1` / `ai_scout.ps1` were found under `tests/` within Scout budget, despite internal test seams in `ai_gate.ps1`;
+- `Get-CanonicalReviewPayload` and subsequent structure validation use strict canonical verdict matching, explaining the Markdown-bold failure mode;
+- one production pilot is insufficient evidence for global model-ordering / timeout changes.
 
 ## Scope
 
-- Reconstruct the actual lifecycle of `intent-routing-observability` from tracked GitHub evidence and relevant workflow contracts.
-- Separate failures/friction into categories such as:
-  - contract/schema validation;
-  - remote/local worktree handoff;
-  - Scout model routing and execution;
-  - writer handoff / implementation friction;
-  - Gate reviewer execution, payload extraction, sequencing, and fallback behavior;
-  - model latency / timeout / step-budget calibration;
-  - artifact promotion / evidence quality;
-  - manual intervention / copy-paste / command burden;
-  - commit/history clarity.
-- Quantify evidence where the repository contains reliable measurements (for example reviewer elapsed times, attempt counts, result types, test counts, reruns).
-- Distinguish **semantic failure**, **infrastructure failure**, **contract brittleness**, and **human convenience friction**; do not collapse them into one severity class.
-- Produce a concise tracked retrospective report under this task package with:
-  - timeline / lifecycle reconstruction;
-  - findings with evidence and confidence;
-  - root-cause vs symptom classification;
+- Reconstruct the actual lifecycle of `intent-routing-observability` from tracked GitHub evidence, commit history, workflow contracts, and—only when available—local `.runtime` evidence.
+- Classify each material friction point into one primary category:
+  - semantic/contract failure;
+  - infrastructure/process failure;
+  - contract/parser brittleness;
+  - evidence/observability gap;
+  - avoidable mechanical human friction;
+  - necessary human semantic approval;
+  - convenience/quality-of-life friction.
+- Quantify reliable evidence, including reviewer elapsed times, attempt counts, Gate outcomes, reruns, test counts, and human intervention points.
+- Use git commit timestamps only as **coarse timeline proxies** when direct stage timings are absent. Such proxy values must be labelled as approximate and must not be presented as measured execution duration.
+- Reconstruct the first failed Mimo Gate attempt from the strongest available source in this order:
+  1. tracked canonical artifact or committed raw log, if any;
+  2. local `.runtime` log, if available to the writer;
+  3. tracked secondary evidence such as `degraded-gemini-review.md` quoting the failed reviewer output;
+  4. otherwise mark the detail as missing/unverified.
+- Produce a tracked retrospective report containing:
+  - lifecycle timeline;
+  - evidence table with source + confidence;
+  - findings with root cause vs symptom;
   - KEEP / CHANGE / MEASURE MORE / DEFER decisions;
   - prioritized follow-up task candidates;
-  - recommended ordering for workflow v1.2 / v2;
-  - explicit recommendation on Semantic Commit Agent timing;
-  - explicit interruptibility requirements to carry into `workflow-interruptibility-v2`.
-- Update the canonical `docs/tasks/BACKLOG.md` roadmap only after the retrospective conclusions are evidence-backed and the Final SPEC authorizes the exact roadmap changes.
+  - recommended workflow v1.2 / v2 ordering;
+  - explicit Semantic Commit Agent recommendation;
+  - explicit interruptibility requirements for `workflow-interruptibility-v2`.
+- Update `docs/tasks/BACKLOG.md` only after the retrospective conclusions are written and internally consistent with this Final SPEC.
+
+## Evidence confidence contract
+
+Every material conclusion must use one of these confidence classes:
+
+- **HIGH** — directly supported by canonical tracked artifacts, commit/PR metadata, or current authoritative code/contracts.
+- **MEDIUM** — reconstructed from tracked secondary evidence that quotes or summarizes the original event, or from coarse git-timestamp proxies.
+- **LOW** — based on local-only ephemeral evidence, incomplete context, or one-off observation that cannot be independently reproduced from tracked artifacts.
+- **UNKNOWN** — evidence missing; no inference allowed beyond stating the gap.
+
+A recommendation may be scheduled only when its rationale is HIGH/MEDIUM confidence and the problem is narrow enough to define a clear responsibility boundary. LOW/UNKNOWN evidence defaults to `MEASURE MORE` unless the safety impact justifies otherwise.
 
 ## Known invariants
 
 - ChatGPT + user remain architecture / workflow contract owners; retrospective evidence does not self-authorize policy changes.
 - Scout is an evidence provider, not the retrospective conclusion owner.
-- Gemini/Antigravity remains the writer for tracked task outputs after Final SPEC, but must not implement workflow fixes unless those fixes are explicitly part of a later task.
-- OpenCode reviewers remain read-only verification roles.
-- A semantic reviewer PASS that is mechanically rejected must be recorded distinctly from a semantic BLOCK; infrastructure classification must not rewrite the reviewer meaning.
-- Degraded / non-independent evidence must remain visibly distinct from normal independent Gate evidence.
-- Model fallback remains an infrastructure-reliability mechanism, not review-shopping.
-- Current workflow behavior remains unchanged by this retrospective unless Final SPEC explicitly identifies a documentation-only clarification as part of this task.
-- Recommendations must be grounded in repository evidence or explicitly marked as hypotheses requiring more measurement.
-- Do not generalize a single pilot observation into a global policy change without stating the confidence / evidence limitation.
+- Gemini/Antigravity is the only writer for this task's tracked retrospective artifacts after Final SPEC.
+- OpenCode reviewers remain independent read-only verification roles.
+- A semantic reviewer PASS that is mechanically rejected must be recorded separately from a semantic BLOCK.
+- Degraded/non-independent evidence must remain visibly distinct from normal independent Gate evidence.
+- Model fallback is infrastructure reliability, never semantic review-shopping.
+- Recommendations must be grounded in evidence or explicitly marked as hypotheses requiring more measurement.
+- One pilot must not silently become global model/timeout policy.
+- Current workflow/runtime behavior is unchanged by this task.
 
 ## Non-goals
 
-- Do not modify `scripts/ai_gate.ps1`, `scripts/ai_scout.ps1`, OpenCode agent prompts, model routing logic, parser regexes, timeout code, or worktree automation in this task.
-- Do not implement Markdown verdict normalization in this task.
-- Do not change Gate reviewer sequencing in this task.
-- Do not change global model ordering / fallback configuration in this task.
-- Do not implement Semantic Commit Agent in this task.
-- Do not implement Pause / Amend / Resume or workflow orchestrator behavior.
-- Do not add autonomous repair/retry loops or reviewer voting.
-- Do not treat the degraded Gemini self-review as equivalent to an independent Gate PASS.
-- Do not perform broad codebase architecture refactoring; this task concerns the AI development workflow.
+- No modification to `scripts/ai_gate.ps1`, `scripts/ai_scout.ps1`, reviewer prompts, parser regexes, timeout logic, fallback ordering, worktree automation, or production/game code.
+- No Markdown verdict normalization implementation.
+- No Gate sequencing implementation.
+- No global model-order or timeout change.
+- No task-schema validator implementation.
+- No Semantic Commit Agent implementation.
+- No Pause / Amend / Resume implementation.
+- No workflow orchestrator implementation.
+- No autonomous repair/retry loops or reviewer voting.
+- No broad architecture refactor.
+- Do not treat the degraded Gemini review as an independent PASS.
 
-## Provisional acceptance criteria
+## Required retrospective findings
 
-1. A tracked retrospective report reconstructs the pilot lifecycle from task creation through Scout, Final SPEC, implementation, first Gate failure, degraded evidence, rerun, successful Gate, final review, and merge.
-2. Every material finding cites or names concrete tracked evidence where available; unsupported impressions are explicitly labelled hypotheses.
-3. The report clearly distinguishes semantic blockers from infrastructure failures and convenience friction.
-4. The Mimo Markdown verdict incident is analyzed as a concrete failure mode, including why semantic PASS became `PAYLOAD_EXTRACTION_FAILED`, why regression review was not reached, and what classes of follow-up solutions exist; the report must not directly implement one.
-5. Reviewer/model measurements include at least the available BigPickle spec/regression elapsed times (~80.2s / ~119.1s), attempt counts, and known rerun/fallback facts; missing Scout/writer timing is recorded as missing evidence rather than invented.
-6. The initial `task.json` schema/config omission is analyzed for whether deterministic task validation/linting deserves promotion from deferred candidate to a scheduled follow-up.
-7. Human intervention points are enumerated and separated into necessary semantic approvals vs avoidable mechanical friction.
-8. The report produces an evidence-backed ordered recommendation for at least these roadmap decisions:
-   - Gate review payload robustness;
-   - Gate stage sequencing / infrastructure-failure behavior;
-   - task descriptor/schema validation;
-   - model timeout / ordering calibration;
-   - Semantic Commit Agent timing;
-   - workflow interruptibility requirements.
-9. Each proposed follow-up task has a narrow responsibility boundary and avoids becoming a catch-all workflow refactor.
-10. `docs/tasks/BACKLOG.md` is updated to reflect the retrospective outcome only after Final SPEC and without duplicating active task contracts.
-11. No production/game-runtime behavior changes occur.
-12. No workflow implementation change is smuggled into the retrospective patch.
+The final `RETROSPECTIVE.md` must make an evidence-backed decision on each of these areas:
 
-## Expected task outputs
+1. **Gate payload robustness**
+   - Explain the Markdown-bold Mimo failure mechanism.
+   - Decide whether to schedule a narrow payload-normalization/contract-robustness follow-up.
+   - Include the risk that overly permissive parsing could accept ambiguous/malformed reviewer output.
 
-Provisional outputs, to be confirmed after Scout:
+2. **Gate stage sequencing after infrastructure failure**
+   - Explain why regression review was not reached in the first failed attempt.
+   - Decide whether stage independence/resilience deserves its own task or should remain current behavior.
+   - Do not conflate this with payload normalization unless evidence supports one combined responsibility boundary.
 
-- `docs/tasks/agent-workflow-pilot-retrospective-v1/RETROSPECTIVE.md` — evidence-backed retrospective and recommendations.
-- `docs/tasks/BACKLOG.md` — lifecycle status / prioritized roadmap update derived from the approved retrospective.
+3. **Task descriptor/schema validation**
+   - Analyze the missing `models` incident.
+   - Decide whether deterministic preflight/schema linting should be promoted from deferred candidate.
+   - Distinguish “task creation mistake” from “missing safety rail.”
 
-No production script modification is expected.
+4. **Model routing / timeout / step budgets**
+   - Record BigPickle spec (~80.2s) and regression (~119.1s) measurements.
+   - Record available Mimo attempt timing if evidence exists; otherwise mark missing.
+   - Decide whether current 480s policy or model ordering can be changed now. With only one pilot, default expectation is `MEASURE MORE` unless stronger evidence emerges.
 
-## Uncertainty to resolve with Scout
+5. **Workflow evidence retention**
+   - Analyze the fact that successful Gate promotion overwrote canonical failed-attempt evidence.
+   - Decide whether durable attempt-history retention deserves a separate observability/evidence task.
 
-- Which tracked artifacts preserve enough evidence to reconstruct the first failed Gate attempt after the later successful Gate overwrote canonical `EVIDENCE.md` / review files.
-- Whether commit history / task commits contain additional reliable timestamps for Scout, writer, handoff, and rerun stages.
-- Whether `.runtime` evidence is intentionally unavailable remotely and therefore must be treated as non-canonical / missing for retrospective purposes.
-- Which existing tests or docs define expected `Get-CanonicalReviewPayload` strictness and Gate stop-on-infrastructure behavior, without changing them.
-- Whether task descriptor validation already exists elsewhere and the initial `models` omission was a task-creation mistake vs a missing deterministic validation layer.
-- Whether the current roadmap should schedule one combined Gate robustness task or separate payload-normalization and stage-resilience tasks.
-- Whether model timeout/step calibration has enough samples for a policy recommendation or should remain `MEASURE MORE` after a single production pilot.
-- How much commit-message inconsistency was actual pilot friction vs a convenience idea discovered during discussion.
+6. **Workflow-script regression protection**
+   - Record Scout's finding that no `ai_gate.ps1` / `ai_scout.ps1` tests were located under `tests/` within budget.
+   - Decide whether a dedicated script-test harness/task should precede parser/sequencing modifications.
 
-## Scout questions
+7. **Human intervention map**
+   - Separate necessary semantic approvals from avoidable mechanical work.
+   - Include remote/local sync, branch/worktree verification, rerun commands, reviewer-model override, commit-message friction, and final merge authorization.
 
-1. Reconstruct the pilot timeline from canonical GitHub artifacts and commits; identify which stages have reliable timing/attempt evidence and which do not.
-2. Locate the exact current contracts/code/tests governing task descriptor validation, Gate payload extraction, reviewer sequencing after infrastructure failure, candidate routing, artifact promotion, and timeout/step limits.
-3. Determine which pilot problems are already prevented by current `main` and which remain reproducible workflow gaps.
-4. Identify the narrowest plausible follow-up task boundaries for each confirmed gap; do not implement or rewrite the Draft SPEC.
-5. Check whether the canonical backlog and architecture workflow docs currently contradict the actual post-pilot behavior or simply need later roadmap status updates.
-6. Assess whether one pilot is sufficient to change model ordering/timeouts, or whether the evidence supports only additional measurement.
+8. **Semantic Commit Agent timing**
+   - Decide KEEP DEFERRED vs PROMOTE NEXT based on actual pilot pain.
+   - Reliability fixes take precedence over convenience automation unless evidence shows commit friction materially blocks throughput.
 
-## Lifecycle gate
+9. **Interruptibility requirements**
+   - Carry forward concrete requirements for `workflow-interruptibility-v2`, especially cancellation/restart semantics, artifact invalidation, and safe recovery after interrupted local processes.
 
-This SPEC remains Draft until OpenCode Scout produces and pushes `CONTEXT.md`, and ChatGPT + user re-evaluate the evidence. No retrospective conclusions, roadmap reprioritization, or workflow implementation should be treated as final before that step.
+## Follow-up task quality bar
+
+Every proposed follow-up task must include:
+
+- a narrow task id;
+- problem statement;
+- responsibility boundary;
+- evidence/confidence;
+- why it is separate from adjacent concerns;
+- priority (`P0/P1/P2` or equivalent);
+- dependency/order rationale.
+
+Do not create a catch-all `workflow-fixes` task.
+
+## Acceptance criteria
+
+1. `RETROSPECTIVE.md` reconstructs the pilot from task creation through Scout, Final SPEC, implementation, first Gate failure, degraded evidence, rerun, successful Gate, final review, and merge.
+2. Every material finding names evidence and confidence; unsupported impressions are labelled hypotheses or UNKNOWN.
+3. Semantic failure, infrastructure failure, parser/contract brittleness, evidence gaps, and convenience friction are clearly separated.
+4. The Mimo Markdown incident is explained technically and categorized correctly without modifying Gate code.
+5. Available reviewer timing/attempt/test evidence is recorded; missing Scout/writer timings are explicitly missing rather than invented.
+6. Git timestamps, if used, are labelled coarse proxies rather than execution timings.
+7. The task.json omission is analyzed as both a human creation error and a possible missing validation guardrail.
+8. The successful BigPickle rerun is not used alone to justify global model-order/timeout changes unless additional evidence exists.
+9. Evidence overwrite / failed-attempt retention is analyzed explicitly.
+10. Lack of located workflow-script tests is analyzed as a prerequisite/risk for future Gate changes.
+11. Human intervention points are enumerated and split into necessary semantic control vs avoidable mechanical friction.
+12. KEEP / CHANGE / MEASURE MORE / DEFER decisions cover all required retrospective areas above.
+13. Follow-up tasks are narrowly bounded and prioritized; no catch-all workflow refactor is proposed.
+14. `docs/tasks/BACKLOG.md` is updated to reflect the retrospective outcome and current lifecycle state without duplicating active task contracts.
+15. No production/game code or workflow implementation scripts are changed.
+
+## Required outputs
+
+- `docs/tasks/agent-workflow-pilot-retrospective-v1/RETROSPECTIVE.md`
+- `docs/tasks/BACKLOG.md`
+
+No production/script/test implementation changes are authorized by this task.
+
+## Writer instructions
+
+Gemini/Antigravity should:
+
+1. Read this Final SPEC, `CONTEXT.md`, `docs/architecture/ai_development_workflow.md`, the completed `intent-routing-observability` task artifacts, relevant commit/PR history, `scripts/ai_gate.ps1`, `scripts/ai_scout.ps1`, and `docs/tasks/BACKLOG.md`.
+2. Produce `RETROSPECTIVE.md` only from evidence available in those sources plus any still-available local `.runtime` logs; clearly label source/confidence.
+3. Update `BACKLOG.md` only to reflect approved conclusions and prioritized follow-up candidates.
+4. Do **not** edit workflow scripts, tests, prompts, model configuration, or production code.
+5. Run only lightweight validation appropriate for documentation changes (for example git diff/status and task artifact inspection). No product full-suite test is required for this documentation-only task.
+6. Push the completed documentation patch for Gate/final semantic review.
+
+## Completion gate
+
+After writer output is committed/pushed, run `scripts/ai_gate.ps1 -Task agent-workflow-pilot-retrospective-v1`. The Gate should review the documentation against this Final SPEC; no workflow implementation is expected. ChatGPT then performs final semantic / architecture review from GitHub before any merge.
