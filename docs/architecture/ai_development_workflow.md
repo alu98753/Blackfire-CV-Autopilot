@@ -206,7 +206,7 @@ docs/tasks/<task-id>/task.json
  .\scripts\ai_scout.ps1 -Task <task-id>
  ```
  
- This runs Scout in an isolated process (`--standalone`, explicit repo working directory, closed non-interactive stdin) with real-time terminal streaming under an 8-minute default timeout. On successful execution and structural validation, it creates or replaces `docs/tasks/<task-id>/CONTEXT.md` via atomic promotion. If Scout times out or fails, any pre-existing canonical `CONTEXT.md` remains untouched.
+ This runs Scout through the repository-owned bounded child-process wrapper (explicit repo working directory, closed non-interactive stdin, redirected output, and termination handling) with real-time terminal streaming under an 8-minute default timeout. Production Scout supports exactly OpenCode CLI version 1.18.31; the wrapper owns process isolation rather than relying on an OpenCode `run` flag. On successful execution and structural validation, it creates or replaces `docs/tasks/<task-id>/CONTEXT.md` via atomic promotion. If Scout times out or fails, any pre-existing canonical `CONTEXT.md` remains untouched.
 
 ### Phase A2 — Contract finalization
 
@@ -228,7 +228,7 @@ Run:
  .\scripts\ai_gate.ps1 -Task <task-id>
  ```
  
- The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded, isolated child-process wrapper (`--standalone`, explicit repo working directory, closed stdin) with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`.
+ The gate snapshots repository status/diff into ignored `.runtime/` files, verifies the exact supported OpenCode CLI version (1.18.31), and invokes the two read-only reviewers through a bounded, isolated repository-owned child-process wrapper (explicit repo working directory, closed stdin, redirected output, and termination handling) with real-time stdout/stderr visibility (default 480-second timeout per reviewer). It optionally runs declared `focused_tests` (default 60-second timeout per test target) and safely promotes canonical `reviews/*` and `EVIDENCE.md`. OpenCode-specific `run --standalone` and `run --pure` flags are not part of the production launcher contract.
 
 Verification outcomes and exit codes:
 - **`0` (PASS)**: Both reviewers returned valid `PASS` verdicts with 0 blocking findings, and all configured focused tests passed. Canonical `reviews/*` and `EVIDENCE.md` are updated.

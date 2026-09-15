@@ -19,12 +19,14 @@ param(
     [string[]]$_ReviewCandidatesOverride,
     [string]$_PythonExecutableOverride,
     [string[]]$_PythonArgumentsOverride,
-    [string]$_FailPromotionOnTarget
+    [string]$_FailPromotionOnTarget,
+    [string]$_OpenCodeVersionOverride
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
+. (Join-Path $PSScriptRoot "opencode_contract.ps1")
 
 $taskDir = Join-Path $repoRoot "docs\tasks\$Task"
 $taskFile = Join-Path $taskDir "task.json"
@@ -40,6 +42,19 @@ if (-not (Test-Path $specPath)) {
 $config = Get-Content $taskFile -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($config.id -ne $Task) {
     throw "task.json id '$($config.id)' does not match directory/task argument '$Task'."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($_ReviewerExecutableOverride)) {
+    if (-not [string]::IsNullOrWhiteSpace($_OpenCodeVersionOverride)) {
+        Assert-OpenCodeSupportedVersion -Version $_OpenCodeVersionOverride.Trim()
+    }
+} else {
+    $openCodeCommand = Get-Command opencode -ErrorAction SilentlyContinue
+    if (-not $openCodeCommand) {
+        throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
+    }
+    $installedVersion = Get-OpenCodeVersion -Executable $openCodeCommand.Source
+    Assert-OpenCodeSupportedVersion -Version $installedVersion
 }
 
 $baseRef = [string]$config.base_ref
@@ -270,7 +285,7 @@ function Get-OpenCodeInvocation {
         } elseif ($null -ne $_ReviewerArgumentsOverride) {
             $args = $_ReviewerArgumentsOverride
         } else {
-            $args = @("run", "--standalone", "--format", "json", "--agent", $Agent, "--model", $CandidateModel)
+            $args = @("run", "--format", "json", "--agent", $Agent, "--model", $CandidateModel)
         }
         return @{
             Executable = $_ReviewerExecutableOverride
@@ -284,7 +299,7 @@ function Get-OpenCodeInvocation {
         throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
     }
 
-    $innerArgs = @("run", "--standalone", "--format", "json", "--agent", $Agent)
+    $innerArgs = @("run", "--format", "json", "--agent", $Agent)
     if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
         $innerArgs += @("--model", $CandidateModel)
     }

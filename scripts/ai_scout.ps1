@@ -10,15 +10,25 @@ param(
     # Internal test seam: override executable and arguments to verify process execution, timeout, streaming, and failure
     [string]$_ExecutableOverride,
     [string[]]$_ArgumentsOverride,
-    [string[]]$_ModelCandidatesOverride
+    [string[]]$_ModelCandidatesOverride,
+    [string]$_OpenCodeVersionOverride
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
+. (Join-Path $PSScriptRoot "opencode_contract.ps1")
 
 if ([string]::IsNullOrWhiteSpace($_ExecutableOverride) -and -not (Get-Command opencode -ErrorAction SilentlyContinue)) {
     throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
+}
+
+if ([string]::IsNullOrWhiteSpace($_ExecutableOverride)) {
+    $openCodeCommand = Get-Command opencode -ErrorAction Stop
+    $installedVersion = Get-OpenCodeVersion -Executable $openCodeCommand.Source
+    Assert-OpenCodeSupportedVersion -Version $installedVersion
+} elseif (-not [string]::IsNullOrWhiteSpace($_OpenCodeVersionOverride)) {
+    Assert-OpenCodeSupportedVersion -Version $_OpenCodeVersionOverride.Trim()
 }
 
 $taskDir = Join-Path $repoRoot "docs\tasks\$Task"
@@ -130,7 +140,7 @@ function Invoke-ScoutProcessAttempt {
         }
     } else {
         $cmdInfo = Get-Command opencode -ErrorAction SilentlyContinue
-        $innerArgs = @("run", "--standalone", "--agent", "scout")
+        $innerArgs = @("run", "--agent", "scout")
         if (-not [string]::IsNullOrWhiteSpace($CandidateModel)) {
             $innerArgs += @("--model", $CandidateModel)
         }

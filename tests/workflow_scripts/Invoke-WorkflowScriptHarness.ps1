@@ -22,6 +22,10 @@ $failed = 0
 $specReviewer = Join-Path $repoRoot '.opencode\agents\spec-reviewer.md'
 $regressionReviewer = Join-Path $repoRoot '.opencode\agents\regression-reviewer.md'
 $workflowContract = Join-Path $repoRoot 'docs\architecture\ai_development_workflow.md'
+$openCodeContract = Join-Path $repoRoot 'scripts\opencode_contract.ps1'
+$bootstrap = Join-Path $repoRoot 'scripts\bootstrap_opencode.ps1'
+$scoutScript = Join-Path $repoRoot 'scripts\ai_scout.ps1'
+$gateScript = Join-Path $repoRoot 'scripts\ai_gate.ps1'
 
 function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -64,10 +68,27 @@ try {
         Assert-True ($workflowText -match '`regression-reviewer`[\s\S]*?`steps: 10`') 'architecture regression-reviewer budget drifted'
         Assert-True ($workflowText -match 'Forced max-step finalization remains an infrastructure failure, never a verdict source') 'architecture finalization contract missing'
     }
+    Run-Case 'OpenCode launcher contract is pinned and flag-free' {
+        $contractText = Get-Content $openCodeContract -Raw
+        $bootstrapText = Get-Content $bootstrap -Raw
+        $scoutText = Get-Content $scoutScript -Raw
+        $gateText = Get-Content $gateScript -Raw
+        $workflowText = Get-Content $workflowContract -Raw
+        Assert-True ($contractText -match '\$OpenCodeSupportedVersion\s*=\s*"1\.18\.31"') 'supported OpenCode version declaration drifted'
+        Assert-True ($bootstrapText -match 'opencode-ai@\$OpenCodeSupportedVersion') 'bootstrap install is not pinned to the authoritative version'
+        Assert-True ($scoutText -notmatch '--standalone|--pure') 'Scout production launcher contains a forbidden OpenCode flag'
+        Assert-True ($gateText -notmatch '--standalone|--pure') 'Gate production launcher contains a forbidden OpenCode flag'
+        Assert-True ($workflowText.Contains('exactly OpenCode CLI version 1.18.31')) 'architecture version contract missing'
+    }
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
     'existing context' | Set-Content (Join-Path $fixtureDir 'CONTEXT.md') -Encoding UTF8
+
+    Run-Case 'Scout rejects an unsupported OpenCode version before routing' {
+        $code = Invoke-Script $scout (@('-Task',$fixtureId,'-_ExecutableOverride',$scoutCmd,'-_OpenCodeVersionOverride','1.18.30'))
+        Assert-True ($code -ne 0) "expected version mismatch failure, got $code"
+    }
 
     @'
 param([string[]]$ChildArgs)
@@ -90,6 +111,10 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$pythonChild`" %*" | Set-Content $pythonCmd -Encoding ASCII
 
     $reviewBase = @('-_ReviewerExecutableOverride',$reviewerCmd,'-ReviewTimeoutSeconds','10','-_ReviewCandidatesOverride','first','second')
+    Run-Case 'Gate rejects an unsupported OpenCode version before routing' {
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_OpenCodeVersionOverride','2.0.3'))
+        Assert-True ($code -ne 0) "expected version mismatch failure, got $code"
+    }
     Run-Case 'Gate PASS and candidate override resolution' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId) + $reviewBase)
         Assert-True ($code -eq 0) "expected 0, got $code"
