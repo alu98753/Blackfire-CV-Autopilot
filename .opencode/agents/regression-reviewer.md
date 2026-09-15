@@ -55,7 +55,7 @@ Execution constraints:
 - divergence from current architecture contracts.
 
 Mandatory response format:
-Your final response MUST begin on line 1 with exactly two lines, without any preamble, greeting, markdown heading, code fence, bold markers (do NOT use `**`), step-limit summary, or explanatory text:
+Your final response MUST begin with the two-line verdict header:
 
 VERDICT: PASS
 BLOCKING_FINDINGS: 0
@@ -64,8 +64,6 @@ or
 
 VERDICT: BLOCK
 BLOCKING_FINDINGS: <positive integer>
-
-If tools become unavailable because the step budget is exhausted, immediately emit the required structured final response starting with the raw two-line header above rather than an explanatory or "Maximum steps reached" summary.
 
 After the header, return Markdown with:
 

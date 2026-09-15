@@ -1,9 +1,9 @@
 ﻿# Verification Evidence
 
 Task: agent-role-contract-hardening-v1-1
-Generated: 2026-09-15T00:24:53+08:00
+Generated: 2026-09-15T08:44:20+08:00
 Branch: refactor/agent-role-contract-hardening-v1-1
-HEAD: 3020976c78263bd6407d5868626468bf04c29279
+HEAD: 14a1e223b984f617fb453f16f5c7354e8ef85a17
 Base ref: origin/main
 
 ## Review verdicts

@@ -1,34 +1,30 @@
-﻿Now let me inspect the current state of the key files to verify the diff is consistent with what actually exists on the working tree:
-Now let me verify one key detail about the scripts - whether `ai_scout.ps1` previously had duplicated budget numbers or was already delegating to the agent contract:
-VERDICT: PASS
-
+﻿VERDICT: PASS
 BLOCKING_FINDINGS: 0
-## Behavior-preservation assessment
+
 # Regression Review
 
+## Behavior-preservation assessment
 
+The diff modifies 8 files: 3 agent contracts, 2 automation scripts, 1 architecture doc, 1 backlog doc, and creates task metadata (SPEC, CONTEXT.md, EVIDENCE.md, task.json). All core behavioral invariants are preserved:
 
-- Scout remains evidence-only and never owns `SPEC.md`.
-- Spec reviewer and regression reviewer remain separate sequential read-only roles.
-- Gemini/Antigravity remains the sole production implementation writer.
-The patch migrates three OpenCode agent role contracts (`scout.md`, `spec-reviewer.md`, `regression-reviewer.md`) from legacy V1 permission syntax to V2 `permissions` rules, adds `steps` budgets (6 for scout, 5 for reviewers), tightens exploration/output budgets, adds early-stop semantics, and updates the architecture documentation and backlog to reflect the new durable role model. The two automation scripts (`ai_scout.ps1`, `ai_gate.ps1`) are **not modified by the diff** ??they already implement `--standalone` invocation, explicit `$repoRoot` working directory, `StandardInput.Close()`, and delegated budget authority to the agent contract.
-All existing behavioral invariants are preserved:
-- ChatGPT + user remain contract owners and final reviewers.
-- Gate semantic contract (`VERDICT: PASS|BLOCK` + `BLOCKING_FINDINGS`) is unchanged.
-- Gate process outcomes (0=PASS, 1=INFRASTRUCTURE_BLOCKED, 2=CANDIDATE_BLOCKED) are unchanged.
-- 480-second hard timeout remains the wall-clock safety boundary.
-- V2 permissions correctly deny `edit`, `shell`, `execute`, `subagent`, `external_directory`, `webfetch`, `websearch` and allow only `read`, `glob`, `grep`.
-- `ai_scout.ps1` does not duplicate concrete budget numbers; its prompt delegates to the agent contract ("Strictly follow the file and word budget limits defined in the scout agent contract").
+- **Agent roles remain separate and read-only.** Scout is evidence-only; spec-reviewer and regression-reviewer are independent sequential bounded blocker detectors. V2 `permissions` correctly deny `edit`, `shell`, `subagent`, `execute`, `external_directory`, `webfetch`, `websearch` and allow only `read`, `glob`, `grep` across all three agents.
+- **Step budgets match spec:** Scout `steps: 6`, both reviewers `steps: 5` — verified in current repo state.
+- **Gate semantic contract unchanged.** `VERDICT: PASS|BLOCK` + `BLOCKING_FINDINGS` header, exit codes 0/1/2, focused-test rejection, transaction-safe promotion, and rollback are all preserved (no modifications to those code paths).
+- **Scout prompt deduplication achieved.** `ai_scout.ps1` now delegates to the agent contract (`"Strictly follow the file and word budget limits defined in the scout agent contract"`), eliminating the previously duplicated 10-file / 1500-word numbers.
+- **Invocation isolation strengthened.** Both scripts now use `--standalone` and explicit `$psi.WorkingDirectory = $repoRoot`. `ai_scout.ps1` adds `RedirectStandardInput` + `StandardInput.Close()`. `ai_gate.ps1` reviewer invocations now also add `--standalone` and `--format json` with `WorkingDirectory` set on `Invoke-BoundedProcess`.
+- **No game/runtime files changed.**
+- **Untracked game-doc files in status snapshot are pre-existing** — confirmed unrelated to this diff.
 
 ## Blocking findings
-- No game/runtime files change.
 
 None.
 
 ## Advisory findings
 
-1. **BACKLOG.md and CONTEXT.md are outside declared `task.json` scope but within the diff.** BACKLOG.md is reorganized (task 1 promoted to active, future tasks condensed). CONTEXT.md is new Scout output. Neither changes a behavioral contract. This is cosmetic and expected for task activation, but a minor scope discipline note ??the diff includes two files not listed in `task.json` scope.
+1. **`--format json` added to gate reviewer invocations (not explicitly in SPEC).** `ai_gate.ps1` line 233 adds `"--format", "json"` to `Get-OpenCodeInvocation`. The SPEC requires invocation isolation but does not mention structured output. The gate script builds a proper JSONL extraction pipeline (`Get-FinalAssistantMessageFromStructuredJson`, `Get-CanonicalReviewPayload`) gated behind an `IsStructured` flag, so this is architecturally coherent and improves deterministic output parsing. Only a runtime probe could verify the OpenCode `--format json` contract is satisfied on the target model.
 
-2. **BACKLOG condensation loses some detail** (e.g., observed model evidence for task 2, detailed planned invariants for task 3). This is acceptable since backlog is explicitly not normative ??`SPEC.md` is the single source of truth ??but future readers may want the detail preserved in the respective SPEC files when those tasks are activated.
+2. **`Test-ReviewVerdictStructure` now requires header at line 1.** The regex changed from `(?m)^VERDICT:` (multiline, anywhere) to `\AVERDICT:` (absolute start). This is more strict but consistent with the reviewer contracts that require "first two lines remain exactly the machine-readable header." `Get-CanonicalReviewPayload` uses `(?m)^VERDICT:` to extract the payload starting from the header match index, then passes that substring to `Test-ReviewVerdictStructure` — the chain is correct. However, any future direct call to `Test-ReviewVerdictStructure` with preamble text would fail. This is a deliberate tightening, not a regression.
 
-3. **Redundant explicit deny entries** after the broad `*/*` deny (e.g., `shell: deny`, `edit: deny` appearing after the broad deny) are harmless ??they serve as explicit documentation of critical boundaries rather than functional policy. No regression risk.
+3. **BACKLOG.md and CONTEXT.md/EVIDENCE.md are outside declared `task.json` scope** but within the diff. These are administrative/editorial (roadmap condensation, task activation metadata). No behavioral contract is altered.
+
+**Confidence: 0.92** — the diff is architecturally sound, all spec invariants are satisfied, and the new structured output pipeline is well-factored. The only residual uncertainty is runtime verification of `--format json` with the target model, which is an expected follow-up probe.
