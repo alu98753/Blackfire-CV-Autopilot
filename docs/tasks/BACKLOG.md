@@ -70,68 +70,58 @@ Long-term automation may orchestrate these steps, but orchestration must never s
   - Ordered role-specific normal-model fallback exists for infrastructure failures.
   - Normal semantic PASS/BLOCK remains terminal; no review-shopping.
   - Gate no longer silently appends an undeclared degraded reviewer path when configured normal candidates are exhausted.
+- `intent-routing-observability` — completed and merged.
+  - First production pilot for hardened workflow.
+  - Implemented structured routing diagnostics, preserved pre-observation in-flight action evidence, and migrated runtime logging.
+  - Provided direct production evidence for pilot retrospective.
 
 ## Active
 
-### 3. `intent-routing-observability`
-
-Status: active production pilot.
-
-Purpose:
-- first production task run through the hardened Spec -> Scout -> Writer -> Gate -> Final Review workflow;
-- add structured intent/in-flight routing evidence while preserving navigation behavior;
-- use the task as workflow evidence, not merely as a product feature.
-
-Pilot evidence worth retaining for the retrospective:
-- handoff friction and manual steps;
-- Scout/Gate attempt count and elapsed time;
-- model fallback frequency;
-- branch/worktree synchronization problems;
-- task descriptor/schema mistakes;
-- amount of human prompt rewriting required;
-- whether reviewer findings were actionable vs speculative;
-- whether final Git history communicates task lifecycle clearly.
-
-Current task remains higher priority than starting any roadmap item below.
-
-## Planned next
-
 ### 4. `agent-workflow-pilot-retrospective-v1`
 
-Depends on successful closeout of `intent-routing-observability`.
+Status: active documentation task (finalizing retrospective and backlog).
 
-Goal: use actual production evidence to decide what automation should be added next instead of extrapolating from toy runs.
+Goal: use actual production evidence from `intent-routing-observability` to decide what automation and fixes should be added next.
 
-Analyze:
-- end-to-end elapsed time by lifecycle stage;
-- local -> remote and remote -> local handoff failures;
-- model attempt elapsed time, timeout rate, fallback rate, and which candidates actually recover infrastructure failure;
-- Gate evidence quality and false/blocking findings;
-- human interventions, copy/paste, manual commit writing, branch switching, artifact repair, and reruns;
-- current 480s timeout policy and model-specific step budgets;
-- task descriptor/schema drift and whether stronger validation is required;
-- whether commits themselves form a readable lifecycle trace.
+Key evidence-backed conclusions:
+- Gate parser brittleness: strict regex failed on semantically valid Markdown bold headers (`**VERDICT: PASS**`), triggering avoidable infrastructure failure.
+- Test protection gap: `ai_gate.ps1` and `ai_scout.ps1` lack automated regression tests.
+- Task schema gap: initial `task.json` omitted required `models` block, causing Scout crash.
+- Model calibration: single pilot is insufficient for global model order or timeout changes (MEASURE MORE).
+- Semantic commit agent: keep deferred (convenience friction does not block throughput; reliability takes precedence).
 
-Expected output:
-- evidence-backed priority ordering for workflow v1.2/v2;
-- calibrated model routing/timeouts/steps;
-- explicit decision on whether Semantic Commit Agent should be promoted immediately or remain deferred;
-- interruptibility requirements for v2.
+## Prioritized Next (Workflow v1.2 Reliability & Safety)
 
-Optimization order remains:
+### 5. `workflow-script-testing-harness`
 
-```text
-reliability
--> production pilot
--> evidence collection
--> calibration
--> convenience automation
--> higher autonomy
-```
+Priority: P0 (Prerequisite before modifying workflow scripts).
 
-### 5. `semantic-commit-agent-v1`
+Goal:
+- Provide an automated test harness for `scripts/ai_gate.ps1` and `scripts/ai_scout.ps1` without requiring live AI model invocations.
+- Exercise `Get-CanonicalReviewPayload`, `Test-ReviewVerdictStructure`, `Resolve-ReviewCandidates`, timeout bounding, and kill-confirmation seams.
+- Prevent regressions during subsequent parser and validation refactoring.
 
-Priority: P1 candidate after pilot retrospective. Do not start before task 4 unless manual commit friction proves materially blocking.
+### 6. `gate-payload-robustness-v1`
+
+Priority: P1 (Core Reliability).
+
+Goal:
+- Update `Get-CanonicalReviewPayload` and `Test-ReviewVerdictStructure` in `scripts/ai_gate.ps1` to tolerate common Markdown formatting (bolding `**`, headings `#`, backticks) on the `VERDICT` header while maintaining strict semantic rejection of ambiguous or multiple verdicts.
+- Preserve attempt history and previous candidate results in `EVIDENCE.md` to prevent canonical evidence overwrite upon rerun.
+
+### 7. `task-descriptor-schema-linting`
+
+Priority: P2 (Developer Experience & Safety).
+
+Goal:
+- Add preflight schema validation for `task.json` in `scripts/ai_scout.ps1` and `scripts/ai_gate.ps1`.
+- Fail fast with human-actionable error messages if required keys (`id`, `base_ref`, `scope`, `models.scout`, `models.review`) are missing or malformed before executing external processes.
+
+## Planned Future Work (Workflow v2)
+
+### 8. `semantic-commit-agent-v1`
+
+Priority: Deferred candidate. Do not start until P0/P1 reliability tasks and further pilot measurements are complete.
 
 #### Problem
 
