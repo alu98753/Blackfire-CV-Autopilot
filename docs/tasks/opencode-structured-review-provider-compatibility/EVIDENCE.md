@@ -48,7 +48,7 @@ Individual bounded records are retained beside this summary:
 
 The predecessor matrix at `task-gate-reviewer-output-contract-reliability` was read as historical context only. Its classifications are not copied into this fresh result; the table above contains only attempts made by this task.
 
-The next dependency is a deliberately selected isolated OpenCode version candidate, decided by ChatGPT and the user. That work must retain the same production reviewer contract, model/schema lifecycle, bounded evidence, and isolated state. It must not change the production `1.18.31` pin or normal Gate routing before a candidate passes both reviewer roles.
+The frozen Phase 2 runtime matrix is already selected (`C1 = 1.14.41`, `C2 = 2.0.2`). The next dependency is therefore not another version choice: it is **probe-runner isolation hardening**. Before any further live provider attempt, the runner must prove that a bounded timeout/cancellation path always terminates the isolated OpenCode/Node child process tree and leaves no orphan process. After deterministic proof of that cleanup behavior, resume the same frozen matrix at C1; do not broaden the runtime/model set. Production `1.18.31`, normal Gate routing, reviewer contracts, and step budgets remain unchanged.
 
 ## Phase 1 deterministic verification
 
