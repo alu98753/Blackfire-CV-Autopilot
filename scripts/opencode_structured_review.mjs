@@ -23,6 +23,7 @@ function required(name) {
 
 const MAX_ERROR_DETAIL_LENGTH = 600;
 const SAFE_ERROR_FIELDS = new Set(["name", "type", "message", "kind", "data", "error", "errors", "issues", "status", "statusText"]);
+const SAFE_INFO_FIELDS = new Set(["id", "sessionID", "role", "time", "created", "completed", "modelID", "providerID", "mode", "finish", "error", "name", "data", "message", "statusCode", "isRetryable", "cost", "tokens", "input", "output", "reasoning", "cache", "read", "write"]);
 
 function safeErrorValue(value, depth = 0) {
   if (depth > 2 || value === null || value === undefined) return value;
@@ -32,6 +33,19 @@ function safeErrorValue(value, depth = 0) {
   const result = {};
   for (const [key, item] of Object.entries(value)) {
     if (SAFE_ERROR_FIELDS.has(key)) result[key] = safeErrorValue(item, depth + 1);
+  }
+  return result;
+}
+
+function safeInfoValue(value, depth = 0) {
+  if (depth > 3 || value === null || value === undefined) return value;
+  if (typeof value === "string") return value.slice(0, 160);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value !== "object") return undefined;
+  if (Array.isArray(value)) return value.slice(0, 8).map((item) => safeInfoValue(item, depth + 1));
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (SAFE_INFO_FIELDS.has(key)) result[key] = safeInfoValue(item, depth + 1);
   }
   return result;
 }
@@ -100,8 +114,12 @@ async function main() {
     if (!result || typeof result !== "object" || !("data" in result) || result.data === undefined || result.data === null) {
       throw new Error("OpenCode SDK session.prompt response did not contain response data.");
     }
-    const structured = result.data?.info?.structured_output;
-    if (structured === undefined || structured === null) throw new Error("OpenCode SDK response did not contain structured_output.");
+    const info = result.data.info;
+    if (!info || typeof info !== "object") throw new Error("OpenCode SDK session.prompt response did not contain message info.");
+    const infoPayload = JSON.stringify(safeInfoValue(info));
+    const boundedInfo = infoPayload.length > MAX_ERROR_DETAIL_LENGTH ? `${infoPayload.slice(0, MAX_ERROR_DETAIL_LENGTH - 3)}...` : infoPayload;
+    const structured = info.structured_output;
+    if (structured === undefined || structured === null) throw new Error(`OpenCode SDK response did not contain structured_output; info=${boundedInfo}`);
     process.stdout.write(JSON.stringify({ structured_output: structured }) + "\n");
   } finally { server.close(); }
 }
