@@ -29,7 +29,16 @@ async function main() {
   const prompt = await readFile(required("--prompt-file"), "utf8");
   const separator = model.indexOf("/");
   if (separator <= 0 || separator === model.length - 1) throw new Error(`Invalid candidate model: ${model}`);
-  const { client, server } = await createOpencode({ hostname: "127.0.0.1", port: 0 });
+  const previousDatabase = process.env.OPENCODE_DB;
+  process.env.OPENCODE_DB = ":memory:";
+  let opencode;
+  try {
+    opencode = await createOpencode({ hostname: "127.0.0.1", port: 0 });
+  } finally {
+    if (previousDatabase === undefined) delete process.env.OPENCODE_DB;
+    else process.env.OPENCODE_DB = previousDatabase;
+  }
+  const { client, server } = opencode;
   try {
     const session = await client.session.create({
       query: { directory },

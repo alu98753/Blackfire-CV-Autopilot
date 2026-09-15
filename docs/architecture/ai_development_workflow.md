@@ -228,7 +228,7 @@ Run:
  .\scripts\ai_gate.ps1 -Task <task-id>
  ```
  
-The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded, isolated one-shot OpenCode SDK JSON-Schema adapter (explicit repo working directory, closed stdin) with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`. The adapter uses the pinned repository-local SDK dependency and closes its process-local server before exit; Gate does not silently install dependencies.
+The gate snapshots repository status/diff into ignored `.runtime/` files, invokes the two read-only reviewers through a bounded, isolated one-shot OpenCode SDK JSON-Schema adapter (explicit repo working directory, closed stdin) with real-time stdout/stderr visibility (default 480-second timeout per reviewer), optionally runs declared `focused_tests` (default 60-second timeout per test target), and safely promotes canonical `reviews/*` and `EVIDENCE.md`. The adapter uses the pinned repository-local SDK dependency, launches reviewer sessions with ephemeral `OPENCODE_DB=:memory:` state that is never shared with the user's interactive OpenCode session database, and closes its process-local server before exit; Gate does not silently install dependencies.
 
 Verification outcomes and exit codes:
 - **`0` (PASS)**: Both reviewers returned valid `PASS` verdicts with 0 blocking findings, and all configured focused tests passed. Canonical `reviews/*` and `EVIDENCE.md` are updated.

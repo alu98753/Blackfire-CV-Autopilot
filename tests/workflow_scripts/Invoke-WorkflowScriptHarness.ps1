@@ -74,6 +74,13 @@ try {
         }
         Assert-True (-not ($gateText -match '\[regex\].*VERDICT')) 'Gate must not regex-parse verdict prose'
     }
+    Run-Case 'Structured reviewer adapter uses isolated ephemeral database' {
+        $adapterText = Get-Content (Join-Path $repoRoot 'scripts\opencode_structured_review.mjs') -Raw
+        Assert-True ($adapterText -match 'process\.env\.OPENCODE_DB\s*=\s*":memory:"') 'adapter must set an in-memory OpenCode database'
+        Assert-True ($adapterText -match 'await createOpencode') 'adapter must launch the SDK server while the override is scoped'
+        Assert-True ($adapterText -match 'delete process\.env\.OPENCODE_DB') 'adapter must restore an unset database override'
+        Assert-True ($adapterText -notmatch 'opencode\.db|USERPROFILE|(^|[^A-Za-z])HOME([^A-Za-z]|$)') 'adapter must not address the user global OpenCode database'
+    }
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
