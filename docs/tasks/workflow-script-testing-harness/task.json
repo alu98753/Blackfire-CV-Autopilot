@@ -2,9 +2,7 @@
   "id": "workflow-script-testing-harness",
   "base_ref": "origin/main",
   "scope": [
-    "scripts/ai_gate.ps1",
-    "scripts/ai_scout.ps1",
-    "tests/",
+    "tests/workflow_scripts/",
     "docs/tasks/workflow-script-testing-harness/"
   ],
   "focused_tests": [],
