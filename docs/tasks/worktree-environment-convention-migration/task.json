@@ -4,6 +4,7 @@
   "scope": [
     "docs/architecture/ai_development_workflow.md",
     ".agents/skills/branch_completion_workflow/SKILL.md",
+    "docs/tasks/BACKLOG.md",
     ".gitignore",
     "scripts/ai_scout.ps1",
     "scripts/ai_gate.ps1",
