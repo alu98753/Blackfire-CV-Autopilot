@@ -67,7 +67,7 @@ class WorkflowScriptContractTests(unittest.TestCase):
 
     def test_adapter_client_throw_on_error_is_configuration_not_prompt_input(self):
         text = (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8")
-        self.assertIn("createOpencodeClient({ baseUrl, throwOnError: true })", text)
+        self.assertIn("createOpencodeClient({ baseUrl, throwOnError: true, fetch: transport.fetch })", text)
         self.assertNotIn("session.create({ directory, throwOnError", text)
         prompt_options = text.split("session.prompt({", 1)[1].split("});", 1)[0]
         self.assertNotIn("throwOnError", prompt_options)
@@ -112,6 +112,91 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertIn("REVIEWER_AI_EXECUTION_DEADLINE_MS = 480_000", text)
         self.assertIn("runBoundedOperation(operation, REVIEWER_AI_EXECUTION_DEADLINE_MS", text)
         self.assertNotIn("runBoundedOperation(operation, 180000", text)
+
+    def test_reviewer_transport_uses_owned_dispatcher_and_bounded_cleanup(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { createReviewerTransport, closeReviewerTransport, REVIEWER_AI_EXECUTION_DEADLINE_MS, REVIEWER_TRANSPORT_TIMEOUT_MS } from "
+            f"'{probe.as_uri()}';"
+            "const calls=[]; class FakeAgent { constructor(options){this.options=options;this.closed=0;this.destroyed=0;} close(){this.closed++;return Promise.resolve();} destroy(){this.destroyed++;} }"
+            "const transport=createReviewerTransport({AgentClass:FakeAgent,fetchImpl:(input,init)=>{calls.push({input,init});return Promise.resolve('ok');}});"
+            "const controller=new AbortController(); await transport.fetch(new Request('http://127.0.0.1/'),{signal:controller.signal}); const safe=await closeReviewerTransport(transport,25);"
+            "console.log(JSON.stringify({timeout:transport.agent.options.headersTimeout,bodyTimeout:transport.agent.options.bodyTimeout,reviewer:REVIEWER_AI_EXECUTION_DEADLINE_MS,dispatcher:calls[0].init.dispatcher===transport.agent,signal:calls[0].init.signal===controller.signal,safe,closed:transport.agent.closed,destroyed:transport.agent.destroyed}));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, timeout=5, check=True)
+        value = json.loads(result.stdout)
+        self.assertGreater(value["timeout"], value["reviewer"])
+        self.assertGreater(value["bodyTimeout"], value["reviewer"])
+        self.assertTrue(value["dispatcher"])
+        self.assertTrue(value["signal"])
+        self.assertTrue(value["safe"])
+        self.assertEqual(value["closed"], 1)
+        self.assertEqual(value["destroyed"], 0)
+        self.assertIn('fetch: transport.fetch', (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8"))
+
+    def test_reviewer_transport_accepts_node_global_request(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import http from 'node:http';"
+            "import { createReviewerTransport, closeReviewerTransport } from "
+            f"'{probe.as_uri()}';"
+            "const server=http.createServer((request,response)=>{response.end('ok');});"
+            "await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));"
+            "const port=server.address().port; const controller=new AbortController();"
+            "const request=new Request('http://127.0.0.1:'+port+'/',{signal:controller.signal});"
+            "const transport=createReviewerTransport();"
+            "const response=await transport.fetch(request,{signal:controller.signal});"
+            "const body=await response.text(); const closed=await closeReviewerTransport(transport,1000);"
+            "await new Promise(resolve=>server.close(resolve));"
+            "console.log(JSON.stringify({ok:response.ok,status:response.status,body,closed}));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, timeout=5, check=True)
+        value = json.loads(result.stdout)
+        self.assertTrue(value["ok"])
+        self.assertEqual(value["status"], 200)
+        self.assertEqual(value["body"], "ok")
+        self.assertTrue(value["closed"])
+
+    def test_reviewer_transport_preserves_abort_behavior(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import http from 'node:http';"
+            "import { createReviewerTransport, closeReviewerTransport } from "
+            f"'{probe.as_uri()}';"
+            "const server=http.createServer((_request,_response)=>{});"
+            "await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));"
+            "const port=server.address().port; const controller=new AbortController();"
+            "const transport=createReviewerTransport();"
+            "const request=new Request('http://127.0.0.1:'+port+'/',{signal:controller.signal});"
+            "const pending=transport.fetch(request,{signal:controller.signal}).then(()=>({aborted:false})).catch(error=>({aborted:true,name:error.name,message:error.message}));"
+            "setTimeout(()=>controller.abort(),25);"
+            "const result=await Promise.race([pending,new Promise(resolve=>setTimeout(()=>resolve({timeout:true}),1000))]);"
+            "const closed=await closeReviewerTransport(transport,1000);"
+            "await new Promise(resolve=>server.close(resolve));"
+            "console.log(JSON.stringify({result,closed,ownedAgent:transport.agent?.constructor?.name==='Agent'}));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, timeout=5, check=True)
+        value = json.loads(result.stdout)
+        self.assertTrue(value["result"]["aborted"])
+        self.assertNotEqual(value["result"].get("name"), "TimeoutError")
+        self.assertTrue(value["closed"])
+        self.assertTrue(value["ownedAgent"])
+
+    def test_reviewer_transport_failure_cleanup_destroys_stuck_agent(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { createReviewerTransport, closeReviewerTransport } from "
+            f"'{probe.as_uri()}';"
+            "class StuckAgent { constructor(){this.destroyed=0;} close(){return new Promise(()=>{});} destroy(){this.destroyed++;} }"
+            "const transport=createReviewerTransport({AgentClass:StuckAgent,fetchImpl:async()=>{throw new Error('fetch failed');}});"
+            "let failure; try { await transport.fetch(new Request('http://127.0.0.1/')); } catch(error) { failure=error.message; }"
+            "const safe=await closeReviewerTransport(transport,10); console.log(JSON.stringify({failure,safe,destroyed:transport.agent.destroyed}));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, timeout=5, check=True)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["failure"], "fetch failed")
+        self.assertFalse(value["safe"])
+        self.assertEqual(value["destroyed"], 1)
 
     def test_classified_envelope_owns_exit_boundary(self):
         adapter = (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8")

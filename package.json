@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=18.17"
   },
   "dependencies": {
     "@opencode-ai/sdk": "1.18.31",
-    "cross-spawn": "7.0.6"
+    "cross-spawn": "7.0.6",
+    "undici": "6.28.1"
   }
 }

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
+import { Agent } from "undici";
 
 export const OUTCOME_SCHEMA = {
   type: "object", additionalProperties: false,
@@ -16,6 +17,7 @@ export const OUTCOME_SCHEMA = {
 const TOOLS = new Set(["read", "glob", "grep"]);
 const LIMIT = 600;
 export const REVIEWER_AI_EXECUTION_DEADLINE_MS = 480_000;
+export const REVIEWER_TRANSPORT_TIMEOUT_MS = 510_000;
 
 export function validateSchema(value) {
   const errors = [];
@@ -103,6 +105,22 @@ export async function runBoundedOperation(name, timeoutMs, operation, { controll
     clearTimeout(timer); error.operation = name; observe(`OP_FAIL ${name} ${JSON.stringify(transportDiagnostic(name, error))}`); throw error;
   }
 }
+export function createReviewerTransport({ AgentClass = Agent, fetchImpl = globalThis.fetch, transportTimeout = REVIEWER_TRANSPORT_TIMEOUT_MS } = {}) {
+  const agent = new AgentClass({ headersTimeout: transportTimeout, bodyTimeout: transportTimeout });
+  return {
+    agent,
+    fetch(input, init) { return fetchImpl(input, { ...(init ?? {}), dispatcher: agent }); },
+  };
+}
+export async function closeReviewerTransport(transport, timeoutMs = 3000) {
+  if (!transport?.agent) return true;
+  let closed = false;
+  const close = Promise.resolve().then(() => transport.agent.close()).then(() => { closed = true; return true; }, () => false);
+  const graceful = await Promise.race([close, new Promise((resolveClosed) => setTimeout(() => resolveClosed(false), timeoutMs))]);
+  if (graceful) return true;
+  try { transport.agent.destroy(); } catch { return false; }
+  return await Promise.race([close, new Promise((resolveClosed) => setTimeout(() => resolveClosed(false), timeoutMs))]);
+}
 
 function argument(name) { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; }
 function required(name) { const value = argument(name); if (!value) throw new Error(`Missing required argument: ${name}`); return value; }
@@ -174,12 +192,14 @@ async function run() {
   let server; let operation = "startServer"; let failure;
   const breadcrumbPath = `${resolve(required("--prompt-file"))}.operations.log`;
   const observe = (line) => { try { mkdirSync(resolve(breadcrumbPath, ".."), { recursive: true }); appendFileSync(breadcrumbPath, `${line}\n`, "utf8"); } catch {} process.stderr.write(`${line}\n`); };
-  let client; let cleanup = { safe: false, server_exit_confirmed: false, consumer_settled: false, subscription_cancelled: false };
+  let client; let transport; let cleanup = { safe: false, server_exit_confirmed: false, consumer_settled: false, subscription_cancelled: false, transport_closed: true };
   let consumer; let stream; let abortController;
   try {
     try {
       const baseUrl = await runBoundedOperation("startServer", 30000, async () => { server = spawn(launch.executable, launch.args, { cwd: directory, env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true }); return await waitForServer(server); }, { observe });
-      client = sdk.createOpencodeClient({ baseUrl, throwOnError: true });
+      transport = createReviewerTransport();
+      cleanup.transport_closed = false;
+      client = sdk.createOpencodeClient({ baseUrl, throwOnError: true, fetch: transport.fetch });
     } catch (error) { error.operation = operation = error.operation ?? "startServer"; throw error; }
     const events = []; let subscription; let subscriptionEstablished = false;
     abortController = new AbortController();
@@ -199,9 +219,9 @@ async function run() {
     const lifecycle = boundary.lifecycle; lifecycle.finish = info?.finish ?? null; lifecycle.subscription_established_before_prompt = subscriptionEstablished; lifecycle.completion_boundary = boundary.complete ? "same-session-event-sequence" : "bounded-deadline";
     const structured = info?.structured; const attempt = qualifyAttempt({ sessionID, info, events }); const classification = attempt.classification;
     cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted);
-    const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe;
+    const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.transport_closed = await closeReviewerTransport(transport); cleanup.safe = cleanup.consumer_settled && serverCleanup.safe && cleanup.transport_closed;
     process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification: cleanup.safe ? classification : "INFRASTRUCTURE_FAILED", lifecycle, structured: structured ?? null, schema_validation: attempt.schema_validation ?? null, semantic_validation: attempt.semantic_validation ?? null, cleanup }) + "\n");
-  } catch (error) { failure = error; } finally { if (!cleanup.consumer_settled) { cleanup.consumer_settled = consumer ? await settleEventConsumer({ consumer, stream, abortController }) : true; cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (server && !cleanup.server_exit_confirmed) { const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe; } }
+  } catch (error) { failure = error; } finally { if (!cleanup.consumer_settled) { cleanup.consumer_settled = consumer ? await settleEventConsumer({ consumer, stream, abortController }) : true; cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (server && !cleanup.server_exit_confirmed) { const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe; } if (!cleanup.transport_closed) { cleanup.transport_closed = await closeReviewerTransport(transport); cleanup.safe = cleanup.safe && cleanup.transport_closed; } }
   if (failure) { process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, classification: "STRUCTURED_TRANSPORT_FAILED", diagnostic: transportDiagnostic(failure.operation ?? operation, failure), cleanup }) + "\n"); }
 }
 
