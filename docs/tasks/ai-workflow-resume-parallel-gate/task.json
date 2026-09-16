@@ -1,0 +1,22 @@
+{
+  "id": "ai-workflow-resume-parallel-gate",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/ai-workflow-resume-parallel-gate/",
+    "scripts/ai_gate.ps1",
+    "scripts/",
+    "tests/workflow_scripts/",
+    "docs/architecture/ai_development_workflow.md",
+    "docs/tasks/README.md"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
