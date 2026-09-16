@@ -218,7 +218,7 @@ function toolParts(messages) {
   return messages.flatMap((message) => Array.isArray(message?.parts) ? message.parts : []).filter((part) => part?.type === "tool");
 }
 
-export function hasAuthoritativePromptResponse({ promptMessage, finalInfo, structuredOutput, sessionId } = {}) {
+export function hasAuthoritativePromptResponse({ promptMessage, finalInfo, sessionId } = {}) {
   if (!promptMessage || typeof promptMessage !== "object") return false;
   if (!finalInfo || typeof finalInfo !== "object") return false;
   if (typeof finalInfo.id !== "string" || finalInfo.id.length === 0) return false;
@@ -227,7 +227,6 @@ export function hasAuthoritativePromptResponse({ promptMessage, finalInfo, struc
     const sessionMatch = finalInfo.sessionID ?? finalInfo.sessionId;
     if (typeof sessionMatch === "string" && sessionMatch !== sessionId) return false;
   }
-  if (structuredOutput === undefined || structuredOutput === null) return false;
 
   const parts = promptMessage.parts;
   if (!Array.isArray(parts) || parts.length === 0) return false;
@@ -250,9 +249,8 @@ export async function auditSessionMessages({
   promptMessage,
   finalInfo,
   candidate = "CONTROL",
-  structuredOutput,
 }) {
-  if (hasAuthoritativePromptResponse({ promptMessage, finalInfo, structuredOutput, sessionId })) {
+  if (hasAuthoritativePromptResponse({ promptMessage, finalInfo, sessionId })) {
     return { valid: true, source: "prompt-response", messages: [promptMessage] };
   }
   let response;
@@ -621,7 +619,6 @@ export async function runProbe(config, dependencies = {}) {
             promptMessage,
             sessionId,
             candidate: config.candidate,
-            structuredOutput: normalized.value,
           });
           if (!audit.valid) return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: false, lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] }, classification: "FAIL_LIFECYCLE_AUDIT", diagnostic: audit.diagnostic, subreason: "AUDIT_UNTRUSTWORTHY" };
           const lifecycle = inspectLifecycle({ messages: audit.messages, finalInfo, structuredOutput: normalized.value });

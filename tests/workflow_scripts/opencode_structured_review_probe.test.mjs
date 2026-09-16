@@ -701,7 +701,6 @@ test("complete prompt-response lifecycle is authoritative without calling sessio
     },
     finalInfo: { id: "msg-auth", sessionID: "sess-authoritative" },
     candidate: "C3",
-    structuredOutput: { verdict: "PASS", blocking_findings: 0, report_markdown: "# OK" },
   });
   assert.equal(audit.valid, true);
   assert.equal(audit.source, "prompt-response");
@@ -737,7 +736,6 @@ test("incomplete prompt-response falls back to session.messages", async () => {
     },
     finalInfo: { id: "msg-fallback" },
     candidate: "C3",
-    structuredOutput: null,
   });
   assert.equal(messagesCalled, true);
   assert.equal(audit.valid, true);
@@ -761,7 +759,6 @@ test("session.messages decoder failure fails closed without salvage", async () =
     },
     finalInfo: { id: "msg-fail" },
     candidate: "C3",
-    structuredOutput: null,
   });
   assert.equal(audit.valid, false);
   assert.equal(audit.source, "session.messages");
@@ -793,7 +790,6 @@ test("session.messages rejects stale message without same final id", async () =>
     },
     finalInfo: { id: "current-msg-id" },
     candidate: "C3",
-    structuredOutput: null,
   });
   assert.equal(audit.valid, false);
   assert.equal(audit.source, "session.messages");
@@ -835,4 +831,88 @@ test("runProbe with finish=tool-calls and complete prompt lifecycle classifies a
   assert.equal(result.lifecycle_audit_trustworthy, true);
   assert.equal(result.lifecycle.forced_finalization, false);
   assert.equal(result.lifecycle.finalization_voluntary, true);
+});
+
+test("runProbe with complete C3 prompt lifecycle but missing structured output classifies as FAIL_STRUCTURED_OUTPUT without calling session.messages", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  let messagesCalled = false;
+  const c3MissingStructuredTransport = async () => ({
+    server: { cleanup: async () => ({ proven: true }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "c3-session-missing-struct" } }),
+        prompt: async () => ({
+          data: {
+            info: {
+              id: "msg-missing-struct",
+              finish: "stop",
+              time: { completed: 1 },
+            },
+            parts: [
+              { type: "tool", tool: "read", state: { status: "completed" } },
+              { type: "step-finish", reason: "stop" },
+            ],
+          },
+        }),
+        messages: async () => {
+          messagesCalled = true;
+          throw new Error('Expected OutputFormatJsonSchema, got {"type":"json_schema"}');
+        },
+      },
+    },
+  });
+
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: c3MissingStructuredTransport,
+  });
+  assert.equal(messagesCalled, false);
+  assert.equal(result.classification, "FAIL_STRUCTURED_OUTPUT");
+  assert.equal(result.lifecycle_audit_source, "prompt-response");
+  assert.equal(result.lifecycle_audit_trustworthy, true);
+  assert.equal(result.lifecycle.read_search_tool_called, true);
+  assert.equal(result.lifecycle.successful_tool_result, true);
+  assert.equal(result.lifecycle.finalization_voluntary, true);
+  assert.equal(result.lifecycle.structured_output_present, false);
+});
+
+test("runProbe with complete C3 prompt lifecycle but schema-invalid structured output classifies as FAIL_SCHEMA without calling session.messages", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  let messagesCalled = false;
+  const c3InvalidSchemaTransport = async () => ({
+    server: { cleanup: async () => ({ proven: true }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "c3-session-invalid-schema" } }),
+        prompt: async () => ({
+          data: {
+            info: {
+              id: "msg-invalid-schema",
+              finish: "stop",
+              time: { completed: 1 },
+              structured: { verdict: "INVALID", blocking_findings: 0, report_markdown: "# Bad" },
+            },
+            parts: [
+              { type: "tool", tool: "read", state: { status: "completed" } },
+              { type: "step-finish", reason: "stop" },
+            ],
+          },
+        }),
+        messages: async () => {
+          messagesCalled = true;
+          throw new Error('Expected OutputFormatJsonSchema, got {"type":"json_schema"}');
+        },
+      },
+    },
+  });
+
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: c3InvalidSchemaTransport,
+  });
+  assert.equal(messagesCalled, false);
+  assert.equal(result.classification, "FAIL_SCHEMA");
+  assert.equal(result.lifecycle_audit_source, "prompt-response");
+  assert.equal(result.lifecycle_audit_trustworthy, true);
+  assert.equal(result.schema_validation.valid, false);
 });
