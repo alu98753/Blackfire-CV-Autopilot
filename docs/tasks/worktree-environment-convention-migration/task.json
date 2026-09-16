@@ -5,9 +5,7 @@
     "docs/architecture/ai_development_workflow.md",
     ".agents/skills/branch_start_workflow/SKILL.md",
     ".agents/skills/branch_completion_workflow/SKILL.md",
-    "docs/tasks/BACKLOG.md",
-    "scripts/README.md",
-    ".gitignore"
+    "docs/tasks/BACKLOG.md"
   ],
   "focused_tests": [],
   "models": {
