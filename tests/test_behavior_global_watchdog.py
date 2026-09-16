@@ -6,7 +6,7 @@ import numpy as np
 
 from states.state_machine import GameStateMachine
 from states.exceptions import ExceptionWatchdog, WheelOfFortuneSubflow, RaidBoxSubflow
-from config import get_critical_exception_templates
+from config import get_critical_exception_templates, get_exception_features_config
 
 
 class TestBehaviorGlobalWatchdog(unittest.TestCase):
@@ -20,6 +20,11 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         self.mouse = MagicMock()
         self.machine = GameStateMachine(self.capturer, self.matcher, self.mouse)
         self.watchdog = self.machine.exception_watchdog
+
+    def test_exception_config_owns_long_subflow_timeout(self):
+        config = get_exception_features_config()
+        self.assertEqual(config["long_subflow_timeout_sec"], 200.0)
+        self.assertNotIn("battle_stuck_timeout_sec", config)
 
     def test_non_battle_under_30s_does_not_trigger_or_scan(self):
         """[測試 1] 效能護欄：非戰鬥狀態 (LOBBY) 卡住未滿 30 秒，絕對不觸發，且 0 圖像匹配消耗"""
@@ -38,7 +43,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         self.assertEqual(self.machine.current_state, GameStateMachine.STATE_LOBBY)
         self.matcher.match.assert_not_called()
 
-    def test_long_subflow_states_under_90s_does_not_trigger_or_scan(self):
+    def test_long_subflow_states_under_200s_does_not_trigger_or_scan(self):
         """[測試 2] 效能護欄：戰鬥、探索、背包整理與長城鎮子流程 (共 10 個狀態) 未滿 90 秒，絕對不觸發"""
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         self.matcher.match.return_value = ((100, 100), 0.99)
@@ -59,7 +64,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         # 逐一驗證 10 個長流程狀態在 85 秒 (未滿 90s) 時均回傳 False，且不觸發 Watchdog
         for st in long_states:
             self.machine.current_state = st
-            self.machine.last_state_change = time.time() - 85.0
+            self.machine.last_state_change = time.time() - 199.0
             self.assertFalse(self.watchdog.check(dummy_img))
             self.assertEqual(self.machine.current_state, st)
 
@@ -118,10 +123,10 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         mock_relaunch_execute.assert_called_once()
         self.assertEqual(mock_relaunch_execute.call_args[1]["reason"], "collect_only_cooldown_timeout_exceeded")
 
-    def test_timeout_30s_with_matched_specific_subflow_template(self):
+    def test_long_timeout_200s_with_matched_specific_subflow_template(self):
         """[測試 3] 雙重條件：滿 90 秒 + 掃描命中 Wheel_of_Fortune.png 專屬 Subflow 圖案"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
-        self.machine.last_state_change = time.time() - 95.0  # 卡住達 95 秒 (滿 90s)
+        self.machine.last_state_change = time.time() - 201.0  # 卡住達 201 秒 (滿 200s)
 
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
 
@@ -163,10 +168,10 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
             popup_handler = self.machine.handlers[GameStateMachine.STATE_POPUP_RECOVERY]
             self.assertIsNone(popup_handler.active_subflow)
 
-    def test_battle_stuck_91s_timeout_triggers_stash(self):
+    def test_battle_stuck_201s_timeout_triggers_stash(self):
         """[測試 5] 雙重條件：戰鬥 (BATTLE) 滿 91 秒 (1.5 分鐘) 觸發 ExceptionWatchdog 暫存」"""
         self.machine.current_state = GameStateMachine.STATE_BATTLE
-        self.machine.last_state_change = time.time() - 91.0
+        self.machine.last_state_change = time.time() - 201.0
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         self.matcher.match.return_value = (None, 0.0)
 
@@ -187,7 +192,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
     def test_restore_stashed_state_preserves_watchdog_memory_and_second_timeout_relaunch(self, mock_relaunch):
         """[測試 9] 驗證 restore_stashed_state 恢復暫存時享有全新寬限期，唯有再次逾時滿 90s 才觸發 GameRelaunchSubflow"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
-        original_ts = time.time() - 95.0
+        original_ts = time.time() - 201.0
         self.machine.last_state_change = original_ts
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         self.matcher.match.return_value = (None, 0.0)
@@ -214,7 +219,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
             mock_relaunch.assert_not_called()
 
             # 斷言 3：若原狀態「再次卡住超過 90 秒」，才判定連續 2 次逾時並調用 GameRelaunchSubflow
-            self.machine.last_state_change = time.time() - 95.0
+            self.machine.last_state_change = time.time() - 201.0
             res_second_timeout = self.watchdog.check(dummy_img)
             self.assertTrue(res_second_timeout)
             mock_relaunch.assert_called_once()

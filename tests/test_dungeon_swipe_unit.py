@@ -172,6 +172,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.handler.handle(screen_img, self.rect)
 
         self.mock_mouse.drag.assert_called_once_with(700, 450, 500, 450, duration=0.8, inertia=False)
+        self.mock_machine.notify_ui_progress.assert_called_once()
 
     @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
     @patch("os.path.exists")
@@ -209,6 +210,7 @@ class TestDungeonSwipeLogic(unittest.TestCase):
         self.handler.handle(screen_img, self.rect)
 
         self.mock_mouse.drag.assert_called_once_with(500, 450, 700, 450, duration=0.8, inertia=False)
+        self.mock_machine.notify_ui_progress.assert_called_once()
 
     @patch("states.handlers.navigation.detect_cooldown_sign_and_time")
     @patch("os.path.exists")

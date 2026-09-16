@@ -93,7 +93,7 @@ class ExceptionWatchdog:
             self.machine.STATE_BACKPACK_FULL_SORTING
         ]
         stuck_timeout = (
-            cfg.get("long_subflow_timeout_sec", 90.0)
+            cfg["long_subflow_timeout_sec"]
             if self.machine.current_state in long_subflow_states
             else cfg.get("non_battle_stuck_timeout_sec", 30.0)
         )
