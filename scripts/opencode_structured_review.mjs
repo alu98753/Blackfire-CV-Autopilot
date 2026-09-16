@@ -36,16 +36,17 @@ export function validateSemantics(value) {
 export function qualifyLifecycle({ parts, events, sessionID, messageID, structured }) {
   // `events` is the only chronology source. Prompt response parts are used
   // for final-message identity and structured payload confirmation only.
-  const ordered = events.filter((part) => part?.sessionID === sessionID || !part?.sessionID);
+  const ordered = events.filter((part) => part?.sessionID === sessionID);
   const repoTools = ordered.filter((part) => part?.type === "tool" && TOOLS.has(part.tool));
-  const structuredIndex = ordered.findIndex((part) => part?.type === "tool" && part.tool === "StructuredOutput" && part.state?.status === "completed");
+  const finalPart = (part) => part?.messageID === messageID;
+  const structuredIndex = ordered.findIndex((part) => finalPart(part) && part?.type === "tool" && part.tool === "StructuredOutput" && part.state?.status === "completed");
   const groundingIndex = repoTools.findIndex((part) => part.state?.status === "completed");
   const finalMessageIdentity = typeof messageID === "string" && parts.length > 0 && parts.every((part) => !part.messageID || part.messageID === messageID);
   return {
     source: "typed-event-and-prompt-response", session_id: sessionID, message_id: messageID ?? null,
-    final_message_identity: finalMessageIdentity, terminal_step: ordered.some((part) => part.type === "step-finish"),
+    final_message_identity: finalMessageIdentity, terminal_step: ordered.some((part) => finalPart(part) && part.type === "step-finish"),
     repository_tool_called: repoTools.length > 0, completed_repository_tool: groundingIndex >= 0,
-    structured_output_completed: structuredIndex >= 0, grounding_before_structured: groundingIndex >= 0 && structuredIndex >= 0 && groundingIndex < structuredIndex,
+    structured_output_completed: structuredIndex >= 0, final_structured_message_identity: structuredIndex >= 0, grounding_before_structured: groundingIndex >= 0 && structuredIndex >= 0 && groundingIndex < structuredIndex,
     event_count: events.length, finish: null, structured_present: structured !== undefined && structured !== null,
   };
 }
