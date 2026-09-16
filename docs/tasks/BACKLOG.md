@@ -15,6 +15,37 @@ Do not duplicate a promoted task here. Replace the backlog item with a link to t
 
 Existing backlog material under `docs/todos/` predates this workflow and remains legacy until touched. New backlog items must be added here, not to `docs/todos/future_work.md` or new files under `docs/todos/`.
 
+### 🔴 Highest priority — paused
+
+#### `gate-immutable-review-baseline-contract`
+
+Status: **Draft task package exists; paused by explicit user decision before Scout / implementation.**
+
+Priority: **P0 / highest current workflow priority when resumed.**
+
+Why it matters:
+- make Gate review diffs reproducible against an immutable task baseline instead of a moving `origin/main`;
+- prevent unrelated later `main` changes from contaminating reviewer scope;
+- make malformed/partial reviewer-attempt fallback fail closed unless cleanup safety is mechanically proven;
+- distinguish focused-test infrastructure failure from a real completed test failure.
+
+Existing remote task branch:
+
+```text
+task-gate-immutable-review-baseline-contract
+```
+
+Resume point:
+
+```text
+remote -> local handoff
+-> OpenCode Scout
+-> ChatGPT + user finalize Draft SPEC
+-> implementation
+```
+
+Do **not** recreate the task or begin implementation while it remains paused.
+
 # AI workflow roadmap
 
 ## North-star architecture
