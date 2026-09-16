@@ -148,6 +148,54 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
 
         self.mock_machine.transition_to.assert_called_with("COLLECT_ONLY")
 
+    def test_dragon_karsos_nemesis_flee_sets_cooldown_and_navigates(self):
+        """
+        Given: 巨龍之巢戰鬥中 (current_dungeon_index = 8, is_in_dungeon = True)
+               遭遇強敵 dragon_karsos.png，配置 nemesis_action = 'flee'
+        When: 執行 BattleHandler.handle()
+        Then: 依序點擊 setting ➔ defeat_giveup ➔ confirm ➔ 巨龍之巢排入 2400 秒冷卻 ➔ 轉移至 NAVIGATING
+        """
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config = {
+            "nemesis_action": "flee",
+            "nemesis_templates": ["dungeons/exception/dragon_karsos.png"],
+            "cooldown_map": {8: 2400.0},
+        }
+        self.mock_machine.current_dungeon_index = 8
+        self.mock_machine.is_in_dungeon = True
+        self.mock_machine.defeat_count = 0
+        self.mock_machine.last_auto_click_time = 0.0
+
+        clicked_templates = []
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "dungeons/exception/dragon_karsos.png":
+                return ((500, 300), 0.88)
+            if template == "battle/setting.png":
+                return ((1800, 50), 0.90)
+            if template == "defeat_giveup.png":
+                return ((960, 600), 0.90)
+            if template in ["common/confirm.png", "common/ok.png"]:
+                return ((960, 700), 0.90)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+        self.mock_machine.mouse.click.side_effect = lambda x, y: clicked_templates.append((x, y))
+
+        now = time.time()
+        with patch("os.path.exists", return_value=True):
+            battle_handler.handle(mock_img, self.rect)
+
+        self.assertEqual(len(clicked_templates), 3)
+        cd_target = self.mock_machine.dungeon_cooldowns.get(8, 0.0)
+        self.assertGreaterEqual(cd_target, now + 2390.0)
+        self.assertFalse(self.mock_machine.is_in_dungeon)
+        self.assertIsNone(self.mock_machine.current_dungeon_index)
+        self.assertEqual(self.mock_machine.defeat_count, 0)
+        self.mock_machine.transition_to.assert_called_with("NAVIGATING")
+
     def test_golden_empire_regression_remains_intact(self):
         """
         Given: 黃金古國領域探索戰鬥 (無地下城 index)
