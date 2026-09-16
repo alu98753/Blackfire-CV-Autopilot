@@ -17,6 +17,7 @@ $pythonChild = Join-Path $helperDir 'fake-test.ps1'
 $reviewerCmd = Join-Path $helperDir 'fake-reviewer.cmd'
 $scoutCmd = Join-Path $helperDir 'fake-scout.cmd'
 $pythonCmd = Join-Path $helperDir 'fake-test.cmd'
+$secondMarker = Join-Path $helperDir 'second-candidate-invoked.marker'
 $passed = 0
 $failed = 0
 $specReviewer = Join-Path $repoRoot '.opencode\agents\spec-reviewer.md'
@@ -121,7 +122,8 @@ try {
 @'
 param([string[]]$ChildArgs)
 $rawArgs = $ChildArgs -join ' '
-$mode = if ($rawArgs -match 'block') { 'block' } elseif ($rawArgs -match 'grounding') { 'grounding' } elseif ($rawArgs -match 'missing') { 'missing' } elseif ($rawArgs -match 'schema') { 'schema' } elseif ($rawArgs -match 'contradiction') { 'contradiction' } elseif ($rawArgs -match 'unsafe') { 'unsafe' } elseif ($rawArgs -match 'malformed') { 'malformed' } elseif ($rawArgs -match 'markdown') { 'markdown' } elseif ($rawArgs -match 'first') { 'fail' } else { 'pass' }
+$mode = if ($rawArgs -match 'terminal-block' -and $rawArgs -match 'first') { 'block' } elseif ($rawArgs -match 'terminal-pass' -and $rawArgs -match 'first') { 'pass' } elseif ($rawArgs -match 'block') { 'block' } elseif ($rawArgs -match 'grounding') { 'grounding' } elseif ($rawArgs -match 'missing') { 'missing' } elseif ($rawArgs -match 'schema') { 'schema' } elseif ($rawArgs -match 'contradiction') { 'contradiction' } elseif ($rawArgs -match 'unsafe') { 'unsafe' } elseif ($rawArgs -match 'malformed') { 'malformed' } elseif ($rawArgs -match 'markdown') { 'markdown' } elseif ($rawArgs -match 'first') { 'fail' } else { 'pass' }
+if ($rawArgs -match 'terminal-(block|pass)' -and $rawArgs -match 'second') { Set-Content -LiteralPath (Join-Path $PSScriptRoot 'second-candidate-invoked.marker') -Value 'invoked' }
 if ($mode -eq 'fail') { exit 7 }
 if ($mode -in @('malformed','markdown')) { if ($mode -eq 'markdown') { '**VERDICT: PASS**' } else { 'not a review' }; exit 0 }
 $class = switch ($mode) { 'block' {'VALID_BLOCK'} 'grounding' {'GROUNDING_FAILED'} 'missing' {'STRUCTURED_OUTPUT_MISSING'} 'schema' {'SCHEMA_INVALID'} 'contradiction' {'SEMANTIC_CONTRADICTION'} default {'VALID_PASS'} }
@@ -162,8 +164,16 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($code -eq 0) "expected 0, got $code"
     }
     Run-Case 'Gate valid structured BLOCK returns 2 and is terminal' {
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','block'))
+        if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','terminal-block','-_ReviewCandidatesOverride','first','second'))
         Assert-True ($code -eq 2) "expected 2, got $code"
+        Assert-True (-not (Test-Path $secondMarker)) 'trusted BLOCK incorrectly invoked the second candidate'
+    }
+    Run-Case 'Gate valid structured PASS is terminal' {
+        if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','terminal-pass','-_ReviewCandidatesOverride','first','second'))
+        Assert-True ($code -eq 0) "expected 0, got $code"
+        Assert-True (-not (Test-Path $secondMarker)) 'trusted PASS incorrectly invoked the second candidate'
     }
     Run-Case 'Gate malformed adapter envelope returns 1' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','malformed'))
