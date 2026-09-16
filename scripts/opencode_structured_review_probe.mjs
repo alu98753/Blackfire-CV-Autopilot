@@ -6,9 +6,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const ISOLATED_DATABASE = ":memory:";
 const MAX_DIAGNOSTIC_LENGTH = 600;
-const PROBE_TIMEOUT_MS = 40_000;
+export const DEFAULT_PROBE_TIMEOUT_MS = 40_000;
+export const C3_PROBE_TIMEOUT_MS = 480_000;
+export const PROBE_TIMEOUT_MS = DEFAULT_PROBE_TIMEOUT_MS;
 const CLEANUP_TIMEOUT_MS = 5_000;
 const SERVER_STARTUP_TIMEOUT_MS = 10_000;
+
+export function probeTimeoutForCandidate(candidate) {
+  if (candidate === "C3") return C3_PROBE_TIMEOUT_MS;
+  return DEFAULT_PROBE_TIMEOUT_MS;
+}
 const ALLOWED_REVIEWER_AGENTS = new Set(["spec-reviewer", "regression-reviewer"]);
 const ALLOWED_MODELS = new Set(["opencode/big-pickle", "opencode/mimo-v2.5-free"]);
 const READ_SEARCH_TOOLS = new Set(["read", "glob", "grep"]);
@@ -211,16 +218,41 @@ function toolParts(messages) {
   return messages.flatMap((message) => Array.isArray(message?.parts) ? message.parts : []).filter((part) => part?.type === "tool");
 }
 
-function hasUsablePromptParts(promptMessage) {
-  const parts = promptMessage?.parts;
-  if (!Array.isArray(parts) || parts.length === 0
-    || !parts.every((part) => part && typeof part === "object" && typeof part.type === "string")) return false;
-  return parts.some((part) => part.type === "tool" && READ_SEARCH_TOOLS.has(part.tool) && part.state?.status === "completed")
-    && parts.some((part) => part.type === "step-finish" && typeof part.reason === "string");
+export function hasAuthoritativePromptResponse({ promptMessage, finalInfo, structuredOutput, sessionId } = {}) {
+  if (!promptMessage || typeof promptMessage !== "object") return false;
+  if (!finalInfo || typeof finalInfo !== "object") return false;
+  if (typeof finalInfo.id !== "string" || finalInfo.id.length === 0) return false;
+  if (promptMessage.info && promptMessage.info !== finalInfo && promptMessage.info.id !== finalInfo.id) return false;
+  if (typeof sessionId === "string" && sessionId.length > 0) {
+    const sessionMatch = finalInfo.sessionID ?? finalInfo.sessionId;
+    if (typeof sessionMatch === "string" && sessionMatch !== sessionId) return false;
+  }
+  if (structuredOutput === undefined || structuredOutput === null) return false;
+
+  const parts = promptMessage.parts;
+  if (!Array.isArray(parts) || parts.length === 0) return false;
+  const validParts = parts.every((part) => part && typeof part === "object" && typeof part.type === "string");
+  if (!validParts) return false;
+
+  const hasSuccessfulTool = parts.some(
+    (part) => part.type === "tool" && READ_SEARCH_TOOLS.has(part.tool) && part.state?.status === "completed",
+  );
+  const hasStepFinish = parts.some(
+    (part) => part.type === "step-finish" && typeof part.reason === "string" && part.reason.length > 0,
+  );
+  return hasSuccessfulTool && hasStepFinish;
 }
 
-export async function auditSessionMessages({ client, sessionId, directory, promptMessage, finalInfo, candidate = "CONTROL" }) {
-  if (hasUsablePromptParts(promptMessage)) {
+export async function auditSessionMessages({
+  client,
+  sessionId,
+  directory,
+  promptMessage,
+  finalInfo,
+  candidate = "CONTROL",
+  structuredOutput,
+}) {
+  if (hasAuthoritativePromptResponse({ promptMessage, finalInfo, structuredOutput, sessionId })) {
     return { valid: true, source: "prompt-response", messages: [promptMessage] };
   }
   let response;
@@ -257,7 +289,7 @@ export function inspectLifecycle({ messages, finalInfo, structuredOutput }) {
   const calls = toolParts(messages);
   const allowedCalls = calls.filter((part) => READ_SEARCH_TOOLS.has(part.tool));
   const reasons = finishReasons(messages, finalInfo);
-  const forced = reasons.some((reason) => /tool-calls|max[-_ ]?steps?|step[-_ ]?limit/i.test(reason));
+  const forced = reasons.some((reason) => /max[-_ ]?steps?|step[-_ ]?limit|step[-_ ]?budget/i.test(reason));
   return {
     finish_reasons: reasons,
     finalization_voluntary: (Boolean(finalInfo?.time?.completed) || reasons.length > 0) && !forced,
@@ -581,9 +613,17 @@ export async function runProbe(config, dependencies = {}) {
           const finalInfo = promptResult?.data?.info;
           if (!finalInfo || typeof finalInfo !== "object") throw new Error("OpenCode session.prompt returned no assistant message info");
           const promptMessage = { info: finalInfo, parts: promptResult?.data?.parts ?? [] };
-          const audit = await auditSessionMessages({ client: opencode.client, directory: config.directory, finalInfo, promptMessage, sessionId, candidate: config.candidate });
-          if (!audit.valid) return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: false, lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] }, classification: "FAIL_LIFECYCLE_AUDIT", diagnostic: audit.diagnostic, subreason: "AUDIT_UNTRUSTWORTHY" };
           const normalized = normalizeStructuredResult(config.candidate, finalInfo);
+          const audit = await auditSessionMessages({
+            client: opencode.client,
+            directory: config.directory,
+            finalInfo,
+            promptMessage,
+            sessionId,
+            candidate: config.candidate,
+            structuredOutput: normalized.value,
+          });
+          if (!audit.valid) return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: false, lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] }, classification: "FAIL_LIFECYCLE_AUDIT", diagnostic: audit.diagnostic, subreason: "AUDIT_UNTRUSTWORTHY" };
           const lifecycle = inspectLifecycle({ messages: audit.messages, finalInfo, structuredOutput: normalized.value });
           const schema = lifecycle.structured_output_present ? validateOutcomeSchema(normalized.value) : { valid: false, errors: ["structured result is missing"] };
           const semantics = schema.valid ? validateOutcomeSemantics(normalized.value) : { valid: false, errors: [] };
@@ -601,14 +641,14 @@ export async function runProbe(config, dependencies = {}) {
           if (classification === "FAIL_LIFECYCLE_AUDIT") {
             if (lifecycle.forced_finalization || !lifecycle.finalization_voluntary) {
               evidenceResult.subreason = "STEP_BUDGET_EXHAUSTED";
-              evidenceResult.diagnostic = "model did not voluntarily finalize before step budget exhaustion (finish: tool-calls)";
+              evidenceResult.diagnostic = "model did not voluntarily finalize before step budget exhaustion";
             } else if (!lifecycle.successful_tool_result) {
               evidenceResult.subreason = "TOOL_RESULT_FAILED";
               evidenceResult.diagnostic = "read/search tool was called but did not return a successful completed result";
             }
           }
           return evidenceResult;
-        }, dependencies.probeTimeoutMs ?? PROBE_TIMEOUT_MS);
+        }, dependencies.probeTimeoutMs ?? probeTimeoutForCandidate(config.candidate));
       } catch (error) {
         evidence = error instanceof ProbeTimeoutError
           ? infrastructureEvidence(config, runtime, error.message, "PROBE_TIMEOUT")

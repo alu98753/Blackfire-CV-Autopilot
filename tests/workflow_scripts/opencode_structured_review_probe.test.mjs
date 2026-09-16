@@ -3,6 +3,8 @@ import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import {
+  C3_PROBE_TIMEOUT_MS,
+  DEFAULT_PROBE_TIMEOUT_MS,
   OUTCOME_SCHEMA,
   RUNTIME_MATRIX,
   aggregateRepeatability,
@@ -13,10 +15,12 @@ import {
   buildSmokePrompt,
   classifyLifecycle,
   diagnosticFromError,
+  hasAuthoritativePromptResponse,
   inspectLifecycle,
   isPidAlive,
   normalizeStructuredResult,
   openCodeVersionCommand,
+  probeTimeoutForCandidate,
   redactDiagnostic,
   runProbe,
   terminateOwnedProcessTree,
@@ -47,7 +51,10 @@ function successfulTransport({ structured = { verdict: "PASS", blocking_findings
           info: { id: "message-1", finish: "stop", time: { completed: 1 }, structured_output: structured, structured },
           parts: parts ?? [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }],
         } }),
-        messages: async () => ({ data: [] }),
+        messages: async () => ({ data: [{
+          info: { id: "message-1", finish: "stop", time: { completed: 1 }, structured_output: structured, structured },
+          parts: parts ?? [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }],
+        }] }),
       },
     },
   });
@@ -319,7 +326,10 @@ test("runProbe with C3 maps missing structured, schema, and semantic failures", 
             parts: [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }],
           },
         }),
-        messages: async () => ({ data: [] }),
+        messages: async () => ({ data: [{
+          info: { id: "m1", finish: "stop", time: { completed: 1 }, structured },
+          parts: [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }],
+        }] }),
       },
     },
   });
@@ -516,10 +526,10 @@ test("reviewer FAIL_LIFECYCLE_AUDIT is preserved when cleanup succeeds", async (
         create: async () => ({ data: { id: "s-fail-audit" } }),
         prompt: async () => ({
           data: {
-            info: { id: "m-1", finish: "tool-calls", structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Done" } },
+            info: { id: "m-1", finish: "step-limit", structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Done" } },
             parts: [
               { type: "tool", tool: "read", state: { status: "completed" } },
-              { type: "step-finish", reason: "tool-calls" },
+              { type: "step-finish", reason: "step-limit" },
             ],
           },
         }),
@@ -583,4 +593,246 @@ test("isPidAlive accurately detects running and non-existent PIDs", () => {
   assert.equal(isPidAlive(9999999), false);
   assert.equal(isPidAlive(-1), false);
   assert.equal(isPidAlive(0), false);
+});
+
+test("probeTimeoutForCandidate assigns 480s to C3 and preserves 40s default for CONTROL, C1, and C2", () => {
+  assert.equal(C3_PROBE_TIMEOUT_MS, 480_000);
+  assert.equal(DEFAULT_PROBE_TIMEOUT_MS, 40_000);
+  assert.equal(probeTimeoutForCandidate("C3"), 480_000);
+  assert.equal(probeTimeoutForCandidate("CONTROL"), 40_000);
+  assert.equal(probeTimeoutForCandidate("C1"), 40_000);
+  assert.equal(probeTimeoutForCandidate("C2"), 40_000);
+});
+
+test("C3 probe runner respects injected probeTimeoutMs override", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  let cleanupCalls = 0;
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    probeTimeoutMs: 5,
+    createTransport: async () => ({
+      server: { cleanup: async () => { cleanupCalls += 1; return { proven: true }; } },
+      client: {
+        session: {
+          create: async () => new Promise(() => {}),
+        },
+      },
+    }),
+  });
+  assert.equal(result.classification, "FAIL_INFRASTRUCTURE");
+  assert.equal(result.subreason, "PROBE_TIMEOUT");
+  assert.equal(cleanupCalls, 1);
+});
+
+test("inspectLifecycle treats finish=tool-calls with completed tool and structured output as voluntary, not forced", () => {
+  const lifecycle = inspectLifecycle({
+    messages: [
+      {
+        parts: [
+          { type: "tool", tool: "read", state: { status: "completed" } },
+          { type: "step-finish", reason: "tool-calls" },
+        ],
+      },
+    ],
+    finalInfo: { id: "m-tc", finish: "tool-calls", time: { completed: 1 } },
+    structuredOutput: { verdict: "PASS", blocking_findings: 0, report_markdown: "# OK" },
+  });
+  assert.equal(lifecycle.forced_finalization, false);
+  assert.equal(lifecycle.finalization_voluntary, true);
+  assert.equal(lifecycle.read_search_tool_called, true);
+  assert.equal(lifecycle.successful_tool_result, true);
+  assert.equal(lifecycle.structured_output_present, true);
+  assert.deepEqual(lifecycle.finish_reasons, ["tool-calls"]);
+});
+
+test("inspectLifecycle treats finish=stop as voluntary", () => {
+  const lifecycle = inspectLifecycle({
+    messages: [
+      {
+        parts: [
+          { type: "tool", tool: "grep", state: { status: "completed" } },
+          { type: "step-finish", reason: "stop" },
+        ],
+      },
+    ],
+    finalInfo: { id: "m-stop", finish: "stop", time: { completed: 1 } },
+    structuredOutput: { verdict: "PASS", blocking_findings: 0, report_markdown: "# OK" },
+  });
+  assert.equal(lifecycle.forced_finalization, false);
+  assert.equal(lifecycle.finalization_voluntary, true);
+});
+
+test("inspectLifecycle treats typed step-limit signal as forced finalization", () => {
+  const lifecycle = inspectLifecycle({
+    messages: [
+      {
+        parts: [
+          { type: "tool", tool: "read", state: { status: "completed" } },
+          { type: "step-finish", reason: "step-limit" },
+        ],
+      },
+    ],
+    finalInfo: { id: "m-limit", finish: "step-limit", time: { completed: 1 } },
+    structuredOutput: { verdict: "PASS", blocking_findings: 0, report_markdown: "# OK" },
+  });
+  assert.equal(lifecycle.forced_finalization, true);
+  assert.equal(lifecycle.finalization_voluntary, false);
+});
+
+test("complete prompt-response lifecycle is authoritative without calling session.messages", async () => {
+  let messagesCalled = false;
+  const audit = await auditSessionMessages({
+    client: {
+      session: {
+        messages: async () => {
+          messagesCalled = true;
+          return { data: [] };
+        },
+      },
+    },
+    sessionId: "sess-authoritative",
+    directory: "E:\\repo",
+    promptMessage: {
+      info: { id: "msg-auth", sessionID: "sess-authoritative" },
+      parts: [
+        { type: "tool", tool: "read", state: { status: "completed" } },
+        { type: "step-finish", reason: "tool-calls" },
+      ],
+    },
+    finalInfo: { id: "msg-auth", sessionID: "sess-authoritative" },
+    candidate: "C3",
+    structuredOutput: { verdict: "PASS", blocking_findings: 0, report_markdown: "# OK" },
+  });
+  assert.equal(audit.valid, true);
+  assert.equal(audit.source, "prompt-response");
+  assert.equal(messagesCalled, false);
+});
+
+test("incomplete prompt-response falls back to session.messages", async () => {
+  let messagesCalled = false;
+  const audit = await auditSessionMessages({
+    client: {
+      session: {
+        messages: async () => {
+          messagesCalled = true;
+          return {
+            data: [
+              {
+                info: { id: "msg-fallback" },
+                parts: [
+                  { type: "tool", tool: "read", state: { status: "completed" } },
+                  { type: "step-finish", reason: "stop" },
+                ],
+              },
+            ],
+          };
+        },
+      },
+    },
+    sessionId: "sess-fallback",
+    directory: "E:\\repo",
+    promptMessage: {
+      info: { id: "msg-fallback" },
+      parts: [{ type: "text", text: "no tool call here" }],
+    },
+    finalInfo: { id: "msg-fallback" },
+    candidate: "C3",
+    structuredOutput: null,
+  });
+  assert.equal(messagesCalled, true);
+  assert.equal(audit.valid, true);
+  assert.equal(audit.source, "session.messages");
+});
+
+test("session.messages decoder failure fails closed without salvage", async () => {
+  const audit = await auditSessionMessages({
+    client: {
+      session: {
+        messages: async () => {
+          throw new Error('Expected OutputFormatJsonSchema, got {"type":"json_schema"}');
+        },
+      },
+    },
+    sessionId: "sess-decoder-fail",
+    directory: "E:\\repo",
+    promptMessage: {
+      info: { id: "msg-fail" },
+      parts: [{ type: "text" }],
+    },
+    finalInfo: { id: "msg-fail" },
+    candidate: "C3",
+    structuredOutput: null,
+  });
+  assert.equal(audit.valid, false);
+  assert.equal(audit.source, "session.messages");
+  assert.match(audit.diagnostic, /OutputFormatJsonSchema/);
+});
+
+test("session.messages rejects stale message without same final id", async () => {
+  const audit = await auditSessionMessages({
+    client: {
+      session: {
+        messages: async () => ({
+          data: [
+            {
+              info: { id: "stale-id-from-prior-session" },
+              parts: [
+                { type: "tool", tool: "read", state: { status: "completed" } },
+                { type: "step-finish", reason: "stop" },
+              ],
+            },
+          ],
+        }),
+      },
+    },
+    sessionId: "sess-stale",
+    directory: "E:\\repo",
+    promptMessage: {
+      info: { id: "current-msg-id" },
+      parts: [{ type: "text" }],
+    },
+    finalInfo: { id: "current-msg-id" },
+    candidate: "C3",
+    structuredOutput: null,
+  });
+  assert.equal(audit.valid, false);
+  assert.equal(audit.source, "session.messages");
+  assert.match(audit.diagnostic, /incomplete same-attempt lifecycle evidence/);
+});
+
+test("runProbe with finish=tool-calls and complete prompt lifecycle classifies as PASS_PROVEN", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  const c3ToolCallsTransport = async () => ({
+    server: { cleanup: async () => ({ proven: true }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "c3-session-tc" } }),
+        prompt: async () => ({
+          data: {
+            info: {
+              id: "msg-tc",
+              finish: "tool-calls",
+              time: { completed: 1 },
+              structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Done" },
+            },
+            parts: [
+              { type: "tool", tool: "read", state: { status: "completed" } },
+              { type: "step-finish", reason: "tool-calls" },
+            ],
+          },
+        }),
+        messages: async () => { throw new Error("must not be called"); },
+      },
+    },
+  });
+
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: c3ToolCallsTransport,
+  });
+  assert.equal(result.classification, "PASS_PROVEN");
+  assert.equal(result.lifecycle_audit_source, "prompt-response");
+  assert.equal(result.lifecycle_audit_trustworthy, true);
+  assert.equal(result.lifecycle.forced_finalization, false);
+  assert.equal(result.lifecycle.finalization_voluntary, true);
 });
