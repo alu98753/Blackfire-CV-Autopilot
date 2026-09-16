@@ -222,24 +222,48 @@ export function hasAuthoritativePromptResponse({ promptMessage, finalInfo, sessi
   if (!promptMessage || typeof promptMessage !== "object") return false;
   if (!finalInfo || typeof finalInfo !== "object") return false;
   if (typeof finalInfo.id !== "string" || finalInfo.id.length === 0) return false;
-  if (promptMessage.info && promptMessage.info !== finalInfo && promptMessage.info.id !== finalInfo.id) return false;
+
+  const resolvedSessionId = typeof sessionId === "string" && sessionId.length > 0
+    ? sessionId
+    : (finalInfo.sessionID ?? finalInfo.sessionId);
   if (typeof sessionId === "string" && sessionId.length > 0) {
     const sessionMatch = finalInfo.sessionID ?? finalInfo.sessionId;
     if (typeof sessionMatch === "string" && sessionMatch !== sessionId) return false;
   }
 
+  if (promptMessage.info) {
+    if (typeof promptMessage.info !== "object") return false;
+    const promptMessageId = promptMessage.info.id;
+    if (typeof promptMessageId === "string") {
+      if (promptMessageId.length === 0 || promptMessageId !== finalInfo.id) return false;
+    } else if (promptMessage.info !== finalInfo) {
+      return false;
+    }
+    const promptSessionMatch = promptMessage.info.sessionID ?? promptMessage.info.sessionId;
+    if (typeof promptSessionMatch === "string" && typeof resolvedSessionId === "string" && resolvedSessionId.length > 0) {
+      if (promptSessionMatch !== resolvedSessionId) return false;
+    }
+  }
+
   const parts = promptMessage.parts;
   if (!Array.isArray(parts) || parts.length === 0) return false;
-  const validParts = parts.every((part) => part && typeof part === "object" && typeof part.type === "string");
+
+  const validParts = parts.every((part) => {
+    if (!part || typeof part !== "object" || typeof part.type !== "string" || part.type.length === 0) return false;
+    const partMessageId = part.messageID ?? part.messageId;
+    if (typeof partMessageId === "string" && partMessageId.length > 0 && partMessageId !== finalInfo.id) return false;
+    const partSessionId = part.sessionID ?? part.sessionId;
+    if (typeof resolvedSessionId === "string" && resolvedSessionId.length > 0) {
+      if (typeof partSessionId === "string" && partSessionId.length > 0 && partSessionId !== resolvedSessionId) return false;
+    }
+    return true;
+  });
   if (!validParts) return false;
 
-  const hasSuccessfulTool = parts.some(
-    (part) => part.type === "tool" && READ_SEARCH_TOOLS.has(part.tool) && part.state?.status === "completed",
-  );
   const hasStepFinish = parts.some(
     (part) => part.type === "step-finish" && typeof part.reason === "string" && part.reason.length > 0,
   );
-  return hasSuccessfulTool && hasStepFinish;
+  return hasStepFinish;
 }
 
 export async function auditSessionMessages({

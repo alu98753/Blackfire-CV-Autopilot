@@ -131,3 +131,19 @@ Following Big Pickle, Candidate C3 was evaluated with `opencode/mimo-v2.5-free` 
   - When the diagnostic helper ([inspect_mimo_structured.mjs](../../../scripts/inspect_mimo_structured.mjs)) executed a minimal prompt with `agent: "regression-reviewer"`, MiMo actively invoked `Tool: StructuredOutput`, and OpenCode populated `info.structured` completely (`verdict: "PASS"`, `blocking_findings: 0`, and non-empty markdown).
   - During the full multi-step review, the model did not invoke StructuredOutput during the full review, but voluntarily terminated (`finish: stop`), leaving `info.structured: undefined`.
   - Conclusion: Candidate C3's SDK v2 transport fully supports JSON-Schema structured transport for both models; however, the model did not invoke StructuredOutput during the full review on complex, multi-turn review sessions compared to minimal prompts.
+
+## Candidate C3 formal qualification attempts and lifecycle audit boundary refinement (2026-09-16)
+
+Candidate C3 formal qualifying attempts were executed against the required first role, `spec-reviewer`, using the production contract:
+
+- [attempt 019](attempt-019-c3-big-pickle-spec-reviewer.json): `opencode/big-pickle` on `spec-reviewer`, classified as `FAIL_LIFECYCLE_AUDIT` with subreason `AUDIT_UNTRUSTWORTHY`.
+- [attempt 020](attempt-020-c3-mimo-spec-reviewer.json): `opencode/mimo-v2.5-free` on `spec-reviewer`, classified as `FAIL_LIFECYCLE_AUDIT` with subreason `AUDIT_UNTRUSTWORTHY`.
+
+The subsequent controlled diagnostic ([diagnostic-c3-spec-reviewer-lifecycle.json](diagnostic-c3-spec-reviewer-lifecycle.json)) captured the raw SDK v2 response and established the underlying model behavior:
+- `promptResult.data.info` contained non-empty message ID, consistent session ID, finish reason `tool-calls`, and `info.structured` with a completed review payload.
+- `promptResult.data.parts` contained a complete typed lifecycle: `step-start`, reasoning and text blocks, an internal `StructuredOutput` tool call with status `completed`, and `step-finish`.
+- No permitted repository inspection tool (`read`, `glob`, or `grep`) was invoked.
+
+Under the prior adapter implementation, `hasAuthoritativePromptResponse()` required at least one completed read/search tool before accepting prompt-response lifecycle evidence. When no permitted read/search tool was called, the adapter treated the prompt response as incomplete and fell back to `client.session.messages`. The `session.messages` endpoint consistently failed due to the OpenAPI client decoder defect (`Expected OutputFormatJsonSchema`), resulting in `FAIL_LIFECYCLE_AUDIT` with subreason `AUDIT_UNTRUSTWORTHY`. This masked the actual model behavior (failure to execute repository exploration tools).
+
+Historical records Attempt 019 and Attempt 020 remain immutable as recorded by the prior adapter semantics. The adapter has now separated lifecycle audit authority from downstream tool-choice compliance: a prompt response is authoritative whenever it provides a complete, typed, and internally consistent lifecycle for the same attempt. Under these corrected semantics, an equivalent attempt where the model voluntarily completes without permitted read/search tool execution classifies directly as `FAIL_TOOL_CHOICE` from authoritative `prompt-response` evidence without falling back to `session.messages`.

@@ -916,3 +916,205 @@ test("runProbe with complete C3 prompt lifecycle but schema-invalid structured o
   assert.equal(result.lifecycle_audit_trustworthy, true);
   assert.equal(result.schema_validation.valid, false);
 });
+
+test("runProbe with C3 complete prompt lifecycle, only StructuredOutput completed, and no read/glob/grep classifies as FAIL_TOOL_CHOICE without calling session.messages", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  let messagesCalled = false;
+  const c3ToolChoiceTransport = async () => ({
+    server: { cleanup: async () => ({ proven: true }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "c3-session-tool-choice" } }),
+        prompt: async () => ({
+          data: {
+            info: {
+              id: "msg-c3-tc",
+              sessionID: "c3-session-tool-choice",
+              finish: "tool-calls",
+              time: { completed: 1 },
+              structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Done" },
+            },
+            parts: [
+              { type: "step-start" },
+              { type: "reasoning", text: "Analyzing spec..." },
+              { type: "tool", tool: "StructuredOutput", state: { status: "completed" } },
+              { type: "step-finish", reason: "tool-calls" },
+            ],
+          },
+        }),
+        messages: async () => {
+          messagesCalled = true;
+          throw new Error('Expected OutputFormatJsonSchema, got {"type":"json_schema"}');
+        },
+      },
+    },
+  });
+
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: c3ToolChoiceTransport,
+  });
+
+  assert.equal(messagesCalled, false);
+  assert.equal(result.classification, "FAIL_TOOL_CHOICE");
+  assert.equal(result.lifecycle_audit_source, "prompt-response");
+  assert.equal(result.lifecycle_audit_trustworthy, true);
+  assert.equal(result.lifecycle.read_search_tool_called, false);
+  assert.equal(result.lifecycle.successful_tool_result, false);
+  assert.equal(result.lifecycle.structured_output_present, true);
+});
+
+test("runProbe with C3 complete prompt lifecycle and permitted read tool status != completed classifies as FAIL_LIFECYCLE_AUDIT without calling session.messages", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  let messagesCalled = false;
+  const c3ToolFailedTransport = async () => ({
+    server: { cleanup: async () => ({ proven: true }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "c3-session-tool-failed" } }),
+        prompt: async () => ({
+          data: {
+            info: {
+              id: "msg-c3-tf",
+              sessionID: "c3-session-tool-failed",
+              finish: "stop",
+              time: { completed: 1 },
+              structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Done" },
+            },
+            parts: [
+              { type: "step-start" },
+              { type: "tool", tool: "read", state: { status: "error" } },
+              { type: "step-finish", reason: "stop" },
+            ],
+          },
+        }),
+        messages: async () => {
+          messagesCalled = true;
+          throw new Error('Expected OutputFormatJsonSchema, got {"type":"json_schema"}');
+        },
+      },
+    },
+  });
+
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: c3ToolFailedTransport,
+  });
+
+  assert.equal(messagesCalled, false);
+  assert.equal(result.classification, "FAIL_LIFECYCLE_AUDIT");
+  assert.equal(result.subreason, "TOOL_RESULT_FAILED");
+  assert.equal(result.lifecycle_audit_source, "prompt-response");
+  assert.equal(result.lifecycle_audit_trustworthy, true);
+  assert.equal(result.lifecycle.read_search_tool_called, true);
+  assert.equal(result.lifecycle.successful_tool_result, false);
+});
+
+test("malformed or incomplete prompt lifecycle falls back to session.messages", async () => {
+  let messagesCalled = false;
+  const audit = await auditSessionMessages({
+    client: {
+      session: {
+        messages: async () => {
+          messagesCalled = true;
+          return {
+            data: [
+              {
+                info: { id: "msg-recovered" },
+                parts: [
+                  { type: "tool", tool: "read", state: { status: "completed" } },
+                  { type: "step-finish", reason: "stop" },
+                ],
+              },
+            ],
+          };
+        },
+      },
+    },
+    sessionId: "sess-incomplete",
+    directory: "E:\\repo",
+    promptMessage: {
+      info: { id: "msg-incomplete" },
+      parts: [{ type: "text", text: "incomplete parts without step-finish" }],
+    },
+    finalInfo: { id: "msg-recovered" },
+    candidate: "C3",
+  });
+  assert.equal(messagesCalled, true);
+  assert.equal(audit.valid, true);
+  assert.equal(audit.source, "session.messages");
+
+  assert.equal(hasAuthoritativePromptResponse({ promptMessage: { parts: [] }, finalInfo: { id: "msg-1" } }), false);
+  assert.equal(hasAuthoritativePromptResponse({ promptMessage: { parts: [{ type: "" }] }, finalInfo: { id: "msg-1" } }), false);
+  assert.equal(hasAuthoritativePromptResponse({ promptMessage: { parts: [null] }, finalInfo: { id: "msg-1" } }), false);
+});
+
+test("stale or mismatched message/session correlation is rejected as authoritative", async () => {
+  const validBase = {
+    finalInfo: { id: "msg-corr-1", sessionID: "sess-corr-1" },
+    sessionId: "sess-corr-1",
+    promptMessage: {
+      info: { id: "msg-corr-1", sessionID: "sess-corr-1" },
+      parts: [
+        { type: "tool", tool: "read", messageID: "msg-corr-1", sessionID: "sess-corr-1", state: { status: "completed" } },
+        { type: "step-finish", reason: "stop", messageID: "msg-corr-1", sessionID: "sess-corr-1" },
+      ],
+    },
+  };
+  assert.equal(hasAuthoritativePromptResponse(validBase), true);
+
+  // Mismatched finalInfo.sessionID vs sessionId
+  assert.equal(hasAuthoritativePromptResponse({ ...validBase, finalInfo: { id: "msg-corr-1", sessionID: "sess-mismatch" } }), false);
+
+  // Mismatched promptMessage.info.id vs finalInfo.id
+  assert.equal(hasAuthoritativePromptResponse({ ...validBase, promptMessage: { ...validBase.promptMessage, info: { id: "msg-stale", sessionID: "sess-corr-1" } } }), false);
+
+  // Mismatched promptMessage.info.sessionID vs sessionId
+  assert.equal(hasAuthoritativePromptResponse({ ...validBase, promptMessage: { ...validBase.promptMessage, info: { id: "msg-corr-1", sessionID: "sess-stale" } } }), false);
+
+  // Mismatched part.messageID
+  assert.equal(hasAuthoritativePromptResponse({
+    ...validBase,
+    promptMessage: {
+      ...validBase.promptMessage,
+      parts: [
+        { type: "tool", tool: "read", messageID: "msg-different", sessionID: "sess-corr-1", state: { status: "completed" } },
+        { type: "step-finish", reason: "stop" },
+      ],
+    },
+  }), false);
+
+  // Mismatched part.sessionID
+  assert.equal(hasAuthoritativePromptResponse({
+    ...validBase,
+    promptMessage: {
+      ...validBase.promptMessage,
+      parts: [
+        { type: "tool", tool: "read", messageID: "msg-corr-1", sessionID: "sess-other", state: { status: "completed" } },
+        { type: "step-finish", reason: "stop" },
+      ],
+    },
+  }), false);
+
+  // Fallback to session.messages occurs when correlation is mismatched
+  let messagesFallbackCalled = false;
+  const audit = await auditSessionMessages({
+    client: {
+      session: {
+        messages: async () => {
+          messagesFallbackCalled = true;
+          return { data: [] };
+        },
+      },
+    },
+    sessionId: "sess-corr-1",
+    directory: "E:\\repo",
+    promptMessage: {
+      ...validBase.promptMessage,
+      info: { id: "msg-different-from-final", sessionID: "sess-corr-1" },
+    },
+    finalInfo: { id: "msg-corr-1", sessionID: "sess-corr-1" },
+    candidate: "C3",
+  });
+  assert.equal(messagesFallbackCalled, true);
+});
