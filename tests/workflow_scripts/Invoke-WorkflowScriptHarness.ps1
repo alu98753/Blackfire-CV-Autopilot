@@ -140,7 +140,11 @@ raw = " ".join(args)
 model = args[args.index("--model") + 1] if "--model" in args else ""
 evidence = pathlib.Path(__file__).with_name(model + ".argv.txt") if model else pathlib.Path(__file__).with_name("missing-model.argv.txt")
 evidence.write_text(json.dumps({"argv": args, "stderr": "", "exit_code": 0}), encoding="utf-8")
-if model == "fallback-grounding":
+if model == "catastrophic-crash":
+    pathlib.Path(__file__).with_name("catastrophic-crash.marker").write_text("invoked", encoding="utf-8")
+    sys.stderr.write("catastrophic fixture failure\n")
+    raise SystemExit(7)
+elif model == "fallback-grounding":
     pathlib.Path(__file__).with_name("fallback-grounding.marker").write_text("invoked", encoding="utf-8")
     result = {"schema_version": 1, "classification": "GROUNDING_FAILED", "structured": None, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
 elif model == "fallback-pass":
@@ -238,8 +242,10 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 0) "expected safe transport fallback success, got $code"; Assert-True (Test-Path $passMarker) 'safe transport envelope did not fall back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate catastrophic adapter failure has no envelope' {
-        $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','crash')
-        Assert-True ($code -ne 0) "expected catastrophic failure, got $code"
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('catastrophic-crash','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        $firstMarker = Join-Path $helperDir 'catastrophic-crash.marker'; $secondMarker = Join-Path $helperDir 'fallback-pass.marker'
+        if (Test-Path $firstMarker) { Remove-Item -LiteralPath $firstMarker -Force }; if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 1) "expected catastrophic failure, got $code"; Assert-True (Test-Path $firstMarker) 'catastrophic candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'catastrophic no-envelope failure incorrectly fell back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate unsafe adapter cleanup stops fallback' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','unsafe'))

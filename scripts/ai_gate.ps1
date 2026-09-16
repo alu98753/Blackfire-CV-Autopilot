@@ -90,10 +90,11 @@ Perform a bounded read-only $($target.Agent) review. Inspect the supplied snapsh
         Write-Host "Running $($target.Agent) [$model]..."; $res = Invoke-BoundedProcess $inv.Executable $inv.Arguments $ReviewTimeoutSeconds
         $raw = ($res.StdOut,$res.StdErr | Where-Object { $_ }) -join "`n"; $raw | Set-Content (Join-Path $runtimeDir "$($target.Agent)_$($attempts.Count+1).log") -Encoding utf8
         $env = if (-not $res.TimedOut) { Read-Envelope $res.StdOut } else { $null }
-        $envelopeValid = Test-Envelope $env; $class = if ($res.TimedOut -and -not $res.KillConfirmed) { 'INFRASTRUCTURE_FAILED' } elseif ($res.TimedOut) { 'INFRASTRUCTURE_FAILED' } elseif (-not $envelopeValid) { 'STRUCTURED_TRANSPORT_FAILED' } else { [string]$env.classification }
+        $envelopeValid = Test-Envelope $env; $class = if ($res.TimedOut -and -not $res.KillConfirmed) { 'INFRASTRUCTURE_FAILED' } elseif ($res.TimedOut) { 'INFRASTRUCTURE_FAILED' } elseif ($envelopeValid) { [string]$env.classification } elseif ($res.ExitCode -ne 0) { 'INFRASTRUCTURE_FAILED' } else { 'STRUCTURED_TRANSPORT_FAILED' }
         $attempts += [pscustomobject]@{ Role=$target.Agent; Model=$model; Classification=$class; Selected=$false; ElapsedSeconds=$res.ElapsedSeconds }
         if ($envelopeValid -and -not ($env.cleanup.safe -eq $true)) { $unavailable=$true; $reason="Adapter cleanup was not mechanically proven safe for $($target.Agent); fallback stopped."; break }
         if ($res.TimedOut -and -not $res.KillConfirmed) { $unavailable=$true; $reason="Unsafe termination for $($target.Agent) candidate $model; fallback stopped."; break }
+        if (-not $envelopeValid -and $res.ExitCode -ne 0) { $unavailable=$true; $reason="Catastrophic adapter failure without a valid envelope for $($target.Agent) candidate $model; fallback stopped."; break }
         if ($envelopeValid -and ($env.cleanup.safe -eq $true) -and $class -in @('VALID_PASS','VALID_BLOCK') -and $env.structured) { $attempts[-1].Selected=$true; $accepted[$target.Agent]=@{ Envelope=$env; Path=(Join-Path $runtimeDir "candidate_$($target.File)"); Canonical=(Join-Path $reviewDir $target.File) }; (Render-Review $env $target.Agent) | Set-Content $accepted[$target.Agent].Path -Encoding utf8; $acceptedRole=$true; break }
     }
     if ($unavailable) { break }; if (-not $acceptedRole) { $unavailable=$true; $reason="No trusted $($target.Agent) verdict was obtained."; break }
