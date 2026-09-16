@@ -16,8 +16,10 @@ def run_main_loop(state_machine, interval):
         def on_pause_toggle():
             if state_machine.is_paused:
                 intervention = state_machine.__dict__.get("nemesis_intervention")
-                if intervention is not None and intervention.active:
-                    intervention.acknowledge()
+                if intervention is not None:
+                    decision = intervention.request_user_resume()
+                    if decision.value == "BLOCKED_TIMEOUT":
+                        return
                 pause_duration = state_machine.resume(user_initiated=True)
                 touch_heartbeat(state_machine, force=True)
                 state_machine.prev_mouse_pos = pyautogui.position()

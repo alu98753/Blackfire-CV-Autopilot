@@ -1,10 +1,12 @@
 import unittest
+import threading
 from unittest.mock import MagicMock
 
 from ports.notification_port import DeleteResult, NotificationResult
 from states.nemesis_intervention import (
     InterventionOutcome,
     NemesisIntervention,
+    UserResumeDecision,
 )
 
 
@@ -109,11 +111,85 @@ class InterventionTests(unittest.TestCase):
 
     def test_ack_timeout_race_has_one_winner(self):
         self.start(notification_count=2)
-        results = [self.lifecycle.acknowledge(), self.timers[0].fire()]
+        barrier = threading.Barrier(2)
+        results = []
+
+        def ack():
+            barrier.wait()
+            results.append(self.lifecycle.acknowledge())
+
+        def timeout():
+            barrier.wait()
+            results.append(self.timers[0].fire())
+
+        threads = [threading.Thread(target=ack), threading.Thread(target=timeout)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=1.0)
         self.assertEqual(sum(results), 1)
         self.assertLessEqual(self.flee.call_count, 1)
         if self.lifecycle.outcome is InterventionOutcome.ACKNOWLEDGED:
             self.flee.assert_not_called()
+
+    def test_late_user_resume_is_blocked_until_timeout_side_effects_finish(self):
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocked_flee():
+            started.set()
+            release.wait(timeout=1.0)
+
+        self.start(notification_count=2)
+        self.lifecycle._active.flee_callback = blocked_flee
+        self.machine.is_paused = True
+        timeout_thread = threading.Thread(target=self.timers[0].fire)
+        timeout_thread.start()
+        self.assertTrue(started.wait(timeout=1.0))
+
+        self.assertEqual(
+            self.lifecycle.request_user_resume(),
+            UserResumeDecision.BLOCKED_TIMEOUT,
+        )
+        self.machine.resume.assert_not_called()
+        self.assertEqual(self.lifecycle.outcome, InterventionOutcome.TIMED_OUT)
+
+        release.set()
+        timeout_thread.join(timeout=1.0)
+        self.machine.resume.assert_called_once_with(user_initiated=False)
+
+    def test_timer_factory_failure_converges_through_timeout(self):
+        machine = self.machine
+        machine.is_paused = True
+
+        def failing_factory(delay, callback):
+            raise RuntimeError("factory")
+
+        lifecycle = NemesisIntervention(
+            machine, self.notifier, timer_factory=failing_factory
+        )
+        lifecycle.start("encounter-1", self.flee, notification_count=1)
+        self.assertEqual(lifecycle.outcome, InterventionOutcome.TIMED_OUT)
+        self.flee.assert_called_once_with()
+        machine.resume.assert_called_once_with(user_initiated=False)
+
+    def test_timer_start_failure_converges_through_timeout(self):
+        machine = self.machine
+        machine.is_paused = True
+
+        class BrokenTimer(ManualTimer):
+            def start(self):
+                raise RuntimeError("start")
+
+        lifecycle = NemesisIntervention(
+            machine,
+            self.notifier,
+            timer_factory=lambda delay, callback: BrokenTimer(callback),
+        )
+        lifecycle.start("encounter-1", self.flee, notification_count=1)
+        self.assertEqual(lifecycle.outcome, InterventionOutcome.TIMED_OUT)
+        self.flee.assert_called_once_with()
+        machine.resume.assert_called_once_with(user_initiated=False)
 
 
 if __name__ == "__main__":

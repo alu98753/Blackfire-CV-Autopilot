@@ -19,6 +19,14 @@ class InterventionOutcome(str, Enum):
     TIMED_OUT = "TIMED_OUT"
 
 
+class UserResumeDecision(str, Enum):
+    """Decision returned to the runtime user-input boundary."""
+
+    NO_INTERVENTION = "NO_INTERVENTION"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    BLOCKED_TIMEOUT = "BLOCKED_TIMEOUT"
+
+
 @dataclass
 class _Session:
     encounter_id: str
@@ -26,6 +34,7 @@ class _Session:
     outcome: InterventionOutcome = InterventionOutcome.ACTIVE
     message_ids: list[str] = field(default_factory=list)
     timer: Any = None
+    timeout_side_effects_complete: bool = False
 
 
 class NemesisIntervention:
@@ -115,6 +124,9 @@ class NemesisIntervention:
                 timer.start()
         except Exception:
             logging.exception("[NemesisIntervention] failed to arm grace deadline")
+            # A paused ACTIVE session must always converge through the same
+            # terminal arbitration path when its deadline owner cannot start.
+            self._on_timeout()
         return True
 
     def _send_alarm(self, session, code, title, reason, details):
@@ -148,6 +160,32 @@ class NemesisIntervention:
             self._delete_best_effort(message_id)
         return True
 
+    def request_user_resume(self) -> UserResumeDecision:
+        """Claim ACK for a user resume, or block while timeout owns side effects.
+
+        ``NO_INTERVENTION`` intentionally means the caller may preserve the
+        normal manual-resume behavior.  The runtime never infers lifecycle
+        meaning from a raw ``active`` flag.
+        """
+        with self._lock:
+            session = self._active
+            if session is None:
+                return UserResumeDecision.NO_INTERVENTION
+            if session.outcome is InterventionOutcome.TIMED_OUT:
+                if not session.timeout_side_effects_complete:
+                    return UserResumeDecision.BLOCKED_TIMEOUT
+                return UserResumeDecision.NO_INTERVENTION
+            if session.outcome is not InterventionOutcome.ACTIVE:
+                return UserResumeDecision.NO_INTERVENTION
+            session.outcome = InterventionOutcome.ACKNOWLEDGED
+            timer = session.timer
+            message_ids = list(session.message_ids)
+            session.message_ids.clear()
+        self._cancel_timer(timer)
+        for message_id in message_ids:
+            self._delete_best_effort(message_id)
+        return UserResumeDecision.ACKNOWLEDGED
+
     def _on_timeout(self):
         with self._lock:
             session = self._active
@@ -162,13 +200,17 @@ class NemesisIntervention:
             # Claim precedes all terminal side effects, including game IO.
             self._run_flee(session)
         finally:
-            for message_id in message_ids[1:]:
-                self._delete_best_effort(message_id)
             try:
+                for message_id in message_ids[1:]:
+                    self._delete_best_effort(message_id)
                 if getattr(self.machine, "is_paused", False):
                     self.machine.resume(user_initiated=False)
             except Exception:
                 logging.exception("[NemesisIntervention] programmatic timeout resume failed")
+            finally:
+                with self._lock:
+                    if self._active is session:
+                        session.timeout_side_effects_complete = True
         return True
 
     def _run_flee(self, session):
