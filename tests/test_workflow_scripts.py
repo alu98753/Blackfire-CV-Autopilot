@@ -113,6 +113,15 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertIn("runBoundedOperation(operation, REVIEWER_AI_EXECUTION_DEADLINE_MS", text)
         self.assertNotIn("runBoundedOperation(operation, 180000", text)
 
+    def test_timeout_hierarchy_keeps_outer_gate_margin(self):
+        gate = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8-sig")
+        adapter = (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8")
+        self.assertIn("[int]$ReviewTimeoutSeconds = 540", gate)
+        self.assertIn("REVIEWER_AI_EXECUTION_DEADLINE_MS = 480_000", adapter)
+        self.assertIn("REVIEWER_TRANSPORT_TIMEOUT_MS = 510_000", adapter)
+        self.assertGreater(540, 510)
+        self.assertGreater(510_000, 480_000)
+
     def test_reviewer_transport_uses_owned_dispatcher_and_bounded_cleanup(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"
         script = (

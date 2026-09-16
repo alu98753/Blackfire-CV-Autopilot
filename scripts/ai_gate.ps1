@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9][a-z0-9-]*$')][string]$Task,
-    [string]$ReviewModel, [switch]$SkipTests, [int]$ReviewTimeoutSeconds = 480, [int]$TestTimeoutSeconds = 60,
+    [string]$ReviewModel, [switch]$SkipTests, [int]$ReviewTimeoutSeconds = 540, [int]$TestTimeoutSeconds = 60,
     [string]$_ReviewerExecutableOverride, [string[]]$_ReviewerArgumentsOverride,
     [string[]]$_SpecReviewerArgumentsOverride, [string[]]$_RegressionReviewerArgumentsOverride,
     [string[]]$_ReviewCandidatesOverride, [string]$_PythonExecutableOverride, [string[]]$_PythonArgumentsOverride,

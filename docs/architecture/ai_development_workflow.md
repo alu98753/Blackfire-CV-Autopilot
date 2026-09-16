@@ -228,7 +228,7 @@ Run:
  .\scripts\ai_gate.ps1 -Task <task-id>
  ```
  
- The gate snapshots repository status/diff into ignored `.runtime/` files, verifies the exact supported OpenCode CLI version (1.18.31), and invokes the two read-only reviewers through a bounded, isolated repository-owned child-process wrapper (explicit repo working directory, closed stdin, redirected output, and termination handling) with real-time stdout/stderr visibility (default 480-second timeout per reviewer). It optionally runs declared `focused_tests` (default 60-second timeout per test target) and safely promotes canonical `reviews/*` and `EVIDENCE.md`. OpenCode-specific `run --standalone` and `run --pure` flags are not part of the production launcher contract.
+ The gate snapshots repository status/diff into ignored `.runtime/` files, verifies the exact supported OpenCode CLI version (1.18.31), and invokes the two read-only reviewers through a bounded, isolated repository-owned child-process wrapper (explicit repo working directory, closed stdin, redirected output, and termination handling) with real-time stdout/stderr visibility. The reviewer AI execution budget is 480 seconds; the outer adapter process budget is 540 seconds, providing margin for transport timeout and cleanup/envelope emission. It optionally runs declared `focused_tests` (default 60-second timeout per test target) and safely promotes canonical `reviews/*` and `EVIDENCE.md`. OpenCode-specific `run --standalone` and `run --pure` flags are not part of the production launcher contract.
 
 Verification outcomes and exit codes:
 - **`0` (`PASSED`)**: Both reviewers reached trusted `VALID_PASS` outcomes and all configured focused tests passed.
@@ -304,7 +304,7 @@ Model configuration is supplied by `task.json` or PowerShell arguments:
 - CLI `-Model` (in `ai_scout.ps1`) and `-ReviewModel` (in `ai_gate.ps1`) act as strict single-model overrides, replacing the configured normal candidate chain with that explicit candidate.
 - Model fallback is attempted **only** upon mechanically classified infrastructure failures (e.g., launch failure, process timeout with confirmed termination, non-zero exit, empty output, malformed transport JSONL, canonical payload extraction failure, or invalid verdict structure).
 - A valid semantic `PASS` or `BLOCK` verdict is strictly terminal for that reviewer role. Fallback is never triggered after a valid verdict; review-shopping is forbidden.
-- Each attempted model receives its own **full 480-second default timeout** (not a shared remainder). Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
+- Each attempted model receives its own **480-second AI execution budget** (not a shared remainder), within a **540-second outer adapter process budget**. The 510-second transport timeout remains below the outer process margin. Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
 - If unconfirmed process termination occurs upon timeout, routing terminates immediately as terminal infrastructure failure without launching subsequent processes.
 - Model fallback in `ai_gate.ps1` manages ONLY automated independent OpenCode reviewer candidates.
 - If all normal independent OpenCode reviewer candidates fail infrastructurally for a role, `ai_gate.ps1` MUST NOT invoke Gemini and MUST exit `1 = INFRASTRUCTURE_BLOCKED`, outputting an explicit diagnostic `MANUAL_DEGRADED_REVIEW_REQUIRED`.
