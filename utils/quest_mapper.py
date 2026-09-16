@@ -91,10 +91,11 @@ class TaskNode:
             4: "stages/level4_desert_ruins.png",
             5: "stages/level5_gloomy_swamp.png",
             6: "stages/level6_ice_cave.png",
-            7: "stages/level7_forgotten_wasteland.png"
+            7: "stages/level7_forgotten_wasteland.png",
+            8: "stages/level8_fiery_volcano.png"
         }
         stage_names = {
-            1: "蒼穹平原", 2: "荒蕪岩地", 3: "古樹森林", 4: "沙漠廢墟", 5: "幽暗沼澤", 6: "冰凍峽谷", 7: "遺忘荒地"
+            1: "蒼穹平原", 2: "荒蕪岩地", 3: "古樹森林", 4: "沙漠廢墟", 5: "幽暗沼澤", 6: "冰凍峽谷", 7: "遺忘荒地", 8: "熾熱火山"
         }
         try:
             from config import BASE_STAGE_LEVELS
