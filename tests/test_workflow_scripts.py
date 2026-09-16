@@ -67,10 +67,60 @@ class WorkflowScriptContractTests(unittest.TestCase):
 
     def test_adapter_client_throw_on_error_is_configuration_not_prompt_input(self):
         text = (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8")
-        self.assertIn("createOpencodeClient({ baseUrl: await waitForServer(server), throwOnError: true })", text)
+        self.assertIn("createOpencodeClient({ baseUrl, throwOnError: true })", text)
         self.assertNotIn("session.create({ directory, throwOnError", text)
         prompt_options = text.split("session.prompt({", 1)[1].split("});", 1)[0]
         self.assertNotIn("throwOnError", prompt_options)
+
+    def test_transport_diagnostic_attributes_nested_cause_and_redacts_bounds(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { transportDiagnostic } from "
+            f"'{probe.as_uri()}';"
+            "const cause=Object.assign(new Error('Bearer secret-value ' + 'x'.repeat(900)),{name:'SocketError',code:'ECONNRESET'});"
+            "const error=Object.assign(new TypeError('fetch failed'),{cause});"
+            "console.log(JSON.stringify(transportDiagnostic('session.prompt',error)));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["operation"], "session.prompt")
+        self.assertEqual(value["name"], "TypeError")
+        self.assertEqual(value["message"], "fetch failed")
+        self.assertEqual(value["cause_name"], "SocketError")
+        self.assertEqual(value["cause_code"], "ECONNRESET")
+        self.assertLessEqual(len(value["cause_message"]), 600)
+        self.assertNotIn("secret-value", value["cause_message"])
+
+    def test_bounded_operation_timeout_success_and_rejection(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { runBoundedOperation } from "
+            f"'{probe.as_uri()}';"
+            "const never=await runBoundedOperation('session.prompt',20,()=>new Promise(()=>{})).catch(error=>({name:error.name,operation:error.operation}));"
+            "const success=await runBoundedOperation('session.create',50,async()=> 'ok');"
+            "const rejected=await runBoundedOperation('event.subscribe',50,async()=>{const cause=Object.assign(new Error('reset'),{code:'ECONNRESET'});throw Object.assign(new TypeError('fetch failed'),{cause});}).catch(error=>({name:error.name,operation:error.operation,cause:error.cause.code}));"
+            "console.log(JSON.stringify({never,success,rejected}));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, timeout=5, check=True)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["never"], {"name": "TimeoutError", "operation": "session.prompt"})
+        self.assertEqual(value["success"], "ok")
+        self.assertEqual(value["rejected"], {"name": "TypeError", "operation": "event.subscribe", "cause": "ECONNRESET"})
+
+    def test_reviewer_prompt_uses_repository_ai_execution_budget(self):
+        text = (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8")
+        self.assertIn("REVIEWER_AI_EXECUTION_DEADLINE_MS = 480_000", text)
+        self.assertIn("runBoundedOperation(operation, REVIEWER_AI_EXECUTION_DEADLINE_MS", text)
+        self.assertNotIn("runBoundedOperation(operation, 180000", text)
+
+    def test_classified_envelope_owns_exit_boundary(self):
+        adapter = (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8")
+        gate = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8")
+        self.assertIn('classification: "STRUCTURED_TRANSPORT_FAILED"', adapter)
+        self.assertIn('if (failure) { process.stdout.write', adapter)
+        self.assertNotIn('if (failure) { process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, classification: "STRUCTURED_TRANSPORT_FAILED", diagnostic: transportDiagnostic(failure.operation ?? operation, failure), cleanup }) + "\\n"); process.exitCode = 1; }', adapter)
+        self.assertIn("$env = if (-not $res.TimedOut) { Read-Envelope $res.StdOut } else { $null }", gate)
+        self.assertNotIn("$res.ExitCode -eq 0) { Read-Envelope", gate)
 
     def test_windows_opencode_launcher_uses_cmd_shim_safely(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"

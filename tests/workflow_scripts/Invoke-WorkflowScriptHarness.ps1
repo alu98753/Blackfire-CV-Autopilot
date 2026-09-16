@@ -152,6 +152,13 @@ elif model in ("terminal-first-pass", "terminal-first-block"):
 elif model == "terminal-second":
     pathlib.Path(__file__).with_name("second-candidate-invoked.marker").write_text("invoked", encoding="utf-8")
     result = {"schema_version": 1, "classification": "VALID_PASS", "structured": {"verdict": "PASS", "blocking_findings": 0, "report_markdown": "# Review"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif model == "transport-safe":
+    result = {"schema_version": 1, "classification": "STRUCTURED_TRANSPORT_FAILED", "structured": None, "diagnostic": {"operation": "session.prompt", "name": "TypeError", "message": "fetch failed"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif model == "transport-unsafe":
+    result = {"schema_version": 1, "classification": "INFRASTRUCTURE_FAILED", "structured": None, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": False, "server_exit_confirmed": False}}
+elif "crash" in args:
+    sys.stderr.write("catastrophic fixture failure\n")
+    raise SystemExit(7)
 elif "terminal-block" in args:
     result = {"schema_version": 1, "classification": "VALID_BLOCK", "structured": {"verdict": "BLOCK", "blocking_findings": 1, "report_markdown": "# Block"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
 elif "terminal-pass" in args:
@@ -224,6 +231,15 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('fallback-grounding','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         if (Test-Path $groundingMarker) { Remove-Item -LiteralPath $groundingMarker -Force }; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
         try { $code = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code.ExitCode -eq 0) "expected fallback success, got $($code.ExitCode): $($code.Output)"; Assert-True (Test-Path $groundingMarker) 'fallback-grounding candidate was not invoked'; Assert-True (Test-Path $passMarker) 'fallback-pass candidate was not invoked'; Write-Host ('BF1 candidate 1 argv: ' + (Get-Content (Join-Path $helperDir 'fallback-grounding.argv.txt') -Raw)); Write-Host ('BF1 candidate 2 argv: ' + (Get-Content (Join-Path $helperDir 'fallback-pass.argv.txt') -Raw)); Write-Host 'BF1 classifications: GROUNDING_FAILED -> VALID_PASS'; Write-Host 'BF1 Gate exit: 0' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+    }
+    Run-Case 'Gate safe transport envelope falls back with exit zero' {
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('transport-safe','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        $passMarker = Join-Path $helperDir 'fallback-pass.marker'; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 0) "expected safe transport fallback success, got $code"; Assert-True (Test-Path $passMarker) 'safe transport envelope did not fall back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+    }
+    Run-Case 'Gate catastrophic adapter failure has no envelope' {
+        $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','crash')
+        Assert-True ($code -ne 0) "expected catastrophic failure, got $code"
     }
     Run-Case 'Gate unsafe adapter cleanup stops fallback' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','unsafe'))

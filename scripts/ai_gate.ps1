@@ -89,8 +89,8 @@ Perform a bounded read-only $($target.Agent) review. Inspect the supplied snapsh
         $inv = New-Invocation $target.Agent $model $promptFile; if ($_InvocationProbe) { [pscustomobject]@{ Agent=$target.Agent; Arguments=$inv.Arguments } | ConvertTo-Json -Compress; exit 0 }
         Write-Host "Running $($target.Agent) [$model]..."; $res = Invoke-BoundedProcess $inv.Executable $inv.Arguments $ReviewTimeoutSeconds
         $raw = ($res.StdOut,$res.StdErr | Where-Object { $_ }) -join "`n"; $raw | Set-Content (Join-Path $runtimeDir "$($target.Agent)_$($attempts.Count+1).log") -Encoding utf8
-        $env = if (-not $res.TimedOut -and $res.ExitCode -eq 0) { Read-Envelope $res.StdOut } else { $null }
-        $envelopeValid = Test-Envelope $env; $class = if ($res.TimedOut -and -not $res.KillConfirmed) { 'INFRASTRUCTURE_FAILED' } elseif ($res.TimedOut) { 'INFRASTRUCTURE_FAILED' } elseif ($res.ExitCode -ne 0 -or -not $envelopeValid) { 'STRUCTURED_TRANSPORT_FAILED' } else { [string]$env.classification }
+        $env = if (-not $res.TimedOut) { Read-Envelope $res.StdOut } else { $null }
+        $envelopeValid = Test-Envelope $env; $class = if ($res.TimedOut -and -not $res.KillConfirmed) { 'INFRASTRUCTURE_FAILED' } elseif ($res.TimedOut) { 'INFRASTRUCTURE_FAILED' } elseif (-not $envelopeValid) { 'STRUCTURED_TRANSPORT_FAILED' } else { [string]$env.classification }
         $attempts += [pscustomobject]@{ Role=$target.Agent; Model=$model; Classification=$class; Selected=$false; ElapsedSeconds=$res.ElapsedSeconds }
         if ($envelopeValid -and -not ($env.cleanup.safe -eq $true)) { $unavailable=$true; $reason="Adapter cleanup was not mechanically proven safe for $($target.Agent); fallback stopped."; break }
         if ($res.TimedOut -and -not $res.KillConfirmed) { $unavailable=$true; $reason="Unsafe termination for $($target.Agent) candidate $model; fallback stopped."; break }

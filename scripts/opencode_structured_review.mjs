@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
+import { appendFileSync, mkdirSync } from "node:fs";
 
 export const OUTCOME_SCHEMA = {
   type: "object", additionalProperties: false,
@@ -14,6 +15,7 @@ export const OUTCOME_SCHEMA = {
 };
 const TOOLS = new Set(["read", "glob", "grep"]);
 const LIMIT = 600;
+export const REVIEWER_AI_EXECUTION_DEADLINE_MS = 480_000;
 
 export function validateSchema(value) {
   const errors = [];
@@ -76,6 +78,30 @@ export function qualifyAttempt({ sessionID, info, events }) {
 export function redact(value) {
   const text = String(value ?? "unknown error").replace(/Bearer\s+[^\s,;]+/gi, "Bearer [REDACTED]").replace(/\b(?:sk|pk|api)[_-][A-Za-z0-9_-]{8,}\b/gi, "[REDACTED]");
   return text.length <= LIMIT ? text : `${text.slice(0, LIMIT - 3)}...`;
+}
+export function transportDiagnostic(operation, error) {
+  const cause = error?.cause;
+  return {
+    operation: redact(operation),
+    name: redact(error?.name ?? "Error"),
+    message: redact(error?.message ?? error),
+    ...(cause?.name ? { cause_name: redact(cause.name) } : {}),
+    ...(cause?.code ? { cause_code: redact(cause.code) } : {}),
+    ...(cause?.message ? { cause_message: redact(cause.message) } : {}),
+  };
+}
+export async function runBoundedOperation(name, timeoutMs, operation, { controller = new AbortController(), observe = () => {} } = {}) {
+  observe(`OP_START ${name}`);
+  const task = Promise.resolve().then(() => operation(controller.signal));
+  task.catch(() => {});
+  let timer;
+  try {
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); const error = new Error(`${name} timed out after ${timeoutMs}ms`); error.name = "TimeoutError"; error.operation = name; reject(error); }, timeoutMs); });
+    const result = await Promise.race([task, timeout]);
+    clearTimeout(timer); observe(`OP_DONE ${name}`); return result;
+  } catch (error) {
+    clearTimeout(timer); error.operation = name; observe(`OP_FAIL ${name} ${JSON.stringify(transportDiagnostic(name, error))}`); throw error;
+  }
 }
 
 function argument(name) { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; }
@@ -145,20 +171,28 @@ async function run() {
   const slash = model.indexOf("/"); if (slash <= 0 || slash === model.length - 1) throw new Error(`Invalid model: ${model}`);
   const sdk = await import("@opencode-ai/sdk/v2");
   const launch = buildServerLaunch();
-  const server = spawn(launch.executable, launch.args, { cwd: directory, env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  let server; let operation = "startServer"; let failure;
+  const breadcrumbPath = `${resolve(required("--prompt-file"))}.operations.log`;
+  const observe = (line) => { try { mkdirSync(resolve(breadcrumbPath, ".."), { recursive: true }); appendFileSync(breadcrumbPath, `${line}\n`, "utf8"); } catch {} process.stderr.write(`${line}\n`); };
   let client; let cleanup = { safe: false, server_exit_confirmed: false, consumer_settled: false, subscription_cancelled: false };
   let consumer; let stream; let abortController;
   try {
-    client = sdk.createOpencodeClient({ baseUrl: await waitForServer(server), throwOnError: true });
+    try {
+      const baseUrl = await runBoundedOperation("startServer", 30000, async () => { server = spawn(launch.executable, launch.args, { cwd: directory, env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true }); return await waitForServer(server); }, { observe });
+      client = sdk.createOpencodeClient({ baseUrl, throwOnError: true });
+    } catch (error) { error.operation = operation = error.operation ?? "startServer"; throw error; }
     const events = []; let subscription; let subscriptionEstablished = false;
     abortController = new AbortController();
-    try { subscription = await client.event.subscribe({ signal: abortController.signal }); } catch (error) { throw new Error(`event.subscribe failed: ${redact(error.message)}`); }
+    operation = "event.subscribe";
+    try { subscription = await runBoundedOperation(operation, 30000, (signal) => client.event.subscribe({ signal }), { controller: abortController, observe }); } catch (error) { error.operation = operation; throw error; }
     subscriptionEstablished = true;
     stream = subscription?.stream;
     consumer = (async () => { if (stream && Symbol.asyncIterator in stream) for await (const event of stream) { if (event?.properties?.part) events.push(event.properties.part); } })();
-    const session = await client.session.create({ directory });
+    operation = "session.create";
+    let session; try { session = await runBoundedOperation(operation, 30000, (signal) => client.session.create({ directory }, { signal }), { observe }); } catch (error) { error.operation = operation; throw error; }
     const sessionID = session?.data?.id; if (!sessionID) throw new Error("session.create returned no session id");
-    const result = await client.session.prompt({ sessionID, directory, agent, model: { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }, parts: [{ type: "text", text: prompt }], format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 } });
+    operation = "session.prompt";
+    let result; try { result = await runBoundedOperation(operation, REVIEWER_AI_EXECUTION_DEADLINE_MS, (signal) => client.session.prompt({ sessionID, directory, agent, model: { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }, parts: [{ type: "text", text: prompt }], format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 }, }, { signal }), { observe }); } catch (error) { error.operation = operation; throw error; }
     const info = result?.data?.info; const parts = Array.isArray(result?.data?.parts) ? result.data.parts : [];
     const deadline = Date.now() + 5000; let boundary;
     do { boundary = lifecycleCompletionBoundary({ events, sessionID, messageID: info?.id, promptParts: parts, structured: info?.structured }); if (boundary.complete || Date.now() >= deadline) break; await new Promise((r) => setTimeout(r, 25)); } while (true);
@@ -167,7 +201,8 @@ async function run() {
     cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted);
     const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe;
     process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification: cleanup.safe ? classification : "INFRASTRUCTURE_FAILED", lifecycle, structured: structured ?? null, schema_validation: attempt.schema_validation ?? null, semantic_validation: attempt.semantic_validation ?? null, cleanup }) + "\n");
-  } finally { if (!cleanup.consumer_settled && consumer) { cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (!cleanup.server_exit_confirmed) { const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe; } }
+  } catch (error) { failure = error; } finally { if (!cleanup.consumer_settled) { cleanup.consumer_settled = consumer ? await settleEventConsumer({ consumer, stream, abortController }) : true; cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (server && !cleanup.server_exit_confirmed) { const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe; } }
+  if (failure) { process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, classification: "STRUCTURED_TRANSPORT_FAILED", diagnostic: transportDiagnostic(failure.operation ?? operation, failure), cleanup }) + "\n"); }
 }
 
 if (pathToFileURL(resolve(process.argv[1] ?? "")).href === import.meta.url) run().catch((error) => { process.stderr.write(`STRUCTURED_REVIEW_ADAPTER_ERROR: ${redact(error.message)}\n`); process.exitCode = 1; });
