@@ -126,3 +126,8 @@ Following Big Pickle, Candidate C3 was evaluated with `opencode/mimo-v2.5-free` 
   - Messages audit finding: `client.session.messages` triggered `Expected OutputFormatJsonSchema` decoder crash, identical to Big Pickle.
   - Classification under Final SPEC: `FAIL_STRUCTURED_OUTPUT` (voluntary stop without valid structured result).
   - Diagnostic record: [diagnostic-c3-mimo-regression-review.json](diagnostic-c3-mimo-regression-review.json)
+- **Mechanistic Root-Cause Audit via `scripts/inspect_mimo_structured.mjs`**:
+  - OpenCode's JSON-schema mechanism functions by injecting an internal `StructuredOutput` tool into the prompt context.
+  - When the diagnostic helper ([inspect_mimo_structured.mjs](../../../scripts/inspect_mimo_structured.mjs)) executed a minimal prompt with `agent: "regression-reviewer"`, MiMo actively invoked `Tool: StructuredOutput`, and OpenCode populated `info.structured` completely (`verdict: "PASS"`, `blocking_findings: 0`, and non-empty markdown).
+  - During the full multi-step review, MiMo completed its text review but voluntarily terminated (`finish: stop`) without invoking the `StructuredOutput` tool, leaving `info.structured: undefined`.
+  - Conclusion: Candidate C3's SDK v2 transport fully supports JSON-Schema structured transport for both models; however, MiMo's prompt-following fidelity to reliably emit the final `StructuredOutput` tool call on complex, multi-turn review sessions is fragile compared to Big Pickle.
