@@ -15,7 +15,10 @@ def run_main_loop(state_machine, interval):
         import pyautogui
         def on_pause_toggle():
             if state_machine.is_paused:
-                pause_duration = state_machine.resume()
+                intervention = state_machine.__dict__.get("nemesis_intervention")
+                if intervention is not None and intervention.active:
+                    intervention.acknowledge()
+                pause_duration = state_machine.resume(user_initiated=True)
                 touch_heartbeat(state_machine, force=True)
                 state_machine.prev_mouse_pos = pyautogui.position()
                 print("\n" + "=" * 60)

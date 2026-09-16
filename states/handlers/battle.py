@@ -373,7 +373,28 @@ class BattleHandler(BaseStateHandler):
                 logging.warning("👉 已依據配置 (nemesis_action = 'pause') 自動暫停腳本運行。")
                 logging.warning("👉 請使用者手動接管操作戰鬥。挑戰完成後，按 [Ctrl + Space] 即可恢復自動掛機！")
                 logging.warning("=" * 60)
-                self.machine.pause()
+                intervention = self.machine.__dict__.get("nemesis_intervention")
+                if intervention is not None:
+                    notification_count = cfg.get(
+                        "nemesis_intervention_notification_count",
+                        p_cfg.get("nemesis_intervention_notification_count", 5),
+                    )
+                    grace_period = cfg.get(
+                        "nemesis_intervention_grace_period_seconds",
+                        p_cfg.get("nemesis_intervention_grace_period_seconds", 60.0),
+                    )
+                    encounter_id = f"{getattr(self.machine, 'battle_start_time', None)}:{detected_nemesis}"
+                    intervention.start(
+                        encounter_id,
+                        lambda: self._run_nemesis_flee_subflow(rect),
+                        notification_count=notification_count,
+                        grace_period_seconds=grace_period,
+                        notification_details={"nemesis": detected_nemesis},
+                    )
+                else:
+                    # Compatibility for lightweight test doubles and legacy embedders.
+                    self.machine.pause()
+                self.nemesis_check_done = True
                 return True
             else:
                 logging.warning(f"🚨 [領域強敵撤退] 偵測到領域強敵特徵 [{detected_nemesis}] (相似度: {detected_conf:.4f} >= 0.75)，立即執行放棄戰鬥流程！")
