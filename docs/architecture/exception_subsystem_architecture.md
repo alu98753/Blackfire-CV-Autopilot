@@ -22,7 +22,7 @@
 ```mermaid
 graph TD
     A["主狀態機 (state_machine.py)"] -->|每一幀呼叫 check()| B["ExceptionWatchdog (watchdog.py)"]
-    B -->|1. 狀態維持 30s/90s 未推進| C["第 1 次逾時：stash_current_state() & 轉移至 STATE_POPUP_RECOVERY"]
+    B -->|1. 狀態維持 30s/200s 未推進| C["第 1 次逾時：stash_current_state() & 轉移至 STATE_POPUP_RECOVERY"]
     C --> D["UnexpectedPopupRecoveryHandler (handler.py)"]
     D -->|優先級 1| E{"匹配專屬 Subflow ?"}
     E -->|YES| F["執行 RaidBoxSubflow / WheelOfFortuneSubflow"]
@@ -59,7 +59,7 @@ states/exceptions/
 * **平時效能保護**：狀態變動未達門檻時，僅進行極輕量之時間浮點數相減 (`now - last_state_change`)，完全不執行任何圖像模板匹配，將 CPU 佔用降至最低。
 * **分級時間門檻**：
   * **常規短狀態**（大廳、結算等）：`30.0` 秒無進展即判定逾時。
-  * **長流程任務**（導航、戰鬥、地下城探索、背包整理、城鎮子流程等）：給予 `90.0` 秒寬鬆門檻。
+  * **長流程任務**（導航、戰鬥、地下城探索、背包整理、城鎮子流程等）：使用 `config/exception_features.json` 的 `long_subflow_timeout_sec`，目前為 `200.0` 秒。
   * **待機模式 (`COLLECT_ONLY`)**：實作 `max(diamond_cd, bread_cd) + 60s` 智慧動態 CD 逾時與遊戲視窗消失檢查。
 
 ### 2. 意外彈窗恢復處理器：[UnexpectedPopupRecoveryHandler](../../states/exceptions/handler.py)

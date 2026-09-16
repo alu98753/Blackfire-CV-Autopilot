@@ -12,9 +12,9 @@ class ExceptionWatchdog:
     全域例外監控與 Watchdog 管理器 (ExceptionWatchdog)
     
     資源優化與雙重條件觸發原則：
-    1. 平時（狀態變動未滿 30s / 戰鬥未滿 90s）：
+    1. 平時（短狀態未滿 30s / 長子流程未滿 200s）：
        僅進行極輕量之時間浮點數相減，完全不上報或執行任何圖像模板匹配比對，將 CPU 佔用率降至最低。
-    2. 當且僅當「狀態持續未變動滿 30s / 90s」時：
+    2. 當且僅當「狀態持續未變動滿 30s / 200s」時：
        觸發圖像特徵掃描，若命中專屬 Subflow 圖案則精確指派；若無專屬圖案則轉由 POPUP_RECOVERY 之優先級 2 通用防卡死兜底點擊。
     """
 
@@ -77,7 +77,7 @@ class ExceptionWatchdog:
 
             return False
 
-        # 門檻判斷：導航、戰鬥、探索、背包整理與長城鎮任務 (導航/抽卡/領懸賞/Boss/深淵魔王/獻祭/寶箱/珠寶加工) 給予 90 秒寬鬆門檻；其餘短狀態 30 秒
+        # 門檻判斷：長子流程狀態使用設定檔的 200 秒門檻；其餘短狀態使用 30 秒
         long_subflow_states = [
             self.machine.STATE_NAVIGATING,
             self.machine.STATE_BATTLE,
@@ -98,11 +98,11 @@ class ExceptionWatchdog:
             else cfg.get("non_battle_stuck_timeout_sec", 30.0)
         )
 
-        # 1. 資源節省護欄：未滿 30s/90s 時，不進行任何圖像比對，直接放行
+        # 1. 資源節省護欄：未滿 30s/200s 時，不進行任何圖像比對，直接放行
         if state_duration < stuck_timeout:
             return False
 
-        # 2. 確定滿 30s/90s 逾時：計算連續卡死次數
+        # 2. 確定滿 30s/200s 逾時：計算連續卡死次數
         if self.last_stuck_state == self.machine.current_state:
             self.consecutive_stuck_count += 1
         else:

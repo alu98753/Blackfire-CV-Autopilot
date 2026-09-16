@@ -44,7 +44,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         self.matcher.match.assert_not_called()
 
     def test_long_subflow_states_under_200s_does_not_trigger_or_scan(self):
-        """[測試 2] 效能護欄：戰鬥、探索、背包整理與長城鎮子流程 (共 10 個狀態) 未滿 90 秒，絕對不觸發"""
+        """[測試 2] 效能護欄：長流程狀態未滿 200 秒，絕對不觸發"""
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
         self.matcher.match.return_value = ((100, 100), 0.99)
 
@@ -61,7 +61,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
             GameStateMachine.STATE_BACKPACK_FULL_SORTING
         ]
 
-        # 逐一驗證 10 個長流程狀態在 85 秒 (未滿 90s) 時均回傳 False，且不觸發 Watchdog
+        # 逐一驗證長流程狀態在 199 秒 (未滿 200s) 時均回傳 False，且不觸發 Watchdog
         for st in long_states:
             self.machine.current_state = st
             self.machine.last_state_change = time.time() - 199.0
@@ -124,7 +124,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
         self.assertEqual(mock_relaunch_execute.call_args[1]["reason"], "collect_only_cooldown_timeout_exceeded")
 
     def test_long_timeout_200s_with_matched_specific_subflow_template(self):
-        """[測試 3] 雙重條件：滿 90 秒 + 掃描命中 Wheel_of_Fortune.png 專屬 Subflow 圖案"""
+        """[測試 3] 雙重條件：滿 200 秒 + 掃描命中 Wheel_of_Fortune.png 專屬 Subflow 圖案"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
         self.machine.last_state_change = time.time() - 201.0  # 卡住達 201 秒 (滿 200s)
 
@@ -169,7 +169,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
             self.assertIsNone(popup_handler.active_subflow)
 
     def test_battle_stuck_201s_timeout_triggers_stash(self):
-        """[測試 5] 雙重條件：戰鬥 (BATTLE) 滿 91 秒 (1.5 分鐘) 觸發 ExceptionWatchdog 暫存」"""
+        """[測試 5] 雙重條件：戰鬥 (BATTLE) 滿 201 秒觸發 ExceptionWatchdog 暫存」"""
         self.machine.current_state = GameStateMachine.STATE_BATTLE
         self.machine.last_state_change = time.time() - 201.0
         dummy_img = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -190,7 +190,7 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
 
     @patch("states.exceptions.subflows.game_relaunch.GameRelaunchSubflow.execute", return_value=True)
     def test_restore_stashed_state_preserves_watchdog_memory_and_second_timeout_relaunch(self, mock_relaunch):
-        """[測試 9] 驗證 restore_stashed_state 恢復暫存時享有全新寬限期，唯有再次逾時滿 90s 才觸發 GameRelaunchSubflow"""
+        """[測試 9] 驗證 restore_stashed_state 恢復暫存時享有全新寬限期，唯有再次逾時滿 200s 才觸發 GameRelaunchSubflow"""
         self.machine.current_state = GameStateMachine.STATE_NAVIGATING
         original_ts = time.time() - 201.0
         self.machine.last_state_change = original_ts
@@ -213,12 +213,12 @@ class TestBehaviorGlobalWatchdog(unittest.TestCase):
             self.assertGreater(self.machine.last_state_change, original_ts)
             self.assertAlmostEqual(self.machine.last_state_change, time.time(), delta=1.0)
 
-            # 斷言 2：復原後的第一幀 (未滿 90s)，Watchdog 必須放行 (回傳 False)，絕不誤殺
+            # 斷言 2：復原後的第一幀 (未滿 200s)，Watchdog 必須放行 (回傳 False)，絕不誤殺
             res_immediate = self.watchdog.check(dummy_img)
             self.assertFalse(res_immediate)
             mock_relaunch.assert_not_called()
 
-            # 斷言 3：若原狀態「再次卡住超過 90 秒」，才判定連續 2 次逾時並調用 GameRelaunchSubflow
+            # 斷言 3：若原狀態「再次卡住超過 200 秒」，才判定連續 2 次逾時並調用 GameRelaunchSubflow
             self.machine.last_state_change = time.time() - 201.0
             res_second_timeout = self.watchdog.check(dummy_img)
             self.assertTrue(res_second_timeout)
