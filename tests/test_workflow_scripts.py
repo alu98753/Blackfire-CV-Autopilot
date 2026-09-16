@@ -35,6 +35,13 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertTrue(values[1]["valid"])
         self.assertFalse(values[2]["valid"])
 
+    def test_windows_workflow_harness(self):
+        harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
+        command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'
+        result = subprocess.run(command, cwd=self.root, capture_output=True, text=True, shell=True, timeout=240)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Workflow script harness:", result.stdout + result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

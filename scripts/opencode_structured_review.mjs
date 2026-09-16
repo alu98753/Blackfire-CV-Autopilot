@@ -33,6 +33,21 @@ export function validateSemantics(value) {
   return { valid: errors.length === 0, errors };
 }
 
+export function qualifyLifecycle({ parts, events, sessionID, messageID, structured }) {
+  const ordered = [...parts, ...events].filter((part) => part?.sessionID === sessionID || !part?.sessionID);
+  const repoTools = ordered.filter((part) => part?.type === "tool" && TOOLS.has(part.tool));
+  const structuredIndex = ordered.findIndex((part) => part?.type === "tool" && part.tool === "StructuredOutput" && part.state?.status === "completed");
+  const groundingIndex = repoTools.findIndex((part) => part.state?.status === "completed");
+  const finalMessageIdentity = typeof messageID === "string" && parts.length > 0 && parts.every((part) => !part.messageID || part.messageID === messageID);
+  return {
+    source: "typed-event-and-prompt-response", session_id: sessionID, message_id: messageID ?? null,
+    final_message_identity: finalMessageIdentity, terminal_step: parts.some((part) => part.type === "step-finish"),
+    repository_tool_called: repoTools.length > 0, completed_repository_tool: groundingIndex >= 0,
+    structured_output_completed: structuredIndex >= 0, grounding_before_structured: groundingIndex >= 0 && structuredIndex >= 0 && groundingIndex < structuredIndex,
+    event_count: events.length, finish: null, structured_present: structured !== undefined && structured !== null,
+  };
+}
+
 export function redact(value) {
   const text = String(value ?? "unknown error").replace(/Bearer\s+[^\s,;]+/gi, "Bearer [REDACTED]").replace(/\b(?:sk|pk|api)[_-][A-Za-z0-9_-]{8,}\b/gi, "[REDACTED]");
   return text.length <= LIMIT ? text : `${text.slice(0, LIMIT - 3)}...`;
@@ -50,6 +65,14 @@ function waitForServer(child, timeout = 10000) {
     child.once("exit", (code) => { if (code !== null) { clearTimeout(timer); reject(new Error(`OpenCode server exited with code ${code}`)); } });
   });
 }
+async function stopServer(server) {
+  if (server.exitCode !== null) return true;
+  try { server.kill(); } catch { return false; }
+  return await new Promise((done) => {
+    const timer = setTimeout(() => done(false), 3000);
+    server.once("exit", () => { clearTimeout(timer); done(true); });
+  });
+}
 
 async function run() {
   const agent = required("--agent"); const model = required("--model"); const directory = resolve(required("--directory"));
@@ -57,35 +80,33 @@ async function run() {
   const slash = model.indexOf("/"); if (slash <= 0 || slash === model.length - 1) throw new Error(`Invalid model: ${model}`);
   const sdk = await import("@opencode-ai/sdk/v2");
   const server = spawn("opencode", ["serve", "--hostname=127.0.0.1", "--port=0"], { env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-  let client;
+  let client; let cleanup = { safe: false, server_exit_confirmed: false };
   try {
     client = sdk.createOpencodeClient({ baseUrl: await waitForServer(server) });
-    const events = []; let subscription;
+    const events = []; let subscription; let subscriptionEstablished = false;
     try { subscription = await client.event.subscribe({ query: { directory } }); } catch (error) { throw new Error(`event.subscribe failed: ${redact(error.message)}`); }
-    const consume = (async () => { if (subscription?.stream && Symbol.asyncIterator in subscription.stream) for await (const event of subscription.stream) events.push(event); })();
+    subscriptionEstablished = true;
+    const consume = (async () => { if (subscription?.stream && Symbol.asyncIterator in subscription.stream) for await (const event of subscription.stream) { if (event?.properties?.part) events.push(event.properties.part); } })();
     const session = await client.session.create({ directory, throwOnError: true });
     const sessionID = session?.data?.id; if (!sessionID) throw new Error("session.create returned no session id");
     const result = await client.session.prompt({ sessionID, directory, agent, model: { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }, parts: [{ type: "text", text: prompt }], format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 }, throwOnError: true });
     const info = result?.data?.info; const parts = Array.isArray(result?.data?.parts) ? result.data.parts : [];
-    await Promise.race([consume, new Promise((resolveWait) => setTimeout(resolveWait, 100))]);
-    const sameSession = (event) => event?.type === "message.part.updated" && event.properties?.part?.sessionID === sessionID;
-    const lifecycleParts = [...parts, ...events.filter(sameSession).map((event) => event.properties.part)];
-    const repoTools = lifecycleParts.filter((part) => part?.type === "tool" && TOOLS.has(part.tool));
-    const completedRepoTool = repoTools.some((part) => part.state?.status === "completed");
-    const finalMessage = typeof info?.id === "string" && parts.length > 0 && parts.every((part) => !part.messageID || part.messageID === info.id);
-    const lifecycle = { source: "typed-event-and-prompt-response", session_id: sessionID, message_id: info?.id ?? null, final_message_identity: finalMessage, terminal_step: parts.some((part) => part.type === "step-finish"), repository_tool_called: repoTools.length > 0, completed_repository_tool: completedRepoTool, structured_output_completed: lifecycleParts.some((part) => part.type === "tool" && part.tool === "StructuredOutput" && part.state?.status === "completed"), finish: info?.finish ?? null };
+    const deadline = Date.now() + 5000; let lifecycleParts;
+    do { lifecycleParts = [...parts, ...events]; if (lifecycleParts.some((part) => part.type === "tool" && part.tool === "StructuredOutput" && part.state?.status === "completed") || Date.now() >= deadline) break; await new Promise((r) => setTimeout(r, 25)); } while (true);
+    const lifecycle = qualifyLifecycle({ parts, events: events.length ? events : lifecycleParts, sessionID, messageID: info?.id, structured: info?.structured }); lifecycle.finish = info?.finish ?? null; lifecycle.subscription_established_before_prompt = subscriptionEstablished; lifecycle.completion_boundary = lifecycle.structured_output_completed ? "completed-StructuredOutput" : "bounded-deadline";
     const structured = info?.structured;
     const schema = structured == null ? { valid: false, errors: ["structured result is missing"] } : validateSchema(structured);
     const semantics = schema.valid ? validateSemantics(structured) : { valid: false, errors: [] };
     let classification = "LIFECYCLE_UNTRUSTWORTHY";
-    if (!finalMessage || !lifecycle.terminal_step) classification = "LIFECYCLE_UNTRUSTWORTHY";
-    else if (!completedRepoTool) classification = "GROUNDING_FAILED";
+    if (!lifecycle.subscription_established_before_prompt || !lifecycle.final_message_identity || !lifecycle.terminal_step) classification = "LIFECYCLE_UNTRUSTWORTHY";
+    else if (!lifecycle.completed_repository_tool || !lifecycle.grounding_before_structured) classification = "GROUNDING_FAILED";
     else if (!lifecycle.structured_output_completed || structured == null) classification = structured == null ? "STRUCTURED_OUTPUT_MISSING" : "STRUCTURED_TRANSPORT_FAILED";
     else if (!schema.valid) classification = "SCHEMA_INVALID";
     else if (!semantics.valid) classification = "SEMANTIC_CONTRADICTION";
     else classification = structured.verdict === "PASS" ? "VALID_PASS" : "VALID_BLOCK";
-    process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification, lifecycle, structured: structured ?? null, schema_validation: schema, semantic_validation: semantics }) + "\n");
-  } finally { server.kill(); }
+    cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.server_exit_confirmed;
+    process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification: cleanup.safe ? classification : "INFRASTRUCTURE_FAILED", lifecycle, structured: structured ?? null, schema_validation: schema, semantic_validation: semantics, cleanup }) + "\n");
+  } finally { if (!cleanup.server_exit_confirmed) { cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.server_exit_confirmed; } }
 }
 
 if (pathToFileURL(resolve(process.argv[1] ?? "")).href === import.meta.url) run().catch((error) => { process.stderr.write(`STRUCTURED_REVIEW_ADAPTER_ERROR: ${redact(error.message)}\n`); process.exitCode = 1; });

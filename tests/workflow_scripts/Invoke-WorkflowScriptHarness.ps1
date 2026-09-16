@@ -118,13 +118,16 @@ try {
         Assert-True (($args -join ' ') -notmatch '--standalone|--pure') 'Scout production args contain unsupported flags'
     }
 
-    @'
+@'
 param([string[]]$ChildArgs)
 $rawArgs = $ChildArgs -join ' '
-$mode = if ($rawArgs -match 'block') { 'block' } elseif ($rawArgs -match 'malformed') { 'malformed' } elseif ($rawArgs -match 'markdown') { 'markdown' } elseif ($rawArgs -match 'first') { 'fail' } else { 'pass' }
+$mode = if ($rawArgs -match 'block') { 'block' } elseif ($rawArgs -match 'grounding') { 'grounding' } elseif ($rawArgs -match 'missing') { 'missing' } elseif ($rawArgs -match 'schema') { 'schema' } elseif ($rawArgs -match 'contradiction') { 'contradiction' } elseif ($rawArgs -match 'unsafe') { 'unsafe' } elseif ($rawArgs -match 'malformed') { 'malformed' } elseif ($rawArgs -match 'markdown') { 'markdown' } elseif ($rawArgs -match 'first') { 'fail' } else { 'pass' }
 if ($mode -eq 'fail') { exit 7 }
-$text = switch ($mode) { 'block' { "VERDICT: BLOCK`nBLOCKING_FINDINGS: 1`n" }; 'malformed' { 'not a review' }; 'markdown' { "**VERDICT: PASS**`n**BLOCKING_FINDINGS: 0**`n" }; default { "VERDICT: PASS`nBLOCKING_FINDINGS: 0`n" } }
-$text
+if ($mode -in @('malformed','markdown')) { if ($mode -eq 'markdown') { '**VERDICT: PASS**' } else { 'not a review' }; exit 0 }
+$class = switch ($mode) { 'block' {'VALID_BLOCK'} 'grounding' {'GROUNDING_FAILED'} 'missing' {'STRUCTURED_OUTPUT_MISSING'} 'schema' {'SCHEMA_INVALID'} 'contradiction' {'SEMANTIC_CONTRADICTION'} default {'VALID_PASS'} }
+$cleanup = [bool]($mode -ne 'unsafe')
+$structured = if ($class -eq 'VALID_PASS') { @{ verdict='PASS'; blocking_findings=0; report_markdown='# Review' } } elseif ($class -eq 'VALID_BLOCK') { @{ verdict='BLOCK'; blocking_findings=1; report_markdown='# Block' } } else { $null }
+@{ schema_version=1; classification=$class; structured=$structured; lifecycle=@{ final_message_identity=$true }; cleanup=@{ safe=$cleanup; server_exit_confirmed=$cleanup } } | ConvertTo-Json -Compress
 '@ | Set-Content $reviewer -Encoding UTF8
 @'
 param([string[]]$ChildArgs)
@@ -151,24 +154,32 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($probe.Agent -eq 'spec-reviewer') "expected spec-reviewer probe, got $($probe.Agent)"
         Assert-True (($args -join ' ') -match '--agent spec-reviewer') 'Gate production args missing reviewer agent'
         Assert-True (($args -join ' ') -match '--model first') 'Gate production args missing model'
-        Assert-True (($args -join ' ') -match 'Task descriptor: docs/tasks/') 'Gate production args missing prompt'
+        Assert-True (($args -join ' ') -match '--prompt-file') 'Gate production args missing prompt file'
         Assert-True (($args -join ' ') -notmatch '--standalone|--pure') 'Gate production args contain unsupported flags'
     }
     Run-Case 'Gate PASS and candidate override resolution' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId) + $reviewBase)
         Assert-True ($code -eq 0) "expected 0, got $code"
     }
-    Run-Case 'Gate BLOCK returns 2' {
+    Run-Case 'Gate valid structured BLOCK returns 2 and is terminal' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','block'))
         Assert-True ($code -eq 2) "expected 2, got $code"
     }
-    Run-Case 'Gate malformed output returns 1' {
+    Run-Case 'Gate malformed adapter envelope returns 1' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','malformed'))
         Assert-True ($code -eq 1) "expected 1, got $code"
     }
-    Run-Case 'Gate Markdown verdict remains rejected' {
+    Run-Case 'Gate legacy free-text verdict has zero authority' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','markdown'))
         Assert-True ($code -eq 1) "expected 1, got $code"
+    }
+    Run-Case 'Gate pre-authority failure falls back to next candidate' {
+        $code = Invoke-Script $gate (@('-Task',$fixtureId) + $reviewBase)
+        Assert-True ($code -eq 0) "expected fallback success, got $code"
+    }
+    Run-Case 'Gate unsafe adapter cleanup stops fallback' {
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','unsafe'))
+        Assert-True ($code -eq 1) "expected unavailable, got $code"
     }
     Run-Case 'Gate focused-test override passes' {
         $json = Get-Content (Join-Path $fixtureDir 'task.json') -Raw | ConvertFrom-Json

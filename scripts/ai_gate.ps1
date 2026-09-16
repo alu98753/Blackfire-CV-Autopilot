@@ -27,10 +27,23 @@ function Invoke-BoundedProcess([string]$Executable, [string[]]$Arguments, [int]$
     $escaped = foreach ($arg in @($Arguments)) { $value = ([string]$arg) -replace '(\\*)"', '$1$1\\"'; $value = $value -replace '(\\+)$', '$1$1'; if ($value -match '[\s"]') { '"' + $value + '"' } else { $value } }
     $psi.Arguments = $escaped -join ' '
     $p = [Diagnostics.Process]::Start($psi); if (-not $p) { throw "Failed to start process: $Executable" }; $p.StandardInput.Close()
-    $sw = [Diagnostics.Stopwatch]::StartNew(); $timedOut = $false
-    while (-not $p.WaitForExit(50)) { if ($sw.Elapsed.TotalSeconds -ge $TimeoutSeconds) { $timedOut = $true; try { $p.Kill() } catch {}; $confirmed = $p.WaitForExit(3000); break } }
-    if (-not $timedOut) { $confirmed = $true; $p.WaitForExit() }; $sw.Stop()
-    [pscustomobject]@{ ExitCode = if ($timedOut) { -1 } else { $p.ExitCode }; TimedOut = $timedOut; KillConfirmed = $confirmed; Pid = $p.Id; StdOut = $p.StandardOutput.ReadToEnd(); StdErr = $p.StandardError.ReadToEnd(); ElapsedSeconds = $sw.Elapsed.TotalSeconds }
+    # ReadToEndAsync drains both redirected pipes while the child is running.
+    # Waiting for the process before reading either pipe is unsafe: a full pipe
+    # can block the child and prevent the parent from ever observing exit.
+    $stdoutTask = $p.StandardOutput.ReadToEndAsync(); $stderrTask = $p.StandardError.ReadToEndAsync()
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $timedOut = $false; $confirmed = $true
+    while (-not $p.WaitForExit(50)) {
+        if ($sw.Elapsed.TotalSeconds -ge $TimeoutSeconds) { $timedOut = $true; try { & taskkill.exe /PID $p.Id /T /F 2>$null | Out-Null } catch { $confirmed = $false }; $confirmed = $confirmed -and ($p.WaitForExit(3000) -or $p.HasExited); break }
+    }
+    if (-not $timedOut) { $p.WaitForExit() }
+    if (-not $stdoutTask.Wait(300) -or -not $stderrTask.Wait(300)) {
+        # A wrapper can leave descendants holding inherited pipe handles after
+        # its own exit. Close that owned tree before bounded capture finalizes.
+        try { & taskkill.exe /PID $p.Id /T /F 2>$null | Out-Null } catch { }
+        if (-not $stdoutTask.Wait(1000) -or -not $stderrTask.Wait(1000)) { $confirmed = $false }
+    }
+    $stdout = if ($stdoutTask.IsCompleted) { $stdoutTask.GetAwaiter().GetResult() } else { '' }; $stderr = if ($stderrTask.IsCompleted) { $stderrTask.GetAwaiter().GetResult() } else { '' }; $sw.Stop()
+    [pscustomobject]@{ ExitCode = if ($timedOut) { -1 } else { $p.ExitCode }; TimedOut = $timedOut; KillConfirmed = $confirmed; Pid = $p.Id; StdOut = $stdout; StdErr = $stderr; ElapsedSeconds = $sw.Elapsed.TotalSeconds }
 }
 function New-Invocation([string]$Agent, [string]$Model, [string]$PromptFile) {
     if ($_ReviewerExecutableOverride) {
@@ -42,6 +55,14 @@ function New-Invocation([string]$Agent, [string]$Model, [string]$PromptFile) {
 function Read-Envelope([string]$text) {
     $lines = @($text -split "`r?`n" | Where-Object { $_.Trim() }); if (-not $lines.Count) { return $null }
     try { return ($lines[-1] | ConvertFrom-Json) } catch { return $null }
+}
+function Test-Envelope($env) {
+    $classes=@('VALID_PASS','VALID_BLOCK','GROUNDING_FAILED','LIFECYCLE_UNTRUSTWORTHY','STRUCTURED_TRANSPORT_FAILED','STRUCTURED_OUTPUT_MISSING','SCHEMA_INVALID','SEMANTIC_CONTRADICTION','INFRASTRUCTURE_FAILED')
+    if ($null -eq $env -or $env.schema_version -ne 1 -or $classes -notcontains [string]$env.classification) { return $false }
+    if ($null -eq $env.lifecycle -or $null -eq $env.cleanup -or $env.cleanup.PSObject.Properties.Name -notcontains 'safe') { return $false }
+    if ($env.cleanup.safe -ne $true -and $env.cleanup.safe -ne $false) { return $false }
+    if ($env.classification -in @('VALID_PASS','VALID_BLOCK') -and $null -eq $env.structured) { return $false }
+    return $true
 }
 function Render-Review($env, [string]$agent) {
     $title = if ($agent -eq 'spec-reviewer') { 'Spec Review' } else { 'Regression Review' }
@@ -69,12 +90,13 @@ Perform a bounded read-only $($target.Agent) review. Inspect the supplied snapsh
         Write-Host "Running $($target.Agent) [$model]..."; $res = Invoke-BoundedProcess $inv.Executable $inv.Arguments $ReviewTimeoutSeconds
         $raw = ($res.StdOut,$res.StdErr | Where-Object { $_ }) -join "`n"; $raw | Set-Content (Join-Path $runtimeDir "$($target.Agent)_$($attempts.Count+1).log") -Encoding utf8
         $env = if (-not $res.TimedOut -and $res.ExitCode -eq 0) { Read-Envelope $res.StdOut } else { $null }
-        $class = if ($res.TimedOut) { 'INFRASTRUCTURE_FAILED' } elseif ($res.ExitCode -ne 0 -or $null -eq $env) { 'STRUCTURED_TRANSPORT_FAILED' } else { [string]$env.classification }
-        if ($class -notin @('VALID_PASS','VALID_BLOCK','GROUNDING_FAILED','LIFECYCLE_UNTRUSTWORTHY','STRUCTURED_TRANSPORT_FAILED','STRUCTURED_OUTPUT_MISSING','SCHEMA_INVALID','SEMANTIC_CONTRADICTION','INFRASTRUCTURE_FAILED')) { $class='INFRASTRUCTURE_FAILED' }
+        $envelopeValid = Test-Envelope $env; $class = if ($res.TimedOut -and -not $res.KillConfirmed) { 'INFRASTRUCTURE_FAILED' } elseif ($res.TimedOut) { 'INFRASTRUCTURE_FAILED' } elseif ($res.ExitCode -ne 0 -or -not $envelopeValid) { 'STRUCTURED_TRANSPORT_FAILED' } else { [string]$env.classification }
         $attempts += [pscustomobject]@{ Role=$target.Agent; Model=$model; Classification=$class; Selected=$false; ElapsedSeconds=$res.ElapsedSeconds }
-        if ($class -in @('VALID_PASS','VALID_BLOCK') -and $env.structured) { $attempts[-1].Selected=$true; $accepted[$target.Agent]=@{ Envelope=$env; Path=(Join-Path $runtimeDir "candidate_$($target.File)"); Canonical=(Join-Path $reviewDir $target.File) }; (Render-Review $env $target.Agent) | Set-Content $accepted[$target.Agent].Path -Encoding utf8; $acceptedRole=$true; break }
+        if ($envelopeValid -and -not ($env.cleanup.safe -eq $true)) { $unavailable=$true; $reason="Adapter cleanup was not mechanically proven safe for $($target.Agent); fallback stopped."; break }
+        if ($res.TimedOut -and -not $res.KillConfirmed) { $unavailable=$true; $reason="Unsafe termination for $($target.Agent) candidate $model; fallback stopped."; break }
+        if ($envelopeValid -and ($env.cleanup.safe -eq $true) -and $class -in @('VALID_PASS','VALID_BLOCK') -and $env.structured) { $attempts[-1].Selected=$true; $accepted[$target.Agent]=@{ Envelope=$env; Path=(Join-Path $runtimeDir "candidate_$($target.File)"); Canonical=(Join-Path $reviewDir $target.File) }; (Render-Review $env $target.Agent) | Set-Content $accepted[$target.Agent].Path -Encoding utf8; $acceptedRole=$true; break }
     }
-    if (-not $acceptedRole) { $unavailable=$true; $reason="No trusted $($target.Agent) verdict was obtained."; break }
+    if ($unavailable) { break }; if (-not $acceptedRole) { $unavailable=$true; $reason="No trusted $($target.Agent) verdict was obtained."; break }
 }
 if ($unavailable) { Write-Warning "AI verification gate VERIFICATION_UNAVAILABLE: $reason"; Write-Warning 'Canonical artifacts were left untouched.'; exit 1 }
 
