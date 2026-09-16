@@ -76,6 +76,22 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertEqual(unix["executable"], "opencode")
         self.assertNotIn("AppData", windows["args"][3])
 
+    def test_event_consumer_settlement_is_bounded_and_subprocess_exits(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { settleEventConsumer } from "
+            f"'{probe.as_uri()}';"
+            "const controller=new AbortController();"
+            "const safe=await settleEventConsumer({consumer:Promise.resolve(),stream:{return:async()=>({done:true})},abortController:controller,timeoutMs:25});"
+            "const unsafe=await settleEventConsumer({consumer:new Promise(()=>{}),stream:{return:async()=>({done:true})},abortController:new AbortController(),timeoutMs:25});"
+            "console.log(JSON.stringify({safe,unsafe,aborted:controller.signal.aborted}));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, timeout=5, check=True)
+        value = json.loads(result.stdout)
+        self.assertTrue(value["safe"])
+        self.assertFalse(value["unsafe"])
+        self.assertTrue(value["aborted"])
+
     def test_windows_workflow_harness(self):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
         command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'

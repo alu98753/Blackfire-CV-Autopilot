@@ -57,7 +57,7 @@ Execution constraints:
 Structured result:
 Return the required StructuredOutput object with exactly `verdict`, `blocking_findings`, and `report_markdown`. Do not encode machine authority in Markdown headers or prose.
 
-After the header, return Markdown with:
+Set `report_markdown` to concise Markdown with:
 
 # Regression Review
 

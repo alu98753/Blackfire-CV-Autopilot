@@ -94,6 +94,13 @@ export function buildServerLaunch(platform = process.platform, shell = process.e
   return { executable: "opencode", args: serverArgs };
 }
 
+export async function settleEventConsumer({ consumer, stream, abortController, timeoutMs = 3000 }) {
+  abortController?.abort();
+  try { await stream?.return?.(); } catch { /* cancellation is best effort; settlement is authoritative */ }
+  const settled = Promise.resolve(consumer).then(() => true, () => false);
+  return await Promise.race([settled, new Promise((resolveSettled) => setTimeout(() => resolveSettled(false), timeoutMs))]);
+}
+
 async function run() {
   const agent = required("--agent"); const model = required("--model"); const directory = resolve(required("--directory"));
   const prompt = await readFile(resolve(required("--prompt-file")), "utf8");
@@ -101,13 +108,16 @@ async function run() {
   const sdk = await import("@opencode-ai/sdk/v2");
   const launch = buildServerLaunch();
   const server = spawn(launch.executable, launch.args, { cwd: directory, env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-  let client; let cleanup = { safe: false, server_exit_confirmed: false };
+  let client; let cleanup = { safe: false, server_exit_confirmed: false, consumer_settled: false, subscription_cancelled: false };
+  let consumer; let stream; let abortController;
   try {
     client = sdk.createOpencodeClient({ baseUrl: await waitForServer(server) });
     const events = []; let subscription; let subscriptionEstablished = false;
-    try { subscription = await client.event.subscribe({ query: { directory } }); } catch (error) { throw new Error(`event.subscribe failed: ${redact(error.message)}`); }
+    abortController = new AbortController();
+    try { subscription = await client.event.subscribe({ signal: abortController.signal }); } catch (error) { throw new Error(`event.subscribe failed: ${redact(error.message)}`); }
     subscriptionEstablished = true;
-    const consume = (async () => { if (subscription?.stream && Symbol.asyncIterator in subscription.stream) for await (const event of subscription.stream) { if (event?.properties?.part) events.push(event.properties.part); } })();
+    stream = subscription?.stream;
+    consumer = (async () => { if (stream && Symbol.asyncIterator in stream) for await (const event of stream) { if (event?.properties?.part) events.push(event.properties.part); } })();
     const session = await client.session.create({ directory, throwOnError: true });
     const sessionID = session?.data?.id; if (!sessionID) throw new Error("session.create returned no session id");
     const result = await client.session.prompt({ sessionID, directory, agent, model: { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }, parts: [{ type: "text", text: prompt }], format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 }, throwOnError: true });
@@ -125,9 +135,10 @@ async function run() {
     else if (!schema.valid) classification = "SCHEMA_INVALID";
     else if (!semantics.valid) classification = "SEMANTIC_CONTRADICTION";
     else classification = structured.verdict === "PASS" ? "VALID_PASS" : "VALID_BLOCK";
-    cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.server_exit_confirmed;
+    cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted);
+    cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.consumer_settled && cleanup.server_exit_confirmed;
     process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification: cleanup.safe ? classification : "INFRASTRUCTURE_FAILED", lifecycle, structured: structured ?? null, schema_validation: schema, semantic_validation: semantics, cleanup }) + "\n");
-  } finally { if (!cleanup.server_exit_confirmed) { cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.server_exit_confirmed; } }
+  } finally { if (!cleanup.consumer_settled && consumer) { cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (!cleanup.server_exit_confirmed) { cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.consumer_settled && cleanup.server_exit_confirmed; } }
 }
 
 if (pathToFileURL(resolve(process.argv[1] ?? "")).href === import.meta.url) run().catch((error) => { process.stderr.write(`STRUCTURED_REVIEW_ADAPTER_ERROR: ${redact(error.message)}\n`); process.exitCode = 1; });
