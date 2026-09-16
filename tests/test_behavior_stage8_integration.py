@@ -5,7 +5,7 @@ Unit & Behavioral integration test for Stage 8 (Fiery Volcano) support.
 import unittest
 from config import BASE_STAGE_LEVELS, STAGE_TEMPLATES
 from utils.config_helper import get_stage_configs
-from utils.quest_mapper import TaskNode
+from utils.quest_mapper import TaskNode, QuestMapper
 from utils.sub_stage_navigator import SubStageListNavigator
 
 
@@ -49,6 +49,20 @@ class TestStage8Integration(unittest.TestCase):
         self.assertIn("熾熱火山", cfg["name"])
         self.assertIn("stages/level8_fiery_volcano.png", cfg["stage_navigation_path"])
         self.assertIn("stages/first_stage.png", cfg["stage_navigation_path"])
+
+    def test_defeat_fire_elemental_mapped_to_stage8_six(self):
+        """驗證『擊敗火元素』懸賞任務被精準映射至 Stage 8 的 sub_stage 'six'。"""
+        mapper = QuestMapper()
+        node = mapper.parse_quest("擊敗火元素")
+        self.assertIsNotNone(node)
+        self.assertEqual(node.mode_type, "stage")
+        self.assertEqual(node.stage_level, 8)
+        self.assertEqual(node.sub_stage, "six")
+        self.assertEqual(node.counting_policy, TaskNode.POLICY_DETERMINISTIC)
+        cfg = node.to_config_dict()
+        self.assertEqual(cfg["stage_entry"], "stages/level8_fiery_volcano.png")
+        self.assertIn("stages/level8_fiery_volcano.png", cfg["stage_navigation_path"])
+        self.assertIn("stages/six_stage.png", cfg["stage_navigation_path"])
 
     def test_stage_templates_contains_stage_8(self):
         """驗證大廳與場景偵測的備援 stage_templates 包含第 8 關。"""

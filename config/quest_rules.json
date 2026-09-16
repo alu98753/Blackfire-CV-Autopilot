@@ -26,7 +26,8 @@
     "清除蛤蟆",
     "討伐惡魔",
     "擊敗冰元素",
-    "破除遺跡的詛咒"
+    "破除遺跡的詛咒",
+    "擊敗火元素"
   ],
   "banner_verify_quests": [
     "終結獄炎統治",
@@ -250,6 +251,12 @@
       "pattern": "(擊敗冰元素|冰元素)",
       "stage_level": 6,
       "sub_stage": "first",
+      "policy": "deterministic_count"
+    },
+    {
+      "pattern": "(擊敗火元素|火元素)",
+      "stage_level": 8,
+      "sub_stage": "six",
       "policy": "deterministic_count"
     }
   ]
