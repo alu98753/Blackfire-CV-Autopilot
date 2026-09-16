@@ -1,0 +1,24 @@
+{
+  "id": "nemesis-user-intervention-lifecycle",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/handlers/battle.py",
+    "states/state_machine.py",
+    "utils/keyboard_listener.py",
+    "ports/notification_port.py",
+    "config.py",
+    "tests"
+  ],
+  "focused_tests": [
+    "tests"
+  ],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  }
+}
