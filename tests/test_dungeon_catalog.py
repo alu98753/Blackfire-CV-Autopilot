@@ -13,7 +13,7 @@ class TestDungeonCatalog(unittest.TestCase):
         self.assertEqual(DungeonCatalog.get_name(5), "幽暗監獄")
         self.assertEqual(DungeonCatalog.get_name(6), "冰雪洞窟")
         self.assertEqual(DungeonCatalog.get_name(7), "獸人地堡")
-        self.assertEqual(DungeonCatalog.get_name(8), "巨龍之巢")
+        self.assertEqual(DungeonCatalog.get_name(8), "巨龍巢穴")
 
     def test_get_name_out_of_bounds_fallback(self):
         self.assertEqual(DungeonCatalog.get_name(0), "地下城")
