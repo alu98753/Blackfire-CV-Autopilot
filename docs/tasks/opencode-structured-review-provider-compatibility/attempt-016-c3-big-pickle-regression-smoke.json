@@ -1,0 +1,34 @@
+{
+  "attempt_kind": "smoke",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "sdk_version": "1.18.31",
+  "isolation_method": "OPENCODE_DB=:memory: + runner-owned process tree",
+  "matrix_candidate": "C3",
+  "model": "opencode/big-pickle",
+  "open_code_version": "1.18.31",
+  "provider": "opencode",
+  "reviewer_role": "regression-reviewer",
+  "sdk_transport": "official-sdk-v2",
+  "classification": "FAIL_INFRASTRUCTURE",
+  "diagnostic": "probe runner timeout after 120000ms",
+  "subreason": "PROBE_TIMEOUT",
+  "lifecycle": {
+    "finish_reasons": [],
+    "finalization_voluntary": false,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "successful_tool_result": false,
+    "structured_output_present": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "isolation_cleanup_proven": true,
+  "owned_process_tree_pid": 5652
+}

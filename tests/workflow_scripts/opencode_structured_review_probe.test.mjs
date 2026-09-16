@@ -14,6 +14,7 @@ import {
   classifyLifecycle,
   diagnosticFromError,
   inspectLifecycle,
+  isPidAlive,
   normalizeStructuredResult,
   openCodeVersionCommand,
   redactDiagnostic,
@@ -76,13 +77,21 @@ function transportWith({ create, cleanup }) {
   });
 }
 
-test("frozen matrix accepts only control, C1, and C2", () => {
+test("frozen matrix accepts control, C1, C2, and C3", () => {
   assert.equal(RUNTIME_MATRIX.C1.runtimeVersion, "1.14.41");
   assert.equal(RUNTIME_MATRIX.C2.clientPackage, "@opencode/client");
+  assert.equal(RUNTIME_MATRIX.C3.runtimeVersion, "1.18.31");
+  assert.equal(RUNTIME_MATRIX.C3.clientPackage, "@opencode-ai/sdk");
+  assert.equal(RUNTIME_MATRIX.C3.clientVersion, "1.18.31");
+  assert.equal(RUNTIME_MATRIX.C3.transport, "official-sdk-v2");
+  assert.equal(RUNTIME_MATRIX.C3.structuredField, "assistant.info.structured");
   assert.equal(controlConfig().expectedOpenCodeVersion, "1.18.31");
   const c1 = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C1", runtimeRoot: ".runtime/c1" });
   assert.equal(c1.expectedClientVersion, "1.14.41");
-  assert.throws(() => buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3", runtimeRoot: ".runtime/c3" }), /Unlisted/);
+  const c3 = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  assert.equal(c3.expectedOpenCodeVersion, "1.18.31");
+  assert.equal(c3.expectedClientVersion, "1.18.31");
+  assert.throws(() => buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C4", runtimeRoot: ".runtime/c4" }), /Unlisted/);
   assert.throws(() => buildProbeConfig({ agent: "spec-reviewer", model: "other/model", directory: "." }), /frozen provider/);
 });
 
@@ -96,9 +105,40 @@ test("qualification request preserves the fixed schema and production control tr
   assert.equal(normalizeStructuredResult("CONTROL", { structured_output: { verdict: "PASS" } }).value.verdict, "PASS");
 });
 
+test("C3 constructs official v2 flat prompt request and targets assistant.info.structured", () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  const request = buildPromptRequest(config, "session-1", buildReviewerPrompt());
+  assert.equal(request.sessionID, "session-1");
+  assert.equal(request.directory, config.directory);
+  assert.equal(request.agent, "spec-reviewer");
+  assert.deepEqual(request.model, { providerID: "opencode", modelID: "big-pickle" });
+  assert.equal(request.format.type, "json_schema");
+  assert.deepEqual(request.format.schema, OUTCOME_SCHEMA);
+  assert.equal(request.format.retryCount, 2);
+  assert.deepEqual(request.parts, [{ type: "text", text: buildReviewerPrompt() }]);
+  assert.equal(request.path, undefined);
+  assert.equal(request.body, undefined);
+
+  const normalized = normalizeStructuredResult("C3", {
+    structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Pass" },
+    structured_output: { verdict: "BLOCK", blocking_findings: 1, report_markdown: "# Block" },
+  });
+  assert.equal(normalized.available, true);
+  assert.equal(normalized.field, "assistant.info.structured");
+  assert.deepEqual(normalized.value, { verdict: "PASS", blocking_findings: 0, report_markdown: "# Pass" });
+
+  const noFallback = normalizeStructuredResult("C3", {
+    structured_output: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Pass" },
+  });
+  assert.equal(noFallback.available, true);
+  assert.equal(noFallback.value, undefined);
+});
+
 test("full and smoke prompts are fixed across candidates and models", () => {
   assert.equal(buildReviewerPrompt("C1", "opencode/big-pickle"), buildReviewerPrompt("C2", "opencode/mimo-v2.5-free"));
+  assert.equal(buildReviewerPrompt("C1", "opencode/big-pickle"), buildReviewerPrompt("C3", "opencode/big-pickle"));
   assert.equal(buildSmokePrompt("C1"), buildSmokePrompt("C2"));
+  assert.equal(buildSmokePrompt("C1"), buildSmokePrompt("C3"));
   assert.notEqual(buildReviewerPrompt(), buildSmokePrompt());
 });
 
@@ -173,6 +213,125 @@ test("runProbe maps absent machine result, schema violation, and semantic violat
   assert.equal(absent.classification, "FAIL_STRUCTURED_OUTPUT");
   assert.equal(schema.classification, "FAIL_SCHEMA");
   assert.equal(semantic.classification, "FAIL_SEMANTIC");
+});
+
+test("C3 auditSessionMessages uses v2 flat parameters and rejects malformed/missing history", async () => {
+  let calledWith;
+  const mockClient = {
+    session: {
+      messages: async (params) => {
+        calledWith = params;
+        return { data: [{ info: { id: "msg-1" }, parts: [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }] }] };
+      },
+    },
+  };
+  const audit = await auditSessionMessages({
+    client: mockClient,
+    sessionId: "sess-v2",
+    directory: "E:\\repo",
+    promptMessage: { parts: [{ type: "text" }] },
+    finalInfo: { id: "msg-1" },
+    candidate: "C3",
+  });
+  assert.equal(audit.valid, true);
+  assert.equal(audit.source, "session.messages");
+  assert.deepEqual(calledWith, { sessionID: "sess-v2", directory: "E:\\repo", throwOnError: true });
+
+  const malformed = await auditSessionMessages({
+    client: { session: { messages: async () => ({ data: [{ parts: [null] }] }) } },
+    sessionId: "sess-v2",
+    directory: "E:\\repo",
+    promptMessage: { parts: [{ type: "text" }] },
+    finalInfo: { id: "msg-1" },
+    candidate: "C3",
+  });
+  assert.equal(malformed.valid, false);
+
+  const fetchFailed = await auditSessionMessages({
+    client: { session: { messages: async () => { throw new Error("fetch failed"); } } },
+    sessionId: "sess-v2",
+    directory: "E:\\repo",
+    promptMessage: { parts: [{ type: "text" }] },
+    finalInfo: { id: "msg-1" },
+    candidate: "C3",
+  });
+  assert.equal(fetchFailed.valid, false);
+});
+
+test("runProbe classifies a full verified C3 lifecycle as PASS_PROVEN", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  let sessionCreateArgs;
+  let promptArgs;
+  const c3Transport = async () => ({
+    server: { cleanup: async () => ({ proven: true }) },
+    client: {
+      session: {
+        create: async (args) => {
+          sessionCreateArgs = args;
+          return { data: { id: "c3-session-1" } };
+        },
+        prompt: async (args) => {
+          promptArgs = args;
+          return {
+            data: {
+              info: {
+                id: "msg-1",
+                finish: "stop",
+                time: { completed: 1 },
+                structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Review" },
+              },
+              parts: [
+                { type: "tool", tool: "read", state: { status: "completed" } },
+                { type: "step-finish", reason: "stop" },
+              ],
+            },
+          };
+        },
+        messages: async () => ({ data: [] }),
+      },
+    },
+  });
+
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: c3Transport,
+  });
+
+  assert.equal(result.classification, "PASS_PROVEN");
+  assert.equal(result.lifecycle_audit_trustworthy, true);
+  assert.equal(result.official_structured_machine_field, "assistant.info.structured");
+  assert.equal(result.sdk_transport, "official-sdk-v2");
+  assert.deepEqual(sessionCreateArgs, { directory: config.directory, throwOnError: true });
+  assert.equal(promptArgs.sessionID, "c3-session-1");
+  assert.equal(result.isolation_cleanup_proven, true);
+});
+
+test("runProbe with C3 maps missing structured, schema, and semantic failures", async () => {
+  const config = buildProbeConfig({ agent: "spec-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  const makeTransport = (structured) => async () => ({
+    server: { cleanup: async () => ({ proven: true }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "s1" } }),
+        prompt: async () => ({
+          data: {
+            info: { id: "m1", finish: "stop", time: { completed: 1 }, structured },
+            parts: [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }],
+          },
+        }),
+        messages: async () => ({ data: [] }),
+      },
+    },
+  });
+
+  const missing = await runProbe(config, { getRuntimeMetadata: async () => runtimeFor(config), createTransport: makeTransport(undefined) });
+  assert.equal(missing.classification, "FAIL_STRUCTURED_OUTPUT");
+
+  const badSchema = await runProbe(config, { getRuntimeMetadata: async () => runtimeFor(config), createTransport: makeTransport({ verdict: "INVALID" }) });
+  assert.equal(badSchema.classification, "FAIL_SCHEMA");
+
+  const badSemantics = await runProbe(config, { getRuntimeMetadata: async () => runtimeFor(config), createTransport: makeTransport({ verdict: "PASS", blocking_findings: 1, report_markdown: "x" }) });
+  assert.equal(badSemantics.classification, "FAIL_SEMANTIC");
 });
 
 test("runtime/client mismatches, unavailable transport, and unavailable C2 adapter are infrastructure failures", async () => {
@@ -282,4 +441,146 @@ test("diagnostics are bounded, redact credentials, and Windows version check is 
   assert.doesNotMatch(diagnostic, /secret-value|example-secret|sk_abcdefghijk/);
   assert.match(diagnosticFromError({ status: 401, token: "secret-value" }), /REDACTED/);
   assert.deepEqual(openCodeVersionCommand("win32", "C:\\Windows\\System32\\cmd.exe"), { command: "C:\\Windows\\System32\\cmd.exe", args: ["/d", "/s", "/c", "opencode --version < NUL"] });
+});
+
+test("child exits before taskkill -> cleanup proven", async () => {
+  const child = new EventEmitter();
+  child.pid = 9001;
+  child.exitCode = 0;
+  let taskKillCalled = false;
+  const result = await terminateOwnedProcessTree(child, {
+    isPidAlive: () => false,
+    checkDescendants: async () => [],
+    taskKill: async () => { taskKillCalled = true; },
+  });
+  assert.deepEqual(result, { proven: true, pid: 9001 });
+  assert.equal(taskKillCalled, false);
+});
+
+test("taskkill reports PID not found but tree is already gone -> cleanup proven", async () => {
+  const child = new EventEmitter();
+  child.pid = 9002;
+  child.exitCode = null;
+  const result = await terminateOwnedProcessTree(child, {
+    isPidAlive: () => false,
+    checkDescendants: async () => [],
+    taskKill: async () => {
+      throw new Error("Command failed: taskkill /PID 9002 /T /F: 錯誤: 找不到處理程序 9002");
+    },
+    waitForChildExit: async () => true,
+  });
+  assert.deepEqual(result, { proven: true, pid: 9002 });
+});
+
+test("owned descendant remains -> cleanup not proven", async () => {
+  const child = new EventEmitter();
+  child.pid = 9003;
+  child.exitCode = 0;
+  const result = await terminateOwnedProcessTree(child, {
+    isPidAlive: () => false,
+    checkDescendants: async () => [9004],
+    taskKill: async () => {},
+    retryTaskKill: async () => {},
+    waitForChildExit: async () => true,
+  });
+  assert.equal(result.proven, false);
+  assert.match(result.diagnostic, /9004/);
+});
+
+test("cleanup retry removes remaining owned tree -> cleanup proven", async () => {
+  const child = new EventEmitter();
+  child.pid = 9005;
+  child.exitCode = null;
+  let descendants = [9006];
+  let retried = false;
+  const result = await terminateOwnedProcessTree(child, {
+    isPidAlive: () => false,
+    checkDescendants: async () => descendants,
+    taskKill: async () => {},
+    retryTaskKill: async () => {
+      retried = true;
+      descendants = [];
+    },
+    waitForChildExit: async () => true,
+  });
+  assert.deepEqual(result, { proven: true, pid: 9005 });
+  assert.equal(retried, true);
+});
+
+test("reviewer FAIL_LIFECYCLE_AUDIT is preserved when cleanup succeeds", async () => {
+  const config = buildProbeConfig({ agent: "regression-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  const transport = async () => ({
+    server: { cleanup: async () => ({ proven: true, pid: 1111 }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "s-fail-audit" } }),
+        prompt: async () => ({
+          data: {
+            info: { id: "m-1", finish: "tool-calls", structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Done" } },
+            parts: [
+              { type: "tool", tool: "read", state: { status: "completed" } },
+              { type: "step-finish", reason: "tool-calls" },
+            ],
+          },
+        }),
+        messages: async () => ({ data: [] }),
+      },
+    },
+  });
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: transport,
+  });
+  assert.equal(result.classification, "FAIL_LIFECYCLE_AUDIT");
+  assert.equal(result.subreason, "STEP_BUDGET_EXHAUSTED");
+  assert.equal(result.isolation_cleanup_proven, true);
+  assert.equal(result.owned_process_tree_pid, 1111);
+});
+
+test("cleanup failure legitimately overrides reviewer result", async () => {
+  const config = buildProbeConfig({ agent: "regression-reviewer", model: "opencode/big-pickle", directory: ".", candidate: "C3" });
+  const transport = async () => ({
+    server: { cleanup: async () => ({ proven: false, diagnostic: "owned descendant remains" }) },
+    client: {
+      session: {
+        create: async () => ({ data: { id: "s-fail-cleanup" } }),
+        prompt: async () => ({
+          data: {
+            info: { id: "m-1", finish: "stop", time: { completed: 1 }, structured: { verdict: "PASS", blocking_findings: 0, report_markdown: "# Done" } },
+            parts: [{ type: "tool", tool: "read", state: { status: "completed" } }, { type: "step-finish", reason: "stop" }],
+          },
+        }),
+        messages: async () => ({ data: [] }),
+      },
+    },
+  });
+  const result = await runProbe(config, {
+    getRuntimeMetadata: async () => runtimeFor(config),
+    createTransport: transport,
+  });
+  assert.equal(result.classification, "FAIL_INFRASTRUCTURE");
+  assert.equal(result.subreason, "ISOLATION_CLEANUP_UNSAFE");
+  assert.match(result.diagnostic, /owned descendant remains/);
+});
+
+test("stdout and stderr stream cleanup releases stream handles", () => {
+  const stdout = new EventEmitter();
+  let stdoutDestroyed = false;
+  stdout.destroy = () => { stdoutDestroyed = true; };
+  const stderr = new EventEmitter();
+  let stderrDestroyed = false;
+  stderr.destroy = () => { stderrDestroyed = true; };
+  stdout.removeAllListeners();
+  stderr.removeAllListeners();
+  stdout.destroy();
+  stderr.destroy();
+  assert.equal(stdoutDestroyed, true);
+  assert.equal(stderrDestroyed, true);
+});
+
+test("isPidAlive accurately detects running and non-existent PIDs", () => {
+  assert.equal(isPidAlive(process.pid), true);
+  assert.equal(isPidAlive(9999999), false);
+  assert.equal(isPidAlive(-1), false);
+  assert.equal(isPidAlive(0), false);
 });

@@ -44,6 +44,14 @@ export const RUNTIME_MATRIX = Object.freeze({
     clientVersion: "2.0.2",
     structuredField: null,
   }),
+  C3: Object.freeze({
+    id: "C3",
+    runtimeVersion: "1.18.31",
+    clientPackage: "@opencode-ai/sdk",
+    clientVersion: "1.18.31",
+    transport: "official-sdk-v2",
+    structuredField: "assistant.info.structured",
+  }),
 });
 
 export const OUTCOME_SCHEMA = {
@@ -93,7 +101,7 @@ export function buildProbeConfig({ agent, model, directory, candidate = "CONTROL
   if (!new Set(["smoke", "qualifying", "confirmation"]).has(attemptKind)) {
     throw new Error("Attempt kind must be smoke, qualifying, or confirmation.");
   }
-  if (candidate !== "CONTROL" && (typeof runtimeRoot !== "string" || runtimeRoot.trim().length === 0)) {
+  if (candidate !== "CONTROL" && candidate !== "C3" && (typeof runtimeRoot !== "string" || runtimeRoot.trim().length === 0)) {
     throw new Error("Alternate runtimes require an isolated runtime root.");
   }
 
@@ -123,6 +131,16 @@ export function buildSmokePrompt() {
 }
 
 export function buildPromptRequest(config, sessionId, prompt) {
+  if (config.candidate === "C3") {
+    return {
+      sessionID: sessionId,
+      directory: config.directory,
+      agent: config.agent,
+      model: { providerID: config.provider, modelID: config.modelId },
+      parts: [{ type: "text", text: prompt }],
+      format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 },
+    };
+  }
   return {
     path: { id: sessionId },
     query: { directory: config.directory },
@@ -181,7 +199,7 @@ export function diagnosticFromError(error) {
 export function normalizeStructuredResult(candidate, finalInfo) {
   const runtime = matrixEntry(candidate);
   if (candidate === "CONTROL") return { available: true, field: runtime.structuredField, value: finalInfo?.structured_output };
-  if (candidate === "C1") return { available: true, field: runtime.structuredField, value: finalInfo?.structured };
+  if (candidate === "C1" || candidate === "C3") return { available: true, field: runtime.structuredField, value: finalInfo?.structured };
   return {
     available: false,
     field: null,
@@ -201,13 +219,17 @@ function hasUsablePromptParts(promptMessage) {
     && parts.some((part) => part.type === "step-finish" && typeof part.reason === "string");
 }
 
-export async function auditSessionMessages({ client, sessionId, directory, promptMessage, finalInfo }) {
+export async function auditSessionMessages({ client, sessionId, directory, promptMessage, finalInfo, candidate = "CONTROL" }) {
   if (hasUsablePromptParts(promptMessage)) {
     return { valid: true, source: "prompt-response", messages: [promptMessage] };
   }
   let response;
   try {
-    response = await client.session.messages({ path: { id: sessionId }, query: { directory }, throwOnError: true });
+    if (candidate === "C3") {
+      response = await client.session.messages({ sessionID: sessionId, directory, throwOnError: true });
+    } else {
+      response = await client.session.messages({ path: { id: sessionId }, query: { directory }, throwOnError: true });
+    }
   } catch (error) {
     return { valid: false, source: "session.messages", diagnostic: redactDiagnostic(`session.messages failed: ${error?.message ?? error}`) };
   }
@@ -215,7 +237,7 @@ export async function auditSessionMessages({ client, sessionId, directory, promp
   const finalId = finalInfo?.id;
   const validShape = Array.isArray(messages) && messages.every((message) => message && typeof message === "object"
     && Array.isArray(message.parts) && message.parts.every((part) => part && typeof part === "object" && typeof part.type === "string"));
-  const containsSameFinal = typeof finalId === "string" && messages.some((message) => message.info?.id === finalId);
+  const containsSameFinal = validShape && typeof finalId === "string" && messages.some((message) => message.info?.id === finalId);
   if (!validShape || !containsSameFinal) {
     return { valid: false, source: "session.messages", diagnostic: "session.messages returned incomplete same-attempt lifecycle evidence" };
   }
@@ -272,7 +294,8 @@ function infrastructureEvidence(config, runtime, diagnostic, subreason) {
 }
 
 function evidenceBase(config, runtime) {
-  return {
+  const entry = matrixEntry(config.candidate);
+  const base = {
     attempt_kind: config.attemptKind,
     client_package: config.clientPackage,
     client_version: runtime.client_version,
@@ -283,6 +306,10 @@ function evidenceBase(config, runtime) {
     provider: config.provider,
     reviewer_role: config.agent,
   };
+  if (entry.transport) {
+    base.sdk_transport = entry.transport;
+  }
+  return base;
 }
 
 export function validateRuntimeMetadata(config, runtime) {
@@ -324,27 +351,84 @@ function waitForExit(child, timeoutMs = CLEANUP_TIMEOUT_MS) {
   });
 }
 
+export function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
 async function taskKillProcessTree(pid, commandRunner = execFileText) {
   const commandShell = process.env.ComSpec ?? "cmd.exe";
   await commandRunner(commandShell, ["/d", "/s", "/c", `taskkill /PID ${pid} /T /F < NUL`]);
 }
 
 export async function terminateOwnedProcessTree(child, dependencies = {}) {
-  if (!Number.isInteger(child?.pid) || child.pid <= 0) {
+  const pid = child?.pid;
+  if (!Number.isInteger(pid) || pid <= 0) {
     return { proven: false, diagnostic: "probe runner did not receive an owned process-tree root" };
   }
-  if (child.exitCode !== null && child.exitCode !== undefined) return { proven: true, pid: child.pid };
+
+  const checkPidAlive = dependencies.isPidAlive ?? isPidAlive;
+  const checkDescendants = dependencies.checkDescendants ?? (() => []);
   const taskKill = dependencies.taskKill ?? taskKillProcessTree;
+  const retryTaskKill = dependencies.retryTaskKill ?? taskKill;
   const waitForChildExit = dependencies.waitForChildExit ?? waitForExit;
-  try {
-    await taskKill(child.pid);
-    const exited = await waitForChildExit(child, dependencies.cleanupTimeoutMs ?? CLEANUP_TIMEOUT_MS);
-    return exited
-      ? { proven: true, pid: child.pid }
-      : { proven: false, diagnostic: `owned process tree ${child.pid} did not exit after taskkill` };
-  } catch (error) {
-    return { proven: false, diagnostic: `owned process tree cleanup failed: ${diagnosticFromError(error)}` };
+  const timeoutMs = dependencies.cleanupTimeoutMs ?? CLEANUP_TIMEOUT_MS;
+
+  let descendants = await checkDescendants(pid);
+  if ((child.exitCode !== null && child.exitCode !== undefined) && !checkPidAlive(pid) && descendants.length === 0) {
+    return { proven: true, pid };
   }
+
+  try {
+    child.kill?.();
+  } catch {}
+
+  let taskKillError = null;
+  try {
+    await taskKill(pid);
+  } catch (error) {
+    taskKillError = error;
+  }
+
+  await waitForChildExit(child, Math.min(2000, timeoutMs)).catch(() => false);
+  let rootAlive = checkPidAlive(pid);
+  descendants = await checkDescendants(pid);
+
+  if (!rootAlive && descendants.length === 0) {
+    return { proven: true, pid };
+  }
+
+  try {
+    await retryTaskKill(pid);
+  } catch (error) {
+    taskKillError = error;
+  }
+
+  await waitForChildExit(child, Math.min(1000, timeoutMs)).catch(() => false);
+  rootAlive = checkPidAlive(pid);
+  descendants = await checkDescendants(pid);
+
+  if (!rootAlive && descendants.length === 0) {
+    return { proven: true, pid };
+  }
+
+  if (descendants.length > 0) {
+    return { proven: false, diagnostic: `owned descendant processes [${descendants.join(", ")}] remained after cleanup` };
+  }
+
+  if (rootAlive) {
+    return { proven: false, diagnostic: `owned process tree root ${pid} did not exit after taskkill` };
+  }
+
+  return {
+    proven: false,
+    diagnostic: taskKillError ? `owned process tree cleanup failed: ${diagnosticFromError(taskKillError)}` : `owned process tree ${pid} state could not be proven`,
+  };
 }
 
 function waitForServerAddress(child, timeoutMs) {
@@ -356,6 +440,8 @@ function waitForServerAddress(child, timeoutMs) {
       child.stdout?.off("data", onOutput);
       child.stderr?.off("data", onOutput);
       child.off("exit", onExit);
+      child.stdout?.resume();
+      child.stderr?.resume();
       callback(value);
     };
     const onOutput = (chunk) => {
@@ -380,7 +466,7 @@ class ProbeTimeoutError extends Error {
 async function runWithinDeadline(operation, timeoutMs) {
   let timer;
   const operationPromise = Promise.resolve().then(operation);
-  operationPromise.catch(() => {});
+  operationPromise.catch(() => { });
   try {
     return await Promise.race([
       operationPromise,
@@ -429,6 +515,31 @@ async function createC1Transport(config) {
   }
 }
 
+async function createC3Transport() {
+  const sdkV2 = await import("@opencode-ai/sdk/v2");
+  const { default: launch } = await import("cross-spawn");
+  const child = launch("opencode", ["serve", "--hostname=127.0.0.1", "--port=0"], {
+    env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    const baseUrl = await waitForServerAddress(child, SERVER_STARTUP_TIMEOUT_MS);
+    return {
+      client: sdkV2.createOpencodeClient({ baseUrl }),
+      server: {
+        cleanup: async () => {
+          child.stdout?.destroy();
+          child.stderr?.destroy();
+          return await terminateOwnedProcessTree(child);
+        },
+      },
+    };
+  } catch (error) {
+    await terminateOwnedProcessTree(child);
+    throw error;
+  }
+}
+
 async function cleanupTransport(transport) {
   if (!transport?.server) return { proven: true };
   try {
@@ -442,7 +553,8 @@ async function cleanupTransport(transport) {
 
 export async function runProbe(config, dependencies = {}) {
   const getRuntimeMetadata = dependencies.getRuntimeMetadata ?? ((candidate) => runtimeMetadata(candidate));
-  const createTransport = dependencies.createTransport ?? createC1Transport;
+  const defaultTransport = config.candidate === "C3" ? createC3Transport : createC1Transport;
+  const createTransport = dependencies.createTransport ?? defaultTransport;
   let runtime = { opencode_version: "unavailable", client_version: "unavailable" };
   try {
     const environment = dependencies.environment ?? process.env;
@@ -458,7 +570,10 @@ export async function runProbe(config, dependencies = {}) {
       try {
         opencode = await createTransport(config);
         evidence = await runWithinDeadline(async () => {
-          const session = await opencode.client.session.create({ query: { directory: config.directory }, throwOnError: true });
+          const createArgs = config.candidate === "C3"
+            ? { directory: config.directory, throwOnError: true }
+            : { query: { directory: config.directory }, throwOnError: true };
+          const session = await opencode.client.session.create(createArgs);
           const sessionId = session?.data?.id;
           if (typeof sessionId !== "string" || sessionId.length === 0) throw new Error("OpenCode session.create returned no session id");
           const prompt = config.attemptKind === "smoke" ? buildSmokePrompt() : buildReviewerPrompt();
@@ -466,13 +581,33 @@ export async function runProbe(config, dependencies = {}) {
           const finalInfo = promptResult?.data?.info;
           if (!finalInfo || typeof finalInfo !== "object") throw new Error("OpenCode session.prompt returned no assistant message info");
           const promptMessage = { info: finalInfo, parts: promptResult?.data?.parts ?? [] };
-          const audit = await auditSessionMessages({ client: opencode.client, directory: config.directory, finalInfo, promptMessage, sessionId });
+          const audit = await auditSessionMessages({ client: opencode.client, directory: config.directory, finalInfo, promptMessage, sessionId, candidate: config.candidate });
           if (!audit.valid) return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: false, lifecycle: emptyLifecycle(), schema_validation: { valid: false, errors: [] }, semantic_validation: { valid: false, errors: [] }, classification: "FAIL_LIFECYCLE_AUDIT", diagnostic: audit.diagnostic, subreason: "AUDIT_UNTRUSTWORTHY" };
           const normalized = normalizeStructuredResult(config.candidate, finalInfo);
           const lifecycle = inspectLifecycle({ messages: audit.messages, finalInfo, structuredOutput: normalized.value });
           const schema = lifecycle.structured_output_present ? validateOutcomeSchema(normalized.value) : { valid: false, errors: ["structured result is missing"] };
           const semantics = schema.valid ? validateOutcomeSemantics(normalized.value) : { valid: false, errors: [] };
-          return { ...evidenceBase(config, runtime), lifecycle_audit_source: audit.source, lifecycle_audit_trustworthy: true, official_structured_machine_field: normalized.field, lifecycle, schema_validation: schema, semantic_validation: semantics, classification: classifyLifecycle({ lifecycle, schema, semantics }) };
+          const classification = classifyLifecycle({ lifecycle, schema, semantics });
+          const evidenceResult = {
+            ...evidenceBase(config, runtime),
+            lifecycle_audit_source: audit.source,
+            lifecycle_audit_trustworthy: true,
+            official_structured_machine_field: normalized.field,
+            lifecycle,
+            schema_validation: schema,
+            semantic_validation: semantics,
+            classification,
+          };
+          if (classification === "FAIL_LIFECYCLE_AUDIT") {
+            if (lifecycle.forced_finalization || !lifecycle.finalization_voluntary) {
+              evidenceResult.subreason = "STEP_BUDGET_EXHAUSTED";
+              evidenceResult.diagnostic = "model did not voluntarily finalize before step budget exhaustion (finish: tool-calls)";
+            } else if (!lifecycle.successful_tool_result) {
+              evidenceResult.subreason = "TOOL_RESULT_FAILED";
+              evidenceResult.diagnostic = "read/search tool was called but did not return a successful completed result";
+            }
+          }
+          return evidenceResult;
         }, dependencies.probeTimeoutMs ?? PROBE_TIMEOUT_MS);
       } catch (error) {
         evidence = error instanceof ProbeTimeoutError

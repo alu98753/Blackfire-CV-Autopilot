@@ -1,0 +1,47 @@
+{
+  "record_type": "diagnostic_run",
+  "candidate": "C3",
+  "open_code_version": "1.18.31",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "sdk_transport": "official-sdk-v2",
+  "model": "opencode/big-pickle",
+  "provider": "opencode",
+  "reviewer_role": "regression-reviewer",
+  "duration_ms": 229431,
+  "http_status": 200,
+  "finish_reason": "tool-calls",
+  "tokens": {
+    "total": 61398,
+    "input": 607,
+    "output": 2935,
+    "reasoning": 0,
+    "cache": {
+      "write": 0,
+      "read": 57856
+    }
+  },
+  "official_structured_machine_field": "promptResult.data.info.structured",
+  "structured_output": {
+    "verdict": "PASS",
+    "blocking_findings": 0,
+    "report_markdown_present": true
+  },
+  "schema_validation": {
+    "valid": true,
+    "errors": []
+  },
+  "lifecycle_status": {
+    "voluntary_finalization": false,
+    "step_budget_exhausted": true,
+    "formal_qualification": "NOT_PROVEN",
+    "qualification_classification_if_formal": "FAIL_LIFECYCLE_AUDIT"
+  },
+  "audit_surface_finding": {
+    "session_messages_status": "DECODER_ERROR",
+    "error_diagnostic": "Expected OutputFormatJsonSchema, got {\"type\":\"json_schema\"} at [0][\"info\"][\"format\"]",
+    "trustworthy_audit_surface": false
+  },
+  "isolation_cleanup_proven": true,
+  "notes": "Diagnostic run only under 480s timeout. Transport capability proven; formal route qualification unproven due to step budget exhaustion and session.messages decoder crash."
+}

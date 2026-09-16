@@ -83,3 +83,27 @@ Both authorized alternate runtimes in the frozen matrix are now exhausted:
 - C2 `2.0.2`: preflight established absence of official JSON-Schema structured transport.
 
 The final matrix outcome is **PASS_PROVEN = 0**; neither candidate established a production-viable structured-review route. Production OpenCode remains pinned to `1.18.31`.
+
+## Candidate C3 structured transport diagnostic (2026-09-16)
+
+Under the authorized amendment ([PHASE2_C3_AMENDMENT.md](PHASE2_C3_AMENDMENT.md)), Candidate C3 evaluates the production-pinned OpenCode CLI `1.18.31` paired with `@opencode-ai/sdk@1.18.31` using the official SDK v2 transport (`@opencode-ai/sdk/v2`).
+
+Initial live C3 smoke attempts [attempt 015](attempt-015-c3-big-pickle-regression-smoke.json), [attempt 016](attempt-016-c3-big-pickle-regression-smoke.json), [attempt 017](attempt-017-c3-big-pickle-regression-smoke.json), and [attempt 018](attempt-018-c3-big-pickle-regression-smoke.json) are preserved as `FAIL_INFRASTRUCTURE` (cleanup verification edge case / 120s probe timeouts / server startup timeout).
+
+On 2026-09-16, a controlled diagnostic run ([diagnostic-c3-big-pickle-regression-review.json](diagnostic-c3-big-pickle-regression-review.json)) with a 480-second outer deadline was executed using the production reviewer contract:
+
+- **Exact Runtime / SDK**: OpenCode CLI `1.18.31`, `@opencode-ai/sdk@1.18.31` official v2 transport
+- **Provider / Model**: `opencode/big-pickle`
+- **Reviewer Role**: `regression-reviewer` (production contract, 10-step budget)
+- **Total Duration**: ~229 seconds (229,431 ms)
+- **Transport Status**: HTTP 200
+- **Official Machine Structured Field**: `promptResult.data.info.structured`
+- **Structured Schema Shape**: Valid object with `verdict` ("PASS"), `blocking_findings` (0), and non-empty `report_markdown`
+- **Finish Reason**: `tool-calls` (step-budget exhaustion at 10 steps; total tokens 61,398)
+- **Process Cleanup**: Proven; child server process terminated cleanly without orphan processes
+- **Audit-Surface Finding**:
+  - `client.session.prompt` succeeded and returned official structured machine output without OpenAPI decoding failure.
+  - Calling `client.session.messages` triggered the known client-side OpenAPI decoder failure: `Expected OutputFormatJsonSchema, got {"type":"json_schema"} at [0]["info"]["format"]`.
+  - Therefore, `client.session.messages` is currently **not** a trustworthy or usable lifecycle-audit surface for this C3 route.
+- **Explicit Interpretation**:
+  - **Transport Success != Qualification Success**: While Candidate C3 demonstrates proven ability to transport JSON-Schema structured review verdicts through official SDK v2 without the Phase 1 OpenAPI prompt crash, it is **NOT** classified as `PASS_PROVEN`. Under the current Final SPEC, the route remains non-qualifying because the model ended at step-budget exhaustion (`finish: tool-calls`), and independent whole-session lifecycle auditing via `session.messages` is blocked by the decoder bug.
