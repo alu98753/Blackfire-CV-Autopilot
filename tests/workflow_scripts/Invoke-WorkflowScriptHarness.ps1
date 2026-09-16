@@ -76,12 +76,12 @@ try {
         foreach ($text in @($specText, $regressionText)) {
             Assert-True ($text -match 'bounded blocker detector') 'bounded reviewer contract missing'
             Assert-True ($text -match 'configured step count is a maximum safety ceiling') 'ceiling contract missing'
-            Assert-True ($text -match 'emit the canonical verdict voluntarily before forced max-step finalization') 'voluntary finalization contract missing'
-            Assert-True ($text -match 'Never rely on forced max-step finalization') 'forced finalization prohibition missing'
+            Assert-True ($text -match 'finalize with StructuredOutput before exhausting the configured safety ceiling') 'StructuredOutput finalization contract missing'
+            Assert-True ($text -match 'finish == "tool-calls" is not itself a failure') 'tool-calls completion contract missing'
         }
         Assert-True ($workflowText -match '`spec-reviewer`[\s\S]*?`steps: 8`') 'architecture spec-reviewer budget drifted'
         Assert-True ($workflowText -match '`regression-reviewer`[\s\S]*?`steps: 10`') 'architecture regression-reviewer budget drifted'
-        Assert-True ($workflowText -match 'Forced max-step finalization remains an infrastructure failure, never a verdict source') 'architecture finalization contract missing'
+        Assert-True ($workflowText -match 'Completed valid StructuredOutput is the terminal reviewer result') 'architecture StructuredOutput finalization contract missing'
     }
     Run-Case 'OpenCode launcher contract is pinned and flag-free' {
         $contractText = Get-Content $openCodeContract -Raw

@@ -157,13 +157,13 @@ If `SPEC.md` is marked Draft, the writer must stop before production implementat
 
 ### Spec reviewer
 
-OpenCode `spec-reviewer` compares the candidate diff against explicit scope, invariants, acceptance criteria, and non-goals. It is a read-only, bounded blocker detector (`steps: 8`, target 300-600 words on PASS). The step count is a finite safety ceiling, not an expected consumption or coverage quota: the reviewer must stop when sufficient evidence exists and voluntarily emit its canonical verdict before forced max-step finalization.
+OpenCode `spec-reviewer` compares the candidate diff against explicit scope, invariants, acceptance criteria, and non-goals. It is a read-only, bounded blocker detector (`steps: 8`, target 300-600 words on PASS). The step count is a safety ceiling, not a coverage quota: after sufficient grounded evidence, the reviewer finalizes with StructuredOutput before exhausting that ceiling.
 
 ### Regression reviewer
 
-OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift for highest-risk reachable paths. It is a read-only, bounded blocker detector (`steps: 10`, target 300-600 words on PASS). The step count is a finite safety ceiling, not an expected consumption or coverage quota: the reviewer must stop when sufficient evidence exists and voluntarily emit its canonical verdict before forced max-step finalization.
+OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift for highest-risk reachable paths. It is a read-only, bounded blocker detector (`steps: 10`, target 300-600 words on PASS). The step count is a safety ceiling, not a coverage quota: after sufficient grounded evidence, the reviewer finalizes with StructuredOutput before exhausting that ceiling.
 
-Forced max-step finalization remains an infrastructure failure, never a verdict source. Gate must not recover PASS or BLOCK from forced-finalization prose, partial output, tool results, or older messages.
+Completed valid StructuredOutput is the terminal reviewer result. A separate trailing assistant text turn is not required, and `finish == "tool-calls"` alone is not a failure or verdict signal.
 
 ### Final reviewer and remote orchestrator
 

@@ -35,6 +35,28 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertTrue(values[1]["valid"])
         self.assertFalse(values[2]["valid"])
 
+    def test_lifecycle_event_order_is_not_synthesized_from_prompt_parts(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { lifecycleCompletionBoundary } from "
+            f"'{probe.as_uri()}';"
+            "const tool=(name,status='completed')=>({type:'tool',sessionID:'s',tool:name,state:{status}});"
+            "const end={type:'step-finish',sessionID:'s',reason:'tool-calls'};"
+            "const prompt=[{messageID:'m',type:'tool',tool:'StructuredOutput',state:{status:'completed'}}];"
+            "const structured={verdict:'PASS',blocking_findings:0,report_markdown:'ok'};"
+            "console.log(JSON.stringify(["
+            "lifecycleCompletionBoundary({events:[tool('read'),tool('StructuredOutput'),end],sessionID:'s',messageID:'m',promptParts:prompt,structured}),"
+            "lifecycleCompletionBoundary({events:[tool('StructuredOutput'),tool('read'),end],sessionID:'s',messageID:'m',promptParts:prompt,structured}),"
+            "lifecycleCompletionBoundary({events:[tool('StructuredOutput')],sessionID:'s',messageID:'m',promptParts:prompt,structured})]));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
+        values = json.loads(result.stdout)
+        self.assertTrue(values[0]["complete"])
+        self.assertTrue(values[0]["lifecycle"]["grounding_before_structured"])
+        self.assertFalse(values[1]["complete"])
+        self.assertFalse(values[1]["lifecycle"]["grounding_before_structured"])
+        self.assertFalse(values[2]["complete"])
+
     def test_windows_workflow_harness(self):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
         command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'

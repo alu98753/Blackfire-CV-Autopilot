@@ -34,17 +34,27 @@ export function validateSemantics(value) {
 }
 
 export function qualifyLifecycle({ parts, events, sessionID, messageID, structured }) {
-  const ordered = [...parts, ...events].filter((part) => part?.sessionID === sessionID || !part?.sessionID);
+  // `events` is the only chronology source. Prompt response parts are used
+  // for final-message identity and structured payload confirmation only.
+  const ordered = events.filter((part) => part?.sessionID === sessionID || !part?.sessionID);
   const repoTools = ordered.filter((part) => part?.type === "tool" && TOOLS.has(part.tool));
   const structuredIndex = ordered.findIndex((part) => part?.type === "tool" && part.tool === "StructuredOutput" && part.state?.status === "completed");
   const groundingIndex = repoTools.findIndex((part) => part.state?.status === "completed");
   const finalMessageIdentity = typeof messageID === "string" && parts.length > 0 && parts.every((part) => !part.messageID || part.messageID === messageID);
   return {
     source: "typed-event-and-prompt-response", session_id: sessionID, message_id: messageID ?? null,
-    final_message_identity: finalMessageIdentity, terminal_step: parts.some((part) => part.type === "step-finish"),
+    final_message_identity: finalMessageIdentity, terminal_step: ordered.some((part) => part.type === "step-finish"),
     repository_tool_called: repoTools.length > 0, completed_repository_tool: groundingIndex >= 0,
     structured_output_completed: structuredIndex >= 0, grounding_before_structured: groundingIndex >= 0 && structuredIndex >= 0 && groundingIndex < structuredIndex,
     event_count: events.length, finish: null, structured_present: structured !== undefined && structured !== null,
+  };
+}
+
+export function lifecycleCompletionBoundary({ events, sessionID, messageID, promptParts, structured }) {
+  const lifecycle = qualifyLifecycle({ parts: promptParts, events, sessionID, messageID, structured });
+  return {
+    complete: lifecycle.final_message_identity && lifecycle.terminal_step && lifecycle.completed_repository_tool && lifecycle.structured_output_completed && lifecycle.grounding_before_structured,
+    lifecycle,
   };
 }
 
@@ -91,9 +101,9 @@ async function run() {
     const sessionID = session?.data?.id; if (!sessionID) throw new Error("session.create returned no session id");
     const result = await client.session.prompt({ sessionID, directory, agent, model: { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }, parts: [{ type: "text", text: prompt }], format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 }, throwOnError: true });
     const info = result?.data?.info; const parts = Array.isArray(result?.data?.parts) ? result.data.parts : [];
-    const deadline = Date.now() + 5000; let lifecycleParts;
-    do { lifecycleParts = [...parts, ...events]; if (lifecycleParts.some((part) => part.type === "tool" && part.tool === "StructuredOutput" && part.state?.status === "completed") || Date.now() >= deadline) break; await new Promise((r) => setTimeout(r, 25)); } while (true);
-    const lifecycle = qualifyLifecycle({ parts, events: events.length ? events : lifecycleParts, sessionID, messageID: info?.id, structured: info?.structured }); lifecycle.finish = info?.finish ?? null; lifecycle.subscription_established_before_prompt = subscriptionEstablished; lifecycle.completion_boundary = lifecycle.structured_output_completed ? "completed-StructuredOutput" : "bounded-deadline";
+    const deadline = Date.now() + 5000; let boundary;
+    do { boundary = lifecycleCompletionBoundary({ events, sessionID, messageID: info?.id, promptParts: parts, structured: info?.structured }); if (boundary.complete || Date.now() >= deadline) break; await new Promise((r) => setTimeout(r, 25)); } while (true);
+    const lifecycle = boundary.lifecycle; lifecycle.finish = info?.finish ?? null; lifecycle.subscription_established_before_prompt = subscriptionEstablished; lifecycle.completion_boundary = boundary.complete ? "same-session-event-sequence" : "bounded-deadline";
     const structured = info?.structured;
     const schema = structured == null ? { valid: false, errors: ["structured result is missing"] } : validateSchema(structured);
     const semantics = schema.valid ? validateSemantics(structured) : { valid: false, errors: [] };
