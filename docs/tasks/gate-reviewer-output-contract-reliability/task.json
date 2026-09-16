@@ -1,9 +1,12 @@
 {
   "id": "gate-reviewer-output-contract-reliability",
-  "base_ref": "origin/main",
+  "base_ref": "f2e6503e88161d01fbd73dc4a60e5da7d98167b4",
   "scope": [
+    ".gitignore",
     ".opencode/agents/spec-reviewer.md",
     ".opencode/agents/regression-reviewer.md",
+    "package.json",
+    "package-lock.json",
     "scripts/ai_gate.ps1",
     "scripts/opencode_structured_review.mjs",
     "scripts/opencode_structured_review_probe.mjs",
