@@ -59,6 +59,20 @@ export function lifecycleCompletionBoundary({ events, sessionID, messageID, prom
   };
 }
 
+export function qualifyAttempt({ sessionID, info, events }) {
+  if (!info || typeof info !== "object" || typeof info.id !== "string" || info.id.length === 0 || typeof info.sessionID !== "string" || info.sessionID.length === 0 || info.sessionID !== sessionID) {
+    return { classification: "STRUCTURED_TRANSPORT_FAILED", reason: "successful prompt response lacks a matching assistant identity" };
+  }
+  const grounded = events.some((part) => part?.sessionID === sessionID && part.type === "tool" && TOOLS.has(part.tool) && part.state?.status === "completed");
+  if (!grounded) return { classification: "GROUNDING_FAILED", reason: "no completed same-session repository tool was observed" };
+  if (info.structured === undefined || info.structured === null) return { classification: "STRUCTURED_OUTPUT_MISSING", reason: "prompt response has no info.structured" };
+  const schema = validateSchema(info.structured);
+  if (!schema.valid) return { classification: "SCHEMA_INVALID", schema_validation: schema };
+  const semantics = validateSemantics(info.structured);
+  if (!semantics.valid) return { classification: "SEMANTIC_CONTRADICTION", schema_validation: schema, semantic_validation: semantics };
+  return { classification: info.structured.verdict === "PASS" ? "VALID_PASS" : "VALID_BLOCK", schema_validation: schema, semantic_validation: semantics };
+}
+
 export function redact(value) {
   const text = String(value ?? "unknown error").replace(/Bearer\s+[^\s,;]+/gi, "Bearer [REDACTED]").replace(/\b(?:sk|pk|api)[_-][A-Za-z0-9_-]{8,}\b/gi, "[REDACTED]");
   return text.length <= LIMIT ? text : `${text.slice(0, LIMIT - 3)}...`;
@@ -111,33 +125,24 @@ async function run() {
   let client; let cleanup = { safe: false, server_exit_confirmed: false, consumer_settled: false, subscription_cancelled: false };
   let consumer; let stream; let abortController;
   try {
-    client = sdk.createOpencodeClient({ baseUrl: await waitForServer(server) });
+    client = sdk.createOpencodeClient({ baseUrl: await waitForServer(server), throwOnError: true });
     const events = []; let subscription; let subscriptionEstablished = false;
     abortController = new AbortController();
     try { subscription = await client.event.subscribe({ signal: abortController.signal }); } catch (error) { throw new Error(`event.subscribe failed: ${redact(error.message)}`); }
     subscriptionEstablished = true;
     stream = subscription?.stream;
     consumer = (async () => { if (stream && Symbol.asyncIterator in stream) for await (const event of stream) { if (event?.properties?.part) events.push(event.properties.part); } })();
-    const session = await client.session.create({ directory, throwOnError: true });
+    const session = await client.session.create({ directory });
     const sessionID = session?.data?.id; if (!sessionID) throw new Error("session.create returned no session id");
-    const result = await client.session.prompt({ sessionID, directory, agent, model: { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }, parts: [{ type: "text", text: prompt }], format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 }, throwOnError: true });
+    const result = await client.session.prompt({ sessionID, directory, agent, model: { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) }, parts: [{ type: "text", text: prompt }], format: { type: "json_schema", schema: OUTCOME_SCHEMA, retryCount: 2 } });
     const info = result?.data?.info; const parts = Array.isArray(result?.data?.parts) ? result.data.parts : [];
     const deadline = Date.now() + 5000; let boundary;
     do { boundary = lifecycleCompletionBoundary({ events, sessionID, messageID: info?.id, promptParts: parts, structured: info?.structured }); if (boundary.complete || Date.now() >= deadline) break; await new Promise((r) => setTimeout(r, 25)); } while (true);
     const lifecycle = boundary.lifecycle; lifecycle.finish = info?.finish ?? null; lifecycle.subscription_established_before_prompt = subscriptionEstablished; lifecycle.completion_boundary = boundary.complete ? "same-session-event-sequence" : "bounded-deadline";
-    const structured = info?.structured;
-    const schema = structured == null ? { valid: false, errors: ["structured result is missing"] } : validateSchema(structured);
-    const semantics = schema.valid ? validateSemantics(structured) : { valid: false, errors: [] };
-    let classification = "LIFECYCLE_UNTRUSTWORTHY";
-    if (!lifecycle.subscription_established_before_prompt || !lifecycle.final_message_identity || !lifecycle.terminal_step) classification = "LIFECYCLE_UNTRUSTWORTHY";
-    else if (!lifecycle.completed_repository_tool || !lifecycle.grounding_before_structured) classification = "GROUNDING_FAILED";
-    else if (!lifecycle.structured_output_completed || structured == null) classification = structured == null ? "STRUCTURED_OUTPUT_MISSING" : "STRUCTURED_TRANSPORT_FAILED";
-    else if (!schema.valid) classification = "SCHEMA_INVALID";
-    else if (!semantics.valid) classification = "SEMANTIC_CONTRADICTION";
-    else classification = structured.verdict === "PASS" ? "VALID_PASS" : "VALID_BLOCK";
+    const structured = info?.structured; const attempt = qualifyAttempt({ sessionID, info, events }); const classification = attempt.classification;
     cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted);
     cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.consumer_settled && cleanup.server_exit_confirmed;
-    process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification: cleanup.safe ? classification : "INFRASTRUCTURE_FAILED", lifecycle, structured: structured ?? null, schema_validation: schema, semantic_validation: semantics, cleanup }) + "\n");
+    process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification: cleanup.safe ? classification : "INFRASTRUCTURE_FAILED", lifecycle, structured: structured ?? null, schema_validation: attempt.schema_validation ?? null, semantic_validation: attempt.semantic_validation ?? null, cleanup }) + "\n");
   } finally { if (!cleanup.consumer_settled && consumer) { cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (!cleanup.server_exit_confirmed) { cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.consumer_settled && cleanup.server_exit_confirmed; } }
 }
 

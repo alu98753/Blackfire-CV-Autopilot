@@ -35,30 +35,29 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertTrue(values[1]["valid"])
         self.assertFalse(values[2]["valid"])
 
-    def test_lifecycle_event_order_is_not_synthesized_from_prompt_parts(self):
+    def test_lifecycle_authority_uses_prompt_identity_and_grounding_only(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"
         script = (
-            "import { lifecycleCompletionBoundary } from "
+            "import { qualifyAttempt } from "
             f"'{probe.as_uri()}';"
             "const tool=(name,messageID='m2',sessionID='s',status='completed')=>({type:'tool',messageID,sessionID,tool:name,state:{status}});"
-            "const end=(messageID='m2',sessionID='s')=>({type:'step-finish',messageID,sessionID,reason:'tool-calls'});"
-            "const prompt=[{messageID:'m2',type:'tool',tool:'StructuredOutput',state:{status:'completed'}}];"
             "const structured={verdict:'PASS',blocking_findings:0,report_markdown:'ok'};"
             "console.log(JSON.stringify(["
-            "lifecycleCompletionBoundary({events:[tool('read','m1'),tool('StructuredOutput'),end()],sessionID:'s',messageID:'m2',promptParts:prompt,structured}),"
-            "lifecycleCompletionBoundary({events:[tool('StructuredOutput','m1'),end('m1')],sessionID:'s',messageID:'m2',promptParts:prompt,structured}),"
-            "lifecycleCompletionBoundary({events:[tool('StructuredOutput'),end('m1')],sessionID:'s',messageID:'m2',promptParts:prompt,structured}),"
-            "lifecycleCompletionBoundary({events:[tool('read','m1',null),tool('StructuredOutput'),end()],sessionID:'s',messageID:'m2',promptParts:prompt,structured}),"
-            "lifecycleCompletionBoundary({events:[tool('read','m1'),tool('StructuredOutput'),end()],sessionID:'s',messageID:'m2',promptParts:prompt,structured})]));"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',structured}}),"
+            "qualifyAttempt({events:[tool('StructuredOutput','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',structured}}),"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'wrong',info:{id:'m2',sessionID:'s',structured}}),"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',structured}}),"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s'}}),"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',structured:{verdict:'BLOCK',blocking_findings:0,report_markdown:'bad'}}})]));"
         )
         result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
         values = json.loads(result.stdout)
-        self.assertTrue(values[0]["complete"])
-        self.assertTrue(values[0]["lifecycle"]["grounding_before_structured"])
-        self.assertFalse(values[1]["complete"])
-        self.assertFalse(values[2]["complete"])
-        self.assertFalse(values[3]["complete"])
-        self.assertTrue(values[4]["complete"])
+        self.assertEqual(values[0]["classification"], "VALID_PASS")
+        self.assertEqual(values[1]["classification"], "GROUNDING_FAILED")
+        self.assertEqual(values[2]["classification"], "STRUCTURED_TRANSPORT_FAILED")
+        self.assertEqual(values[3]["classification"], "STRUCTURED_TRANSPORT_FAILED")
+        self.assertEqual(values[4]["classification"], "STRUCTURED_OUTPUT_MISSING")
+        self.assertEqual(values[5]["classification"], "SEMANTIC_CONTRADICTION")
 
     def test_windows_opencode_launcher_uses_cmd_shim_safely(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"
