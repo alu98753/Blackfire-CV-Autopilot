@@ -9,34 +9,32 @@ Fresh Scout: [`CONTEXT.md`](CONTEXT.md)
 
 ## Goal
 
-Make OpenCode reviewer outcomes machine-reliable while keeping Gate deliberately small, deterministic, and non-semantic.
+Make OpenCode reviewer outcomes machine-reliable without turning OpenCode implementation details into reviewer-authority requirements.
 
-The authoritative workflow is:
+The workflow is:
 
 ```text
 Gemini / Antigravity
 implementation writer
         ↓
 OpenCode independent reviewers
-semantic code review
+semantic review
         ↓
-StructuredOutput + typed lifecycle evidence
+SDK adapter
+attempt qualification
         ↓
-small SDK adapter
-attempt qualification authority
-        ↓
-versioned deterministic envelope
+versioned envelope
         ↓
 Gate
-thin envelope validation + fallback routing + transaction coordination
+routing + tests + transaction coordination
         ↓
 canonical GitHub evidence
         ↓
 ChatGPT / human
-final semantic + architecture review
+final semantic / architecture review
 ```
 
-Responsibility is intentionally split:
+Responsibility is fixed:
 
 ```text
 Reviewer      = semantic authority
@@ -45,120 +43,55 @@ Gate          = orchestration authority
 ChatGPT/human = final semantic safety net
 ```
 
-This responsibility split is an architecture invariant for this task.
+This split is an architecture invariant.
 
-## Core responsibility invariant
+## Core principle
 
-### Reviewer
+The automation should verify only what materially contributes to trustworthy review authority.
 
-The reviewer decides only semantic PASS/BLOCK for the candidate implementation.
+It must not reject an otherwise grounded, schema-valid reviewer verdict merely because an internal OpenCode SSE event, step marker, finish string, or event-order detail is absent or delayed.
 
-### Adapter
+The authority question is intentionally small:
 
-The adapter decides whether one concrete OpenCode reviewer attempt is mechanically authoritative enough to become one of:
+> Did a fresh reviewer session actually inspect repository evidence and return a valid structured PASS/BLOCK result through the supported SDK contract?
 
-- `VALID_PASS`
-- `VALID_BLOCK`
-- a typed pre-authority failure classification
+Everything else is either transport safety, cleanup safety, routing policy, or diagnostic evidence.
 
-### Gate
+## Verified OpenCode 1.18.31 SDK contract
 
-Gate is exactly:
+Pinned source/type inspection establishes for `@opencode-ai/sdk@1.18.31`:
 
-```text
-Gate = thin adapter-envelope validator
-     + fallback router
-     + focused-test orchestrator
-     + transaction coordinator
+- successful `session.prompt()` HTTP 200 data is:
+
+```ts
+{
+  info: AssistantMessage
+  parts: Array<Part>
+}
 ```
 
-Gate is not:
+- `AssistantMessage.id` is required `string`;
+- `AssistantMessage.sessionID` is required `string`;
+- `AssistantMessage.structured` is optional and is the authoritative structured-result field;
+- generated client request behavior defaults to `throwOnError = false` unless configured as a request/client option;
+- therefore production adapter must configure SDK error handling correctly and must not pass `throwOnError` as if it were prompt body data;
+- an API/SDK failure that yields no successful `data.info` must be treated as transport/API-contract failure, not as reviewer lifecycle ambiguity;
+- server source writes successful `StructuredOutput` into the assistant message `structured` field before returning the final assistant message;
+- `info.structured` is therefore the authoritative success signal for structured reviewer output;
+- completed `StructuredOutput` ToolPart events and step-finish events may remain useful diagnostics but are not independent hard authority requirements.
 
-```text
-- a code reviewer
-- an architecture reviewer
-- a second semantic judge
-- an OpenCode lifecycle reimplementation
-- a StructuredOutput schema reimplementation
-- a model reasoning evaluator
-- a prose interpreter
-- a replacement for final ChatGPT/human review
-```
+The production path remains pinned to OpenCode `1.18.31` and SDK `1.18.31`.
 
-Gate may answer only these questions:
+## Reviewer — semantic authority
 
-1. Did the adapter process return a supported, parseable machine envelope?
-2. Is the adapter-owned classification supported by this Gate version?
-3. Is cleanup/fallback safe according to the adapter/process boundary facts?
-4. Is the current attempt terminal, or may bounded fallback continue?
-5. Did required focused deterministic tests pass?
-6. May canonical evidence be promoted transactionally?
-
-If Gate logic materially recomputes OpenCode lifecycle, grounding, StructuredOutput schema, or PASS/BLOCK semantic consistency, that is architecture drift.
-
-## Verified baseline
-
-The completed `opencode-structured-review-provider-compatibility` task established:
-
-- OpenCode is pinned to `1.18.31`.
-- `@opencode-ai/sdk` is pinned to `1.18.31`.
-- supported structured transport is official SDK v2 `session.prompt(... format: { type: "json_schema" })`.
-- authoritative structured data is `promptResult.data.info.structured`.
-- successful StructuredOutput settlement is represented by a typed ToolPart with `state.status == "completed"`.
-- `finish == "tool-calls"` is not failure evidence by itself.
-- `client.session.messages` has a decoder defect for this route and is not a production dependency.
-- Big Pickle proved structured transport can succeed while repository grounding fails.
-- MiMo proved the separate missing-StructuredOutput failure mode exists.
-- SDK v2 typed event subscription can expose earlier same-session tool activity that final prompt response parts do not contain.
-
-Live task evidence additionally established that OpenCode 1.18.31 + Big Pickle can produce a same-session grounded completed StructuredOutput with authoritative `info.structured` and a valid `VALID_BLOCK` adapter envelope. Remaining adapter teardown must allow that completed attempt to terminate naturally without leaving owned async resources alive.
-
-## Final authority pipeline
-
-```text
-fresh isolated reviewer session
-        ↓
-typed same-session lifecycle events
-        ↓
-minimum repository grounding proof
-        ↓
-reviewer semantic judgment
-        ↓
-completed final StructuredOutput
-        ↓
-promptResult.data.info.structured
-        ↓
-adapter schema / consistency / lifecycle qualification
-        ↓
-adapter attempt classification
-        ↓
-versioned deterministic envelope
-        ↓
-Gate envelope-boundary validation
-        ↓
-terminal trusted verdict OR bounded fallback
-        ↓
-focused tests
-        ↓
-transactional canonical promotion
-        ↓
-final ChatGPT/human semantic review
-```
-
-Human-readable Markdown is presentation evidence only. It never carries machine verdict authority.
-
-## Responsibility model
-
-### 1. Reviewer — semantic authority
-
-`spec-reviewer` and `regression-reviewer` are independent, read-only, bounded semantic reviewers.
+`spec-reviewer` and `regression-reviewer` remain independent, read-only, bounded semantic reviewers.
 
 They own:
 
 - reading relevant task/repository evidence;
 - understanding the implementation change;
-- detecting blocking semantic, regression, and architecture defects within role scope;
-- producing the canonical semantic object:
+- detecting blocking semantic / regression / architecture defects within role scope;
+- producing exactly:
 
 ```json
 {
@@ -170,9 +103,14 @@ They own:
 
 Only the reviewer/model decides semantic PASS vs BLOCK.
 
-Neither adapter nor Gate may override a trusted BLOCK into PASS, choose a preferred reviewer opinion, or recover verdict authority from prose.
+Neither Adapter nor Gate may:
 
-### 2. Adapter — attempt qualification authority
+- override trusted BLOCK into PASS;
+- reinterpret `report_markdown` as machine authority;
+- compare multiple trusted reviewer opinions to choose a preferred semantic result;
+- become another semantic reviewer.
+
+## Adapter — attempt qualification authority
 
 Production adapter:
 
@@ -180,116 +118,71 @@ Production adapter:
 scripts/opencode_structured_review.mjs
 ```
 
-The adapter isolates OpenCode-specific mechanics from Gate policy.
+The adapter isolates OpenCode-specific mechanics from Gate.
 
 It owns:
 
-1. official `@opencode-ai/sdk/v2` request construction;
+1. correct official `@opencode-ai/sdk/v2` client/request construction;
 2. fresh one-shot reviewer session creation;
-3. typed event subscription established before prompt execution;
-4. bounded same-session event collection;
-5. final prompt/session/message identity qualification;
-6. current grounding policy qualification;
-7. ordering proof that completed model-initiated `read` / `glob` / `grep` occurs before accepted final StructuredOutput;
-8. final completed StructuredOutput qualification;
-9. authoritative `info.structured` extraction;
-10. exact structured shape/type validation;
-11. deterministic PASS/BLOCK cross-field validation;
-12. teardown of adapter-owned async resources;
-13. cleanup safety qualification;
-14. bounded/redacted diagnostics;
-15. final attempt classification;
-16. emission of exactly one versioned deterministic machine envelope.
+3. SDK error handling with `throwOnError` configured in the supported client/request option surface;
+4. one bounded typed event subscription for repository-grounding evidence;
+5. authoritative prompt-response success validation;
+6. response `info.id` and `info.sessionID` validation against the requested fresh session;
+7. current repository-grounding policy;
+8. `info.structured` extraction;
+9. exact review-object shape/type validation;
+10. deterministic PASS/BLOCK cross-field validation;
+11. adapter-owned async-resource teardown and cleanup safety;
+12. bounded/redacted diagnostics;
+13. final attempt classification;
+14. exactly one deterministic versioned envelope.
 
 The adapter must not:
 
 - select fallback models;
-- choose PASS over BLOCK;
 - decide Gate final state;
-- parse `report_markdown` for verdict authority;
-- promote canonical artifacts;
-- query stale sessions to salvage a failed attempt;
 - perform semantic code review;
+- parse prose for verdict authority;
+- query stale sessions to salvage a failed attempt;
 - depend on compatibility-matrix routing at runtime.
 
-### 3. Gate — orchestration authority
+## Minimal trusted-review authority contract
 
-`scripts/ai_gate.ps1` remains the orchestration owner.
+A reviewer attempt may become `VALID_PASS` or `VALID_BLOCK` only when all of the following are true:
 
-#### Thin envelope validation
+```text
+fresh isolated reviewer session
++ session.prompt successful under the SDK contract
++ response info.id exists
++ response info.sessionID matches the fresh session
++ same fresh session contains at least one completed model-initiated repository read/glob/grep
++ info.structured exists
++ structured review schema is valid
++ PASS/BLOCK cross-field semantics are valid
+= trusted reviewer verdict
+```
 
-Gate validates only the adapter/process boundary:
-
-- adapter process completed normally enough to provide machine output;
-- stdout contains one supported parseable envelope;
-- supported `schema_version`;
-- supported classification enum;
-- minimum envelope sections / primitive field types required for routing exist;
-- cleanup safety fact exists and is well typed;
-- `VALID_PASS` / `VALID_BLOCK` includes structured payload sufficient for deterministic rendering.
-
-Gate MUST NOT independently recompute:
-
-- repository grounding qualification;
-- lifecycle ordering/trust;
-- final StructuredOutput completion qualification;
-- exact three-field structured schema;
-- `PASS -> blocking_findings == 0`;
-- `BLOCK -> blocking_findings >= 1`;
-- semantic-contradiction classification.
-
-Those are adapter-owned deterministic qualifications.
-
-Gate consumes the adapter classification subject to envelope-version/type validation.
-
-#### Fallback routing
-
-Gate owns:
-
-- configured candidate ordering;
-- bounded candidate invocation;
-- fallback only before trusted verdict authority and only when cleanup/process termination is safe;
-- immediate terminal stop after trusted `VALID_PASS` or `VALID_BLOCK`;
-- anti-review-shopping.
-
-#### Transaction coordination
-
-Gate owns:
-
-- focused deterministic test orchestration;
-- candidate evidence staging;
-- deterministic rendering from accepted machine fields;
-- transactional canonical promotion;
-- rollback on promotion failure;
-- aggregate final state;
-- external exit-code mapping.
-
-### 4. Final ChatGPT / human review — semantic safety net
-
-Final ChatGPT/human review remains mandatory after Gate evidence is available.
-
-It may disagree with an automated PASS and may detect responsibility-boundary, coupling, state ownership, timing, testability, dead logic, technical debt, or architecture drift.
-
-Therefore Gate PASS means workflow verification succeeded, not that the implementation is semantically correct.
+Cleanup safety is additionally required for the workflow to continue/promote safely, but OpenCode internal event trivia is not review authority.
 
 ## Grounding contract
 
-A reviewer verdict must be grounded in repository evidence tied to the current candidate/task state.
-
-For this task the machine-verifiable minimum proxy is:
+The machine-verifiable minimum grounding proxy remains:
 
 - at least one model-initiated permitted repository `read`, `glob`, or `grep`;
-- tool state reaches `completed`;
-- event belongs to the same fresh reviewer session;
-- it occurs before accepted final StructuredOutput.
+- the tool reaches `state.status == "completed"`;
+- the evidence belongs to the same fresh reviewer session used by the prompt.
 
-The **adapter applies this grounding policy and emits the resulting attempt classification**.
+That is enough for this task.
 
-Gate does not recompute grounding from raw lifecycle facts. Gate only routes on the adapter-owned classification.
+The adapter may use typed events to observe this fact and may boundedly tolerate delivery lag before final qualification.
 
-This is a minimum anti-ungrounded-review condition, not proof of semantic coverage completeness.
+The adapter does **not** need to prove an exact event-order relation between the completed repository tool and a `StructuredOutput` ToolPart event.
 
-A future `reviewer-bounded-context-infrastructure` task may replace HOW grounding is proven while preserving or strengthening the grounding invariant.
+Reason: the session is fresh/one-shot, grounding belongs to the same session, and successful `session.prompt()` returns the final assistant result whose `info.structured` is the authoritative structured outcome.
+
+This grounding proxy proves only that the reviewer actually inspected repository evidence. It does not prove semantic coverage completeness.
+
+A future `reviewer-bounded-context-infrastructure` task may replace HOW grounding is proven while preserving or strengthening this invariant.
 
 ## Structured result contract
 
@@ -303,7 +196,7 @@ The authoritative semantic object contains exactly:
 }
 ```
 
-Shape/type requirements:
+Required shape/type rules:
 
 - exactly these three fields;
 - `verdict` is `PASS` or `BLOCK`;
@@ -317,62 +210,48 @@ PASS  -> blocking_findings == 0
 BLOCK -> blocking_findings >= 1
 ```
 
-**The adapter validates these invariants mechanically before assigning `VALID_PASS` or `VALID_BLOCK`.**
+The Adapter validates these mechanically before assigning `VALID_PASS` or `VALID_BLOCK`.
 
-Gate does not repeat them. Gate validates the versioned adapter-envelope boundary and routes on the adapter-owned classification.
+Gate does not repeat them.
 
 Verdict-like strings inside `report_markdown` have zero machine authority.
 
-## Lifecycle / completion contract
+## SDK success / failure contract
 
-Adapter qualification for trusted verdict authority requires:
+For this task, successful prompt transport means the SDK call resolves through the supported success contract and yields a real `data.info: AssistantMessage`.
 
-```text
-same-session grounding evidence
-+ trustworthy typed lifecycle observation
-+ accepted final-message identity
-+ completed final StructuredOutput ToolPart
-+ non-null info.structured
-+ valid structured schema
-+ valid PASS/BLOCK cross-field semantics
-+ safe owned-resource teardown
-= VALID_PASS or VALID_BLOCK
-```
+Because `AssistantMessage.id` and `sessionID` are required by the pinned type contract:
 
-Consequences:
+- missing `data.info`;
+- missing `info.id`;
+- missing `info.sessionID`;
+- mismatched `info.sessionID`;
 
-- `finish == "tool-calls"` is neutral and cannot be rejected by itself;
-- `finish == "stop"` does not validate missing StructuredOutput;
-- step count is a safety ceiling, not a coverage quota;
-- no trailing assistant text turn is required;
-- final prompt parts alone cannot prove earlier grounding;
-- same-session and final-message identity are fail-closed authority boundaries;
-- valid completed StructuredOutput may occur on the configured final model step;
-- cleanup includes adapter-owned async resources, not only server process termination.
+must not be treated as normal successful review output.
 
-## Adapter teardown / cleanup contract
+A request/API error that would otherwise resolve with `data: undefined` under the generated client's default non-throwing behavior must be surfaced by correct `throwOnError` configuration and classified as transport/API failure.
 
-The adapter owns every asynchronous resource it starts, including the OpenCode server process and event subscription / consumer.
+`message_id == null` is therefore not an accepted success state and must not be explained as ordinary reviewer lifecycle nondeterminism.
 
-Before emitting an envelope with `cleanup.safe == true`, the adapter must mechanically establish the required owned-resource teardown state.
+## OpenCode details that are diagnostic only
 
-Required behavior:
+The following may be retained in diagnostics, logs, tests, or envelopes if useful, but they must not independently decide reviewer verdict authority:
 
-- explicitly cancel/abort/close the event subscription or stream using supported pinned SDK semantics where available;
-- stop and bounded-await the consumer task;
-- terminate the owned OpenCode server;
-- confirm server termination;
-- ensure no adapter-owned stream/socket/timer remains capable of keeping Node alive;
-- emit exactly one envelope;
-- naturally terminate with exit code 0 after a valid envelope, including `VALID_BLOCK`.
+- final `step-finish` observation;
+- `terminal_step`;
+- completed `StructuredOutput` ToolPart event;
+- `final_structured_message_identity` derived from event matching;
+- exact event-order relation between grounding and StructuredOutput event;
+- `finish` string;
+- `event_count`;
+- `completion_boundary` label;
+- `repository_tool_called` when `completed_repository_tool` already proves the stronger fact.
 
-An unconditional `process.exit(0)` is not an acceptable substitute for owned-resource teardown.
-
-If owned-resource teardown cannot be proven safe, the attempt must not be represented as safely reusable for fallback.
+Absence or delay of those diagnostics must not turn an otherwise successful, same-session grounded, schema-valid `info.structured` result into `LIFECYCLE_UNTRUSTWORTHY`.
 
 ## Attempt classification
 
-Adapter-owned attempt classifications remain machine-distinguishable:
+Adapter-owned classes remain machine-distinguishable:
 
 - `GROUNDING_FAILED`
 - `LIFECYCLE_UNTRUSTWORTHY`
@@ -384,136 +263,167 @@ Adapter-owned attempt classifications remain machine-distinguishable:
 - `VALID_PASS`
 - `VALID_BLOCK`
 
-Examples:
+Interpretation is narrowed as follows:
 
-- authoritative lifecycle but no completed grounding -> `GROUNDING_FAILED`;
-- current-session/final-message lifecycle cannot be proven -> `LIFECYCLE_UNTRUSTWORTHY`;
-- SDK/prompt/server transport fails -> appropriate transport/infrastructure classification;
-- no accepted StructuredOutput -> `STRUCTURED_OUTPUT_MISSING`;
-- invalid structured shape/type -> `SCHEMA_INVALID`;
-- PASS with blocking findings or BLOCK with zero findings -> `SEMANTIC_CONTRADICTION`;
-- all adapter authority checks pass + reviewer PASS -> `VALID_PASS`;
-- all adapter authority checks pass + reviewer BLOCK -> `VALID_BLOCK`.
+- `GROUNDING_FAILED`: prompt/session authority is otherwise usable, but no completed same-session repository grounding is observed;
+- `LIFECYCLE_UNTRUSTWORTHY`: reserved for genuine session/provenance ambiguity that cannot be reduced to transport failure or missing grounding; it must not be used merely because step-finish or StructuredOutput event diagnostics are absent;
+- `STRUCTURED_TRANSPORT_FAILED`: SDK/API/prompt contract did not complete successfully, including request errors or missing required success-response identity fields;
+- `STRUCTURED_OUTPUT_MISSING`: successful prompt response exists but `info.structured` is absent;
+- `SCHEMA_INVALID`: structured result shape/type invalid;
+- `SEMANTIC_CONTRADICTION`: PASS/>0 or BLOCK/0;
+- `INFRASTRUCTURE_FAILED`: adapter/server/process/cleanup infrastructure prevents safe workflow continuation;
+- `VALID_PASS`: trusted grounded review says PASS;
+- `VALID_BLOCK`: trusted grounded review says BLOCK.
 
 Gate must not collapse these classes merely for routing convenience.
 
-## Fallback / anti-review-shopping
+## Cleanup contract
 
-Fallback is allowed only while no trusted semantic verdict exists.
+The adapter owns every asynchronous resource it starts, including OpenCode server and event subscription/consumer.
+
+Before the workflow may safely continue or promote, cleanup must establish:
+
+- event subscription/consumer stop requested;
+- consumer settles within a bounded deadline;
+- owned server terminates;
+- server exit is confirmed;
+- no adapter-owned resource is knowingly left keeping Node alive.
+
+The existing bounded teardown using abort + async-generator return + bounded settlement is retained unless pinned SDK evidence requires a narrower change.
+
+An unconditional `process.exit(0)` is not an acceptable substitute for owned-resource teardown.
+
+## Gate — orchestration authority
+
+`scripts/ai_gate.ps1` remains deliberately small.
+
+Gate validates only the adapter/process envelope boundary:
+
+- adapter process completed normally enough to provide machine output;
+- one supported envelope is parseable;
+- supported `schema_version`;
+- supported classification enum;
+- minimum routing fields exist with expected primitive types;
+- cleanup safety fact is present and well typed;
+- `VALID_PASS` / `VALID_BLOCK` includes structured payload sufficient for deterministic rendering.
+
+Gate MUST NOT recompute:
+
+- grounding;
+- OpenCode event ordering;
+- StructuredOutput ToolPart completion;
+- exact review-object schema;
+- PASS/BLOCK cross-field consistency;
+- semantic contradiction classification.
+
+Gate owns:
+
+- bounded configured candidate routing;
+- fallback only before trusted verdict authority;
+- cleanup-safe fallback;
+- immediate stop after trusted `VALID_PASS` or `VALID_BLOCK`;
+- anti-review-shopping;
+- focused deterministic tests;
+- evidence staging;
+- transactional promotion / rollback;
+- final state and external exit code.
+
+## Fallback / anti-review-shopping
 
 A trusted `VALID_PASS` or `VALID_BLOCK` is terminal for that reviewer role.
 
-Safe bounded fallback may continue after pre-authority classifications such as:
+Safe fallback may continue after pre-authority classifications such as:
 
 - `GROUNDING_FAILED`;
-- `LIFECYCLE_UNTRUSTWORTHY`;
+- genuine `LIFECYCLE_UNTRUSTWORTHY`;
 - `STRUCTURED_TRANSPORT_FAILED`;
 - `STRUCTURED_OUTPUT_MISSING`;
 - `SCHEMA_INVALID`;
 - `SEMANTIC_CONTRADICTION`;
-- confirmed-safe process/infrastructure failures.
+- confirmed-safe infrastructure failure.
 
-Fallback requires cleanup/process termination to be safe for that attempt.
+Unsafe/unconfirmed cleanup stops the chain.
 
-Unconfirmed termination or unsafe cleanup stops the chain.
+Fallback must never seek a more favorable semantic answer after trusted PASS/BLOCK.
 
-Fallback must never be used to seek a more favorable semantic result after trusted PASS/BLOCK.
-
-## Gate final-state semantics
-
-Attempt classification and Gate final state are different concepts.
+## Gate final states
 
 Gate exposes exactly:
 
-- `PASSED`: both reviewer roles reached trusted PASS and required focused tests passed;
-- `CANDIDATE_BLOCKED`: at least one trusted BLOCK or focused-test failure blocks the candidate;
-- `VERIFICATION_UNAVAILABLE`: sufficient trusted reviewer/test authority could not be obtained safely.
-
-External compatibility:
-
 ```text
-0 = PASSED
-2 = CANDIDATE_BLOCKED
-1 = VERIFICATION_UNAVAILABLE
+PASSED                    -> exit 0
+CANDIDATE_BLOCKED         -> exit 2
+VERIFICATION_UNAVAILABLE  -> exit 1
 ```
 
-`VERIFICATION_UNAVAILABLE` is not synonymous with infrastructure failure.
+`VERIFICATION_UNAVAILABLE` means sufficient trusted authority could not be obtained safely. It is not synonymous with infrastructure failure.
 
-Examples include:
+Examples:
 
 - all candidates `GROUNDING_FAILED`;
-- `STRUCTURED_OUTPUT_MISSING` followed by `SCHEMA_INVALID` with no candidates left;
-- lifecycle authority cannot be proven;
-- transport prevents trusted review;
+- successful prompt responses without StructuredOutput;
+- SDK transport failures exhaust candidates;
+- genuine session/provenance ambiguity;
 - unsafe cleanup stops fallback.
 
-Candidate exhaustion before trusted verdict authority returns `VERIFICATION_UNAVAILABLE` / exit 1 and must not be relabeled semantic BLOCK or generic infrastructure-blocked.
+Candidate exhaustion before trusted verdict authority must never become semantic BLOCK.
 
 ## Canonical artifacts
 
-### `reviews/spec-review.md` / `reviews/regression-review.md`
+`reviews/spec-review.md` and `reviews/regression-review.md` are deterministic renderings of accepted reviewer results.
 
-Canonical review files are deterministic human-readable renderings of accepted reviewer results.
+`EVIDENCE.md` is the canonical verification summary after transactional promotion.
 
-They contain reviewer `report_markdown`, deterministic verdict metadata from accepted machine fields, and optional compact provenance.
+Runs that terminate before promotion must preserve prior trusted canonical artifacts.
 
-### `EVIDENCE.md`
+Raw per-attempt diagnostics remain task-namespaced under:
 
-`EVIDENCE.md` remains the canonical verification summary after transactional promotion.
-
-It records, where applicable:
-
-- Gate final state;
-- task / branch / HEAD / base ref;
-- accepted reviewer role/model/attempt;
-- accepted verdict/blocking count;
-- prior attempt classifications;
-- focused-test results;
-- pointers to review files.
-
-For runs that terminate before transactional promotion, prior trusted canonical artifacts must remain untouched. Root classifications remain available in task-namespaced runtime diagnostics and, when the workflow produces/promotes a canonical evidence summary, must remain distinguishable rather than being collapsed to `INFRASTRUCTURE_BLOCKED`.
-
-### `.runtime/ai_gate/<task>/`
-
-Raw failed-attempt output and bounded diagnostics are ephemeral / git-ignored.
-
-## Required removals
-
-The authoritative production reviewer path must not contain:
-
-1. `Get-FinalAssistantMessageFromStructuredJson()` verdict extraction;
-2. `Get-CanonicalReviewPayload()`;
-3. regex/header-based `Test-ReviewVerdictStructure()`;
-4. direct reviewer transport through `opencode run --format json`;
-5. free-text `VERDICT:` / `BLOCKING_FINDINGS:` authority;
-6. trailing voluntary final-text requirements;
-7. `finish == "tool-calls"` failure heuristics;
-8. rules equating all reviewer failures with infrastructure failure;
-9. Gate semantic code/architecture review;
-10. Gate scoring/reinterpreting reviewer reasoning;
-11. Gate duplication of adapter grounding/lifecycle/schema/cross-field qualification.
-
-No hidden compatibility path may retain PASS/BLOCK authority.
+```text
+.runtime/ai_gate/<task>/
+```
 
 ## Required preservation
 
-Preserve stable orchestration behavior where compatible:
+Preserve where compatible:
 
-- bounded child-process execution;
-- async stdout/stderr draining;
-- timeout handling;
-- kill/termination confirmation;
-- non-interactive stdin;
-- candidate ordering and bounded fallback;
-- git status/diff snapshots;
+- OpenCode `1.18.31` pin;
+- SDK `1.18.31` pin;
+- Windows `cmd.exe /d /s /c` launcher and `< NUL`;
+- repository cwd;
+- fresh one-shot reviewer session;
+- typed event grounding observation;
+- schema/cross-field validation in Adapter;
+- bounded async stdout/stderr draining;
+- timeout / termination confirmation;
+- cleanup-safe fallback;
 - focused-test orchestration and full-suite rejection;
-- trusted BLOCK terminality;
-- candidate staging;
-- canonical backup;
-- transactional promotion;
-- rollback;
+- trusted PASS/BLOCK terminality;
 - task-namespaced runtime diagnostics;
-- external `0 / 1 / 2` contract.
+- candidate staging;
+- transactional promotion and rollback;
+- external `0 / 2 / 1` contract;
+- no prose verdict authority;
+- no production dependency on `client.session.messages`;
+- no direct reviewer `opencode run --format json` transport;
+- no Gate auto-commit/push/merge.
+
+## Required removals / simplifications
+
+The production authority path must not require:
+
+1. final `step-finish` as reviewer authority;
+2. `terminal_step == true` as reviewer authority;
+3. a completed `StructuredOutput` ToolPart event when authoritative `info.structured` is already present;
+4. `final_structured_message_identity` event matching as an additional hard requirement;
+5. exact grounding-before-StructuredOutput event ordering;
+6. `finish` value as reviewer authority;
+7. event-count or completion-boundary labels as reviewer authority;
+8. trailing assistant text after StructuredOutput;
+9. `client.session.messages` fallback;
+10. prose/header/regex verdict recovery;
+11. duplicate Gate qualification of adapter-owned facts.
+
+These details may remain diagnostic where useful.
 
 ## Reviewer-agent contract
 
@@ -523,146 +433,69 @@ Preserve stable orchestration behavior where compatible:
 - preserve role boundaries;
 - preserve step ceilings (`8`, `10`);
 - remain bounded blocker detectors;
-- require repository grounding before finalization;
-- perform needed research before StructuredOutput;
+- perform repository grounding before finalization;
 - use StructuredOutput as the machine result;
-- keep `report_markdown` concise and evidence based;
-- not require verdict headers or a trailing text turn.
-
-Wording such as `After the header, return Markdown with:` is stale and should be replaced with wording that directly describes `report_markdown` content.
+- keep `report_markdown` concise and evidence-based;
+- not require textual verdict headers or trailing text turns.
 
 ## Scope
 
 Primary implementation surface:
 
-- `scripts/ai_gate.ps1`
 - `scripts/opencode_structured_review.mjs`
-- `.opencode/agents/spec-reviewer.md`
-- `.opencode/agents/regression-reviewer.md`
-- `tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1`
-- structured adapter fixtures/helpers under `tests/workflow_scripts/` as needed
-- `tests/test_workflow_scripts.py`
-- `docs/architecture/ai_development_workflow.md`
-- this task package
-
-Dependency/version churn is out of scope.
+- `scripts/ai_gate.ps1` only if the envelope/routing boundary requires a narrow compatibility change;
+- `.opencode/agents/spec-reviewer.md` / `regression-reviewer.md` only for contract-aligned wording;
+- `tests/test_workflow_scripts.py`;
+- `tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1`;
+- small deterministic fixtures/helpers as needed;
+- this task package.
 
 ## Non-goals
 
-- changing OpenCode away from `1.18.31`;
+- changing OpenCode or SDK away from `1.18.31`;
 - reopening provider/version exploration;
+- implementing resumable verification checkpoints in this task;
 - implementing `reviewer-bounded-context-infrastructure`;
-- weakening grounding;
-- adding a long-lived global OpenCode session/server owner;
-- restoring trailing final-text requirements;
-- treating `finish: tool-calls` as exhaustion;
-- parsing verdict authority from prose/Markdown/older messages;
+- weakening the requirement that reviewers actually inspect repository evidence;
+- changing reviewer step budgets/timeouts;
 - changing Scout behavior;
 - changing game/runtime behavior;
-- changing reviewer step budgets/timeouts;
 - running the full product suite by default;
-- replacing final ChatGPT/human review;
-- turning Gate into a semantic or qualification reviewer.
-
-## Forbidden shortcuts
-
-Implementation MUST NOT:
-
-1. recover PASS/BLOCK from `report_markdown` or raw assistant text;
-2. use `client.session.messages` as production audit fallback;
-3. use final prompt-response parts alone as proof of earlier grounding;
-4. infer forced finalization from finish strings;
-5. relabel adapter grounding/schema/semantic failure classes as infrastructure merely for routing;
-6. invoke another candidate after trusted PASS/BLOCK;
-7. promote trusted canonical reviewer artifacts from a pre-authority attempt;
-8. silently change/install OpenCode/SDK versions;
-9. couple production execution to compatibility-matrix routing;
-10. retain regex/free-text verdict fallback;
-11. emit top-level `INFRASTRUCTURE_BLOCKED` for generic exhaustion;
-12. duplicate SDK/session/event mechanics inside Gate;
-13. duplicate adapter grounding/schema/semantic qualification inside Gate;
-14. re-review implementation semantics inside Gate;
-15. reject/accept a trusted verdict because Gate disagrees with reasoning;
-16. compare trusted semantic verdicts from multiple candidates to choose a preferred result;
-17. hide incomplete async cleanup behind unconditional `process.exit(0)`.
-
-## Complexity / architecture budget
-
-This task must make Gate more deterministic and conceptually smaller.
-
-```text
-REMOVE from Gate:
-OpenCode lifecycle qualification
-StructuredOutput schema qualification
-PASS/BLOCK cross-field qualification
-semantic-looking reviewer logic
-
-KEEP behind adapter:
-SDK/session/event mechanics
-grounding qualification
-final-message/StructuredOutput qualification
-schema + cross-field validation
-attempt classification
-owned-resource cleanup qualification
-
-KEEP in Gate:
-thin envelope checks
-fallback routing
-focused-test orchestration
-transactional promotion / rollback
-final state / exit mapping
-```
-
-A significant increase in Gate semantic or OpenCode-specific branching is a review smell.
+- replacing final ChatGPT/human semantic review;
+- turning Gate into semantic or lifecycle qualification engine.
 
 ## Required deterministic verification
 
-Existing `tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1` must be evolved rather than replaced.
+Focused offline deterministic tests must cover at least:
 
-Focused offline deterministic verification must cover at least:
+### SDK / Adapter
 
-### Adapter qualification
+1. SDK failure/non-success cannot silently become `message_id = null` lifecycle failure;
+2. supported error handling makes API/prompt failure surface as transport failure;
+3. successful prompt result with `info.id` and matching `info.sessionID`, completed same-session grounding, and valid `info.structured` -> `VALID_PASS` / `VALID_BLOCK`;
+4. successful prompt result with no same-session grounding -> `GROUNDING_FAILED`;
+5. successful prompt result with missing `info.structured` -> `STRUCTURED_OUTPUT_MISSING`;
+6. invalid structured shape/type -> `SCHEMA_INVALID`;
+7. PASS/>0 and BLOCK/0 -> `SEMANTIC_CONTRADICTION`;
+8. missing final step-finish alone does not invalidate an otherwise trusted result;
+9. missing StructuredOutput ToolPart event alone does not invalidate an otherwise trusted `info.structured` result;
+10. exact grounding-vs-StructuredOutput event ordering is not required;
+11. `finish == "tool-calls"` remains diagnostic/neutral;
+12. event consumer teardown remains bounded and adapter exits naturally after one envelope.
 
-1. grounded structured PASS -> `VALID_PASS`;
-2. grounded structured BLOCK -> `VALID_BLOCK`;
-3. valid completed StructuredOutput with `finish == "tool-calls"` is valid;
-4. earlier same-session grounding can precede final-message StructuredOutput;
-5. missing grounding -> `GROUNDING_FAILED`;
-6. event/session/final-message identity mismatch -> `LIFECYCLE_UNTRUSTWORTHY`;
-7. missing StructuredOutput / `info.structured` -> `STRUCTURED_OUTPUT_MISSING`;
-8. invalid structured shape/type -> `SCHEMA_INVALID`;
-9. PASS/>0 and BLOCK/0 -> `SEMANTIC_CONTRADICTION`;
-10. adapter-owned event consumer / subscription teardown settles boundedly;
-11. safe cleanup allows natural adapter exit 0 after one envelope;
-12. unsettled/unsafe owned-resource cleanup is not marked safe.
+### Gate
 
-### Gate routing / orchestration
+13. `VALID_PASS` / `VALID_BLOCK` terminality prevents later candidate invocation;
+14. safe pre-authority classifications may fall back;
+15. unsafe cleanup stops fallback;
+16. candidate exhaustion -> `VERIFICATION_UNAVAILABLE` / exit 1;
+17. malformed/unsupported envelope fails closed;
+18. canonical promotion/rollback remains transactional;
+19. Gate does not rederive adapter grounding/schema/semantic classifications.
 
-13. adapter envelope `VALID_PASS` can produce `PASSED` / exit 0 when both roles/tests pass;
-14. adapter envelope `VALID_BLOCK` is terminal and produces `CANDIDATE_BLOCKED` / exit 2;
-15. trusted PASS/BLOCK mechanistically proves no later candidate invocation;
-16. `GROUNDING_FAILED` with safe cleanup may fall back;
-17. `STRUCTURED_OUTPUT_MISSING` with safe cleanup may fall back;
-18. `SCHEMA_INVALID` with safe cleanup may fall back;
-19. `SEMANTIC_CONTRADICTION` with safe cleanup may fall back;
-20. unsafe/unconfirmed cleanup stops fallback -> `VERIFICATION_UNAVAILABLE` / exit 1;
-21. exhaustion of safe pre-authority classifications -> `VERIFICATION_UNAVAILABLE` / exit 1;
-22. root attempt classifications remain distinguishable in runtime/provenance evidence;
-23. verdict-like Markdown cannot change machine outcome;
-24. legacy free-text `VERDICT:` has zero authority;
-25. malformed/unsupported envelope fails closed;
-26. unsupported `schema_version` fails closed;
-27. pre-authority attempts preserve prior canonical trusted artifacts;
-28. promotion failure rolls back canonical state;
-29. reviewer step budgets and OpenCode 1.18.31 pin remain enforced;
-30. production Gate invokes the structured adapter rather than direct reviewer `opencode run --format json` transport;
-31. Gate does not independently derive grounding/schema/semantic classifications from raw adapter facts.
+Tests must not require a live provider/model.
 
-The tests must not require a live provider/model.
-
-## Focused test targets
-
-`task.json` must continue to declare:
+Focused targets remain:
 
 ```text
 tests.test_opencode_structured_review_probe
@@ -673,44 +506,35 @@ The full product suite remains user-only under repository policy.
 
 ## Acceptance criteria
 
-1. Reviewer semantic PASS/BLOCK authority comes only from accepted StructuredOutput machine fields.
-2. Adapter is the single attempt-qualification authority for lifecycle, grounding, StructuredOutput, schema, cross-field semantics, cleanup, and classification.
-3. Gate does not recompute adapter qualification logic.
-4. Gate is accurately described as thin envelope validator + fallback router + focused-test orchestrator + transaction coordinator.
-5. OpenCode-specific SDK/session/event mechanics remain isolated behind adapter.
-6. Production uses OpenCode 1.18.31 + SDK 1.18.31 official v2 structured transport and `info.structured`.
-7. Fresh one-shot session + typed event evidence proves same-session grounding and final-message StructuredOutput authority.
-8. Production does not depend on `client.session.messages`.
-9. Current grounding policy requires completed same-session model-initiated `read` / `glob` / `grep` before accepted StructuredOutput.
-10. `finish == "tool-calls"` is neutral.
-11. Adapter-owned async resources terminate boundedly; valid envelope execution exits naturally with code 0.
-12. Attempt failure classes remain distinguishable.
-13. Trusted PASS and BLOCK are terminal and cannot trigger semantic review-shopping.
+1. Reviewer semantic authority comes only from valid structured machine fields, never prose.
+2. Adapter is the single attempt-qualification authority.
+3. Gate remains thin orchestration.
+4. Production uses the supported OpenCode/SDK `1.18.31` route.
+5. SDK error handling is configured on the supported client/request option surface so API failure cannot masquerade as lifecycle ambiguity.
+6. A successful 200 prompt result is expected to contain required `AssistantMessage.id` and `sessionID`; absence is transport/API-contract failure, not ordinary lifecycle failure.
+7. Same-fresh-session completed repository grounding remains mandatory.
+8. `info.structured` is the authoritative StructuredOutput success field.
+9. Step-finish, final StructuredOutput ToolPart event, exact event ordering, finish string, event count, and completion-boundary labels are not independent reviewer-authority requirements.
+10. Review schema and PASS/BLOCK cross-field invariants remain adapter-validated.
+11. Adapter-owned resources tear down boundedly and valid envelope execution exits naturally.
+12. Attempt classes remain distinguishable.
+13. Trusted PASS/BLOCK are terminal; no review shopping.
 14. Pre-authority fallback is bounded and cleanup-safe only.
-15. Final states remain `PASSED`, `CANDIDATE_BLOCKED`, `VERIFICATION_UNAVAILABLE`.
-16. External exits remain `0 / 2 / 1` respectively.
-17. Canonical reviews derive verdict state only from accepted machine fields.
-18. Pre-authority attempts preserve prior trusted canonical review artifacts.
-19. Promotion/rollback remains transactional.
-20. Reviewer agents remain independent read-only bounded blocker detectors with 8/10 step ceilings.
-21. Direct production reviewer transport through `opencode run --format json` remains removed.
-22. Old text/header/regex verdict authority remains removed.
-23. Stable bounded-process, timeout, candidate-routing, focused-test, staging, promotion, and rollback behavior is preserved where compatible.
-24. `reviewer-bounded-context-infrastructure` remains downstream.
-25. No game/runtime behavior changes occur.
-26. Gate PASS is workflow-verification success only; final ChatGPT/human semantic/architecture review remains mandatory.
-27. Final review explicitly checks that Gate has not absorbed adapter qualification responsibilities.
+15. Gate final states remain `PASSED`, `CANDIDATE_BLOCKED`, `VERIFICATION_UNAVAILABLE` with exits `0 / 2 / 1`.
+16. Canonical artifacts are transactionally promoted and preserved on pre-promotion failure.
+17. No production `session.messages`, prose verdict parsing, or direct reviewer `opencode run --format json` authority path returns.
+18. Final ChatGPT/human semantic/architecture review remains mandatory before merge.
 
 ## Implementation handoff
 
 This SPEC is Final.
 
-This Final amendment resolves the stale responsibility split that previously assigned duplicate grounding/schema/cross-field qualification to Gate. Historical reviewer findings based only on that stale duplicate responsibility are not implementation requirements.
+This amendment intentionally removes over-strict OpenCode lifecycle/event details from reviewer verdict authority and records the pinned SDK success/error contract discovered during live validation.
 
-Gemini/Antigravity may implement the smallest coherent patch satisfying this amended contract.
+Gemini/Antigravity may implement the smallest coherent patch satisfying this contract.
 
 OpenCode Scout/reviewers remain read-only.
 
-Do not implement `reviewer-bounded-context-infrastructure` inside this task.
+Do not implement resumable verification checkpoints or `reviewer-bounded-context-infrastructure` inside this task.
 
-After implementation and focused deterministic tests pass, run a bounded local adapter termination check first. Then stop for ChatGPT pre-live review before the next real Gate execution.
+After implementation and focused deterministic tests pass, stop for ChatGPT pre-live review before another full live Gate run.
