@@ -1,0 +1,28 @@
+{
+  "attempt_kind": "live_production_reviewer",
+  "open_code_version": "1.18.31",
+  "provider": "opencode",
+  "reviewer_role": "spec-reviewer",
+  "sdk_version": "1.18.31",
+  "state_isolation": "OPENCODE_DB=:memory:",
+  "model": "opencode/mimo-v2.5-free",
+  "lifecycle_audit_source": "session.messages",
+  "lifecycle": {
+    "finish_reasons": [],
+    "finalization_voluntary": false,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "structured_output_present": false,
+    "successful_tool_result": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "classification": "FAIL_LIFECYCLE_AUDIT",
+  "diagnostic": "session.messages failed: Expected OutputFormatJsonSchema, got {\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"verdict\":{\"type\":\"string\",\"enum\":[\"PASS\",\"BLOCK\"]},\"blocking_findings\":{\"type\":\"integer\",\"minimum\":0},\"report_markdown\":{\"type\":\"string\"}},\"required\":[\"verdict\",\"blocking_findings\",\"report_markdown\"]},\"retryCount\":2}\n  at [0][\"info\"][\"format\"]"
+}

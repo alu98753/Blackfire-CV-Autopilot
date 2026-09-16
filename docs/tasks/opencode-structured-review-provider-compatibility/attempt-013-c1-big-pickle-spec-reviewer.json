@@ -1,0 +1,36 @@
+{
+  "attempt_kind": "qualifying",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.14.41",
+  "isolation_method": "isolated runtime root + OPENCODE_DB=:memory: + restored PATH/environment",
+  "matrix_candidate": "C1",
+  "model": "opencode/big-pickle",
+  "open_code_version": "1.14.41",
+  "provider": "opencode",
+  "reviewer_role": "spec-reviewer",
+  "lifecycle_audit_source": "not reached: owned server startup timeout",
+  "lifecycle_audit_trustworthy": false,
+  "official_structured_machine_field": "assistant.info.structured",
+  "structured_result_present": false,
+  "isolation_cleanup_proven": true,
+  "owned_process_tree_pid": null,
+  "classification": "FAIL_INFRASTRUCTURE",
+  "diagnostic": "Timeout waiting for owned server to start after 10000ms",
+  "subreason": "RUNTIME_OR_TRANSPORT_FAILURE",
+  "lifecycle": {
+    "finish_reasons": [],
+    "finalization_voluntary": false,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "successful_tool_result": false,
+    "structured_output_present": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  }
+}

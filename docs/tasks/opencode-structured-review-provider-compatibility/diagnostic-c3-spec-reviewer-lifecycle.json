@@ -1,0 +1,147 @@
+{
+  "record_type": "diagnostic_c3_spec_reviewer_lifecycle",
+  "candidate": "C3",
+  "model": "opencode/big-pickle",
+  "agent": "spec-reviewer",
+  "duration_ms": 221441,
+  "info": {
+    "keys": [
+      "parentID",
+      "role",
+      "mode",
+      "agent",
+      "path",
+      "cost",
+      "tokens",
+      "modelID",
+      "providerID",
+      "time",
+      "finish",
+      "structured",
+      "id",
+      "sessionID"
+    ],
+    "id": "msg_0a7baa8e40019f079hx35PbKga",
+    "sessionID": "ses_f58480365ffeohpqGjP7uOEP1i",
+    "role": "assistant",
+    "agent": "spec-reviewer",
+    "finish": "tool-calls",
+    "time": {
+      "created": 1789520423140,
+      "completed": 1789520469418
+    },
+    "tokens": {
+      "total": 66969,
+      "input": 3189,
+      "output": 3108,
+      "reasoning": 0,
+      "cache": {
+        "write": 0,
+        "read": 60672
+      }
+    },
+    "cost": 0,
+    "structured_present": true,
+    "structured_verdict": "BLOCK",
+    "structured_blocking_findings": 1,
+    "structured_report_markdown_length": 6992
+  },
+  "parts_count": 5,
+  "parts": [
+    {
+      "index": 0,
+      "keys": [
+        "snapshot",
+        "type",
+        "id",
+        "sessionID",
+        "messageID"
+      ],
+      "type": "step-start",
+      "id": "prt_0a7bab71c001l6R55iW0kDpCXY",
+      "sessionID": "ses_f58480365ffeohpqGjP7uOEP1i",
+      "messageID": "msg_0a7baa8e40019f079hx35PbKga"
+    },
+    {
+      "index": 1,
+      "keys": [
+        "type",
+        "text",
+        "time",
+        "id",
+        "sessionID",
+        "messageID"
+      ],
+      "type": "reasoning",
+      "id": "prt_0a7bab731001kRit9Ixabs1jP6",
+      "sessionID": "ses_f58480365ffeohpqGjP7uOEP1i",
+      "messageID": "msg_0a7baa8e40019f079hx35PbKga",
+      "text_length": 5164
+    },
+    {
+      "index": 2,
+      "keys": [
+        "type",
+        "text",
+        "time",
+        "id",
+        "sessionID",
+        "messageID"
+      ],
+      "type": "text",
+      "id": "prt_0a7baf166001pv9kyPoYgVNDhV",
+      "sessionID": "ses_f58480365ffeohpqGjP7uOEP1i",
+      "messageID": "msg_0a7baa8e40019f079hx35PbKga",
+      "text_length": 2
+    },
+    {
+      "index": 3,
+      "keys": [
+        "type",
+        "tool",
+        "callID",
+        "state",
+        "id",
+        "sessionID",
+        "messageID"
+      ],
+      "type": "tool",
+      "id": "prt_0a7baf3e4001WE8BBANHYf7fWX",
+      "sessionID": "ses_f58480365ffeohpqGjP7uOEP1i",
+      "messageID": "msg_0a7baa8e40019f079hx35PbKga",
+      "tool_identifier": "StructuredOutput",
+      "state_keys": [
+        "status",
+        "input",
+        "output",
+        "metadata",
+        "title",
+        "time"
+      ],
+      "state_status": "completed"
+    },
+    {
+      "index": 4,
+      "keys": [
+        "reason",
+        "snapshot",
+        "type",
+        "tokens",
+        "cost",
+        "id",
+        "sessionID",
+        "messageID"
+      ],
+      "type": "step-finish",
+      "id": "prt_0a7bb5b59001OKNh3kJdOERHhm",
+      "sessionID": "ses_f58480365ffeohpqGjP7uOEP1i",
+      "messageID": "msg_0a7baa8e40019f079hx35PbKga",
+      "reason": "tool-calls"
+    }
+  ],
+  "session_messages": {
+    "status": "DECODER_OR_FETCH_ERROR",
+    "message": "Expected OutputFormatJsonSchema, got {\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"verdict\":{\"type\":\"string\",\"enum\":[\"PASS\",\"BLOCK\"]},\"blocking_findings\":{\"type\":\"integer\",\"minimum\":0},\"report_markdown\":{\"type\":\"string\"}},\"required\":[\"verdict\",\"blocking_findings\",\"report_markdown\"]},\"retryCount\":2}\n  at [0][\"info\"][\"format\"]",
+    "name": "Error"
+  }
+}

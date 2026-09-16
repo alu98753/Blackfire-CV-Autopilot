@@ -1,0 +1,58 @@
+{
+  "record_type": "diagnostic_run",
+  "candidate": "C3",
+  "open_code_version": "1.18.31",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "sdk_transport": "official-sdk-v2",
+  "model": "opencode/mimo-v2.5-free",
+  "provider": "opencode",
+  "reviewer_role": "regression-reviewer",
+  "step1_smoke_duration_ms": 11061,
+  "step1_structured_output_present": true,
+  "step2_full_review_duration_ms": 79769,
+  "step2_http_status": 200,
+  "step2_finish_reason": "stop",
+  "step2_tokens": {
+    "total": 14133,
+    "input": 398,
+    "output": 1255,
+    "reasoning": 0,
+    "cache": {
+      "write": 0,
+      "read": 12480
+    }
+  },
+  "step2_official_structured_machine_field": "promptResult.data.info.structured",
+  "step2_structured_output_present": false,
+  "minimal_reviewer_task_diagnostic": {
+    "script": "scripts/inspect_mimo_structured.mjs",
+    "prompt": "Minimal check: do not call tools. Review is PASS with 0 blocking findings. Emit the structured output.",
+    "tool_invoked": "StructuredOutput",
+    "structured_output_present": true,
+    "structured_output": {
+      "verdict": "PASS",
+      "blocking_findings": 0,
+      "report_markdown_present": true
+    }
+  },
+  "root_cause_finding": "OpenCode handles format.type = json_schema by injecting an internal StructuredOutput tool. When given minimal instructions, MiMo actively calls Tool: StructuredOutput and populates info.structured. In full multi-step reviews, MiMo writes its markdown review as standard text and voluntarily terminates (finish: stop) without invoking the StructuredOutput tool, resulting in structured: undefined.",
+  "schema_validation": {
+    "valid": false,
+    "errors": [
+      "structured result is missing on full review"
+    ]
+  },
+  "lifecycle_status": {
+    "voluntary_finalization": true,
+    "step_budget_exhausted": false,
+    "formal_qualification": "NOT_PROVEN",
+    "qualification_classification_if_formal": "FAIL_STRUCTURED_OUTPUT"
+  },
+  "audit_surface_finding": {
+    "session_messages_status": "DECODER_ERROR",
+    "error_diagnostic": "Expected OutputFormatJsonSchema, got {\"type\":\"json_schema\"} at [0][\"info\"][\"format\"]",
+    "trustworthy_audit_surface": false
+  },
+  "isolation_cleanup_proven": true
+}

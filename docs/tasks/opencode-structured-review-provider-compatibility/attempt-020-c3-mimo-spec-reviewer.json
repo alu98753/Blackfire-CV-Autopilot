@@ -1,0 +1,35 @@
+{
+  "attempt_kind": "qualifying",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "isolation_method": "isolated runtime root + OPENCODE_DB=:memory: + restored PATH/environment",
+  "matrix_candidate": "C3",
+  "model": "opencode/mimo-v2.5-free",
+  "open_code_version": "1.18.31",
+  "provider": "opencode",
+  "reviewer_role": "spec-reviewer",
+  "sdk_transport": "official-sdk-v2",
+  "lifecycle_audit_source": "session.messages",
+  "lifecycle_audit_trustworthy": false,
+  "lifecycle": {
+    "finish_reasons": [],
+    "finalization_voluntary": false,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "successful_tool_result": false,
+    "structured_output_present": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "classification": "FAIL_LIFECYCLE_AUDIT",
+  "diagnostic": "session.messages returned incomplete same-attempt lifecycle evidence",
+  "subreason": "AUDIT_UNTRUSTWORTHY",
+  "isolation_cleanup_proven": true,
+  "owned_process_tree_pid": 13248
+}

@@ -337,3 +337,32 @@ Not scheduled until production evidence justifies them:
 ## Explicit non-goal for the roadmap
 
 The roadmap does **not** aim to create a swarm of agents that independently reinterpret the codebase. The desired system is a contract-driven development pipeline in which increasingly more mechanical coordination is automated while semantic authority remains deliberately narrow and auditable.
+
+## Verified compatibility baseline — OpenCode structured review (2026-09-16)
+
+The compatibility task `opencode-structured-review-provider-compatibility` established a durable baseline for future reviewer infrastructure work:
+
+```text
+OpenCode 1.18.31
++ @opencode-ai/sdk 1.18.31 / official v2 transport
++ opencode/big-pickle
+        ↓
+JSON-Schema request
+        ↓
+OpenCode StructuredOutput tool
+        ↓
+HTTP 200
+        ↓
+promptResult.data.info.structured
+        ↓
+valid structured object
+```
+
+Evidence and the version policy are preserved in [`docs/architecture/opencode_structured_review_baseline.md`](../architecture/opencode_structured_review_baseline.md).
+
+Roadmap policy:
+- Structured transport compatibility for this exact stack is **PROVEN**.
+- Formal reviewer-route qualification remains **NOT PROVEN** because the current bottleneck is model-owned repository discovery / structured-finalization behavior, not the verified SDK v2 transport.
+- Production OpenCode remains pinned to **1.18.31**.
+- Do not resume adjacent-version guessing or change OpenCode solely to solve structured transport unless a new concrete incompatibility, maintenance/security requirement, or explicitly approved task invalidates this baseline.
+- Future reviewer work should first improve bounded context acquisition and reviewer evidence supply while preserving independent semantic judgment.

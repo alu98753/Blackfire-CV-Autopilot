@@ -1,0 +1,32 @@
+{
+  "attempt_kind": "smoke",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "sdk_version": "1.18.31",
+  "isolation_method": "OPENCODE_DB=:memory: + runner-owned process tree",
+  "matrix_candidate": "C3",
+  "model": "opencode/big-pickle",
+  "open_code_version": "1.18.31",
+  "provider": "opencode",
+  "reviewer_role": "regression-reviewer",
+  "sdk_transport": "official-sdk-v2",
+  "classification": "FAIL_INFRASTRUCTURE",
+  "diagnostic": "owned process tree cleanup failed: Command failed: C:\\WINDOWS\\system32\\cmd.exe /d /s /c taskkill /PID 13788 /T /F < NUL\n���~: �䤣��B�z�{�� \"13788\"�C\r\n; stderr=���~: �䤣��B�z�{�� \"13788\"�C\r\n",
+  "subreason": "ISOLATION_CLEANUP_UNSAFE",
+  "lifecycle": {
+    "finish_reasons": [],
+    "finalization_voluntary": false,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "successful_tool_result": false,
+    "structured_output_present": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  }
+}

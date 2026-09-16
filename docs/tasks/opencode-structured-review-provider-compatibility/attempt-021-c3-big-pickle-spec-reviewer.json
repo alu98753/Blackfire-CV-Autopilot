@@ -1,0 +1,36 @@
+{
+  "attempt_kind": "qualifying",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "isolation_method": "isolated runtime root + OPENCODE_DB=:memory: + restored PATH/environment",
+  "matrix_candidate": "C3",
+  "model": "opencode/big-pickle",
+  "open_code_version": "1.18.31",
+  "provider": "opencode",
+  "reviewer_role": "spec-reviewer",
+  "sdk_transport": "official-sdk-v2",
+  "lifecycle_audit_source": "prompt-response",
+  "lifecycle_audit_trustworthy": true,
+  "official_structured_machine_field": "assistant.info.structured",
+  "lifecycle": {
+    "finish_reasons": [
+      "tool-calls"
+    ],
+    "finalization_voluntary": true,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "successful_tool_result": false,
+    "structured_output_present": true
+  },
+  "schema_validation": {
+    "valid": true,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": true,
+    "errors": []
+  },
+  "classification": "FAIL_TOOL_CHOICE",
+  "isolation_cleanup_proven": true,
+  "owned_process_tree_pid": 11488
+}

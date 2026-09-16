@@ -1,0 +1,27 @@
+{
+  "attempt_kind": "live_production_reviewer",
+  "open_code_version": "unavailable",
+  "provider": "opencode",
+  "reviewer_role": "spec-reviewer",
+  "sdk_version": "unavailable",
+  "state_isolation": "OPENCODE_DB=:memory:",
+  "model": "opencode/big-pickle",
+  "lifecycle": {
+    "finish_reasons": [],
+    "finalization_voluntary": false,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "structured_output_present": false,
+    "successful_tool_result": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "classification": "FAIL_INFRASTRUCTURE",
+  "diagnostic": "spawn opencode ENOENT; stderr="
+}

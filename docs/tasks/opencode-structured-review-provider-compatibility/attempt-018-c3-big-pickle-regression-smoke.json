@@ -1,0 +1,33 @@
+{
+  "attempt_kind": "smoke",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "isolation_method": "isolated runtime root + OPENCODE_DB=:memory: + restored PATH/environment",
+  "matrix_candidate": "C3",
+  "model": "opencode/big-pickle",
+  "open_code_version": "1.18.31",
+  "provider": "opencode",
+  "reviewer_role": "regression-reviewer",
+  "sdk_transport": "official-sdk-v2",
+  "classification": "FAIL_INFRASTRUCTURE",
+  "diagnostic": "Timeout waiting for owned server to start after 10000ms",
+  "subreason": "RUNTIME_OR_TRANSPORT_FAILURE",
+  "lifecycle": {
+    "finish_reasons": [],
+    "finalization_voluntary": false,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "successful_tool_result": false,
+    "structured_output_present": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "isolation_cleanup_proven": true,
+  "owned_process_tree_pid": null
+}

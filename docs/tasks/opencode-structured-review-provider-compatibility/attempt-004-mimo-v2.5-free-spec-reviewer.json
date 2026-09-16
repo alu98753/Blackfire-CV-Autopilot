@@ -1,0 +1,30 @@
+{
+  "attempt_kind": "live_production_reviewer",
+  "open_code_version": "1.18.31",
+  "provider": "opencode",
+  "reviewer_role": "spec-reviewer",
+  "sdk_version": "1.18.31",
+  "state_isolation": "OPENCODE_DB=:memory:",
+  "model": "opencode/mimo-v2.5-free",
+  "lifecycle": {
+    "finish_reasons": [
+      "stop"
+    ],
+    "finalization_voluntary": true,
+    "forced_finalization": false,
+    "read_search_tool_called": false,
+    "structured_output_present": false,
+    "successful_tool_result": false
+  },
+  "schema_validation": {
+    "valid": false,
+    "errors": [
+      "structured_output is missing"
+    ]
+  },
+  "semantic_validation": {
+    "valid": false,
+    "errors": []
+  },
+  "classification": "FAIL_TOOL_CHOICE"
+}
