@@ -538,3 +538,69 @@ OpenCode Scout/reviewers remain read-only.
 Do not implement resumable verification checkpoints or `reviewer-bounded-context-infrastructure` inside this task.
 
 After implementation and focused deterministic tests pass, stop for ChatGPT pre-live review before another full live Gate run.
+
+## Closure amendment — 2026-09-16
+
+This closure amendment is authoritative for task completion and supersedes the earlier Scope, deterministic-verification, and acceptance-criteria wording only where they conflict with the decisions below.
+
+### Final task scope
+
+The completed scope is the reviewer-output reliability path and the minimum supporting workflow surface actually changed during implementation:
+
+- `.gitignore` runtime-artifact hygiene;
+- `.opencode/agents/spec-reviewer.md` and `.opencode/agents/regression-reviewer.md` contract wording;
+- `package.json` / `package-lock.json` for the pinned direct Undici transport dependency;
+- `scripts/opencode_structured_review.mjs`;
+- `scripts/ai_gate.ps1` changes required to consume the adapter contract and keep the 480s / 510s / 540s timeout hierarchy coherent;
+- deterministic workflow tests and harness support;
+- architecture/task documentation for this reviewer-output contract.
+
+The immutable resumption baseline for this task is `f2e6503e88161d01fbd73dc4a60e5da7d98167b4`; `task.json` records that SHA rather than the moving `origin/main` ref.
+
+### Core objective closure
+
+The core infrastructure objective is met.
+
+The final live Gate execution reached both independent OpenCode reviewers through the pinned OpenCode `1.18.31` / SDK `1.18.31` path and obtained machine-qualified trusted outcomes:
+
+```text
+spec-reviewer       -> VALID_BLOCK
+regression-reviewer -> VALID_BLOCK
+```
+
+That live result proves the failures that originally prevented trusted reviewer authority were resolved: the supported SDK transport path completed, reviewer grounding and structured output were qualified, the adapter emitted trusted envelopes, the Gate consumed those envelopes, and the earlier transport/outer-process timeout races no longer prevented review completion.
+
+`CANDIDATE_BLOCKED` is therefore preserved as the factual Gate result; it is not rewritten as `PASSED`. For this task, the trusted semantic BLOCKs are evidence that the reviewer-output infrastructure became reliable enough to surface downstream correctness findings.
+
+### Explicitly deferred findings
+
+The live reviewers exposed additional Gate-orchestration correctness work after reviewer-output reliability was established. Those findings are intentionally deferred to the follow-up task:
+
+`gate-immutable-review-baseline-contract`
+
+That follow-up owns the generalized contract for:
+
+- immutable task review baselines and baseline provenance;
+- eliminating moving-`origin/main` diff contamination and false out-of-scope findings;
+- reproducible Gate diff snapshots;
+- cleanup-safe fail-closed fallback semantics for malformed/partial failure envelopes, including the `cleanup.safe == false` corner discovered by the live review;
+- related Gate-orchestration consistency revealed while making review snapshots reproducible;
+- focused-test orchestration robustness discovered by the final live Gate run.
+
+Accordingly, earlier Gate verification item 15 / acceptance criterion 14 are considered satisfied only for the validated-envelope paths already covered by this task. The malformed/partial failure-envelope cleanup corner is explicitly deferred rather than silently treated as complete.
+
+### Verification and test closure
+
+Before the final live Gate run, the task's deterministic transport/workflow checks reached 18 passing tests, with Node syntax, PowerShell syntax, and `git diff --check` passing for the implemented timeout hierarchy. The final live Gate then reached both reviewers successfully but reported focused-test failures/timeouts after reviewer authority had already been established.
+
+Those focused-test orchestration results are recorded as evidence, not converted into a false PASS. The user explicitly chose not to run the full product suite for this closure. No claim is made that the deferred Gate-orchestration findings are fixed in this task.
+
+### Closure status
+
+Core reviewer-output infrastructure objective: **MET**.
+
+Deferred Gate semantic/orchestration work: **TRACKED IN `gate-immutable-review-baseline-contract`**.
+
+Full product suite: **NOT RUN by explicit user decision**.
+
+Task closure: **COMPLETED WITH EXPLICIT DEFERRALS**.
