@@ -48,7 +48,10 @@ class WorkflowScriptContractTests(unittest.TestCase):
             "qualifyAttempt({events:[tool('read','m1')],sessionID:'wrong',info:{id:'m2',sessionID:'s',structured}}),"
             "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',structured}}),"
             "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s'}}),"
-            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',structured:{verdict:'BLOCK',blocking_findings:0,report_markdown:'bad'}}})]));"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',structured:{verdict:'BLOCK',blocking_findings:0,report_markdown:'bad'}}}),"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',finish:'tool-calls',structured}}),"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',structured:{verdict:'MAYBE',blocking_findings:0,report_markdown:'bad'}}}),"
+            "qualifyAttempt({events:[tool('read','m1')],sessionID:'s',info:{id:'m2',sessionID:'s',structured:{verdict:'BLOCK',blocking_findings:1,report_markdown:'bad'}}})]));"
         )
         result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
         values = json.loads(result.stdout)
@@ -58,6 +61,16 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertEqual(values[3]["classification"], "STRUCTURED_TRANSPORT_FAILED")
         self.assertEqual(values[4]["classification"], "STRUCTURED_OUTPUT_MISSING")
         self.assertEqual(values[5]["classification"], "SEMANTIC_CONTRADICTION")
+        self.assertEqual(values[6]["classification"], "VALID_PASS")
+        self.assertEqual(values[7]["classification"], "SCHEMA_INVALID")
+        self.assertEqual(values[8]["classification"], "VALID_BLOCK")
+
+    def test_adapter_client_throw_on_error_is_configuration_not_prompt_input(self):
+        text = (self.root / "scripts" / "opencode_structured_review.mjs").read_text(encoding="utf-8")
+        self.assertIn("createOpencodeClient({ baseUrl: await waitForServer(server), throwOnError: true })", text)
+        self.assertNotIn("session.create({ directory, throwOnError", text)
+        prompt_options = text.split("session.prompt({", 1)[1].split("});", 1)[0]
+        self.assertNotIn("throwOnError", prompt_options)
 
     def test_windows_opencode_launcher_uses_cmd_shim_safely(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"
@@ -90,6 +103,23 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertTrue(value["safe"])
         self.assertFalse(value["unsafe"])
         self.assertTrue(value["aborted"])
+
+    def test_windows_process_tree_cleanup_closes_owned_pipes(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { spawn } from 'node:child_process';"
+            "import { stopServer } from "
+            f"'{probe.as_uri()}';"
+            "const server=spawn('cmd.exe',['/d','/s','/c','node -e \"process.stdout.write(\\'live\\');setInterval(()=>{},1000)\"'],{stdio:['ignore','pipe','pipe'],windowsHide:true});"
+            "await new Promise(r=>setTimeout(r,100));"
+            "console.log(JSON.stringify(await stopServer(server,{platform:'win32',timeoutMs:2000})));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, timeout=10, check=True)
+        value = json.loads(result.stdout)
+        self.assertTrue(value["safe"])
+        self.assertTrue(value["tree_termination_confirmed"])
+        self.assertTrue(value["stdout_closed"])
+        self.assertTrue(value["stderr_closed"])
 
     def test_windows_workflow_harness(self):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"

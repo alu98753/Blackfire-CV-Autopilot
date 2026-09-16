@@ -90,13 +90,37 @@ function waitForServer(child, timeout = 10000) {
     child.once("exit", (code) => { if (code !== null) { clearTimeout(timer); reject(new Error(`OpenCode server exited with code ${code}`)); } });
   });
 }
-async function stopServer(server) {
-  if (server.exitCode !== null) return true;
-  try { server.kill(); } catch { return false; }
-  return await new Promise((done) => {
-    const timer = setTimeout(() => done(false), 3000);
+function waitForClose(stream, timeoutMs = 3000) {
+  if (!stream || stream.destroyed || stream.readableEnded) return Promise.resolve(true);
+  return new Promise((done) => {
+    const timer = setTimeout(() => done(false), timeoutMs);
+    stream.once("close", () => { clearTimeout(timer); done(true); });
+    stream.once("end", () => { clearTimeout(timer); done(true); });
+  });
+}
+export async function stopServer(server, { platform = process.platform, timeoutMs = 3000 } = {}) {
+  let treeTerminationConfirmed = false;
+  if (platform === "win32") {
+      const killer = spawn("taskkill.exe", ["/PID", String(server.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+      treeTerminationConfirmed = await new Promise((done) => {
+        const timer = setTimeout(() => done(false), timeoutMs);
+        killer.once("exit", (code) => { clearTimeout(timer); done(code === 0 || server.exitCode !== null); });
+        killer.once("error", () => { clearTimeout(timer); done(false); });
+      });
+  } else if (server.exitCode === null) {
+      try { server.kill(); } catch { return { tree_termination_confirmed: false, stdout_closed: false, stderr_closed: false, safe: false }; }
+      treeTerminationConfirmed = await new Promise((done) => {
+        const timer = setTimeout(() => done(false), timeoutMs);
+        if (server.exitCode !== null) { clearTimeout(timer); done(true); }
+        else server.once("exit", () => { clearTimeout(timer); done(true); });
+      });
+  } else { treeTerminationConfirmed = true; }
+  const wrapperExited = server.exitCode !== null || await new Promise((done) => {
+    const timer = setTimeout(() => done(false), timeoutMs);
     server.once("exit", () => { clearTimeout(timer); done(true); });
   });
+  const [stdoutClosed, stderrClosed] = await Promise.all([waitForClose(server.stdout, timeoutMs), waitForClose(server.stderr, timeoutMs)]);
+  return { tree_termination_confirmed: treeTerminationConfirmed, wrapper_exited: wrapperExited, stdout_closed: stdoutClosed, stderr_closed: stderrClosed, safe: treeTerminationConfirmed && wrapperExited && stdoutClosed && stderrClosed };
 }
 export function buildServerLaunch(platform = process.platform, shell = process.env.ComSpec ?? "cmd.exe") {
   const serverArgs = ["serve", "--hostname=127.0.0.1", "--port=0"];
@@ -141,9 +165,9 @@ async function run() {
     const lifecycle = boundary.lifecycle; lifecycle.finish = info?.finish ?? null; lifecycle.subscription_established_before_prompt = subscriptionEstablished; lifecycle.completion_boundary = boundary.complete ? "same-session-event-sequence" : "bounded-deadline";
     const structured = info?.structured; const attempt = qualifyAttempt({ sessionID, info, events }); const classification = attempt.classification;
     cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted);
-    cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.consumer_settled && cleanup.server_exit_confirmed;
+    const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe;
     process.stdout.write(JSON.stringify({ schema_version: 1, agent, model, session_id: sessionID, message_id: info?.id ?? null, classification: cleanup.safe ? classification : "INFRASTRUCTURE_FAILED", lifecycle, structured: structured ?? null, schema_validation: attempt.schema_validation ?? null, semantic_validation: attempt.semantic_validation ?? null, cleanup }) + "\n");
-  } finally { if (!cleanup.consumer_settled && consumer) { cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (!cleanup.server_exit_confirmed) { cleanup.server_exit_confirmed = await stopServer(server); cleanup.safe = cleanup.consumer_settled && cleanup.server_exit_confirmed; } }
+  } finally { if (!cleanup.consumer_settled && consumer) { cleanup.consumer_settled = await settleEventConsumer({ consumer, stream, abortController }); cleanup.subscription_cancelled = Boolean(abortController?.signal.aborted); } if (!cleanup.server_exit_confirmed) { const serverCleanup = await stopServer(server); cleanup.server_exit_confirmed = serverCleanup.wrapper_exited; cleanup.process_tree_termination_confirmed = serverCleanup.tree_termination_confirmed; cleanup.stdout_closed = serverCleanup.stdout_closed; cleanup.stderr_closed = serverCleanup.stderr_closed; cleanup.safe = cleanup.consumer_settled && serverCleanup.safe; } }
 }
 
 if (pathToFileURL(resolve(process.argv[1] ?? "")).href === import.meta.url) run().catch((error) => { process.stderr.write(`STRUCTURED_REVIEW_ADAPTER_ERROR: ${redact(error.message)}\n`); process.exitCode = 1; });

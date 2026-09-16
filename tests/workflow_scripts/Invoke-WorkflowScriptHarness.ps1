@@ -11,13 +11,15 @@ $runtimeDirs = @(
     (Join-Path $repoRoot ".runtime\ai_scout\$fixtureId")
 )
 $helperDir = Join-Path $PSScriptRoot '.runtime-fixtures'
-$reviewer = Join-Path $helperDir 'fake-reviewer.ps1'
+$diagnosticRoot = Join-Path $repoRoot '.runtime\test_workflow_harness'
+$reviewer = Join-Path $helperDir 'fake-reviewer.py'
 $scoutChild = Join-Path $helperDir 'fake-scout.ps1'
 $pythonChild = Join-Path $helperDir 'fake-test.ps1'
 $reviewerCmd = Join-Path $helperDir 'fake-reviewer.cmd'
 $scoutCmd = Join-Path $helperDir 'fake-scout.cmd'
 $pythonCmd = Join-Path $helperDir 'fake-test.cmd'
 $secondMarker = Join-Path $helperDir 'second-candidate-invoked.marker'
+$firstMarker = Join-Path $helperDir 'first-candidate-invoked.marker'
 $passed = 0
 $failed = 0
 $specReviewer = Join-Path $repoRoot '.opencode\agents\spec-reviewer.md'
@@ -98,7 +100,11 @@ try {
         Assert-True ($workflowText.Contains('exactly OpenCode CLI version 1.18.31')) 'architecture version contract missing'
     }
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $diagnosticRoot | Out-Null
+    $env:WORKFLOW_HARNESS_DIAGNOSTIC_DIR = $diagnosticRoot
     '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
+    $taskJsonPath = Join-Path $fixtureDir 'task.json'
+    $originalTaskJson = Get-Content -LiteralPath $taskJsonPath -Raw
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
     'existing context' | Set-Content (Join-Path $fixtureDir 'CONTEXT.md') -Encoding UTF8
 
@@ -120,16 +126,47 @@ try {
     }
 
 @'
-param([string[]]$ChildArgs)
-$rawArgs = $ChildArgs -join ' '
-$mode = if ($rawArgs -match 'terminal-block' -and $rawArgs -match 'first') { 'block' } elseif ($rawArgs -match 'terminal-pass' -and $rawArgs -match 'first') { 'pass' } elseif ($rawArgs -match 'block') { 'block' } elseif ($rawArgs -match 'grounding') { 'grounding' } elseif ($rawArgs -match 'missing') { 'missing' } elseif ($rawArgs -match 'schema') { 'schema' } elseif ($rawArgs -match 'contradiction') { 'contradiction' } elseif ($rawArgs -match 'unsafe') { 'unsafe' } elseif ($rawArgs -match 'malformed') { 'malformed' } elseif ($rawArgs -match 'markdown') { 'markdown' } elseif ($rawArgs -match 'first') { 'fail' } else { 'pass' }
-if ($rawArgs -match 'terminal-(block|pass)' -and $rawArgs -match 'second') { Set-Content -LiteralPath (Join-Path $PSScriptRoot 'second-candidate-invoked.marker') -Value 'invoked' }
-if ($mode -eq 'fail') { exit 7 }
-if ($mode -in @('malformed','markdown')) { if ($mode -eq 'markdown') { '**VERDICT: PASS**' } else { 'not a review' }; exit 0 }
-$class = switch ($mode) { 'block' {'VALID_BLOCK'} 'grounding' {'GROUNDING_FAILED'} 'missing' {'STRUCTURED_OUTPUT_MISSING'} 'schema' {'SCHEMA_INVALID'} 'contradiction' {'SEMANTIC_CONTRADICTION'} default {'VALID_PASS'} }
-$cleanup = [bool]($mode -ne 'unsafe')
-$structured = if ($class -eq 'VALID_PASS') { @{ verdict='PASS'; blocking_findings=0; report_markdown='# Review' } } elseif ($class -eq 'VALID_BLOCK') { @{ verdict='BLOCK'; blocking_findings=1; report_markdown='# Block' } } else { $null }
-@{ schema_version=1; classification=$class; structured=$structured; lifecycle=@{ final_message_identity=$true }; cleanup=@{ safe=$cleanup; server_exit_confirmed=$cleanup } } | ConvertTo-Json -Compress
+import json
+import os
+import pathlib
+import sys
+
+# Persist raw process argv before any argument parsing.
+diagnostic_dir = pathlib.Path(os.environ["WORKFLOW_HARNESS_DIAGNOSTIC_DIR"])
+diagnostic_dir.mkdir(parents=True, exist_ok=True)
+(diagnostic_dir / "fake-reviewer.raw-argv.txt").write_text(repr(sys.argv), encoding="utf-8")
+args = sys.argv[1:]
+raw = " ".join(args)
+model = args[args.index("--model") + 1] if "--model" in args else ""
+evidence = pathlib.Path(__file__).with_name(model + ".argv.txt") if model else pathlib.Path(__file__).with_name("missing-model.argv.txt")
+evidence.write_text(json.dumps({"argv": args, "stderr": "", "exit_code": 0}), encoding="utf-8")
+if model == "fallback-grounding":
+    pathlib.Path(__file__).with_name("fallback-grounding.marker").write_text("invoked", encoding="utf-8")
+    result = {"schema_version": 1, "classification": "GROUNDING_FAILED", "structured": None, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif model == "fallback-pass":
+    pathlib.Path(__file__).with_name("fallback-pass.marker").write_text("invoked", encoding="utf-8")
+    result = {"schema_version": 1, "classification": "VALID_PASS", "structured": {"verdict": "PASS", "blocking_findings": 0, "report_markdown": "# Review"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif model in ("terminal-first-pass", "terminal-first-block"):
+    pathlib.Path(__file__).with_name("first-candidate-invoked.marker").write_text("invoked", encoding="utf-8")
+    result = {"schema_version": 1, "classification": "VALID_BLOCK" if model.endswith("block") else "VALID_PASS", "structured": {"verdict": "BLOCK" if model.endswith("block") else "PASS", "blocking_findings": 1 if model.endswith("block") else 0, "report_markdown": "# Review"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif model == "terminal-second":
+    pathlib.Path(__file__).with_name("second-candidate-invoked.marker").write_text("invoked", encoding="utf-8")
+    result = {"schema_version": 1, "classification": "VALID_PASS", "structured": {"verdict": "PASS", "blocking_findings": 0, "report_markdown": "# Review"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif "terminal-block" in args:
+    result = {"schema_version": 1, "classification": "VALID_BLOCK", "structured": {"verdict": "BLOCK", "blocking_findings": 1, "report_markdown": "# Block"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif "terminal-pass" in args:
+    result = {"schema_version": 1, "classification": "VALID_PASS", "structured": {"verdict": "PASS", "blocking_findings": 0, "report_markdown": "# Review"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+elif "unsafe" in args:
+    result = {"schema_version": 1, "classification": "VALID_PASS", "structured": {"verdict": "PASS", "blocking_findings": 0, "report_markdown": "# Review"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": False, "server_exit_confirmed": False}}
+elif "malformed" in args:
+    print("not a review")
+    raise SystemExit(0)
+elif "markdown" in args:
+    print("**VERDICT: PASS**")
+    raise SystemExit(0)
+else:
+    result = {"schema_version": 1, "classification": "VALID_PASS", "structured": {"verdict": "PASS", "blocking_findings": 0, "report_markdown": "# Review"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+print(json.dumps(result, separators=(",", ":")))
 '@ | Set-Content $reviewer -Encoding UTF8
 @'
 param([string[]]$ChildArgs)
@@ -139,7 +176,7 @@ if ($ChildArgs -contains 'sleep') { Start-Sleep -Seconds 2 }
 Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 '@ | Set-Content $scoutChild -Encoding UTF8
     'exit 0' | Set-Content $pythonChild -Encoding UTF8
-    "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$reviewer`" %*" | Set-Content $reviewerCmd -Encoding ASCII
+    "@python `"%~dp0fake-reviewer.py`" %*" | Set-Content $reviewerCmd -Encoding ASCII
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$scoutChild`" %*" | Set-Content $scoutCmd -Encoding ASCII
     "@powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$pythonChild`" %*" | Set-Content $pythonCmd -Encoding ASCII
 
@@ -164,16 +201,14 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($code -eq 0) "expected 0, got $code"
     }
     Run-Case 'Gate valid structured BLOCK returns 2 and is terminal' {
-        if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','terminal-block','-_ReviewCandidatesOverride','first','second'))
-        Assert-True ($code -eq 2) "expected 2, got $code"
-        Assert-True (-not (Test-Path $secondMarker)) 'trusted BLOCK incorrectly invoked the second candidate'
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('terminal-first-block','terminal-second'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }; $firstMarker = Join-Path $helperDir 'first-candidate-invoked.marker'; if (Test-Path $firstMarker) { Remove-Item -LiteralPath $firstMarker -Force }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 2) "expected 2, got $code"; Assert-True (Test-Path $firstMarker) 'terminal BLOCK first candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'trusted BLOCK incorrectly invoked the second candidate' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate valid structured PASS is terminal' {
-        if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','terminal-pass','-_ReviewCandidatesOverride','first','second'))
-        Assert-True ($code -eq 0) "expected 0, got $code"
-        Assert-True (-not (Test-Path $secondMarker)) 'trusted PASS incorrectly invoked the second candidate'
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('terminal-first-pass','terminal-second'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }; $firstMarker = Join-Path $helperDir 'first-candidate-invoked.marker'; if (Test-Path $firstMarker) { Remove-Item -LiteralPath $firstMarker -Force }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 0) "expected 0, got $code"; Assert-True (Test-Path $firstMarker) 'terminal PASS first candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'trusted PASS incorrectly invoked the second candidate' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate malformed adapter envelope returns 1' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','malformed'))
@@ -184,8 +219,11 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($code -eq 1) "expected 1, got $code"
     }
     Run-Case 'Gate pre-authority failure falls back to next candidate' {
-        $code = Invoke-Script $gate (@('-Task',$fixtureId) + $reviewBase)
-        Assert-True ($code -eq 0) "expected fallback success, got $code"
+        $groundingMarker = Join-Path $helperDir 'fallback-grounding.marker'
+        $passMarker = Join-Path $helperDir 'fallback-pass.marker'
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('fallback-grounding','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        if (Test-Path $groundingMarker) { Remove-Item -LiteralPath $groundingMarker -Force }; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
+        try { $code = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code.ExitCode -eq 0) "expected fallback success, got $($code.ExitCode): $($code.Output)"; Assert-True (Test-Path $groundingMarker) 'fallback-grounding candidate was not invoked'; Assert-True (Test-Path $passMarker) 'fallback-pass candidate was not invoked'; Write-Host ('BF1 candidate 1 argv: ' + (Get-Content (Join-Path $helperDir 'fallback-grounding.argv.txt') -Raw)); Write-Host ('BF1 candidate 2 argv: ' + (Get-Content (Join-Path $helperDir 'fallback-pass.argv.txt') -Raw)); Write-Host 'BF1 classifications: GROUNDING_FAILED -> VALID_PASS'; Write-Host 'BF1 Gate exit: 0' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate unsafe adapter cleanup stops fallback' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','unsafe'))
@@ -228,9 +266,16 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 }
 finally {
+    $diagnosticPath = Join-Path $diagnosticRoot $fixtureId
+    if ($failed -gt 0) {
+        New-Item -ItemType Directory -Force -Path $diagnosticPath | Out-Null
+        if (Test-Path $helperDir) { Copy-Item $helperDir $diagnosticPath -Recurse -Force }
+        if (Test-Path $fixtureDir) { Copy-Item $fixtureDir (Join-Path $diagnosticPath 'fixture') -Recurse -Force }
+    }
     foreach ($path in @($fixtureDir,$helperDir) + $runtimeDirs) {
         if (Test-Path $path) { Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue }
     }
+    Remove-Item Env:WORKFLOW_HARNESS_DIAGNOSTIC_DIR -ErrorAction SilentlyContinue
 }
 
 if ($failed -gt 0) { exit 1 }
