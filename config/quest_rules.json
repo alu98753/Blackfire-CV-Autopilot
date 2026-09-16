@@ -202,6 +202,11 @@
       "pattern": "(血角終結者|獸人地堡)",
       "dungeon_index": 7,
       "policy": "banner_verify_only"
+    },
+    {
+      "pattern": "(巨龍之巢|巨龍巢穴)",
+      "dungeon_index": 8,
+      "policy": "banner_verify_only"
     }
   ],
   "stage_rules": [
