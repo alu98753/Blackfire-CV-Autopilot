@@ -1,0 +1,25 @@
+{
+  "id": "reviewer-bounded-context-infrastructure",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/reviewer-bounded-context-infrastructure/",
+    "docs/architecture/opencode_structured_review_baseline.md",
+    "docs/architecture/ai_development_workflow.md",
+    ".opencode/agents/spec-reviewer.md",
+    ".opencode/agents/regression-reviewer.md",
+    "scripts/ai_gate.ps1",
+    "scripts/",
+    "tests/workflow_scripts/",
+    "tests/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
