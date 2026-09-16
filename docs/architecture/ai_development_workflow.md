@@ -1,30 +1,102 @@
 # AI Development Verification Workflow v1
 
-> Status: experimental development workflow. This document defines the repository contract for AI-assisted task specification, localization, implementation handoff, and read-only verification. It does not change game runtime behavior.
+> Status: canonical development workflow contract. This document defines the repository SSOT for AI-assisted task lifecycle, local workspace topology, environment ownership, role boundaries, verification, and integration authority. It does not define game runtime behavior.
 
 ## 1. Purpose
 
-The project uses ChatGPT for architecture/specification/final review, Gemini/Antigravity as the primary implementation writer, and OpenCode for read-only localization and verification. GitHub-tracked task packages are the shared handoff surface so the user does not need to manually copy specifications, reviewer output, or evidence between tools.
+The project uses a contract-driven AI workflow:
 
 ```text
 Human / ChatGPT
   -> lightweight repository survey
   -> Draft SPEC.md + task.json
   -> OpenCode Scout -> CONTEXT.md
-  -> ChatGPT re-checks evidence and finalizes SPEC.md
+  -> ChatGPT + user finalize SPEC.md
   -> Gemini/Antigravity implementation
+  -> focused tests
   -> OpenCode read-only reviewers -> reviews/*
-  -> focused tests under project policy
   -> EVIDENCE.md
-  -> ChatGPT final semantic / architecture review from GitHub
-  -> user-authorized merge via ChatGPT GitHub integration (or manual temp-main fallback)
+  -> ChatGPT final semantic / architecture review
+  -> user-authorized integration
 ```
 
-GitHub is the message bus. Tool roles are deliberately separated: Scout discovers evidence, ChatGPT/user own the contract, Gemini writes implementation code, and OpenCode reviewers independently verify the candidate. Local agents (Gemini/Antigravity/OpenCode) never merge or push main; ChatGPT integrates via GitHub merge commit only after closeout gates pass and the user explicitly authorizes merge.
+GitHub-tracked task artifacts are the handoff surface. Semantic authority is deliberately narrow:
 
-## 2. Canonical task package
+- ChatGPT + user own product intent, architecture, scope, invariants, and Final SPEC.
+- OpenCode Scout provides read-only localization evidence.
+- Gemini/Antigravity is the production implementation writer in workflow v1.
+- OpenCode reviewers provide independent read-only verification evidence.
+- Local agents never merge to `main`.
+- ChatGPT may integrate through GitHub only after closeout gates pass and the user explicitly authorizes integration.
 
-Every active AI-assisted task uses one tool-agnostic directory:
+## 2. Canonical local workspace
+
+Blackfire uses one permanent local `main` worktree and project-scoped task worktrees:
+
+```text
+E:\Side_Project\Blackfire-CV-Autopilot\
+├─ BlackfireCrusade_tool\
+│  └─ .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+│
+└─ worktrees\
+   └─ <task-id>\
+      └─ .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+```
+
+Canonical responsibilities:
+
+```text
+E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool
+    = permanent checkout of local main
+    = canonical integrated runtime home
+    = canonical real CV/runtime validation home
+
+E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
+    = branch-scoped task worktree
+    = temporary
+```
+
+Local topology is machine state. Before branch switching, task startup, Scout, Gate, migration, or cleanup, inspect actual ownership with:
+
+```powershell
+git worktree list --porcelain
+```
+
+Never guess branch ownership from a remembered path. Git's one-branch-per-worktree checkout rule remains authoritative.
+
+Existing active worktrees may remain at their current paths until their task closes. New task worktrees use the canonical project-scoped path above.
+
+## 3. Canonical Python environment
+
+Blackfire uses one repository-global Python environment stored outside every Git worktree:
+
+```text
+E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+```
+
+Every runnable worktree exposes its own local `.venv` Windows junction directly to that environment.
+
+Normal commands consume the environment through the worktree-local path:
+
+```text
+.\.venv\Scripts\python.exe
+```
+
+### Environment invariants
+
+1. `.venv/` is local-only and Git-ignored.
+2. No Git worktree owns the physical environment.
+3. Main, task worktrees, Scout, Gate, tests, and runtime validation are environment consumers.
+4. Consumer workflows must not run `pip install`, `pip uninstall`, recreate the venv, or otherwise mutate dependencies merely to make a command succeed.
+5. Consumer workflows must not silently fall back to system Python when the required worktree-local `.venv` is unavailable.
+6. Do not use another worktree's absolute interpreter path. Use the current worktree's `.venv\Scripts\python.exe`.
+7. Do not run `pip install -e .` or equivalent worktree-specific editable binding into the shared environment.
+8. Dependency mutation is a repository-level environment operation, not ordinary branch-local work.
+9. Safe shared-environment mutation/locking/rebuild semantics are deferred to `shared-environment-mutation-protocol` in `docs/tasks/BACKLOG.md`.
+
+## 4. Canonical task package
+
+Every active AI-assisted task uses:
 
 ```text
 docs/tasks/<task-id>/
@@ -37,145 +109,103 @@ docs/tasks/<task-id>/
    └─ regression-review.md
 ```
 
-`SPEC.md` is the only normative behavioral contract. All other files are supporting metadata or evidence and must not silently redefine it.
+`SPEC.md` is the normative task contract. Other task files are metadata or evidence and must not silently redefine it.
 
-Task intent belongs to the project, not to one AI tool. Tool-specific configuration remains under `.opencode/` and `.agents/`.
+`task.json` contains automation metadata. Scripts resolve `docs/tasks/<task-id>/SPEC.md` directly.
 
-## 3. Specification maturity
+## 5. Specification maturity
 
-A normal task passes through:
-
-```text
-Draft SPEC -> Scout evidence -> Final SPEC -> implementation
-```
-
-`SPEC.md` should declare near the top either:
+The normal task lifecycle is:
 
 ```text
-Status: Draft
-```
-
-or:
-
-```text
-Status: Final
+Draft SPEC
+  -> Scout evidence
+  -> Final SPEC
+  -> implementation
 ```
 
 ### Draft
 
-A Draft is complete enough to localize the problem but may still contain uncertainty. It should define at least:
+A Draft contains enough information to localize the problem:
 
 - goal / observed problem;
 - initial scope;
 - known invariants;
 - non-goals;
 - provisional acceptance criteria;
-- explicit uncertainty / open questions.
+- explicit uncertainty.
 
-The Draft must be grounded by a lightweight ChatGPT repository survey before creation. That survey should identify the current architecture parent, relevant implementation area, known behavior constraints, and whether the problem appears real. It should not duplicate the exhaustive codebase localization delegated to Scout.
-
-### Scout evidence
-
-OpenCode Scout acts as a light-by-default task localizer, not an exhaustive codebase auditor. It reads the Draft, current code, tests, and architecture documents, and writes `CONTEXT.md` under a bounded exploration budget (initial `steps: 6`, target 5-6 files, ceiling 8 files, concise output target 600-800 words, ceiling 1000 words, and an 8-minute execution timeout). It should identify:
-
-- relevant files and symbols (within budget);
-- actual control flow;
-- existing tests and safety mechanisms;
-- callers / sibling paths / shared state;
-- timing, lifecycle, ownership, and regression risks;
-- architecture conflicts;
-- uncertainty (reported explicitly when budget is reached instead of expanding audit);
-- minimal plausible change surface.
-
-Scout is an evidence provider, not the contract owner. It must not rewrite `SPEC.md` or decide product/architecture intent.
-
-### Final
-
-After `CONTEXT.md` is pushed, ChatGPT + user re-read the Draft, Scout evidence, current implementation, tests, and architecture contracts. They resolve unsupported assumptions and update `SPEC.md` to `Status: Final`.
-
-Production implementation must not begin while `SPEC.md` is explicitly `Status: Draft`.
-
-## 4. Artifact responsibilities
-
-### `SPEC.md`
-
-Defines what completion means. A Final spec should include, as applicable:
-
-- goal and observed behavior;
-- expected behavior;
-- scope and non-goals;
-- invariants;
-- acceptance criteria;
-- regression risks;
-- required focused tests;
-- forbidden shortcuts.
-
-### `task.json`
-
-Contains automation metadata only. The spec path is not configurable; scripts always resolve `docs/tasks/<task-id>/SPEC.md`.
-
-Typical fields:
-
-```json
-{
-  "id": "intent-routing-observability",
-  "base_ref": "origin/main",
-  "scope": ["states/navigation_routing.py", "tests/"],
-  "focused_tests": ["tests.test_behavior_navigation_intent"],
-  "models": {
-    "scout": null,
-    "review": null
-  }
-}
-```
-
-### `CONTEXT.md`
-
-Read-only localization evidence generated by Scout. It may challenge assumptions in the Draft but cannot redefine the task contract.
-
-### `reviews/*` and `EVIDENCE.md`
-
-The verification gate stores independent reviewer output under `reviews/` and writes a summary to `EVIDENCE.md`.
-
-A blocking reviewer finding must identify concrete contract/regression evidence. Style preference, unsupported speculation, or architecture taste without a reachable path is advisory and must not block the gate.
-
-## 5. Roles and write ownership
-
-### Contract owner
-
-ChatGPT + user. They define behavior, architecture trade-offs, scope, invariants, and acceptance criteria. They alone promote a Draft spec to Final.
+ChatGPT performs only the lightweight survey needed to validate the problem, responsibility boundary, architecture parent, known invariants, and plausible scope before creating the Draft.
 
 ### Scout
 
-OpenCode `scout` is read-only. It localizes the current repository and returns evidence. It may not edit files, execute shell commands, launch repair subagents, or own the task contract.
+OpenCode Scout is a bounded read-only evidence provider. It localizes actual code, tests, callers, ownership, timing, state, architecture conflicts, and regression risks and writes `CONTEXT.md`.
+
+Scout does not own the spec and cannot promote Draft to Final.
+
+### Final
+
+ChatGPT + user re-read the Draft, Scout evidence, current code/tests, and architecture contracts, resolve unsupported assumptions, and set:
+
+```text
+Status: Final
+```
+
+Production implementation must not begin while a task SPEC is Draft.
+
+If Scout infrastructure is unavailable and the user explicitly authorizes a temporary fallback, an interactive model may perform one read-only evidence survey. That fallback is not the spec owner and cannot begin production implementation while the SPEC remains Draft.
+
+## 6. Roles and write ownership
+
+### Contract owner
+
+ChatGPT + user own task intent, architecture trade-offs, scope, invariants, acceptance criteria, and Final SPEC.
+
+### Scout
+
+OpenCode Scout is read-only and produces localization evidence.
 
 ### Writer
 
-Gemini/Antigravity is the only implementation writer in v1. It reads the Final `SPEC.md` and `CONTEXT.md`, implements the smallest coherent patch, preserves verified behavior outside scope, runs only allowed focused tests, and invokes the verification gate before declaring the candidate ready.
+Gemini/Antigravity is the production implementation writer in workflow v1. It implements only the Final contract and preserves verified behavior outside scope.
 
-If `SPEC.md` is marked Draft, the writer must stop before production implementation.
+### Reviewers
 
-### Spec reviewer
+OpenCode `spec-reviewer` and `regression-reviewer` are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift.
 
-OpenCode `spec-reviewer` compares the candidate diff against explicit scope, invariants, acceptance criteria, and non-goals. It is a read-only, bounded blocker detector (`steps: 8`, target 300-600 words on PASS). The step count is a safety ceiling, not a coverage quota: after sufficient grounded evidence, the reviewer finalizes with StructuredOutput before exhausting that ceiling.
+Valid structured PASS/BLOCK output is terminal for the reviewer role. Reviewer fallback is for infrastructure failure, never semantic review-shopping.
 
-### Regression reviewer
+### Final reviewer / remote orchestrator
 
-OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift for highest-risk reachable paths. It is a read-only, bounded blocker detector (`steps: 10`, target 300-600 words on PASS). The step count is a safety ceiling, not a coverage quota: after sufficient grounded evidence, the reviewer finalizes with StructuredOutput before exhausting that ceiling.
-
-Completed valid StructuredOutput is the terminal reviewer result. A separate trailing assistant text turn is not required, and `finish == "tool-calls"` alone is not a failure or verdict signal.
-
-### Final reviewer and remote orchestrator
-
-ChatGPT performs final architecture/semantic review from GitHub using the Final spec, current diff/commit, evidence artifacts, and current implementation. `EVIDENCE.md` is supporting evidence, not a substitute for direct review.
+ChatGPT performs final semantic and architecture review from GitHub using the Final SPEC, current diff/commit, evidence artifacts, and current implementation.
 
 ### Integration authority
 
-- **Local agents (Gemini / Antigravity / OpenCode)**: **Strictly forbidden** from merging branches, pushing to `main`, deleting branches, or performing integration actions.
-- **ChatGPT Remote Orchestrator**: Authorized to integrate via GitHub API only after all closeout gates pass and the user gives explicit merge authorization. Integration must use GitHub merge-commit semantics (no squash/rebase).
-- **User**: Ultimate integration authority. If ChatGPT integration is unavailable or manual flow is preferred, the user performs `git merge --no-ff` in `temp-main`. `temp-main` remains the permanent local `main` baseline.
+- Local Gemini/Antigravity/OpenCode must not merge, push to `main`, delete integrated branches, or perform equivalent integration actions.
+- ChatGPT may integrate via GitHub only after required closeout gates pass and the user explicitly authorizes integration.
+- Integration uses merge-commit semantics; squash/rebase must not silently replace repository history policy.
+- The user remains the ultimate integration authority and may perform the manual merge when preferred.
 
-## 6. Task lifecycle
+## 7. Remote-to-local task handoff
+
+After ChatGPT creates or updates task artifacts on GitHub and before any local task command runs:
+
+1. `git fetch origin`.
+2. Inspect `git worktree list --porcelain`.
+3. Ensure the intended task worktree is attached to the expected task branch.
+4. If the task worktree is detached, restore it to the expected task branch before Scout/Gate/implementation.
+5. Synchronize the task branch with remote using non-destructive fast-forward semantics where applicable.
+6. Respect branch exclusivity; never checkout a branch already attached to another worktree.
+
+Canonical new task path:
+
+```text
+E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
+```
+
+The detailed startup sequence belongs to `.agents/skills/branch_start_workflow/SKILL.md`.
+
+## 8. Task lifecycle
 
 ### Backlog
 
@@ -185,180 +215,113 @@ New ideas and not-yet-specified work go to:
 docs/tasks/BACKLOG.md
 ```
 
-When work becomes active, promote it into a unique `docs/tasks/<task-id>/` package. Do not maintain duplicate active descriptions in both backlog and task package.
+When work becomes active, promote it into a unique `docs/tasks/<task-id>/` package. Do not maintain two active SSOT descriptions.
 
-### Phase A1 — Lightweight contract framing
+### Phase A1 — Contract framing
 
-Before creating a task, ChatGPT checks current GitHub `main`, the relevant architecture baseline, nearby implementation, and existing task/backlog material. The purpose is to establish the real problem boundary, not to perform a full duplicate code audit.
-
-Create:
-
-```text
-docs/tasks/<task-id>/SPEC.md   # Status: Draft
-docs/tasks/<task-id>/task.json
-```
+ChatGPT checks current GitHub `main`, relevant architecture contracts, nearby implementation, tests, and backlog/task material, then creates a Draft SPEC and task descriptor.
 
 ### Phase B — Localization
- 
- From the task worktree:
- 
- ```powershell
- .\scripts\ai_scout.ps1 -Task <task-id>
- ```
- 
- This runs Scout through the repository-owned bounded child-process wrapper (explicit repo working directory, closed non-interactive stdin, redirected output, and termination handling) with real-time terminal streaming under an 8-minute default timeout. Production Scout supports exactly OpenCode CLI version 1.18.31; the wrapper owns process isolation rather than relying on an OpenCode `run` flag. On successful execution and structural validation, it creates or replaces `docs/tasks/<task-id>/CONTEXT.md` via atomic promotion. If Scout times out or fails, any pre-existing canonical `CONTEXT.md` remains untouched.
+
+From the correctly attached task worktree:
+
+```powershell
+.\scripts\ai_scout.ps1 -Task <task-id>
+```
+
+Production Scout supports the repository-pinned OpenCode contract. The wrapper owns non-interactive process handling, timeouts, artifact validation, and safe promotion of `CONTEXT.md`.
 
 ### Phase A2 — Contract finalization
 
-Push Scout evidence. ChatGPT then re-inspects the task against `CONTEXT.md`, current code/tests, and architecture contracts. Unsupported assumptions are removed or corrected and `SPEC.md` becomes `Status: Final`.
-
-Only after this point may production implementation begin.
+ChatGPT + user reconcile Draft assumptions against evidence and produce Final SPEC.
 
 ### Phase C — Implementation
 
-Gemini/Antigravity implements only the Final contract. `.agents/AGENTS.md`, applicable skills, architecture contracts, and `SPEC.md` remain authoritative.
+Gemini/Antigravity implements the Final SPEC. `.agents/AGENTS.md`, applicable skills, architecture contracts, and Final SPEC remain authoritative.
 
-Behavior-preserving refactors remain behavior-preserving unless the Final spec explicitly changes behavior. The writer must not modify the spec merely to make its patch appear compliant.
-
-### Phase D — Read-only verification
+### Phase D — Verification
 
 Run:
- 
- ```powershell
- .\scripts\ai_gate.ps1 -Task <task-id>
- ```
- 
- The gate snapshots repository status/diff into ignored `.runtime/` files, verifies the exact supported OpenCode CLI version (1.18.31), and invokes the two read-only reviewers through a bounded, isolated repository-owned child-process wrapper (explicit repo working directory, closed stdin, redirected output, and termination handling) with real-time stdout/stderr visibility. The reviewer AI execution budget is 480 seconds; the outer adapter process budget is 540 seconds, providing margin for transport timeout and cleanup/envelope emission. It optionally runs declared `focused_tests` (default 60-second timeout per test target) and safely promotes canonical `reviews/*` and `EVIDENCE.md`. OpenCode-specific `run --standalone` and `run --pure` flags are not part of the production launcher contract.
 
-Verification outcomes and exit codes:
-- **`0` (`PASSED`)**: Both reviewers reached trusted `VALID_PASS` outcomes and all configured focused tests passed.
-- **`2` (`CANDIDATE_BLOCKED`)**: A trusted reviewer returned `VALID_BLOCK` or a focused test completed and exited non-zero; accepted blocking evidence is promoted.
-- **`1` (`VERIFICATION_UNAVAILABLE`)**: No trusted verdict or required test authority was available. Attempt classifications remain distinct (`GROUNDING_FAILED`, `STRUCTURED_OUTPUT_MISSING`, `SCHEMA_INVALID`, `LIFECYCLE_UNTRUSTWORTHY`, and so on), and prior canonical trusted artifacts are preserved.
+```powershell
+.\scripts\ai_gate.ps1 -Task <task-id>
+```
 
-The gate never runs the full test suite. Full-suite execution remains user-only under project policy.
+Gate invokes bounded read-only reviewers, optionally runs declared focused tests, and promotes trusted review/evidence artifacts. It never substitutes full-suite execution.
+
+Gate outcomes remain mechanically distinct:
+
+- `0`: trusted verification passed;
+- `2`: trusted candidate blocker or configured focused-test failure;
+- `1`: verification infrastructure unavailable / no trusted verdict.
 
 ### Phase E — Final review and closeout
 
-Commit/push the candidate patch and tracked task evidence. The user can ask ChatGPT to review the branch or PR directly from GitHub.
+Commit/push the candidate and tracked task evidence. ChatGPT performs final semantic/architecture review from GitHub. Branch closeout follows `.agents/skills/branch_completion_workflow/SKILL.md`.
 
-Branch closeout follows the gated workflow defined in `.agents/skills/branch_completion_workflow/SKILL.md`:
-- Local agents extract durable contracts, update canonical documentation, and verify zero regressions against `temp-main`.
-- Local agents must never perform the merge.
-- Once all closeout gates pass and the user gives explicit authorization, ChatGPT performs the GitHub merge using merge-commit semantics.
-- `temp-main` remains the local permanent `main` baseline and simply fast-forwards (`git fetch origin && git pull --ff-only`).
-- If remote integration is unavailable, the user executes manual `git merge --no-ff` in `temp-main` as a fallback.
-- Active task packages are not permanent architecture documentation; durable invariants are archived to canonical docs.
+## 9. Test policy
 
-## 7. Reviewer finding contract
+This workflow inherits `.agents/AGENTS.md` and `.agents/skills/project-test-rules/SKILL.md`:
 
-The adapter requests OpenCode's official `StructuredOutput` object with exactly:
+- AI agents run only the smallest directly relevant tests.
+- Gate rejects obvious full-suite discovery targets.
+- Full-suite execution remains user-only when required.
+- Baseline comparisons must execute each worktree through its own `.venv\Scripts\python.exe` path.
+- If tests share runtime/game/user-data resources, execute them serially rather than concurrently.
 
-```json
-{"verdict":"PASS|BLOCK","blocking_findings":0,"report_markdown":"..."}
-```
+A reviewer finding is not proof of a bug; blocking claims require concrete contract/regression evidence.
 
-Each blocking finding should contain:
+## 10. Multi-worktree task-state invariant
 
-```text
-ID:
-Severity:
-Contract / invariant:
-Location:
-Claim:
-Evidence:
-Suggested validation:
-Confidence:
-```
-
-`BLOCK` is appropriate only for concrete correctness, regression, contract, or architecture-boundary problems. Unsupported possibilities must remain advisory.
-
-`report_markdown` is presentation evidence only. The adapter and Gate validate the machine fields mechanically and never recover verdict authority from prose, headers, fences, or older messages.
-
-## 8. Test policy
-
-This workflow inherits [AGENTS.md](../../.agents/AGENTS.md) and [project-test-rules](../../.agents/skills/project-test-rules/SKILL.md):
-
-- AI agents may execute only the smallest directly relevant tests.
-- The gate rejects obvious full-suite discovery targets.
-- The full suite is executed manually by the user when required.
-- A reviewer finding is not proof of a bug; blocking claims should be grounded by tests, direct control-flow evidence, or reproducible behavior where practical.
-
-## 9. Multi-worktree invariant
-
-Task state is namespaced by task id:
+Task state is namespaced by task id under:
 
 ```text
 docs/tasks/<task-id>/
 ```
 
-Do not introduce `.ai/current-task`, `docs/tasks/current`, global mutable task state, or another singleton that could collide across permanent worktrees. Scripts always require an explicit `-Task` parameter.
+Do not introduce a global mutable current-task singleton. Scripts require explicit task identity.
 
-## 10. Model selection and fallback routing
+## 11. OpenCode compatibility and fallback
 
-Agent roles are stable; model names are not. `.opencode/agents/*.md` defines role and permission boundaries without hard-coding a model.
+Repository automation follows the pinned OpenCode version, launcher contract, CLI contract, and provider compatibility baseline documented by the repository.
 
-Model configuration is supplied by `task.json` or PowerShell arguments:
-- `models.scout` and `models.review` accept either a scalar string or an ordered array of model identifiers. A scalar string is equivalent to a single-element candidate list.
-- `opencode/mimo-v2.5-free` is the current configured default first candidate because of operational stability, but it is not hard-coded in routing logic: all candidates are data passed into the routing scripts.
-- Only models that pass bounded live qualification under their specific formal role contracts may be admitted to recommended/default chains. Qualification is role-specific (a model may qualify for Scout without qualifying for Gate review, or vice versa).
-- CLI `-Model` (in `ai_scout.ps1`) and `-ReviewModel` (in `ai_gate.ps1`) act as strict single-model overrides, replacing the configured normal candidate chain with that explicit candidate.
-- Model fallback is attempted **only** upon mechanically classified infrastructure failures (e.g., launch failure, process timeout with confirmed termination, non-zero exit, empty output, malformed transport JSONL, canonical payload extraction failure, or invalid verdict structure).
-- A valid semantic `PASS` or `BLOCK` verdict is strictly terminal for that reviewer role. Fallback is never triggered after a valid verdict; review-shopping is forbidden.
-- Each attempted model receives its own **480-second AI execution budget** (not a shared remainder), within a **540-second outer adapter process budget**. The 510-second transport timeout remains below the outer process margin. Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
-- If unconfirmed process termination occurs upon timeout, routing terminates immediately as terminal infrastructure failure without launching subsequent processes.
-- Model fallback in `ai_gate.ps1` manages ONLY automated independent OpenCode reviewer candidates.
-- If all normal independent OpenCode reviewer candidates fail infrastructurally for a role, `ai_gate.ps1` MUST NOT invoke Gemini and MUST exit `1 = INFRASTRUCTURE_BLOCKED`, outputting an explicit diagnostic `MANUAL_DEGRADED_REVIEW_REQUIRED`.
-- Outer workflow handoff: When Gate exits 1 due to infrastructure exhaustion, the outer Blackfire Agent Workflow prompts the interactive Antigravity Gemini implementation agent to conduct an interactive degraded self-review tracked under `docs/tasks/<task>/reviews/degraded-gemini-review.md`.
-- Degraded review evidence is unambiguously labeled `DEGRADED`, `LOW_EVIDENCE`, and `NOT_INDEPENDENT`. It possesses NO independent Gate authority and never masquerades as a Gate PASS. Merge authority remains strictly with ChatGPT + user semantic review.
-- Structured attempt provenance (role, attempt type, 1-based index, model, elapsed seconds, outcome reason, selected status) is recorded compactly in `EVIDENCE.md` without committing raw failed output or credentials.
-- Provider credentials remain local user configuration and must never be committed.
+Do not add unverified CLI flags or guess alternate invocation forms. Version/contract mismatch must fail fast.
 
-## 11. Installation boundary
+Model routing rules:
 
-Repository configuration does not silently install or authenticate OpenCode during task execution. Bootstrap is explicit:
+- role boundaries remain stable even if candidate models change;
+- ordered fallback is permitted only for mechanically classified infrastructure failures;
+- a valid semantic PASS/BLOCK is terminal;
+- reviewer infrastructure exhaustion must not silently substitute Gemini as an independent reviewer;
+- degraded interactive review, when explicitly used by the outer workflow, is labeled non-independent and does not create Gate PASS authority;
+- provider credentials remain local and untracked.
 
-```powershell
-.\scripts\bootstrap_opencode.ps1
+## 12. Installation boundary
+
+Task execution does not silently install or authenticate OpenCode. Bootstrap is explicit through repository-owned setup tooling. Secrets remain outside the repository.
+
+Python project dependency provisioning is likewise outside Scout/Gate/normal test responsibility; the worktree-local `.venv` must already resolve to the canonical environment.
+
+## 13. Windows shell policy
+
+Non-interactive agent shell/tool execution uses:
+
+```text
+cmd.exe /d /s /c "<command>"
 ```
 
-After installation, the user completes the interactive OpenCode `/connect` flow. Secrets remain outside the repository.
+Commands must not wait for stdin. PowerShell automation is wrapped through non-interactive `cmd.exe` execution. Preserve the intended repository working directory and never silently switch to the user home directory.
 
-## 12. Legacy `docs/todos/`
+## 14. Non-goals
 
-`docs/todos/` predates this workflow and is frozen legacy storage after this workflow lands:
-
-- do not add new tasks there;
-- do not add new backlog items to `future_work.md`;
-- when an old item becomes active, migrate the relevant current material into a new `docs/tasks/<task-id>/SPEC.md`;
-- clean or archive the legacy source during normal branch closeout when safe.
-
-This avoids a disruptive one-shot historical-document migration while ensuring all new work has one canonical location from now on.
-
-## 13. v1 non-goals
-
-Version 1 does not implement:
+Workflow v1 does not add:
 
 - autonomous repair loops;
-- multiple parallel candidate patches;
-- automatic PR creation or merge;
-- automatic handling of ChatGPT review comments;
-- replacement of existing `.agents/` skills;
-- a new test framework;
+- competing implementation patches;
+- automatic semantic authority transfer;
 - automatic full-suite execution;
-- bulk migration of historical `docs/todos/` content.
+- dependency mutation orchestration;
+- shared-environment mutation locking/rebuild machinery;
+- automatic merge without explicit user authorization.
 
-A later version may add a bounded repair loop only after reviewer quality is validated on several real tasks.
-
-## 14. Pilot success criteria
-
-The workflow is useful if several real tasks show that:
-
-1. Draft framing is fast enough that ChatGPT does not duplicate Scout work.
-2. Scout context materially reduces wrong assumptions before implementation.
-3. Final spec changes are driven by repository evidence rather than model guesswork.
-4. Independent reviewers identify concrete spec/regression problems before final ChatGPT review.
-5. Reviewer noise remains low enough that findings are actionable.
-6. Final ChatGPT review usually requires fewer implementation-repair cycles.
-7. The user no longer needs to copy specifications, implementation summaries, or review findings between ChatGPT and the IDE.
-
-IntentRouting Observability is a suitable first pilot because its change surface is small, behavior should remain unchanged, and its logging contract can be verified independently of routing policy.
+The north star is a contract-driven development pipeline with increasingly automated mechanics and deliberately narrow semantic authority.

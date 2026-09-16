@@ -397,3 +397,51 @@ Roadmap policy:
 - Production OpenCode remains pinned to **1.18.31**.
 - Do not resume adjacent-version guessing or change OpenCode solely to solve structured transport unless a new concrete incompatibility, maintenance/security requirement, or explicitly approved task invalidates this baseline.
 - Future reviewer work should first improve bounded context acquisition and reviewer evidence supply while preserving independent semantic judgment.
+
+# Pending technical debt
+
+## `shared-environment-mutation-protocol`
+
+Status: pending / trigger-based technical debt  
+Priority: P2 until triggered
+
+### Context
+
+Blackfire intentionally uses one repository-global canonical Python virtual environment, stored outside Git worktrees and consumed through each worktree's local `.venv` junction. This minimizes provisioning friction for a mature project whose dependency set changes infrequently, but it means dependency mutation is shared machine/repository state rather than branch-local state.
+
+### Problem
+
+The repository does not yet define a concurrency-safe protocol for mutating that shared environment. Ad-hoc `pip install`, `pip uninstall`, environment recreation, or equivalent dependency changes could affect other active worktrees, tests, or agents.
+
+This is consciously deferred because the current operational pain point is worktree/main/runtime ownership, not dependency churn.
+
+### Trigger
+
+Promote this backlog item into `docs/tasks/shared-environment-mutation-protocol/` before introducing ad-hoc mutation behavior when any of the following becomes real:
+
+- a Python dependency must be added, removed, or upgraded;
+- the canonical venv must be recreated or migrated;
+- two agents/processes need to mutate shared environment state concurrently;
+- environment drift becomes a demonstrated source of failures.
+
+### Expected investigation
+
+Compare and choose with evidence rather than pre-committing to an implementation:
+
+- repository-level environment mutation locking / lease semantics;
+- in-place update vs build-new-and-swap;
+- dependency declaration and environment consistency validation;
+- `pip`, `uv sync`, or equivalent deterministic synchronization mechanisms;
+- behavior while Scout, Gate, tests, runtime validation, or other agents are consuming the environment;
+- rollback/recovery after failed mutation;
+- whether the project should remain on a singleton shared venv or move to dependency-fingerprint / isolated environments if real usage evidence changes the trade-off.
+
+### Current invariant until triggered
+
+```text
+Scout / Gate / normal tests / runtime validation
+        -> consume canonical shared .venv
+        -> do not mutate dependencies as a side effect
+```
+
+Do not add speculative environment-management machinery merely to solve a hypothetical future dependency change.
