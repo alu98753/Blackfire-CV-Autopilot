@@ -84,13 +84,23 @@ async function stopServer(server) {
     server.once("exit", () => { clearTimeout(timer); done(true); });
   });
 }
+export function buildServerLaunch(platform = process.platform, shell = process.env.ComSpec ?? "cmd.exe") {
+  const serverArgs = ["serve", "--hostname=127.0.0.1", "--port=0"];
+  if (platform === "win32") {
+    // Keep the command body fixed: no user-controlled value is interpolated
+    // into cmd.exe, and NUL gives the server an explicit non-interactive EOF.
+    return { executable: shell, args: ["/d", "/s", "/c", "opencode serve --hostname=127.0.0.1 --port=0 < NUL"] };
+  }
+  return { executable: "opencode", args: serverArgs };
+}
 
 async function run() {
   const agent = required("--agent"); const model = required("--model"); const directory = resolve(required("--directory"));
   const prompt = await readFile(resolve(required("--prompt-file")), "utf8");
   const slash = model.indexOf("/"); if (slash <= 0 || slash === model.length - 1) throw new Error(`Invalid model: ${model}`);
   const sdk = await import("@opencode-ai/sdk/v2");
-  const server = spawn("opencode", ["serve", "--hostname=127.0.0.1", "--port=0"], { env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  const launch = buildServerLaunch();
+  const server = spawn(launch.executable, launch.args, { cwd: directory, env: { ...process.env, OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_CONFIG_CONTENT: "{}" }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   let client; let cleanup = { safe: false, server_exit_confirmed: false };
   try {
     client = sdk.createOpencodeClient({ baseUrl: await waitForServer(server) });

@@ -60,6 +60,22 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertFalse(values[3]["complete"])
         self.assertTrue(values[4]["complete"])
 
+    def test_windows_opencode_launcher_uses_cmd_shim_safely(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { buildServerLaunch } from "
+            f"'{probe.as_uri()}';"
+            "console.log(JSON.stringify([buildServerLaunch('win32','cmd.exe'), buildServerLaunch('linux')]));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
+        windows, unix = json.loads(result.stdout)
+        self.assertEqual(windows["executable"], "cmd.exe")
+        self.assertEqual(windows["args"][:3], ["/d", "/s", "/c"])
+        self.assertIn("opencode serve", windows["args"][3])
+        self.assertIn("< NUL", windows["args"][3])
+        self.assertEqual(unix["executable"], "opencode")
+        self.assertNotIn("AppData", windows["args"][3])
+
     def test_windows_workflow_harness(self):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
         command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'
