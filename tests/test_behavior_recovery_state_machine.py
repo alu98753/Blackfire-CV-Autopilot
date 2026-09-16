@@ -120,7 +120,7 @@ class TestRecoveryStateMachine(StateMachineLogicTestCase):
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_NAVIGATING)
         
         # 測試分支 A: 卡住逾時發起暫存並由 GenericAntiStuckSubflow 點擊匹配 confirm.png
-        self.state_machine.last_state_change = time.time() - 95.0
+        self.state_machine.last_state_change = time.time() - 201.0
         
         def match_confirm(img, name, threshold=0.75, quiet=True):
             if "common/confirm.png" in name:

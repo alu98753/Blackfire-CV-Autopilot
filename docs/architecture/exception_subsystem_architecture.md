@@ -22,7 +22,7 @@
 ```mermaid
 graph TD
     A["主狀態機 (state_machine.py)"] -->|每一幀呼叫 check()| B["ExceptionWatchdog (watchdog.py)"]
-    B -->|1. 狀態維持 30s/90s 未推進| C["第 1 次逾時：stash_current_state() & 轉移至 STATE_POPUP_RECOVERY"]
+    B -->|1. 狀態維持 30s/200s 未推進| C["第 1 次逾時：stash_current_state() & 轉移至 STATE_POPUP_RECOVERY"]
     C --> D["UnexpectedPopupRecoveryHandler (handler.py)"]
     D -->|優先級 1| E{"匹配專屬 Subflow ?"}
     E -->|YES| F["執行 RaidBoxSubflow / WheelOfFortuneSubflow"]
@@ -59,7 +59,7 @@ states/exceptions/
 * **平時效能保護**：狀態變動未達門檻時，僅進行極輕量之時間浮點數相減 (`now - last_state_change`)，完全不執行任何圖像模板匹配，將 CPU 佔用降至最低。
 * **分級時間門檻**：
   * **常規短狀態**（大廳、結算等）：`30.0` 秒無進展即判定逾時。
-  * **長流程任務**（導航、戰鬥、地下城探索、背包整理、城鎮子流程等）：給予 `90.0` 秒寬鬆門檻。
+  * **長流程任務**（導航、戰鬥、地下城探索、背包整理、城鎮子流程等）：使用 `config/exception_features.json` 的 `long_subflow_timeout_sec`，目前為 `200.0` 秒。
   * **待機模式 (`COLLECT_ONLY`)**：實作 `max(diamond_cd, bread_cd) + 60s` 智慧動態 CD 逾時與遊戲視窗消失檢查。
 
 ### 2. 意外彈窗恢復處理器：[UnexpectedPopupRecoveryHandler](../../states/exceptions/handler.py)
@@ -78,7 +78,7 @@ states/exceptions/
 在早期版本中，系統有時發生卡死卻未能觸發重開，經深度剖析後已全數完成防禦性修復：
 
 ### 1. 狀態假切換與時間戳刷洗 (已修復)
-* **成因**：當業務 Handler 重複觸發無效的 `transition_to(current_state)` 時，`last_state_change` 被持續刷新為當前時間，導致時間永遠無法累積到 30s/90s。
+* **成因**：當業務 Handler 重複觸發無效的 `transition_to(current_state)` 時，`last_state_change` 被持續刷新為當前時間，導致時間永遠無法累積到 30s/200s。
 * **修復方案**：在 [state_machine.py](../../states/state_machine.py) 的 `transition_to` 入口處加入 `if self.current_state != new_state:` 狀態防抖檢查。
 
 ### 2. 連續逾時卡死計數器被重置 (已修復)
@@ -86,7 +86,8 @@ states/exceptions/
 * **修復方案**：在 [handler.py](../../states/exceptions/handler.py) 中新增「5 次點擊未果直接重開自癒」護欄，不再等待第二次逾時。
 
 ### 3. 長作業進度回報契約 (`notify_ui_progress`) (已實作)
-* **機制**：針對長途背包銷毀與珠寶出售，建立嚴格的進度回報契約：只有在內部 Iterator 推進、點擊有效生效或 Phase 階段推進時，才調用 `self.machine.notify_ui_progress()` 刷新時間戳，兼顧長作業不誤判與卡死必自癒。
+* **長作業門檻**：長子流程的 no-progress Watchdog 門檻由 `config/exception_features.json` 的 `long_subflow_timeout_sec` 單一設定控制，目前為 200 秒；一般非戰鬥狀態仍使用 30 秒門檻。
+* **機制**：`notify_ui_progress()` 是唯一的同狀態進度回報 API。只有在 Iterator/index/phase 推進、已確認的業務/UI 步驟完成，或朝已知目標成功派發有界導航、翻頁、對齊與重置操作時，才刷新 `last_state_change`。迴圈迭代、等待、模板缺失或無進展重試不得刷新；因此合法長作業不會誤判，而真正無進展仍會自癒。
 
 ---
 
