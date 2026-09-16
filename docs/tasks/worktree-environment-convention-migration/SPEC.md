@@ -1,305 +1,244 @@
 # Worktree Environment Convention Migration
 
-Status: Draft
+Status: Final
 
 ## Decision Summary
 
-This task standardizes the local development topology around two separate lifecycles:
+This task standardizes Blackfire local development around two deliberately separate lifecycles:
 
 1. **Git lifecycle** — one project-scoped permanent `main` worktree plus temporary task worktrees.
-2. **Python environment lifecycle** — one repository-global shared virtual environment stored outside all Git worktrees and consumed through worktree-local `.venv` junctions.
+2. **Python environment lifecycle** — one repository-global shared virtual environment stored outside every Git worktree and consumed through worktree-local `.venv` junctions.
 
-A complete shared-environment mutation protocol is intentionally deferred to the backlog item `shared-environment-mutation-protocol`. Dependency mutation is rare and is not the present pain point.
+The selected convention is now validated on the local machine. This task does **not** design the future shared-environment mutation protocol; that remains deferred to `docs/tasks/BACKLOG.md#shared-environment-mutation-protocol`.
 
-## Goal
-
-Eliminate the current split-brain local convention where `temp-main` owns Git `main` while `BlackfireCrusade_tool` is the real runtime/CV home.
-
-Target topology:
+## Final Target Convention
 
 ```text
 E:\Side_Project\
 ├─ VenvPools\
-│  └─ .venvs-Blackfire-CV-Autopilot\      <- single canonical shared Python environment
+│  └─ .venvs-Blackfire-CV-Autopilot\      <- single physical canonical Python environment
 │
-└─ Blackfire-CV-Autopilot\                <- project namespace
-   ├─ BlackfireCrusade_tool\               <- permanent main worktree + runtime home
-   │  └─ .venv -> junction to shared env
+└─ Blackfire-CV-Autopilot\
+   ├─ BlackfireCrusade_tool\               <- permanent main worktree + runtime/CV home
+   │  └─ .venv -> junction to canonical env
    │
    └─ worktrees\
-      ├─ task-foo\
-      │  └─ .venv -> same shared env
-      └─ task-bar\
-         └─ .venv -> same shared env
+      └─ <task-id>\                         <- temporary task worktree
+         └─ .venv -> junction to canonical env
 ```
 
-After migration there must be exactly one obvious answer to both:
+Legacy task worktrees that were already active under `E:\Side_Project\task-*` may remain in place until their own lifecycle completes. They must not be moved merely for cosmetic directory consistency.
 
-- "Where is local main?" -> `BlackfireCrusade_tool`
-- "Where is official integrated runtime validation performed?" -> `BlackfireCrusade_tool`
+## Established Migration Facts
 
-## Survey Evidence
+The following are no longer assumptions:
 
-A manual read-only Gemini survey was used in place of Scout for this draft refinement.
+- `temp-main` has been retired and removed.
+- `E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool` is the local `main` worktree and canonical runtime/CV validation home.
+- `main` was synchronized to fetched `origin/main` before topology migration.
+- existing linked worktrees survived the primary-worktree move through `git worktree repair` with branch, HEAD, and dirty state preserved.
+- new task worktrees can be created under `E:\Side_Project\Blackfire-CV-Autopilot\worktrees\`.
+- the migration task itself is located under that project-scoped `worktrees` directory.
+- one physical Python environment exists at `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot`.
+- main, migration-task, reviewer-task, and watchdog-task `.venv` paths are valid Windows junctions directly targeting that canonical environment.
+- Python 3.11.2 starts successfully through the relocated canonical environment.
+- Blackfire runtime dependencies validated before relocation (`cv2`, `numpy`, `PIL`, `win32api`) still import successfully after relocation.
+- `pytest` was absent before relocation and remains absent; it was not installed as part of this task.
+- branch-local source resolution was validated: `config.py` resolves from the current worktree rather than being bound to another worktree through the shared environment.
+- `.venv` remains ignored/untracked in all verified worktrees.
+- no `pip install`, `pip uninstall`, environment rebuild, or dependency mutation was performed during migration.
 
-### Current local worktree state
+## Problem Being Solved
 
-At survey time:
-
-- previous `main` holder: `E:\Side_Project\temp-main`
-- previous holder: clean, branch `main`, HEAD `ac5d8c9`
-- `temp-main` was safely switched to detached HEAD to release `main`
-- `BlackfireCrusade_tool` remained detached at `ac5d8c9384195a3a2ae6c19e852a26364b55025f`
-- known local `origin/main`: `a537eac18bd177282105d99c0366cfa338d63ca3`
-- `BlackfireCrusade_tool` was dirty: 1 modified file + 3 untracked files
-- therefore no `fetch`, `switch main`, or `pull --ff-only` was performed in `BlackfireCrusade_tool`
-
-The dirty state was correctly preserved. No reset, clean, stash, or forced checkout was used.
-
-### Confirmed old-topology contracts
-
-The old permanent dual-worktree model is encoded in multiple durable surfaces:
-
-- `docs/architecture/ai_development_workflow.md`
-  - defines `temp-main` as the permanent local main/baseline surface.
-- `.agents/skills/branch_start_workflow/SKILL.md`
-  - defines `BlackfireCrusade_tool` as the feature/fix development worktree and `temp-main` as permanent main owner.
-  - explicitly forbids switching `BlackfireCrusade_tool` to `main`.
-- `.agents/skills/branch_completion_workflow/SKILL.md`
-  - depends on the permanent dual-worktree layout and forbids the development worktree from owning `main`.
-- `docs/tasks/workflow-merge-authority/SPEC.md`
-  - historical/task-level contract also records `temp-main` as the permanent main/baseline surface.
-
-`test-main` was not found as a durable convention.
-
-### Environment evidence
-
-The survey found:
-
-- README and most scripts use worktree-relative `.venv\Scripts\python.exe`.
-- `scripts/ai_gate.ps1` already resolves the current repository root's `.venv\Scripts\python.exe` and infrastructure-blocks when absent.
-- no automated `pip install` / `pip uninstall` behavior was found.
-- README contains manual `.venv` creation and `pip install -r requirements.txt` instructions.
-- existing `.venv` directories in inspected worktrees are physical directories, not junction/reparse points.
-- both inspected `pyvenv.cfg` files use Python 3.11.2.
-- matching `python.exe` file identity/content does not prove that the whole environment/package tree is already shared.
-
-Therefore the target shared-junction layout is a **migration target**, not a description of current state.
-
-## Architecture Decision
-
-### A. Project-scoped Git lifecycle
-
-For Blackfire:
+The old workflow encoded two competing canonical locations:
 
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\       <- permanent main
-└─ worktrees\
-   ├─ task-a\
-   ├─ task-b\
-   └─ task-c\
+Git/main/integration authority -> E:\Side_Project\temp-main
+runtime/CV/development home     -> E:\Side_Project\BlackfireCrusade_tool
 ```
 
-Task worktrees must no longer be globally flattened alongside unrelated side projects.
+This split allowed the runtime home to be detached or behind current `main` while another worktree represented Git integration state. Multiple durable workflow documents also encoded that split as policy.
 
-### B. One shared canonical venv
+The old environment layout also made the single physical `.venv` belong to one Git worktree path, so linked worktrees depended on that worktree's location. Moving the main worktree broke those legacy junctions and confirmed that environment ownership had to be separated from Git-worktree ownership.
 
-Blackfire intentionally uses one repository-global virtual environment:
+## Architecture Contract
+
+### 1. Exactly one permanent local main worktree
+
+`E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool` is the permanent local checkout of `main`.
+
+It is also the canonical integrated runtime/CV validation home.
+
+No `temp-main`, `test-main`, or other second permanent-main convention may coexist as active policy.
+
+### 2. Task worktrees are project-scoped, branch-scoped, and temporary
+
+New task worktrees default to:
+
+```text
+E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
+```
+
+A task worktree owns only its task branch during active work. Before Scout/Gate/tests/implementation, local state must be validated rather than inferred.
+
+Existing legacy task worktrees may finish in their original `E:\Side_Project\task-*` paths. Dirty or active worktrees must not be moved solely to satisfy the new directory aesthetic.
+
+### 3. One canonical shared Python environment
+
+Canonical physical environment:
 
 ```text
 E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
 ```
 
-Every runnable worktree exposes:
+Every runnable worktree exposes the conventional local path:
 
 ```text
 .\.venv\Scripts\python.exe
 ```
 
-via a Windows junction to the canonical environment.
+via a direct Windows junction to that canonical environment.
 
-The stable local `.venv` path is the consumer contract. Agents/scripts should not need to know the physical pool path during normal operation.
+Normal tools should consume the worktree-local `.venv` path and should not need to know the physical VenvPools location.
 
-### C. Deliberate trade-off
+### 4. Shared environment is intentionally not branch-isolated
 
-A repository-global shared mutable environment does not isolate dependency state across branches. This is accepted for now because dependency changes are rare and the active problem is Git/worktree/runtime identity, not environment mutation.
+The project deliberately accepts one shared environment across worktrees because dependency mutation is currently rare and environment setup is not the current operational bottleneck.
 
-Safe dependency mutation remains deferred to `docs/tasks/BACKLOG.md#shared-environment-mutation-protocol`.
+This means dependency mutation must not be treated as an ordinary branch-local action.
 
-## Known Invariants
+A future safe mutation protocol is explicitly deferred to `shared-environment-mutation-protocol`.
 
-1. **Exactly one permanent local main worktree**
-   - After migration, `E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool` owns checkout of `main`.
-   - It is also the canonical integrated runtime/CV validation home.
-   - No second permanent main authority remains.
+### 5. No worktree-specific editable install
 
-2. **Task worktrees are project-scoped and temporary**
-   - task worktrees live under `Blackfire-CV-Autopilot\worktrees\`.
-   - each holds its task branch only.
-   - local branch/worktree state must be validated before task commands.
+The shared environment must not be bound to one worktree through `pip install -e .` or equivalent editable-install/source-binding behavior.
 
-3. **Canonical environment is outside all Git worktrees**
-   - target path: `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot`.
-   - deleting/recreating a worktree must not delete the canonical environment.
+Tests/runtime must resolve project source from the current worktree. The migration validation confirmed this for `config.py` from both main and the migration task worktree.
 
-4. **`.venv` is a local junction contract after migration**
-   - every runnable worktree exposes `.venv` as a local junction to the same canonical environment.
-   - `.venv/` remains ignored and untracked.
-   - current physical `.venv` directories must not be mistaken for already-completed migration.
+### 6. Normal workflows consume, not provision, the environment
 
-5. **Normal workflows consume, not mutate, the environment**
-   - Scout/Gate/tests/runtime validation must not install/uninstall dependencies merely to succeed.
-   - where repository automation owns interpreter discovery, absent/invalid `.venv` must fail closed rather than silently use system Python.
+Scout, Gate, tests, runtime validation, and ordinary source-code tasks are environment consumers.
 
-6. **No worktree-specific editable install into the shared environment**
-   - `pip install -e .` or equivalent source binding to one worktree is forbidden for the shared environment.
+They must not silently:
 
-7. **Shared-environment mutation is deferred**
-   - dependency add/remove/upgrade, venv recreation, locking, atomic swap, and synchronization are not part of this task.
-   - promote `shared-environment-mutation-protocol` when a real mutation need appears.
+- `pip install`;
+- `pip uninstall`;
+- recreate the venv;
+- mutate dependencies merely to make a command pass;
+- fall back to unrelated system Python when repository automation is expected to use `.venv`.
 
-8. **Dirty worktree preservation is mandatory**
-   - dirty/untracked/staged state must never be silently reset, cleaned, stashed, overwritten, or moved merely to complete migration.
+Current evidence does not require changes to `scripts/ai_gate.ps1` or `scripts/ai_scout.ps1` for this task.
 
-9. **Remote freshness must be explicit**
-   - local `origin/main` cannot be treated as current remote truth until `git fetch origin` succeeds.
-   - before official runtime validation, `BlackfireCrusade_tool` must be clean enough for safe branch attachment and synchronized with fetched `origin/main` using non-destructive fast-forward semantics.
+### 7. Git worktree safety remains mandatory
 
-10. **Git worktree branch exclusivity remains authoritative**
-   - `main` cannot be checked out in two linked worktrees simultaneously.
-   - migration must release any previous `main` holder before attaching `BlackfireCrusade_tool` to `main`.
+Before branch switch, migration, cleanup, Scout, or Gate when topology matters:
 
-11. **GitHub remains the handoff surface**
-   - tracked task artifacts remain authoritative for task intent and evidence.
-   - local machine topology is validated, not guessed.
+- inspect `git worktree list --porcelain`;
+- respect Git branch exclusivity;
+- preserve dirty/staged/untracked state;
+- do not use `reset --hard`, `clean -fd`, force deletion, or implicit stash as shortcuts;
+- `git fetch origin` must occur before treating `origin/main` as fresh remote truth;
+- `main` synchronization uses non-destructive fast-forward semantics where applicable.
 
-12. **Windows non-interactive execution policy remains unchanged**
-   - commands invoked by agents use `cmd.exe /d /s /c`, do not wait for stdin, and preserve repository working directory.
+### 8. Windows execution policy remains unchanged
 
-## Scope
+Non-interactive agent commands use:
+
+```text
+cmd.exe /d /s /c "<command>"
+```
+
+Commands must not wait for stdin. PowerShell remains wrapped through `cmd.exe` according to the repository Windows-shell policy.
+
+## Final Implementation Scope
+
+Production implementation for this task is intentionally documentation/skill-only.
 
 ### Must change
 
 - `docs/architecture/ai_development_workflow.md`
-  - remove `temp-main` as permanent main/baseline authority and document the new project-scoped topology.
+  - replace the old permanent `temp-main` baseline convention with the new project-scoped topology;
+  - define `BlackfireCrusade_tool` as permanent local `main` + runtime/CV home;
+  - define the external shared-environment ownership model at the architecture/workflow level;
+  - retain GitHub as the primary handoff surface and existing authority boundaries.
+
 - `.agents/skills/branch_start_workflow/SKILL.md`
-  - replace the old rule that permanently reserves `main` for `temp-main`.
-  - establish safe creation of task worktrees under the project-scoped `worktrees\` namespace.
+  - remove the rule reserving `main` for `temp-main`;
+  - default new task worktrees to `E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>`;
+  - require worktree-topology validation rather than assuming branch ownership;
+  - preserve remote-to-local sync and branch-exclusivity safety.
+
 - `.agents/skills/branch_completion_workflow/SKILL.md`
-  - remove permanent dual-worktree assumptions and cross-worktree Python interpreter assumptions.
-  - align closeout/synchronization with `BlackfireCrusade_tool` as permanent `main`.
+  - remove permanent dual-worktree assumptions;
+  - use `BlackfireCrusade_tool` as local permanent `main`/baseline/runtime surface;
+  - stop cross-referencing an interpreter physically owned by another worktree;
+  - use the current worktree's `.venv` consumer path;
+  - preserve dirty-worktree safety, merge authority, and non-destructive synchronization semantics.
+
+### May change only if wording must be aligned
+
 - `docs/tasks/BACKLOG.md`
-  - retain the deferred `shared-environment-mutation-protocol` technical debt.
-- migration/runbook documentation
-  - provide a safe one-time sequence including dirty-state preservation, remote fetch freshness, branch exclusivity, environment migration, validation, rollback, and legacy `temp-main` retirement.
+  - keep `shared-environment-mutation-protocol` as pending technical debt; do not promote or implement it in this task.
 
-### Likely change only if directly referenced by old topology
+### Explicitly out of scope
 
-- `scripts/README.md`
-- README/developer setup documentation
-- `.gitignore` only if current ignore rules are insufficient
-- other workflow docs discovered to encode `temp-main`, flattened task-worktree paths, or cross-worktree interpreter paths
+- production source code;
+- gameplay/runtime/CV behavior;
+- `scripts/ai_gate.ps1`;
+- `scripts/ai_scout.ps1`;
+- `requirements.txt`;
+- installing `pytest` or any other package;
+- moving active legacy task worktrees;
+- implementing environment locking, atomic swap, or mutation orchestration;
+- rewriting historical task specs solely to erase historical `temp-main` references.
 
-### Explicitly not required by current evidence
+## Acceptance Criteria
 
-- `scripts/ai_gate.ps1`
-  - current evidence already shows worktree-relative `.venv` discovery with fail-closed behavior.
-- `scripts/ai_scout.ps1`
-  - no evidence yet requires executable behavior changes.
-- production source code
-- gameplay/runtime code
-- product tests unrelated to workflow documentation
-- `requirements.txt`
+1. Active canonical workflow documentation defines exactly one permanent local main/runtime worktree: `E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool`.
+2. New task worktrees default to `E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>`.
+3. Active branch-start and branch-completion skills no longer assign permanent `main` ownership to `temp-main` or forbid `BlackfireCrusade_tool` from owning `main`.
+4. Legacy task worktrees are explicitly allowed to remain at old `E:\Side_Project\task-*` paths until completion; dirty/active worktrees are not moved for cosmetic consistency.
+5. The external canonical Python environment is documented at `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot`.
+6. Runnable worktrees are documented as consumers through their own `.venv` junction; normal commands use worktree-local `.venv\Scripts\python.exe` paths.
+7. No active workflow documentation instructs one worktree to execute another worktree's Python interpreter path.
+8. No active workflow introduces system-Python fallback, automatic environment creation, or dependency installation as a side effect of Scout/Gate/tests.
+9. Worktree-specific `pip install -e .` into the shared environment is explicitly prohibited.
+10. `shared-environment-mutation-protocol` remains deferred and is not implemented by this task.
+11. Branch-start/branch-completion instructions preserve branch exclusivity, dirty-state protection, remote freshness, and non-destructive synchronization semantics.
+12. Historical task specs may retain old topology as history but must not be treated as active canonical authority.
+13. The implementation changes only workflow documentation/skills unless a newly discovered contradiction requires explicit contract-owner approval.
+14. No production gameplay behavior changes.
 
-Executable script changes must not be introduced without new evidence.
+## Validation Requirements
+
+Because the final tracked implementation is documentation/skill-only:
+
+- inspect the final diff for obsolete active `temp-main` rules;
+- search active workflow/skill surfaces for `temp-main`, old flattened task path assumptions, and cross-worktree interpreter paths;
+- verify the three canonical files agree on the same topology and environment ownership;
+- verify no production/script/test files changed unexpectedly;
+- preserve the already validated local topology/environment evidence recorded in this task.
+
+No full gameplay regression suite is required solely for these documentation/skill changes.
+
+## Deferred Technical Debt: `shared-environment-mutation-protocol`
+
+This future task is triggered when any of the following becomes real work:
+
+- add/remove/upgrade a Python dependency;
+- recreate or materially mutate the canonical shared venv;
+- concurrent environment mutation becomes necessary;
+- environment drift becomes a demonstrated source of failures.
+
+Expected future investigation may compare locking, in-place sync, rebuild + atomic swap, dependency declaration validation, uv/equivalent tooling, or replacing the singleton model. None is preselected here.
 
 ## Non-Goals
 
-- changing gameplay/runtime/CV/navigation/state-machine behavior.
-- designing one venv per worktree.
-- dependency-fingerprint environments.
-- migrating to uv/Poetry/Conda/containers solely for this task.
-- implementing shared-environment locking, atomic swap, or dependency sync.
-- automatically destroying or force-cleaning `temp-main`.
-- making Scout/Gate environment managers.
-- changing OpenCode compatibility/provider policy.
-- rewriting historical task records merely to erase history. Historical task specs may retain old topology as historical evidence when clearly non-authoritative.
-
-## Migration Safety Requirements
-
-The one-time migration/runbook must use this safety order:
-
-1. enumerate all worktrees and record path, branch/detached state, HEAD, and dirty/untracked/staged state.
-2. fetch `origin` before claiming remote freshness.
-3. preserve all dirty worktrees; no reset/clean/stash/force checkout shortcuts.
-4. identify the sole current `main` holder and safely release it only when its worktree is clean and expected.
-5. confirm ancestry/fast-forward safety between local `main` and fetched `origin/main`.
-6. attach `BlackfireCrusade_tool` to `main` only when its current dirty state has been intentionally resolved by the user or otherwise preserved through an explicitly approved non-destructive procedure.
-7. synchronize `BlackfireCrusade_tool` with `origin/main` using fast-forward-only semantics.
-8. inventory the existing physical `.venv` directories before moving/replacing anything; record interpreter version and enough package/environment evidence to validate equivalence.
-9. create the external canonical shared environment using a procedure with an explicit rollback path; do not assume current `.venv` directories are already junctions/shared environments.
-10. replace each worktree-local `.venv` with a junction only after the canonical environment is validated.
-11. validate junction/reparse-point identity and interpreter target explicitly.
-12. validate imports and an appropriate focused test/smoke command from both main and at least one task worktree using the worktree-local `.venv` path.
-13. retire/remove legacy `temp-main` only after the new main ownership, environment access, and workflow contracts are validated.
-
-The runbook must define rollback for environment migration before any original environment directory is irreversibly removed.
-
-## Provisional Acceptance Criteria
-
-1. `BlackfireCrusade_tool` is the only documented permanent local `main` worktree and integrated runtime home.
-2. task worktrees are documented under `Blackfire-CV-Autopilot\worktrees\<task>`.
-3. active workflow/skill contracts no longer assign permanent main ownership to `temp-main`.
-4. `branch_start_workflow` and `branch_completion_workflow` both implement the new topology consistently.
-5. historical task material is not treated as canonical authority; historical references may remain when clearly contextual.
-6. one shared Python environment is documented outside all Git worktrees.
-7. every runnable worktree uses a local `.venv` junction to that canonical environment after migration.
-8. migration validation explicitly checks junction/reparse-point identity and interpreter target rather than inferring sharing from identical `python.exe` files.
-9. normal workflow commands use worktree-local `.venv` paths and do not cross-reference another worktree's interpreter.
-10. no new system-Python fallback is introduced.
-11. shared-environment mutation remains deferred and cross-referenced to backlog.
-12. migration handles dirty worktree preservation, remote-ref freshness, detached HEAD, branch exclusivity, and fast-forward-only synchronization.
-13. migration includes a documented environment rollback path.
-14. official runtime validation from `BlackfireCrusade_tool` occurs only after fetched `origin/main` synchronization.
-15. environment migration is verified from main and at least one task worktree before legacy topology retirement.
-16. no production gameplay behavior changes.
-
-## Forbidden Shortcuts
-
-- treating local `origin/main` as freshly verified without fetching.
-- switching a dirty `BlackfireCrusade_tool` to `main` by reset/clean/stash/force.
-- keeping `temp-main` as a hidden second permanent main authority.
-- claiming current physical `.venv` directories are already shared/junction-based without explicit reparse-point validation.
-- inferring whole-environment sharing only from identical Python executable identity.
-- keeping the physical canonical environment under a Git worktree.
-- using another worktree's absolute `.venv\Scripts\python.exe` path.
-- using `pip install -e .` in the shared environment.
-- adding speculative environment mutation machinery to this task.
-- modifying Gate/Scout executable behavior without evidence of a real incompatibility.
-- deleting original venv/worktree state before rollback is possible.
-
-## Deferred Technical Debt
-
-### `shared-environment-mutation-protocol`
-
-Canonical backlog: `docs/tasks/BACKLOG.md#shared-environment-mutation-protocol`
-
-Trigger for promotion:
-
-- a Python dependency must be added, removed, or upgraded;
-- the canonical venv must be recreated/migrated after this one-time topology migration;
-- concurrent mutation becomes necessary;
-- environment drift becomes a demonstrated failure source.
-
-Expected future investigation may include locking, in-place sync, rebuild + atomic swap, dependency declaration validation, and uv or equivalent tooling. None of these are preselected by this task.
-
-## Remaining Uncertainty Before Final
-
-1. exact contents of the dirty `BlackfireCrusade_tool` files and whether they belong to another active task/user state.
-2. actual current remote `origin/main` after a fresh fetch.
-3. exact physical `.venv` package/layout relationship between existing worktrees beyond the Python executable evidence.
-4. whether an existing repository helper is suitable for the one-time migration/runbook or whether documentation-only migration is safer.
-5. which permanent section of `ai_development_workflow.md` should own the topology contract so branch skills reference it rather than duplicate architecture intent.
-
-These uncertainties affect migration execution details, not the selected target topology.
+- per-worktree virtual environments;
+- dependency-fingerprint environments;
+- uv/Poetry/Conda/container migration for its own sake;
+- speculative environment-mutation machinery;
+- moving dirty/active legacy worktrees;
+- changing OpenCode CLI/provider compatibility;
+- changing merge authority;
+- rewriting old historical task records purely for cosmetic consistency.
