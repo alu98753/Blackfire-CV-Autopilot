@@ -625,6 +625,12 @@ def get_runtime_game_config(key: str) -> dict:
 _EXCEPTION_CONFIG_MANAGER = None
 
 
+def _validate_exception_features_config(config: dict) -> None:
+    timeout = config.get("long_subflow_timeout_sec")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise ValueError("long_subflow_timeout_sec must be a positive number")
+
+
 def get_exception_features_config():
     """Return the latest valid exception-feature configuration snapshot."""
     global _EXCEPTION_CONFIG_MANAGER
@@ -633,11 +639,12 @@ def get_exception_features_config():
         "auto_discover_exceptions_dir": "templates/exceptions",
         "mismatch_scan_interval_sec": 30.0,
         "non_battle_stuck_timeout_sec": 30.0,
-        "battle_stuck_timeout_sec": 90.0,
     }
     if _EXCEPTION_CONFIG_MANAGER is None:
         _EXCEPTION_CONFIG_MANAGER = JsonConfigManager(
-            CONFIG_DIR / "exception_features.json", default=default_config
+            CONFIG_DIR / "exception_features.json",
+            default=default_config,
+            validator=_validate_exception_features_config,
         )
 
     was_reloaded = _EXCEPTION_CONFIG_MANAGER.reload_if_changed()
@@ -648,7 +655,9 @@ def get_exception_features_config():
             "⚠️ [HotReload] exception_features.json 無法套用，保留上一份有效設定：%s",
             _EXCEPTION_CONFIG_MANAGER.last_error,
         )
-    return _EXCEPTION_CONFIG_MANAGER.snapshot()
+    config = _EXCEPTION_CONFIG_MANAGER.snapshot()
+    _validate_exception_features_config(config)
+    return config
 
 
 def get_critical_exception_templates():

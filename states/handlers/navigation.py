@@ -1035,6 +1035,7 @@ class NavigationHandler(BaseStateHandler):
                     # 不在畫面上，進行左右滑動尋找目標地下城
                     any_visible_idx = list(visible_dungeons.keys())[0]
                     CardListNavigator.swipe_towards_target(self.mouse, rect, any_visible_idx, target_idx, duration=0.8, inertia=False)
+                    self.notify_ui_progress()
                     self.machine.last_dungeon_scroll_time = time.time()
                     self._sleep(1.2)
                     return

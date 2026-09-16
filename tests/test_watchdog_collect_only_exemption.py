@@ -56,12 +56,12 @@ class TestWatchdogCollectOnlyExemption(unittest.TestCase):
 
     def test_watchdog_active_during_navigation_and_battle(self):
         """
-        [冷卻 Resume 狀態恢復 30s/90s 監視斷言] 驗證 Resume 切回 NAVIGATING (>30s) 或 BATTLE (>90s) 時，
+        [冷卻 Resume 狀態恢復 30s/200s 監視斷言] 驗證 Resume 切回 NAVIGATING 或 BATTLE (>200s) 時，
         Watchdog 恢復嚴格逾時監控並回傳 True 發起救援。
         """
-        # 1. NAVIGATING > 90s
+        # 1. NAVIGATING > 200s
         self.state_machine.current_state = self.state_machine.STATE_NAVIGATING
-        self.state_machine.last_state_change = time.time() - 95.0
+        self.state_machine.last_state_change = time.time() - 201.0
 
         mock_handler = MagicMock()
         mock_handler.subflows_map = {}
@@ -73,10 +73,10 @@ class TestWatchdogCollectOnlyExemption(unittest.TestCase):
         self.assertTrue(triggered_nav)
         self.assertEqual(self.state_machine.stashed_state, self.state_machine.STATE_NAVIGATING)
 
-        # 2. BATTLE > 90s
+        # 2. BATTLE > 200s
         self.state_machine.stashed_state = None
         self.state_machine.current_state = self.state_machine.STATE_BATTLE
-        self.state_machine.last_state_change = time.time() - 95.0
+        self.state_machine.last_state_change = time.time() - 201.0
 
         with patch('states.exceptions.watchdog.safe_match', return_value=(None, 0.0)):
             triggered_battle = self.watchdog.check(screen_img=None)
@@ -84,30 +84,30 @@ class TestWatchdogCollectOnlyExemption(unittest.TestCase):
         self.assertTrue(triggered_battle)
         self.assertEqual(self.state_machine.stashed_state, self.state_machine.STATE_BATTLE)
 
-    def test_watchdog_demon_lords_has_90s_timeout(self):
+    def test_watchdog_demon_lords_has_200s_timeout(self):
         """
-        [深淵魔王 90s 寬鬆門檻斷言] 驗證 STATE_DEMON_LORDS 享有 90 秒寬鬆門檻：
-        35s 時不觸發逾時，>90s (如 95s) 時才觸發 Watchdog。
+        [深淵魔王 200s 寬鬆門檻斷言] 驗證 STATE_DEMON_LORDS 享有 200 秒寬鬆門檻：
+        199s 時不觸發逾時，>200s (如 201s) 時才觸發 Watchdog。
         """
         self.state_machine.current_state = self.state_machine.STATE_DEMON_LORDS
-        self.state_machine.last_state_change = time.time() - 35.0
+        self.state_machine.last_state_change = time.time() - 199.0
         self.state_machine.stashed_state = None
 
         mock_handler = MagicMock()
         mock_handler.subflows_map = {}
         self.state_machine.handlers[self.state_machine.STATE_POPUP_RECOVERY] = mock_handler
 
-        # 35s: 未達 90s 門檻，不觸發
-        triggered_35s = self.watchdog.check(screen_img=None)
-        self.assertFalse(triggered_35s)
+        # 199s: 未達 200s 門檻，不觸發
+        triggered_199s = self.watchdog.check(screen_img=None)
+        self.assertFalse(triggered_199s)
         self.assertIsNone(self.state_machine.stashed_state)
 
-        # 95s: 超過 90s 門檻，觸發 Watchdog
-        self.state_machine.last_state_change = time.time() - 95.0
+        # 201s: 超過 200s 門檻，觸發 Watchdog
+        self.state_machine.last_state_change = time.time() - 201.0
         with patch('states.exceptions.watchdog.safe_match', return_value=(None, 0.0)):
-            triggered_95s = self.watchdog.check(screen_img=None)
+            triggered_201s = self.watchdog.check(screen_img=None)
 
-        self.assertTrue(triggered_95s)
+        self.assertTrue(triggered_201s)
         self.assertEqual(self.state_machine.stashed_state, self.state_machine.STATE_DEMON_LORDS)
 
 if __name__ == '__main__':
