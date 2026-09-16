@@ -107,3 +107,22 @@ On 2026-09-16, a controlled diagnostic run ([diagnostic-c3-big-pickle-regression
   - Therefore, `client.session.messages` is currently **not** a trustworthy or usable lifecycle-audit surface for this C3 route.
 - **Explicit Interpretation**:
   - **Transport Success != Qualification Success**: While Candidate C3 demonstrates proven ability to transport JSON-Schema structured review verdicts through official SDK v2 without the Phase 1 OpenAPI prompt crash, it is **NOT** classified as `PASS_PROVEN`. Under the current Final SPEC, the route remains non-qualifying because the model ended at step-budget exhaustion (`finish: tool-calls`), and independent whole-session lifecycle auditing via `session.messages` is blocked by the decoder bug.
+
+### MiMo (`opencode/mimo-v2.5-free`) diagnostic evaluation (2026-09-16)
+
+Following Big Pickle, Candidate C3 was evaluated with `opencode/mimo-v2.5-free` under the identical 2-step diagnostic workflow:
+
+- **Step 1 (Trivial ok smoke)**:
+  - Total duration: 11.0s (11,061 ms)
+  - Transport: HTTP 200
+  - Official structured machine output: Present (`verdict: "PASS"`, `blocking_findings: 0`, `report_markdown: "ok"`)
+  - Cleanup: Proven (no orphan processes)
+- **Step 2 (Production regression-reviewer contract, 480s deadline)**:
+  - Total duration: ~80 seconds (79,769 ms)
+  - Transport: HTTP 200
+  - Tokens: 14,133
+  - Finish reason: `stop` (voluntary model finalization)
+  - Structured output: `undefined` (`promptResult.data.info.structured` missing)
+  - Messages audit finding: `client.session.messages` triggered `Expected OutputFormatJsonSchema` decoder crash, identical to Big Pickle.
+  - Classification under Final SPEC: `FAIL_STRUCTURED_OUTPUT` (voluntary stop without valid structured result).
+  - Diagnostic record: [diagnostic-c3-mimo-regression-review.json](diagnostic-c3-mimo-regression-review.json)

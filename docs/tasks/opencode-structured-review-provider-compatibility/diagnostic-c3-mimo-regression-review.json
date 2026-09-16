@@ -1,0 +1,45 @@
+{
+  "record_type": "diagnostic_run",
+  "candidate": "C3",
+  "open_code_version": "1.18.31",
+  "client_package": "@opencode-ai/sdk",
+  "client_version": "1.18.31",
+  "sdk_transport": "official-sdk-v2",
+  "model": "opencode/mimo-v2.5-free",
+  "provider": "opencode",
+  "reviewer_role": "regression-reviewer",
+  "duration_ms": 79769,
+  "http_status": 200,
+  "finish_reason": "stop",
+  "tokens": {
+    "total": 14133,
+    "input": 398,
+    "output": 1255,
+    "reasoning": 0,
+    "cache": {
+      "write": 0,
+      "read": 12480
+    }
+  },
+  "official_structured_machine_field": "promptResult.data.info.structured",
+  "structured_output_present": false,
+  "schema_validation": {
+    "valid": false,
+    "errors": [
+      "structured result is missing"
+    ]
+  },
+  "lifecycle_status": {
+    "voluntary_finalization": true,
+    "step_budget_exhausted": false,
+    "formal_qualification": "NOT_PROVEN",
+    "qualification_classification_if_formal": "FAIL_STRUCTURED_OUTPUT"
+  },
+  "audit_surface_finding": {
+    "session_messages_status": "DECODER_ERROR",
+    "error_diagnostic": "Expected OutputFormatJsonSchema, got {\"type\":\"json_schema\"} at [0][\"info\"][\"format\"]",
+    "trustworthy_audit_surface": false
+  },
+  "isolation_cleanup_proven": true,
+  "notes": "Diagnostic run under 480s timeout with MiMo. Step 1 (trivial ok prompt) produced structured output in 11s, but Step 2 (full regression-reviewer contract) voluntarily finalized (finish: stop) without populating promptResult.data.info.structured (undefined), classifying as FAIL_STRUCTURED_OUTPUT."
+}
