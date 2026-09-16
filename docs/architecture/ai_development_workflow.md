@@ -157,13 +157,13 @@ If `SPEC.md` is marked Draft, the writer must stop before production implementat
 
 ### Spec reviewer
 
-OpenCode `spec-reviewer` compares the candidate diff against explicit scope, invariants, acceptance criteria, and non-goals. It is a read-only, bounded blocker detector (`steps: 8`, target 300-600 words on PASS). The step count is a finite safety ceiling, not an expected consumption or coverage quota: the reviewer must stop when sufficient evidence exists and voluntarily emit its canonical verdict before forced max-step finalization.
+OpenCode `spec-reviewer` compares the candidate diff against explicit scope, invariants, acceptance criteria, and non-goals. It is a read-only, bounded blocker detector (`steps: 8`, target 300-600 words on PASS). The step count is a safety ceiling, not a coverage quota: after sufficient grounded evidence, the reviewer finalizes with StructuredOutput before exhausting that ceiling.
 
 ### Regression reviewer
 
-OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift for highest-risk reachable paths. It is a read-only, bounded blocker detector (`steps: 10`, target 300-600 words on PASS). The step count is a finite safety ceiling, not an expected consumption or coverage quota: the reviewer must stop when sufficient evidence exists and voluntarily emit its canonical verdict before forced max-step finalization.
+OpenCode `regression-reviewer` independently checks callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift for highest-risk reachable paths. It is a read-only, bounded blocker detector (`steps: 10`, target 300-600 words on PASS). The step count is a safety ceiling, not a coverage quota: after sufficient grounded evidence, the reviewer finalizes with StructuredOutput before exhausting that ceiling.
 
-Forced max-step finalization remains an infrastructure failure, never a verdict source. Gate must not recover PASS or BLOCK from forced-finalization prose, partial output, tool results, or older messages.
+Completed valid StructuredOutput is the terminal reviewer result. A separate trailing assistant text turn is not required, and `finish == "tool-calls"` alone is not a failure or verdict signal.
 
 ### Final reviewer and remote orchestrator
 
@@ -228,12 +228,12 @@ Run:
  .\scripts\ai_gate.ps1 -Task <task-id>
  ```
  
- The gate snapshots repository status/diff into ignored `.runtime/` files, verifies the exact supported OpenCode CLI version (1.18.31), and invokes the two read-only reviewers through a bounded, isolated repository-owned child-process wrapper (explicit repo working directory, closed stdin, redirected output, and termination handling) with real-time stdout/stderr visibility (default 480-second timeout per reviewer). It optionally runs declared `focused_tests` (default 60-second timeout per test target) and safely promotes canonical `reviews/*` and `EVIDENCE.md`. OpenCode-specific `run --standalone` and `run --pure` flags are not part of the production launcher contract.
+ The gate snapshots repository status/diff into ignored `.runtime/` files, verifies the exact supported OpenCode CLI version (1.18.31), and invokes the two read-only reviewers through a bounded, isolated repository-owned child-process wrapper (explicit repo working directory, closed stdin, redirected output, and termination handling) with real-time stdout/stderr visibility. The reviewer AI execution budget is 480 seconds; the outer adapter process budget is 540 seconds, providing margin for transport timeout and cleanup/envelope emission. It optionally runs declared `focused_tests` (default 60-second timeout per test target) and safely promotes canonical `reviews/*` and `EVIDENCE.md`. OpenCode-specific `run --standalone` and `run --pure` flags are not part of the production launcher contract.
 
 Verification outcomes and exit codes:
-- **`0` (PASS)**: Both reviewers returned valid `PASS` verdicts with 0 blocking findings, and all configured focused tests passed. Canonical `reviews/*` and `EVIDENCE.md` are updated.
-- **`2` (CANDIDATE_BLOCKED)**: Verification completed normally, but one or more reviewers returned `BLOCK` (blocking findings >= 1) or a focused test completed and exited non-zero. Canonical `reviews/*` and `EVIDENCE.md` are updated with the candidate blocking evidence.
-- **`1` (INFRASTRUCTURE_BLOCKED)**: A reviewer or test process timed out, crashed, failed to launch, had unconfirmed termination, or produced malformed/structurally inconsistent output. On infrastructure failure, previous canonical `reviews/*` and `EVIDENCE.md` are preserved untouched; failure diagnostics are saved under `.runtime/ai_gate/<task-id>/`.
+- **`0` (`PASSED`)**: Both reviewers reached trusted `VALID_PASS` outcomes and all configured focused tests passed.
+- **`2` (`CANDIDATE_BLOCKED`)**: A trusted reviewer returned `VALID_BLOCK` or a focused test completed and exited non-zero; accepted blocking evidence is promoted.
+- **`1` (`VERIFICATION_UNAVAILABLE`)**: No trusted verdict or required test authority was available. Attempt classifications remain distinct (`GROUNDING_FAILED`, `STRUCTURED_OUTPUT_MISSING`, `SCHEMA_INVALID`, `LIFECYCLE_UNTRUSTWORTHY`, and so on), and prior canonical trusted artifacts are preserved.
 
 The gate never runs the full test suite. Full-suite execution remains user-only under project policy.
 
@@ -251,11 +251,10 @@ Branch closeout follows the gated workflow defined in `.agents/skills/branch_com
 
 ## 7. Reviewer finding contract
 
-Reviewer output begins with:
+The adapter requests OpenCode's official `StructuredOutput` object with exactly:
 
-```text
-VERDICT: PASS | BLOCK
-BLOCKING_FINDINGS: <integer>
+```json
+{"verdict":"PASS|BLOCK","blocking_findings":0,"report_markdown":"..."}
 ```
 
 Each blocking finding should contain:
@@ -273,7 +272,7 @@ Confidence:
 
 `BLOCK` is appropriate only for concrete correctness, regression, contract, or architecture-boundary problems. Unsupported possibilities must remain advisory.
 
-The orchestration script parses only the explicit verdict header; it does not ask another model to reinterpret reviewer prose.
+`report_markdown` is presentation evidence only. The adapter and Gate validate the machine fields mechanically and never recover verdict authority from prose, headers, fences, or older messages.
 
 ## 8. Test policy
 
@@ -305,7 +304,7 @@ Model configuration is supplied by `task.json` or PowerShell arguments:
 - CLI `-Model` (in `ai_scout.ps1`) and `-ReviewModel` (in `ai_gate.ps1`) act as strict single-model overrides, replacing the configured normal candidate chain with that explicit candidate.
 - Model fallback is attempted **only** upon mechanically classified infrastructure failures (e.g., launch failure, process timeout with confirmed termination, non-zero exit, empty output, malformed transport JSONL, canonical payload extraction failure, or invalid verdict structure).
 - A valid semantic `PASS` or `BLOCK` verdict is strictly terminal for that reviewer role. Fallback is never triggered after a valid verdict; review-shopping is forbidden.
-- Each attempted model receives its own **full 480-second default timeout** (not a shared remainder). Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
+- Each attempted model receives its own **480-second AI execution budget** (not a shared remainder), within a **540-second outer adapter process budget**. The 510-second transport timeout remains below the outer process margin. Total execution latency may grow linearly with chain length; this is an accepted v1.1 reliability tradeoff.
 - If unconfirmed process termination occurs upon timeout, routing terminates immediately as terminal infrastructure failure without launching subsequent processes.
 - Model fallback in `ai_gate.ps1` manages ONLY automated independent OpenCode reviewer candidates.
 - If all normal independent OpenCode reviewer candidates fail infrastructurally for a role, `ai_gate.ps1` MUST NOT invoke Gemini and MUST exit `1 = INFRASTRUCTURE_BLOCKED`, outputting an explicit diagnostic `MANUAL_DEGRADED_REVIEW_REQUIRED`.

@@ -1,0 +1,33 @@
+{
+  "id": "gate-reviewer-output-contract-reliability",
+  "base_ref": "f2e6503e88161d01fbd73dc4a60e5da7d98167b4",
+  "scope": [
+    ".gitignore",
+    ".opencode/agents/spec-reviewer.md",
+    ".opencode/agents/regression-reviewer.md",
+    "package.json",
+    "package-lock.json",
+    "scripts/ai_gate.ps1",
+    "scripts/opencode_structured_review.mjs",
+    "scripts/opencode_structured_review_probe.mjs",
+    "tests/test_opencode_structured_review_probe.py",
+    "tests/test_workflow_scripts.py",
+    "tests/workflow_scripts/",
+    "docs/architecture/ai_development_workflow.md",
+    "docs/architecture/opencode_structured_review_baseline.md",
+    "docs/tasks/gate-reviewer-output-contract-reliability/"
+  ],
+  "focused_tests": [
+    "tests.test_opencode_structured_review_probe",
+    "tests.test_workflow_scripts"
+  ],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  }
+}
