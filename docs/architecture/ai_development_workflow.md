@@ -231,9 +231,9 @@ Run:
  The gate snapshots repository status/diff into ignored `.runtime/` files, verifies the exact supported OpenCode CLI version (1.18.31), and invokes the two read-only reviewers through a bounded, isolated repository-owned child-process wrapper (explicit repo working directory, closed stdin, redirected output, and termination handling) with real-time stdout/stderr visibility (default 480-second timeout per reviewer). It optionally runs declared `focused_tests` (default 60-second timeout per test target) and safely promotes canonical `reviews/*` and `EVIDENCE.md`. OpenCode-specific `run --standalone` and `run --pure` flags are not part of the production launcher contract.
 
 Verification outcomes and exit codes:
-- **`0` (PASS)**: Both reviewers returned valid `PASS` verdicts with 0 blocking findings, and all configured focused tests passed. Canonical `reviews/*` and `EVIDENCE.md` are updated.
-- **`2` (CANDIDATE_BLOCKED)**: Verification completed normally, but one or more reviewers returned `BLOCK` (blocking findings >= 1) or a focused test completed and exited non-zero. Canonical `reviews/*` and `EVIDENCE.md` are updated with the candidate blocking evidence.
-- **`1` (INFRASTRUCTURE_BLOCKED)**: A reviewer or test process timed out, crashed, failed to launch, had unconfirmed termination, or produced malformed/structurally inconsistent output. On infrastructure failure, previous canonical `reviews/*` and `EVIDENCE.md` are preserved untouched; failure diagnostics are saved under `.runtime/ai_gate/<task-id>/`.
+- **`0` (`PASSED`)**: Both reviewers reached trusted `VALID_PASS` outcomes and all configured focused tests passed.
+- **`2` (`CANDIDATE_BLOCKED`)**: A trusted reviewer returned `VALID_BLOCK` or a focused test completed and exited non-zero; accepted blocking evidence is promoted.
+- **`1` (`VERIFICATION_UNAVAILABLE`)**: No trusted verdict or required test authority was available. Attempt classifications remain distinct (`GROUNDING_FAILED`, `STRUCTURED_OUTPUT_MISSING`, `SCHEMA_INVALID`, `LIFECYCLE_UNTRUSTWORTHY`, and so on), and prior canonical trusted artifacts are preserved.
 
 The gate never runs the full test suite. Full-suite execution remains user-only under project policy.
 
@@ -251,11 +251,10 @@ Branch closeout follows the gated workflow defined in `.agents/skills/branch_com
 
 ## 7. Reviewer finding contract
 
-Reviewer output begins with:
+The adapter requests OpenCode's official `StructuredOutput` object with exactly:
 
-```text
-VERDICT: PASS | BLOCK
-BLOCKING_FINDINGS: <integer>
+```json
+{"verdict":"PASS|BLOCK","blocking_findings":0,"report_markdown":"..."}
 ```
 
 Each blocking finding should contain:
@@ -273,7 +272,7 @@ Confidence:
 
 `BLOCK` is appropriate only for concrete correctness, regression, contract, or architecture-boundary problems. Unsupported possibilities must remain advisory.
 
-The orchestration script parses only the explicit verdict header; it does not ask another model to reinterpret reviewer prose.
+`report_markdown` is presentation evidence only. The adapter and Gate validate the machine fields mechanically and never recover verdict authority from prose, headers, fences, or older messages.
 
 ## 8. Test policy
 

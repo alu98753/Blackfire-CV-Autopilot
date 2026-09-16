@@ -1,0 +1,40 @@
+import json
+import subprocess
+import unittest
+from pathlib import Path
+
+
+class WorkflowScriptContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(__file__).resolve().parents[1]
+
+    def test_gate_uses_structured_adapter_and_keeps_external_states(self):
+        text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("opencode_structured_review.mjs", text)
+        self.assertIn("VALID_PASS", text)
+        self.assertIn("VALID_BLOCK", text)
+        self.assertIn("VERIFICATION_UNAVAILABLE", text)
+        self.assertNotIn("Get-FinalAssistantMessageFromStructuredJson", text)
+        self.assertNotIn("Get-CanonicalReviewPayload", text)
+        self.assertNotIn("Test-ReviewVerdictStructure", text)
+
+    def test_adapter_validates_exact_machine_contract(self):
+        probe = self.root / "scripts" / "opencode_structured_review.mjs"
+        script = (
+            "import { validateSchema, validateSemantics } from "
+            f"'{probe.as_uri()}';"
+            "console.log(JSON.stringify(["
+            "validateSchema({verdict:'PASS',blocking_findings:0,report_markdown:'ok'}),"
+            "validateSchema({verdict:'PASS',blocking_findings:1,report_markdown:'bad'}),"
+            "validateSemantics({verdict:'BLOCK',blocking_findings:0,report_markdown:'bad'})]));"
+        )
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
+        values = json.loads(result.stdout)
+        self.assertTrue(values[0]["valid"])
+        self.assertTrue(values[1]["valid"])
+        self.assertFalse(values[2]["valid"])
+
+
+if __name__ == "__main__":
+    unittest.main()
