@@ -147,3 +147,30 @@ The subsequent controlled diagnostic ([diagnostic-c3-spec-reviewer-lifecycle.jso
 Under the prior adapter implementation, `hasAuthoritativePromptResponse()` required at least one completed read/search tool before accepting prompt-response lifecycle evidence. When no permitted read/search tool was called, the adapter treated the prompt response as incomplete and fell back to `client.session.messages`. The `session.messages` endpoint consistently failed due to the OpenAPI client decoder defect (`Expected OutputFormatJsonSchema`), resulting in `FAIL_LIFECYCLE_AUDIT` with subreason `AUDIT_UNTRUSTWORTHY`. This masked the actual model behavior (failure to execute repository exploration tools).
 
 Historical records Attempt 019 and Attempt 020 remain immutable as recorded by the prior adapter semantics. The adapter has now separated lifecycle audit authority from downstream tool-choice compliance: a prompt response is authoritative whenever it provides a complete, typed, and internally consistent lifecycle for the same attempt. Under these corrected semantics, an equivalent attempt where the model voluntarily completes without permitted read/search tool execution classifies directly as `FAIL_TOOL_CHOICE` from authoritative `prompt-response` evidence without falling back to `session.messages`.
+
+### Fresh qualification verification under corrected taxonomy (Attempt 021)
+
+A single fresh qualification attempt was executed under the corrected adapter logic on 2026-09-16:
+
+- [attempt 021](attempt-021-c3-big-pickle-spec-reviewer.json): Candidate C3, `opencode/big-pickle` on `spec-reviewer`, classified definitively as `FAIL_TOOL_CHOICE`.
+
+The fresh attempt confirmed the corrected lifecycle taxonomy:
+- `lifecycle_audit_source`: `"prompt-response"`
+- `lifecycle_audit_trustworthy`: `true`
+- `read_search_tool_called`: `false` (no permitted `read`, `glob`, or `grep` executed)
+- `structured_output_present`: `true` (valid JSON-Schema structured payload delivered to `assistant.info.structured`)
+- `session.messages`: Not called; no masking by the client OpenAPI decoder defect occurred.
+- `classification`: `FAIL_TOOL_CHOICE`
+
+## Final Task Conclusion
+
+This compatibility investigation is formally concluded. All evaluation candidates have been comprehensively audited against the production reviewer contracts:
+- **CONTROL** (`1.18.31` with default client): Fails on `session.prompt` schema transport with client OpenAPI decoder error (`PASS_PROVEN = 0`).
+- **Candidate C1** (`1.14.41`): Infrastructure blocked at isolated server readiness (`PASS_PROVEN = 0`).
+- **Candidate C2** (`2.0.2`): Preflight verified absence of official JSON-Schema structured transport (`PASS_PROVEN = 0`).
+- **Candidate C3** (`1.18.31` with `@opencode-ai/sdk/v2`):
+  - Structured transport to `assistant.info.structured` is **PROVEN**.
+  - Authoritative lifecycle auditing from `promptResult.data.parts` without `session.messages` decoder failure is **PROVEN**.
+  - Route qualification across models is **NOT PROVEN** (`FAIL_TOOL_CHOICE` on Big Pickle for omitting required repository exploration tools; `FAIL_STRUCTURED_OUTPUT` on MiMo for failing to invoke `StructuredOutput` on full reviews).
+
+Total qualifying `PASS_PROVEN = 0`. This closes the compatibility task without further model or version chasing; production reviewer gates remain on their baseline architecture.
