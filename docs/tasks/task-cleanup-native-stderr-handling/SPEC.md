@@ -121,13 +121,21 @@ Implementation commit:
 
 `bed6f49950e7955c40b597457658b158db0a95e5`
 
-Reported verification:
+Reported deterministic verification:
 
 - wrapper behavioral tests: 7/7 passed;
 - PowerShell parse validation: passed;
 - `git diff --check`: passed.
 
 ChatGPT semantic review confirmed the implementation preserves native exit-code authority, retains stderr diagnostics, and does not alter cleanup ordering or safety ownership.
+
+Real Windows/Git/GitHub dogfood also passed before merge. The unmerged fixed wrapper was launched from `task-cleanup-native-stderr-handling` and cleaned the already-merged `node-workflow-dependency-bootstrap` task end-to-end, including remote branch deletion. Final output:
+
+```text
+TASK CLEANUP SUCCEEDED: task=node-workflow-dependency-bootstrap branch=task-node-workflow-dependency-bootstrap remote=deleted
+```
+
+This validates the exact runtime path that previously failed: real `git push origin --delete` stderr no longer becomes `NativeCommandError`, while the wrapper still performs canonical-main resolution, task worktree removal, local branch deletion, and explicit remote deletion in the intended order.
 
 ## Expected implementation surface
 
