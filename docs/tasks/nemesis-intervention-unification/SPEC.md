@@ -9,7 +9,7 @@ Unify known-strong-enemy (`強敵`) intervention and consecutive-defeat-limit ha
 The task supports two policies:
 
 1. **Timed known-nemesis intervention** — pause immediately, notify CLI + Discord, wait a bounded grace period, allow `Shift+C` acknowledgement, and preserve the existing automatic flee fallback only when the grace period expires without acknowledgement.
-2. **Indefinite defeat-limit intervention** — when consecutive defeats reach `battle_max_defeat`, replace the current automatic give-up path with an indefinite operator hold: no timer, no automatic flee, no automatic give-up, and no automatic recovery/restart path may escape the hold.
+2. **Indefinite defeat-limit intervention** — when consecutive defeats reach `battle_max_defeat`, replace the current automatic give-up path with an indefinite operator hold for the current bot process/runtime session: no timer, no automatic flee, no automatic give-up, and no in-process timeout/watchdog/recovery/relaunch path may escape the hold without explicit user action.
 
 `NemesisIntervention` remains the class/module concept. Generalization to `BattleIntervention` is deferred.
 
@@ -24,8 +24,8 @@ This task owns:
 - Chinese CLI and Discord copy for the two reasons;
 - canonical `[nemesis_intervention]` configuration;
 - strong-enemy template relocation;
-- the minimum runtime/watchdog/relaunch/supervisor gating needed to preserve intervention holds;
-- deterministic tests proving all discovered automatic escape paths are suppressed.
+- the minimum in-process runtime/watchdog/relaunch gating needed to preserve intervention holds;
+- deterministic tests proving discovered in-process automatic escape paths are suppressed.
 
 This task does not own:
 
@@ -35,7 +35,9 @@ This task does not own:
 - screenshot capture;
 - the separate strong-enemy registration workflow;
 - English notification copy;
-- unrelated battle-stall/recovery behavior outside intervention arbitration.
+- unrelated battle-stall/recovery behavior outside intervention arbitration;
+- process-external Supervisor daily-maintenance restart policy;
+- persistence/reconstruction of an intervention across process restart/crash.
 
 ## Architecture Contract
 
@@ -77,7 +79,7 @@ ResultHandler threshold branch
     -> CLI prints distinct Chinese warning containing `Shift+C`
     -> Discord sends distinct Chinese warning containing `Shift+C`
     -> create NO timer
-    -> remain PAUSED until explicit user action
+    -> remain PAUSED until explicit user action or process replacement
 ```
 
 The intervention start must not reset `defeat_count`.
@@ -119,7 +121,7 @@ Existing normal pause/resume ownership remains with the current pause controller
 This separates:
 
 ```text
-Shift+C   = I returned
+Shift+C    = I returned
 Ctrl+Space = I finished manual handling; resume automation
 ```
 
@@ -127,21 +129,23 @@ Ctrl+Space = I finished manual handling; resume automation
 
 `Ctrl+Q` manual fast restart and `Ctrl+Shift+Q` manual exit are explicit user actions. They are not prohibited by the automatic-escape invariant and retain their existing ownership.
 
-No other automatic mechanism may treat their existence as permission to escape an intervention hold.
+## Indefinite-Hold Invariant
 
-## Permanent-Hold Invariant
-
-> **最大戰敗次數到達後，在沒有使用者明確動作前，不允許任何 timeout、watchdog、recovery、relaunch、restart、give-up、flee、scheduler 或 state-transition path 自動讓這場戰鬥離開永久 pause。**
+> **最大戰敗次數到達後，在目前 bot process / runtime session 仍存續期間，沒有使用者明確動作前，不允許任何 in-process timeout、watchdog、recovery、relaunch、restart、give-up、flee、scheduler 或 state-transition path 自動讓這場戰鬥離開 indefinite pause。**
 
 The same protection applies to the manual-hold phase created when a timed known-nemesis intervention is acknowledged with `Shift+C`.
 
-Implementation and tests must cover the actual owners discovered by Scout, not just the intervention timer.
+This is an **in-process / current-session guarantee**, not a durable cross-process guarantee.
+
+The external Supervisor still retains its existing scheduled daily maintenance restart behavior. Therefore this intervention is not guaranteed to survive the daily process replacement. This task intentionally does not modify Supervisor policy or persist intervention state across restart.
+
+Implementation and tests must cover the actual in-process owners discovered by Scout, not just the intervention timer.
 
 ### In-process behavior
 
-The normal runtime loop already skips `state_machine.step()` while paused. This remains useful but is insufficient as the sole guarantee.
+The normal runtime loop already skips `state_machine.step()` while paused. Existing pause enforcement should remain the primary runtime gate.
 
-The implementation must ensure that intervention-owned hold state cannot be bypassed by direct/recovery entry points including, where applicable:
+The implementation must ensure intervention-owned hold cannot be bypassed by in-process entry points including, where applicable:
 
 - pending Nemesis timeout recovery;
 - ResultHandler give-up continuation;
@@ -156,18 +160,16 @@ The implementation must ensure that intervention-owned hold state cannot be bypa
 
 Existing guards that already make a path impossible while paused should be preserved and regression-tested rather than duplicated without need.
 
-### Supervisor behavior
+### Supervisor boundary
 
-`runtime/supervisor.py` is process-external and therefore must participate in the contract.
+`runtime/supervisor.py` remains out of implementation scope for this task.
 
-A small machine-readable intervention-hold signal may be added to heartbeat/runtime metadata so the supervisor can distinguish intervention ownership from ordinary process liveness. Exact field names are implementation detail.
+Required compatibility evidence is only:
 
-Required semantics:
-
-1. **Daily maintenance restart:** if an intervention-owned hold is active, scheduled maintenance restart is deferred. It must not terminate/relaunch the child merely because the scheduled hour has arrived. Once the hold is explicitly cleared, normal daily-restart eligibility may resume.
-2. **Stale heartbeat:** the paused runtime must continue emitting fresh heartbeat. Tests must prove intervention pause itself does not create a false stale-heartbeat restart.
-3. **Unexpected child exit/crash while an intervention-owned hold was active:** supervisor recovery must fail closed and must not automatically relaunch into normal automation. Operator action is required. This task does not add persistence/reconstruction of a live intervention across process replacement.
-4. **Explicit manual restart/exit:** existing `Ctrl+Q` / `Ctrl+Shift+Q` behavior remains permitted because it is initiated by the user.
+- paused runtime continues emitting fresh heartbeat, so a normal intervention pause must not be mistaken for a stale/dead child;
+- existing Supervisor scheduled daily maintenance restart remains unchanged and may replace the child even while an intervention hold exists;
+- no heartbeat/intervention metadata extension is required by this task;
+- whether intervention state should later coordinate with Supervisor restart policy is deferred to backlog observation.
 
 ## Lifecycle State Contract
 
@@ -188,7 +190,7 @@ Indefinite policy must not be represented by a huge timeout value. No timer is c
 Two semantic notification reasons are required:
 
 1. known/configured strong enemy — timed fallback;
-2. defeat limit reached / possible unregistered strong enemy — indefinite hold.
+2. defeat limit reached / possible unregistered strong enemy — indefinite current-session hold.
 
 Both CLI and Discord copy must explicitly contain:
 
@@ -209,9 +211,11 @@ Required meaning:
 
 - consecutive defeat limit was reached;
 - an unregistered strong enemy may have been encountered;
-- automation is permanently paused;
-- it will not automatically flee/give up;
+- automation will remain paused for the current runtime session until explicit user handling;
+- it will not automatically flee/give up through normal in-process recovery paths;
 - return to the computer and press `Shift+C`.
+
+The copy must not imply durable persistence across Supervisor process replacement.
 
 Reusable wording/composition belongs in the existing notification i18n/dictionary boundary rather than being hard-coded in `ResultHandler`.
 
@@ -295,13 +299,13 @@ Evidence indicates the implementation may need to touch:
 - `states/state_machine.py`
 - `runtime/loop.py`
 - `utils/keyboard_listener.py`
-- `runtime/heartbeat.py`
-- `runtime/supervisor.py`
 - `runtime/notification_i18n.py`
 - `config.py` / config accessors only as needed for the new section
 - `config/defaults.toml`
 - existing Nemesis template references and files
 - focused tests listed in `task.json`
+
+`runtime/heartbeat.py` and `runtime/supervisor.py` are observation/regression boundaries only unless implementation evidence shows an existing in-process regression; they are not planned production-change surfaces for this task.
 
 Do not broaden this into a generic recovery framework.
 
@@ -314,7 +318,9 @@ Do not broaden this into a generic recovery framework.
 - No passive mouse/activity acknowledgement.
 - No general CV matcher redesign.
 - No automatic migration/mutation of untracked profile files.
-- No durable persistence/reconstruction of an intervention across a crashed/replaced child process; supervisor must fail closed instead.
+- No Supervisor daily-restart deferral.
+- No Supervisor crash-recovery redesign.
+- No durable persistence/reconstruction of an intervention across process replacement.
 - No unrelated state-machine/recovery refactor.
 
 ## Acceptance Criteria
@@ -329,16 +335,15 @@ Do not broaden this into a generic recovery framework.
 8. After `Shift+C`, a later explicit `Ctrl+Space` may clear the manual hold and resume normal automation.
 9. Reaching `battle_max_defeat` no longer clicks give-up or enters the give-up continuation; it enters indefinite Nemesis intervention before those mutations.
 10. Defeat-limit intervention creates no timer, invokes no flee/give-up fallback, preserves the logical threshold count, and emits distinct Chinese CLI + Discord guidance containing `Shift+C`.
-11. `Shift+C` during defeat-limit intervention leaves automation paused indefinitely for manual handling.
+11. `Shift+C` during defeat-limit intervention leaves automation paused for the current runtime session/manual handling period.
 12. Automatic in-process escape paths identified by Scout cannot bypass intervention-owned hold. Required coverage includes battle timeout, stall/restart/relaunch, watchdog/recovery, generic relaunch, result give-up continuation, and state/scheduler paths that could otherwise progress the battle.
-13. Paused intervention continues producing fresh heartbeat and does not trigger supervisor stale-heartbeat restart.
-14. Supervisor scheduled daily maintenance restart is deferred while intervention-owned hold is active.
-15. If the child unexpectedly exits/crashes while the last valid runtime state reports an intervention-owned hold, supervisor does not automatically relaunch into normal automation; it fails closed for operator action.
-16. Explicit `Ctrl+Q` manual restart and `Ctrl+Shift+Q` manual exit remain available as user-authorized actions.
-17. All eight existing strong-enemy images are moved under the new `templates/nemesis/domain/golden_empire/` and `templates/nemesis/dungeon/` layout; tracked config/test/doc references are updated and production applicability remains scoped.
-18. Existing notification cleanup race/idempotence behavior remains deterministic; ACK/timeout has one winner and no double flee/resume occurs.
-19. No screenshot capture, English-copy work, passive activity detection, or broad battle/recovery refactor is introduced.
-20. Focused deterministic tests in `task.json` pass before review; any new test file introduced for runtime/supervisor arbitration must also be added to `task.json`.
+13. Paused intervention continues producing fresh heartbeat and does not trigger stale-heartbeat recovery merely because automation is paused.
+14. Existing Supervisor daily maintenance restart behavior remains unchanged and is explicitly outside the guarantee of this task.
+15. Explicit `Ctrl+Q` manual restart and `Ctrl+Shift+Q` manual exit remain available as user-authorized actions.
+16. All eight existing strong-enemy images are moved under the new `templates/nemesis/domain/golden_empire/` and `templates/nemesis/dungeon/` layout; tracked config/test/doc references are updated and production applicability remains scoped.
+17. Existing notification cleanup race/idempotence behavior remains deterministic; ACK/timeout has one winner and no double flee/resume occurs.
+18. No screenshot capture, English-copy work, passive activity detection, Supervisor redesign, or broad battle/recovery refactor is introduced.
+19. Focused deterministic tests in `task.json` pass before review; any new focused test file introduced must also be added to `task.json`.
 
 ## Verification Matrix
 
@@ -366,12 +371,11 @@ At minimum prove:
 - `Shift+C` -> manual hold, still paused;
 - pre-ACK `Ctrl+Space` blocked;
 - post-ACK `Ctrl+Space` explicitly resumes;
-- battle timeout/stall/restart/relaunch cannot escape automatically;
-- watchdog/recovery/generic relaunch cannot escape automatically;
+- battle timeout/stall/restart/relaunch cannot escape automatically inside the process;
+- watchdog/recovery/generic relaunch cannot escape automatically inside the process;
 - scheduler/state transitions do not progress while hold is active;
-- heartbeat stays fresh;
-- supervisor daily restart defers;
-- unexpected child exit under reported hold does not auto-relaunch.
+- paused runtime keeps heartbeat fresh;
+- no requirement that intervention survive scheduled Supervisor daily restart or another process replacement.
 
 ### Configuration/templates
 
@@ -383,4 +387,4 @@ At minimum prove:
 
 ## Scout Provenance
 
-Canonical OpenCode Scout failed infrastructurally and left canonical context untouched. The user explicitly authorized a one-time Gemini/Antigravity read-only fallback. Its findings were recorded in `docs/tasks/nemesis-intervention-unification/CONTEXT.md` and the high-risk supervisor/runtime claims were cross-checked against the task branch before this SPEC was finalized.
+Canonical OpenCode Scout failed infrastructurally and left canonical context untouched. The user explicitly authorized a one-time Gemini/Antigravity read-only fallback. Its findings were recorded in `docs/tasks/nemesis-intervention-unification/CONTEXT.md` and cross-checked before this SPEC was finalized. Supervisor daily restart was deliberately classified as a process-lifetime boundary/non-goal after review: the task guarantees intervention hold behavior only within the current bot process/runtime session.
