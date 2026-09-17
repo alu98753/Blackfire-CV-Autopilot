@@ -1,0 +1,22 @@
+{
+  "id": "task-start-orchestration-wrapper",
+  "base_ref": "origin/main",
+  "base_sha": "17bdff32e74ef56584a966c8d2973d15d2ae8ed3",
+  "scope": [
+    "docs/tasks/task-start-orchestration-wrapper/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": ["opencode-default"],
+    "review": ["opencode-default"]
+  },
+  "notes": {
+    "status": "Draft",
+    "implementation_blocked_until_final": true,
+    "depends_on": [
+      "worktree-environment-junction-bootstrap"
+    ],
+    "draft_intentionally_incomplete": true,
+    "reason": "Exact orchestration contract is deferred until the environment junction bootstrap task is finalized and startup boundaries are surveyed."
+  }
+}
