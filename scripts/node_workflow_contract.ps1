@@ -1,4 +1,28 @@
-$NodeEngineRequiredSpec = ">=18.17"
+function Get-RequiredNodeEngineSpec {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $packageJsonPath = Join-Path $RepoRoot 'package.json'
+    if (-not (Test-Path $packageJsonPath)) {
+        throw "Root package.json not found in '$RepoRoot'."
+    }
+
+    try {
+        $raw = Get-Content -LiteralPath $packageJsonPath -Raw -Encoding utf8
+        $parsed = $raw | ConvertFrom-Json
+    } catch {
+        throw "Failed to parse package.json in '$RepoRoot': $($_.Exception.Message)"
+    }
+
+    $spec = [string]($parsed.engines.node)
+    if ([string]::IsNullOrWhiteSpace($spec)) {
+        throw "package.json in '$RepoRoot' is missing a valid 'engines.node' declaration."
+    }
+
+    return $spec.Trim()
+}
 
 function Get-NodeVersion {
     param(
@@ -21,18 +45,38 @@ function Get-NodeVersion {
 function Assert-NodeSupportedVersion {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Version
+        [string]$Version,
+        [string]$RequiredSpec,
+        [string]$RepoRoot
     )
 
-    $trimmed = $Version.Trim()
-    if ($trimmed -match '^v?([0-9]+)\.([0-9]+)(?:\.([0-9]+))?') {
-        $major = [int]$matches[1]
-        $minor = [int]$matches[2]
-        if ($major -lt 18 -or ($major -eq 18 -and $minor -lt 17)) {
-            throw "Unsupported Node.js version '$Version'. This repository requires Node.js $NodeEngineRequiredSpec (engines.node in package.json). Install a supported Node.js version."
-        }
-    } else {
+    if ([string]::IsNullOrWhiteSpace($RequiredSpec)) {
+        $root = if (-not [string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot } else { Split-Path $PSScriptRoot -Parent }
+        $RequiredSpec = Get-RequiredNodeEngineSpec -RepoRoot $root
+    }
+
+    $trimmedSpec = $RequiredSpec.Trim()
+    if ($trimmedSpec -notmatch '^\s*>=\s*([0-9]+)\.([0-9]+)(?:\.([0-9]+))?\s*$') {
+        throw "Unsupported or malformed 'engines.node' specification '$RequiredSpec' in package.json. Expected format: '>=<major>.<minor>'."
+    }
+    $reqMajor = [int]$matches[1]
+    $reqMinor = [int]$matches[2]
+    $reqPatch = if ($matches[3]) { [int]$matches[3] } else { 0 }
+
+    $trimmedVersion = $Version.Trim()
+    if ($trimmedVersion -notmatch '^v?([0-9]+)\.([0-9]+)(?:\.([0-9]+))?') {
         throw "Unable to parse Node.js version from '$Version'."
+    }
+    $actMajor = [int]$matches[1]
+    $actMinor = [int]$matches[2]
+    $actPatch = if ($matches[3]) { [int]$matches[3] } else { 0 }
+
+    $supported = ($actMajor -gt $reqMajor) -or `
+                 ($actMajor -eq $reqMajor -and $actMinor -gt $reqMinor) -or `
+                 ($actMajor -eq $reqMajor -and $actMinor -eq $reqMinor -and $actPatch -ge $reqPatch)
+
+    if (-not $supported) {
+        throw "Unsupported Node.js version '$Version'. This repository requires Node.js $RequiredSpec (engines.node in package.json). Install a supported Node.js version."
     }
 }
 
@@ -45,7 +89,28 @@ function Test-NodeWorkflowDependencies {
         [switch]$SkipPackageImportProbe
     )
 
-    # 1. Node executable check
+    # 1. Manifest presence and engines.node contract (SSOT)
+    $packageJson = Join-Path $RepoRoot 'package.json'
+    if (-not (Test-Path $packageJson)) {
+        return [pscustomobject]@{
+            Ready = $false
+            Reason = "package.json not found in $RepoRoot"
+            Remediation = "Ensure current directory is a valid Blackfire worktree root."
+        }
+    }
+
+    $requiredSpec = $null
+    try {
+        $requiredSpec = Get-RequiredNodeEngineSpec -RepoRoot $RepoRoot
+    } catch {
+        return [pscustomobject]@{
+            Ready = $false
+            Reason = $_.Exception.Message
+            Remediation = "Ensure package.json contains a valid 'engines.node' declaration (e.g. '>=18.17')."
+        }
+    }
+
+    # 2. Node executable check
     $nodeCmd = $null
     if (-not [string]::IsNullOrWhiteSpace($Executable) -and $Executable -ne 'node') {
         if (Test-Path $Executable) {
@@ -63,11 +128,11 @@ function Test-NodeWorkflowDependencies {
         return [pscustomobject]@{
             Ready = $false
             Reason = "Node.js executable not found"
-            Remediation = "Install Node.js >=18.17 and ensure 'node' is available on PATH."
+            Remediation = "Install Node.js $requiredSpec and ensure 'node' is available on PATH."
         }
     }
 
-    # 2. Node version check
+    # 3. Node version check against engines.node contract
     $versionToAssert = if (-not [string]::IsNullOrWhiteSpace($VersionOverride)) {
         $VersionOverride
     } else {
@@ -83,22 +148,12 @@ function Test-NodeWorkflowDependencies {
     }
 
     try {
-        Assert-NodeSupportedVersion -Version $versionToAssert
+        Assert-NodeSupportedVersion -Version $versionToAssert -RequiredSpec $requiredSpec -RepoRoot $RepoRoot
     } catch {
         return [pscustomobject]@{
             Ready = $false
             Reason = $_.Exception.Message
-            Remediation = "Install Node.js >=18.17 (current engine contract)."
-        }
-    }
-
-    # 3. Manifest presence
-    $packageJson = Join-Path $RepoRoot 'package.json'
-    if (-not (Test-Path $packageJson)) {
-        return [pscustomobject]@{
-            Ready = $false
-            Reason = "package.json not found in $RepoRoot"
-            Remediation = "Ensure current directory is a valid Blackfire worktree root."
+            Remediation = "Install Node.js $requiredSpec (current package.json engines.node contract)."
         }
     }
 

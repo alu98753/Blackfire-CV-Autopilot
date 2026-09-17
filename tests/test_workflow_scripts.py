@@ -265,16 +265,64 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertTrue(value["stdout_closed"])
         self.assertTrue(value["stderr_closed"])
 
-    def test_node_workflow_contract_version_assertions(self):
+    def test_node_workflow_contract_derives_spec_from_package_json(self):
         contract = self.root / "scripts" / "node_workflow_contract.ps1"
-        valid_cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'24.19.0\'; Assert-NodeSupportedVersion \'v18.17.0\'; Assert-NodeSupportedVersion \'20.11.1\'"'
-        result_valid = subprocess.run(f'cmd.exe /d /s /c "{valid_cmd}"', cwd=self.root, capture_output=True, text=True)
-        self.assertEqual(result_valid.returncode, 0, result_valid.stdout + result_valid.stderr)
+        contract_text = contract.read_text(encoding="utf-8")
+        self.assertNotIn("$NodeEngineRequiredSpec", contract_text)
 
-        invalid_cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'18.16.0\'"'
-        result_invalid = subprocess.run(f'cmd.exe /d /s /c "{invalid_cmd}"', cwd=self.root, capture_output=True, text=True)
-        self.assertNotEqual(result_invalid.returncode, 0)
-        self.assertIn("Unsupported Node.js version", result_invalid.stdout + result_invalid.stderr)
+        test_dir = self.root / ".runtime" / "test_engine_ssot_fixture"
+        test_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            # 1. Custom version in package.json (>=22.0)
+            custom_pkg = {"name": "fixture", "engines": {"node": ">=22.0"}}
+            (test_dir / "package.json").write_text(json.dumps(custom_pkg), encoding="utf-8")
+
+            # Prove Get-RequiredNodeEngineSpec extracts exact string from package.json
+            ps_get_spec = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Get-RequiredNodeEngineSpec -RepoRoot \'{test_dir}\'"'
+            res_spec = subprocess.run(f'cmd.exe /d /s /c "{ps_get_spec}"', cwd=self.root, capture_output=True, text=True)
+            self.assertEqual(res_spec.returncode, 0, res_spec.stdout + res_spec.stderr)
+            self.assertEqual(res_spec.stdout.strip(), ">=22.0")
+
+            # Under >=22.0, 20.11.1 must fail
+            ps_fail = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion -Version \'20.11.1\' -RepoRoot \'{test_dir}\'"'
+            res_fail = subprocess.run(f'cmd.exe /d /s /c "{ps_fail}"', cwd=self.root, capture_output=True, text=True)
+            self.assertNotEqual(res_fail.returncode, 0)
+            self.assertIn(">=22.0", res_fail.stdout + res_fail.stderr)
+
+            # Under >=22.0, 22.1.0 must pass
+            ps_pass = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion -Version \'22.1.0\' -RepoRoot \'{test_dir}\'"'
+            res_pass = subprocess.run(f'cmd.exe /d /s /c "{ps_pass}"', cwd=self.root, capture_output=True, text=True)
+            self.assertEqual(res_pass.returncode, 0, res_pass.stdout + res_pass.stderr)
+
+            # 2. Missing engines.node fails closed
+            (test_dir / "package.json").write_text(json.dumps({"name": "fixture"}), encoding="utf-8")
+            ps_missing = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Get-RequiredNodeEngineSpec -RepoRoot \'{test_dir}\'"'
+            res_missing = subprocess.run(f'cmd.exe /d /s /c "{ps_missing}"', cwd=self.root, capture_output=True, text=True)
+            self.assertNotEqual(res_missing.returncode, 0)
+            self.assertIn("missing a valid 'engines.node'", res_missing.stdout + res_missing.stderr)
+
+            # 3. Malformed engines.node syntax fails closed
+            (test_dir / "package.json").write_text(json.dumps({"name": "fixture", "engines": {"node": "unsupported_syntax"}}), encoding="utf-8")
+            ps_malformed = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion -Version \'24.19.0\' -RepoRoot \'{test_dir}\'"'
+            res_malformed = subprocess.run(f'cmd.exe /d /s /c "{ps_malformed}"', cwd=self.root, capture_output=True, text=True)
+            self.assertNotEqual(res_malformed.returncode, 0)
+            self.assertIn("Unsupported or malformed 'engines.node' specification", res_malformed.stdout + res_malformed.stderr)
+        finally:
+            import shutil
+            shutil.rmtree(test_dir, ignore_errors=True)
+
+        # 4. Repository worktree package.json contract
+        repo_pkg = json.loads((self.root / "package.json").read_text(encoding="utf-8"))
+        repo_engine = repo_pkg["engines"]["node"]
+        self.assertEqual(repo_engine, ">=18.17")
+        ps_repo_valid = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'24.19.0\'; Assert-NodeSupportedVersion \'v18.17.0\'"'
+        res_repo_valid = subprocess.run(f'cmd.exe /d /s /c "{ps_repo_valid}"', cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(res_repo_valid.returncode, 0, res_repo_valid.stdout + res_repo_valid.stderr)
+
+        ps_repo_invalid = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'18.16.0\'"'
+        res_repo_invalid = subprocess.run(f'cmd.exe /d /s /c "{ps_repo_invalid}"', cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(res_repo_invalid.returncode, 0)
+        self.assertIn("Unsupported Node.js version", res_repo_invalid.stdout + res_repo_invalid.stderr)
 
     def test_node_workflow_readiness_probe_package_boundary(self):
         script = "import('undici').then(() => import('@opencode-ai/sdk/v2')).then(() => console.log('BOUNDARY_OK'));"
@@ -286,7 +334,7 @@ class WorkflowScriptContractTests(unittest.TestCase):
         test_dir = self.root / ".runtime" / "test_unbootstrapped_fixture"
         test_dir.mkdir(parents=True, exist_ok=True)
         try:
-            (test_dir / "package.json").write_text("{}", encoding="utf-8")
+            (test_dir / "package.json").write_text(json.dumps({"name": "fixture", "engines": {"node": ">=18.17"}}), encoding="utf-8")
             (test_dir / "package-lock.json").write_text("{}", encoding="utf-8")
             ps_cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; $r = Test-NodeWorkflowDependencies -RepoRoot \'{test_dir}\'; [pscustomobject]@{{ Ready = $r.Ready; Reason = $r.Reason; Remediation = $r.Remediation }} | ConvertTo-Json -Compress"'
             result = subprocess.run(f'cmd.exe /d /s /c "{ps_cmd}"', cwd=self.root, capture_output=True, text=True)
@@ -312,8 +360,14 @@ class WorkflowScriptContractTests(unittest.TestCase):
         bootstrap_text = (self.root / "scripts" / "bootstrap_node_workflow_deps.ps1").read_text(encoding="utf-8")
         self.assertIn("npm ci", bootstrap_text)
         self.assertNotIn("npm install ", bootstrap_text)
+        self.assertIn("Get-RequiredNodeEngineSpec", bootstrap_text)
         self.assertIn("Assert-NodeSupportedVersion", bootstrap_text)
         self.assertIn("Assert-NodeWorkflowDependenciesReady", bootstrap_text)
+
+    def test_gate_reviewer_override_does_not_bypass_node_readiness(self):
+        gate_text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8")
+        self.assertIn("if (-not $_SkipNodeReadinessCheck) {", gate_text)
+        self.assertNotIn("if ($_ReviewerExecutableOverride) { if ($_NodeVersionOverride) { Assert-NodeSupportedVersion", gate_text)
 
     def test_windows_workflow_harness(self):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"

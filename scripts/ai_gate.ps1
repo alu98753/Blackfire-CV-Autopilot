@@ -16,8 +16,7 @@ $config = Get-Content -Raw -Encoding utf8 $taskFile | ConvertFrom-Json; if ($con
 if ($_ReviewerExecutableOverride) { if ($_OpenCodeVersionOverride) { Assert-OpenCodeSupportedVersion $_OpenCodeVersionOverride } }
 else { $oc = Get-Command opencode -ErrorAction SilentlyContinue; if (-not $oc) { throw 'OpenCode is not installed.' }; Assert-OpenCodeSupportedVersion (Get-OpenCodeVersion $oc.Source) }
 if (-not $_SkipNodeReadinessCheck) {
-    if ($_ReviewerExecutableOverride) { if ($_NodeVersionOverride) { Assert-NodeSupportedVersion $_NodeVersionOverride } }
-    else { Assert-NodeWorkflowDependenciesReady -RepoRoot $repoRoot -Executable $_NodeExecutableOverride -VersionOverride $_NodeVersionOverride }
+    Assert-NodeWorkflowDependenciesReady -RepoRoot $repoRoot -Executable $_NodeExecutableOverride -VersionOverride $_NodeVersionOverride
 }
 $baseRef = [string]$config.base_ref; if (-not $baseRef) { throw 'task.json must define base_ref.' }
 

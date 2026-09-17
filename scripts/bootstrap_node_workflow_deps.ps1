@@ -6,19 +6,6 @@ Set-Location $repoRoot
 
 . (Join-Path $PSScriptRoot 'node_workflow_contract.ps1')
 
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    throw "Node.js is not installed or not available on PATH. Install Node.js $NodeEngineRequiredSpec first."
-}
-
-$installedNodeVersion = Get-NodeVersion -Executable $nodeCmd.Source
-Assert-NodeSupportedVersion -Version $installedNodeVersion
-
-$npmCmd = Get-Command npm -ErrorAction SilentlyContinue
-if (-not $npmCmd) {
-    throw "npm is not installed or not available on PATH. Install Node.js/npm first."
-}
-
 $packageJson = Join-Path $repoRoot 'package.json'
 if (-not (Test-Path $packageJson)) {
     throw "Root package.json not found in '$repoRoot'."
@@ -27,6 +14,21 @@ if (-not (Test-Path $packageJson)) {
 $packageLock = Join-Path $repoRoot 'package-lock.json'
 if (-not (Test-Path $packageLock)) {
     throw "Root package-lock.json not found in '$repoRoot'."
+}
+
+$requiredSpec = Get-RequiredNodeEngineSpec -RepoRoot $repoRoot
+
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCmd) {
+    throw "Node.js is not installed or not available on PATH. Install Node.js $requiredSpec first."
+}
+
+$installedNodeVersion = Get-NodeVersion -Executable $nodeCmd.Source
+Assert-NodeSupportedVersion -Version $installedNodeVersion -RequiredSpec $requiredSpec -RepoRoot $repoRoot
+
+$npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+if (-not $npmCmd) {
+    throw "npm is not installed or not available on PATH. Install Node.js/npm first."
 }
 
 Write-Host "Installing repository Node workflow dependencies with 'npm ci'..."

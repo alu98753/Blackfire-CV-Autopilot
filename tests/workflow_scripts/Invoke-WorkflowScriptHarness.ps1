@@ -106,8 +106,11 @@ try {
         $bootstrapNodeText = Get-Content $bootstrapNode -Raw
         $gateText = Get-Content $gateScript -Raw
         $workflowText = Get-Content $workflowContract -Raw
-        Assert-True ($nodeContractText -match '\$NodeEngineRequiredSpec\s*=\s*">=18\.17"') 'Node engine requirement drifted'
+        Assert-True ($nodeContractText -notmatch '\$NodeEngineRequiredSpec') 'Node contract must not declare a hardcoded engine constant'
+        Assert-True ($nodeContractText -match 'Get-RequiredNodeEngineSpec') 'Node contract missing Get-RequiredNodeEngineSpec'
+        Assert-True ($nodeContractText -match 'engines\.node') 'Node contract does not inspect engines.node from package.json'
         Assert-True ($nodeContractText -match 'bootstrap_node_workflow_deps\.ps1') 'node contract remediation missing bootstrap script'
+        Assert-True ($bootstrapNodeText -match 'Get-RequiredNodeEngineSpec') 'bootstrap script does not derive required engine spec from package.json'
         Assert-True ($bootstrapNodeText -match 'npm ci') 'bootstrap script does not use npm ci'
         Assert-True ($bootstrapNodeText -notmatch 'npm install\b') 'bootstrap script contains forbidden npm install'
         Assert-True ($gateText -match 'node_workflow_contract\.ps1') 'Gate does not include node_workflow_contract'
@@ -156,6 +159,7 @@ raw = " ".join(args)
 model = args[args.index("--model") + 1] if "--model" in args else ""
 evidence = pathlib.Path(__file__).with_name(model + ".argv.txt") if model else pathlib.Path(__file__).with_name("missing-model.argv.txt")
 evidence.write_text(json.dumps({"argv": args, "stderr": "", "exit_code": 0}), encoding="utf-8")
+pathlib.Path(__file__).with_name("reviewer-invoked.marker").write_text("invoked", encoding="utf-8")
 if model == "catastrophic-crash":
     pathlib.Path(__file__).with_name("catastrophic-crash.marker").write_text("invoked", encoding="utf-8")
     sys.stderr.write("catastrophic fixture failure\n")
@@ -216,11 +220,26 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_NodeVersionOverride','16.0.0'))
         Assert-True ($code -ne 0) "expected Node version mismatch failure, got $code"
     }
-    Run-Case 'Gate fails fast on unbootstrapped Node dependencies' {
-        $result = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_NodeExecutableOverride','nonexistent_node_binary_for_test')
+    Run-Case 'Gate fails fast on unbootstrapped Node dependencies before reviewer execution' {
+        $marker = Join-Path $helperDir 'reviewer-invoked.marker'
+        if (Test-Path $marker) { Remove-Item -LiteralPath $marker -Force }
+        $result = Invoke-ScriptOutput $gate @(
+            '-Task', $fixtureId,
+            '-_ReviewerExecutableOverride', $reviewerCmd,
+            '-_NodeExecutableOverride', 'nonexistent_node_binary_for_test'
+        )
         Assert-True ($result.ExitCode -ne 0) "expected missing node failure, got $($result.ExitCode)"
         Assert-True ($result.Output -match 'Node workflow dependencies are not ready') 'missing expected bootstrap guidance'
         Assert-True ($result.Output -match 'bootstrap_nod') 'missing bootstrap script remediation'
+        Assert-True (-not (Test-Path $marker)) 'fake reviewer must NOT have been executed when Node readiness fails'
+    }
+    Run-Case 'Gate explicit _SkipNodeReadinessCheck bypasses readiness for testing' {
+        $code = Invoke-Script $gate (@(
+            '-Task', $fixtureId,
+            '-_NodeExecutableOverride', 'nonexistent_node_binary_for_test',
+            '-_SkipNodeReadinessCheck'
+        ) + $reviewBase)
+        Assert-True ($code -eq 0) "expected 0 when explicitly skipping readiness, got $code"
     }
     Run-Case 'Gate invocation probe exercises the production argument builder' {
         $result = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_InvocationProbe')
