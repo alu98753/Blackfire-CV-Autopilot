@@ -1,0 +1,22 @@
+{
+  "id": "node-workflow-dependency-bootstrap",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/node-workflow-dependency-bootstrap/",
+    "docs/architecture/ai_development_workflow.md",
+    ".agents/skills/branch_start_workflow/SKILL.md",
+    "scripts/",
+    "tests/workflow_scripts/",
+    "tests/test_opencode_structured_review_probe.py",
+    "package.json",
+    "package-lock.json",
+    ".gitignore"
+  ],
+  "focused_tests": [
+    "tests.test_opencode_structured_review_probe"
+  ],
+  "models": {
+    "scout": null,
+    "review": null
+  }
+}
