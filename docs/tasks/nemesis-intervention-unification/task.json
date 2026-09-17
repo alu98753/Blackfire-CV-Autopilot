@@ -6,24 +6,40 @@
     "states/handlers/battle.py",
     "states/handlers/result.py",
     "states/state_machine.py",
+    "runtime/loop.py",
+    "runtime/heartbeat.py",
+    "runtime/supervisor.py",
     "runtime/notification_i18n.py",
+    "utils/keyboard_listener.py",
+    "config.py",
     "config/defaults.toml",
     "templates/nemesis/",
     "tests/"
   ],
-  "focused_tests": [],
+  "focused_tests": [
+    "tests/test_nemesis_intervention.py",
+    "tests/test_behavior_golden_empire.py",
+    "tests/test_behavior_dungeon_nemesis.py",
+    "tests/test_behavior_result_tick_driven.py",
+    "tests/test_game_process_lifecycle.py",
+    "tests/test_long_run_resilience.py",
+    "tests/test_supervisor_alarm.py"
+  ],
   "models": {
     "scout": [
-      "repository-default"
+      "repository-default",
+      "temporary-gemini-antigravity-fallback"
     ],
     "review": [
       "repository-default"
     ]
   },
   "notes": {
-    "status": "Draft",
+    "status": "Final",
     "main_base": "b0a734e9fc7751ae5691e2bd5d1b2b129c76e307",
-    "scout_priority": "Enumerate every timeout, watchdog, recovery, relaunch, give-up, and resume path capable of escaping defeat-limit indefinite pause; identify authoritative hotkey owner and Shift+C collisions before Final SPEC.",
-    "implementation": "Blocked until Scout evidence is reviewed and SPEC is Final."
+    "canonical_scout_status": "Infrastructure failure: repository-default exited NON_ZERO_EXIT with unexpected server error; canonical CONTEXT.md was untouched.",
+    "fallback_scout_status": "User explicitly authorized one-time Gemini/Antigravity read-only fallback. Evidence recorded in CONTEXT.md and cross-checked by ChatGPT before Final SPEC.",
+    "critical_invariant": "No automatic timeout, watchdog, recovery, relaunch, restart, give-up, flee, scheduler, supervisor, or state-transition path may escape an intervention-owned permanent/manual hold without explicit user action.",
+    "implementation": "Allowed only after this Final SPEC. Gemini/Antigravity remains workflow-v1 production implementation writer."
   }
 }
