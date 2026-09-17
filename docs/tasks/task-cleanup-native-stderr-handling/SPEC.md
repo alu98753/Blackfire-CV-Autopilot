@@ -1,6 +1,6 @@
 # task-cleanup-native-stderr-handling
 
-Status: Draft
+Status: Final
 
 ## Goal
 
@@ -22,15 +22,15 @@ Git emitted normal progress such as:
 To https://github.com/...
 ```
 
-on stderr. Current `Invoke-Git` merges stderr into the PowerShell pipeline:
+on stderr. The prior `Invoke-Git` merged stderr into the PowerShell pipeline:
 
 ```powershell
 $output = @(& $gitExe @Arguments 2>&1 | ForEach-Object { [string]$_ })
 ```
 
-With `$ErrorActionPreference = 'Stop'`, PowerShell may promote native stderr records into terminating `NativeCommandError` before the wrapper can inspect `$LASTEXITCODE`.
+With `$ErrorActionPreference = 'Stop'`, Windows PowerShell could promote native stderr records into terminating `NativeCommandError` before the wrapper could inspect `$LASTEXITCODE`.
 
-The remote branch was in fact deleted, showing that native stderr text is not itself failure evidence.
+The remote branch was in fact deleted, proving native stderr text is not itself failure evidence.
 
 ## Scope
 
@@ -63,11 +63,11 @@ Do not change:
 
 Extend `tests/test_task_cleanup_behavioral.py` so the fake Git seam can emit stderr independently of exit code.
 
-Required regression cases should include at least:
+Required regression cases:
 
 1. exit code 0 + stderr text during remote branch deletion => wrapper succeeds;
 2. exit code 0 + stderr text during another Git phase => wrapper succeeds;
-3. nonzero exit code + stderr text => wrapper fails according to existing boundary and diagnostic contains the stderr evidence;
+3. nonzero exit code + stderr text => wrapper fails according to the existing boundary and diagnostic contains stderr evidence;
 4. no later destructive step occurs after a genuine nonzero failure.
 
 ## Known invariants
@@ -75,8 +75,8 @@ Required regression cases should include at least:
 - `$ErrorActionPreference = 'Stop'` remains valid for PowerShell/script errors; native process stderr must not be conflated with those errors.
 - Native process exit code is the authoritative Git success/failure signal.
 - Git commonly writes progress/status text to stderr even on success.
-- `Invoke-Git` is the central Git execution seam and should remain the owner of native process capture semantics.
-- Failure diagnostics should preserve both stdout and stderr without allowing either stream alone to redefine process success.
+- `Invoke-Git` is the central Git execution seam and remains the owner of native process capture semantics.
+- Failure diagnostics preserve stdout/stderr without allowing either stream alone to redefine process success.
 - Existing Windows non-interactive shell policy remains unchanged.
 
 ## Non-goals
@@ -87,33 +87,52 @@ Required regression cases should include at least:
 - No automatic retry of failed Git commands.
 - No suppression/discarding of stderr diagnostics.
 - No change to remote deletion default policy.
-- No general PowerShell process runner framework unless the nearby code proves one already exists and reuse is smaller than a local fix.
+- No general PowerShell process runner framework.
 
-## Provisional acceptance criteria
+## Acceptance criteria
 
 1. `task_cleanup.ps1` no longer throws `NativeCommandError` solely because a Git command writes stderr while returning exit code 0.
-2. `Invoke-Git` returns separable or otherwise clearly preserved stdout/stderr diagnostic evidence and the native exit code.
+2. `Invoke-Git` preserves stdout, stderr, and native exit code as diagnostic/process evidence.
 3. Exit code 0 is treated as success even with stderr text.
 4. Nonzero exit code remains failure even if stdout/stderr text is otherwise benign-looking.
 5. Existing cleanup phase ordering and fail-closed boundaries remain unchanged.
 6. A behavioral test reproduces the real dogfood pattern: successful remote deletion emits stderr and wrapper exits 0.
-7. Behavioral tests also prove a real nonzero Git failure still stops later destructive actions.
+7. Behavioral tests prove a real nonzero Git failure still stops later destructive actions.
 8. Existing task-cleanup behavioral tests remain green.
 9. PowerShell parse validation and `git diff --check` pass.
 10. No unrelated workflow/game files change.
 
-## Uncertainty to resolve via Scout
+## Implementation decision
 
-1. Which PowerShell/native-process capture mechanism best fits the repository's supported PowerShell/runtime version while preserving separate stdout/stderr and exit code?
-2. Whether a nearby repository script already provides a reusable native-process execution seam that should be reused instead of adding new local plumbing.
-3. Whether tests should specifically exercise stderr on `git push --delete`, or parameterize stderr injection across multiple phases to protect the generic `Invoke-Git` contract.
+Use a local native-process boundary inside `Invoke-Git`:
+
+- redirect stdout and stderr to separate temporary files;
+- locally prevent native stderr from becoming a terminating PowerShell error;
+- restore the script-wide `$ErrorActionPreference = 'Stop'` immediately after the native call;
+- classify success/failure only from `$LASTEXITCODE`;
+- return stdout/stderr diagnostic evidence to callers;
+- delete temporary capture artifacts in `finally`.
+
+This keeps the fix local to the existing Git execution seam and does not alter orchestration ownership or cleanup ordering.
+
+## Verification evidence
+
+Implementation commit:
+
+`bed6f49950e7955c40b597457658b158db0a95e5`
+
+Reported verification:
+
+- wrapper behavioral tests: 7/7 passed;
+- PowerShell parse validation: passed;
+- `git diff --check`: passed.
+
+ChatGPT semantic review confirmed the implementation preserves native exit-code authority, retains stderr diagnostics, and does not alter cleanup ordering or safety ownership.
 
 ## Expected implementation surface
 
-Likely minimal surface:
-
 - `scripts/task_cleanup.ps1`
 - `tests/test_task_cleanup_behavioral.py`
-- task artifacts only
+- task artifacts
 
-No architecture contract change is expected unless Scout finds an existing canonical native-process execution contract that must be referenced.
+No architecture contract or `.venv` safety-helper change is required.
