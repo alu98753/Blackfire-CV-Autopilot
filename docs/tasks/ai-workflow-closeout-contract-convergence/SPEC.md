@@ -1,6 +1,6 @@
 # AI Workflow Closeout Contract Convergence
 
-Status: Draft
+Status: Final
 
 ## Goal
 
@@ -38,7 +38,7 @@ This is a documentation/contract convergence task only.
 - No broad rewrite of `.agents/AGENTS.md` or branch-start behavior unless a direct contradiction is discovered.
 - No automatic deletion/archive policy for tracked task history.
 
-## Provisional acceptance criteria
+## Acceptance criteria
 
 1. The architecture contract states that, before formal Gate/final closeout review, current `base_ref` (normally `origin/main`) must be incorporated into the task branch; stale/diverged task branches are reconciled before Gate rather than reviewed against a misleading diff.
 2. Gate exit meanings `0/2/1` live under verification (Phase D), not under final review/integration (Phase E).
@@ -50,9 +50,9 @@ This is a documentation/contract convergence task only.
 8. Canonical ownership stays narrow: architecture owns lifecycle/authority, branch-completion skill owns operational closeout procedure, task README owns task-artifact semantics.
 9. No script/code/runtime file changes.
 
-## Uncertainty
+## Deferred follow-up
 
-- The Gate's current human-facing partial-failure warning is slightly inaccurate under sibling promotion, but fixing that text would require a script change and is intentionally deferred.
+- The Gate's current human-facing partial-failure warning is slightly inaccurate under sibling promotion, but fixing that text requires a script change and is intentionally deferred.
 - A future implementation task may add a fail-fast Gate preflight for stale `base_ref` ancestry; this task only documents the invariant.
 
 ## Execution note
