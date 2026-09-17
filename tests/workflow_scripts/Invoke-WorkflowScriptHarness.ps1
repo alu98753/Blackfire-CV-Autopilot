@@ -349,20 +349,94 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 
     $cacheReviewArgs = @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','terminal-pass')
 
-    Run-Case 'Gate cache hit skips both reviewers' {
+    # 1. Gate successful run followed immediately by identical second run
+    Run-Case 'Gate successful run followed immediately by identical second run reuses both reviewers' {
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
-        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
-        $regCountBefore = [int](Get-Content $regInvocationsFile -Raw)
+        $specCanonical = Join-Path $fixtureDir 'reviews\spec-review.md'
+        $regCanonical = Join-Path $fixtureDir 'reviews\regression-review.md'
+        $evidenceCanonical = Join-Path $fixtureDir 'EVIDENCE.md'
+        if (Test-Path $specCanonical) { Remove-Item $specCanonical -Force }
+        if (Test-Path $regCanonical) { Remove-Item $regCanonical -Force }
+        if (Test-Path $evidenceCanonical) { Remove-Item $evidenceCanonical -Force }
 
-        $code = Invoke-Script $gate $cacheReviewArgs
-        Assert-True ($code -eq 0) "expected 0, got $code"
+        # Run 1: Fresh execution with ForceRefresh to guarantee fresh promotion
+        $code1 = Invoke-Script $gate ($cacheReviewArgs + '-ForceRefresh')
+        Assert-True ($code1 -eq 0) "Run 1 expected 0, got $code1"
+        Assert-True (Test-Path $specCanonical) 'Run 1 spec-review.md was not promoted'
+        Assert-True (Test-Path $regCanonical) 'Run 1 regression-review.md was not promoted'
+        Assert-True (Test-Path $evidenceCanonical) 'Run 1 EVIDENCE.md was not promoted'
 
-        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
-        $regCountAfter = [int](Get-Content $regInvocationsFile -Raw)
+        # Record counts after Run 1 (canonical outputs now exist in the worktree!)
+        $specCountRun1 = [int](Get-Content $specInvocationsFile -Raw)
+        $regCountRun1 = [int](Get-Content $regInvocationsFile -Raw)
 
-        Assert-True ($specCountAfter -eq $specCountBefore) 'spec-reviewer launched on cache hit'
-        Assert-True ($regCountAfter -eq $regCountBefore) 'regression-reviewer launched on cache hit'
+        # Run 2: Immediate identical second run with existing canonical review outputs
+        $code2 = Invoke-Script $gate $cacheReviewArgs
+        Assert-True ($code2 -eq 0) "Run 2 expected 0, got $code2"
+
+        $specCountRun2 = [int](Get-Content $specInvocationsFile -Raw)
+        $regCountRun2 = [int](Get-Content $regInvocationsFile -Raw)
+
+        Assert-True ($specCountRun2 -eq $specCountRun1) "spec-reviewer launched on immediate second run: Run1=$specCountRun1, Run2=$specCountRun2 (self-invalidation detected)"
+        Assert-True ($regCountRun2 -eq $regCountRun1) "regression-reviewer launched on immediate second run: Run1=$regCountRun1, Run2=$regCountRun2 (self-invalidation detected)"
+    }
+
+    Run-Case 'Gate tracked canonical reviews in git preserve valid reuse' {
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
+        $specCanonical = Join-Path $fixtureDir 'reviews\spec-review.md'
+        $regCanonical = Join-Path $fixtureDir 'reviews\regression-review.md'
+        $evidenceCanonical = Join-Path $fixtureDir 'EVIDENCE.md'
+
+        try {
+            & cmd.exe /d /s /c "git add -f `"$specCanonical`" `"$regCanonical`" `"$evidenceCanonical`"" 2>&1 | Out-Null
+            $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+            $regCountBefore = [int](Get-Content $regInvocationsFile -Raw)
+
+            $code = Invoke-Script $gate $cacheReviewArgs
+            Assert-True ($code -eq 0) "expected 0, got $code"
+
+            $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+            $regCountAfter = [int](Get-Content $regInvocationsFile -Raw)
+
+            Assert-True ($specCountAfter -eq $specCountBefore) 'spec-reviewer launched when canonical review was tracked in git'
+            Assert-True ($regCountAfter -eq $regCountBefore) 'regression-reviewer launched when canonical review was tracked in git'
+        } finally {
+            & cmd.exe /d /s /c "git reset HEAD -- `"$specCanonical`" `"$regCanonical`" `"$evidenceCanonical`"" 2>&1 | Out-Null
+        }
+    }
+
+    Run-Case 'Gate model candidate order changes fingerprint and unchanged order hits cache' {
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
+        $json = $originalTaskJson | ConvertFrom-Json
+
+        try {
+            # Order 1: [first, second]
+            $json.models.review = @('terminal-first-pass', 'terminal-second')
+            $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+            $code1 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-ForceRefresh'))
+            Assert-True ($code1 -eq 0) "Order 1 expected 0, got $code1"
+
+            # Cache hit check with unchanged order [first, second]
+            $specCountBeforeSame = [int](Get-Content $specInvocationsFile -Raw)
+            $codeSame = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd))
+            Assert-True ($codeSame -eq 0) "Order same expected 0, got $codeSame"
+            $specCountAfterSame = [int](Get-Content $specInvocationsFile -Raw)
+            Assert-True ($specCountAfterSame -eq $specCountBeforeSame) 'spec-reviewer was rerun despite identical candidate order'
+
+            # Order 2: Reversed order [second, first]
+            $json.models.review = @('terminal-second', 'terminal-first-pass')
+            $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+            $specCountBeforeReversed = [int](Get-Content $specInvocationsFile -Raw)
+            $code2 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd))
+            Assert-True ($code2 -eq 0) "Order 2 expected 0, got $code2"
+            $specCountAfterReversed = [int](Get-Content $specInvocationsFile -Raw)
+            Assert-True ($specCountAfterReversed -gt $specCountBeforeReversed) 'spec-reviewer was NOT rerun when candidate order reversed ([A,B] vs [B,A])'
+        } finally {
+            $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        }
     }
 
     Run-Case 'Gate ForceRefresh bypasses cache and reruns both reviewers' {

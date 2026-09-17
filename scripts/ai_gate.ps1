@@ -52,7 +52,7 @@ function Get-ReviewFingerprint([string]$Agent, [string[]]$ModelsList) {
     $contractPath = Join-Path $repoRoot ".opencode\agents\$Agent.md"
     $contractHash = Get-Sha256File $contractPath
     $promptHash = Get-Sha256String (Get-ReviewPromptText $Agent)
-    $modelsStr = ($ModelsList | ForEach-Object { [string]$_ } | Sort-Object) -join ','
+    $modelsStr = ($ModelsList | ForEach-Object { [string]$_ }) -join ','
     $argsOverride = if ($Agent -eq 'spec-reviewer' -and $_SpecReviewerArgumentsOverride) { $_SpecReviewerArgumentsOverride -join ' ' }
                     elseif ($Agent -eq 'regression-reviewer' -and $_RegressionReviewerArgumentsOverride) { $_RegressionReviewerArgumentsOverride -join ' ' }
                     elseif ($_ReviewerArgumentsOverride) { $_ReviewerArgumentsOverride -join ' ' }
@@ -198,8 +198,9 @@ function Render-Review($env, [string]$agent) {
 
 $candidates = @(Resolve-Candidates $config.models.review $ReviewModel $_ReviewCandidatesOverride); if (-not $candidates.Count) { throw 'No review candidates configured.' }
 $runtimeDir = Join-Path $repoRoot ".runtime\ai_gate\$Task"; $reviewDir = Join-Path $taskDir 'reviews'; New-Item -ItemType Directory -Force $runtimeDir,$reviewDir | Out-Null
-(& cmd.exe /d /s /c "chcp 65001 >nul && <nul git status --short" | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'status.txt') -Encoding utf8
-(& cmd.exe /d /s /c "chcp 65001 >nul && <nul git diff --no-ext-diff $baseRef -- ." | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'diff.patch') -Encoding utf8
+$excludes = ":!docs/tasks/$Task/reviews :!docs/tasks/$Task/EVIDENCE.md :!docs/tasks/$Task/CONTEXT.md :!.runtime"
+(& cmd.exe /d /s /c "chcp 65001 >nul && <nul git status --short -u -- . $excludes" | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'status.txt') -Encoding utf8
+(& cmd.exe /d /s /c "chcp 65001 >nul && <nul git diff --no-ext-diff $baseRef -- . $excludes" | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'diff.patch') -Encoding utf8
 
 $targets = @(@{ Agent='spec-reviewer'; File='spec-review.md' }, @{ Agent='regression-reviewer'; File='regression-review.md' })
 $backup = Join-Path $runtimeDir 'canonical_backup'; New-Item -ItemType Directory -Force $backup | Out-Null
