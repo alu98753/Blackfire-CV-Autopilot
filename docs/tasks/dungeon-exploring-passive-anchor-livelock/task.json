@@ -7,10 +7,12 @@
     "states/state_machine.py",
     "states/login_flow.py",
     "tests/test_behavior_dungeon_state_machine.py",
+    "tests/test_dungeon_relaunch_recovery.py",
     "docs/tasks/dungeon-exploring-passive-anchor-livelock/"
   ],
   "focused_tests": [
-    "tests.test_behavior_dungeon_state_machine"
+    "tests.test_behavior_dungeon_state_machine",
+    "tests.test_dungeon_relaunch_recovery"
   ],
   "models": {
     "scout": ["opencode-default"],
@@ -19,8 +21,10 @@
   "notes": {
     "status": "Draft",
     "implementation_blocked_until_final": true,
-    "observed_gap": "EXPLORING repeatedly treats persistent dungeons/leave.png passive anchor matches as handled work, resets local no-match accounting, returns without visible gameplay progress, and eventually reaches the outer watchdog timeout",
-    "investigation_focus": "identify the authoritative dungeon exploration progress owner and prove whether the defect is passive-anchor starvation, recovery handoff loss, or a combination",
+    "observed_gap": "EXPLORING treats persistent dungeons/leave.png passive anchor matches as handled work, resets local no-match accounting, returns without gameplay progress, and eventually reaches the outer watchdog timeout",
+    "confirmed_root_cause": "passive dungeon-presence evidence is conflated with actionable progress in ExploreHandler's common matched-item tail",
+    "existing_test_conflict": "tests.test_dungeon_relaunch_recovery::test_3_explore_handler_handles_leave_anchor currently requires no_explore_match_count to reset on leave.png and must be corrected while preserving the no-click invariant",
+    "remaining_uncertainty": "identify the existing authoritative bounded progress/recovery owner when valid dungeon presence persists but no actionable dungeon event is available; simply removing leave reset/return is insufficient because the current post-loop counter only checks external-scene fallbacks",
     "gemini_role": "read-only evidence provider only; no production implementation and no Draft-to-Final promotion"
   }
 }
