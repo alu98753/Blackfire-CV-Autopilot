@@ -27,7 +27,10 @@ notification_count = 5
 [nemesis]
 intervene = [
     "nemesis/dungeon/ice_boss_calvia_body.png",
-    "nemesis/domain/golden_empire/golden_king.png"
+    "nemesis/domain/golden_empire/golden_king.png",
+    "nemesis/domain/golden_empire/undead_altalim.png",
+    "nemesis/domain/golden_empire/human_golden_tulakh.png",
+    "nemesis/domain/golden_empire/golden_wall_guard_tulan.png"
 ]
 flee = [
     "nemesis/dungeon/dragon_karsos.png",

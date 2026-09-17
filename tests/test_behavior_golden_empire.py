@@ -433,8 +433,15 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config["nemesis_templates"] = ["nemesis/domain/golden_empire/golden_king.png"]
-        self.mock_machine.config["nemesis_action"] = "flee"
+        with patch("states.handlers.battle.get_nemesis_policy", return_value={
+            "intervene": [],
+            "flee": ["nemesis/domain/golden_empire/golden_king.png"],
+        }):
+            self._run_golden_king_flee_case()
+
+    def _run_golden_king_flee_case(self):
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
         self.mock_machine.config["domain_max_defeat"] = 5
         self.mock_machine.defeat_count = 0
         self.mock_machine.last_auto_click_time = 0.0
@@ -471,8 +478,8 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config["nemesis_templates"] = ["nemesis/domain/golden_empire/elf_mythril_hag.png"]
-        self.mock_machine.config["nemesis_action"] = "pause"
+        self.mock_machine.config.pop("nemesis_templates", None)
+        self.mock_machine.config.pop("nemesis_action", None)
         self.mock_machine.last_auto_click_time = 0.0
         self.mock_machine.battle_start_time = 100.0
 
@@ -485,14 +492,17 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         self.mock_machine.matcher.match.side_effect = fake_match
 
-        with patch("os.path.exists", return_value=True):
+        with patch("states.handlers.battle.get_nemesis_policy", return_value={
+            "intervene": ["nemesis/domain/golden_empire/elf_mythril_hag.png"],
+            "flee": [],
+        }), patch("os.path.exists", return_value=True):
             battle_handler.handle(mock_img, self.rect)
 
         # 斷言觸發 machine.pause()，且未發起放棄戰鬥之滑鼠點擊
         self.mock_machine.pause.assert_called_once()
         self.assertFalse(self.mock_machine.mouse.click.called)
 
-    def test_nemesis_backward_compatibility_with_flee_bosses(self):
+    def test_stale_legacy_keys_are_not_used_for_routing(self):
         """
         [向下相容測試] 驗證使用舊鍵值 flee_bosses 與 flee_boss_action 時，BattleHandler 依然能正確辨識強敵並暫停
         """
@@ -513,10 +523,11 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         self.mock_machine.matcher.match.side_effect = fake_match
 
-        with patch("os.path.exists", return_value=True):
-            battle_handler.handle(mock_img, self.rect)
+        with patch("states.handlers.battle.get_nemesis_policy", return_value={"intervene": [], "flee": []}), \
+             patch("os.path.exists", return_value=True):
+            self.assertFalse(battle_handler._check_and_handle_nemesis_encounter(mock_img, self.rect))
 
-        self.mock_machine.pause.assert_called_once()
+        self.mock_machine.pause.assert_not_called()
 
     # =========================================================================
     # 8. 單場常規戰鬥戰敗重試 (獨立 5 次 retry) 測試
