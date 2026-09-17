@@ -543,23 +543,21 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 
         try {
             # Order 1: [first, second]
-            $json.models.review = @('terminal-first-pass', 'terminal-second')
-            $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
-            $code1 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-ForceRefresh'))
+            $orderOne = @('terminal-first-pass', 'terminal-second')
+            $code1 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$orderOne,'-ForceRefresh'))
             Assert-True ($code1 -eq 0) "Order 1 expected 0, got $code1"
 
             # Cache hit check with unchanged order [first, second]
             $specCountBeforeSame = [int](Get-Content $specInvocationsFile -Raw)
-            $codeSame = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd))
+            $codeSame = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$orderOne))
             Assert-True ($codeSame -eq 0) "Order same expected 0, got $codeSame"
             $specCountAfterSame = [int](Get-Content $specInvocationsFile -Raw)
             Assert-True ($specCountAfterSame -eq $specCountBeforeSame) 'spec-reviewer was rerun despite identical candidate order'
 
             # Order 2: Reversed order [second, first]
-            $json.models.review = @('terminal-second', 'terminal-first-pass')
-            $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+            $orderTwo = @('terminal-second', 'terminal-first-pass')
             $specCountBeforeReversed = [int](Get-Content $specInvocationsFile -Raw)
-            $code2 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd))
+            $code2 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$orderTwo))
             Assert-True ($code2 -eq 0) "Order 2 expected 0, got $code2"
             $specCountAfterReversed = [int](Get-Content $specInvocationsFile -Raw)
             Assert-True ($specCountAfterReversed -gt $specCountBeforeReversed) 'spec-reviewer was NOT rerun when candidate order reversed ([A,B] vs [B,A])'
