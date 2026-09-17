@@ -234,6 +234,13 @@ if model == "catastrophic-crash" or "catastrophic-crash" in args:
     pathlib.Path(__file__).with_name("catastrophic-crash.marker").write_text("invoked", encoding="utf-8")
     sys.stderr.write("catastrophic fixture failure\n")
     raise SystemExit(7)
+elif model == "stale-evidence-probe":
+    directory = pathlib.Path(args[args.index("--directory") + 1])
+    stale = list((directory / ".runtime" / "ai_gate").glob("*/candidate_EVIDENCE.md"))
+    if stale:
+        result = {"schema_version": 1, "classification": "VALID_BLOCK", "structured": {"verdict": "BLOCK", "blocking_findings": 1, "report_markdown": "stale candidate visible"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
+    else:
+        result = {"schema_version": 1, "classification": "VALID_PASS", "structured": {"verdict": "PASS", "blocking_findings": 0, "report_markdown": "clean staging"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
 elif model == "fallback-grounding":
     pathlib.Path(__file__).with_name("fallback-grounding.marker").write_text("invoked", encoding="utf-8")
     result = {"schema_version": 1, "classification": "GROUNDING_FAILED", "structured": None, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
@@ -355,6 +362,15 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('transport-safe','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         $passMarker = Join-Path $helperDir 'fallback-pass.marker'; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
         try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 0) "expected safe transport fallback success, got $code"; Assert-True (Test-Path $passMarker) 'safe transport envelope did not fall back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+    }
+    Run-Case 'Gate clears stale candidate evidence before reviewer phase' {
+        $stale = Join-Path $repoRoot ".runtime\ai_gate\$fixtureId\candidate_EVIDENCE.md"
+        New-Item -ItemType Directory -Force -Path (Split-Path $stale) | Out-Null
+        'Focused tests`n- tests.test_workflow_scripts: FAIL' | Set-Content -LiteralPath $stale -Encoding UTF8
+        $probeArgs = @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','stale-evidence-probe','-_RegressionReviewerArgumentsOverride','stale-evidence-probe','-ForceRefresh')
+        $code = Invoke-Script $gate $probeArgs
+        Assert-True ($code -eq 0) "expected clean staging PASS, got $code"
+        Assert-True (-not (Test-Path -LiteralPath $stale)) 'stale candidate evidence survived cleanup'
     }
     Run-Case 'Gate catastrophic adapter failure has no envelope' {
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('catastrophic-crash','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8

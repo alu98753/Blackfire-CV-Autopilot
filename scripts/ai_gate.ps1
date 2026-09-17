@@ -207,6 +207,13 @@ $excludes = ":!docs/tasks/$Task/reviews :!docs/tasks/$Task/EVIDENCE.md :!docs/ta
 (& cmd.exe /d /s /c "chcp 65001 >nul && <nul git status --short -u -- . $excludes" | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'status.txt') -Encoding utf8
 (& cmd.exe /d /s /c "chcp 65001 >nul && <nul git diff --no-ext-diff $baseRef -- . $excludes" | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'diff.patch') -Encoding utf8
 
+# Candidate artifacts are invocation-local staging and must never survive into
+# a reviewer phase from an earlier invocation.
+foreach ($candidate in @('candidate_EVIDENCE.md', 'candidate_spec-review.md', 'candidate_regression-review.md')) {
+    $candidatePath = Join-Path $runtimeDir $candidate
+    if (Test-Path -LiteralPath $candidatePath) { Remove-Item -LiteralPath $candidatePath -Force }
+}
+
 $targets = @(@{ Agent='spec-reviewer'; File='spec-review.md' }, @{ Agent='regression-reviewer'; File='regression-review.md' })
 $backup = Join-Path $runtimeDir 'canonical_backup'; New-Item -ItemType Directory -Force $backup | Out-Null
 
