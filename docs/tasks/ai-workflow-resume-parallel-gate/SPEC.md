@@ -1,193 +1,231 @@
 # AI Workflow Resume + Parallel Gate
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Reduce end-to-end AI workflow latency and make interrupted workflow execution safely resumable by evolving the current linear orchestration into a small persistent-stage dependency model, without introducing a generalized workflow engine.
+Reduce AI Gate latency and allow interrupted/repeated Gate runs to continue from still-valid reviewer artifacts instead of always rerunning both reviewers.
 
-This task has two coupled goals:
+This task does exactly two things:
 
-1. run `spec-reviewer` and `regression-reviewer` concurrently when both are required, then deterministically fan-in their completed outcomes into the existing gate decision; and
-2. persist enough stage-result identity/validity metadata that a later invocation can reuse a completed artifact only when it is still valid for the current inputs, otherwise rerun the stale/missing stage and the minimum necessary downstream work.
+1. run `spec-reviewer` and `regression-reviewer` concurrently, then deterministically fan-in their terminal results; and
+2. make each reviewer result reusable when its persisted input fingerprint still matches the current logical inputs.
 
-## Current evidence from initial repository survey
+Do not build a generic workflow engine or broader DAG system.
 
-- `scripts/ai_gate.ps1` currently selects `spec-reviewer` and `regression-reviewer` and executes them through one sequential reviewer loop.
-- The reviewers are architecturally independent, read-only roles and consume substantially overlapping frozen task/spec/implementation evidence, so they are natural fan-out siblings rather than producer/consumer stages.
-- Existing task handoff is already artifact-oriented: `SPEC.md`, `CONTEXT.md`, implementation results, per-reviewer result artifacts, gate reports/evidence, and task metadata are tracked or otherwise persisted.
-- Existing gate logic already contains narrower reuse concepts such as prior review artifact handling, generation state, current implementation revision checks, and `-ForceRefresh`; this task should converge those mechanisms instead of building an unrelated cache.
-- The earlier `ai-gate-execution-resilience` task deliberately kept reviewers sequential in v1. This task is the explicit follow-up that may parallelize them while preserving its bounded-process, fail-closed, canonical-artifact-safety invariants.
-- Latest `main` at task creation is `63d5c93ce88dda7bc580645f664f5efaa4adaf88`, which includes the canonical project worktree/shared-environment convention migration.
+## Target Architecture
+
+```text
+Implementation revision
+        |
+        +-------------------+
+        v                   v
+ spec-reviewer       regression-reviewer
+        |                   |
+ spec-review.md      regression-review.md
+ + fingerprint       + fingerprint
+        |                   |
+        +---------+---------+
+                  v
+        deterministic Gate aggregate
+                  |
+                  v
+         PASS / CANDIDATE_BLOCKED /
+         VERIFICATION_UNAVAILABLE
+```
+
+On every Gate invocation, each reviewer stage follows:
+
+```text
+canonical review artifact exists
+AND
+stored fingerprint == current fingerprint
+        -> reuse / do not launch reviewer
+otherwise
+        -> execute reviewer and replace artifact only after valid completion
+```
+
+Therefore a partial run such as:
+
+```text
+spec-reviewer       PASS
+regression-reviewer infrastructure failure
+```
+
+may resume later as:
+
+```text
+spec-reviewer       REUSE
+regression-reviewer RERUN
+        \           /
+         Gate fan-in
+```
+
+provided the spec-reviewer fingerprint is still current.
 
 ## Scope
 
-Primary expected change surface:
+Primary change surface:
 
 - `scripts/ai_gate.ps1`
-- existing AI workflow/task-runner helpers used by gate artifact state, generation state, or task transitions, only where required by the final design
+- focused deterministic workflow-script tests/harness as needed
 - `docs/architecture/ai_development_workflow.md`
-- `docs/tasks/README.md` where persistent-stage/resume semantics become user-visible contract
-- focused deterministic workflow-script tests/probes
-- this task's tracked artifacts under `docs/tasks/ai-workflow-resume-parallel-gate/`
+- `docs/tasks/README.md` only where user-facing Gate resume behavior needs documentation
+- task artifacts under `docs/tasks/ai-workflow-resume-parallel-gate/`
 
-The final implementation surface must be narrowed after the temporary Gemini read-only survey establishes the actual helper ownership and concurrency hazards.
+A small local helper inside `ai_gate.ps1` may be introduced if needed to keep reviewer-slot execution coherent. Do not extract a repository-wide workflow framework.
 
-## Known invariants
+## Required Behavior
 
-1. User + ChatGPT remain task/spec owners. Scout/review evidence may challenge assumptions but does not own or finalize the specification.
-2. Production implementation remains closed while this SPEC is Draft.
-3. Gemini/Antigravity may be used in this round only as an explicitly authorized temporary read-only Scout/evidence provider before SPEC finalization.
-4. After SPEC Final, Gemini/Antigravity remains the production implementation writer; OpenCode reviewers remain read-only.
-5. GitHub tracked task artifacts remain the principal handoff surface.
-6. `spec-reviewer` and `regression-reviewer` remain independent read-only semantic reviewers. Parallel execution must not introduce reviewer-to-reviewer dependency or shared mutable semantic state.
-7. Gate remains fail-closed. Missing, malformed, timed-out, crashed, or otherwise unavailable required verification may not be converted into PASS.
-8. Existing execution-resilience semantics remain intact: bounded child execution, client-only termination, structural output validation, canonical artifact promotion only from valid completed results, and preservation of previous valid canonical evidence across infrastructure failure.
-9. A semantic reviewer `BLOCK` remains distinct from infrastructure failure.
-10. Gate aggregation after reviewer fan-in should be deterministic and must not add another LLM reasoning stage merely to combine reviewer outcomes.
-11. Parallel reviewers must evaluate the same frozen logical input revision for a gate attempt.
-12. Reuse must be input-aware. Artifact existence alone is never sufficient to skip a stage.
-13. No stale artifact may silently survive a relevant SPEC, implementation, contract, or stage-configuration change.
-14. `-ForceRefresh` must continue to mean an explicit bypass/invalidation of otherwise reusable workflow evidence according to a documented boundary.
-15. `task.json` may index/project workflow state, but must not become the storage location for full Scout/reviewer prose or evolve into a workflow God Object.
-16. Resume/persistence must preserve multi-worktree/task-id isolation.
-17. No production/game runtime behavior changes are allowed.
-18. Normal workflow operations are environment consumers. They may not mutate the canonical shared Python environment, perform editable installs, or silently fall back to system Python.
-19. Local execution remains non-interactive and follows the repository-pinned OpenCode launcher/CLI/provider contracts; no invented CLI flags are permitted.
+### 1. Reviewer fan-out
 
-## Target architecture
+When both reviewers require execution:
 
-### 1. Reviewer fan-out / fan-in
+- launch `spec-reviewer` and `regression-reviewer` concurrently;
+- each reviewer owns its own process, timeout, model-candidate attempts, logs, staging output, and terminal execution result;
+- one reviewer failure must not cancel or corrupt the sibling reviewer;
+- both reviewers evaluate the same frozen Gate input snapshot;
+- wait for both required reviewer stages to reach a terminal result before aggregate classification.
 
-Conceptually:
+Use the smallest reliable Windows/PowerShell design compatible with the current implementation. Prefer one coordinator managing two independent `.NET Diagnostics.Process` execution slots over PowerShell background-job/runspace infrastructure unless implementation evidence proves otherwise.
 
-```text
-                    ┌─ spec-reviewer ─────────┐
-Gate reviewer input ┤                         ├─ deterministic fan-in → gate aggregate
-                    └─ regression-reviewer ──┘
-```
+### 2. Deterministic fan-in
 
-When both reviewers are required:
+Do not add a third AI judge.
 
-- launch them concurrently from one frozen gate input identity;
-- keep process ownership, timeout, log/output staging, invocation identity, and canonical result paths isolated per reviewer;
-- allow one reviewer to finish independently of the other;
-- wait for every required reviewer to reach a terminal execution outcome before aggregate classification;
-- preserve a valid completed sibling result if the other reviewer fails at infrastructure level, subject to the final persistence-validity contract;
-- aggregate only after fan-in and without another model call.
+After both reviewer stages are resolved, aggregate deterministically using the existing Gate meanings:
 
-The temporary Scout must determine the smallest concurrency primitive compatible with the current PowerShell/process wrapper and verify that current shared variables, jobs/event handlers, temp paths, logging, environment state, or task-runner helpers are safe for concurrent use.
+- all required reviewers valid `PASS` and focused tests pass -> Gate `PASS` / exit `0`;
+- any valid semantic reviewer `BLOCK`, or a focused test that completes and fails -> `CANDIDATE_BLOCKED` / exit `2`;
+- any required reviewer result unavailable because of launch/timeout/crash/malformed/unsafe cleanup -> `VERIFICATION_UNAVAILABLE` / exit `1`.
 
-### 2. Persistent stage result contract
+Infrastructure failure must remain fail-closed.
 
-A stage output is reusable only if both conditions hold:
+### 3. Persistent reviewer artifacts
 
-```text
-artifact exists
-AND
-artifact input identity == current stage input identity
-```
+Canonical reviewer artifacts remain:
 
-The implementation should define the smallest coherent persisted validity record. Exact representation is intentionally provisional until Scout evidence is available.
+- `docs/tasks/<task-id>/reviews/spec-review.md`
+- `docs/tasks/<task-id>/reviews/regression-review.md`
 
-At minimum the design must account for relevant inputs such as:
+Each promoted canonical review must also carry a compact machine-readable fingerprint describing the logical inputs that make that review valid.
 
-- task/stage identity;
-- Final SPEC revision/content identity where relevant;
-- implementation revision/commit where relevant;
-- workflow/reviewer contract version or equivalent code/config identity when it can change stage semantics;
-- stage-specific parameters that materially change the result;
-- completion/outcome status;
-- produced artifact pointer(s).
+The fingerprint metadata should travel with the canonical review artifact itself so reuse still works after a fresh clone/worktree without depending on `.runtime/` state.
 
-Do not assume one universal fingerprint must include every repository file. Fingerprints should follow real stage responsibility boundaries so unrelated changes do not invalidate everything.
+Keep the metadata compact; an embedded machine-readable comment/header is sufficient. Do not create a database or separate global cache service.
 
-### 3. Resume / selective invalidation
+### 4. Reviewer fingerprint inputs
 
-On a repeated invocation:
+The fingerprint must be role-specific and responsibility-aware.
 
-- current and valid completed stage → reuse/skip;
-- missing stage result → execute;
-- stale input identity → execute;
-- incomplete/interrupted/infrastructure-failed stage → do not treat as valid completion;
-- changed upstream input invalidates only stages whose declared logical inputs changed and downstream results that depend on those outputs;
-- an interrupted run may continue from the latest set of independently valid artifacts rather than restart the full pipeline.
+At minimum it must change when any input that can materially change that reviewer result changes, including:
 
-The final design should make partial Gate completion useful: for example, if one reviewer completed validly and the sibling was interrupted, a later invocation should be able to reuse the still-current reviewer result if doing so is compatible with the existing canonical-artifact safety model.
+- reviewer role;
+- Final `SPEC.md` content identity;
+- implementation/review snapshot identity used by Gate;
+- reviewer contract/prompt identity relevant to that role;
+- reviewer model/configuration inputs that materially affect the stage contract.
 
-### 4. State index versus evidence artifacts
+Do not hash the entire repository indiscriminately. Unrelated repository changes should not invalidate a current review.
 
-Prefer keeping substantive evidence in dedicated artifacts. `task.json` or another small manifest/index may expose current stage state/pointers/fingerprints if that fits existing ownership, but the final design must avoid duplicating full evidence bodies into task metadata.
+The implementation may use deterministic content hashes and/or stable Git identities as long as the resulting validity rule is explicit and testable.
 
-### 5. Compatibility with existing gate semantics
+### 5. Reuse / invalidation
 
-This task must explicitly reconcile persistence/resume with:
+For each reviewer independently:
 
-- prior reviewer artifact reuse;
-- generation state;
-- implementation commit/revision checks;
-- `-ForceRefresh`;
-- reviewer timeout/retry behavior;
-- canonical versus runtime/staged artifacts;
-- `GATE_REPORT.md` / evidence generation;
-- any automatic lifecycle/finalization behavior currently triggered after gate success.
+- artifact missing -> run reviewer;
+- fingerprint missing or unparsable -> treat as stale and run reviewer;
+- fingerprint mismatch -> run reviewer;
+- artifact malformed or not a valid completed reviewer result -> run reviewer;
+- fingerprint match + valid completed review -> reuse reviewer result without launching that reviewer.
 
-Existing overlapping mechanisms should be simplified or made authoritative rather than layered into contradictory caches.
+Old historical artifacts without fingerprint metadata require no migration. If encountered by an active Gate run, they are simply stale-once and regenerated.
 
-## Provisional acceptance criteria
+### 6. Partial resume
 
-1. When semantic review requires both reviewers, `spec-reviewer` and `regression-reviewer` execute concurrently rather than sequentially.
-2. Deterministic evidence demonstrates actual overlap/concurrency rather than merely reordered sequential calls.
-3. Both reviewers receive the same frozen SPEC/implementation logical revision for one gate attempt.
-4. Per-reviewer timeout, retry, stdout/stderr, staging, and canonical promotion remain isolated and safe under concurrency.
-5. One reviewer timing out/crashing cannot corrupt, cancel, overwrite, or misclassify the sibling review result.
-6. Fan-in waits for terminal outcomes from all required reviewers before aggregate Gate classification.
-7. Gate aggregate remains deterministic and introduces no additional LLM judge/aggregation request.
-8. Existing PASS / candidate-block / infrastructure-block semantics remain fail-closed and compatible unless the Final SPEC explicitly documents a necessary migration.
-9. Every stage made resumable by this task has an explicit validity contract based on its relevant logical inputs, not artifact existence alone.
-10. A current valid artifact is reused without rerunning its stage.
-11. A stale, missing, incomplete, malformed, or infrastructure-failed artifact is not reused as successful completion.
-12. Changing Final SPEC identity cannot silently reuse reviews or implementation evidence tied to the old SPEC when that stage depends on SPEC.
-13. Changing implementation revision cannot silently reuse reviewer results tied to the previous implementation.
-14. Unrelated repository changes do not unnecessarily invalidate all stages when they are outside a stage's declared inputs.
-15. Interrupted Gate execution can resume from still-valid completed reviewer evidence where safe, rerunning only missing/stale required siblings and dependent aggregation.
-16. `-ForceRefresh` behavior is explicit, tested, and cannot accidentally reuse a result that the flag promises to recompute.
-17. Existing tracked artifact formats remain compatible where practical; any migration is deterministic and documented.
-18. `task.json` remains a bounded metadata/index artifact rather than a container for full reviewer/Scout reasoning.
-19. Deterministic focused tests cover at least: reviewer overlap; both-pass fan-in; one semantic BLOCK; one infrastructure failure; sibling artifact preservation; interrupted/partial resume; valid cache hit; stale SPEC invalidation; stale implementation invalidation; relevant stage-config invalidation; `-ForceRefresh`; deterministic aggregate; and no shared-path/process leakage.
-20. Architecture/task workflow documentation describes fan-out/fan-in and persistence/resume semantics.
-21. Existing gate execution-resilience invariants and OpenCode provider/CLI contracts remain passing.
-22. No game/runtime behavior changes.
+Reviewer reuse is independent per role.
+
+If one reviewer completed successfully and the sibling ended with infrastructure failure, the successful reviewer artifact may remain reusable on a later invocation if its fingerprint still matches.
+
+`EVIDENCE.md` remains a completed Gate artifact, not partial success evidence. Do not promote a new completed `EVIDENCE.md` when required verification is unavailable.
+
+### 7. Force refresh
+
+Add a simple Gate switch:
+
+`-ForceRefresh`
+
+Its meaning is only:
+
+> Ignore otherwise reusable reviewer artifacts for this invocation and execute both required reviewers again.
+
+Do not add per-reviewer refresh flags in this task.
+
+`-ForceRefresh` does not trigger implementation work, dependency installation, branch changes, or other workflow stages.
+
+### 8. Artifact safety
+
+Preserve current staged/canonical promotion safety:
+
+- reviewer output is promoted only after the reviewer execution and structural result validation succeed;
+- infrastructure-failed execution must not overwrite a previously valid canonical reviewer artifact;
+- sibling reviewer execution must not share mutable staging paths;
+- `.runtime/ai_gate/<task-id>/` remains runtime scratch/log space, not the authority for long-lived reuse.
+
+### 9. Focused tests
+
+Focused tests remain Gate work and do not need cross-run caching in this task.
+
+This task is specifically about reviewer fan-out and reviewer-result reuse/resume. Do not broaden persistence to every possible workflow stage yet.
+
+## Acceptance Criteria
+
+1. `spec-reviewer` and `regression-reviewer` overlap in execution when both require a fresh run.
+2. Deterministic tests prove real overlap without relying on remote LLM timing.
+3. Both reviewers receive the same frozen Gate input snapshot.
+4. Reviewer timeout/process/log/staging state is isolated per reviewer.
+5. One reviewer infrastructure failure does not cancel or corrupt the sibling result.
+6. Fan-in waits for every required reviewer stage to resolve.
+7. Aggregate result remains deterministic with no additional AI judge.
+8. A valid canonical reviewer artifact with matching fingerprint is reused and its reviewer process is not launched.
+9. Reviewer reuse is independent: one role may be reused while the other reruns.
+10. Final SPEC change invalidates affected reviewer artifacts.
+11. Implementation/review snapshot change invalidates affected reviewer artifacts.
+12. Relevant reviewer contract/config change invalidates the affected reviewer artifact.
+13. Missing/malformed fingerprint or malformed review artifact is treated as stale, never as a cache hit.
+14. Historical review artifacts without fingerprints need no migration and are regenerated when next used.
+15. `-ForceRefresh` bypasses reviewer reuse and recomputes both reviewers.
+16. Infrastructure failure does not overwrite a previously valid canonical reviewer artifact or completed `EVIDENCE.md`.
+17. Existing Gate exit meanings remain `0=PASS`, `2=CANDIDATE_BLOCKED`, `1=VERIFICATION_UNAVAILABLE`.
+18. Existing focused-test behavior and execution-resilience/provider contracts continue to pass.
+19. Architecture/task workflow docs describe parallel reviewers and reviewer artifact reuse/resume.
+20. No production/game runtime behavior changes.
 
 ## Non-goals
 
-- Do not build a generic DAG framework, distributed scheduler, queue service, workflow server, or dashboard.
-- Do not parallelize stages that have real data dependencies merely for latency.
-- Do not add an AI aggregator/judge after the two reviewers.
-- Do not make reviewers communicate with or influence each other before fan-in.
-- Do not redesign reviewer semantic responsibilities unless Scout evidence reveals a correctness blocker.
-- Do not redesign the production implementation agent role.
-- Do not mutate shared Python dependencies or invent a shared-environment concurrency protocol; that remains a separate repository-level concern.
-- Do not introduce `pip install -e .` or any worktree-specific source binding into the shared environment.
-- Do not change production/game logic.
-- Do not let the temporary Gemini Scout edit production source, implement this task, or promote this Draft SPEC to Final.
+- No generic DAG/workflow engine.
+- No workflow database, queue, scheduler, dashboard, or background service.
+- No persistence/cache for implementation, Scout, focused tests, or ChatGPT final review in this task.
+- No third AI aggregator.
+- No reviewer-to-reviewer communication.
+- No redesign of reviewer semantic responsibilities.
+- No per-reviewer force-refresh flags.
+- No migration of completed historical task artifacts.
+- No shared Python environment mutation.
+- No production/game logic changes.
 
-## Uncertainty requiring temporary Scout evidence
+## Implementation Notes From Scout Evidence
 
-Before this SPEC may become Final, establish:
+The temporary Gemini read-only survey established that current reviewer serialization is owned by the single synchronous reviewer loop in `scripts/ai_gate.ps1`; the reviewers themselves are architecturally independent.
 
-1. Which exact functions/files currently own reviewer child-process execution, generation state, prior-artifact validation, artifact promotion, aggregate report generation, and lifecycle finalization?
-2. Are any current reviewer execution variables, event handlers/jobs, environment variables, temp paths, log names, OpenCode session identifiers, or task-runner helpers unsafe when two reviewers run concurrently?
-3. What is the smallest reliable PowerShell concurrency mechanism given the current process wrapper and repository-supported Windows/PowerShell environment?
-4. Which persisted artifact is currently authoritative for a review's input revision, and where are there duplicate/overlapping cache-validity rules?
-5. What exactly does `-ForceRefresh` invalidate today?
-6. Can a valid completed canonical reviewer artifact safely survive a sibling infrastructure failure and be reused on the next gate attempt without violating existing `EVIDENCE.md`/gate-attempt semantics?
-7. Which logical input components are necessary for each proposed persisted stage fingerprint, and which tempting components would cause needless global invalidation?
-8. Should the state index live in existing generation state, `task.json`, a per-stage manifest, or another already-established artifact boundary?
-9. How does gate success interact with current auto-finalize/task-lifecycle behavior, and what resumed path must preserve that behavior exactly once?
-10. Which deterministic test harnesses already exist for `ai_gate.ps1`, and what minimal new seams are required to prove true overlap and resume behavior without live model calls?
-11. Are there backwards-compatibility requirements from completed tasks that already contain older result artifacts without the new validity metadata?
+The OpenCode structured-review adapter already isolates sibling executions using independent child processes, ephemeral ports, in-memory databases, role-specific prompt files, and role-specific candidate artifacts. The main concurrency work therefore belongs in the Gate coordinator, especially replacing shared attempt/unavailable state with reviewer-slot-local state.
 
-## Temporary Scout rule for this task
+The survey also corrected the Draft assumption that Gate already had reuse/generation-state/`-ForceRefresh` behavior. It does not. Reviewer persistence/reuse in this task is a small additive capability, not a consolidation of an existing cache system.
 
-The user explicitly authorized Gemini/Antigravity as a one-time temporary Scout fallback for this round. Its role is evidence provider only. It may inspect the repository read-only and produce `CONTEXT.md` as the tracked survey artifact, but it must not modify this SPEC, `task.json`, workflow/production source, tests, or production implementation. ChatGPT + user retain responsibility for resolving the uncertainties above and promoting this SPEC from Draft to Final.
+## Ownership
+
+- User + ChatGPT own this Final SPEC.
+- Gemini/Antigravity is the production implementation writer for v1.
+- OpenCode reviewers remain read-only verification roles.
+- GitHub tracked task artifacts remain the handoff surface.
