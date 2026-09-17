@@ -31,6 +31,13 @@ function Stop-Cleanup([string]$Message) {
 
 function Normalize([string]$Path) { return [IO.Path]::GetFullPath($Path).TrimEnd('\').ToLowerInvariant() }
 
+function Is-SameOrDescendant([string]$Candidate, [string]$Root) {
+    $candidateNormalized = Normalize $Candidate
+    $rootNormalized = Normalize $Root
+    return $candidateNormalized -eq $rootNormalized -or
+        $candidateNormalized.StartsWith($rootNormalized + '\', [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Parse-Worktrees([string[]]$Lines) {
     $records = @(); $record = [ordered]@{}
     foreach ($line in $Lines) {
@@ -56,11 +63,10 @@ function Require-Clean([string]$Path, [string]$Label) {
 $topology = Invoke-Git @('worktree', 'list', '--porcelain')
 if ($topology.Code -ne 0) { Stop-Cleanup "cannot read worktree topology: $($topology.Text)" }
 $records = Parse-Worktrees $topology.Lines
-$canonicalExpected = if ($env:TASK_CLEANUP_CANONICAL_MAIN) { Normalize $env:TASK_CLEANUP_CANONICAL_MAIN } else { Normalize (Join-Path (Split-Path $repoRoot -Parent) 'BlackfireCrusade_tool') }
-$main = @($records | Where-Object { $_.branch -eq 'main' -and (Normalize $_.path) -eq $canonicalExpected })
+$main = @($records | Where-Object { $_.branch -eq 'main' -and (-not ($_.PSObject.Properties.Name -contains 'detached') -or -not $_.detached) })
 if ($main.Count -ne 1) { Stop-Cleanup 'canonical main worktree is missing or ambiguous.' }
 $mainPath = $main[0].path
-if ((Normalize $mainPath) -eq (Normalize $currentCwd)) { $mainIsCurrent = $true }
+if (-not (Test-Path -LiteralPath $mainPath -PathType Container)) { Stop-Cleanup 'canonical main worktree path is not present.' }
 Require-Clean $mainPath 'canonical main worktree'
 
 $fetch = Invoke-Git @('fetch', 'origin') $mainPath
@@ -70,13 +76,13 @@ if ($topology.Code -ne 0) { Stop-Cleanup "cannot refresh worktree topology after
 $records = Parse-Worktrees $topology.Lines
 
 $taskCandidates = @($records | Where-Object {
-    (Split-Path (Normalize $_.path) -Leaf) -eq $Task.ToLowerInvariant() -and $_.branch -and -not $_.detached
+    (Split-Path (Normalize $_.path) -Leaf) -eq $Task.ToLowerInvariant() -and $_.branch -and (-not ($_.PSObject.Properties.Name -contains 'detached') -or -not $_.detached)
 })
 if ($taskCandidates.Count -ne 1) { Stop-Cleanup "task topology resolved $($taskCandidates.Count) matching attached worktrees; expected exactly one." }
 $taskRecord = $taskCandidates[0]
 $taskPath = [IO.Path]::GetFullPath($taskRecord.path)
 $branch = [string]$taskRecord.branch
-if ((Normalize $taskPath) -eq (Normalize $currentCwd) -or (Normalize $taskPath) -eq (Normalize $mainPath)) { Stop-Cleanup 'refusing to remove current or canonical main worktree.' }
+if ((Is-SameOrDescendant $currentCwd $taskPath) -or (Normalize $taskPath) -eq (Normalize $mainPath)) { Stop-Cleanup 'refusing to remove current or canonical main worktree.' }
 
 $localBranch = Invoke-Git @('show-ref', '--verify', '--quiet', "refs/heads/$branch") $mainPath
 if ($localBranch.Code -ne 0) { Stop-Cleanup "resolved branch '$branch' has no local branch ref." }
