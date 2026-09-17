@@ -1,139 +1,239 @@
 # Nemesis Intervention Unification
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Unify the existing known-strong-enemy operator intervention flow and the consecutive-defeat-limit flow under the existing `NemesisIntervention` responsibility, while preserving explicit pause ownership and existing battle behavior outside this boundary.
+Unify known-strong-enemy (`強敵`) intervention and consecutive-defeat-limit handling under the existing `NemesisIntervention` responsibility.
 
-The task must support two distinct policies:
+The task supports two policies:
 
-1. **Known strong enemy (`強敵`)**: pause immediately, notify the user, wait a bounded grace period, allow explicit user acknowledgement with `Shift+C`, and retain the existing automatic flee fallback if the user does not return in time.
-2. **Defeat-limit strong-enemy candidate**: when consecutive defeats reach `battle_max_defeat`, stop the existing automatic give-up path and instead enter an indefinite intervention pause with no timeout, no automatic flee, and no automatic give-up. This state is intended to let the user return and use the existing external workflow to register a newly discovered strong enemy.
+1. **Timed known-nemesis intervention** — pause immediately, notify CLI + Discord, wait a bounded grace period, allow `Shift+C` acknowledgement, and preserve the existing automatic flee fallback only when the grace period expires without acknowledgement.
+2. **Indefinite defeat-limit intervention** — when consecutive defeats reach `battle_max_defeat`, replace the current automatic give-up path with an indefinite operator hold: no timer, no automatic flee, no automatic give-up, and no automatic recovery/restart path may escape the hold.
 
-`NemesisIntervention` remains the owner/name for this lifecycle in this task. Generalization to a broader `BattleIntervention` abstraction is explicitly deferred until another battle-interruption use case exists.
+`NemesisIntervention` remains the class/module concept. Generalization to `BattleIntervention` is deferred.
 
 ## Responsibility Boundary
 
 This task owns:
 
-- extending `NemesisIntervention` to support bounded and indefinite intervention policies;
-- integrating the existing consecutive-defeat threshold with the indefinite intervention policy;
-- explicit `Shift+C` acknowledgement semantics for an active intervention;
-- Chinese CLI and Discord notification wording for the two intervention reasons;
-- migration of the shared nemesis-intervention configuration;
-- consolidation of strong-enemy template files under one `templates/nemesis/` hierarchy while preserving domain/dungeon applicability;
-- gating every automatic timeout/watchdog/recovery/relaunch/give-up path necessary to preserve defeat-limit indefinite pause;
-- focused deterministic tests for the above behavior.
+- timed versus indefinite `NemesisIntervention` policy;
+- defeat-limit integration before the existing give-up branch;
+- `Shift+C` operator-arrival acknowledgement;
+- intervention-aware `Ctrl+Space` arbitration;
+- Chinese CLI and Discord copy for the two reasons;
+- canonical `[nemesis_intervention]` configuration;
+- strong-enemy template relocation;
+- the minimum runtime/watchdog/relaunch/supervisor gating needed to preserve intervention holds;
+- deterministic tests proving all discovered automatic escape paths are suppressed.
 
-This task does not take ownership of:
+This task does not own:
 
-- general state-machine pause/resume semantics beyond the intervention arbitration required here;
-- Discord transport implementation;
-- strong-enemy image matching architecture beyond path migration and existing scope selection;
-- the external strong-enemy registration workflow;
-- unrelated battle-stall/relaunch policy except where it must be suppressed while an indefinite intervention owns the pause.
+- a general pause/resume redesign;
+- Discord transport internals;
+- a CV matcher redesign;
+- screenshot capture;
+- the separate strong-enemy registration workflow;
+- English notification copy;
+- unrelated battle-stall/recovery behavior outside intervention arbitration.
 
-## Desired Behavior
+## Architecture Contract
 
-### 1. Known strong enemy
-
-When an already configured strong-enemy template is detected:
+### 1. Timed known strong enemy
 
 ```text
 known strong enemy detected
-    -> NemesisIntervention starts
-    -> automation pauses immediately
-    -> CLI prints operator guidance including `Shift+C`
-    -> Discord sends operator guidance including `Shift+C`
-    -> grace countdown starts (default 180 seconds)
+    -> NemesisIntervention starts TIMED policy
+    -> state machine pauses immediately
+    -> CLI prints Chinese guidance containing `Shift+C`
+    -> Discord sends Chinese guidance containing `Shift+C`
+    -> grace timer starts (default 180 s)
 
         |-- Shift+C before timeout
-        |      -> acknowledge that the user has returned
-        |      -> cancel the grace timeout
-        |      -> remain PAUSED indefinitely for manual handling
+        |      -> acknowledge user arrival
+        |      -> cancel timer
+        |      -> enter manual hold
+        |      -> remain PAUSED
+        |      -> best-effort delete tracked repeated Discord alarms
         |
-        `-- no Shift+C before timeout
-               -> preserve current timeout recovery
-               -> execute the existing strong-enemy flee subflow
+        `-- grace expires first
+               -> existing timeout arbitration wins
+               -> existing timeout recovery executes exactly once
+               -> existing strong-enemy flee subflow runs
+               -> existing timeout notification-history semantics remain
 ```
 
-`Shift+C` means **Come / user has returned / acknowledge intervention**. It is not a Resume command.
+### 2. Defeat-limit / possible unregistered strong enemy
 
-### 2. Consecutive defeat limit
-
-When consecutive defeats reach the configured `battle_max_defeat` threshold (currently default 30):
+At the logical defeat that reaches `battle_max_defeat`:
 
 ```text
-defeat_count reaches battle_max_defeat
-    -> do NOT enter the existing automatic give-up flow
-    -> start defeat-limit NemesisIntervention
-    -> automation pauses immediately
-    -> CLI prints a distinct Chinese warning including `Shift+C`
-    -> Discord sends a distinct Chinese warning including `Shift+C`
-    -> no timer is armed
-    -> remain PAUSED indefinitely
+ResultHandler threshold branch
+    -> do NOT click give-up
+    -> do NOT enter WAIT_GIVEUP_CONFIRM
+    -> record logical defeat count as threshold reached
+    -> start NemesisIntervention INDEFINITE policy
+    -> pause immediately
+    -> CLI prints distinct Chinese warning containing `Shift+C`
+    -> Discord sends distinct Chinese warning containing `Shift+C`
+    -> create NO timer
+    -> remain PAUSED until explicit user action
 ```
 
-The notification should communicate that the configured consecutive-defeat limit has been reached and that an unregistered strong enemy may have been encountered.
+The intervention start must not reset `defeat_count`.
 
-When the user later presses `Shift+C`:
+### 3. `Shift+C` — Come / user-arrival acknowledgement
+
+`Shift+C` means only:
+
+```text
+I am back / acknowledge this intervention
+```
+
+It must never implicitly Resume automation.
+
+For either policy:
 
 ```text
 Shift+C
-    -> acknowledge that the user has returned
-    -> intervention remains PAUSED
-    -> no automatic battle action is triggered
+    -> acknowledge active intervention
+    -> cancel timer if one exists
+    -> enter/retain manual hold
+    -> remain PAUSED
+    -> print CLI confirmation that automation remains paused
+    -> best-effort remove tracked repeated Discord alarms
 ```
 
-The user may then perform the separate existing/manual strong-enemy registration workflow. This task does not capture screenshots or implement that registration flow.
+The CLI confirmation should tell the operator that, after manual handling is complete, normal resume remains available through `Ctrl+Space`.
 
-## Hotkey Contract
+If there is no active intervention, `Shift+C` must not create one or alter normal runtime state.
 
-`Shift+C` is the explicit intervention acknowledgement / `Come` command.
+### 4. `Ctrl+Space` arbitration
+
+Existing normal pause/resume ownership remains with the current pause controller/state machine, with this intervention rule:
+
+- **before `Shift+C` acknowledgement:** active intervention blocks `Ctrl+Space` from resuming automation;
+- **after `Shift+C` acknowledgement/manual hold:** a later explicit `Ctrl+Space` may end the intervention hold and perform normal user-initiated Resume;
+- outside an intervention, current `Ctrl+Space` semantics remain unchanged.
+
+This separates:
+
+```text
+Shift+C   = I returned
+Ctrl+Space = I finished manual handling; resume automation
+```
+
+### 5. Explicit manual restart/exit
+
+`Ctrl+Q` manual fast restart and `Ctrl+Shift+Q` manual exit are explicit user actions. They are not prohibited by the automatic-escape invariant and retain their existing ownership.
+
+No other automatic mechanism may treat their existence as permission to escape an intervention hold.
+
+## Permanent-Hold Invariant
+
+> **最大戰敗次數到達後，在沒有使用者明確動作前，不允許任何 timeout、watchdog、recovery、relaunch、restart、give-up、flee、scheduler 或 state-transition path 自動讓這場戰鬥離開永久 pause。**
+
+The same protection applies to the manual-hold phase created when a timed known-nemesis intervention is acknowledged with `Shift+C`.
+
+Implementation and tests must cover the actual owners discovered by Scout, not just the intervention timer.
+
+### In-process behavior
+
+The normal runtime loop already skips `state_machine.step()` while paused. This remains useful but is insufficient as the sole guarantee.
+
+The implementation must ensure that intervention-owned hold state cannot be bypassed by direct/recovery entry points including, where applicable:
+
+- pending Nemesis timeout recovery;
+- ResultHandler give-up continuation;
+- battle max-duration relaunch;
+- battle stall restart/relaunch;
+- watchdog popup recovery/relaunch;
+- window-loss/capture-failure recovery;
+- generic `request_relaunch()`;
+- direct battle restart/flee/give-up subflows;
+- scheduler/daily-reset state mutation;
+- state transitions executed outside the ordinary paused runtime step gate.
+
+Existing guards that already make a path impossible while paused should be preserved and regression-tested rather than duplicated without need.
+
+### Supervisor behavior
+
+`runtime/supervisor.py` is process-external and therefore must participate in the contract.
+
+A small machine-readable intervention-hold signal may be added to heartbeat/runtime metadata so the supervisor can distinguish intervention ownership from ordinary process liveness. Exact field names are implementation detail.
 
 Required semantics:
 
-- it is meaningful only through the intervention/hotkey arbitration boundary established by the implementation;
-- for a timed known-strong-enemy intervention, it cancels the countdown and converts the intervention into indefinite manual takeover while remaining paused;
-- for a defeat-limit indefinite intervention, it records/acknowledges that the user has returned while remaining paused;
-- it must not implicitly call normal Resume;
-- normal pause/resume controls retain their existing ownership and semantics outside the intervention behavior required by this task.
+1. **Daily maintenance restart:** if an intervention-owned hold is active, scheduled maintenance restart is deferred. It must not terminate/relaunch the child merely because the scheduled hour has arrived. Once the hold is explicitly cleared, normal daily-restart eligibility may resume.
+2. **Stale heartbeat:** the paused runtime must continue emitting fresh heartbeat. Tests must prove intervention pause itself does not create a false stale-heartbeat restart.
+3. **Unexpected child exit/crash while an intervention-owned hold was active:** supervisor recovery must fail closed and must not automatically relaunch into normal automation. Operator action is required. This task does not add persistence/reconstruction of a live intervention across process replacement.
+4. **Explicit manual restart/exit:** existing `Ctrl+Q` / `Ctrl+Shift+Q` behavior remains permitted because it is initiated by the user.
 
-The exact current hotkey owner and any collision with existing shortcuts must be established by Scout before Final SPEC.
+## Lifecycle State Contract
+
+The implementation must model a post-acknowledgement **manual hold** distinctly enough that it cannot be confused with timeout completion or ordinary Resume.
+
+Exact enum/member names are implementation detail, but the lifecycle must distinguish at least:
+
+- waiting for operator with timed policy;
+- waiting for operator with indefinite policy;
+- acknowledged/manual hold;
+- timed out / timeout recovery ownership;
+- completed/cleared intervention.
+
+Indefinite policy must not be represented by a huge timeout value. No timer is created for it.
 
 ## Notification Contract
 
-Both intervention reasons must produce user-facing guidance in **both CLI and Discord**.
+Two semantic notification reasons are required:
 
-Both must explicitly mention:
+1. known/configured strong enemy — timed fallback;
+2. defeat limit reached / possible unregistered strong enemy — indefinite hold.
+
+Both CLI and Discord copy must explicitly contain:
 
 ```text
 Shift+C
 ```
 
-so the operator does not need prior knowledge of the acknowledgement control.
+Required meaning:
 
-The two reasons must be visibly distinguishable in notification text:
+### Known strong enemy
 
-- known/configured strong enemy detected;
-- consecutive defeat limit reached / possible unregistered strong enemy.
+- a configured strong enemy was detected;
+- automation is paused;
+- press `Shift+C` when back;
+- without acknowledgement within the configured grace period, the existing automatic flee fallback occurs.
 
-Notification text should use the repository's existing notification dictionary/i18n ownership rather than embedding transport-specific strings in battle/result handlers.
+### Defeat limit
 
-Only Chinese (`zh-TW`) wording is required by this task. English copy is deferred.
+- consecutive defeat limit was reached;
+- an unregistered strong enemy may have been encountered;
+- automation is permanently paused;
+- it will not automatically flee/give up;
+- return to the computer and press `Shift+C`.
 
-## Configuration Migration
+Reusable wording/composition belongs in the existing notification i18n/dictionary boundary rather than being hard-coded in `ResultHandler`.
 
-Remove the existing nemesis-intervention settings from `[notification]`:
+`zh-TW` is required. English wording is deferred.
+
+### Notification cleanup
+
+- while waiting, repeated alarms remain tracked by `NemesisIntervention`;
+- `Shift+C` acknowledgement performs existing-style best-effort deletion of all tracked repeated alarm messages;
+- a timed intervention that expires without acknowledgement preserves the existing behavior of retaining one successful alarm as history and cleaning up the remainder;
+- notification deletion failure must not corrupt intervention state.
+
+## Configuration Contract
+
+Remove the old keys from `[notification]` and remove redundant mode-level copies:
 
 ```toml
-[notification]
-nemesis_intervention_grace_period_seconds = 60.0
-nemesis_intervention_notification_count = 5
+nemesis_intervention_grace_period_seconds
+nemesis_intervention_notification_count
 ```
 
-The canonical shared configuration becomes:
+Canonical shared configuration becomes:
 
 ```toml
 [nemesis_intervention]
@@ -141,132 +241,146 @@ grace_period_seconds = 180.0
 notification_count = 5
 ```
 
-The consecutive-defeat indefinite intervention does not use `grace_period_seconds`; it must be represented as a real no-timeout/indefinite policy rather than an arbitrarily large timeout value.
+Rules:
 
-`battle_max_defeat` remains owned by the existing battle/defeat configuration. This task must not duplicate that threshold inside `[nemesis_intervention]`.
+- one unambiguous tracked source for shared defaults;
+- handlers/intervention code must read through the repository config boundary, not hard-coded competing literals;
+- `battle_max_defeat` remains separate and authoritative for defeat threshold;
+- untracked user profile files are not silently rewritten by this task;
+- legacy tracked keys cease to be authoritative inputs rather than remaining as hidden fallback sources.
 
-Scout must identify any mode-level duplicates or profile/config compatibility implications before Final SPEC. Redundant mode-level nemesis intervention settings should not remain as competing configuration sources unless evidence shows they are intentionally required.
+## Defeat Count Contract
+
+The existing ResultHandler threshold check occurs before the final retry increment. The new flow must therefore ensure the logical count reflects that the configured maximum was reached when the intervention starts.
+
+Starting or acknowledging the intervention must not reset the count.
+
+Existing later reset ownership after a genuinely resolved battle/exit remains unchanged unless a minimal adjustment is required to avoid immediate re-trigger after an explicit manual resume.
+
+The implementation must not hide the threshold condition by resetting to zero at intervention entry.
 
 ## Strong-Enemy Template Layout
 
-Consolidate the physical strong-enemy templates under:
+Relocate the existing tracked images to:
 
 ```text
-templates/
-└─ nemesis/
-   ├─ domain/
-   │  └─ golden_empire/
-   │     └─ <existing domain strong-enemy images>
-   └─ dungeon/
-      └─ <existing dungeon strong-enemy images>
+templates/nemesis/domain/golden_empire/
+  elf_mythril_hag.png
+  golden_king.png
+  golden_wall_guard_tulan.png
+  human_golden_tulakh.png
+  undead_altalim.png
+
+templates/nemesis/dungeon/
+  dragon_karsos.png
+  dragonkin_sakroth.png
+  ice_boss_calvia_body.png
 ```
 
-The expected change is primarily a `git mv` plus configuration/reference migration.
+Requirements:
 
-Physical consolidation must **not** flatten applicability semantics. Domain detection must continue to use only the relevant domain templates, and dungeon detection must continue to use only the relevant dungeon templates. The implementation must not respond by matching every strong-enemy image in every mode.
+- use path/reference migration (`git mv` semantics) rather than matcher redesign;
+- update config, tests, and documentation references;
+- domain matching continues to use only the relevant domain list;
+- dungeon matching continues to use only the relevant dungeon list;
+- a cross-mode test fixture may reference a template for regression purposes, but production applicability must not be flattened.
 
-## Known Invariants
+## Expected Implementation Surfaces
 
-1. **最大戰敗次數到達後，在沒有使用者明確動作前，不允許任何 timeout、watchdog 或 recovery path 自動讓這場戰鬥離開永久 pause。**
-2. The invariant above includes every discovered path capable of causing battle give-up, flee, state transition, watchdog recovery, game relaunch/restart, timeout recovery, or equivalent automatic escape while defeat-limit indefinite intervention is active.
-3. Verification must explicitly enumerate and test the relevant automatic escape paths; testing only `NemesisIntervention`'s own timer is insufficient.
-4. `NemesisIntervention` remains the class/module concept for this task; do not rename it to `BattleIntervention`.
-5. `Shift+C` acknowledges user return; it does not Resume automation.
-6. `Shift+C` acknowledgement leaves both timed-to-manual and already-indefinite intervention flows paused.
-7. Known strong-enemy detection without user acknowledgement retains the current automatic flee fallback after the configured grace period.
-8. Defeat-limit intervention has no timeout and no automatic flee/give-up fallback.
-9. The state machine remains the owner of the actual pause/resume gate.
-10. Notification/i18n infrastructure remains the owner of reusable notification wording/transport-facing message composition.
-11. `battle_max_defeat` remains the authoritative defeat threshold.
-12. Existing strong-enemy mode applicability is preserved after template relocation.
-13. No screenshot capture is added.
-14. Behavior outside the specified intervention paths remains preserved unless a change is strictly necessary to uphold the permanent-pause invariant.
+Evidence indicates the implementation may need to touch:
 
-## Scope
+- `states/nemesis_intervention.py`
+- `states/handlers/battle.py`
+- `states/handlers/result.py`
+- `states/state_machine.py`
+- `runtime/loop.py`
+- `utils/keyboard_listener.py`
+- `runtime/heartbeat.py`
+- `runtime/supervisor.py`
+- `runtime/notification_i18n.py`
+- `config.py` / config accessors only as needed for the new section
+- `config/defaults.toml`
+- existing Nemesis template references and files
+- focused tests listed in `task.json`
 
-Expected implementation surfaces include, subject to Scout evidence:
-
-- `states/nemesis_intervention.py`;
-- `states/handlers/battle.py`;
-- `states/handlers/result.py`;
-- the current hotkey/pause-control owner;
-- `runtime/notification_i18n.py` and existing notification composition surfaces as needed;
-- `config/defaults.toml` and any directly affected config resolution code;
-- strong-enemy template paths/config references;
-- focused tests around intervention lifecycle, defeat handling, hotkey arbitration, and pause escape-path suppression.
-
-Scout should keep this set narrow and identify the actual owners rather than broadening the task speculatively.
+Do not broaden this into a generic recovery framework.
 
 ## Non-Goals
 
-- No rename/generalization to `BattleIntervention`.
-- No screenshot capture for defeat-limit discovery.
-- No implementation or redesign of the strong-enemy registration workflow.
-- No English notification copy in this task.
-- No broad redesign of battle stall, watchdog, recovery, or relaunch architecture; only the minimum gating/arbitration required to uphold indefinite intervention pause.
-- No passive mouse/activity detection as a replacement for explicit `Shift+C` acknowledgement.
-- No change to the meaning/default ownership of `battle_max_defeat` beyond routing the terminal defeat outcome into indefinite intervention.
-- No unrelated state-machine or CV refactor.
+- No rename to `BattleIntervention`.
+- No screenshot capture.
+- No strong-enemy registration implementation.
+- No English notification copy.
+- No passive mouse/activity acknowledgement.
+- No general CV matcher redesign.
+- No automatic migration/mutation of untracked profile files.
+- No durable persistence/reconstruction of an intervention across a crashed/replaced child process; supervisor must fail closed instead.
+- No unrelated state-machine/recovery refactor.
 
-## Provisional Acceptance Criteria
+## Acceptance Criteria
 
-1. Default configuration contains exactly the canonical shared section:
+1. `NemesisIntervention` supports a real timed policy and a real no-timer indefinite policy.
+2. Canonical defaults are exactly represented under `[nemesis_intervention]` with `grace_period_seconds = 180.0` and `notification_count = 5`; old `[notification]` keys and redundant tracked mode-level copies are removed as authoritative sources.
+3. Known strong-enemy detection pauses immediately and emits Chinese CLI + Discord guidance containing `Shift+C`.
+4. Known strong-enemy default grace period is 180 seconds and default notification count is 5.
+5. Known strong-enemy timeout without acknowledgement preserves the existing flee subflow exactly once.
+6. `Shift+C` before timeout cancels the timer, acknowledges user arrival, cleans tracked repeated alarms best-effort, and leaves automation paused.
+7. While an intervention is still waiting for `Shift+C`, `Ctrl+Space` cannot resume automation.
+8. After `Shift+C`, a later explicit `Ctrl+Space` may clear the manual hold and resume normal automation.
+9. Reaching `battle_max_defeat` no longer clicks give-up or enters the give-up continuation; it enters indefinite Nemesis intervention before those mutations.
+10. Defeat-limit intervention creates no timer, invokes no flee/give-up fallback, preserves the logical threshold count, and emits distinct Chinese CLI + Discord guidance containing `Shift+C`.
+11. `Shift+C` during defeat-limit intervention leaves automation paused indefinitely for manual handling.
+12. Automatic in-process escape paths identified by Scout cannot bypass intervention-owned hold. Required coverage includes battle timeout, stall/restart/relaunch, watchdog/recovery, generic relaunch, result give-up continuation, and state/scheduler paths that could otherwise progress the battle.
+13. Paused intervention continues producing fresh heartbeat and does not trigger supervisor stale-heartbeat restart.
+14. Supervisor scheduled daily maintenance restart is deferred while intervention-owned hold is active.
+15. If the child unexpectedly exits/crashes while the last valid runtime state reports an intervention-owned hold, supervisor does not automatically relaunch into normal automation; it fails closed for operator action.
+16. Explicit `Ctrl+Q` manual restart and `Ctrl+Shift+Q` manual exit remain available as user-authorized actions.
+17. All eight existing strong-enemy images are moved under the new `templates/nemesis/domain/golden_empire/` and `templates/nemesis/dungeon/` layout; tracked config/test/doc references are updated and production applicability remains scoped.
+18. Existing notification cleanup race/idempotence behavior remains deterministic; ACK/timeout has one winner and no double flee/resume occurs.
+19. No screenshot capture, English-copy work, passive activity detection, or broad battle/recovery refactor is introduced.
+20. Focused deterministic tests in `task.json` pass before review; any new test file introduced for runtime/supervisor arbitration must also be added to `task.json`.
 
-   ```toml
-   [nemesis_intervention]
-   grace_period_seconds = 180.0
-   notification_count = 5
-   ```
+## Verification Matrix
 
-   and the old nemesis-intervention keys are removed from `[notification]`.
+At minimum prove:
 
-2. Redundant/legacy mode-specific configuration sources are either migrated/removed or explicitly justified by Final SPEC after Scout evidence; there is one unambiguous effective source for the shared defaults.
+### Timed
 
-3. Known strong-enemy intervention immediately pauses automation and emits both CLI and Discord guidance that explicitly contains `Shift+C`.
+- known nemesis -> pause;
+- default 180 s / count 5;
+- CLI contains `Shift+C`;
+- Discord contains `Shift+C`;
+- timeout -> existing flee once;
+- `Shift+C` -> timer cancelled, alarms cleaned best-effort, still paused;
+- no flee after ACK;
+- repeated `Shift+C` is idempotent;
+- ACK/timeout race has one deterministic winner.
 
-4. Known strong-enemy intervention uses the configured 180-second default grace period.
+### Indefinite
 
-5. Pressing `Shift+C` during a known-strong-enemy grace period cancels the timeout and leaves automation paused indefinitely; it does not Resume.
+- final defeat reaches configured threshold and logical count reflects it;
+- threshold -> indefinite intervention before give-up mutation;
+- no timer;
+- no give-up/flee;
+- CLI + Discord contain `Shift+C`;
+- `Shift+C` -> manual hold, still paused;
+- pre-ACK `Ctrl+Space` blocked;
+- post-ACK `Ctrl+Space` explicitly resumes;
+- battle timeout/stall/restart/relaunch cannot escape automatically;
+- watchdog/recovery/generic relaunch cannot escape automatically;
+- scheduler/state transitions do not progress while hold is active;
+- heartbeat stays fresh;
+- supervisor daily restart defers;
+- unexpected child exit under reported hold does not auto-relaunch.
 
-6. If no `Shift+C` acknowledgement occurs before the known-strong-enemy grace expires, the existing strong-enemy flee behavior remains intact.
+### Configuration/templates
 
-7. Reaching `battle_max_defeat` no longer enters the existing automatic give-up path. It enters a no-timeout indefinite `NemesisIntervention` pause instead.
+- canonical new section only;
+- old tracked keys absent as sources;
+- `battle_max_defeat` remains separate;
+- all template paths migrated;
+- domain/dungeon production scopes preserved.
 
-8. The defeat-limit intervention emits a distinct Chinese CLI warning and a distinct Chinese Discord warning, and both explicitly contain `Shift+C`.
+## Scout Provenance
 
-9. Defeat-limit intervention does not arm a timer, invoke flee, invoke give-up, or automatically transition out of the battle.
-
-10. Pressing `Shift+C` during defeat-limit intervention acknowledges user return but leaves automation paused.
-
-11. Scout/implementation verification identifies every relevant automatic escape mechanism reachable while the battle is paused, including at minimum investigation of:
-    - Nemesis intervention timeout/recovery;
-    - result-handler give-up continuation;
-    - battle max-duration handling;
-    - battle stall retry/relaunch handling;
-    - state/watchdog recovery paths;
-    - generic relaunch/restart requests;
-    - normal/manual resume arbitration;
-    - any main-loop or recovery behavior capable of progressing the battle despite pause.
-
-12. Focused deterministic tests prove that every applicable discovered automatic escape path is blocked/suspended while defeat-limit indefinite intervention owns the pause, until an explicit user action permits later progression.
-
-13. Existing strong-enemy images are relocated under `templates/nemesis/domain/golden_empire/` and `templates/nemesis/dungeon/`, all tracked references are updated, and domain/dungeon matching scope is preserved.
-
-14. No screenshot capture or English translation work is introduced.
-
-15. Existing behavior unrelated to this task continues to pass its relevant focused regression coverage.
-
-## Uncertainty / Scout Questions
-
-Scout must resolve these before Final SPEC:
-
-1. Where is the current authoritative hotkey/pause-control owner, and does `Shift+C` collide with any existing keyboard binding or input path?
-2. What is the smallest clean API change to `NemesisIntervention` for timed versus indefinite policy without encoding infinity as a large numeric timeout?
-3. What exact semantics should the existing `request_user_resume()`/resume arbitration retain once `Shift+C` is separated from Resume?
-4. Which timeout/watchdog/recovery/relaunch/give-up paths can execute or become pending while the state machine is paused, and which must be explicitly gated versus already naturally blocked by the pause gate?
-5. Are there additional supervisor/process watchdogs outside the immediate state-machine handlers that could restart or replace the process during an indefinite intervention?
-6. How are Discord notification message IDs currently retained/deleted on acknowledgement, and should the retained history semantics differ between timed and indefinite reasons?
-7. Which mode/profile configuration files still define legacy `nemesis_intervention_*` keys, and what compatibility behavior is required when removing the old `[notification]` keys?
-8. Which tests already cover `NemesisIntervention`, defeat retry/give-up, pause/resume hotkeys, and watchdog/relaunch behavior, and where are the minimal new focused tests best located?
-
-Until these questions are answered with repository evidence, this SPEC remains Draft and production implementation must not begin.
+Canonical OpenCode Scout failed infrastructurally and left canonical context untouched. The user explicitly authorized a one-time Gemini/Antigravity read-only fallback. Its findings were recorded in `docs/tasks/nemesis-intervention-unification/CONTEXT.md` and the high-risk supervisor/runtime claims were cross-checked against the task branch before this SPEC was finalized.
