@@ -41,7 +41,7 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
 
         self.mock_machine.config = {
             "nemesis_action": "flee",
-            "nemesis_templates": ["dungeons/exception/ice_boss_calvia_body.png"],
+            "nemesis_templates": ["nemesis/dungeon/ice_boss_calvia_body.png"],
             "cooldown_map": {6: 900.0},
         }
         self.mock_machine.current_dungeon_index = 6
@@ -52,7 +52,7 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         clicked_templates = []
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "dungeons/exception/ice_boss_calvia_body.png":
+            if template == "nemesis/dungeon/ice_boss_calvia_body.png":
                 return ((500, 300), 0.85)
             if template == "battle/setting.png":
                 return ((1800, 50), 0.90)
@@ -97,13 +97,13 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         self.mock_machine.config = {}
         self.mock_machine.primary_config = {
             "nemesis_action": "flee",
-            "nemesis_templates": ["dungeons/exception/ice_boss_calvia_body.png"],
+            "nemesis_templates": ["nemesis/dungeon/ice_boss_calvia_body.png"],
         }
         self.mock_machine.current_dungeon_index = 6
         self.mock_machine.is_in_dungeon = True
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "dungeons/exception/ice_boss_calvia_body.png":
+            if template == "nemesis/dungeon/ice_boss_calvia_body.png":
                 return ((500, 300), 0.85)
             if template in ["battle/setting.png", "defeat_giveup.png", "common/confirm.png"]:
                 return ((900, 500), 0.90)
@@ -129,13 +129,13 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         self.mock_machine.is_in_collect_only_mode.return_value = True
         self.mock_machine.config = {
             "nemesis_action": "flee",
-            "nemesis_templates": ["dungeons/exception/ice_boss_calvia_body.png"],
+            "nemesis_templates": ["nemesis/dungeon/ice_boss_calvia_body.png"],
         }
         self.mock_machine.current_dungeon_index = 6
         self.mock_machine.is_in_dungeon = True
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "dungeons/exception/ice_boss_calvia_body.png":
+            if template == "nemesis/dungeon/ice_boss_calvia_body.png":
                 return ((500, 300), 0.85)
             if template in ["battle/setting.png", "defeat_giveup.png", "common/confirm.png"]:
                 return ((900, 500), 0.90)
@@ -160,7 +160,7 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
 
         self.mock_machine.config = {
             "nemesis_action": "flee",
-            "nemesis_templates": ["dungeons/exception/dragon_karsos.png"],
+            "nemesis_templates": ["nemesis/dungeon/dragon_karsos.png"],
             "cooldown_map": {8: 2400.0},
         }
         self.mock_machine.current_dungeon_index = 8
@@ -171,7 +171,7 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         clicked_templates = []
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "dungeons/exception/dragon_karsos.png":
+            if template == "nemesis/dungeon/dragon_karsos.png":
                 return ((500, 300), 0.88)
             if template == "battle/setting.png":
                 return ((1800, 50), 0.90)
@@ -207,7 +207,7 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
 
         self.mock_machine.config = {
             "nemesis_action": "flee",
-            "nemesis_templates": ["domains/golden_empire/exception/golden_king.png"],
+            "nemesis_templates": ["nemesis/domain/golden_empire/golden_king.png"],
         }
         self.mock_machine.current_dungeon_index = None
         self.mock_machine.is_in_dungeon = False
@@ -215,7 +215,7 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         clicked = []
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "domains/golden_empire/exception/golden_king.png":
+            if template == "nemesis/domain/golden_empire/golden_king.png":
                 return ((500, 300), 0.85)
             if template == "battle/setting.png":
                 return ((1800, 50), 0.90)
@@ -245,13 +245,13 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
 
         self.mock_machine.config = {
             "nemesis_action": "pause",
-            "nemesis_templates": ["dungeons/exception/dragonkin_sakroth.png"],
+            "nemesis_templates": ["nemesis/dungeon/dragonkin_sakroth.png"],
         }
         self.mock_machine.current_dungeon_index = 8
         self.mock_machine.is_in_dungeon = True
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "dungeons/exception/dragonkin_sakroth.png":
+            if template == "nemesis/dungeon/dragonkin_sakroth.png":
                 return ((500, 300), 0.88)
             return (None, 0.0)
 
@@ -272,9 +272,9 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
             mode_cfg = defaults["primary_modes"].get(mode_key, {})
             self.assertEqual(mode_cfg.get("nemesis_action"), "pause")
             templates = mode_cfg.get("nemesis_templates", [])
-            self.assertIn("dungeons/exception/dragonkin_sakroth.png", templates)
-            self.assertIn("dungeons/exception/dragon_karsos.png", templates)
-            self.assertIn("dungeons/exception/ice_boss_calvia_body.png", templates)
+            self.assertIn("nemesis/dungeon/dragonkin_sakroth.png", templates)
+            self.assertIn("nemesis/dungeon/dragon_karsos.png", templates)
+            self.assertIn("nemesis/dungeon/ice_boss_calvia_body.png", templates)
 
 
 if __name__ == "__main__":

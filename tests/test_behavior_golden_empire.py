@@ -433,7 +433,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config["nemesis_templates"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["nemesis_templates"] = ["nemesis/domain/golden_empire/golden_king.png"]
         self.mock_machine.config["nemesis_action"] = "flee"
         self.mock_machine.config["domain_max_defeat"] = 5
         self.mock_machine.defeat_count = 0
@@ -441,7 +441,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.mock_machine.battle_start_time = 100.0
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "domains/golden_empire/exception/golden_king.png":
+            if template == "nemesis/domain/golden_empire/golden_king.png":
                 return ((500, 300), 0.85)
             if template == "battle/setting.png":
                 return ((1800, 50), 0.90)
@@ -471,13 +471,13 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config["nemesis_templates"] = ["domains/golden_empire/exception/elf_mythril_hag.png"]
+        self.mock_machine.config["nemesis_templates"] = ["nemesis/domain/golden_empire/elf_mythril_hag.png"]
         self.mock_machine.config["nemesis_action"] = "pause"
         self.mock_machine.last_auto_click_time = 0.0
         self.mock_machine.battle_start_time = 100.0
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "domains/golden_empire/exception/elf_mythril_hag.png":
+            if template == "nemesis/domain/golden_empire/elf_mythril_hag.png":
                 return ((500, 300), 0.85)
             if template == "common/auto.png":
                 return ((1200, 55), 0.95)
@@ -502,12 +502,12 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         self.mock_machine.config.pop("nemesis_templates", None)
         self.mock_machine.config.pop("nemesis_action", None)
-        self.mock_machine.config["flee_bosses"] = ["domains/golden_empire/exception/golden_king.png"]
+        self.mock_machine.config["flee_bosses"] = ["nemesis/domain/golden_empire/golden_king.png"]
         self.mock_machine.config["flee_boss_action"] = "pause"
         self.mock_machine.battle_start_time = 100.0
 
         def fake_match(img, template, threshold=0.75, *args, **kwargs):
-            if template == "domains/golden_empire/exception/golden_king.png":
+            if template == "nemesis/domain/golden_empire/golden_king.png":
                 return ((500, 300), 0.85)
             return (None, 0.0)
 
