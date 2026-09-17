@@ -76,10 +76,18 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
     $ErrorActionPreference = 'Continue'
     $outputPath = Join-Path $helperDir "harness-output-$PID-$([Guid]::NewGuid().ToString('N')).txt"
     $errorPath = Join-Path $helperDir "harness-error-$PID-$([Guid]::NewGuid().ToString('N')).txt"
+    $shellCommand = $command + ' 1>"' + $outputPath + '" 2>"' + $errorPath + '"'
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = 'cmd.exe'
+    $startInfo.Arguments = '/d /s /c "' + $shellCommand + '"'
+    $startInfo.WorkingDirectory = $repoRoot
+    $root = [System.Diagnostics.Process]::new()
+    $root.StartInfo = $startInfo
     try {
-        Push-Location $repoRoot
-        try { & cmd.exe /d /s /c ('"' + $command + '"') 1> $outputPath 2> $errorPath; $exitCode = $LASTEXITCODE }
-        finally { Pop-Location }
+        if (-not $root.Start()) { throw 'Harness child failed to start' }
+        if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
+        $root.WaitForExit()
+        $exitCode = $root.ExitCode
         $output = ((Get-Content -LiteralPath $outputPath -Raw -ErrorAction SilentlyContinue), (Get-Content -LiteralPath $errorPath -Raw -ErrorAction SilentlyContinue) | Where-Object { $_ }) -join "`n"
         return [pscustomobject]@{ ExitCode = [int]$exitCode; Output = $output }
     } catch { return [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) } }
@@ -173,6 +181,8 @@ try {
     'existing context' | Set-Content (Join-Path $fixtureDir 'CONTEXT.md') -Encoding UTF8
     $exitProbe = Join-Path $helperDir 'exit-code-probe.ps1'
     'param([int]$Code); exit $Code' | Set-Content -LiteralPath $exitProbe -Encoding UTF8
+    $timeoutProbe = Join-Path $helperDir 'timeout-probe.ps1'
+    'Start-Sleep -Seconds 35' | Set-Content -LiteralPath $timeoutProbe -Encoding UTF8
 
     foreach ($expected in @(0, 1, 2, 7)) {
         Run-Case "Invoke-Script preserves child exit $expected" {
@@ -183,6 +193,13 @@ try {
             $actual = (Invoke-ScriptOutput $exitProbe @('-Code', $expected)).ExitCode
             Assert-True ($actual -eq $expected) "expected $expected, got $actual"
         }
+    }
+    Run-Case 'Invoke-ScriptOutput bounds child timeout' {
+        $started = [DateTime]::UtcNow
+        $result = Invoke-ScriptOutput $timeoutProbe @()
+        $elapsed = ([DateTime]::UtcNow - $started).TotalSeconds
+        Assert-True ($result.ExitCode -eq 1) "expected timeout failure, got $($result.ExitCode)"
+        Assert-True ($elapsed -lt 35) "timeout wrapper exceeded bound: $elapsed seconds"
     }
 
     Run-Case 'Scout rejects an unsupported OpenCode version before routing' {
