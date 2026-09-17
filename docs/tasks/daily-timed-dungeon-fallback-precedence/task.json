@@ -1,0 +1,25 @@
+{
+  "id": "daily-timed-dungeon-fallback-precedence",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/state_machine.py",
+    "states/handlers/domain_explore.py",
+    "tests/test_behavior_daily_tier4.py",
+    "tests/test_daily_pipeline_orchestration.py",
+    "tests/test_behavior_daily_preemption.py",
+    "docs/architecture/project_arch_greenfield_lite_v1.md"
+  ],
+  "focused_tests": [
+    "tests/test_behavior_daily_tier4.py",
+    "tests/test_daily_pipeline_orchestration.py",
+    "tests/test_behavior_daily_preemption.py"
+  ],
+  "models": {
+    "scout": [
+      "skipped-by-user-authorization"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  }
+}
