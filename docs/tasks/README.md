@@ -45,7 +45,7 @@ Rules:
 - OpenCode Scout may inspect a Draft task and produce `CONTEXT.md` under a light-by-default budget (<= 10 files, <= 1500 words, 8-minute timeout, real-time terminal streaming).
 - Scout is an evidence provider, not the contract owner; it must not rewrite `SPEC.md`.
 - Failed or timed-out Scout runs never overwrite an existing canonical `CONTEXT.md`.
-- Failed or timed-out verification gate runs at the infrastructure layer never overwrite existing canonical `reviews/*` or `EVIDENCE.md`.
+- Verification infrastructure failure never overwrites the failed reviewer's canonical review and never promotes a new completed `EVIDENCE.md`. A trusted sibling review may be promoted independently and reused on a later identical-input Gate run.
 - ChatGPT + user own the architecture/behavior decision and finalize the contract after reviewing Scout evidence and current code.
 - Gemini/Antigravity must not begin production implementation while `SPEC.md` is explicitly `Status: Draft`.
 - Once `Status: Final`, implementation may proceed. Any later material contract change must be surfaced explicitly rather than silently inferred by the writer.
@@ -62,10 +62,12 @@ idea / future work
   -> ChatGPT re-checks code / architecture using Scout evidence
   -> Final SPEC.md
   -> Gemini/Antigravity implements
-  -> verification gate creates reviews/* + EVIDENCE.md
+  -> verification gate creates/updates reviews/* + completed EVIDENCE.md
+  -> push candidate + applicable evidence to GitHub
   -> ChatGPT / human final review
-  -> branch closeout extracts durable contracts
-  -> task package is deleted when no longer needed
+  -> explicit user-authorized integration
+  -> task_cleanup.ps1 removes local task execution/worktree state
+  -> tracked task package remains repository history until explicit archival/deletion policy
 ```
 
 The initial ChatGPT survey should be deep enough to establish the real problem boundary, architecture parent, known invariants, and plausible scope, but should not duplicate the exhaustive localization work delegated to Scout.
@@ -87,9 +89,17 @@ Key execution contracts:
 - Each reviewer stage is independently evaluated on each Gate run:
   - If a valid canonical review artifact exists with a matching input fingerprint, the stage is reused without launching that reviewer process.
   - If missing, stale, or mismatched, that reviewer reruns fresh.
-  - An infrastructure failure in one reviewer does not invalidate or discard a valid sibling result, enabling partial resume on subsequent runs.
+  - Reviewer artifacts are stage-level durable results. If one reviewer suffers infrastructure failure, a trusted sibling result may remain canonical and reusable; the failed reviewer's canonical artifact is not overwritten.
+- `EVIDENCE.md` is completed-Gate aggregate evidence and is only regenerated/promoted after all required reviewer stages resolve. Verification-unavailable runs do not promote a new completed `EVIDENCE.md`.
 - Pass `-ForceRefresh` to explicitly bypass cached reviewer artifacts and re-execute both reviewers fresh:
   `.\scripts\ai_gate.ps1 -Task <task-id> -ForceRefresh`
+- When formal Gate evidence is required for remote final review, the canonical `reviews/*.md` and `EVIDENCE.md` must be committed and pushed to the task branch before ChatGPT's GitHub-based final review.
+
+## Task-history retention vs local cleanup
+
+`task_cleanup.ps1` is a local execution/worktree cleanup operation. It does not imply deletion of tracked files under `docs/tasks/<task-id>/`.
+
+Tracked task packages remain repository history unless an explicit archival/deletion policy or user-authorized task says otherwise. Do not equate branch/worktree cleanup with tracked-history deletion.
 
 ## task.json
 
@@ -120,7 +130,7 @@ Rules:
 
 - `id` must exactly match the task directory name.
 - `SPEC.md` must exist in the same task directory.
-- `base_ref` is the comparison baseline used by the verification gate.
+- `base_ref` is the comparison baseline used by the verification gate. Before formal Gate, the current configured baseline must be reconciled into the task branch so the Gate snapshot represents task-owned changes rather than stale-branch drift.
 - `scope` helps reviewers detect scope creep; it does not override `SPEC.md`.
 - `focused_tests` contains Python `unittest` module/class/method targets only and must never contain a full-suite discovery command.
 - `models.scout` and `models.review` are optional `provider/model` overrides. `null` uses the locally configured OpenCode default.

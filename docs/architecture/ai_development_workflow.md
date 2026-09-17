@@ -161,9 +161,7 @@ Gemini/Antigravity is the production implementation writer in workflow v1 and im
 
 ### Reviewers
 
-OpenCode `spec-reviewer` (`steps: 8`) and `regression-reviewer` (`steps: 10`) are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift. Completed valid StructuredOutput is the terminal reviewer result.
-
-Completed valid StructuredOutput is the terminal reviewer result. Valid structured PASS/BLOCK output is terminal for the reviewer role. Reviewer fallback is for infrastructure failure, never semantic review-shopping.
+OpenCode `spec-reviewer` (`steps: 8`) and `regression-reviewer` (`steps: 10`) are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift. Valid structured PASS/BLOCK output is terminal for the reviewer role. Reviewer fallback is for infrastructure failure, never semantic review-shopping.
 
 ### Final reviewer / remote orchestrator
 
@@ -265,6 +263,8 @@ Gemini/Antigravity implements the Final SPEC. Applicable repository rules/contra
 
 ### Phase D — Verification
 
+Before formal Gate, refresh the configured comparison baseline and require the current `base_ref` (normally fetched `origin/main`) to be an ancestor of the task HEAD. A long-lived task branch that is stale or diverged from the current baseline must be reconciled with the latest baseline through repository-approved non-destructive merge semantics and re-verified before Gate. Do not review a stale branch against a newer baseline in a way that makes newer-base files appear to be task-owned deletions or unrelated changes.
+
 When the task/lifecycle requires AI Gate and its infrastructure is available:
 
 ```powershell
@@ -273,6 +273,12 @@ When the task/lifecycle requires AI Gate and its infrastructure is available:
 
 Gate executes `spec-reviewer` and `regression-reviewer` concurrently using a dual-slot coordinator loop, optionally runs declared focused tests, and promotes trusted review/evidence artifacts. It never substitutes full-suite execution.
 
+Gate aggregate meanings remain:
+
+- `0`: trusted verification passed (all required reviewers PASS + focused tests pass);
+- `2`: trusted candidate blocker or configured focused-test failure;
+- `1`: verification infrastructure unavailable / no trusted verdict.
+
 Reviewer persistence and resume follow:
 
 - Canonical reviews carry an embedded input fingerprint comment:
@@ -280,14 +286,25 @@ Reviewer persistence and resume follow:
 - Each reviewer stage is independently evaluated:
   - If a valid canonical review exists with a matching input fingerprint, it is reused and its reviewer process is not launched.
   - If missing, stale, or mismatched, the reviewer is executed fresh.
-- Interrupted or partially failed runs can resume: an infrastructure failure in one reviewer does not discard a valid sibling result.
+- Reviewer artifacts are stage-level durable results. During a partial infrastructure failure, a trusted sibling reviewer result may be promoted and remain reusable; the failed reviewer's canonical artifact is not overwritten.
+- `EVIDENCE.md` is completed-Gate aggregate evidence. A new completed `EVIDENCE.md` is promoted only after all required reviewer stages resolve; verification-unavailable runs do not promote completed Gate evidence.
 - `-ForceRefresh` explicitly bypasses cached reviewer artifacts and forces fresh execution of both reviewers.
+
+When formal Gate succeeds and remote ChatGPT final review is required, the canonical `reviews/*.md` and `EVIDENCE.md` must be committed and pushed to the task branch before handoff. Local-only Gate evidence is not sufficient for the GitHub-based final-review step.
 
 ### Phase E — Final review, integration, cleanup
 
-- `0`: trusted verification passed (all reviewers PASS + focused tests pass);
-- `2`: trusted candidate blocker or configured focused-test failure;
-- `1`: verification infrastructure unavailable / no trusted verdict.
+Phase E begins only after the applicable verification path is complete and the candidate/evidence required for remote review is available on GitHub.
+
+Preferred closeout path:
+
+1. Push the current task HEAD and applicable canonical review/evidence artifacts.
+2. ChatGPT re-checks the expected task HEAD and current base on GitHub and performs final semantic/architecture review.
+3. The user explicitly authorizes integration.
+4. ChatGPT integrates through GitHub using merge-commit semantics.
+5. After integrated ancestry is confirmed in `origin/main`, local task cleanup is delegated to `task_cleanup.ps1`.
+
+A Gate result of `CANDIDATE_BLOCKED` (`2`) or `VERIFICATION_UNAVAILABLE` (`1`) does not advance to integration; it returns to bounded diagnosis/correction/verification.
 
 After remote integration, normal task cleanup is repository-owned:
 
@@ -302,6 +319,8 @@ Optionally, when repository/user policy calls for deleting the remote branch:
 ```
 
 `task_cleanup.ps1` owns the safe teardown mechanics: fetches current remote state, validates topology/cleanliness/integrated ancestry, invokes `worktree_cleanup_safety.ps1` to detach only the exact canonical `.venv` junction, removes the task worktree, verifies topology, and safely deletes the local branch. It fails closed instead of forcing ambiguous or unsafe state.
+
+Local task cleanup removes local execution/worktree state; it does not imply deletion of tracked task-history artifacts. Tracked task packages remain repository history until an explicit archival/deletion policy or user-authorized task says otherwise.
 
 Users should not manually run `worktree_cleanup_safety.ps1`, `git worktree remove`, `git branch -d`, or `git worktree prune` during the normal successful closeout path. Those are lower-level recovery tools only when the wrapper reports a bounded failure requiring diagnosis.
 

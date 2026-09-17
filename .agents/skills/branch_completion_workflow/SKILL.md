@@ -91,6 +91,10 @@ E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool
 
 For regression/baseline work, main must be attached to `main` and clean. Fetch `origin`; if local main is behind and safely fast-forwardable, synchronize with fast-forward semantics. Dirty/diverged/detached/wrong-branch state blocks baseline use.
 
+The task branch must also be current relative to the configured `base_ref` before formal Gate or final candidate review. After fetching, require the current `base_ref` (normally `origin/main`) to be an ancestor of task `HEAD`. If it is not, stop verification and reconcile the latest baseline into the task branch through repository-approved non-destructive merge semantics. Re-run affected deterministic/focused verification after reconciliation before formal Gate.
+
+Do not run Gate against a stale long-lived branch where newer-main files can be misread as task-owned deletions or unrelated changes.
+
 Do not use reset/clean/force checkout shortcuts.
 
 ### Phase 2 — Regression baseline
@@ -153,33 +157,48 @@ Remove task-local/transient wording from durable production code where appropria
 
 ### Phase 8 — Contract convergence
 
-Converge durable invariants into canonical architecture/workflow SSOT. Task SPEC/CONTEXT/reviews/EVIDENCE remain task lifecycle artifacts, not a permanent second architecture authority.
+Converge durable invariants into canonical architecture/workflow SSOT. Task SPEC/CONTEXT/reviews/EVIDENCE remain task lifecycle/history artifacts, not a permanent second architecture authority.
 
-Tracked-history deletion or archival outside the Final SPEC requires explicit user agreement.
+Tracked-history deletion or archival outside the Final SPEC requires explicit user agreement. Local worktree cleanup does not imply deletion of tracked task-history artifacts.
 
 ### Phase 9 — Development story
 
 When project convention calls for it, record a concise PARS development story. The story is historical narrative, not architecture authority.
 
-### Phase 10 — Final branch audit
+### Phase 10 — Final branch audit and verification handoff
 
 Confirm:
 
 ```powershell
+git fetch origin
 git status --short
 git branch --show-current
 git log --oneline origin/main..HEAD
 git diff --stat origin/main...HEAD
+git merge-base --is-ancestor <base-ref> HEAD
 ```
 
 Verify:
 
 - task branch clean;
+- current configured `base_ref` is an ancestor of task `HEAD`;
 - expected commits pushed;
 - no unrelated files;
 - Final SPEC/current implementation/evidence align;
 - no undeclared behavior change;
 - canonical docs converged.
+
+If formal AI Gate is applicable, run it only after this baseline-freshness check and any required post-reconciliation verification. Gate meanings remain:
+
+```text
+0 = trusted verification PASS
+2 = CANDIDATE_BLOCKED
+1 = VERIFICATION_UNAVAILABLE
+```
+
+`2` or `1` blocks integration and returns to bounded diagnosis/correction/verification.
+
+After a successful formal Gate, canonical `docs/tasks/<task-id>/reviews/*.md` and `EVIDENCE.md` required for remote final review must be committed and pushed to the task branch. Local-only Gate evidence is not a complete GitHub handoff.
 
 ### Phase 11 — Integration readiness
 
@@ -187,10 +206,11 @@ Local agents deliver readiness; they do not merge.
 
 Preferred path:
 
-1. ChatGPT re-checks current expected head/base on GitHub.
-2. ChatGPT performs final semantic/architecture review.
-3. User explicitly authorizes integration.
-4. ChatGPT integrates through GitHub with merge-commit semantics.
+1. Candidate HEAD and applicable canonical Gate evidence are pushed and reviewable on GitHub.
+2. ChatGPT re-checks current expected head/base on GitHub.
+3. ChatGPT performs final semantic/architecture review.
+4. User explicitly authorizes integration.
+5. ChatGPT integrates through GitHub with merge-commit semantics.
 
 Manual fallback is allowed when the user prefers it, but it uses the canonical permanent `main` worktree—not temp-main—and must preserve repository merge policy.
 
@@ -245,6 +265,8 @@ The wrapper owns the normal teardown mechanics:
 - optionally deletes the remote branch when explicitly requested.
 
 It fails closed rather than forcing unknown state.
+
+This cleanup removes local task execution/worktree state. It does not delete tracked task-history files from repository history.
 
 ## 7. What users should no longer do during normal cleanup
 
@@ -309,7 +331,7 @@ Normal cleanup delegates junction safety to repository scripts.
 
 Gate/reviewer policy remains a separate verification concern. A user-authorized temporary decision not to run Gate for workflow-infrastructure work does not silently rewrite the canonical Gate contract.
 
-Closeout must accurately state which verification evidence actually exists.
+Closeout must accurately state which verification evidence actually exists and whether that evidence has been pushed to GitHub when remote final review depends on it.
 
 ## 11. Closeout report
 
@@ -318,12 +340,14 @@ A closeout report should include at least:
 ```text
 Task / Branch:
 Head:
-Main baseline:
+Main/base_ref baseline:
+Base-ref ancestry current: yes/no
 Regression classification:
 Focused verification:
 User full-suite status (if required):
 Contract convergence:
 Gate / reviewer evidence actually available:
+Gate evidence pushed to GitHub: yes/no/not-applicable
 Final semantic review status:
 Integration authority:
 Cleanup readiness:
@@ -334,6 +358,7 @@ Cleanup readiness:
 ```text
 [ ] task worktree/branch identity verified
 [ ] canonical main baseline state valid when needed
+[ ] configured base_ref is an ancestor of task HEAD before formal Gate/final candidate review
 [ ] regression baseline classified
 [ ] no BRANCH_REGRESSION / UNCERTAIN blocker
 [ ] maintenance changes preserve declared behavior
@@ -342,6 +367,7 @@ Cleanup readiness:
 [ ] durable contracts converged
 [ ] final branch audit clean
 [ ] candidate pushed and reviewable
+[ ] applicable canonical Gate reviews/EVIDENCE pushed before remote final review
 [ ] explicit user authorization obtained before integration
 [ ] integration confirmed in origin/main
 [ ] normal cleanup delegated to task_cleanup.ps1
