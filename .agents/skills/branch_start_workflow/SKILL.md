@@ -204,6 +204,27 @@ git branch -r --list origin/<branch>
 
 ### Phase 4 — Create / attach task worktree
 
+#### 4.1 Formal AI Task Orchestration (Recommended)
+
+若本工作為遵循 AI Task Lifecycle 的正式 task（已有 GitHub remote task branch 與 `docs/tasks/<task-id>/` artifacts），一律使用 repository 統一 startup wrapper：
+
+```powershell
+.\scripts\task_start.ps1 -Task <task-id>
+```
+
+本 command 會全自動執行：
+1. Canonical main 驗證與 safe fast-forward synchronization；
+2. Remote branch 與 fresh base (`origin/main`) 驗證；
+3. Remote task artifacts (`SPEC.md`, `task.json`) 預檢；
+4. Git worktree topology 檢查與 branch exclusivity 防護；
+5. Canonical task worktree (`worktrees\<task-id>`) 建立或 safe reuse；
+6. 呼叫 `scripts\worktree_environment_bootstrap.ps1` 完成 `.venv` junction bootstrap；
+7. 輸出單行 JSON 契約（`TASK_READY`）。
+
+若遭遇 dirty main、stale base、detached HEAD、ownership conflict 或 bootstrap failure，wrapper 會 fail closed 並保留現場證據。
+
+#### 4.2 Manual / Non-AI Task Fallback
+
 若 remote task branch 已存在、本地 branch 尚不存在：
 
 ```powershell
@@ -355,7 +376,7 @@ origin/<branch>
 [ ] task worktree attached to expected branch
 [ ] origin/<branch> 已建立或已存在
 [ ] upstream tracking 已設定
-[ ] worktree-local .venv 可用
+[ ] worktree-local .venv 可用 (透過 task_start.ps1 或 worktree_environment_bootstrap.ps1)
 [ ] Goal / Acceptance / Out-of-scope 已確認
 ```
 
@@ -370,6 +391,12 @@ Worktree: E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
 Base: main @ <sha>
 Remote: origin/<branch>
 Environment: .venv consumer ready
+```
+
+若使用 `task_start.ps1`，成功時會直接返回符合契約的單行 JSON：
+
+```json
+{"ok":true,"code":"TASK_READY","task":"<task-id>","branch":"<branch>","worktree":"...","base_sha":"...","remote_ref":"...","action":"CREATED|REUSED","python_action":"CREATED|UNCHANGED","python_version":"..."}
 ```
 
 # One-line principle
