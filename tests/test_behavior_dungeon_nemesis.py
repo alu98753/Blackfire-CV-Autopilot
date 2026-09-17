@@ -25,9 +25,18 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         self.mock_machine.dungeon_detection_features.return_value = []
         self.mock_machine.battle_elapsed_seconds.return_value = 1.0
         self.mock_machine.is_in_collect_only_mode.return_value = False
+        self.mock_machine.battle_session.is_hp_stalled.return_value = False
+        self.mock_machine.battle_session.restart_battle_attempts = 0
+        self.mock_machine.last_auto_click_time = 0.0
         self.mock_machine.config = {}
         self.mock_machine.primary_config = {}
         self.mock_machine.dungeon_cooldowns = DungeonCatalog.build_default_cooldowns()
+        self.nemesis_policy = patch(
+            "states.handlers.battle.get_nemesis_policy",
+            return_value={"intervene": [], "flee": []},
+        )
+        self.nemesis_policy_mock = self.nemesis_policy.start()
+        self.addCleanup(self.nemesis_policy.stop)
 
     def test_dungeon_nemesis_giveup_sets_cooldown_and_navigates(self):
         """
@@ -39,11 +48,11 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config = {
-            "nemesis_action": "flee",
-            "nemesis_templates": ["nemesis/dungeon/ice_boss_calvia_body.png"],
-            "cooldown_map": {6: 900.0},
+        self.nemesis_policy_mock.return_value = {
+            "intervene": [],
+            "flee": ["nemesis/dungeon/ice_boss_calvia_body.png"],
         }
+        self.mock_machine.config = {"cooldown_map": {6: 900.0}}
         self.mock_machine.current_dungeon_index = 6
         self.mock_machine.is_in_dungeon = True
         self.mock_machine.defeat_count = 0
@@ -95,10 +104,11 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         mock_img = MagicMock()
 
         self.mock_machine.config = {}
-        self.mock_machine.primary_config = {
-            "nemesis_action": "flee",
-            "nemesis_templates": ["nemesis/dungeon/ice_boss_calvia_body.png"],
+        self.nemesis_policy_mock.return_value = {
+            "intervene": [],
+            "flee": ["nemesis/dungeon/ice_boss_calvia_body.png"],
         }
+        self.mock_machine.primary_config = {}
         self.mock_machine.current_dungeon_index = 6
         self.mock_machine.is_in_dungeon = True
 
@@ -127,10 +137,11 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         mock_img = MagicMock()
 
         self.mock_machine.is_in_collect_only_mode.return_value = True
-        self.mock_machine.config = {
-            "nemesis_action": "flee",
-            "nemesis_templates": ["nemesis/dungeon/ice_boss_calvia_body.png"],
+        self.nemesis_policy_mock.return_value = {
+            "intervene": [],
+            "flee": ["nemesis/dungeon/ice_boss_calvia_body.png"],
         }
+        self.mock_machine.config = {}
         self.mock_machine.current_dungeon_index = 6
         self.mock_machine.is_in_dungeon = True
 
@@ -158,11 +169,11 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config = {
-            "nemesis_action": "flee",
-            "nemesis_templates": ["nemesis/dungeon/dragon_karsos.png"],
-            "cooldown_map": {8: 2400.0},
+        self.nemesis_policy_mock.return_value = {
+            "intervene": [],
+            "flee": ["nemesis/dungeon/dragon_karsos.png"],
         }
+        self.mock_machine.config = {"cooldown_map": {8: 2400.0}}
         self.mock_machine.current_dungeon_index = 8
         self.mock_machine.is_in_dungeon = True
         self.mock_machine.defeat_count = 0
@@ -205,10 +216,11 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config = {
-            "nemesis_action": "flee",
-            "nemesis_templates": ["nemesis/domain/golden_empire/golden_king.png"],
+        self.nemesis_policy_mock.return_value = {
+            "intervene": [],
+            "flee": ["nemesis/domain/golden_empire/golden_king.png"],
         }
+        self.mock_machine.config = {}
         self.mock_machine.current_dungeon_index = None
         self.mock_machine.is_in_dungeon = False
 
@@ -243,10 +255,11 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         battle_handler = BattleHandler(self.mock_machine)
         mock_img = MagicMock()
 
-        self.mock_machine.config = {
-            "nemesis_action": "pause",
-            "nemesis_templates": ["nemesis/dungeon/dragonkin_sakroth.png"],
+        self.nemesis_policy_mock.return_value = {
+            "intervene": ["nemesis/dungeon/dragonkin_sakroth.png"],
+            "flee": [],
         }
+        self.mock_machine.config = {}
         self.mock_machine.current_dungeon_index = 8
         self.mock_machine.is_in_dungeon = True
 
@@ -268,13 +281,10 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         from utils.config_manager import TomlConfigManager
         from pathlib import Path
         defaults = TomlConfigManager(Path("config/defaults.toml")).snapshot()
-        for mode_key in ("dungeon", "daily"):
-            mode_cfg = defaults["primary_modes"].get(mode_key, {})
-            self.assertEqual(mode_cfg.get("nemesis_action"), "pause")
-            templates = mode_cfg.get("nemesis_templates", [])
-            self.assertIn("nemesis/dungeon/dragonkin_sakroth.png", templates)
-            self.assertIn("nemesis/dungeon/dragon_karsos.png", templates)
-            self.assertIn("nemesis/dungeon/ice_boss_calvia_body.png", templates)
+        policy = defaults["nemesis"]
+        self.assertIn("nemesis/dungeon/dragonkin_sakroth.png", policy["flee"])
+        self.assertIn("nemesis/dungeon/dragon_karsos.png", policy["flee"])
+        self.assertIn("nemesis/dungeon/ice_boss_calvia_body.png", policy["intervene"])
 
 
 if __name__ == "__main__":

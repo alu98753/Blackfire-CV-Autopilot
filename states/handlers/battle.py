@@ -1,7 +1,7 @@
 import time
 import os
 import logging
-from config import get_battle_max_duration_seconds, get_battle_stall_settings, get_nemesis_intervention_settings
+from config import get_battle_max_duration_seconds, get_battle_stall_settings, get_nemesis_intervention_settings, get_nemesis_policy
 from runtime.notification_i18n import format_nemesis_intervention
 from states.handlers.base import BaseStateHandler
 from utils.dungeon_catalog import DungeonCatalog
@@ -14,12 +14,16 @@ class BattleHandler(BaseStateHandler):
         self.last_nemesis_log_time = 0.0
         self.nemesis_check_count = 0
         self.nemesis_check_done = False
+        self.nemesis_missing_templates_warned = set()
+        self.nemesis_no_valid_templates_warned = False
 
     def reset_state(self):
         self.non_battle_feature_start_time = None
         self.last_nemesis_log_time = 0.0
         self.nemesis_check_count = 0
         self.nemesis_check_done = False
+        self.nemesis_missing_templates_warned = set()
+        self.nemesis_no_valid_templates_warned = False
 
     def handle(self, screen_img, rect):
         """
@@ -324,16 +328,14 @@ class BattleHandler(BaseStateHandler):
         if getattr(self, "nemesis_check_done", False):
             return False
 
-        cfg = self.machine.config if isinstance(getattr(self.machine, "config", None), dict) else {}
-        p_cfg = self.machine.primary_config if isinstance(getattr(self.machine, "primary_config", None), dict) else {}
-        nemesis_templates = (
-            cfg.get("nemesis_templates")
-            or p_cfg.get("nemesis_templates")
-            or cfg.get("flee_bosses")
-            or p_cfg.get("flee_bosses")
-            or []
-        )
-        if not isinstance(nemesis_templates, (list, tuple)) or not nemesis_templates:
+        policy = get_nemesis_policy()
+        policy_by_template = {
+            template: action
+            for action in ("intervene", "flee")
+            for template in policy[action]
+        }
+        nemesis_templates = list(policy_by_template)
+        if not nemesis_templates:
             self.nemesis_check_done = True
             return False
 
@@ -344,34 +346,39 @@ class BattleHandler(BaseStateHandler):
         scores_summary = []
         now = time.time()
 
+        valid_template_count = 0
         for n_temp in nemesis_templates:
-            if os.path.exists(os.path.join("templates", n_temp)):
-                n_name = os.path.splitext(os.path.basename(n_temp))[0]
-                pos, conf = self.matcher.match(screen_img, n_temp, threshold=0.75, quiet=True)
-                scores_summary.append(f"{n_name}: {conf:.4f}")
-                if pos and detected_nemesis is None:
-                    detected_nemesis = n_temp
-                    detected_conf = conf
+            if not os.path.exists(os.path.join("templates", n_temp)):
+                if n_temp not in self.nemesis_missing_templates_warned:
+                    logging.warning("[Nemesis] configured template is missing: %s", n_temp)
+                    self.nemesis_missing_templates_warned.add(n_temp)
+                continue
+            valid_template_count += 1
+            n_name = os.path.splitext(os.path.basename(n_temp))[0]
+            pos, conf = self.matcher.match(screen_img, n_temp, threshold=0.75, quiet=True)
+            scores_summary.append(f"{n_name}: {conf:.4f}")
+            if pos and detected_nemesis is None:
+                detected_nemesis = n_temp
+                detected_conf = conf
+
+        if valid_template_count == 0 and not self.nemesis_no_valid_templates_warned:
+            logging.warning(
+                "[Nemesis] configured policy has zero valid template files; continuing normal battle flow."
+            )
+            self.nemesis_no_valid_templates_warned = True
 
         # 印出所有強敵的即時比對信心度 (每 2 秒或命中強敵時輸出)
         last_log = getattr(self, "last_nemesis_log_time", 0.0)
-        if detected_nemesis or (now - last_log >= 2.0):
+        if scores_summary and (detected_nemesis or (now - last_log >= 2.0)):
             self.last_nemesis_log_time = now
             logging.info(f"🔍 [領域強敵比對 第 {self.nemesis_check_count}/3 次] 畫面相似度 (門檻 0.75) ➔ {', '.join(scores_summary)}")
 
         if detected_nemesis:
-            raw_action = (
-                cfg.get("nemesis_action")
-                or p_cfg.get("nemesis_action")
-                or cfg.get("flee_boss_action")
-                or p_cfg.get("flee_boss_action")
-                or "flee"
-            )
-            action = str(raw_action).lower() if isinstance(raw_action, str) else "flee"
-            if action == "pause":
+            action = policy_by_template[detected_nemesis]
+            if action == "intervene":
                 logging.warning("=" * 60)
                 logging.warning(f"🚨 [領域強敵遭遇 - 暫停接管] 偵測到領域強敵特徵 [{detected_nemesis}] (相似度: {detected_conf:.4f} >= 0.75)！")
-                logging.warning("👉 已依據配置 (nemesis_action = 'pause') 自動暫停腳本運行。")
+                logging.warning("👉 已依據配置 (nemesis.intervene) 自動暫停腳本運行。")
                 logging.warning("👉 請回到電腦後按 [Shift+C] 確認；手動處理完成後再按 [Ctrl+Space] 恢復自動化。")
                 logging.warning("=" * 60)
                 intervention = self.machine.__dict__.get("nemesis_intervention")
