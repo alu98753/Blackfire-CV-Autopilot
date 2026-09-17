@@ -220,6 +220,7 @@ class NavigationHandler(BaseStateHandler):
 
     def __init__(self, machine):
         super().__init__(machine)
+        self.scene_detector = getattr(machine, "scene_detector", None) or SceneDetector(self.matcher)
         self.card_alignment_target_tab = None
         self.card_alignment_tab = None
         self.card_alignment_attempts = 0

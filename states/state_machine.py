@@ -52,6 +52,7 @@ from states.nemesis_intervention import NemesisIntervention
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 from utils.dungeon_catalog import DungeonCatalog
 from utils.scene_types import SceneId
+from utils.scene_detector import SceneDetector
 
 
 
@@ -136,6 +137,7 @@ class GameStateMachine:
         self.capturer = capturer
         self.capture_port = capturer
         self.matcher = matcher
+        self.scene_detector = SceneDetector(matcher=matcher)
         self.mouse = mouse
         self.input_port = mouse
         self.clock = clock or SystemClock()
@@ -1066,7 +1068,7 @@ class GameStateMachine:
             from states.navigation_routing import resolve_detection_request
             from utils.scene_detector import SceneDetector
 
-            scene = SceneDetector(matcher=self.matcher).detect(
+            scene = self.scene_detector.detect(
                 screen_img,
                 machine=self,
                 request=resolve_detection_request(self),

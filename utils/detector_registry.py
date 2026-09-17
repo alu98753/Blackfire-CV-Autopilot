@@ -12,6 +12,7 @@ class DetectorGroup(str, Enum):
     TABS = "tabs"
     DUNGEON = "dungeon"
     OTHER = "other"
+    BATTLE = "battle"
 
 
 class DetectorRegistry:
@@ -79,7 +80,7 @@ class DetectorRegistry:
             }
         ),
         DetectionProfileId.LOADING: frozenset({DetectorGroup.SAFETY}),
-        DetectionProfileId.BATTLE: frozenset({DetectorGroup.SAFETY}),
+        DetectionProfileId.BATTLE: frozenset({DetectorGroup.SAFETY, DetectorGroup.BATTLE}),
         DetectionProfileId.RESULT: frozenset({DetectorGroup.SAFETY}),
     }
 
@@ -97,14 +98,16 @@ class DetectorRegistry:
 
     @staticmethod
     def classify(template_name, runtime_templates=()):
-        # Battle anchors are global safety evidence. An expected lobby tab is
-        # a perception scope, never proof that the game is still in the lobby.
         if template_name in {
-            "task_complete.png",
-            "dungeons/dungeons_complete.png",
             "common/auto.png",
             "battle/battle_features_1.png",
             "battle/battle_features_2.png",
+        }:
+            return DetectorGroup.BATTLE
+        # Safety evidence remains globally visible.
+        if template_name in {
+            "task_complete.png",
+            "dungeons/dungeons_complete.png",
         }:
             return DetectorGroup.SAFETY
         if template_name in {"common/door.png", "diamond.png"}:

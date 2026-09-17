@@ -196,6 +196,7 @@ def resolve_detection_request(machine) -> SceneDetectionRequest:
             expected_tab=None,
             tab_scope=LobbyTabScope.FULL_RELOCALIZE,
             reason="machine_none",
+            allow_battle_evidence=True,
         )
 
     expected_tab = resolve_expected_tab_from_machine(machine)
@@ -205,6 +206,7 @@ def resolve_detection_request(machine) -> SceneDetectionRequest:
             expected_tab=None,
             tab_scope=LobbyTabScope.FULL_RELOCALIZE,
             reason="uncommitted_route",
+            allow_battle_evidence=True,
         )
 
     profile = TAB_ID_TO_PROFILE.get(expected_tab, DetectionProfileId.LOBBY)
@@ -213,6 +215,7 @@ def resolve_detection_request(machine) -> SceneDetectionRequest:
         expected_tab=expected_tab,
         tab_scope=LobbyTabScope.EXPECTED_TAB,
         reason="navigation_steady",
+        allow_battle_evidence=True,
     )
 
 
