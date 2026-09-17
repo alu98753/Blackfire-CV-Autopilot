@@ -649,7 +649,7 @@ class GameStateMachine:
         Visual state detection and bag-cleanup recovery can enter EXPLORING
         while a temporary town/subflow or non-dungeon config (e.g. domain, stage)
         is active. Those configs either lack ``explore_priorities`` or define
-        non-dungeon priorities (e.g. ``domains/golden_empire/explore_btn.png``).
+        non-dungeon priorities (e.g. ``domains/common/explore_btn.png``).
         """
         active_config = self.config or {}
         if self.is_dungeon_explore_config(active_config):
@@ -1197,7 +1197,7 @@ class GameStateMachine:
                         
         # 4.5 檢查是否在領地探索中 (例如黃金古國主場景 explore_btn.png 或 exit_to_lobby.png)
         domain_features = [
-            "domains/golden_empire/explore_btn.png",
+            "domains/common/explore_btn.png",
             "domains/common/exit_to_lobby.png",
         ]
         is_domain_mode = (

@@ -53,7 +53,7 @@ class BattleHandler(BaseStateHandler):
         # Check domain anchor before auto.png
         cur_type = self.machine.config.get("type") if self.machine.config else None
         is_domain = cur_type == "domain" or bool(self.machine.config and self.machine.config.get("domain"))
-        domain_anchor = "domains/golden_empire/explore_btn.png"
+        domain_anchor = "domains/common/explore_btn.png"
         if is_domain and os.path.exists(os.path.join("templates", domain_anchor)):
             pos, conf = self.matcher.match(screen_img, domain_anchor, threshold=0.85, quiet=True)
             if pos:
@@ -205,7 +205,7 @@ class BattleHandler(BaseStateHandler):
                     is_in_domain = False
                     cur_type = self.machine.config.get("type") if self.machine.config else None
                     if cur_type == "domain" or bool(self.machine.config and self.machine.config.get("domain")):
-                        domain_btn = "domains/golden_empire/explore_btn.png"
+                        domain_btn = "domains/common/explore_btn.png"
                         if os.path.exists(os.path.join("templates", domain_btn)):
                             pos_de, conf_de = self.matcher.match(screen_img, domain_btn, threshold=0.80)
                             if pos_de:

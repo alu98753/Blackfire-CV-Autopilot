@@ -133,7 +133,7 @@ domain_tab_btn = "domains/Domains_entry.png"
 domain_tab_after_btn = "domains/Domains_entry_after.png"
 domain_entry_btn = "domains/golden_empire/entry.png"
 domain_reset_max_attempts = 7
-explore_priorities = ["domains/golden_empire/explore_btn.png"]
+explore_priorities = ["domains/common/explore_btn.png"]
 lobby_start_btn = "domains/common/start_btn.png"
 result_buttons = ["common/continue.png", "common/continue_gray.png"]
 
