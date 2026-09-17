@@ -98,9 +98,13 @@ Worktree closeout has one safety owner: the branch-completion workflow. Before n
 canonical junction, detach only that local reparse object, and verify that the canonical
 environment survived. Missing, physical, wrong-target, unsupported, or ambiguous `.venv`
 states fail closed. The helper never performs force removal, pruning, branch deletion, or
-shared-environment mutation. Partial removal is classified for explicit stale proof; only
-the branch-completion workflow may run `git worktree prune --verbose` after that proof and
-must re-read `git worktree list --porcelain` afterward.
+shared-environment mutation. Partial removal is classified for explicit stale proof; after
+that proof, the same helper may be invoked with `-PartialRemovalRecovery` to inspect residual
+`.venv` and detach only an exact canonical junction. Only the branch-completion workflow may
+run `git worktree prune --verbose`, and it must re-read `git worktree list --porcelain`
+afterward. If a normal detach succeeded but a later worktree removal failed,
+`-DetachedPendingRemove` is an explicit retry evidence mode, not a general missing-`.venv`
+exemption.
 8. Dependency mutation is a repository-level environment operation, not ordinary branch-local work.
 9. Safe shared-environment mutation/locking/rebuild semantics are deferred to `shared-environment-mutation-protocol` in `docs/tasks/BACKLOG.md`.
 

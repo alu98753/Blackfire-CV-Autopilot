@@ -375,6 +375,76 @@ class WorkflowScriptContractTests(unittest.TestCase):
             self.assertNotIn("worktree remove --force", helper_text.lower())
             self.assertNotIn("worktree prune", helper_text.lower())
 
+    def test_partial_recovery_detaches_residual_junction_only_after_explicit_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            (worktree / ".git").unlink()
+            canonical = root / "canonical"
+            canonical.mkdir()
+            self.make_junction(worktree / ".venv", canonical)
+
+            normal = self.run_cleanup_helper(worktree, canonical, "-Detach")
+            self.assertEqual(self.helper_result(normal)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            self.assertTrue((worktree / ".venv").exists())
+
+            recovery = self.run_cleanup_helper(worktree, canonical, "-PartialRemovalRecovery", "-Detach")
+            self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
+            self.assertEqual(self.helper_result(recovery)["code"], "DETACHED")
+            self.assertFalse((worktree / ".venv").exists())
+            self.assertTrue(canonical.exists())
+
+    def test_partial_recovery_absent_is_safe_only_in_explicit_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            (worktree / ".git").unlink()
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            normal = self.run_cleanup_helper(worktree, canonical)
+            self.assertEqual(self.helper_result(normal)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            recovery = self.run_cleanup_helper(worktree, canonical, "-PartialRemovalRecovery")
+            self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
+            self.assertEqual(self.helper_result(recovery)["code"], "SAFE_RESIDUAL_ABSENT")
+
+    def test_explicit_detached_pending_remove_does_not_accept_arbitrary_missing_venv(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            canonical = root / "canonical"
+            canonical.mkdir()
+            result = self.run_cleanup_helper(worktree, canonical, "-DetachedPendingRemove")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(self.helper_result(result)["code"], "DETACHED_PENDING_REMOVE")
+
+            worktree_without_marker = root / "without-marker"
+            worktree_without_marker.mkdir()
+            result = self.run_cleanup_helper(worktree_without_marker, canonical, "-DetachedPendingRemove")
+            self.assertEqual(self.helper_result(result)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+
+    def test_partial_recovery_preserves_physical_and_wrong_target_venv(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            physical = root / "physical"
+            physical.mkdir()
+            (physical / ".venv").mkdir()
+            result = self.run_cleanup_helper(physical, canonical, "-PartialRemovalRecovery")
+            self.assertEqual(self.helper_result(result)["code"], "PHYSICAL_DIRECTORY")
+            self.assertTrue((physical / ".venv").exists())
+
+            wrong = root / "wrong"
+            wrong.mkdir()
+            wrong_target = root / "wrong-env"
+            wrong_target.mkdir()
+            self.make_junction(wrong / ".venv", wrong_target)
+            result = self.run_cleanup_helper(wrong, canonical, "-PartialRemovalRecovery", "-Detach")
+            self.assertEqual(self.helper_result(result)["code"], "WRONG_TARGET")
+            self.assertTrue((wrong / ".venv").exists())
+
     def test_cleanup_rejects_directory_symlink_as_unsupported_reparse(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

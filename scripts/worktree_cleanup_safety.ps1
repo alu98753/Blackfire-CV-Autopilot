@@ -7,7 +7,13 @@ param(
 
     [switch]$Detach,
 
-    [switch]$ClassifyOnly
+    [switch]$ClassifyOnly,
+
+    # Caller must prove stale registration/no-live-state before selecting this mode.
+    [switch]$PartialRemovalRecovery,
+
+    # Caller must prove this helper already detached .venv in this cleanup sequence.
+    [switch]$DetachedPendingRemove
 )
 
 Set-StrictMode -Version Latest
@@ -23,6 +29,9 @@ $ExitCodes = @{
     AMBIGUOUS_TARGET = 14
     TARGET_MISSING = 15
     POSTCONDITION_FAILED = 16
+    SAFE_RESIDUAL_ABSENT = 17
+    DETACHED_PENDING_REMOVE = 18
+    INVALID_RECOVERY_MODE = 19
     PARTIAL_REMOVAL_REQUIRES_STALE_PROOF = 20
     INVALID_ARGUMENT = 64
     INTERNAL_ERROR = 70
@@ -55,22 +64,43 @@ function Write-Result([string]$Code, [string]$Message, [hashtable]$Data = @{}) {
 }
 
 try {
+    if ($PartialRemovalRecovery -and $DetachedPendingRemove) {
+        Write-Result 'INVALID_RECOVERY_MODE' 'recovery modes are mutually exclusive' @{}
+    }
+    if ($PartialRemovalRecovery -and $Detach -and $ClassifyOnly) {
+        Write-Result 'INVALID_RECOVERY_MODE' 'recovery mode cannot combine detach and classify-only' @{}
+    }
+
     $worktree = Normalize-WindowsPath $WorktreePath
     $canonical = Normalize-WindowsPath $CanonicalEnvironmentPath
     $venv = Join-Path $worktree '.venv'
 
     if (-not (Test-Path -LiteralPath $worktree -PathType Container)) {
+        if ($PartialRemovalRecovery) {
+            Write-Result 'SAFE_RESIDUAL_ABSENT' 'partial worktree path is absent; no residual .venv remains to detach' @{}
+        }
         Write-Result 'PARTIAL_REMOVAL_REQUIRES_STALE_PROOF' 'worktree path is missing; no prune or force cleanup performed' @{}
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $worktree '.git') -PathType Leaf) -and
-        -not (Test-Path -LiteralPath (Join-Path $worktree '.git') -PathType Container)) {
+    $gitMarker = Join-Path $worktree '.git'
+    $hasGitMarker = (Test-Path -LiteralPath $gitMarker -PathType Leaf) -or
+        (Test-Path -LiteralPath $gitMarker -PathType Container)
+    if (-not $hasGitMarker -and -not $PartialRemovalRecovery) {
         Write-Result 'PARTIAL_REMOVAL_REQUIRES_STALE_PROOF' 'worktree .git administrative marker is missing; stale proof remains the caller responsibility' @{}
     }
-    if (-not (Test-Path -LiteralPath $venv)) {
+
+    # Get-Item is intentionally attempted before Test-Path: a dangling junction is
+    # a residual link object even though Test-Path may report its followed target as absent.
+    $item = Get-Item -LiteralPath $venv -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        if ($DetachedPendingRemove -and $hasGitMarker) {
+            Write-Result 'DETACHED_PENDING_REMOVE' 'local .venv is absent after an explicitly recorded detach; retry normal worktree removal' @{}
+        }
+        if ($PartialRemovalRecovery) {
+            Write-Result 'SAFE_RESIDUAL_ABSENT' 'partial worktree has no residual .venv object; safe for caller stale-proof/prune decision' @{}
+        }
         Write-Result 'MISSING_VENV' 'registered runnable worktree has no .venv junction' @{}
     }
 
-    $item = Get-Item -LiteralPath $venv -Force
     $isReparse = (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
     if (-not $isReparse) {
         Write-Result 'PHYSICAL_DIRECTORY' '.venv is not a reparse object; preserved' @{}
@@ -93,6 +123,9 @@ try {
         Write-Result 'TARGET_MISSING' 'canonical environment is missing before detach; preserved' @{ target = $canonical }
     }
 
+    if ($DetachedPendingRemove) {
+        Write-Result 'INVALID_RECOVERY_MODE' 'detached-pending-remove requires .venv to be absent' @{}
+    }
     if ($ClassifyOnly -or -not $Detach) {
         Write-Result 'EXPECTED_JUNCTION' 'exact canonical junction verified; no detach requested' @{ target = $target }
     }

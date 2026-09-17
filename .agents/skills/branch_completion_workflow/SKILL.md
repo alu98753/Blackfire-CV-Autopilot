@@ -345,9 +345,18 @@ branch deletion 或 prune。若回傳 fail-closed code，停止並保留 filesys
 
 若 worktree 已部分移除（例如 path 或 `.git` administrative marker 缺失），不得 retry
 normal remove 或使用 `--force`。只有在另行明確證明 registration stale、沒有 live/dirty
-state 要保留後，才可由本 workflow 執行 `git worktree prune --verbose`，再重新讀取
-`git worktree list --porcelain` 並確認 intended registration 消失且 unrelated worktrees
-仍存在。Helper 不會自動 prune。
+state 要保留後，才可先以 `scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -PartialRemovalRecovery -Detach`
+檢查並 detach residual exact canonical junction。若 `.venv` 已安全不存在，recovery
+helper 回傳 `SAFE_RESIDUAL_ABSENT`。只有 filesystem safety proof 完成後，才可由本
+workflow 執行 `git worktree prune --verbose`，再重新讀取 `git worktree list --porcelain`
+並確認 intended registration 消失且 unrelated worktrees 仍存在。Helper 不會自動
+prune；physical、wrong-target、unsupported 或 ambiguous residual `.venv` 一律停止。
+
+若第一次正常 cleanup 已成功 detach `.venv`，但後續 `git worktree remove <path>` 失敗，
+workflow 必須保留該次操作 evidence，並以
+`scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -DetachedPendingRemove`
+取得 `DETACHED_PENDING_REMOVE` 後再 bounded retry。任意 missing `.venv` 不得被當成已
+detach 的證據。
 
 ### Branch deletion
 
