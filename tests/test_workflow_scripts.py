@@ -265,6 +265,56 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertTrue(value["stdout_closed"])
         self.assertTrue(value["stderr_closed"])
 
+    def test_node_workflow_contract_version_assertions(self):
+        contract = self.root / "scripts" / "node_workflow_contract.ps1"
+        valid_cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'24.19.0\'; Assert-NodeSupportedVersion \'v18.17.0\'; Assert-NodeSupportedVersion \'20.11.1\'"'
+        result_valid = subprocess.run(f'cmd.exe /d /s /c "{valid_cmd}"', cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(result_valid.returncode, 0, result_valid.stdout + result_valid.stderr)
+
+        invalid_cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'18.16.0\'"'
+        result_invalid = subprocess.run(f'cmd.exe /d /s /c "{invalid_cmd}"', cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(result_invalid.returncode, 0)
+        self.assertIn("Unsupported Node.js version", result_invalid.stdout + result_invalid.stderr)
+
+    def test_node_workflow_readiness_probe_package_boundary(self):
+        script = "import('undici').then(() => import('@opencode-ai/sdk/v2')).then(() => console.log('BOUNDARY_OK'));"
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
+        self.assertIn("BOUNDARY_OK", result.stdout)
+
+    def test_node_workflow_readiness_reports_unbootstrapped_directory(self):
+        contract = self.root / "scripts" / "node_workflow_contract.ps1"
+        test_dir = self.root / ".runtime" / "test_unbootstrapped_fixture"
+        test_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (test_dir / "package.json").write_text("{}", encoding="utf-8")
+            (test_dir / "package-lock.json").write_text("{}", encoding="utf-8")
+            ps_cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; $r = Test-NodeWorkflowDependencies -RepoRoot \'{test_dir}\'; [pscustomobject]@{{ Ready = $r.Ready; Reason = $r.Reason; Remediation = $r.Remediation }} | ConvertTo-Json -Compress"'
+            result = subprocess.run(f'cmd.exe /d /s /c "{ps_cmd}"', cwd=self.root, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            data = json.loads(result.stdout.strip())
+            self.assertFalse(data["Ready"])
+            self.assertIn("bootstrap_node_workflow_deps.ps1", data["Remediation"])
+        finally:
+            import shutil
+            shutil.rmtree(test_dir, ignore_errors=True)
+
+    def test_gate_and_readiness_contracts_do_not_mutate_dependencies(self):
+        gate_text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8")
+        contract_text = (self.root / "scripts" / "node_workflow_contract.ps1").read_text(encoding="utf-8")
+        self.assertNotIn("npm install", gate_text)
+        self.assertNotIn("npm ci", gate_text)
+        # Verify readiness contract does not invoke npm commands to mutate environment
+        self.assertNotIn("& npm", contract_text)
+        self.assertNotIn("npm install", contract_text)
+        self.assertNotIn("npm.cmd", contract_text)
+
+    def test_bootstrap_node_workflow_deps_contract(self):
+        bootstrap_text = (self.root / "scripts" / "bootstrap_node_workflow_deps.ps1").read_text(encoding="utf-8")
+        self.assertIn("npm ci", bootstrap_text)
+        self.assertNotIn("npm install ", bootstrap_text)
+        self.assertIn("Assert-NodeSupportedVersion", bootstrap_text)
+        self.assertIn("Assert-NodeWorkflowDependenciesReady", bootstrap_text)
+
     def test_windows_workflow_harness(self):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
         command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'

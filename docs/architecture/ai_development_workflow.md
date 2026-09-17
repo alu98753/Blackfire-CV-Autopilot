@@ -94,6 +94,31 @@ Normal commands consume the environment through the worktree-local path:
 8. Dependency mutation is a repository-level environment operation, not ordinary branch-local work.
 9. Safe shared-environment mutation/locking/rebuild semantics are deferred to `shared-environment-mutation-protocol` in `docs/tasks/BACKLOG.md`.
 
+## 3.1 Canonical Node workflow environment
+
+AI workflow tooling (including AI Gate reviewer adapters such as `scripts/opencode_structured_review.mjs` and deterministic workflow tests) uses repository-local Node dependencies.
+
+```text
+package.json + package-lock.json
+          |
+          | dependency SSOT
+          v
+explicit Node bootstrap (npm ci)
+          |
+          v
+<current-worktree>/node_modules
+```
+
+### Node environment invariants
+
+1. **Per-worktree `node_modules`**: Every runnable worktree owns its own untracked, local `node_modules`.
+2. **SSOT**: Root `package.json` and `package-lock.json` are the exclusive dependency single source of truth. Exact package versions (`@opencode-ai/sdk@1.18.31`, `cross-spawn@7.0.6`, `undici@6.28.1`) and `engines.node >=18.17` are locked.
+3. **No junctions / shared pools**: Node dependencies are small (~3.5 MB) and cheap to materialize; they are **not** shared across worktrees through Windows junctions or external pools. The Python shared venv design is intentionally separate.
+4. **Explicit bootstrap only**: Node dependency materialization is an explicit worktree-level operation via `.\scripts\bootstrap_node_workflow_deps.ps1` (or `npm ci` at the worktree root).
+5. **Consumer / mutator separation**: Scout, Gate, reviewers, and tests are strict consumers. They must never silently run `npm install` or `npm ci`.
+6. **Gate fail-fast preflight**: `scripts/ai_gate.ps1` validates Node executable availability, Node version (`>=18.17`), manifest/lockfile presence, and required package resolvability (`undici`, `@opencode-ai/sdk/v2`) before spawning reviewers. Unbootstrapped worktrees fail fast with clear bootstrap remediation.
+7. **Scout isolation**: `scripts/ai_scout.ps1` consumes the global OpenCode CLI and does not depend on repository `node_modules`.
+
 ## 4. Canonical task package
 
 Every active AI-assisted task uses:
@@ -171,7 +196,7 @@ Gemini/Antigravity is the production implementation writer in workflow v1. It im
 
 ### Reviewers
 
-OpenCode `spec-reviewer` and `regression-reviewer` are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift.
+OpenCode `spec-reviewer` (`steps: 8`) and `regression-reviewer` (`steps: 10`) are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift. Completed valid StructuredOutput is the terminal reviewer result.
 
 Valid structured PASS/BLOCK output is terminal for the reviewer role. Reviewer fallback is for infrastructure failure, never semantic review-shopping.
 
@@ -283,7 +308,7 @@ Do not introduce a global mutable current-task singleton. Scripts require explic
 
 ## 11. OpenCode compatibility and fallback
 
-Repository automation follows the pinned OpenCode version, launcher contract, CLI contract, and provider compatibility baseline documented by the repository.
+Repository automation follows the pinned OpenCode version, launcher contract, CLI contract, and provider compatibility baseline documented by the repository, requiring exactly OpenCode CLI version 1.18.31.
 
 Do not add unverified CLI flags or guess alternate invocation forms. Version/contract mismatch must fail fast.
 

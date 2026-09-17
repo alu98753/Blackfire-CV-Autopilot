@@ -27,6 +27,8 @@ $regressionReviewer = Join-Path $repoRoot '.opencode\agents\regression-reviewer.
 $workflowContract = Join-Path $repoRoot 'docs\architecture\ai_development_workflow.md'
 $openCodeContract = Join-Path $repoRoot 'scripts\opencode_contract.ps1'
 $bootstrap = Join-Path $repoRoot 'scripts\bootstrap_opencode.ps1'
+$nodeContract = Join-Path $repoRoot 'scripts\node_workflow_contract.ps1'
+$bootstrapNode = Join-Path $repoRoot 'scripts\bootstrap_node_workflow_deps.ps1'
 $scoutScript = Join-Path $repoRoot 'scripts\ai_scout.ps1'
 $gateScript = Join-Path $repoRoot 'scripts\ai_gate.ps1'
 
@@ -98,6 +100,20 @@ try {
         Assert-True ($scoutText -notmatch '--standalone|--pure') 'Scout production launcher contains a forbidden OpenCode flag'
         Assert-True ($gateText -notmatch '--standalone|--pure') 'Gate production launcher contains a forbidden OpenCode flag'
         Assert-True ($workflowText.Contains('exactly OpenCode CLI version 1.18.31')) 'architecture version contract missing'
+    }
+    Run-Case 'Node workflow contract and bootstrap script contracts' {
+        $nodeContractText = Get-Content $nodeContract -Raw
+        $bootstrapNodeText = Get-Content $bootstrapNode -Raw
+        $gateText = Get-Content $gateScript -Raw
+        $workflowText = Get-Content $workflowContract -Raw
+        Assert-True ($nodeContractText -match '\$NodeEngineRequiredSpec\s*=\s*">=18\.17"') 'Node engine requirement drifted'
+        Assert-True ($nodeContractText -match 'bootstrap_node_workflow_deps\.ps1') 'node contract remediation missing bootstrap script'
+        Assert-True ($bootstrapNodeText -match 'npm ci') 'bootstrap script does not use npm ci'
+        Assert-True ($bootstrapNodeText -notmatch 'npm install\b') 'bootstrap script contains forbidden npm install'
+        Assert-True ($gateText -match 'node_workflow_contract\.ps1') 'Gate does not include node_workflow_contract'
+        Assert-True ($gateText -match 'Assert-NodeWorkflowDependenciesReady') 'Gate does not check Node readiness'
+        Assert-True ($gateText -notmatch 'npm install|npm ci') 'Gate contains forbidden npm mutation'
+        Assert-True ($workflowText.Contains('Canonical Node workflow environment')) 'architecture Node workflow environment section missing'
     }
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     New-Item -ItemType Directory -Force -Path $diagnosticRoot | Out-Null
@@ -195,6 +211,16 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     Run-Case 'Gate rejects an unsupported OpenCode version before routing' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_OpenCodeVersionOverride','2.0.3'))
         Assert-True ($code -ne 0) "expected version mismatch failure, got $code"
+    }
+    Run-Case 'Gate rejects an unsupported Node version before routing' {
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_NodeVersionOverride','16.0.0'))
+        Assert-True ($code -ne 0) "expected Node version mismatch failure, got $code"
+    }
+    Run-Case 'Gate fails fast on unbootstrapped Node dependencies' {
+        $result = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_NodeExecutableOverride','nonexistent_node_binary_for_test')
+        Assert-True ($result.ExitCode -ne 0) "expected missing node failure, got $($result.ExitCode)"
+        Assert-True ($result.Output -match 'Node workflow dependencies are not ready') 'missing expected bootstrap guidance'
+        Assert-True ($result.Output -match 'bootstrap_nod') 'missing bootstrap script remediation'
     }
     Run-Case 'Gate invocation probe exercises the production argument builder' {
         $result = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_InvocationProbe')
