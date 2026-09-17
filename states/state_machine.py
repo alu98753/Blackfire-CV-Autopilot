@@ -51,6 +51,8 @@ from states.nemesis_intervention import NemesisIntervention
 
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 from utils.dungeon_catalog import DungeonCatalog
+from utils.scene_types import SceneId
+from utils.scene_detector import SceneDetector
 
 
 
@@ -135,6 +137,7 @@ class GameStateMachine:
         self.capturer = capturer
         self.capture_port = capturer
         self.matcher = matcher
+        self.scene_detector = SceneDetector(matcher=matcher)
         self.mouse = mouse
         self.input_port = mouse
         self.clock = clock or SystemClock()
@@ -546,6 +549,14 @@ class GameStateMachine:
             return
         if previous_state == self.STATE_BATTLE:
             self.battle_session.clear()
+
+    def adopt_active_battle(self, *, source: str = "scene_detection") -> bool:
+        """Adopt a visually verified battle without navigation history."""
+        if self.current_state == self.STATE_BATTLE:
+            return False
+        logging.info("[BattleAdoption] adopted visually verified active battle source=%s", source)
+        self.transition_to(self.STATE_BATTLE)
+        return True
 
     def battle_elapsed_seconds(self) -> float:
         """Return the active battle duration using the runtime clock port."""
@@ -1050,6 +1061,24 @@ class GameStateMachine:
                 return
 
         # 0.05 如果需要清理背包 (need_bag_cleaning == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
+        # Global scene acquisition shares the canonical detector with
+        # navigation. Run it before intent-owned recovery/collection so a
+        # cold-start battle cannot be masked by stale navigation context.
+        try:
+            from states.navigation_routing import resolve_detection_request
+            from utils.scene_detector import SceneDetector
+
+            scene = self.scene_detector.detect(
+                screen_img,
+                machine=self,
+                request=resolve_detection_request(self),
+            )
+            if scene.scene_type == SceneId.BATTLE:
+                self.adopt_active_battle(source="global_scene_detection")
+                return
+        except Exception as exc:
+            logging.debug("[GlobalSceneAcquisition] scene detection failed: %s", exc)
+
         if self.need_bag_cleaning:
             for town_btn in ["common/door.png", "goback_town.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):

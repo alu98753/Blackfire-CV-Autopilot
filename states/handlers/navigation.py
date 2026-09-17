@@ -220,6 +220,7 @@ class NavigationHandler(BaseStateHandler):
 
     def __init__(self, machine):
         super().__init__(machine)
+        self.scene_detector = getattr(machine, "scene_detector", None) or SceneDetector(self.matcher)
         self.card_alignment_target_tab = None
         self.card_alignment_tab = None
         self.card_alignment_attempts = 0
@@ -677,6 +678,12 @@ class NavigationHandler(BaseStateHandler):
         detection_req = resolve_detection_request(self.machine)
         scene = self.scene_detector.detect(screen_img, machine=self.machine, request=detection_req)
         frame_matches = {}
+
+        # Evidence owns this transition, before intent routing can mask a
+        # cold-start battle with collect/navigation state or expected_tab.
+        if scene.scene_type == SceneType.BATTLE:
+            self.machine.adopt_active_battle(source="navigation_scene_detection")
+            return
 
         def match_current_frame(template_name, **match_options):
             """Reuse an exact template query only while handling this screenshot."""

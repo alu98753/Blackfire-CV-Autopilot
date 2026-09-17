@@ -191,6 +191,7 @@ class SceneDetector:
         self._runtime_templates = {}
         self._frame_match_cache = {}
         self._last_tab_was_full_relocalize = False
+        self._allow_battle_evidence = False
 
     def _safe_match(self, screen_img, template_name: str, threshold: float = 0.8) -> Tuple[Optional[Tuple[int, int]], float]:
         """
@@ -198,6 +199,10 @@ class SceneDetector:
         """
         if not self.registry.allows_template(
             self._active_profile, template_name, self._runtime_templates
+        ) and not (
+            self._allow_battle_evidence
+            and self.registry.classify(template_name, self._runtime_templates)
+            == DetectorGroup.BATTLE
         ):
             return None, 0.0
         cache_key = (template_name, float(threshold))
@@ -301,8 +306,10 @@ class SceneDetector:
                 expected_tab=None,
                 tab_scope=LobbyTabScope.FULL_RELOCALIZE,
                 reason="legacy_or_unspecified",
+                allow_battle_evidence=True,
             )
         self._active_profile = effective_profile
+        self._allow_battle_evidence = bool(request.allow_battle_evidence)
         self._frame_match_cache = {}
         self._runtime_templates = self._build_runtime_templates(machine)
         scene_info = SceneInfo(scene_type=SceneType.UNKNOWN)
