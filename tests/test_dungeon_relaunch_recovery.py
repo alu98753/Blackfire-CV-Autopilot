@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 import os
 import sys
+import time
 import numpy as np
 
 # 將專案根目錄加入系統路徑
@@ -103,7 +104,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
     @patch("os.path.exists")
     def test_3_explore_handler_handles_leave_anchor(self, mock_exists):
         """
-        測試 3：ExploreHandler 處理 dungeons/leave.png 錨點時，維持 is_in_dungeon = True、重置樓層記憶與 no_explore_match_count，且絕對不發送點擊
+        測試 3：ExploreHandler 處理 dungeons/leave.png 錨點時，維持 is_in_dungeon = True、重置樓層記憶，且絕對不發送點擊、不視為可執行事件進展
         """
         handler = ExploreHandler(self.machine)
         self.machine.is_in_dungeon = True
@@ -124,7 +125,8 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         # 斷言樓層過渡記憶被重置
         self.assertFalse(self.machine.dungeon_floor_transitioning)
         self.assertFalse(self.machine.chest_opened_this_floor)
-        # 斷言救援計數器被重置為 0
+        # 斷言 leave.png 具備 non-consuming passive 語意，累加 actionless ticks 而非作為 actionable 進展清零
+        self.assertEqual(handler.dungeon_actionless_ticks, 0)
         self.assertEqual(handler.no_explore_match_count, 0)
         # 斷言 leave.png 為錨點，絕不點擊 exit 按鈕
         self.mock_mouse.click.assert_not_called()
@@ -289,6 +291,129 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
 
         # 斷言成功點擊下樓按鈕
         self.mock_mouse.click.assert_called_with(self.rect["left"] + 150, self.rect["top"] + 400)
+
+    @patch("os.path.exists")
+    def test_8_multi_tick_passive_anchor_stall_escalation(self, mock_exists):
+        """
+        測試 8：連續多 tick 僅見 leave.png，證明：
+        1. 不會被 leave.png consume 或 click
+        2. 不會被不斷清空 actionless 計數
+        3. 達到停滯閾值後觸發有界局部處置 (轉移至 STATE_UNKNOWN)
+        """
+        mock_exists.return_value = True
+        self.machine.is_in_dungeon = True
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.machine.config = {
+            "type": "dungeon",
+            "explore_priorities": [
+                "dungeons/dungeons_complete.png",
+                "dungeons/Treasure.png",
+                "dungeons/skill_event.png",
+                "dungeons/dungeon_bless.png",
+                "dungeons/gungeon_godown.png",
+                "dungeons/leave.png",
+            ]
+        }
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+
+        # 模擬畫面上只有 leave.png，無任何可執行事件
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+
+        threshold = explore_handler.DUNGEON_ACTIONLESS_STALL_THRESHOLD
+        for tick in range(1, threshold):
+            explore_handler.handle(self.fake_img, self.rect)
+            self.assertEqual(explore_handler.dungeon_actionless_ticks, tick)
+            self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+            self.mock_mouse.click.assert_not_called()
+
+        # 第 threshold 次 tick：達到停滯閾值，轉移至 STATE_UNKNOWN
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_UNKNOWN)
+        self.assertEqual(explore_handler.dungeon_actionless_escalations, 1)
+        self.mock_mouse.click.assert_not_called()
+
+    @patch("os.path.exists")
+    def test_9_legal_wait_windows_suppress_actionless_stall(self, mock_exists):
+        """
+        測試 9：合法等待窗口 (下樓過渡中、通關退出中、領取祝福 3.5s 內) 期間，
+        即使無可執行事件，也不得被判為停滯或累加 actionless ticks
+        """
+        mock_exists.return_value = True
+        self.machine.is_in_dungeon = True
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.machine.config = {
+            "type": "dungeon",
+            "explore_priorities": ["dungeons/leave.png"]
+        }
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+
+        # 模擬只有 leave.png
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+
+        # 1. 處於下樓過渡期內
+        self.machine.dungeon_floor_transitioning = True
+        self.machine.last_godown_click_time = time.time()
+        explore_handler.dungeon_actionless_ticks = 0
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+        self.machine.dungeon_floor_transitioning = False
+        self.machine.last_godown_click_time = None
+
+        # 2. 處於通關退出中
+        self.machine.dungeon_completing = True
+        self.machine.last_dungeon_complete_click_time = time.time()
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+        self.machine.dungeon_completing = False
+
+        # 3. 處於領取祝福 3.5 秒冷卻結算期內
+        self.machine.bless_received_this_floor = True
+        self.machine.last_bless_claim_time = time.time()
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+
+    @patch("os.path.exists")
+    def test_10_recovery_reentry_preserves_stall_budget(self, mock_exists):
+        """
+        測試 10：EXPLORING -> UNKNOWN 重新定位後若再度進入 EXPLORING 且畫面仍只有 leave.png，
+        停滯預算不會被無條件清空，避免形成 UNKNOWN -> EXPLORING -> UNKNOWN 的無限循環。
+        """
+        mock_exists.return_value = True
+        self.machine.is_in_dungeon = True
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.machine.config = {
+            "type": "dungeon",
+            "explore_priorities": ["dungeons/leave.png"]
+        }
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+
+        # 讓 ticks 達到閾值觸發升級
+        threshold = explore_handler.DUNGEON_ACTIONLESS_STALL_THRESHOLD
+        for _ in range(threshold):
+            explore_handler.handle(self.fake_img, self.rect)
+
+        self.assertEqual(self.machine.current_state, self.machine.STATE_UNKNOWN)
+        # 驗證升級後保留了預算 (預設 budget=3，因此剩餘 ticks = threshold - budget = 7)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, threshold - explore_handler.DUNGEON_ACTIONLESS_REENTRY_BUDGET)
+
+        # 模擬狀態機從 UNKNOWN 再次辨識到 leave.png 重回 EXPLORING
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        # 再只需跑 budget 次 tick 即會再次觸發處置，而非重新從 0 算起整套滿額
+        for _ in range(explore_handler.DUNGEON_ACTIONLESS_REENTRY_BUDGET - 1):
+            explore_handler.handle(self.fake_img, self.rect)
+            self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_UNKNOWN)
+        self.assertEqual(explore_handler.dungeon_actionless_escalations, 2)
 
 
 if __name__ == "__main__":
