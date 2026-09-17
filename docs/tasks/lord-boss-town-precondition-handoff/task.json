@@ -1,0 +1,24 @@
+{
+  "id": "lord-boss-town-precondition-handoff",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/town_subflow_registry.py",
+    "states/state_machine.py",
+    "states/handlers/lobby.py",
+    "tests/test_town_subflow_precondition_navigation.py",
+    "tests/test_behavior_dungeon_state_machine.py"
+  ],
+  "focused_tests": [
+    "tests/test_town_subflow_precondition_navigation.py",
+    "tests/test_behavior_dungeon_state_machine.py"
+  ],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  }
+}
