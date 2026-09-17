@@ -129,6 +129,7 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("notification", "language"),
     ("nemesis_intervention", "grace_period_seconds"),
     ("nemesis_intervention", "notification_count"),
+    ("nemesis",),
 )
 
 
@@ -170,7 +171,9 @@ def get_profile_config_path(profile: str | None = None) -> Path:
 
 def get_defaults_config() -> dict:
     """Return defaults merged with the optional profile/local runtime override file."""
-    return _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_override_config())
+    settings = _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_override_config())
+    _validate_nemesis_policy(settings.get("nemesis"))
+    return settings
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -182,6 +185,43 @@ def _deep_merge(base: dict, override: dict) -> dict:
         else:
             merged[key] = deepcopy(value)
     return merged
+
+
+def _validate_nemesis_policy(policy: dict | None) -> None:
+    """Validate the global, explicit Nemesis routing lists at the config boundary."""
+    if not isinstance(policy, dict):
+        raise ValueError("nemesis must be a table")
+
+    unknown_keys = set(policy) - {"intervene", "flee"}
+    if unknown_keys:
+        raise ValueError(f"unsupported nemesis policy keys: {sorted(unknown_keys)}")
+
+    seen: dict[str, str] = {}
+    for action in ("intervene", "flee"):
+        entries = policy.get(action, [])
+        if not isinstance(entries, list):
+            raise ValueError(f"nemesis.{action} must be a list")
+        for entry in entries:
+            if not isinstance(entry, str) or not entry.strip():
+                raise ValueError(f"nemesis.{action} entries must be non-empty relative path strings")
+            path = entry.strip()
+            path_obj = Path(path)
+            if path_obj.is_absolute() or ".." in path_obj.parts:
+                raise ValueError(f"nemesis.{action} entries must be relative template paths: {entry!r}")
+            previous = seen.get(path)
+            if previous is not None:
+                raise ValueError(f"Nemesis template appears in both nemesis.{previous} and nemesis.{action}: {path}")
+            seen[path] = action
+
+
+def get_nemesis_policy() -> dict[str, list[str]]:
+    """Return the validated global Nemesis policy with lists copied for callers."""
+    policy = get_defaults_config().get("nemesis", {})
+    _validate_nemesis_policy(policy)
+    return {
+        "intervene": list(policy.get("intervene", [])),
+        "flee": list(policy.get("flee", [])),
+    }
 
 
 def _get_override_config() -> dict:

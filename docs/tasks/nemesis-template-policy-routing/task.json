@@ -11,7 +11,8 @@
     "tests/test_nemesis_intervention.py",
     "tests/test_behavior_dungeon_nemesis.py",
     "tests/test_behavior_golden_empire.py",
-    "tests/test_config_ssot.py"
+    "tests/test_config_ssot.py",
+    "tests/test_nemesis_template_policy_routing.py"
   ],
   "models": {
     "scout": null,
