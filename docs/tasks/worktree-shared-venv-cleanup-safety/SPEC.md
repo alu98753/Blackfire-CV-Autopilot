@@ -1,103 +1,267 @@
 # worktree-shared-venv-cleanup-safety
 
-Status: Draft
+Status: Final
 
 ## Goal
 
 Make task-worktree closeout safe when each worktree consumes the repository-global Python environment through a local `.venv` Windows junction.
 
-The current closeout contract says an active task worktree with a `.venv` junction can proceed directly to `git worktree remove <path>`. A real closeout demonstrated that this is unsafe on Windows: Git removal traversed into the junction target, attempted to unlink files from the canonical shared environment, hit a locked `.pyd`, partially removed the worktree (including `.git`), and left stale Git worktree metadata that still held the task branch.
+A real closeout demonstrated that the current instruction sequence is unsafe on Windows: `git worktree remove <path>` was invoked while `<worktree>\.venv` still pointed at the canonical shared environment, Git traversed the junction and attempted to unlink files under the external environment, a locked `.pyd` interrupted removal, the worktree was partially deleted (including `.git`), and stale Git worktree metadata continued to own the task branch.
 
-This task must make closeout preserve the canonical shared environment, prevent partial-removal failure where practical, and define deterministic recovery when stale worktree metadata already exists.
+This task must make closeout mechanically preserve the canonical shared environment, prevent this normal-removal hazard, and define bounded recovery for the known stale-registration state.
 
-## Lightweight survey evidence
+## Evidence basis
 
-Verified on `main` commit `4c7c1ec705b19a9cd249f1b3e8550b93856976b0`:
+The Final SPEC is based on:
 
-- `docs/architecture/ai_development_workflow.md` is the canonical workflow/workspace/environment SSOT. It defines one repository-global environment at `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot` and requires each runnable worktree to expose a local `.venv` Windows junction to that environment.
-- `.agents/skills/branch_completion_workflow/SKILL.md` is the canonical branch closeout procedure. Its current active-worktree cleanup step explicitly notes that `.venv` is only a junction consumer, but then instructs normal `git worktree remove <path>` without first unlinking/verifying that junction.
-- The observed production incident occurred after `git worktree remove` attempted to unlink `...\.venv\Lib\site-packages\bidi\bidi.cp311-win_amd64.pyd`; the operation then left the worktree partially removed. After manually removing the `.venv` junction, a second `git worktree remove` failed because `<worktree>\.git` no longer existed, while `git branch -d` remained blocked because Git still registered the worktree.
-- The canonical shared environment itself remained valid after the junction was removed with `rmdir <worktree>\.venv`.
-- `docs/tasks/BACKLOG.md` does not currently contain this promoted task. Existing `shared-environment-mutation-protocol` is a different concern: dependency mutation/locking/rebuild. This task must not expand into shared-environment mutation semantics.
+- lightweight survey of current `main` and closeout contracts;
+- the real failure observed during `nemesis-user-intervention-lifecycle` cleanup;
+- user-authorized Gemini/Antigravity read-only fallback survey in `CONTEXT.md`;
+- current workflow test infrastructure in `tests/test_workflow_scripts.py` and `tests/workflow_scripts/`.
 
-This is intentionally a lightweight pre-survey pass. The user explicitly authorized Gemini/Antigravity to replace OpenCode Scout for one read-only evidence survey for this task.
+Confirmed evidence:
+
+- `docs/architecture/ai_development_workflow.md` is the canonical workspace/environment SSOT.
+- `.agents/skills/branch_completion_workflow/SKILL.md` is the closeout orchestration owner.
+- There is no existing repository-owned worktree cleanup helper.
+- The current closeout contract acknowledges that `.venv` is only a junction consumer but still hands directly to `git worktree remove <path>`.
+- Windows reparse evidence from an existing worktree showed the expected `.venv` as mount-point/junction tag `0xA0000003` targeting `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot`.
+- The existing workflow script test harness is the nearest deterministic test owner for a small helper.
+
+## Architectural decision
+
+This task will add a **small deterministic cleanup helper plus tests plus contract updates**.
+
+Documentation-only enforcement is insufficient because junction classification, target verification, fail-closed destructive handoff, and stale-registration recovery are mechanical safety invariants that should not depend on a human remembering command ordering.
+
+The branch-completion workflow remains the orchestration owner. The helper is a narrow filesystem/worktree-safety primitive and must not become a general worktree manager.
 
 ## Scope
 
-- Correct the canonical closeout workflow so a task worktree's `.venv` junction is safely detached before the worktree directory is removed.
-- Mechanically verify that a detected `.venv` is the expected Windows junction/reparse point and resolves to the canonical repository-global environment before automatic unlink is permitted.
-- Never recursively delete or mutate the physical canonical shared environment during ordinary task closeout.
-- Define fail-fast behavior when `.venv` is a normal directory, symlink/reparse point to an unexpected target, missing in a context where the workflow expects it, or otherwise ambiguous.
-- Define deterministic recovery for the known partial-removal state where the worktree directory or `.git` marker has already disappeared but `git worktree list` still contains stale metadata. The recovery should use Git-supported stale-metadata cleanup (`git worktree prune`) only after proving the registered worktree is stale; it must not force-delete a live/dirty worktree.
-- Preserve the current ancestry, cleanliness, branch ownership, and remote/main synchronization gates before cleanup.
-- Update the durable workspace/closeout contract where needed so future ChatGPT/Gemini instructions do not regress to unsafe `git worktree remove` ordering.
-- Add the smallest useful deterministic automation/test surface if one already exists or if introducing a narrowly scoped helper is justified by survey evidence. Do not invent a broad worktree manager solely for this task.
+### 1. Narrow cleanup helper
+
+Add a repository-owned helper under `scripts/` with a narrow responsibility:
+
+- inspect one explicit task worktree path;
+- classify `<worktree>\.venv` without following it as proof of ownership;
+- verify that the local `.venv` is the expected Windows junction/mount-point reparse object;
+- verify its normalized target equals the canonical external environment;
+- unlink only the verified local junction itself;
+- verify the local `.venv` is gone and the canonical environment still exists;
+- report deterministic success/failure suitable for branch-completion orchestration;
+- support bounded classification of the known stale-registration recovery state.
+
+The exact filename/API may be chosen during implementation, but it should be small, non-interactive, and independently testable.
+
+### 2. Safe normal cleanup order
+
+Canonical normal closeout becomes:
+
+```text
+verify integration ancestry / clean worktree / branch ownership
+    -> verify .venv is exact canonical junction
+    -> detach local .venv junction only
+    -> verify canonical environment still exists
+    -> git worktree remove <path>
+    -> re-read git worktree list --porcelain
+    -> only after branch no longer has a worktree owner may branch deletion proceed
+```
+
+`git worktree remove --force` remains forbidden for unknown/dirty state.
+
+### 3. Bounded stale-registration recovery
+
+Define recovery for the known partial-removal state:
+
+```text
+worktree removal already failed
++ worktree registration still exists
++ worktree path / .git administrative marker is demonstrably absent or invalid
++ no live/dirty worktree state remains to preserve
+    -> classify registration as stale
+    -> git worktree prune --verbose
+    -> re-read git worktree list --porcelain
+    -> verify intended stale registration is gone
+    -> only then allow branch deletion
+```
+
+`git worktree prune` is not a general cleanup command. It is permitted only after explicit stale proof.
+
+### 4. Contract convergence
+
+Update durable workflow wording so the same safe order is not contradicted elsewhere.
+
+At minimum inspect/update as needed:
+
+- `.agents/skills/branch_completion_workflow/SKILL.md` — detailed closeout owner and command/order contract;
+- `docs/architecture/ai_development_workflow.md` — durable workspace/environment invariant and cross-reference to safe cleanup;
+- `.agents/skills/branch_start_workflow/SKILL.md` — only if needed to keep junction lifecycle wording consistent; startup must not duplicate closeout logic.
+
+Avoid creating multiple independent cleanup algorithms in docs.
+
+## Junction verification contract
+
+Automatic unlink is permitted only when all of the following are proven:
+
+1. `<worktree>\.venv` exists as a directory-like reparse object.
+2. Reparse metadata identifies the object as a Windows junction / mount point, not an ordinary directory and not an unsupported/unknown reparse type.
+3. The junction target is obtained from reparse/link metadata rather than by following the path and guessing ownership from the resolved contents.
+4. After normalization, the target is exactly the canonical environment path:
+   `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot`.
+5. The canonical target exists before detach.
+6. The detach operation addresses the link path itself only and is non-recursive with respect to the target.
+7. After detach, `<worktree>\.venv` is absent and the canonical environment still exists.
+
+Implementation may use PowerShell/.NET/Windows filesystem metadata or another repository-available structured mechanism. `fsutil reparsepoint query` may be used as diagnostic evidence but must not be accepted via loose substring parsing as the sole ownership proof. `Resolve-Path` alone is insufficient because it follows the junction.
+
+Path comparison must be strict and normalized for Windows semantics, including case-insensitivity and trailing separators. If extended/UNC forms or metadata fields cannot be normalized unambiguously, fail closed rather than infer equivalence.
+
+## Cleanup decision tree
+
+### A. `.venv` is the expected canonical junction
+
+Proceed:
+
+- detach local junction only;
+- verify canonical target survived;
+- then perform normal `git worktree remove`.
+
+### B. `.venv` is missing on an otherwise normal, registered, runnable task worktree
+
+Fail fast.
+
+Rationale: runnable task worktrees are required to consume the canonical environment through their local `.venv`. Missing junction is not silently treated as successful cleanup because doing so would hide topology drift or an earlier partial-removal event.
+
+If surrounding evidence instead proves the worktree is already partially removed/stale, classify under stale-recovery rules rather than normal cleanup.
+
+### C. `.venv` is a normal physical directory
+
+Fail closed and preserve it. Do not recursively remove it and do not continue with worktree removal automatically.
+
+### D. `.venv` is a junction/reparse object with an unexpected target or unsupported reparse type
+
+Fail closed and preserve it. Ownership is not proven.
+
+### E. Worktree path or `.git` is already missing / partial removal suspected
+
+Do not retry normal removal and do not use `--force`.
+
+Inspect Git registration and filesystem state. Only transition to stale-registration recovery after proving no live/dirty worktree state remains to preserve.
+
+### F. Registration proven stale
+
+Run bounded `git worktree prune --verbose`, then re-read `git worktree list --porcelain` and verify the intended registration disappeared while unrelated registrations remain.
+
+### G. Live or dirty registered worktree
+
+Stop. No prune, reset, clean, force removal, or recursive deletion.
+
+## Helper responsibility boundary
+
+The helper may own:
+
+- `.venv` classification;
+- exact canonical-target verification;
+- safe local junction detach;
+- postcondition verification;
+- structured diagnostics/result codes for normal-vs-stale cleanup decisions.
+
+The helper must not own:
+
+- merge or push to `main`;
+- task ancestry policy beyond consuming explicit preconditions supplied by the closeout workflow;
+- task branch deletion;
+- remote branch deletion;
+- broad worktree creation/removal orchestration;
+- recursive deletion of unknown directories;
+- shared environment mutation;
+- package installation;
+- `git worktree remove --force`;
+- automatic pruning of ambiguous/live registrations.
+
+The branch-completion workflow remains responsible for sequencing, integration checks, worktree removal, prune authorization after stale proof, and branch deletion.
 
 ## Known invariants
 
-- The canonical physical environment is external to all Git worktrees:
+- Canonical physical environment:
   `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot`.
-- A task worktree owns only its local `.venv` junction, never the target environment.
-- Cleanup must never execute recursive deletion against the canonical environment target.
-- Ordinary closeout remains an environment-consumer operation: no `pip install`, `pip uninstall`, venv recreation, editable install, or dependency mutation.
-- Git worktree topology is live local-machine state; cleanup must inspect `git worktree list --porcelain` instead of assuming remembered ownership.
-- Cleanup must verify task ancestry in `origin/main` before deleting the task worktree/branch.
-- Dirty or ambiguous worktree state must fail closed; `--force`, `reset --hard`, `clean -fd`, or equivalent destructive shortcuts remain forbidden.
-- Local branch deletion happens only after no registered worktree owns the branch.
+- No Git worktree owns the physical environment.
+- A task worktree owns only its local `.venv` junction.
+- Cleanup must never recursively delete or mutate the canonical environment target.
+- Ordinary closeout is an environment-consumer operation: no `pip install`, `pip uninstall`, venv recreation, editable install, or dependency mutation.
+- Cleanup inspects current `git worktree list --porcelain`; remembered paths/branch ownership are not authoritative.
+- Task ancestry in `origin/main` is verified before cleanup.
+- Dirty or ambiguous state fails closed.
+- Local branch deletion is allowed only after no registered worktree owns the branch.
+- Legacy/non-canonical worktree paths may be cleaned in place, but they do not weaken junction verification or stale-state safety.
 - `shared-environment-mutation-protocol` remains out of scope.
 
 ## Non-goals
 
-- No redesign of the shared Python environment topology.
-- No dependency mutation, locking, rebuild, or package-management protocol.
-- No general Git worktree orchestration framework unless existing repository structure already has the correct owner and only a narrow extension is needed.
-- No automatic deletion of unknown `.venv` directories or reparse points.
-- No `git worktree remove --force` fallback for unknown/dirty state.
-- No unrelated changes to Scout/Gate/model routing or game runtime behavior.
-- No production implementation while this SPEC remains Draft.
+- No redesign of shared Python environment topology.
+- No dependency mutation/locking/rebuild/package-management protocol.
+- No general Git worktree manager.
+- No automatic deletion of unknown `.venv` directories/reparse points.
+- No `git worktree remove --force` fallback.
+- No automatic `git worktree prune` on merely suspicious state.
+- No unrelated Scout/Gate/model-routing/game-runtime changes.
 
-## Provisional acceptance criteria
+## Tests / validation strategy
 
-1. Canonical closeout no longer instructs `git worktree remove` while an attached worktree-local `.venv` junction still points at the canonical shared environment.
-2. Before unlinking `.venv`, cleanup verifies it is a junction/reparse point and that its resolved target equals the canonical environment path.
-3. A verified junction is removed by unlinking the junction itself only; the canonical environment remains present and usable afterward.
-4. If `.venv` is a real directory or points anywhere unexpected, cleanup stops with an actionable diagnostic and does not remove either `.venv` or the worktree.
-5. After safe junction detach, normal clean-worktree removal proceeds without `--force`.
-6. If an earlier failed removal already deleted `.git` / enough of the worktree that Git considers the registration stale, the workflow can detect that state and use `git worktree prune --verbose` as bounded recovery, then re-check `git worktree list --porcelain` before branch deletion.
-7. A live registered worktree is never pruned merely because cleanup encountered an unrelated error.
-8. Branch deletion remains blocked until the worktree registration no longer owns the branch.
-9. The durable contract documents the safe order and recovery path once, without creating contradictory SSOTs.
-10. If implementation adds automation/helper logic, deterministic tests cover at minimum: expected junction target, missing junction, real directory, wrong-target junction, normal removal handoff, and stale-registration recovery without touching a live worktree.
+Use deterministic filesystem/control-flow tests. Never target the real canonical environment in automated tests.
 
-## Uncertainty for Gemini read-only survey
+Use temporary fixture directories and the existing workflow test harness where practical. If actual junction creation is reliable in the test environment, create temporary junctions only to temporary targets. Otherwise provide an injectable/classification seam so reparse metadata and command results can be simulated without privileges.
 
-Gemini must resolve these facts before this SPEC becomes Final:
+Focused coverage must include at least:
 
-- Whether branch completion is intentionally instruction-only (`SKILL.md`) or whether an existing repository-owned cleanup/helper script should be the mechanical owner of junction inspection/unlink/recovery.
-- Whether Windows-native commands already used by the repository can reliably distinguish junction vs directory and resolve the junction target without external dependencies; identify the safest non-interactive command/API contract.
-- Whether `git worktree prune` can be safely bounded by prior checks to the exact stale state observed, and what evidence should be re-checked after pruning.
-- Whether cleanup should treat a missing `.venv` as acceptable for non-runnable/legacy worktrees or as a fail-fast condition; preserve existing legacy-path policy.
-- The smallest useful test strategy for a Windows/junction cleanup contract: docs/skill-only validation, PowerShell/Python helper tests using temporary directories, or an existing workflow test harness.
-- Whether `docs/architecture/ai_development_workflow.md`, `.agents/skills/branch_completion_workflow/SKILL.md`, and any related startup/environment skill need synchronized wording to avoid future contradictory commands.
-- Any repository convention for recovery after partially removed/stale worktrees that should be reused instead of adding new mechanics.
+1. expected canonical junction is accepted and detached while target remains intact;
+2. missing `.venv` on normal registered worktree fails closed;
+3. ordinary physical directory fails closed and remains untouched;
+4. wrong-target junction fails closed and remains untouched;
+5. unsupported/unknown reparse type fails closed;
+6. normal worktree removal is only handed off after successful junction detach + target-survival verification;
+7. helper never recursively deletes the canonical target;
+8. partial-removal state does not trigger force removal;
+9. stale registration can be pruned only after explicit stale proof;
+10. post-prune verification confirms intended registration is gone and unrelated registrations remain;
+11. live/dirty registered worktree blocks prune/cleanup;
+12. path normalization is case-insensitive and trailing-separator safe without accepting an actually different target.
 
-## Gemini survey evidence requested
+Focused tests must be non-interactive and must not require mutation of the real shared environment.
 
-Gemini/Antigravity must remain read-only and report:
+## Acceptance criteria
 
-- exact current closeout ownership/call surface;
-- exact unsafe cleanup instruction(s) and why the junction can be traversed;
-- existing helper/script/test infrastructure relevant to safe Windows worktree cleanup;
-- recommended minimal implementation surface;
-- exact junction verification + target-resolution mechanism supported by current Windows tooling;
-- bounded stale-worktree recovery decision tree;
-- nearby tests/contracts that must be updated;
-- hidden risks such as locked handles, partial directory removal, branch exclusivity, stale registry entries, legacy worktree paths, or canonical-env target mismatch.
+1. Canonical closeout no longer invokes `git worktree remove` while a verified canonical `.venv` junction remains attached.
+2. Automatic `.venv` unlink is possible only after structured proof that it is the exact canonical Windows junction/mount point.
+3. Detach removes only the link object; canonical shared environment remains present and usable.
+4. Missing `.venv` in a normal registered runnable worktree fails fast rather than silently continuing.
+5. Physical directory, wrong-target junction, unsupported reparse type, ambiguous target, or target-verification failure all fail closed without recursive deletion.
+6. Normal `git worktree remove` is attempted only after successful junction detach and postcondition verification.
+7. `git worktree remove --force`, `reset --hard`, and `clean -fd` are not introduced as recovery shortcuts.
+8. Partial-removal/missing-`.git` state does not cause blind retry of normal remove.
+9. `git worktree prune --verbose` is used only after explicit stale-registration proof and is followed by registry re-verification.
+10. Unrelated live worktree registrations are preserved.
+11. Branch deletion remains blocked until the branch is no longer owned by any registered worktree.
+12. Branch-completion workflow remains the orchestration owner; the helper stays narrowly scoped to junction/stale-state safety.
+13. Durable architecture/skill wording converges on one safe closeout order and does not duplicate contradictory lifecycle logic.
+14. Deterministic focused tests cover the normal junction path, fail-closed classifications, partial/stale recovery boundaries, and target-preservation invariant without touching the real canonical environment.
+15. Existing shared-environment mutation policy remains unchanged and out of scope.
 
-Gemini must not edit files, implement production changes, merge, or promote this Draft SPEC to Final.
+## Implementation surface
+
+Expected minimal surface:
+
+- one narrow helper under `scripts/` for Windows task-worktree `.venv` cleanup safety;
+- focused deterministic tests under existing workflow test infrastructure;
+- `.agents/skills/branch_completion_workflow/SKILL.md` update;
+- `docs/architecture/ai_development_workflow.md` small durable invariant/cross-reference update;
+- `.agents/skills/branch_start_workflow/SKILL.md` only if needed for wording consistency;
+- this task package/evidence.
+
+No game runtime production files should change.
 
 ## Completion gate
 
-This SPEC is **Draft**. Do not start production implementation.
+This SPEC is **Final**.
 
-After Gemini pushes or returns read-only survey evidence, ChatGPT + user will reconcile this Draft against the evidence and current code/contracts, then explicitly promote it to `Status: Final` before Gemini/Antigravity implementation is allowed.
+Gemini/Antigravity may now implement the Final contract on `task-worktree-shared-venv-cleanup-safety`. OpenCode Scout/reviewers remain read-only when used. After implementation, run focused deterministic tests and the repository Gate if available, then perform ChatGPT final semantic/architecture review before integration.
