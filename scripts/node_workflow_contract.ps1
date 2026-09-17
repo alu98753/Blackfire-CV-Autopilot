@@ -244,6 +244,11 @@ function Assert-NodeWorkflowDependenciesReady {
 
     $result = Test-NodeWorkflowDependencies -RepoRoot $RepoRoot -Executable $Executable -VersionOverride $VersionOverride -SkipPackageImportProbe:$SkipPackageImportProbe
     if (-not $result.Ready) {
-        throw "Node workflow dependencies are not ready for this worktree ($($result.Reason)). Run: .\scripts\bootstrap_node_workflow_deps.ps1 (or npm ci)"
+        [Console]::Error.WriteLine("Node workflow dependencies are not ready for this worktree.")
+        if (-not [string]::IsNullOrWhiteSpace($result.Reason)) {
+            [Console]::Error.WriteLine("Reason: $($result.Reason)")
+        }
+        [Console]::Error.WriteLine("Run: .\scripts\bootstrap_node_workflow_deps.ps1")
+        throw "Node workflow dependencies are not ready for this worktree.`nRun: .\scripts\bootstrap_node_workflow_deps.ps1"
     }
 }

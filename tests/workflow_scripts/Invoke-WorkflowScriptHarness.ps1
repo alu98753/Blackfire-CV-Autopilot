@@ -61,8 +61,11 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
         }
     }
     $command = ($commandParts -join ' ') + ' < NUL'
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try { $output = & cmd.exe /d /s /c $command 2>&1 | Out-String }
     catch { return [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) } }
+    finally { $ErrorActionPreference = $prevEap }
     return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
 }
 
@@ -229,8 +232,8 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
             '-_NodeExecutableOverride', 'nonexistent_node_binary_for_test'
         )
         Assert-True ($result.ExitCode -ne 0) "expected missing node failure, got $($result.ExitCode)"
-        Assert-True ($result.Output -match 'Node workflow dependencies are not ready') 'missing expected bootstrap guidance'
-        Assert-True ($result.Output -match 'bootstrap_nod') 'missing bootstrap script remediation'
+        Assert-True ($result.Output -match 'Node workflow dependencies are not ready for this worktree') 'missing expected bootstrap guidance'
+        Assert-True ($result.Output.Contains('Run: .\scripts\bootstrap_node_workflow_deps.ps1')) 'missing bootstrap script remediation'
         Assert-True (-not (Test-Path $marker)) 'fake reviewer must NOT have been executed when Node readiness fails'
     }
     Run-Case 'Gate explicit _SkipNodeReadinessCheck bypasses readiness for testing' {
