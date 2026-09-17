@@ -171,9 +171,9 @@ Gemini/Antigravity is the production implementation writer in workflow v1. It im
 
 ### Reviewers
 
-OpenCode `spec-reviewer` and `regression-reviewer` are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift.
+OpenCode `spec-reviewer` (safety budget: `steps: 8`) and `regression-reviewer` (safety budget: `steps: 10`) are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift.
 
-Valid structured PASS/BLOCK output is terminal for the reviewer role. Reviewer fallback is for infrastructure failure, never semantic review-shopping.
+Completed valid StructuredOutput is the terminal reviewer result. Valid structured PASS/BLOCK output is terminal for the reviewer role. Reviewer fallback is for infrastructure failure, never semantic review-shopping.
 
 ### Final reviewer / remote orchestrator
 
@@ -247,11 +247,21 @@ Run:
 .\scripts\ai_gate.ps1 -Task <task-id>
 ```
 
-Gate invokes bounded read-only reviewers, optionally runs declared focused tests, and promotes trusted review/evidence artifacts. It never substitutes full-suite execution.
+Gate executes `spec-reviewer` and `regression-reviewer` concurrently using a dual-slot coordinator loop, optionally runs declared focused tests, and promotes trusted review/evidence artifacts. It never substitutes full-suite execution.
+
+Reviewer persistence and resume follow:
+
+- Canonical reviews carry an embedded input fingerprint comment:
+  `<!-- blackfire-gate-fingerprint: {"schema":1,"role":"...","hash":"..."} -->`
+- Each reviewer stage is independently evaluated:
+  - If a valid canonical review exists with a matching input fingerprint, it is reused and its reviewer process is not launched.
+  - If missing, stale, or mismatched, the reviewer is executed fresh.
+- Interrupted or partially failed runs can resume: an infrastructure failure in one reviewer does not discard a valid sibling result.
+- `-ForceRefresh` explicitly bypasses cached reviewer artifacts and forces fresh execution of both reviewers.
 
 Gate outcomes remain mechanically distinct:
 
-- `0`: trusted verification passed;
+- `0`: trusted verification passed (all reviewers PASS + focused tests pass);
 - `2`: trusted candidate blocker or configured focused-test failure;
 - `1`: verification infrastructure unavailable / no trusted verdict.
 
@@ -283,7 +293,7 @@ Do not introduce a global mutable current-task singleton. Scripts require explic
 
 ## 11. OpenCode compatibility and fallback
 
-Repository automation follows the pinned OpenCode version, launcher contract, CLI contract, and provider compatibility baseline documented by the repository.
+Repository automation follows the pinned OpenCode version (specifically, exactly OpenCode CLI version 1.18.31), launcher contract, CLI contract, and provider compatibility baseline documented by the repository.
 
 Do not add unverified CLI flags or guess alternate invocation forms. Version/contract mismatch must fail fast.
 

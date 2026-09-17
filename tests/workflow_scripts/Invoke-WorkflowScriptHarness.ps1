@@ -130,6 +130,7 @@ import json
 import os
 import pathlib
 import sys
+import time
 
 # Persist raw process argv before any argument parsing.
 diagnostic_dir = pathlib.Path(os.environ["WORKFLOW_HARNESS_DIAGNOSTIC_DIR"])
@@ -138,9 +139,28 @@ diagnostic_dir.mkdir(parents=True, exist_ok=True)
 args = sys.argv[1:]
 raw = " ".join(args)
 model = args[args.index("--model") + 1] if "--model" in args else ""
+agent = args[args.index("--agent") + 1] if "--agent" in args else "unknown"
+helper_dir = pathlib.Path(__file__).parent
+
+# Record invocation count per agent
+invocations_file = helper_dir / f"{agent}.invocations.txt"
+prev_count = int(invocations_file.read_text(encoding="utf-8")) if invocations_file.exists() else 0
+invocations_file.write_text(str(prev_count + 1), encoding="utf-8")
+
+if "overlap-probe" in args or model == "overlap-probe":
+    start_marker = helper_dir / f"{agent}.start.marker"
+    start_marker.write_text("start", encoding="utf-8")
+    sibling = "regression-reviewer" if agent == "spec-reviewer" else "spec-reviewer"
+    sibling_marker = helper_dir / f"{sibling}.start.marker"
+    for _ in range(40):
+        if sibling_marker.exists():
+            (helper_dir / "overlap-confirmed.marker").write_text("confirmed", encoding="utf-8")
+            break
+        time.sleep(0.05)
+
 evidence = pathlib.Path(__file__).with_name(model + ".argv.txt") if model else pathlib.Path(__file__).with_name("missing-model.argv.txt")
 evidence.write_text(json.dumps({"argv": args, "stderr": "", "exit_code": 0}), encoding="utf-8")
-if model == "catastrophic-crash":
+if model == "catastrophic-crash" or "catastrophic-crash" in args:
     pathlib.Path(__file__).with_name("catastrophic-crash.marker").write_text("invoked", encoding="utf-8")
     sys.stderr.write("catastrophic fixture failure\n")
     raise SystemExit(7)
@@ -252,17 +272,170 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($code -eq 1) "expected unavailable, got $code"
     }
     Run-Case 'Gate focused-test override passes' {
-        $json = Get-Content (Join-Path $fixtureDir 'task.json') -Raw | ConvertFrom-Json
-        $json.focused_tests = @('disposable-target')
-        $json | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
-        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_PythonExecutableOverride',$pythonCmd))
-        Assert-True ($code -eq 0) "expected 0, got $code"
+        try {
+            $json = Get-Content (Join-Path $fixtureDir 'task.json') -Raw | ConvertFrom-Json
+            $json.focused_tests = @('disposable-target')
+            $json | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
+            $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_PythonExecutableOverride',$pythonCmd))
+            Assert-True ($code -eq 0) "expected 0, got $code"
+        } finally {
+            $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        }
     }
     Run-Case 'Gate promotion rollback preserves prior artifacts' {
         $old = Get-Content (Join-Path $fixtureDir 'EVIDENCE.md') -Raw
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_FailPromotionOnTarget','evidence'))
         Assert-True ($code -eq 1) "expected 1, got $code"
         Assert-True ((Get-Content (Join-Path $fixtureDir 'EVIDENCE.md') -Raw) -eq $old) 'rollback did not preserve evidence'
+    }
+
+    Run-Case 'Gate parallel reviewers overlap execution' {
+        $overlapMarker = Join-Path $helperDir 'overlap-confirmed.marker'
+        if (Test-Path $overlapMarker) { Remove-Item $overlapMarker -Force }
+        $specStart = Join-Path $helperDir 'spec-reviewer.start.marker'
+        $regStart = Join-Path $helperDir 'regression-reviewer.start.marker'
+        if (Test-Path $specStart) { Remove-Item $specStart -Force }
+        if (Test-Path $regStart) { Remove-Item $regStart -Force }
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','overlap-probe','-ForceRefresh'))
+        Assert-True ($code -eq 0) "expected 0, got $code"
+        Assert-True (Test-Path $overlapMarker) 'Reviewers did not overlap in execution'
+    }
+
+    Run-Case 'Gate spec BLOCK and regression PASS yields CANDIDATE_BLOCKED' {
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-block','-_RegressionReviewerArgumentsOverride','terminal-pass','-ForceRefresh'))
+        Assert-True ($code -eq 2) "expected 2, got $code"
+    }
+
+    Run-Case 'Gate regression BLOCK and spec PASS yields CANDIDATE_BLOCKED' {
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','terminal-block','-ForceRefresh'))
+        Assert-True ($code -eq 2) "expected 2, got $code"
+    }
+
+    Run-Case 'Gate sibling artifact survives infrastructure failure' {
+        $specCanonical = Join-Path $fixtureDir 'reviews\spec-review.md'
+        $regCanonical = Join-Path $fixtureDir 'reviews\regression-review.md'
+        $evidenceCanonical = Join-Path $fixtureDir 'EVIDENCE.md'
+        if (Test-Path $specCanonical) { Remove-Item $specCanonical -Force }
+        if (Test-Path $regCanonical) { Remove-Item $regCanonical -Force }
+        if (Test-Path $evidenceCanonical) { Remove-Item $evidenceCanonical -Force }
+
+        # spec-reviewer passes, but regression-reviewer crashes
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','catastrophic-crash','-ForceRefresh'))
+        Assert-True ($code -eq 1) "expected 1, got $code"
+        Assert-True (Test-Path $specCanonical) 'spec-reviewer valid canonical artifact was not promoted'
+        Assert-True (-not (Test-Path $regCanonical)) 'regression-reviewer canonical artifact should not exist'
+        Assert-True (-not (Test-Path $evidenceCanonical)) 'EVIDENCE.md must not be created on incomplete gate run'
+    }
+
+    Run-Case 'Gate partial resume reuses surviving sibling and reruns failed reviewer' {
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
+        $specCountBefore = if (Test-Path $specInvocationsFile) { [int](Get-Content $specInvocationsFile -Raw) } else { 0 }
+        $regCountBefore = if (Test-Path $regInvocationsFile) { [int](Get-Content $regInvocationsFile -Raw) } else { 0 }
+
+        # regression-reviewer now passes as well
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','terminal-pass'))
+        Assert-True ($code -eq 0) "expected 0, got $code"
+
+        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+        $regCountAfter = [int](Get-Content $regInvocationsFile -Raw)
+
+        Assert-True ($specCountAfter -eq $specCountBefore) "spec-reviewer was launched despite valid cache: before=$specCountBefore, after=$specCountAfter"
+        Assert-True ($regCountAfter -gt $regCountBefore) "regression-reviewer was not launched on rerun"
+        Assert-True (Test-Path (Join-Path $fixtureDir 'reviews\spec-review.md')) 'spec-review.md missing'
+        Assert-True (Test-Path (Join-Path $fixtureDir 'reviews\regression-review.md')) 'regression-review.md missing'
+        Assert-True (Test-Path (Join-Path $fixtureDir 'EVIDENCE.md')) 'EVIDENCE.md missing'
+    }
+
+    $cacheReviewArgs = @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','terminal-pass')
+
+    Run-Case 'Gate cache hit skips both reviewers' {
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
+        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+        $regCountBefore = [int](Get-Content $regInvocationsFile -Raw)
+
+        $code = Invoke-Script $gate $cacheReviewArgs
+        Assert-True ($code -eq 0) "expected 0, got $code"
+
+        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+        $regCountAfter = [int](Get-Content $regInvocationsFile -Raw)
+
+        Assert-True ($specCountAfter -eq $specCountBefore) 'spec-reviewer launched on cache hit'
+        Assert-True ($regCountAfter -eq $regCountBefore) 'regression-reviewer launched on cache hit'
+    }
+
+    Run-Case 'Gate ForceRefresh bypasses cache and reruns both reviewers' {
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
+        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+        $regCountBefore = [int](Get-Content $regInvocationsFile -Raw)
+
+        $code = Invoke-Script $gate ($cacheReviewArgs + '-ForceRefresh')
+        Assert-True ($code -eq 0) "expected 0, got $code"
+
+        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+        $regCountAfter = [int](Get-Content $regInvocationsFile -Raw)
+
+        Assert-True ($specCountAfter -gt $specCountBefore) 'spec-reviewer was not rerun on -ForceRefresh'
+        Assert-True ($regCountAfter -gt $regCountBefore) 'regression-reviewer was not rerun on -ForceRefresh'
+    }
+
+    Run-Case 'Gate SPEC change invalidates cache' {
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+
+        '# Modified spec content for invalidation test' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
+
+        $code = Invoke-Script $gate $cacheReviewArgs
+        Assert-True ($code -eq 0) "expected 0, got $code"
+
+        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+        Assert-True ($specCountAfter -gt $specCountBefore) 'spec-reviewer was not rerun when SPEC changed'
+    }
+
+    Run-Case 'Gate reviewer contract or config change invalidates cache' {
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+
+        # Run with different spec reviewer arguments to simulate prompt/config change
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-first-pass','-_RegressionReviewerArgumentsOverride','terminal-pass'))
+        Assert-True ($code -eq 0) "expected 0, got $code"
+
+        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+        Assert-True ($specCountAfter -gt $specCountBefore) 'spec-reviewer was not rerun when arguments/config changed'
+    }
+
+    Run-Case 'Gate malformed or missing fingerprint invalidates cache' {
+        $specReview = Join-Path $fixtureDir 'reviews\spec-review.md'
+        $content = Get-Content $specReview -Raw
+        $corrupted = $content -replace 'blackfire-gate-fingerprint: \{.*?\}', 'blackfire-gate-fingerprint: {invalid-json'
+        $corrupted | Set-Content $specReview -Encoding UTF8
+
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+
+        $code = Invoke-Script $gate $cacheReviewArgs
+        Assert-True ($code -eq 0) "expected 0, got $code"
+
+        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+        Assert-True ($specCountAfter -gt $specCountBefore) 'spec-reviewer was not rerun when fingerprint was malformed'
+    }
+
+    Run-Case 'Gate malformed review artifact invalidates cache' {
+        $specReview = Join-Path $fixtureDir 'reviews\spec-review.md'
+        $content = Get-Content $specReview -Raw
+        $corrupted = $content -replace 'Gate-accepted verdict: PASS', 'Gate-accepted verdict: UNKNOWN'
+        $corrupted | Set-Content $specReview -Encoding UTF8
+
+        $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
+        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+
+        $code = Invoke-Script $gate $cacheReviewArgs
+        Assert-True ($code -eq 0) "expected 0, got $code"
+
+        $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
+        Assert-True ($specCountAfter -gt $specCountBefore) 'spec-reviewer was not rerun when review was malformed'
     }
 
     Run-Case 'Scout success promotes structured output' {

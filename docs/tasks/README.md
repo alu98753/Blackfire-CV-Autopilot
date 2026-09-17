@@ -72,6 +72,25 @@ The initial ChatGPT survey should be deep enough to establish the real problem b
 
 Do not create a global `current-task` marker. This repository uses multiple permanent worktrees, so every script requires an explicit task id.
 
+## Verification gate, parallel reviewers, and resume
+
+Verification runs through:
+
+```powershell
+.\scripts\ai_gate.ps1 -Task <task-id>
+```
+
+Key execution contracts:
+- `spec-reviewer` and `regression-reviewer` execute concurrently using an isolated two-slot process coordinator.
+- Each canonical review artifact (`docs/tasks/<task-id>/reviews/*.md`) carries an embedded machine-readable fingerprint comment:
+  `<!-- blackfire-gate-fingerprint: {"schema":1,"role":"...","hash":"..."} -->`
+- Each reviewer stage is independently evaluated on each Gate run:
+  - If a valid canonical review artifact exists with a matching input fingerprint, the stage is reused without launching that reviewer process.
+  - If missing, stale, or mismatched, that reviewer reruns fresh.
+  - An infrastructure failure in one reviewer does not invalidate or discard a valid sibling result, enabling partial resume on subsequent runs.
+- Pass `-ForceRefresh` to explicitly bypass cached reviewer artifacts and re-execute both reviewers fresh:
+  `.\scripts\ai_gate.ps1 -Task <task-id> -ForceRefresh`
+
 ## task.json
 
 `task.json` contains automation metadata only. `SPEC.md` is always discovered by convention from the same directory and therefore is not repeated as a configurable path.
