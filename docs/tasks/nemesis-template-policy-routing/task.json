@@ -1,0 +1,26 @@
+{
+  "id": "nemesis-template-policy-routing",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/handlers/battle.py",
+    "config.py",
+    "config/defaults.toml",
+    "tests/"
+  ],
+  "focused_tests": [
+    "tests/test_nemesis_intervention.py",
+    "tests/test_behavior_dungeon_nemesis.py",
+    "tests/test_behavior_golden_empire.py",
+    "tests/test_config_ssot.py"
+  ],
+  "models": {
+    "scout": null,
+    "review": null
+  },
+  "notes": {
+    "status": "Draft",
+    "workflow": "User requested ChatGPT + Gemini only; OpenCode Scout/Gate intentionally skipped unless later requested.",
+    "architecture": "Nemesis policy is selected by the detected encounter/template, not by mode-level nemesis_action.",
+    "observed_bug": "Runtime can receive a non-empty nemesis template list whose paths all do not exist; current loop silently skips them and produces an empty score summary."
+  }
+}
