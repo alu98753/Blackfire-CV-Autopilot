@@ -1008,6 +1008,191 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(machine.config.get("type"), "dungeon")
         self.assertEqual(machine.config.get("dungeon_index"), 2)
 
+    def test_evaluate_next_activity_selects_ready_dungeon_when_quests_cooling_and_tier4_domain(self):
+        """驗證當懸賞任務冷卻中且定時地下城就緒時，Tier 4 domain 退守優先讓位給地下城派發"""
+        import time
+        from utils.quest_scheduler import QuestScheduler, TaskNode
+        now = time.time()
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.current_town_subflow = None
+        machine.town_subflow_queue = []
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        machine.daily_manager.is_demon_lords_available.return_value = (False, "已無次數")
+        machine.daily_manager.get_available_lord_bosses.return_value = []
+
+        # 懸賞任務 #8 處於冷卻中
+        task = TaskNode(
+            quest_title="血角終結者",
+            mode_type="dungeon",
+            counting_policy="banner_verify_only",
+            target_count=20,
+            dungeon_index=8,
+        )
+        scheduler = QuestScheduler()
+        scheduler.add_task(task)
+        machine.quest_scheduler = scheduler
+        machine.dungeon_cooldowns = {8: now + 1200.0}
+
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "name": "Daily Base",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_town_daily": False,
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6, 7, 8],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+                "dungeons/dragon_lair.png",
+            ],
+            "dungeon_names": ["Slime", "Ghost", "Forest", "Ruins", "Prison", "Ice", "Orc", "Dragon"],
+        }
+        machine.config = machine.primary_config.copy()
+        # 6 號冷卻結束可打
+        machine.dungeon_cooldowns[6] = 0.0
+
+        result = machine.evaluate_next_activity()
+
+        self.assertTrue(result)
+        self.assertTrue(machine.config.get("is_tier4_fallback", False))
+        self.assertEqual(machine.config.get("type"), "mix")
+        self.assertEqual(machine.config.get("navigation_path"), ["common/door.png", "dungeons/dungeon.png"])
+        self.assertNotEqual(machine.config.get("type"), "domain")
+
+    def test_evaluate_next_activity_selects_ready_dungeon_when_quests_cooling_and_tier4_stage(self):
+        """驗證當懸賞任務冷卻中且定時地下城就緒時，Tier 4 stage 退守優先讓位給地下城派發"""
+        import time
+        from utils.quest_scheduler import QuestScheduler, TaskNode
+        now = time.time()
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.current_town_subflow = None
+        machine.town_subflow_queue = []
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        machine.daily_manager.is_demon_lords_available.return_value = (False, "已無次數")
+        machine.daily_manager.get_available_lord_bosses.return_value = []
+
+        # 懸賞任務 #8 處於冷卻中
+        task = TaskNode(
+            quest_title="血角終結者",
+            mode_type="dungeon",
+            counting_policy="banner_verify_only",
+            target_count=20,
+            dungeon_index=8,
+        )
+        scheduler = QuestScheduler()
+        scheduler.add_task(task)
+        machine.quest_scheduler = scheduler
+        machine.dungeon_cooldowns = {8: now + 1200.0}
+
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "name": "Daily Base",
+            "tier4_mode": "stage",
+            "tier4_stage_level": 6,
+            "tier4_sub_stage": "first",
+            "enable_stage_farming": True,
+            "enable_town_daily": False,
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6, 7, 8],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+                "dungeons/dragon_lair.png",
+            ],
+            "dungeon_names": ["Slime", "Ghost", "Forest", "Ruins", "Prison", "Ice", "Orc", "Dragon"],
+        }
+        machine.config = machine.primary_config.copy()
+        machine.dungeon_cooldowns[6] = 0.0
+
+        result = machine.evaluate_next_activity()
+
+        self.assertTrue(result)
+        self.assertTrue(machine.config.get("is_tier4_fallback", False))
+        self.assertEqual(machine.config.get("navigation_path"), ["common/door.png", "dungeons/dungeon.png"])
+
+    def test_evaluate_next_activity_falls_back_when_quests_and_dungeons_both_cooling(self):
+        """驗證當懸賞任務與地下城皆在冷卻中時，正確退守至設定的 Tier 4 (如 domain)"""
+        import time
+        from utils.quest_scheduler import QuestScheduler, TaskNode
+        now = time.time()
+        machine = GameStateMachine(
+            MagicMock(), MagicMock(), MagicMock(), preload_ocr=False
+        )
+        machine.current_town_subflow = None
+        machine.town_subflow_queue = []
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        machine.daily_manager.is_demon_lords_available.return_value = (False, "已無次數")
+        machine.daily_manager.get_available_lord_bosses.return_value = []
+
+        # 懸賞任務 #8 處於冷卻中
+        task = TaskNode(
+            quest_title="血角終結者",
+            mode_type="dungeon",
+            counting_policy="banner_verify_only",
+            target_count=20,
+            dungeon_index=8,
+        )
+        scheduler = QuestScheduler()
+        scheduler.add_task(task)
+        machine.quest_scheduler = scheduler
+        machine.dungeon_cooldowns = {6: now + 600.0, 7: now + 600.0, 8: now + 1200.0}
+
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "name": "Daily Base",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_town_daily": False,
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [6, 7, 8],
+            "dungeon_entries": [
+                "dungeons/Slime_entry.png",
+                "dungeons/Ghost_entry.png",
+                "dungeons/Forest_entry.png",
+                "dungeons/Ruins_entry.png",
+                "dungeons/dark_prison.png",
+                "dungeons/Ice_entry.png",
+                "dungeons/orc_bunker.png",
+                "dungeons/dragon_lair.png",
+            ],
+            "dungeon_names": ["Slime", "Ghost", "Forest", "Ruins", "Prison", "Ice", "Orc", "Dragon"],
+        }
+        machine.config = machine.primary_config.copy()
+
+        result = machine.evaluate_next_activity()
+
+        self.assertFalse(result)
+        self.assertTrue(machine.config.get("is_tier4_fallback", False))
+        self.assertEqual(machine.config.get("type"), "domain")
+        self.assertEqual(machine.config.get("domain"), "golden_empire")
+
 
 if __name__ == "__main__":
     unittest.main()
