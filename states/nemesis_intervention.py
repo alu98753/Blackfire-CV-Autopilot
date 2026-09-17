@@ -47,6 +47,7 @@ class _Session:
     timeout_cleanup_message_ids: list[str] = field(default_factory=list)
     policy: InterventionPolicy = InterventionPolicy.TIMED
     acknowledged: bool = False
+    timeout_recovery_owner_thread_id: int | None = None
 
 
 class NemesisIntervention:
@@ -254,6 +255,17 @@ class NemesisIntervention:
                 )
             )
 
+    def allows_timeout_recovery_transition(self) -> bool:
+        """Allow only the serialized timeout owner through state guards."""
+        with self._lock:
+            session = self._active
+            return bool(
+                session
+                and session.outcome is InterventionOutcome.TIMED_OUT
+                and session.timeout_recovery_in_progress
+                and session.timeout_recovery_owner_thread_id == threading.get_ident()
+            )
+
     def run_pending_timeout_recovery(self) -> bool:
         """Run timeout-owned game recovery on the authoritative runtime path."""
         with self._lock:
@@ -267,6 +279,7 @@ class NemesisIntervention:
                 return False
             session.timeout_recovery_pending = False
             session.timeout_recovery_in_progress = True
+            session.timeout_recovery_owner_thread_id = threading.get_ident()
             message_ids = list(session.timeout_cleanup_message_ids)
 
         try:
@@ -280,6 +293,7 @@ class NemesisIntervention:
             with self._lock:
                 if self._active is session:
                     session.timeout_recovery_in_progress = False
+                    session.timeout_recovery_owner_thread_id = None
                     session.timeout_side_effects_complete = True
         return True
 

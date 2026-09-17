@@ -512,7 +512,11 @@ class GameStateMachine:
 
     def transition_to(self, new_state):
         intervention = getattr(self, "nemesis_intervention", None)
-        if intervention is not None and intervention.holds_automation():
+        if (
+            intervention is not None
+            and intervention.holds_automation()
+            and not intervention.allows_timeout_recovery_transition()
+        ):
             logging.warning("[NemesisIntervention] blocked state transition during operator hold: %s", new_state)
             return False
         if self.current_state != new_state:
