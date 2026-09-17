@@ -1,0 +1,21 @@
+{
+  "id": "task-cleanup-native-stderr-handling",
+  "base_ref": "origin/main",
+  "base_sha": "f2c96c7a47c66a8cc03dc0bc3de31e6e4dd46f47",
+  "scope": [
+    "scripts/task_cleanup.ps1",
+    "tests/test_task_cleanup_behavioral.py"
+  ],
+  "focused_tests": [
+    "tests/test_task_cleanup_behavioral.py"
+  ],
+  "models": {
+    "scout": ["opencode-default"],
+    "review": ["opencode-default"]
+  },
+  "notes": {
+    "status": "Draft",
+    "implementation_blocked_until_final": true,
+    "observed_runtime_failure": "successful git push --delete emitted stderr and PowerShell promoted it to NativeCommandError before LASTEXITCODE handling"
+  }
+}
