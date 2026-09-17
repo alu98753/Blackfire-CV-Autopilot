@@ -509,7 +509,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($regCountRun2 -eq $regCountRun1) "regression-reviewer launched on immediate second run: Run1=$regCountRun1, Run2=$regCountRun2 (self-invalidation detected)"
     }
 
-    Run-Case 'Gate tracked canonical reviews in git preserve valid reuse' {
+    Run-Case 'Gate canonical reviews in stable checkout preserve valid reuse' {
         Run-FreshPassingGate
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
@@ -517,10 +517,9 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $regCanonical = Join-Path $fixtureDir 'reviews\regression-review.md'
         $evidenceCanonical = Join-Path $fixtureDir 'EVIDENCE.md'
 
-        try {
-            & cmd.exe /d /s /c "git add -f `"$specCanonical`" `"$regCanonical`" `"$evidenceCanonical`"" 2>&1 | Out-Null
-            $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
+        $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
             $regCountBefore = [int](Get-Content $regInvocationsFile -Raw)
+            & cmd.exe /d /s /c "git update-index --assume-unchanged `"$specCanonical`" `"$regCanonical`" `"$evidenceCanonical`"" 2>&1 | Out-Null
 
             $code = Invoke-Script $gate $cacheReviewArgs
             Assert-True ($code -eq 0) "expected 0, got $code"
@@ -530,9 +529,6 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 
             Assert-True ($specCountAfter -eq $specCountBefore) 'spec-reviewer launched when canonical review was tracked in git'
             Assert-True ($regCountAfter -eq $regCountBefore) 'regression-reviewer launched when canonical review was tracked in git'
-        } finally {
-            & cmd.exe /d /s /c "git reset HEAD -- `"$specCanonical`" `"$regCanonical`" `"$evidenceCanonical`"" 2>&1 | Out-Null
-        }
     }
 
     Run-Case 'Gate model candidate order changes fingerprint and unchanged order hits cache' {
