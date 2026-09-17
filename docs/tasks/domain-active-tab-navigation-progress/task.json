@@ -1,0 +1,22 @@
+{
+  "id": "domain-active-tab-navigation-progress",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/handlers/navigation.py",
+    "states/navigation_routing.py",
+    "states/navigation_progress.py",
+    "utils/scene_detector.py",
+    "utils/scene_snapshot.py",
+    "tests"
+  ],
+  "focused_tests": [
+    "tests/test_behavior_navigation_intent.py",
+    "tests/test_behavior_navigation_progress.py",
+    "tests/test_behavior_runtime_ports.py"
+  ],
+  "workflow": {
+    "mode": "chatgpt-gemini-direct",
+    "scout": false,
+    "gate": false
+  }
+}

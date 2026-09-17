@@ -909,6 +909,35 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.assertEqual(filtered_town, ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"])
         self.assertIn("common/door.png", filtered_town)
 
+    def test_filter_navigation_path_keeps_domain_tab_when_inactive(self):
+        """Domain tab remains an eligible navigation step until observed active."""
+        nav_path = [
+            "common/door.png",
+            "domains/Domains_entry.png",
+            "domains/golden_empire/entry.png",
+        ]
+
+        filtered = filter_navigation_path(nav_path, active_tabs=[])
+
+        self.assertEqual(filtered, nav_path)
+        self.assertIn("domains/Domains_entry.png", filtered)
+
+    def test_filter_navigation_path_skips_domain_tab_when_active(self):
+        """Observed active domain tab is completed progress, like stage/dungeon."""
+        nav_path = [
+            "common/door.png",
+            "domains/Domains_entry.png",
+            "domains/golden_empire/entry.png",
+        ]
+
+        filtered = filter_navigation_path(nav_path, active_tabs=["domain"])
+
+        self.assertEqual(
+            filtered,
+            ["common/door.png", "domains/golden_empire/entry.png"],
+        )
+        self.assertNotIn("domains/Domains_entry.png", filtered)
+
     def test_managed_daily_without_fallback_suppresses_mix_tab_switching(self):
         """驗證在 Daily 大流水線受管模式下且非 Tier 4 退守時，NavigationHandler 絕不越權點擊地下城頁籤切換"""
         import numpy as np

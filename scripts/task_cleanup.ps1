@@ -1,0 +1,178 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]$Task,
+    [switch]$DeleteRemoteBranch
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = (git -C $scriptRoot rev-parse --show-toplevel 2>$null).Trim()
+if (-not $repoRoot) { throw 'Unable to discover repository root.' }
+$gitExe = if ($env:TASK_CLEANUP_GIT_EXE) { $env:TASK_CLEANUP_GIT_EXE } else { 'git' }
+$helper = if ($env:TASK_CLEANUP_HELPER) { $env:TASK_CLEANUP_HELPER } else { Join-Path $repoRoot 'scripts\worktree_cleanup_safety.ps1' }
+$currentCwd = [IO.Path]::GetFullPath((Get-Location).Path).TrimEnd('\')
+$commonDirResult = if ($env:TASK_CLEANUP_COMMON_DIR_OVERRIDE) {
+    $env:TASK_CLEANUP_COMMON_DIR_OVERRIDE
+} else {
+    $absoluteCommonDir = @(git -C $scriptRoot rev-parse --path-format=absolute --git-common-dir 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $absoluteCommonDir.Count -eq 1) {
+        $absoluteCommonDir[0]
+    } else {
+        $legacyCommonDir = @(git -C $scriptRoot rev-parse --git-common-dir 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $legacyCommonDir.Count -ne 1) { $null } else { $legacyCommonDir[0] }
+    }
+}
+if (-not $commonDirResult) { throw 'Unable to discover Git common directory.' }
+$commonDirText = ([string]$commonDirResult).Trim()
+$commonDir = if ([IO.Path]::IsPathRooted($commonDirText)) {
+    [IO.Path]::GetFullPath($commonDirText)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $scriptRoot $commonDirText))
+}
+$canonicalRoot = if ((Split-Path $commonDir -Leaf) -ieq '.git') { Split-Path $commonDir -Parent } else { $null }
+if (-not $canonicalRoot) { throw 'Git common directory does not identify a permanent repository root.' }
+
+function Invoke-Git([string[]]$Arguments, [string]$Cwd = $repoRoot) {
+    $old = (Get-Location).Path
+    $captureDir = Join-Path ([IO.Path]::GetTempPath()) ("task-cleanup-git-" + [guid]::NewGuid().ToString('N'))
+    $stdoutPath = Join-Path $captureDir 'stdout.txt'
+    $stderrPath = Join-Path $captureDir 'stderr.txt'
+    try {
+        New-Item -ItemType Directory -Path $captureDir -Force | Out-Null
+        Set-Location -LiteralPath $Cwd
+        # Redirect native streams to files at the process boundary. In Windows
+        # PowerShell, merging stderr into the pipeline can turn normal native
+        # diagnostics into NativeCommandError terminating errors.
+        $oldErrorActionPreference = $ErrorActionPreference
+        try {
+            # This is deliberately scoped to the native call. Native stderr is
+            # captured as data; PowerShell errors outside this boundary remain
+            # terminating under the script's Stop policy.
+            $ErrorActionPreference = 'Continue'
+            & $gitExe @Arguments 1> $stdoutPath 2> $stderrPath
+        } finally {
+            $ErrorActionPreference = $oldErrorActionPreference
+        }
+        $code = $LASTEXITCODE
+        $output = @(if (Test-Path $stdoutPath) { Get-Content -LiteralPath $stdoutPath })
+        $stderr = @(if (Test-Path $stderrPath) { Get-Content -LiteralPath $stderrPath })
+        return [pscustomobject]@{ Code = $code; Lines = $output; Stderr = $stderr; Text = (($output + $stderr) -join "`n") }
+    } finally {
+        Set-Location -LiteralPath $old
+        Remove-Item -LiteralPath $captureDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Stop-Cleanup([string]$Message) {
+    Write-Error "TASK CLEANUP STOPPED: $Message"
+    exit 1
+}
+
+function Normalize([string]$Path) { return [IO.Path]::GetFullPath($Path).TrimEnd('\').ToLowerInvariant() }
+
+function Is-SameOrDescendant([string]$Candidate, [string]$Root) {
+    $candidateNormalized = Normalize $Candidate
+    $rootNormalized = Normalize $Root
+    return $candidateNormalized -eq $rootNormalized -or
+        $candidateNormalized.StartsWith($rootNormalized + '\', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Parse-Worktrees([string[]]$Lines) {
+    $records = @(); $record = [ordered]@{}
+    foreach ($line in $Lines) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            if ($record.Count) { $records += [pscustomobject]$record; $record = [ordered]@{} }
+            continue
+        }
+        if ($line -match '^worktree (.+)$') { $record.path = $Matches[1]; continue }
+        if ($line -match '^HEAD (.+)$') { $record.head = $Matches[1]; continue }
+        if ($line -match '^branch refs/heads/(.+)$') { $record.branch = $Matches[1]; continue }
+        if ($line -eq 'detached HEAD') { $record.detached = $true }
+    }
+    if ($record.Count) { $records += [pscustomobject]$record }
+    return @($records)
+}
+
+function Require-Clean([string]$Path, [string]$Label) {
+    $r = Invoke-Git @('-C', $Path, 'status', '--porcelain')
+    if ($r.Code -ne 0) { Stop-Cleanup "cannot inspect $Label status: $($r.Text)" }
+    if ($r.Lines.Count -gt 0) { Stop-Cleanup "$Label is dirty." }
+}
+
+$topology = Invoke-Git @('worktree', 'list', '--porcelain')
+if ($topology.Code -ne 0) { Stop-Cleanup "cannot read worktree topology: $($topology.Text)" }
+$records = Parse-Worktrees $topology.Lines
+$main = @($records | Where-Object {
+    $_.branch -eq 'main' -and
+    (-not ($_.PSObject.Properties.Name -contains 'detached') -or -not $_.detached) -and
+    (Normalize $_.path) -eq (Normalize $canonicalRoot)
+})
+if ($main.Count -ne 1) { Stop-Cleanup 'canonical main worktree is missing or ambiguous.' }
+$mainPath = $main[0].path
+if (-not (Test-Path -LiteralPath $mainPath -PathType Container)) { Stop-Cleanup 'canonical main worktree path is not present.' }
+Require-Clean $mainPath 'canonical main worktree'
+
+$fetch = Invoke-Git @('fetch', 'origin') $mainPath
+if ($fetch.Code -ne 0) { Stop-Cleanup "git fetch origin failed: $($fetch.Text)" }
+$topology = Invoke-Git @('worktree', 'list', '--porcelain') $mainPath
+if ($topology.Code -ne 0) { Stop-Cleanup "cannot refresh worktree topology after fetch: $($topology.Text)" }
+$records = Parse-Worktrees $topology.Lines
+
+$taskCandidates = @($records | Where-Object {
+    (Split-Path (Normalize $_.path) -Leaf) -eq $Task.ToLowerInvariant() -and $_.branch -and (-not ($_.PSObject.Properties.Name -contains 'detached') -or -not $_.detached)
+})
+if ($taskCandidates.Count -ne 1) { Stop-Cleanup "task topology resolved $($taskCandidates.Count) matching attached worktrees; expected exactly one." }
+$taskRecord = $taskCandidates[0]
+$taskPath = [IO.Path]::GetFullPath($taskRecord.path)
+$branch = [string]$taskRecord.branch
+if ((Is-SameOrDescendant $currentCwd $taskPath) -or (Normalize $taskPath) -eq (Normalize $mainPath)) { Stop-Cleanup 'refusing to remove current or canonical main worktree.' }
+
+$localBranch = Invoke-Git @('show-ref', '--verify', '--quiet', "refs/heads/$branch") $mainPath
+if ($localBranch.Code -ne 0) { Stop-Cleanup "resolved branch '$branch' has no local branch ref." }
+Require-Clean $taskPath 'task worktree'
+$ancestor = Invoke-Git @('merge-base', '--is-ancestor', $branch, 'origin/main') $mainPath
+if ($ancestor.Code -ne 0) { Stop-Cleanup "branch '$branch' is not an ancestor of origin/main." }
+
+$captureDir = Join-Path ([IO.Path]::GetTempPath()) ("task-cleanup-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $captureDir -Force | Out-Null
+$stdoutPath = Join-Path $captureDir 'stdout.txt'
+$stderrPath = Join-Path $captureDir 'stderr.txt'
+try {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $helper -WorktreePath $taskPath -Detach 1> $stdoutPath 2> $stderrPath
+    $helperExit = $LASTEXITCODE
+    $helperStdout = if (Test-Path $stdoutPath) { @(Get-Content $stdoutPath) } else { @() }
+    $helperStderr = if (Test-Path $stderrPath) { @(Get-Content $stderrPath) } else { @() }
+} finally {
+    Remove-Item -LiteralPath $captureDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+if ($helperExit -ne 0) { Stop-Cleanup "cleanup safety helper failed: $($helperStderr -join "`n") $($helperStdout -join "`n")" }
+$jsonLines = @($helperStdout | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+if ($jsonLines.Count -ne 1) { Stop-Cleanup 'cleanup safety helper did not return exactly one JSON object.' }
+try { $evidence = $jsonLines[0] | ConvertFrom-Json -ErrorAction Stop } catch { Stop-Cleanup 'cleanup safety helper returned malformed JSON.' }
+if ($null -eq $evidence.code) { Stop-Cleanup 'cleanup safety helper JSON is missing code.' }
+if ($evidence.code -ne 'DETACHED') { Stop-Cleanup "cleanup safety helper returned '$($evidence.code)'; no worktree removal attempted." }
+
+$remove = Invoke-Git @('worktree', 'remove', $taskPath) $mainPath
+if ($remove.Code -ne 0) { Stop-Cleanup "worktree removal failed; use documented stale/partial recovery guidance: $($remove.Text)" }
+$after = Invoke-Git @('worktree', 'list', '--porcelain') $mainPath
+if ($after.Code -ne 0) { Stop-Cleanup "cannot verify post-removal topology: $($after.Text)" }
+$remaining = Parse-Worktrees $after.Lines
+if (@($remaining | Where-Object { (Normalize $_.path) -eq (Normalize $taskPath) -or $_.branch -eq $branch }).Count -ne 0) { Stop-Cleanup "post-removal topology still owns '$branch'; local branch was not deleted." }
+
+$deleteLocal = Invoke-Git @('branch', '-d', $branch) $mainPath
+if ($deleteLocal.Code -ne 0) { Stop-Cleanup "safe local branch deletion failed; remote deletion was not attempted: $($deleteLocal.Text)" }
+
+$remoteStatus = 'omitted'
+if ($DeleteRemoteBranch) {
+    $remote = Invoke-Git @('push', 'origin', '--delete', $branch) $mainPath
+    if ($remote.Code -ne 0) {
+        $remoteStatus = 'failed'
+        Write-Error "LOCAL CLEANUP SUCCEEDED; remote branch deletion failed for '$branch': $($remote.Text)" -ErrorAction Continue
+        exit 2
+    }
+    $remoteStatus = 'deleted'
+}
+Write-Output "TASK CLEANUP SUCCEEDED: task=$Task branch=$branch remote=$remoteStatus"
+exit 0

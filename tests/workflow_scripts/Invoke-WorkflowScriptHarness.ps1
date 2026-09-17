@@ -27,6 +27,8 @@ $regressionReviewer = Join-Path $repoRoot '.opencode\agents\regression-reviewer.
 $workflowContract = Join-Path $repoRoot 'docs\architecture\ai_development_workflow.md'
 $openCodeContract = Join-Path $repoRoot 'scripts\opencode_contract.ps1'
 $bootstrap = Join-Path $repoRoot 'scripts\bootstrap_opencode.ps1'
+$nodeContract = Join-Path $repoRoot 'scripts\node_workflow_contract.ps1'
+$bootstrapNode = Join-Path $repoRoot 'scripts\bootstrap_node_workflow_deps.ps1'
 $scoutScript = Join-Path $repoRoot 'scripts\ai_scout.ps1'
 $gateScript = Join-Path $repoRoot 'scripts\ai_gate.ps1'
 
@@ -44,9 +46,19 @@ function Invoke-Script([string]$Script, [string[]]$Arguments) {
         }
     }
     $command = ($commandParts -join ' ') + ' < NUL'
-    try { & cmd.exe /d /s /c $command 2>&1 | Out-Null }
-    catch { return 1 }
-    return $LASTEXITCODE
+    $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',$command) -WorkingDirectory $repoRoot -PassThru
+    try {
+        if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
+        $root.Refresh()
+        $exitCode = $root.ExitCode
+        return $exitCode
+    } finally {
+        $children = @(Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $root.Id })
+        foreach ($child in $children) {
+            if (Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue) { & taskkill.exe /PID $child.ProcessId /T /F 2>$null | Out-Null }
+        }
+        $root.Dispose()
+    }
 }
 
 function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
@@ -59,14 +71,54 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
         }
     }
     $command = ($commandParts -join ' ') + ' < NUL'
-    try { $output = & cmd.exe /d /s /c $command 2>&1 | Out-String }
-    catch { return [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) } }
-    return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $outputPath = Join-Path $helperDir "harness-output-$PID-$([Guid]::NewGuid().ToString('N')).txt"
+    $errorPath = Join-Path $helperDir "harness-error-$PID-$([Guid]::NewGuid().ToString('N')).txt"
+    $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',$command) -WorkingDirectory $repoRoot -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath -PassThru
+    try {
+        if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
+        $root.Refresh()
+        $output = ((Get-Content -LiteralPath $outputPath -Raw -ErrorAction SilentlyContinue), (Get-Content -LiteralPath $errorPath -Raw -ErrorAction SilentlyContinue) | Where-Object { $_ }) -join "`n"
+        $exitCode = $root.ExitCode
+        return [pscustomobject]@{ ExitCode = $exitCode; Output = $output }
+    } catch { return [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) } }
+    finally {
+        $ErrorActionPreference = $prevEap
+        $children = @(Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $root.Id })
+        foreach ($child in $children) {
+            if (Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue) { & taskkill.exe /PID $child.ProcessId /T /F 2>$null | Out-Null }
+        }
+        $root.Dispose()
+        if (Test-Path -LiteralPath $outputPath) { Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $errorPath) { Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 function Run-Case([string]$Name, [scriptblock]$Body) {
     try { & $Body; Write-Host "PASS $Name"; $script:passed++ }
     catch { Write-Host "FAIL $Name - $($_.Exception.Message)"; $script:failed++ }
+}
+
+function Reset-DisposableGateState {
+    $reviewDir = Join-Path $fixtureDir 'reviews'
+    if (Test-Path -LiteralPath $reviewDir) { Get-ChildItem -LiteralPath $reviewDir -File | Remove-Item -Force -ErrorAction SilentlyContinue }
+    foreach ($path in @((Join-Path $fixtureDir 'EVIDENCE.md'), (Join-Path $repoRoot ".runtime\ai_gate\$fixtureId"), (Join-Path $repoRoot ".runtime\ai_scout\$fixtureId"))) {
+        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    if ($taskJsonPath -and $originalTaskJson) { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+    foreach ($item in Get-ChildItem -LiteralPath $helperDir -File -ErrorAction SilentlyContinue) {
+        if ($item.Extension -notin @('.py', '.cmd', '.ps1')) { Remove-Item -LiteralPath $item.FullName -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+function Run-FreshPassingGate {
+    Reset-DisposableGateState
+    $code = Invoke-Script $gate $cacheReviewArgs + '-ForceRefresh'
+    Assert-True ($code -eq 0) "fresh passing Gate expected 0, got $code"
+    Assert-True (Test-Path (Join-Path $fixtureDir 'reviews\spec-review.md')) 'fresh spec review missing'
+    Assert-True (Test-Path (Join-Path $fixtureDir 'reviews\regression-review.md')) 'fresh regression review missing'
+    Assert-True (Test-Path (Join-Path $fixtureDir 'EVIDENCE.md')) 'fresh EVIDENCE missing'
 }
 
 try {
@@ -98,6 +150,23 @@ try {
         Assert-True ($scoutText -notmatch '--standalone|--pure') 'Scout production launcher contains a forbidden OpenCode flag'
         Assert-True ($gateText -notmatch '--standalone|--pure') 'Gate production launcher contains a forbidden OpenCode flag'
         Assert-True ($workflowText.Contains('exactly OpenCode CLI version 1.18.31')) 'architecture version contract missing'
+    }
+    Run-Case 'Node workflow contract and bootstrap script contracts' {
+        $nodeContractText = Get-Content $nodeContract -Raw
+        $bootstrapNodeText = Get-Content $bootstrapNode -Raw
+        $gateText = Get-Content $gateScript -Raw
+        $workflowText = Get-Content $workflowContract -Raw
+        Assert-True ($nodeContractText -notmatch '\$NodeEngineRequiredSpec') 'Node contract must not declare a hardcoded engine constant'
+        Assert-True ($nodeContractText -match 'Get-RequiredNodeEngineSpec') 'Node contract missing Get-RequiredNodeEngineSpec'
+        Assert-True ($nodeContractText -match 'engines\.node') 'Node contract does not inspect engines.node from package.json'
+        Assert-True ($nodeContractText -match 'bootstrap_node_workflow_deps\.ps1') 'node contract remediation missing bootstrap script'
+        Assert-True ($bootstrapNodeText -match 'Get-RequiredNodeEngineSpec') 'bootstrap script does not derive required engine spec from package.json'
+        Assert-True ($bootstrapNodeText -match 'npm ci') 'bootstrap script does not use npm ci'
+        Assert-True ($bootstrapNodeText -notmatch 'npm install\b') 'bootstrap script contains forbidden npm install'
+        Assert-True ($gateText -match 'node_workflow_contract\.ps1') 'Gate does not include node_workflow_contract'
+        Assert-True ($gateText -match 'Assert-NodeWorkflowDependenciesReady') 'Gate does not check Node readiness'
+        Assert-True ($gateText -notmatch 'npm install|npm ci') 'Gate contains forbidden npm mutation'
+        Assert-True ($workflowText.Contains('Canonical Node workflow environment')) 'architecture Node workflow environment section missing'
     }
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     New-Item -ItemType Directory -Force -Path $diagnosticRoot | Out-Null
@@ -160,6 +229,7 @@ if "overlap-probe" in args or model == "overlap-probe":
 
 evidence = pathlib.Path(__file__).with_name(model + ".argv.txt") if model else pathlib.Path(__file__).with_name("missing-model.argv.txt")
 evidence.write_text(json.dumps({"argv": args, "stderr": "", "exit_code": 0}), encoding="utf-8")
+pathlib.Path(__file__).with_name("reviewer-invoked.marker").write_text("invoked", encoding="utf-8")
 if model == "catastrophic-crash" or "catastrophic-crash" in args:
     pathlib.Path(__file__).with_name("catastrophic-crash.marker").write_text("invoked", encoding="utf-8")
     sys.stderr.write("catastrophic fixture failure\n")
@@ -215,6 +285,31 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     Run-Case 'Gate rejects an unsupported OpenCode version before routing' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_OpenCodeVersionOverride','2.0.3'))
         Assert-True ($code -ne 0) "expected version mismatch failure, got $code"
+    }
+    Run-Case 'Gate rejects an unsupported Node version before routing' {
+        $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_NodeVersionOverride','16.0.0'))
+        Assert-True ($code -ne 0) "expected Node version mismatch failure, got $code"
+    }
+    Run-Case 'Gate fails fast on unbootstrapped Node dependencies before reviewer execution' {
+        $marker = Join-Path $helperDir 'reviewer-invoked.marker'
+        if (Test-Path $marker) { Remove-Item -LiteralPath $marker -Force }
+        $result = Invoke-ScriptOutput $gate @(
+            '-Task', $fixtureId,
+            '-_ReviewerExecutableOverride', $reviewerCmd,
+            '-_NodeExecutableOverride', 'nonexistent_node_binary_for_test'
+        )
+        Assert-True ($result.ExitCode -ne 0) "expected missing node failure, got $($result.ExitCode)"
+        Assert-True ($result.Output -match 'Node workflow dependencies are not ready for this worktree') 'missing expected bootstrap guidance'
+        Assert-True ($result.Output.Contains('Run: .\scripts\bootstrap_node_workflow_deps.ps1')) 'missing bootstrap script remediation'
+        Assert-True (-not (Test-Path $marker)) 'fake reviewer must NOT have been executed when Node readiness fails'
+    }
+    Run-Case 'Gate explicit _SkipNodeReadinessCheck bypasses readiness for testing' {
+        $code = Invoke-Script $gate (@(
+            '-Task', $fixtureId,
+            '-_NodeExecutableOverride', 'nonexistent_node_binary_for_test',
+            '-_SkipNodeReadinessCheck'
+        ) + $reviewBase)
+        Assert-True ($code -eq 0) "expected 0 when explicitly skipping readiness, got $code"
     }
     Run-Case 'Gate invocation probe exercises the production argument builder' {
         $result = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_InvocationProbe')
@@ -312,6 +407,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate sibling artifact survives infrastructure failure' {
+        Reset-DisposableGateState
         $specCanonical = Join-Path $fixtureDir 'reviews\spec-review.md'
         $regCanonical = Join-Path $fixtureDir 'reviews\regression-review.md'
         $evidenceCanonical = Join-Path $fixtureDir 'EVIDENCE.md'
@@ -328,6 +424,9 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate partial resume reuses surviving sibling and reruns failed reviewer' {
+        Reset-DisposableGateState
+        $code0 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','catastrophic-crash','-ForceRefresh'))
+        Assert-True ($code0 -eq 1) "partial resume setup expected 1, got $code0"
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
         $specCountBefore = if (Test-Path $specInvocationsFile) { [int](Get-Content $specInvocationsFile -Raw) } else { 0 }
@@ -351,14 +450,13 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 
     # 1. Gate successful run followed immediately by identical second run
     Run-Case 'Gate successful run followed immediately by identical second run reuses both reviewers' {
+        Run-FreshPassingGate
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
         $specCanonical = Join-Path $fixtureDir 'reviews\spec-review.md'
         $regCanonical = Join-Path $fixtureDir 'reviews\regression-review.md'
         $evidenceCanonical = Join-Path $fixtureDir 'EVIDENCE.md'
-        if (Test-Path $specCanonical) { Remove-Item $specCanonical -Force }
-        if (Test-Path $regCanonical) { Remove-Item $regCanonical -Force }
-        if (Test-Path $evidenceCanonical) { Remove-Item $evidenceCanonical -Force }
+        # Run-FreshPassingGate owns the run-1 precondition.
 
         # Run 1: Fresh execution with ForceRefresh to guarantee fresh promotion
         $code1 = Invoke-Script $gate ($cacheReviewArgs + '-ForceRefresh')
@@ -383,6 +481,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate tracked canonical reviews in git preserve valid reuse' {
+        Run-FreshPassingGate
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
         $specCanonical = Join-Path $fixtureDir 'reviews\spec-review.md'
@@ -408,6 +507,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate model candidate order changes fingerprint and unchanged order hits cache' {
+        Reset-DisposableGateState
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
         $json = $originalTaskJson | ConvertFrom-Json
@@ -440,6 +540,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate ForceRefresh bypasses cache and reruns both reviewers' {
+        Run-FreshPassingGate
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
         $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
@@ -456,6 +557,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate SPEC change invalidates cache' {
+        Run-FreshPassingGate
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
 
@@ -469,6 +571,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate reviewer contract or config change invalidates cache' {
+        Run-FreshPassingGate
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
 
@@ -481,6 +584,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate malformed or missing fingerprint invalidates cache' {
+        Run-FreshPassingGate
         $specReview = Join-Path $fixtureDir 'reviews\spec-review.md'
         $content = Get-Content $specReview -Raw
         $corrupted = $content -replace 'blackfire-gate-fingerprint: \{.*?\}', 'blackfire-gate-fingerprint: {invalid-json'
@@ -497,6 +601,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Gate malformed review artifact invalidates cache' {
+        Run-FreshPassingGate
         $specReview = Join-Path $fixtureDir 'reviews\spec-review.md'
         $content = Get-Content $specReview -Raw
         $corrupted = $content -replace 'Gate-accepted verdict: PASS', 'Gate-accepted verdict: UNKNOWN'
@@ -536,7 +641,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 }
 finally {
     $diagnosticPath = Join-Path $diagnosticRoot $fixtureId
-    if ($failed -gt 0) {
+if ($failed -gt 0) {
         New-Item -ItemType Directory -Force -Path $diagnosticPath | Out-Null
         if (Test-Path $helperDir) { Copy-Item $helperDir $diagnosticPath -Recurse -Force }
         if (Test-Path $fixtureDir) { Copy-Item $fixtureDir (Join-Path $diagnosticPath 'fixture') -Recurse -Force }

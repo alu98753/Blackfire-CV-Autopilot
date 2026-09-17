@@ -18,6 +18,9 @@ log_level = "INFO" # 終端機日誌顯示等級: "DEBUG", "INFO", "WARNING", "E
 log_retention_days = 7 # 每日日誌檔案保留天數 (超過 7 天自動清理)
 
 [notification]
+# Nemesis pause intervention policy.
+nemesis_intervention_grace_period_seconds = 60.0
+nemesis_intervention_notification_count = 5
 language = "zh-TW" # 通知語言: "zh-TW" (繁體中文) 或 "en" (英文)
 
 [notification.discord]
@@ -110,6 +113,8 @@ type = "domain"
 domain = "golden_empire"
 bread_cost = 3
 nemesis_action = "pause" # "flee" (自動放棄戰鬥退出) 或 "pause" (自動暫停交給使用者手動打)
+nemesis_intervention_grace_period_seconds = 60.0
+nemesis_intervention_notification_count = 5
 enable_lord_boss = true # 是否在掛古國時若領主 Boss 冷卻結束自動插隊挑戰
 # nemesis_templates 為 list 型態，可在 user_data/<profile>/config.toml 中定義同名 key 整份覆蓋
 # 當角色變強後可縮減此清單，例如只保留 golden_king.png
@@ -154,9 +159,11 @@ bless_mode = "combat"
 greedy_dungeon = true
 greedy_allowed_indices = [1, 2, 3, 4, 5, 6, 7, 8]
 auto_resume_dungeon_on_cd = false
-nemesis_action = "flee"
+nemesis_action = "pause"
 nemesis_templates = [
-    "dungeons/exception/dragon_karsos.png"
+    "dungeons/exception/dragon_karsos.png",
+    "dungeons/exception/ice_boss_calvia_body.png",
+    "dungeons/exception/dragonkin_sakroth.png"
 ]
 navigation_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/Slime_entry.png"]
 dungeon_fight_btn = "dungeons/dungeon_fight.png"
@@ -232,6 +239,12 @@ dungeon_battle_results = ["common/continue.png", "common/continue_gray.png"]
 explore_priorities = ["dungeons/dungeons_complete.png", "common/confirm.png", "common/continue.png", "common/continue_gray.png", "dungeons/gungeon_godown_confirm.png", "common/ok.png", "dungeons/dungeon_fight.png", "common/quit.png", "dungeons/Treasure.png", "dungeons/skill_event.png", "dungeons/dungeon_bless.png", "dungeons/gungeon_godown.png", "dungeons/leave.png"]
 lobby_start_btn = "stages/start.png"
 result_buttons = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
+nemesis_action = "pause"
+nemesis_templates = [
+    "dungeons/exception/dragon_karsos.png",
+    "dungeons/exception/ice_boss_calvia_body.png",
+    "dungeons/exception/dragonkin_sakroth.png"
+]
 enable_stage_farming = true
 tier4_mode = "stage"  # 可選: "stage", "domain", "none" (停用長駐)
 tier4_domain = "golden_empire"  # tier4_mode="domain" 時目前支援黃金古國

@@ -102,6 +102,8 @@ Task startup 不建立或修改 Python dependencies。
 
 不得在 shared environment 執行 `pip install -e .`。
 
+Node workflow dependencies 採用 per-worktree untracked `node_modules`。若 task 需要執行 Node tooling（如 AI Gate 或 Node workflow tests），worktree 必須具備本機 `node_modules`。Normal consumers 嚴禁自動安裝套件；若未 bootstrap 應 fail-fast。
+
 ## Startup workflow
 
 ### Phase 0 — Development intent
@@ -230,6 +232,8 @@ git pull --ff-only
 
 ### Phase 6 — Environment preflight
 
+#### 6.1 Python environment preflight
+
 確認：
 
 ```text
@@ -247,6 +251,22 @@ git pull --ff-only
 不得引用其他 worktree 的 interpreter absolute path。
 
 若 `.venv` 缺失或失效：停止並提供 bootstrap guidance；本 Skill 不自行 pip install / recreate venv。
+
+#### 6.2 Node workflow dependency preflight
+
+若該 task 涉及 AI Gate、reviewer adapter、或 Node workflow scripts，確認本 worktree 具備可用的 Node workflow dependencies。
+
+若 `node_modules` 缺失或未完成 bootstrap，執行明確 bootstrap 指令：
+
+```powershell
+.\scripts\bootstrap_node_workflow_deps.ps1
+```
+
+（或由操作者在 worktree root 執行 `npm ci`）。
+
+注意：
+- 每個 runnable worktree 擁有獨立 untracked `node_modules`，不透過 junction 共享。
+- Gate、Scout 與 tests 僅作為 consumer；若套件缺失會 fail-fast，絕不自動執行 `npm install` / `npm ci`。
 
 ### Phase 7 — Publish remote tracking branch
 

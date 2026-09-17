@@ -1,0 +1,33 @@
+{
+  "id": "worktree-shared-venv-cleanup-safety",
+  "base_ref": "origin/main",
+  "scope": [
+    ".agents/skills/branch_completion_workflow/SKILL.md",
+    "docs/architecture/ai_development_workflow.md",
+    "scripts/worktree_cleanup_safety.ps1",
+    "tests/test_workflow_scripts.py"
+  ],
+  "focused_tests": [
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_cleanup_accepts_and_detaches_exact_junction_without_touching_target",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_cleanup_fail_closed_classifications",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_cleanup_classifies_partial_removal_without_force",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_partial_recovery_detaches_residual_junction_only_after_explicit_mode",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_partial_recovery_absent_is_safe_only_in_explicit_mode",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_explicit_detached_pending_remove_does_not_accept_arbitrary_missing_venv",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_partial_recovery_preserves_physical_and_wrong_target_venv",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_cleanup_rejects_directory_symlink_as_unsupported_reparse",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_cleanup_contract_keeps_remove_and_prune_ownership_in_workflow"
+  ],
+  "models": {
+    "scout": [
+      "temporary-gemini-read-only-fallback"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  },
+  "notes": {
+    "scout_override": "User explicitly authorized one Gemini/Antigravity read-only survey instead of OpenCode Scout for this task. Gemini is evidence provider only and may not implement while SPEC is Draft.",
+    "gate_status": "VERIFICATION_UNAVAILABLE due to catastrophic adapter failure before a valid reviewer envelope; user explicitly accepted manual final review as the integration exception for this task."
+  }
+}

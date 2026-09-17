@@ -234,6 +234,48 @@ class TestDungeonNemesisBehavior(unittest.TestCase):
         self.assertEqual(len(clicked), 3)
         self.mock_machine.transition_to.assert_called_with("NAVIGATING")
 
+    def test_dragonkin_sakroth_nemesis_pause_triggers_pause(self):
+        """
+        Given: 戰鬥中遭遇強敵 dragonkin_sakroth.png，配置 nemesis_action = 'pause'
+        When: 執行 BattleHandler.handle()
+        Then: 觸發自動暫停 (machine.pause) 並標記 nemesis_check_done
+        """
+        battle_handler = BattleHandler(self.mock_machine)
+        mock_img = MagicMock()
+
+        self.mock_machine.config = {
+            "nemesis_action": "pause",
+            "nemesis_templates": ["dungeons/exception/dragonkin_sakroth.png"],
+        }
+        self.mock_machine.current_dungeon_index = 8
+        self.mock_machine.is_in_dungeon = True
+
+        def fake_match(img, template, threshold=0.75, *args, **kwargs):
+            if template == "dungeons/exception/dragonkin_sakroth.png":
+                return ((500, 300), 0.88)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+
+        with patch("os.path.exists", return_value=True):
+            battle_handler.handle(mock_img, self.rect)
+
+        self.mock_machine.pause.assert_called_once()
+        self.assertTrue(battle_handler.nemesis_check_done)
+
+    def test_defaults_toml_contains_dungeon_and_daily_nemesis_pause(self):
+        """驗證 defaults.toml 中 primary_modes.dungeon 與 primary_modes.daily 均預設 pause 且包含薩克洛等強敵"""
+        from utils.config_manager import TomlConfigManager
+        from pathlib import Path
+        defaults = TomlConfigManager(Path("config/defaults.toml")).snapshot()
+        for mode_key in ("dungeon", "daily"):
+            mode_cfg = defaults["primary_modes"].get(mode_key, {})
+            self.assertEqual(mode_cfg.get("nemesis_action"), "pause")
+            templates = mode_cfg.get("nemesis_templates", [])
+            self.assertIn("dungeons/exception/dragonkin_sakroth.png", templates)
+            self.assertIn("dungeons/exception/dragon_karsos.png", templates)
+            self.assertIn("dungeons/exception/ice_boss_calvia_body.png", templates)
+
 
 if __name__ == "__main__":
     unittest.main()

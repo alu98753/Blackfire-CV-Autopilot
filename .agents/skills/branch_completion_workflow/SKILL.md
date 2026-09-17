@@ -337,7 +337,26 @@ git merge-base --is-ancestor <task-branch> origin/main
 - 不含未保存的 local-only evidence；
 - `.venv` 只是 junction consumer，不是 environment owner。
 
-接著使用正常 `git worktree remove <path>`；不得 `--force` 處理未知 dirty state。
+先執行 repository-owned `scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -Detach`。
+只有在 helper 回傳 `DETACHED` 且確認 canonical environment 存在後，才可使用正常
+`git worktree remove <path>`；不得 `--force` 處理未知 dirty state。Helper 只負責驗證並
+detach 該 worktree 的 exact canonical `.venv` junction，不負責 ancestry、cleanliness、
+branch deletion 或 prune。若回傳 fail-closed code，停止並保留 filesystem state。
+
+若 worktree 已部分移除（例如 path 或 `.git` administrative marker 缺失），不得 retry
+normal remove 或使用 `--force`。只有在另行明確證明 registration stale、沒有 live/dirty
+state 要保留後，才可先以 `scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -PartialRemovalRecovery -Detach`
+檢查並 detach residual exact canonical junction。若 `.venv` 已安全不存在，recovery
+helper 回傳 `SAFE_RESIDUAL_ABSENT`。只有 filesystem safety proof 完成後，才可由本
+workflow 執行 `git worktree prune --verbose`，再重新讀取 `git worktree list --porcelain`
+並確認 intended registration 消失且 unrelated worktrees 仍存在。Helper 不會自動
+prune；physical、wrong-target、unsupported 或 ambiguous residual `.venv` 一律停止。
+
+若第一次正常 cleanup 已成功 detach `.venv`，但後續 `git worktree remove <path>` 失敗，
+workflow 必須保留該次操作 evidence，並以
+`scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -DetachedPendingRemove`
+取得 `DETACHED_PENDING_REMOVE` 後再 bounded retry。任意 missing `.venv` 不得被當成已
+detach 的證據。
 
 ### Branch deletion
 
@@ -404,3 +423,28 @@ Cleanup readiness:
 # One-line principle
 
 > Verify task against canonical main, converge durable truth to SSOT, integrate only with explicit authority, then safely remove the temporary task worktree.
+
+## User-facing cleanup wrapper
+
+For a normal merged, clean task, prefer:
+
+```bat
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> < NUL"
+```
+
+Remote deletion is opt-in only:
+
+```bat
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch < NUL"
+```
+
+The wrapper may be launched from any valid repository worktree, but validates
+canonical `main` and runs destructive Git commands from that cwd. It resolves
+the task path and branch from `git worktree list --porcelain`, never guesses
+historical branch names, invokes `worktree_cleanup_safety.ps1 -Detach`, and
+continues only on one strict JSON result with `code == DETACHED`. Any failure
+stops later destructive actions.
+
+V1 does not automatically run `git worktree prune`,
+`-PartialRemovalRecovery`, or `-DetachedPendingRemove`; stale and partial
+states remain on the manual recovery path above.

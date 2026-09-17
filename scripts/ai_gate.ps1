@@ -5,15 +5,20 @@ param(
     [string]$_ReviewerExecutableOverride, [string[]]$_ReviewerArgumentsOverride,
     [string[]]$_SpecReviewerArgumentsOverride, [string[]]$_RegressionReviewerArgumentsOverride,
     [string[]]$_ReviewCandidatesOverride, [string]$_PythonExecutableOverride, [string[]]$_PythonArgumentsOverride,
-    [string]$_FailPromotionOnTarget, [string]$_OpenCodeVersionOverride, [switch]$_InvocationProbe
+    [string]$_FailPromotionOnTarget, [string]$_OpenCodeVersionOverride, [switch]$_InvocationProbe,
+    [string]$_NodeExecutableOverride, [string]$_NodeVersionOverride, [switch]$_SkipNodeReadinessCheck
 )
 $ErrorActionPreference = 'Stop'; $repoRoot = Split-Path $PSScriptRoot -Parent; Set-Location $repoRoot
 . (Join-Path $PSScriptRoot 'opencode_contract.ps1')
+. (Join-Path $PSScriptRoot 'node_workflow_contract.ps1')
 $taskDir = Join-Path $repoRoot "docs\tasks\$Task"; $taskFile = Join-Path $taskDir 'task.json'; $specPath = Join-Path $taskDir 'SPEC.md'
 if (-not (Test-Path $taskFile) -or -not (Test-Path $specPath)) { throw "Task package is incomplete: $Task" }
 $config = Get-Content -Raw -Encoding utf8 $taskFile | ConvertFrom-Json; if ($config.id -ne $Task) { throw 'task.json id does not match Task.' }
 if ($_ReviewerExecutableOverride) { if ($_OpenCodeVersionOverride) { Assert-OpenCodeSupportedVersion $_OpenCodeVersionOverride } }
 else { $oc = Get-Command opencode -ErrorAction SilentlyContinue; if (-not $oc) { throw 'OpenCode is not installed.' }; Assert-OpenCodeSupportedVersion (Get-OpenCodeVersion $oc.Source) }
+if (-not $_SkipNodeReadinessCheck) {
+    Assert-NodeWorkflowDependenciesReady -RepoRoot $repoRoot -Executable $_NodeExecutableOverride -VersionOverride $_NodeVersionOverride
+}
 $baseRef = [string]$config.base_ref; if (-not $baseRef) { throw 'task.json must define base_ref.' }
 
 function Resolve-Candidates($raw, [string]$cli, [string[]]$override) {
@@ -430,4 +435,3 @@ try {
 $blocked = -not $testsPassed -or ($slots['spec-reviewer'].Verdict -eq 'BLOCK') -or ($slots['regression-reviewer'].Verdict -eq 'BLOCK')
 if ($blocked) { Write-Host 'AI verification gate CANDIDATE_BLOCKED.'; exit 2 }
 Write-Host 'AI verification gate PASSED. Final ChatGPT/human review is still required.'; exit 0
-

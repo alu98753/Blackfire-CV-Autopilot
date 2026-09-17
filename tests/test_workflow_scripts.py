@@ -1,5 +1,7 @@
 import json
+import os
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -265,12 +267,355 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertTrue(value["stdout_closed"])
         self.assertTrue(value["stderr_closed"])
 
+    def test_node_workflow_contract_derives_spec_from_package_json(self):
+        contract = self.root / "scripts" / "node_workflow_contract.ps1"
+        contract_text = contract.read_text(encoding="utf-8")
+        self.assertNotIn("$NodeEngineRequiredSpec", contract_text)
+
+        test_dir = self.root / ".runtime" / "test_engine_ssot_fixture"
+        test_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            # 1. Custom version in package.json (>=22.0)
+            custom_pkg = {"name": "fixture", "engines": {"node": ">=22.0"}}
+            (test_dir / "package.json").write_text(json.dumps(custom_pkg), encoding="utf-8")
+
+            # Prove Get-RequiredNodeEngineSpec extracts exact string from package.json
+            ps_get_spec = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Get-RequiredNodeEngineSpec -RepoRoot \'{test_dir}\'"'
+            res_spec = subprocess.run(f'cmd.exe /d /s /c "{ps_get_spec}"', cwd=self.root, capture_output=True, text=True)
+            self.assertEqual(res_spec.returncode, 0, res_spec.stdout + res_spec.stderr)
+            self.assertEqual(res_spec.stdout.strip(), ">=22.0")
+
+            # Under >=22.0, 20.11.1 must fail
+            ps_fail = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion -Version \'20.11.1\' -RepoRoot \'{test_dir}\'"'
+            res_fail = subprocess.run(f'cmd.exe /d /s /c "{ps_fail}"', cwd=self.root, capture_output=True, text=True)
+            self.assertNotEqual(res_fail.returncode, 0)
+            self.assertIn(">=22.0", res_fail.stdout + res_fail.stderr)
+
+            # Under >=22.0, 22.1.0 must pass
+            ps_pass = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion -Version \'22.1.0\' -RepoRoot \'{test_dir}\'"'
+            res_pass = subprocess.run(f'cmd.exe /d /s /c "{ps_pass}"', cwd=self.root, capture_output=True, text=True)
+            self.assertEqual(res_pass.returncode, 0, res_pass.stdout + res_pass.stderr)
+
+            # 2. Missing engines.node fails closed
+            (test_dir / "package.json").write_text(json.dumps({"name": "fixture"}), encoding="utf-8")
+            ps_missing = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Get-RequiredNodeEngineSpec -RepoRoot \'{test_dir}\'"'
+            res_missing = subprocess.run(f'cmd.exe /d /s /c "{ps_missing}"', cwd=self.root, capture_output=True, text=True)
+            self.assertNotEqual(res_missing.returncode, 0)
+            self.assertIn("missing a valid 'engines.node'", res_missing.stdout + res_missing.stderr)
+
+            # 3. Malformed engines.node syntax fails closed
+            (test_dir / "package.json").write_text(json.dumps({"name": "fixture", "engines": {"node": "unsupported_syntax"}}), encoding="utf-8")
+            ps_malformed = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion -Version \'24.19.0\' -RepoRoot \'{test_dir}\'"'
+            res_malformed = subprocess.run(f'cmd.exe /d /s /c "{ps_malformed}"', cwd=self.root, capture_output=True, text=True)
+            self.assertNotEqual(res_malformed.returncode, 0)
+            self.assertIn("Unsupported or malformed 'engines.node' specification", res_malformed.stdout + res_malformed.stderr)
+        finally:
+            import shutil
+            shutil.rmtree(test_dir, ignore_errors=True)
+
+        # 4. Repository worktree package.json contract
+        repo_pkg = json.loads((self.root / "package.json").read_text(encoding="utf-8"))
+        repo_engine = repo_pkg["engines"]["node"]
+        self.assertEqual(repo_engine, ">=18.17")
+        ps_repo_valid = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'24.19.0\'; Assert-NodeSupportedVersion \'v18.17.0\'"'
+        res_repo_valid = subprocess.run(f'cmd.exe /d /s /c "{ps_repo_valid}"', cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(res_repo_valid.returncode, 0, res_repo_valid.stdout + res_repo_valid.stderr)
+
+        ps_repo_invalid = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; Assert-NodeSupportedVersion \'18.16.0\'"'
+        res_repo_invalid = subprocess.run(f'cmd.exe /d /s /c "{ps_repo_invalid}"', cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(res_repo_invalid.returncode, 0)
+        self.assertIn("Unsupported Node.js version", res_repo_invalid.stdout + res_repo_invalid.stderr)
+
+    def test_node_workflow_readiness_probe_package_boundary(self):
+        script = "import('undici').then(() => import('@opencode-ai/sdk/v2')).then(() => console.log('BOUNDARY_OK'));"
+        result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.root, capture_output=True, text=True, check=True)
+        self.assertIn("BOUNDARY_OK", result.stdout)
+
+    def test_node_workflow_readiness_reports_unbootstrapped_directory(self):
+        contract = self.root / "scripts" / "node_workflow_contract.ps1"
+        test_dir = self.root / ".runtime" / "test_unbootstrapped_fixture"
+        test_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (test_dir / "package.json").write_text(json.dumps({"name": "fixture", "engines": {"node": ">=18.17"}}), encoding="utf-8")
+            (test_dir / "package-lock.json").write_text("{}", encoding="utf-8")
+            ps_cmd = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ". \'{contract}\'; $r = Test-NodeWorkflowDependencies -RepoRoot \'{test_dir}\'; [pscustomobject]@{{ Ready = $r.Ready; Reason = $r.Reason; Remediation = $r.Remediation }} | ConvertTo-Json -Compress"'
+            result = subprocess.run(f'cmd.exe /d /s /c "{ps_cmd}"', cwd=self.root, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            data = json.loads(result.stdout.strip())
+            self.assertFalse(data["Ready"])
+            self.assertIn("bootstrap_node_workflow_deps.ps1", data["Remediation"])
+        finally:
+            import shutil
+            shutil.rmtree(test_dir, ignore_errors=True)
+
+    def test_gate_and_readiness_contracts_do_not_mutate_dependencies(self):
+        gate_text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8")
+        contract_text = (self.root / "scripts" / "node_workflow_contract.ps1").read_text(encoding="utf-8")
+        self.assertNotIn("npm install", gate_text)
+        self.assertNotIn("npm ci", gate_text)
+        # Verify readiness contract does not invoke npm commands to mutate environment
+        self.assertNotIn("& npm", contract_text)
+        self.assertNotIn("npm install", contract_text)
+        self.assertNotIn("npm.cmd", contract_text)
+
+    def test_bootstrap_node_workflow_deps_contract(self):
+        bootstrap_text = (self.root / "scripts" / "bootstrap_node_workflow_deps.ps1").read_text(encoding="utf-8")
+        self.assertIn("npm ci", bootstrap_text)
+        self.assertNotIn("npm install ", bootstrap_text)
+        self.assertIn("Get-RequiredNodeEngineSpec", bootstrap_text)
+        self.assertIn("Assert-NodeSupportedVersion", bootstrap_text)
+        self.assertIn("Assert-NodeWorkflowDependenciesReady", bootstrap_text)
+
+    def test_gate_reviewer_override_does_not_bypass_node_readiness(self):
+        gate_text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8")
+        self.assertIn("if (-not $_SkipNodeReadinessCheck) {", gate_text)
+        self.assertNotIn("if ($_ReviewerExecutableOverride) { if ($_NodeVersionOverride) { Assert-NodeSupportedVersion", gate_text)
+
     def test_windows_workflow_harness(self):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
         command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'
         result = subprocess.run(command, cwd=self.root, capture_output=True, text=True, shell=True, timeout=240)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Workflow script harness:", result.stdout + result.stderr)
+
+    def run_cleanup_helper(self, worktree, canonical, *extra):
+        helper = self.root / "scripts" / "worktree_cleanup_safety.ps1"
+        arguments = [
+            "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            str(helper), "-WorktreePath", str(worktree),
+            "-CanonicalEnvironmentPath", str(canonical), *extra,
+        ]
+        command = subprocess.list2cmdline(arguments) + " < NUL"
+        return subprocess.run(
+            ["cmd.exe", "/d", "/s", "/c", command],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @staticmethod
+    def helper_result(result):
+        output = (result.stdout or "").strip().splitlines()
+        if not output:
+            raise AssertionError(result.stdout + result.stderr)
+        return json.loads(output[-1])
+
+    @staticmethod
+    def make_worktree(root):
+        worktree = root / "task-worktree"
+        worktree.mkdir()
+        (worktree / ".git").write_text("gitdir: administrative-marker", encoding="utf-8")
+        return worktree
+
+    @staticmethod
+    def make_junction(link, target):
+        result = subprocess.run(
+            ["cmd.exe", "/d", "/s", "/c", f'mklink /J "{link}" "{target}"'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise unittest.SkipTest(f"junction fixture unavailable: {result.stdout}{result.stderr}")
+
+    def test_cleanup_accepts_and_detaches_exact_junction_without_touching_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            canonical = root / "canonical-env"
+            canonical.mkdir()
+            (canonical / "sentinel.txt").write_text("keep", encoding="utf-8")
+            self.make_junction(worktree / ".venv", canonical)
+
+            result = self.run_cleanup_helper(worktree, Path(str(canonical).upper()) / "")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(self.helper_result(result)["code"], "EXPECTED_JUNCTION")
+
+            result = self.run_cleanup_helper(worktree, canonical, "-Detach")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(self.helper_result(result)["code"], "DETACHED")
+            self.assertFalse((worktree / ".venv").exists())
+            self.assertEqual((canonical / "sentinel.txt").read_text(encoding="utf-8"), "keep")
+
+    def test_cleanup_fail_closed_classifications(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            missing = root / "missing-worktree"
+            missing.mkdir()
+            (missing / ".git").write_text("marker", encoding="utf-8")
+            result = self.run_cleanup_helper(missing, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "MISSING_VENV")
+
+            physical = root / "physical-worktree"
+            physical.mkdir()
+            (physical / ".git").write_text("marker", encoding="utf-8")
+            (physical / ".venv").mkdir()
+            result = self.run_cleanup_helper(physical, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "PHYSICAL_DIRECTORY")
+            self.assertTrue((physical / ".venv").exists())
+
+            wrong = root / "wrong-target"
+            wrong.mkdir()
+            (wrong / ".git").write_text("marker", encoding="utf-8")
+            wrong_target = root / "other-env"
+            wrong_target.mkdir()
+            self.make_junction(wrong / ".venv", wrong_target)
+            result = self.run_cleanup_helper(wrong, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "WRONG_TARGET")
+            self.assertTrue((wrong / ".venv").exists())
+
+    def test_cleanup_classifies_partial_removal_without_force(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            partial = root / "partial-worktree"
+            partial.mkdir()
+            result = self.run_cleanup_helper(partial, root / "canonical")
+            self.assertEqual(self.helper_result(result)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            helper_text = (self.root / "scripts" / "worktree_cleanup_safety.ps1").read_text(encoding="utf-8")
+            self.assertNotIn("worktree remove --force", helper_text.lower())
+            self.assertNotIn("worktree prune", helper_text.lower())
+
+    def test_partial_recovery_detaches_residual_junction_only_after_explicit_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            (worktree / ".git").unlink()
+            canonical = root / "canonical"
+            canonical.mkdir()
+            self.make_junction(worktree / ".venv", canonical)
+
+            normal = self.run_cleanup_helper(worktree, canonical, "-Detach")
+            self.assertEqual(self.helper_result(normal)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            self.assertTrue((worktree / ".venv").exists())
+
+            recovery = self.run_cleanup_helper(worktree, canonical, "-PartialRemovalRecovery", "-Detach")
+            self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
+            self.assertEqual(self.helper_result(recovery)["code"], "DETACHED")
+            self.assertFalse((worktree / ".venv").exists())
+            self.assertTrue(canonical.exists())
+
+    def test_partial_recovery_absent_is_safe_only_in_explicit_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            (worktree / ".git").unlink()
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            normal = self.run_cleanup_helper(worktree, canonical)
+            self.assertEqual(self.helper_result(normal)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            recovery = self.run_cleanup_helper(worktree, canonical, "-PartialRemovalRecovery")
+            self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
+            recovery_result = self.helper_result(recovery)
+            self.assertEqual(recovery_result["code"], "SAFE_RESIDUAL_ABSENT")
+            self.assertTrue(recovery_result["ok"])
+
+    def test_explicit_detached_pending_remove_does_not_accept_arbitrary_missing_venv(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            canonical = root / "canonical"
+            canonical.mkdir()
+            result = self.run_cleanup_helper(worktree, canonical, "-DetachedPendingRemove")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            pending_result = self.helper_result(result)
+            self.assertEqual(pending_result["code"], "DETACHED_PENDING_REMOVE")
+            self.assertTrue(pending_result["ok"])
+
+            worktree_without_marker = root / "without-marker"
+            worktree_without_marker.mkdir()
+            result = self.run_cleanup_helper(worktree_without_marker, canonical, "-DetachedPendingRemove")
+            self.assertEqual(self.helper_result(result)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+
+    def test_partial_recovery_preserves_physical_and_wrong_target_venv(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            physical = root / "physical"
+            physical.mkdir()
+            (physical / ".venv").mkdir()
+            result = self.run_cleanup_helper(physical, canonical, "-PartialRemovalRecovery")
+            self.assertEqual(self.helper_result(result)["code"], "PHYSICAL_DIRECTORY")
+            self.assertTrue((physical / ".venv").exists())
+
+            wrong = root / "wrong"
+            wrong.mkdir()
+            wrong_target = root / "wrong-env"
+            wrong_target.mkdir()
+            self.make_junction(wrong / ".venv", wrong_target)
+            result = self.run_cleanup_helper(wrong, canonical, "-PartialRemovalRecovery", "-Detach")
+            self.assertEqual(self.helper_result(result)["code"], "WRONG_TARGET")
+            self.assertTrue((wrong / ".venv").exists())
+
+    def test_cleanup_rejects_directory_symlink_as_unsupported_reparse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            canonical = root / "canonical"
+            canonical.mkdir()
+            try:
+                os.symlink(canonical, worktree / ".venv", target_is_directory=True)
+            except (OSError, NotImplementedError) as error:
+                raise unittest.SkipTest(f"symbolic-link fixture unavailable: {error}")
+            result = self.run_cleanup_helper(worktree, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "UNSUPPORTED_REPARSE")
+            self.assertTrue((worktree / ".venv").is_symlink())
+
+    def test_cleanup_contract_keeps_remove_and_prune_ownership_in_workflow(self):
+        helper = (self.root / "scripts" / "worktree_cleanup_safety.ps1").read_text(encoding="utf-8")
+        completion = (self.root / ".agents" / "skills" / "branch_completion_workflow" / "SKILL.md").read_text(encoding="utf-8")
+        architecture = (self.root / "docs" / "architecture" / "ai_development_workflow.md").read_text(encoding="utf-8")
+        self.assertIn("-Detach", completion)
+        self.assertIn("git worktree remove <path>", completion)
+        self.assertIn("git worktree prune --verbose", completion)
+        self.assertIn("live/dirty", completion.lower())
+        self.assertIn("unrelated worktrees", completion)
+        self.assertLess(completion.index("-Detach"), completion.index("git worktree remove <path>"))
+        self.assertNotIn("worktree remove --force", helper.lower())
+        self.assertNotIn("worktree prune", helper.lower())
+        self.assertIn("worktree_cleanup_safety.ps1", architecture)
+
+    def test_task_cleanup_wrapper_contract_is_orchestration_only(self):
+        wrapper = (self.root / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
+        helper = (self.root / "scripts" / "worktree_cleanup_safety.ps1").read_text(encoding="utf-8")
+        self.assertIn("fetch', 'origin", wrapper)
+        self.assertIn("worktree', 'remove", wrapper)
+        self.assertIn("worktree_cleanup_safety.ps1", wrapper)
+        self.assertIn("code -ne 'DETACHED'", wrapper)
+        self.assertIn("branch', '-d", wrapper)
+        self.assertIn("push', 'origin', '--delete", wrapper)
+        self.assertNotIn("worktree remove --force", wrapper.lower())
+        self.assertNotIn("worktree prune", wrapper.lower())
+        self.assertNotIn("pull", wrapper.lower())
+        self.assertNotIn("reset --hard", wrapper.lower())
+        self.assertNotIn("clean -fd", wrapper.lower())
+        self.assertNotIn("pip install", wrapper.lower())
+        self.assertIn("rmdir", helper)
+
+    def test_task_cleanup_wrapper_documents_explicit_remote_policy(self):
+        wrapper = (self.root / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
+        readme = (self.root / "scripts" / "README.md").read_text(encoding="utf-8")
+        completion = (self.root / ".agents" / "skills" / "branch_completion_workflow" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("[switch]$DeleteRemoteBranch", wrapper)
+        self.assertIn("if ($DeleteRemoteBranch)", wrapper)
+        self.assertIn("-DeleteRemoteBranch", readme)
+        self.assertIn("-DeleteRemoteBranch", completion)
+
+    def test_task_cleanup_wrapper_has_strict_json_and_stop_boundaries(self):
+        wrapper = (self.root / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
+        self.assertIn("exactly one JSON object", wrapper)
+        self.assertIn("ConvertFrom-Json", wrapper)
+        self.assertIn("post-removal topology still owns", wrapper)
+        self.assertIn("remote branch deletion failed", wrapper)
+        self.assertLess(wrapper.index("$helperStdout"), wrapper.index("worktree', 'remove"))
+        self.assertLess(wrapper.index("worktree', 'remove"), wrapper.index("branch', '-d"))
+        self.assertLess(wrapper.index("branch', '-d"), wrapper.index("push', 'origin', '--delete"))
 
 
 if __name__ == "__main__":

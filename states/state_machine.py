@@ -47,9 +47,12 @@ from states.town_subflow_navigation import TownSubflowPreconditionController
 from states.battle_session import BattleSession
 from states.stamina_retreat import StaminaRetreatRecovery, StaminaRetreatSettings
 from states.daily_pipeline_notifier import NullDailyPipelineNotifier
+from states.nemesis_intervention import NemesisIntervention
 
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 from utils.dungeon_catalog import DungeonCatalog
+from utils.scene_types import SceneId
+from utils.scene_detector import SceneDetector
 
 
 
@@ -134,6 +137,7 @@ class GameStateMachine:
         self.capturer = capturer
         self.capture_port = capturer
         self.matcher = matcher
+        self.scene_detector = SceneDetector(matcher=matcher)
         self.mouse = mouse
         self.input_port = mouse
         self.clock = clock or SystemClock()
@@ -143,6 +147,9 @@ class GameStateMachine:
         else:
             from ports.notification_port import NullNotifier
             self.notification_port = NullNotifier()
+        self.nemesis_intervention = NemesisIntervention(
+            self, self.notification_port
+        )
 
         self.daily_pipeline_notifier = (
             daily_pipeline_notifier
@@ -358,7 +365,7 @@ class GameStateMachine:
             self.pause_start_time = time.time()
             logging.info(f"⏸️ [StateMachine] 腳本已暫停，鎖定當前狀態: [{self.current_state}]。")
 
-    def resume(self) -> float:
+    def resume(self, user_initiated: bool = True) -> float:
         """
         退出手動暫停狀態，原子化執行內部安全/防卡死計時器補償並放行底層動作門閥。
         
@@ -368,12 +375,14 @@ class GameStateMachine:
         if self.is_paused:
             if self.pause_start_time is not None:
                 pause_duration = max(0.0, time.time() - self.pause_start_time)
-                self.compensate_internal_timers(pause_duration)
+                self.compensate_internal_timers(
+                    pause_duration, user_initiated=user_initiated
+                )
             self.is_paused = False
             self.pause_start_time = None
             if hasattr(self, "resume_event") and self.resume_event:
                 self.resume_event.set()
-            self.just_resumed_from_user = True
+            self.just_resumed_from_user = bool(user_initiated)
             logging.info(f"▶️ [StateMachine] 腳本已恢復運行 (已補償內部計時器 {pause_duration:.1f} 秒)。繼續執行狀態: [{self.current_state}]。")
         return pause_duration
 
@@ -390,7 +399,7 @@ class GameStateMachine:
             self.pause()
             return True
 
-    def compensate_internal_timers(self, pause_duration: float):
+    def compensate_internal_timers(self, pause_duration: float, user_initiated: bool = True):
         """
         【Clean Code 內部安全時鐘補償】
         僅補償腳本自設的防卡死、過渡等待與單場戰鬥統計計時器。
@@ -429,7 +438,7 @@ class GameStateMachine:
             self.mouse.last_action_time = now
         self.last_user_operation_time = 0.0
         self.user_operating = False
-        self.just_resumed_from_user = True
+        self.just_resumed_from_user = bool(user_initiated)
 
         # 6. 反射自動補償所有動態 missing_time_* 模板記憶
         for attr in list(self.__dict__.keys()):
@@ -540,6 +549,14 @@ class GameStateMachine:
             return
         if previous_state == self.STATE_BATTLE:
             self.battle_session.clear()
+
+    def adopt_active_battle(self, *, source: str = "scene_detection") -> bool:
+        """Adopt a visually verified battle without navigation history."""
+        if self.current_state == self.STATE_BATTLE:
+            return False
+        logging.info("[BattleAdoption] adopted visually verified active battle source=%s", source)
+        self.transition_to(self.STATE_BATTLE)
+        return True
 
     def battle_elapsed_seconds(self) -> float:
         """Return the active battle duration using the runtime clock port."""
@@ -1044,6 +1061,24 @@ class GameStateMachine:
                 return
 
         # 0.05 如果需要清理背包 (need_bag_cleaning == True) 且已回到了大廳/城鎮畫面 (看到 common/door.png 或 goback_town.png)
+        # Global scene acquisition shares the canonical detector with
+        # navigation. Run it before intent-owned recovery/collection so a
+        # cold-start battle cannot be masked by stale navigation context.
+        try:
+            from states.navigation_routing import resolve_detection_request
+            from utils.scene_detector import SceneDetector
+
+            scene = self.scene_detector.detect(
+                screen_img,
+                machine=self,
+                request=resolve_detection_request(self),
+            )
+            if scene.scene_type == SceneId.BATTLE:
+                self.adopt_active_battle(source="global_scene_detection")
+                return
+        except Exception as exc:
+            logging.debug("[GlobalSceneAcquisition] scene detection failed: %s", exc)
+
         if self.need_bag_cleaning:
             for town_btn in ["common/door.png", "goback_town.png"]:
                 if os.path.exists(os.path.join("templates", town_btn)):
@@ -2418,43 +2453,39 @@ class GameStateMachine:
                         fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
                     )
                     self.quest_scheduler = None
-                    self.apply_tier4_fallback_config()
-                    return False
                 else:
                     scheduled_node = self.check_and_advance_quest_target()
                     if scheduled_node:
                         return True
-                    # Keep the scheduler attached while temporarily farming Tier 4.
-                    # ResultHandler will preempt Tier 4 at the next safe result
-                    # screen as soon as any Daily quest becomes runnable.
+                    # 當懸賞排程器尚有任務但均在冷卻中時，保留排程器並武裝插隊旗標，
+                    # 往下依序檢查就緒之定時地下城 (Tier 4A) 或長駐退守路由 (Tier 4B)。
                     if self.quest_scheduler.get_pending_tasks():
-                        logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
-                        self.apply_tier4_fallback_config()
-                        return False
-
-            # 4. 檢查 Tier 4 地下城探索 (dungeon)
-            if activity_cfg.get("enable_dungeon", False):
-                if self.has_available_dungeon(target_config=activity_cfg):
-                    dungeon_route = activity_cfg.copy()
-                    self._apply_tier4_stage_selection(dungeon_route)
-                    self._apply_tier4_dungeon_selection(dungeon_route)
-                    dungeon_route["is_tier4_fallback"] = True
-                    self.set_config(dungeon_route)
-                    if self.quest_scheduler:
                         self.arm_daily_quest_preemption()
-                    if self.current_state not in [self.STATE_NAVIGATING, self.STATE_DUNGEON_EXPLORING, self.STATE_BATTLE]:
-                        logging.info("🏰 [Activity Scheduler] 偵測到地下城就緒 ➔ 轉移至 NAVIGATING 前往 Tier 4 地下城！")
-                        self.transition_to(self.STATE_NAVIGATING)
-                    return True
+
+            # 4. 檢查 Tier 4A 定時地下城探索 (dungeon)
+            if self.has_available_daily_dungeon():
+                dungeon_route = activity_cfg.copy()
+                self._apply_tier4_stage_selection(dungeon_route)
+                self._apply_tier4_dungeon_selection(dungeon_route)
+                dungeon_route["is_tier4_fallback"] = True
+                self.set_config(dungeon_route)
+                if self.quest_scheduler:
+                    self.arm_daily_quest_preemption()
+                logging.info("🏰 [Activity Scheduler] 偵測到定時地下城就緒 ➔ 優先於常規長駐退守前往地下城！")
+                if self.current_state not in [self.STATE_NAVIGATING, self.STATE_DUNGEON_EXPLORING, self.STATE_BATTLE]:
+                    self.transition_to(self.STATE_NAVIGATING)
+                return True
 
             # 4.5. 若已有進行中或待辦之城鎮子流程，優先維持活躍導航，不退守 Tier 4 或兜底待機
             if self.has_pending_town_subflow():
                 return True
 
-            # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4 長駐路由。
+            # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4B 長駐路由。
             daily_policy = self._daily_activity_config()
             tier4_mode = daily_policy.get("tier4_mode", cfg.get("tier4_mode"))
             if self.is_daily_pipeline_active() and tier4_mode != TIER4_MODE_NONE:
+                if self.quest_scheduler and self.quest_scheduler.get_pending_tasks():
+                    logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中且無就緒地下城；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
                 self.apply_tier4_fallback_config()
                 return False
 
