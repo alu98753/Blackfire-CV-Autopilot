@@ -16,10 +16,21 @@ $currentCwd = [IO.Path]::GetFullPath((Get-Location).Path).TrimEnd('\')
 $commonDirResult = if ($env:TASK_CLEANUP_COMMON_DIR_OVERRIDE) {
     $env:TASK_CLEANUP_COMMON_DIR_OVERRIDE
 } else {
-    (git -C $scriptRoot rev-parse --git-common-dir 2>$null).Trim()
+    $absoluteCommonDir = @(git -C $scriptRoot rev-parse --path-format=absolute --git-common-dir 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $absoluteCommonDir.Count -eq 1) {
+        $absoluteCommonDir[0]
+    } else {
+        $legacyCommonDir = @(git -C $scriptRoot rev-parse --git-common-dir 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $legacyCommonDir.Count -ne 1) { $null } else { $legacyCommonDir[0] }
+    }
 }
 if (-not $commonDirResult) { throw 'Unable to discover Git common directory.' }
-$commonDir = [IO.Path]::GetFullPath($commonDirResult)
+$commonDirText = ([string]$commonDirResult).Trim()
+$commonDir = if ([IO.Path]::IsPathRooted($commonDirText)) {
+    [IO.Path]::GetFullPath($commonDirText)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $scriptRoot $commonDirText))
+}
 $canonicalRoot = if ((Split-Path $commonDir -Leaf) -ieq '.git') { Split-Path $commonDir -Parent } else { $null }
 if (-not $canonicalRoot) { throw 'Git common directory does not identify a permanent repository root.' }
 

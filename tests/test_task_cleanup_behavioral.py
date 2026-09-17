@@ -86,6 +86,7 @@ class TaskCleanupBehavioralTests(unittest.TestCase):
         result, state = self.run_wrapper(cwd_kind="other")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(any(os.path.normcase(c["cwd"]) == os.path.normcase(state["main"]) for c in state["calls"] if "remove" in c["args"]))
+        self.assertTrue(all(os.path.normcase(c["cwd"]) != os.path.normcase(str(ROOT)) for c in state["calls"] if "remove" in c["args"]))
         for cwd_kind in ("task", "task-child"):
             result, state = self.run_wrapper(cwd_kind=cwd_kind)
             self.assertNotEqual(result.returncode, 0)
