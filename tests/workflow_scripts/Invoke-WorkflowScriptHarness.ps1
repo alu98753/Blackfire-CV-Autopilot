@@ -45,8 +45,8 @@ function Invoke-Script([string]$Script, [string[]]$Arguments) {
             $commandParts += $argument
         }
     }
-    $command = ($commandParts -join ' ') + ' < NUL & exit /b %errorlevel%'
-    $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',$command) -WorkingDirectory $repoRoot -PassThru
+    $command = ($commandParts -join ' ') + ' < NUL'
+    $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',('"' + $command + '"')) -WorkingDirectory $repoRoot -PassThru
     try {
         if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
         $root.Refresh()
@@ -70,12 +70,12 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
             $commandParts += $argument
         }
     }
-    $command = ($commandParts -join ' ') + ' < NUL & exit /b %errorlevel%'
+    $command = ($commandParts -join ' ') + ' < NUL'
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     $outputPath = Join-Path $helperDir "harness-output-$PID-$([Guid]::NewGuid().ToString('N')).txt"
     $errorPath = Join-Path $helperDir "harness-error-$PID-$([Guid]::NewGuid().ToString('N')).txt"
-    $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',$command) -WorkingDirectory $repoRoot -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath -PassThru
+    $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',('"' + $command + '"')) -WorkingDirectory $repoRoot -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath -PassThru
     try {
         if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
         $root.Refresh()
@@ -176,6 +176,19 @@ try {
     $originalTaskJson = Get-Content -LiteralPath $taskJsonPath -Raw
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
     'existing context' | Set-Content (Join-Path $fixtureDir 'CONTEXT.md') -Encoding UTF8
+    $exitProbe = Join-Path $helperDir 'exit-code-probe.ps1'
+    'param([int]$Code); exit $Code' | Set-Content -LiteralPath $exitProbe -Encoding UTF8
+
+    foreach ($expected in @(0, 1, 2, 7)) {
+        Run-Case "Invoke-Script preserves child exit $expected" {
+            $actual = Invoke-Script $exitProbe @('-Code', $expected)
+            Assert-True ($actual -eq $expected) "expected $expected, got $actual"
+        }
+        Run-Case "Invoke-ScriptOutput preserves child exit $expected" {
+            $actual = (Invoke-ScriptOutput $exitProbe @('-Code', $expected)).ExitCode
+            Assert-True ($actual -eq $expected) "expected $expected, got $actual"
+        }
+    }
 
     Run-Case 'Scout rejects an unsupported OpenCode version before routing' {
         $code = Invoke-Script $scout (@('-Task',$fixtureId,'-_ExecutableOverride',$scoutCmd,'-_OpenCodeVersionOverride','1.18.30'))
