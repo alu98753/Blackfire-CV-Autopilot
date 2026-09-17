@@ -47,7 +47,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
                 "domains/golden_empire/entry.png",
                 "domains/common/start_btn.png"
             ],
-            "explore_priorities": ["domains/golden_empire/explore_btn.png"],
+            "explore_priorities": ["domains/common/explore_btn.png"],
             "result_buttons": ["common/continue.png", "common/continue_gray.png"]
         }
 
@@ -97,14 +97,14 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
     def test_navigation_into_golden_empire_scene(self):
         """
-        Given: 導航至領地主畫面，畫面上出現探索按鈕 (domains/golden_empire/explore_btn.png)
+        Given: 導航至領地主畫面，畫面上出現探索按鈕 (domains/common/explore_btn.png)
         When: 執行 NavigationHandler.handle()
         Then: 判定抵達領地主場景，成功轉移至 STATE_DOMAIN_EXPLORE
         """
         mock_img = MagicMock()
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
-            if template == "domains/golden_empire/explore_btn.png":
+            if template == "domains/common/explore_btn.png":
                 return ((850, 740), 0.85)
             return (None, 0.0)
 
@@ -270,7 +270,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         mock_img = MagicMock()
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
-            if template == "domains/golden_empire/explore_btn.png":
+            if template == "domains/common/explore_btn.png":
                 return ((850, 740), 0.90)
             return (None, 0.0)
 
@@ -288,16 +288,16 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
     def test_treasure_event_free_box_subflow(self):
         """
-        Given: 處於 STATE_DOMAIN_EXPLORE，畫面出現挖寶畫面 (domains/golden_empire/open.png)
+        Given: 處於 STATE_DOMAIN_EXPLORE，畫面出現挖寶畫面 (domains/common/open.png)
         When: 執行 DomainExploreHandler.handle()
         Then: 觸發挖寶子流程：使用 click_and_wait_until_gone 閉環點擊 open.png、confirm.png 與 quit.png
         """
         mock_img = MagicMock()
 
         def fake_match(img, template, threshold=0.8, *args, **kwargs):
-            if template in ["domains/golden_empire/open.png", "domains/open.png"]:
+            if template in ["domains/common/open.png", "domains/open.png"]:
                 return ((1045, 615), 0.92)
-            if template in ["domains/golden_empire/find_treasure.png", "domains/golden_empire/treasure.png", "domains/find_treasure.png", "domains/treasure.png"]:
+            if template in ["domains/common/find_treasure.png", "domains/common/treasure.png"]:
                 return ((960, 540), 0.88)
             if template in ["common/confirm.png", "common/ok.png"]:
                 return ((960, 700), 0.85)
@@ -314,7 +314,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         # 斷言調用 click_and_wait_until_gone 閉環點擊 open.png、confirm.png 與 quit.png
         self.assertTrue(self.handler.click_and_wait_until_gone.called)
         called_templates = [call.args[0] for call in self.handler.click_and_wait_until_gone.call_args_list]
-        self.assertIn("domains/golden_empire/open.png", called_templates)
+        self.assertIn("domains/common/open.png", called_templates)
         self.assertIn("common/confirm.png", called_templates)
         self.assertIn("common/quit.png", called_templates)
 
@@ -675,6 +675,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
 
         # 模擬進入 Lord Boss 子流程
         sm.pop_and_next_town_subflow()
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
         # 模擬 Lord Boss 結束，隊列清空並結尾
@@ -686,7 +687,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
     # 12. UNKNOWN 狀態辨識出黃金古國主場景 (explore_btn.png) 精確轉移至 DOMAIN_EXPLORE
     def test_unknown_state_detects_golden_empire_scene(self):
         """
-        Given: 狀態機處於 UNKNOWN 全域定位，畫面出現黃金古國主場景特徵 (domains/golden_empire/explore_btn.png)
+        Given: 狀態機處於 UNKNOWN 全域定位，畫面出現黃金古國主場景特徵 (domains/common/explore_btn.png)
         When: 執行 detect_game_state
         Then: 精確斷言轉移至 STATE_DOMAIN_EXPLORE，絕不掉入 NAVIGATING 兜底
         """
@@ -696,7 +697,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         mock_screen = MagicMock()
         
         def fake_match(screen, template, threshold=0.8, **kwargs):
-            if template == "domains/golden_empire/explore_btn.png":
+            if template == "domains/common/explore_btn.png":
                 return (100, 200), 0.95
             return None, 0.0
 
@@ -715,7 +716,7 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         mock_screen = MagicMock()
 
         def fake_match(screen, template, threshold=0.8, **kwargs):
-            if template == "domains/golden_empire/explore_btn.png":
+            if template == "domains/common/explore_btn.png":
                 return (100, 200), 0.92
             return None, 0.0
 

@@ -75,7 +75,7 @@ class TestDailyTier4Behavior(unittest.TestCase):
                 "type": "domain",
                 "domain": "golden_empire",
                 "navigation_path": ["domains/golden_empire/entry.png"],
-                "explore_priorities": ["domains/golden_empire/explore_btn.png"],
+                "explore_priorities": ["domains/common/explore_btn.png"],
             }
         }
 

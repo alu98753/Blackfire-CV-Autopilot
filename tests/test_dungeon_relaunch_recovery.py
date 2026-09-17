@@ -214,7 +214,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
             "name": "黃金帝國",
             "type": "domain",
             "domain": "golden_empire",
-            "explore_priorities": ["domains/golden_empire/explore_btn.png"],
+            "explore_priorities": ["domains/common/explore_btn.png"],
         }
         self.machine.config = domain_cfg.copy()
         self.machine.current_state = self.machine.STATE_UNKNOWN
@@ -269,7 +269,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
     def test_7_explore_handler_domain_autonomy_fallback(self, mock_exists):
         """
         測試 7：ExploreHandler 領域自治 (Domain Autonomy)：
-        若傳入之配置被外部污染 (只有 domains/golden_empire/explore_btn.png)，
+        若傳入之配置被外部污染 (只有 domains/common/explore_btn.png)，
         ExploreHandler 自主識別其非地下城特徵，回退至 EMERGENCY_DUNGEON_EXIT_PRIORITIES，
         保證下樓按鈕 (gungeon_godown.png) 仍能被比對並成功點擊。
         """
@@ -278,7 +278,7 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         self.machine.config = {
             "name": "污染配置",
             "type": "domain",
-            "explore_priorities": ["domains/golden_empire/explore_btn.png"],
+            "explore_priorities": ["domains/common/explore_btn.png"],
         }
         explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
 
