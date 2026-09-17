@@ -250,7 +250,13 @@ git pull --ff-only
 
 不得引用其他 worktree 的 interpreter absolute path。
 
-若 `.venv` 缺失或失效：停止並提供 bootstrap guidance；本 Skill 不自行 pip install / recreate venv。
+若 `.venv` 缺失或需要 bootstrap，執行 repository-owned bootstrap primitive：
+
+```powershell
+.\scripts\worktree_environment_bootstrap.ps1 -WorktreePath <task-worktree>
+```
+
+本 primitive 會安全驗證 worktree 註冊狀態、檢查 canonical 環境與 interpreter、建立 exact Windows junction 並驗證本機 python 執行能力；若遇到 physical directory、wrong target 或 unsupported reparse 則會 fail closed。本 Skill 嚴禁自行 pip install、pip uninstall 或 recreate venv。
 
 #### 6.2 Node workflow dependency preflight
 
