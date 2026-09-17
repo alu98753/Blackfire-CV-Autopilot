@@ -35,3 +35,4 @@ Do not duplicate the AI workflow roadmap in this backlog. New workflow ideas may
 
 - [ ] 觀察 `NemesisIntervention` 是否需要與 process-external Supervisor daily restart 協作／延後重啟；本 task 先維持既有每日重啟語意，不保證 intervention hold 跨 process 持久化。
 - [ ] prompt 太長了 需要縮減(GPT給scout 的)
+- [ ] config 位置統一任務
