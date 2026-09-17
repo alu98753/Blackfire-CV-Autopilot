@@ -581,6 +581,42 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertNotIn("worktree prune", helper.lower())
         self.assertIn("worktree_cleanup_safety.ps1", architecture)
 
+    def test_task_cleanup_wrapper_contract_is_orchestration_only(self):
+        wrapper = (self.root / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
+        helper = (self.root / "scripts" / "worktree_cleanup_safety.ps1").read_text(encoding="utf-8")
+        self.assertIn("fetch', 'origin", wrapper)
+        self.assertIn("worktree', 'remove", wrapper)
+        self.assertIn("worktree_cleanup_safety.ps1", wrapper)
+        self.assertIn("code -ne 'DETACHED'", wrapper)
+        self.assertIn("branch', '-d", wrapper)
+        self.assertIn("push', 'origin', '--delete", wrapper)
+        self.assertNotIn("worktree remove --force", wrapper.lower())
+        self.assertNotIn("worktree prune", wrapper.lower())
+        self.assertNotIn("pull", wrapper.lower())
+        self.assertNotIn("reset --hard", wrapper.lower())
+        self.assertNotIn("clean -fd", wrapper.lower())
+        self.assertNotIn("pip install", wrapper.lower())
+        self.assertIn("rmdir", helper)
+
+    def test_task_cleanup_wrapper_documents_explicit_remote_policy(self):
+        wrapper = (self.root / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
+        readme = (self.root / "scripts" / "README.md").read_text(encoding="utf-8")
+        completion = (self.root / ".agents" / "skills" / "branch_completion_workflow" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("[switch]$DeleteRemoteBranch", wrapper)
+        self.assertIn("if ($DeleteRemoteBranch)", wrapper)
+        self.assertIn("-DeleteRemoteBranch", readme)
+        self.assertIn("-DeleteRemoteBranch", completion)
+
+    def test_task_cleanup_wrapper_has_strict_json_and_stop_boundaries(self):
+        wrapper = (self.root / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
+        self.assertIn("exactly one JSON object", wrapper)
+        self.assertIn("ConvertFrom-Json", wrapper)
+        self.assertIn("post-removal topology still owns", wrapper)
+        self.assertIn("remote branch deletion failed", wrapper)
+        self.assertLess(wrapper.index("$helperStdout"), wrapper.index("worktree', 'remove"))
+        self.assertLess(wrapper.index("worktree', 'remove"), wrapper.index("branch', '-d"))
+        self.assertLess(wrapper.index("branch', '-d"), wrapper.index("push', 'origin', '--delete"))
+
 
 if __name__ == "__main__":
     unittest.main()

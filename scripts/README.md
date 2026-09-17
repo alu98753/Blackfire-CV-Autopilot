@@ -1,5 +1,30 @@
 # 專案維運與診斷工具手冊 (Scripts & Diagnostics Index) 🛠️
 
+## Task closeout
+
+Normal cleanup uses the repository-owned wrapper:
+
+```bat
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> < NUL"
+```
+
+Remote deletion is explicit only:
+
+```bat
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch < NUL"
+```
+
+The wrapper resolves actual Git worktree topology, validates cleanliness and
+ancestry, invokes the narrow `.venv` safety primitive, and performs normal
+worktree/local-branch cleanup. It may be launched from any repository
+worktree, but destructive Git commands run from validated canonical `main`.
+It fails closed on dirty, detached, ambiguous, stale, partial, or unmerged
+state and never uses force removal, prune, reset, clean, or pull.
+
+`worktree_cleanup_safety.ps1` remains the low-level junction safety primitive;
+do not duplicate its classification logic. Stale/partial failures use the
+bounded recovery procedure in `branch_completion_workflow`.
+
 本目錄 (`scripts/`) 集中收納《黑火遠征》專案的所有**開發維護、圖像裁剪、座標校準、OCR 診斷、倍速熱注入與狀態除錯腳本**。
 
 ---
