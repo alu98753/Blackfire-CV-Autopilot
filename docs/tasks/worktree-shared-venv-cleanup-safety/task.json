@@ -1,0 +1,24 @@
+{
+  "id": "worktree-shared-venv-cleanup-safety",
+  "base_ref": "origin/main",
+  "scope": [
+    ".agents/skills/branch_completion_workflow/SKILL.md",
+    "docs/architecture/ai_development_workflow.md",
+    "scripts",
+    "tests"
+  ],
+  "focused_tests": [
+    "tests"
+  ],
+  "models": {
+    "scout": [
+      "temporary-gemini-read-only-fallback"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  },
+  "notes": {
+    "scout_override": "User explicitly authorized one Gemini/Antigravity read-only survey instead of OpenCode Scout for this task. Gemini is evidence provider only and may not implement while SPEC is Draft."
+  }
+}
