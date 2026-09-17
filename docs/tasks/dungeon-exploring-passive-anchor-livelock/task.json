@@ -1,0 +1,26 @@
+{
+  "id": "dungeon-exploring-passive-anchor-livelock",
+  "base_ref": "origin/main",
+  "base_sha": "79c4734604f7f3c9614ed172d48ebc617bd99b71",
+  "scope": [
+    "states/handlers/explore.py",
+    "states/state_machine.py",
+    "states/login_flow.py",
+    "tests/test_behavior_dungeon_state_machine.py",
+    "docs/tasks/dungeon-exploring-passive-anchor-livelock/"
+  ],
+  "focused_tests": [
+    "tests.test_behavior_dungeon_state_machine"
+  ],
+  "models": {
+    "scout": ["opencode-default"],
+    "review": ["opencode-default"]
+  },
+  "notes": {
+    "status": "Draft",
+    "implementation_blocked_until_final": true,
+    "observed_gap": "EXPLORING repeatedly treats persistent dungeons/leave.png passive anchor matches as handled work, resets local no-match accounting, returns without visible gameplay progress, and eventually reaches the outer watchdog timeout",
+    "investigation_focus": "identify the authoritative dungeon exploration progress owner and prove whether the defect is passive-anchor starvation, recovery handoff loss, or a combination",
+    "gemini_role": "read-only evidence provider only; no production implementation and no Draft-to-Final promotion"
+  }
+}
