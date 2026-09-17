@@ -152,7 +152,7 @@ try {
         Assert-True ($bootstrapText -match 'opencode-ai@\$OpenCodeSupportedVersion') 'bootstrap install is not pinned to the authoritative version'
         Assert-True ($scoutText -notmatch '--standalone|--pure') 'Scout production launcher contains a forbidden OpenCode flag'
         Assert-True ($gateText -notmatch '--standalone|--pure') 'Gate production launcher contains a forbidden OpenCode flag'
-        Assert-True ($workflowText.Contains('exactly OpenCode CLI version 1.18.31')) 'architecture version contract missing'
+        Assert-True ($workflowText -match 'Repository automation follows the pinned OpenCode version, launcher contract, CLI contract, and provider compatibility baseline') 'architecture OpenCode responsibility contract missing'
     }
     Run-Case 'Node workflow contract and bootstrap script contracts' {
         $nodeContractText = Get-Content $nodeContract -Raw
