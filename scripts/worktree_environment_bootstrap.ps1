@@ -67,6 +67,12 @@ function Classify-Venv([string]$VenvPath, [string]$ExpectedCanonicalPath) {
     }
 
     $targets = @($item.Target | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    if ($env:WORKTREE_BOOTSTRAP_MOCK_TARGET_COUNT) {
+        $mockCount = [int]$env:WORKTREE_BOOTSTRAP_MOCK_TARGET_COUNT
+        if ($mockCount -ne 1) {
+            return @{ State = 'AMBIGUOUS_TARGET'; Item = $item; TargetCount = $mockCount }
+        }
+    }
     if ($targets.Count -ne 1) {
         return @{ State = 'AMBIGUOUS_TARGET'; Item = $item; TargetCount = $targets.Count }
     }

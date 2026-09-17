@@ -48,10 +48,10 @@ class WorktreeEnvironmentBootstrapTests(unittest.TestCase):
 
     @staticmethod
     def parse_result(proc):
-        lines = (proc.stdout or "").strip().splitlines()
-        if not lines:
-            raise AssertionError(f"No stdout lines returned.\nstdout: {proc.stdout}\nstderr: {proc.stderr}")
-        return json.loads(lines[-1])
+        lines = [line for line in (proc.stdout or "").splitlines() if line.strip()]
+        if len(lines) != 1:
+            raise AssertionError(f"Expected exactly one non-empty stdout line, got {len(lines)}:\nstdout: {proc.stdout}\nstderr: {proc.stderr}")
+        return json.loads(lines[0])
 
     @staticmethod
     def make_fake_canonical_env(path, python_version="Python 3.11.9", exit_code=0):
@@ -353,7 +353,6 @@ class WorktreeEnvironmentBootstrapTests(unittest.TestCase):
             self.assertTrue((wt / ".venv").exists())
 
     def test_ambiguous_target_fails_closed_and_is_preserved(self):
-        # We can test ambiguous target by having a mock seam or helper where Target returns multiple targets
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             repo = root / "repo"
@@ -371,7 +370,65 @@ class WorktreeEnvironmentBootstrapTests(unittest.TestCase):
             canonical = root / "fake_canonical_venv"
             self.make_fake_canonical_env(canonical)
 
-            # Test invalid argument check: omitted WorktreePath
+            # Create an existing junction targeting canonical
+            self.make_junction(wt / ".venv", canonical)
+
+            # Drive Classify-Venv into AMBIGUOUS_TARGET via bounded seam WORKTREE_BOOTSTRAP_MOCK_TARGET_COUNT
+            proc = self.run_bootstrap(wt, canonical, env={"WORKTREE_BOOTSTRAP_MOCK_TARGET_COUNT": "2"})
+            self.assertNotEqual(proc.returncode, 0)
+            res = self.parse_result(proc)
+            self.assertFalse(res["ok"])
+            self.assertEqual(res["code"], "AMBIGUOUS_TARGET")
+            self.assertEqual(res["target_count"], 2)
+
+            # Assert .venv object is preserved and not mutated/deleted
+            self.assertTrue((wt / ".venv").exists())
+
+    def test_dangling_broken_reparse_fails_closed_and_is_preserved(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = root / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "TestRunner"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+            (repo / "README.md").write_text("root", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-m", "init"], check=True, capture_output=True)
+
+            wt = root / "worktrees" / "task-wt"
+            subprocess.run(["git", "-C", str(repo), "worktree", "add", "-b", "task/feat", str(wt), "HEAD"], check=True, capture_output=True)
+
+            # Valid configured canonical environment
+            canonical = root / "valid_canonical_venv"
+            self.make_fake_canonical_env(canonical)
+
+            # Create a separate temporary target and junction
+            temporary_target = root / "temporary_target"
+            temporary_target.mkdir()
+            self.make_junction(wt / ".venv", temporary_target)
+
+            # Make the junction's target disappear (dangling/broken junction)
+            # but keep the configured canonical environment valid
+            temporary_target.rmdir()
+
+            # The followed path does not exist, but Get-Item -Force still sees the residual reparse object
+            proc = self.run_bootstrap(wt, canonical)
+            self.assertNotEqual(proc.returncode, 0)
+            res = self.parse_result(proc)
+            self.assertFalse(res["ok"])
+            # Its target does not match canonical (it was temporary_target), so WRONG_TARGET fails closed
+            self.assertIn(res["code"], ("WRONG_TARGET", "JUNCTION_CREATION_FAILED"))
+
+            # The residual reparse object must be left untouched
+            self.assertTrue((wt / ".venv").is_dir() or (wt / ".venv").exists() or os.path.lexists(wt / ".venv"))
+
+    def test_omitted_worktree_path_argument_validation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            canonical = root / "fake_canonical_venv"
+            self.make_fake_canonical_env(canonical)
+
             proc_empty = self.run_bootstrap(canonical_path=canonical)
             self.assertNotEqual(proc_empty.returncode, 0)
             res_empty = self.parse_result(proc_empty)
