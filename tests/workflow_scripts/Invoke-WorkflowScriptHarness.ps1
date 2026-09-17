@@ -49,6 +49,7 @@ function Invoke-Script([string]$Script, [string[]]$Arguments) {
     $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',('"' + $command + '"')) -WorkingDirectory $repoRoot -PassThru
     try {
         if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
+        $root.WaitForExit()
         $root.Refresh()
         $exitCode = $root.ExitCode
         return ([int]$exitCode)
@@ -75,21 +76,15 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
     $ErrorActionPreference = 'Continue'
     $outputPath = Join-Path $helperDir "harness-output-$PID-$([Guid]::NewGuid().ToString('N')).txt"
     $errorPath = Join-Path $helperDir "harness-error-$PID-$([Guid]::NewGuid().ToString('N')).txt"
-    $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',('"' + $command + '"')) -WorkingDirectory $repoRoot -RedirectStandardOutput $outputPath -RedirectStandardError $errorPath -PassThru
     try {
-        if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
-        $root.Refresh()
+        Push-Location $repoRoot
+        try { & cmd.exe /d /s /c ('"' + $command + '"') 1> $outputPath 2> $errorPath; $exitCode = $LASTEXITCODE }
+        finally { Pop-Location }
         $output = ((Get-Content -LiteralPath $outputPath -Raw -ErrorAction SilentlyContinue), (Get-Content -LiteralPath $errorPath -Raw -ErrorAction SilentlyContinue) | Where-Object { $_ }) -join "`n"
-        $exitCode = $root.ExitCode
         return [pscustomobject]@{ ExitCode = [int]$exitCode; Output = $output }
     } catch { return [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) } }
     finally {
         $ErrorActionPreference = $prevEap
-        $children = @(Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $root.Id })
-        foreach ($child in $children) {
-            if (Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue) { & taskkill.exe /PID $child.ProcessId /T /F 2>$null | Out-Null }
-        }
-        $root.Dispose()
         if (Test-Path -LiteralPath $outputPath) { Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue }
         if (Test-Path -LiteralPath $errorPath) { Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue }
     }
