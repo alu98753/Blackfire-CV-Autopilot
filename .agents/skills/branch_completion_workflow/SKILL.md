@@ -423,3 +423,28 @@ Cleanup readiness:
 # One-line principle
 
 > Verify task against canonical main, converge durable truth to SSOT, integrate only with explicit authority, then safely remove the temporary task worktree.
+
+## User-facing cleanup wrapper
+
+For a normal merged, clean task, prefer:
+
+```bat
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> < NUL"
+```
+
+Remote deletion is opt-in only:
+
+```bat
+cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch < NUL"
+```
+
+The wrapper may be launched from any valid repository worktree, but validates
+canonical `main` and runs destructive Git commands from that cwd. It resolves
+the task path and branch from `git worktree list --porcelain`, never guesses
+historical branch names, invokes `worktree_cleanup_safety.ps1 -Detach`, and
+continues only on one strict JSON result with `code == DETACHED`. Any failure
+stops later destructive actions.
+
+V1 does not automatically run `git worktree prune`,
+`-PartialRemovalRecovery`, or `-DetachedPendingRemove`; stale and partial
+states remain on the manual recovery path above.
