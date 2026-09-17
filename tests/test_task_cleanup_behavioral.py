@@ -23,6 +23,7 @@ elif args[-3:] == ["worktree", "list", "--porcelain"]:
         if path == data["task"] and not data.get("task_present", True): continue
         print(f"worktree {path}\nHEAD deadbeef\nbranch refs/heads/{branch}\n")
 elif args[-2:] == ["fetch", "origin"]:
+    if os.environ.get("FAKE_FETCH_STDERR") == "1": print("fetch progress", file=sys.stderr)
     if os.environ.get("FAKE_FETCH_FAIL") == "1": state.write_text(json.dumps(data)); sys.exit(7)
 elif "show-ref" in args:
     if os.environ.get("FAKE_LOCAL_REF_FAIL") == "1": sys.exit(1)
@@ -36,6 +37,8 @@ elif args[:2] == ["branch", "-d"]:
     if os.environ.get("FAKE_LOCAL_DELETE_FAIL") == "1": state.write_text(json.dumps(data)); sys.exit(1)
 elif args[:3] == ["push", "origin", "--delete"]:
     data["remote_deleted"] = True
+    if os.environ.get("FAKE_REMOTE_STDERR") == "1": print("To https://example.invalid/repo.git", file=sys.stderr)
+    if os.environ.get("FAKE_REMOTE_FAIL") == "1": print("fatal: remote failure", file=sys.stderr)
     if os.environ.get("FAKE_REMOTE_FAIL") == "1": state.write_text(json.dumps(data)); sys.exit(1)
 state.write_text(json.dumps(data))
 '''
@@ -81,6 +84,26 @@ class TaskCleanupBehavioralTests(unittest.TestCase):
         self.assertTrue(state["remote_deleted"])
         names = [" ".join(c["args"]) for c in state["calls"]]
         self.assertLess(next(i for i, x in enumerate(names) if x.startswith("branch -d")), next(i for i, x in enumerate(names) if x.startswith("push origin --delete")))
+
+    def test_successful_remote_delete_with_stderr_is_success(self):
+        result, state = self.run_wrapper(delete_remote=True, remote_stderr=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(state["remote_deleted"])
+        self.assertIn("TASK CLEANUP SUCCEEDED", result.stdout)
+
+    def test_failed_remote_delete_preserves_stderr_and_local_success(self):
+        result, state = self.run_wrapper(delete_remote=True, remote_fail=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertTrue(state["local_deleted"])
+        self.assertTrue(state["remote_deleted"])
+        self.assertIn("LOCAL", result.stderr)
+        self.assertIn("SUCCEEDED", result.stderr)
+        self.assertIn("fatal: remote failure", result.stderr)
+
+    def test_successful_fetch_with_stderr_continues(self):
+        result, state = self.run_wrapper(fetch_stderr=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(state["local_deleted"])
 
     def test_non_main_launch_and_cwd_containment_protection(self):
         result, state = self.run_wrapper(cwd_kind="other")
