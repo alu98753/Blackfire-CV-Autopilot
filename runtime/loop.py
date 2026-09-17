@@ -10,82 +10,70 @@ from runtime.incident_journal import record_unhandled_exception, record_manual_r
 from runtime.supervisor import MANUAL_EXIT_CODE, MANUAL_RESTART_EXIT_CODE
 from states.nemesis_intervention import UserResumeDecision
 
+
 def run_main_loop(state_machine, interval):
     pause_controller = None
     try:
         import pyautogui
+
         def on_pause_toggle():
-            intervention = state_machine.__dict__.get("nemesis_intervention")
+            intervention = getattr(state_machine, "nemesis_intervention", None)
             if intervention is not None and intervention.blocks_user_toggle():
                 return
             if state_machine.is_paused:
                 if intervention is not None:
                     decision = intervention.request_user_resume()
-                    if decision is UserResumeDecision.BLOCKED_TIMEOUT:
+                    if decision in (UserResumeDecision.BLOCKED_TIMEOUT, UserResumeDecision.BLOCKED_INTERVENTION):
                         return
                 pause_duration = state_machine.resume(user_initiated=True)
                 touch_heartbeat(state_machine, force=True)
                 state_machine.prev_mouse_pos = pyautogui.position()
-                print("\n" + "=" * 60)
-                print(f" ▶️ [RESUMED] 腳本已恢復掛機 (已補償內部防卡死計時器: {pause_duration:.1f} 秒)")
-                print(f" 👉 繼續執行狀態: [{state_machine.current_state}]")
-                print("=" * 60 + "\n", flush=True)
+                print(f"\n[RESUMED] state={state_machine.current_state}; paused {pause_duration:.1f}s\n", flush=True)
             else:
                 state_machine.pause()
                 touch_heartbeat(state_machine, force=True)
-                print("\n" + "=" * 60)
-                print(f" ⏸️ [PAUSED] 腳本已手動暫停 (目前狀態: [{state_machine.current_state}])")
-                print(f" 👉 在終端機或遊戲視窗 按 [Ctrl + Space] 隨時暫停/繼續 即可恢復自動掛機...")
-                print("=" * 60 + "\n", flush=True)
+                print(f"\n[PAUSED] state={state_machine.current_state}\n", flush=True)
+
+        def on_intervention_acknowledge():
+            intervention = getattr(state_machine, "nemesis_intervention", None)
+            if intervention is None or not intervention.acknowledge():
+                return
+            print("\n[Nemesis] 已確認你已回到電腦；自動化仍保持暫停。手動處理完成後請按 Ctrl+Space 恢復。\n", flush=True)
+            touch_heartbeat(state_machine, force=True)
 
         pause_controller = PauseController(
             capturer=getattr(state_machine, "capturer", None),
             on_toggle=on_pause_toggle,
+            on_acknowledge=on_intervention_acknowledge,
             is_paused_fn=lambda: getattr(state_machine, "is_paused", False),
             heartbeat_callback=lambda: touch_heartbeat(state_machine),
         )
-        
+
         while True:
             start_time = time.time()
-
-            if pause_controller.check_manual_exit_triggered() is True:
-                print("\n[Manual Exit] Ctrl+Shift+Q received; supervisor will return to the restart menu.")
+            if pause_controller.check_manual_exit_triggered():
+                print("\n[Manual Exit] Ctrl+Shift+Q received.")
                 raise SystemExit(MANUAL_EXIT_CODE)
-
-            if pause_controller.check_manual_restart_triggered() is True:
-                print("\n[Manual Restart] Ctrl+Q received; restarting bot via supervisor fast-resume...")
+            if pause_controller.check_manual_restart_triggered():
+                print("\n[Manual Restart] Ctrl+Q received.")
                 record_manual_restart(state_machine, "manual_restart_hotkey")
                 raise SystemExit(MANUAL_RESTART_EXIT_CODE)
 
-            intervention = state_machine.__dict__.get("nemesis_intervention")
+            intervention = getattr(state_machine, "nemesis_intervention", None)
             if intervention is not None and intervention.has_pending_timeout_recovery():
                 intervention.run_pending_timeout_recovery()
                 continue
-            
-            # 1. 檢測熱鍵事件標記 (若為非執行緒模式之備用輪詢)
             if pause_controller.check_toggle_triggered() and not pause_controller._thread:
                 on_pause_toggle()
-
-            # 2. 若處於手動暫停狀態，進入輕量休眠迴圈，跳過 step()
             if state_machine.is_paused:
                 touch_heartbeat(state_machine)
                 time.sleep(0.05)
                 continue
-
             state_machine.refresh_config_at_safe_point()
             touch_heartbeat(state_machine)
             state_machine.step()
-            
-            elapsed = time.time() - start_time
-            sleep_time = max(0.001, interval - elapsed)
-            time.sleep(sleep_time)
-            
+            time.sleep(max(0.001, interval - (time.time() - start_time)))
     except KeyboardInterrupt:
-        print("\n" + "=" * 60)
-        print(" 🛑 程式已由使用者中斷。")
-        print(f" 📊 統計資訊：")
-        print(f"    - 總共啟動戰鬥場次: {state_machine.run_count} 次")
-        print("=" * 60)
         sys.exit(0)
     except Exception as exc:
         logging.exception("[Runtime] Unhandled bot exception; exiting for supervisor recovery.")

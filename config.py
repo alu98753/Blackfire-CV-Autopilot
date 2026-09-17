@@ -127,6 +127,8 @@ _REQUIRED_DEFAULT_SETTING_PATHS = (
     ("supervisor", "relaunch_buffer_seconds"),
     ("supervisor", "max_restarts"),
     ("notification", "language"),
+    ("nemesis_intervention", "grace_period_seconds"),
+    ("nemesis_intervention", "notification_count"),
 )
 
 
@@ -527,6 +529,15 @@ def get_notification_language(profile: str | None = None) -> str:
     notif_cfg = get_defaults_config().get("notification", {})
     lang = notif_cfg.get("language", DEFAULT_NOTIFICATION_LANGUAGE)
     return normalize_language(lang)
+
+
+def get_nemesis_intervention_settings() -> dict[str, float | int]:
+    """Return the canonical shared Nemesis intervention defaults."""
+    settings = get_defaults_config().get("nemesis_intervention", {})
+    return {
+        "grace_period_seconds": float(settings.get("grace_period_seconds", 180.0)),
+        "notification_count": int(settings.get("notification_count", 5)),
+    }
 
 
 def get_notification_webhook_url(profile: str | None = None) -> str:

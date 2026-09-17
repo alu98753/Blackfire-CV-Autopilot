@@ -201,6 +201,23 @@ class ResultHandler(BaseStateHandler):
                 )
                 
                 if self.machine.defeat_count >= (max_defeat - 1):
+                    self.machine.defeat_count += 1
+                    intervention = getattr(self.machine, "nemesis_intervention", None)
+                    if intervention is not None:
+                        from config import get_nemesis_intervention_settings
+                        from runtime.notification_i18n import format_nemesis_intervention
+                        title, reason = format_nemesis_intervention("defeat_limit")
+                        intervention.start(
+                            f"defeat-limit:{getattr(self.machine, 'battle_start_time', None)}:{self.machine.defeat_count}",
+                            lambda: None,
+                            policy="INDEFINITE",
+                            notification_count=get_nemesis_intervention_settings()["notification_count"],
+                            notification_title=title,
+                            notification_reason=reason,
+                            notification_code="NEMESIS_DEFEAT_LIMIT",
+                            notification_details={"defeat_count": self.machine.defeat_count},
+                        )
+                        return True
                     logging.warning(f"🚨 連續戰敗次數已達 {self.machine.defeat_count + 1} 次！發起「放棄挑戰」流程...")
                     giveup_temp = "defeat_giveup.png"
                     if os.path.exists(os.path.join("templates", giveup_temp)):

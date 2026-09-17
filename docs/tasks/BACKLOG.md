@@ -30,3 +30,8 @@ Use that roadmap for:
 Current pointer: `gate-immutable-review-baseline-contract` remains a **paused Draft task** on remote branch `task-gate-immutable-review-baseline-contract`. Do not recreate or resume it until the user explicitly unpauses it.
 
 Do not duplicate the AI workflow roadmap in this backlog. New workflow ideas may be captured here briefly only until they are either promoted into a task or incorporated into the roadmap SSOT.
+
+## Task todo
+
+- [ ] 觀察 `NemesisIntervention` 是否需要與 process-external Supervisor daily restart 協作／延後重啟；本 task 先維持既有每日重啟語意，不保證 intervention hold 跨 process 持久化。
+- [ ] prompt 太長了 需要縮減(GPT給scout 的)

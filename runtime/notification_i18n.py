@@ -117,6 +117,26 @@ MESSAGES: dict[str, dict[str, Any]] = {
 }
 
 
+NEMESIS_INTERVENTION_MESSAGES = {
+    "known": {
+        "title": "偵測到已設定的強敵",
+        "reason": "已暫停自動化。請回到電腦後按 Shift+C 確認；若在寬限時間內未確認，將執行既有自動撤退流程。",
+    },
+    "defeat_limit": {
+        "title": "連續戰敗上限已達",
+        "reason": "可能遇到尚未登錄的強敵。自動化將在目前執行階段持續暫停，不會自動撤退或放棄。請回到電腦後按 Shift+C；處理完成後再按 Ctrl+Space 恢復。",
+    },
+}
+
+
+def format_nemesis_intervention(reason_code: str) -> tuple[str, str]:
+    """Return the Traditional-Chinese operator guidance for a Nemesis hold."""
+    message = NEMESIS_INTERVENTION_MESSAGES.get(
+        reason_code, NEMESIS_INTERVENTION_MESSAGES["known"]
+    )
+    return message["title"], message["reason"]
+
+
 def normalize_language(lang: str | None) -> str:
     """Normalize and strictly validate language code.
 

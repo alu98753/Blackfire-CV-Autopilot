@@ -33,6 +33,16 @@ class TestBehaviorResultTickDriven(unittest.TestCase):
         self.fake_img = np.zeros((1080, 1920, 3), dtype=np.uint8)
         self.rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
 
+    def test_intervention_hold_blocks_relaunch_and_state_transition(self):
+        self.sm.nemesis_intervention.start(
+            "test-hold", lambda: None, policy="INDEFINITE", notification_count=0
+        )
+        self.sm.process_port = MagicMock()
+        self.assertFalse(self.sm.request_relaunch("automatic-recovery"))
+        self.sm.process_port.relaunch.assert_not_called()
+        self.assertFalse(self.sm.transition_to(self.sm.STATE_LOADING))
+
+
     @patch("os.path.exists", return_value=True)
     def test_scenario_1_init_delay_multi_tick_stability(self, _mock_exists):
         """
@@ -77,18 +87,21 @@ class TestBehaviorResultTickDriven(unittest.TestCase):
 
         self.mock_matcher.match.side_effect = mock_match
 
-        # Tick 1: 發現戰敗超限，點擊 defeat_giveup.png，切換至 WAIT_GIVEUP_CONFIRM
+        # Tick 1: 達到敗北上限，進入 indefinite Nemesis hold。
         self.handler.handle(self.fake_img, self.rect)
-        self.assertEqual(self.handler.subflow_step, "WAIT_GIVEUP_CONFIRM")
-        self.assertEqual(self.mock_mouse.click.call_count, 1)
-        self.assertIsNotNone(self.handler.giveup_confirm_start_time)
+        self.assertEqual(self.handler.subflow_step, "CONTINUE_LOOP")
+        self.assertEqual(self.mock_mouse.click.call_count, 0)
+        self.assertEqual(self.sm.defeat_count, 3)
+        self.assertTrue(self.sm.is_paused)
+        self.assertEqual(self.sm.nemesis_intervention.policy.value, "INDEFINITE")
+        self.assertEqual(self.sm.nemesis_intervention.tracked_message_ids, ())
 
         # Tick 2 (前進 1.0s，confirm 尚未出現): 維持等待，絕不重複點擊，絕不切換狀態
         self.clock.advance(1.0)
         self.handler.handle(self.fake_img, self.rect)
-        self.assertEqual(self.handler.subflow_step, "WAIT_GIVEUP_CONFIRM")
-        self.assertEqual(self.mock_mouse.click.call_count, 1)  # 仍然是 1 次
-        self.assertEqual(self.sm.current_state, "UNKNOWN")  # 狀態機未被提前切換
+        self.assertEqual(self.handler.subflow_step, "CONTINUE_LOOP")
+        self.assertEqual(self.mock_mouse.click.call_count, 0)
+        self.assertEqual(self.sm.current_state, "UNKNOWN")
 
     @patch("os.path.exists", return_value=True)
     def test_scenario_3_confirm_click_transitions_to_wait_exit_without_early_completion(self, _mock_exists):

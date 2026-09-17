@@ -1,4 +1,4 @@
-"""Bounded operator intervention lifecycle for nemesis encounters.
+"""Operator intervention lifecycle for nemesis encounters.
 
 This module owns the intervention session only.  Pause ownership, game-side
 flee actions, and notification transport remain with their existing owners.
@@ -19,12 +19,19 @@ class InterventionOutcome(str, Enum):
     TIMED_OUT = "TIMED_OUT"
 
 
+class InterventionPolicy(str, Enum):
+    TIMED = "TIMED"
+    INDEFINITE = "INDEFINITE"
+
+
 class UserResumeDecision(str, Enum):
     """Decision returned to the runtime user-input boundary."""
 
     NO_INTERVENTION = "NO_INTERVENTION"
     ACKNOWLEDGED = "ACKNOWLEDGED"
     BLOCKED_TIMEOUT = "BLOCKED_TIMEOUT"
+    BLOCKED_INTERVENTION = "BLOCKED_INTERVENTION"
+    CLEAR_MANUAL_HOLD = "CLEAR_MANUAL_HOLD"
 
 
 @dataclass
@@ -38,13 +45,16 @@ class _Session:
     timeout_recovery_pending: bool = False
     timeout_recovery_in_progress: bool = False
     timeout_cleanup_message_ids: list[str] = field(default_factory=list)
+    policy: InterventionPolicy = InterventionPolicy.TIMED
+    acknowledged: bool = False
+    timeout_recovery_owner_thread_id: int | None = None
 
 
 class NemesisIntervention:
     """Coordinate one active nemesis intervention with exact-once resolution."""
 
     DEFAULT_NOTIFICATION_COUNT = 5
-    DEFAULT_GRACE_PERIOD_SECONDS = 60.0
+    DEFAULT_GRACE_PERIOD_SECONDS = 180.0
 
     def __init__(
         self,
@@ -76,6 +86,27 @@ class NemesisIntervention:
             return self._active.outcome if self._active else None
 
     @property
+    def policy(self) -> InterventionPolicy | None:
+        with self._lock:
+            return self._active.policy if self._active else None
+
+    @property
+    def acknowledged(self) -> bool:
+        with self._lock:
+            return bool(self._active and self._active.acknowledged)
+
+    def holds_automation(self) -> bool:
+        with self._lock:
+            session = self._active
+            return bool(
+                session
+                and (
+                    session.outcome is not InterventionOutcome.TIMED_OUT
+                    or not session.timeout_side_effects_complete
+                )
+            )
+
+    @property
     def tracked_message_ids(self) -> tuple[str, ...]:
         with self._lock:
             return tuple(self._active.message_ids) if self._active else ()
@@ -87,6 +118,7 @@ class NemesisIntervention:
         *,
         notification_count: int = DEFAULT_NOTIFICATION_COUNT,
         grace_period_seconds: float = DEFAULT_GRACE_PERIOD_SECONDS,
+        policy: InterventionPolicy | str = InterventionPolicy.TIMED,
         notification_code: str = "NEMESIS_INTERVENTION",
         notification_title: str = "Nemesis detected",
         notification_reason: str = "Operator action required",
@@ -96,7 +128,8 @@ class NemesisIntervention:
         with self._lock:
             if self._active is not None and self._active.outcome is InterventionOutcome.ACTIVE:
                 return False
-            session = _Session(str(encounter_id), flee_callback=flee_callback)
+            policy = InterventionPolicy(policy)
+            session = _Session(str(encounter_id), flee_callback=flee_callback, policy=policy)
             self._active = session
 
         # Pause is authoritative and happens before auxiliary notification IO.
@@ -104,6 +137,11 @@ class NemesisIntervention:
             self.machine.pause()
         except Exception:
             logging.exception("[NemesisIntervention] authoritative pause failed")
+
+        try:
+            print(f"\n[Nemesis] {notification_title}\n{notification_reason}\n", flush=True)
+        except Exception:
+            pass
 
         count = max(0, int(notification_count))
         for _ in range(count):
@@ -114,6 +152,9 @@ class NemesisIntervention:
                 notification_reason,
                 notification_details,
             )
+
+        if policy is InterventionPolicy.INDEFINITE:
+            return True
 
         try:
             timer = self._timer_factory(max(0.0, float(grace_period_seconds)), self._on_timeout)
@@ -155,6 +196,7 @@ class NemesisIntervention:
             if session is None or session.outcome is not InterventionOutcome.ACTIVE:
                 return False
             session.outcome = InterventionOutcome.ACKNOWLEDGED
+            session.acknowledged = True
             timer = session.timer
             message_ids = list(session.message_ids)
             session.message_ids.clear()
@@ -179,15 +221,11 @@ class NemesisIntervention:
                     return UserResumeDecision.BLOCKED_TIMEOUT
                 return UserResumeDecision.NO_INTERVENTION
             if session.outcome is not InterventionOutcome.ACTIVE:
+                if session.outcome is InterventionOutcome.ACKNOWLEDGED and session.acknowledged:
+                    self._active = None
+                    return UserResumeDecision.CLEAR_MANUAL_HOLD
                 return UserResumeDecision.NO_INTERVENTION
-            session.outcome = InterventionOutcome.ACKNOWLEDGED
-            timer = session.timer
-            message_ids = list(session.message_ids)
-            session.message_ids.clear()
-        self._cancel_timer(timer)
-        for message_id in message_ids:
-            self._delete_best_effort(message_id)
-        return UserResumeDecision.ACKNOWLEDGED
+            return UserResumeDecision.BLOCKED_INTERVENTION
 
     def blocks_user_toggle(self) -> bool:
         """Return whether timeout-owned recovery currently owns the hotkey."""
@@ -195,8 +233,13 @@ class NemesisIntervention:
             session = self._active
             return bool(
                 session
-                and session.outcome is InterventionOutcome.TIMED_OUT
-                and not session.timeout_side_effects_complete
+                and (
+                    session.outcome is InterventionOutcome.ACTIVE
+                    or (
+                        session.outcome is InterventionOutcome.TIMED_OUT
+                        and not session.timeout_side_effects_complete
+                    )
+                )
             )
 
     def has_pending_timeout_recovery(self) -> bool:
@@ -212,6 +255,17 @@ class NemesisIntervention:
                 )
             )
 
+    def allows_timeout_recovery_transition(self) -> bool:
+        """Allow only the serialized timeout owner through state guards."""
+        with self._lock:
+            session = self._active
+            return bool(
+                session
+                and session.outcome is InterventionOutcome.TIMED_OUT
+                and session.timeout_recovery_in_progress
+                and session.timeout_recovery_owner_thread_id == threading.get_ident()
+            )
+
     def run_pending_timeout_recovery(self) -> bool:
         """Run timeout-owned game recovery on the authoritative runtime path."""
         with self._lock:
@@ -225,6 +279,7 @@ class NemesisIntervention:
                 return False
             session.timeout_recovery_pending = False
             session.timeout_recovery_in_progress = True
+            session.timeout_recovery_owner_thread_id = threading.get_ident()
             message_ids = list(session.timeout_cleanup_message_ids)
 
         try:
@@ -238,6 +293,7 @@ class NemesisIntervention:
             with self._lock:
                 if self._active is session:
                     session.timeout_recovery_in_progress = False
+                    session.timeout_recovery_owner_thread_id = None
                     session.timeout_side_effects_complete = True
         return True
 

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from ports.notification_port import DeleteResult, NotificationResult
 from states.nemesis_intervention import (
     InterventionOutcome,
+    InterventionPolicy,
     NemesisIntervention,
     UserResumeDecision,
 )
@@ -81,6 +82,47 @@ class InterventionTests(unittest.TestCase):
         self.assertTrue(self.timers[0].cancelled)
         self.assertFalse(self.timers[0].fire())
         self.flee.assert_not_called()
+
+    def test_indefinite_intervention_has_no_timer(self):
+        self.assertTrue(self.start(policy=InterventionPolicy.INDEFINITE))
+        self.assertEqual(self.lifecycle.policy, InterventionPolicy.INDEFINITE)
+        self.assertEqual(self.timers, [])
+        self.machine.pause.assert_called_once_with()
+
+    def test_shift_c_ack_keeps_machine_paused_and_ctrl_space_arbitration(self):
+        self.start(policy=InterventionPolicy.INDEFINITE, notification_count=0)
+        self.machine.is_paused = True
+        self.assertEqual(
+            self.lifecycle.request_user_resume(), UserResumeDecision.BLOCKED_INTERVENTION
+        )
+        self.assertTrue(self.lifecycle.acknowledge())
+        self.assertTrue(self.machine.is_paused)
+        self.assertEqual(
+            self.lifecycle.request_user_resume(), UserResumeDecision.CLEAR_MANUAL_HOLD
+        )
+        self.machine.resume(user_initiated=True)
+        self.assertTrue(self.machine.resume.called)
+
+    def test_relaunch_and_state_progress_are_blocked_during_hold(self):
+        self.start(policy=InterventionPolicy.INDEFINITE, notification_count=0)
+        self.assertTrue(self.lifecycle.holds_automation())
+        self.assertFalse(self.lifecycle.allows_timeout_recovery_transition())
+
+    def test_timeout_recovery_owner_can_transition_but_other_threads_cannot(self):
+        transitions = []
+        self.lifecycle.machine.transition_to = lambda state: transitions.append(state) if self.lifecycle.allows_timeout_recovery_transition() else False
+        self.start(notification_count=0)
+        self.timers[0].fire()
+        self.assertTrue(self.lifecycle.has_pending_timeout_recovery())
+
+        def flee():
+            self.lifecycle.machine.transition_to("NAVIGATING")
+
+        self.lifecycle._active.flee_callback = flee
+        self.lifecycle.run_pending_timeout_recovery()
+        self.assertEqual(transitions, ["NAVIGATING"])
+        self.assertFalse(self.lifecycle.has_pending_timeout_recovery())
+        self.assertFalse(self.lifecycle.allows_timeout_recovery_transition())
 
     def test_timeout_flees_resumes_programmatically_and_retains_one(self):
         self.start(notification_count=4)

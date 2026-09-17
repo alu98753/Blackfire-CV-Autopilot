@@ -9,6 +9,7 @@ VK_CONTROL = 0x11
 VK_SHIFT = 0x10
 VK_SPACE = 0x20
 VK_Q = 0x51
+VK_C = 0x43
 GA_ROOT = 2
 
 TRIGGER_MODE_CTRL_SPACE = "ctrl_space"
@@ -34,6 +35,7 @@ class PauseController:
         debounce_sec: float = 0.08,
         start_thread: bool = True,
         on_toggle=None,
+        on_acknowledge=None,
         is_paused_fn=None,
         heartbeat_callback=None,
         heartbeat_interval_sec: float = 5.0,
@@ -43,6 +45,7 @@ class PauseController:
         self.trigger_mode = trigger_mode
         self.debounce_sec = debounce_sec
         self._on_toggle = on_toggle
+        self._on_acknowledge = on_acknowledge
         self._is_paused_fn = is_paused_fn
         self._heartbeat_callback = heartbeat_callback
         self._heartbeat_interval_sec = heartbeat_interval_sec
@@ -50,6 +53,8 @@ class PauseController:
         self.key_pressed = False
         self.last_press_time = 0.0
         self.toggle_event_pending = False
+        self.acknowledge_event_pending = False
+        self.acknowledge_key_pressed = False
         self.manual_exit_event_pending = False
         self.manual_exit_key_pressed = False
         self.manual_restart_event_pending = False
@@ -294,6 +299,32 @@ class PauseController:
                 return True
             return False
 
+    def check_acknowledge_triggered(self) -> bool:
+        with self._lock:
+            if self.acknowledge_event_pending:
+                self.acknowledge_event_pending = False
+                return True
+            return False
+
+    def _poll_shift_c(self) -> bool:
+        try:
+            if not self.is_target_window_active():
+                self.acknowledge_key_pressed = False
+                return False
+            user32 = ctypes.windll.user32
+            pressed = bool(user32.GetAsyncKeyState(VK_SHIFT) & 0x8000) and bool(user32.GetAsyncKeyState(VK_C) & 0x8000)
+            if pressed and not self.acknowledge_key_pressed:
+                self.acknowledge_key_pressed = True
+                with self._lock:
+                    self.acknowledge_event_pending = True
+                if self._on_acknowledge:
+                    self._on_acknowledge()
+                return True
+            self.acknowledge_key_pressed = pressed
+        except Exception:
+            self.acknowledge_key_pressed = False
+        return False
+
     def check_manual_exit_triggered(self) -> bool:
         """Consume the high-frequency Ctrl+Shift+Q exit event."""
         with self._lock:
@@ -386,4 +417,5 @@ class PauseController:
 
         self._poll_manual_restart()
         self._poll_manual_exit()
+        self._poll_shift_c()
         return self._poll_ctrl_space(now)

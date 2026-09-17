@@ -1,0 +1,43 @@
+{
+  "id": "nemesis-intervention-unification",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/nemesis_intervention.py",
+    "states/handlers/battle.py",
+    "states/handlers/result.py",
+    "states/state_machine.py",
+    "runtime/loop.py",
+    "runtime/notification_i18n.py",
+    "utils/keyboard_listener.py",
+    "config.py",
+    "config/defaults.toml",
+    "templates/nemesis/",
+    "tests/"
+  ],
+  "focused_tests": [
+    "tests/test_nemesis_intervention.py",
+    "tests/test_behavior_golden_empire.py",
+    "tests/test_behavior_dungeon_nemesis.py",
+    "tests/test_behavior_result_tick_driven.py",
+    "tests/test_game_process_lifecycle.py",
+    "tests/test_long_run_resilience.py"
+  ],
+  "models": {
+    "scout": [
+      "repository-default",
+      "temporary-gemini-antigravity-fallback"
+    ],
+    "review": [
+      "repository-default"
+    ]
+  },
+  "notes": {
+    "status": "Final",
+    "main_base": "b0a734e9fc7751ae5691e2bd5d1b2b129c76e307",
+    "canonical_scout_status": "Infrastructure failure: repository-default exited NON_ZERO_EXIT with unexpected server error; canonical CONTEXT.md was untouched.",
+    "fallback_scout_status": "User explicitly authorized one-time Gemini/Antigravity read-only fallback. Evidence recorded in CONTEXT.md and cross-checked by ChatGPT before Final SPEC.",
+    "critical_invariant": "Within the current bot process/runtime session, no automatic timeout, watchdog, recovery, relaunch, give-up, flee, scheduler, or state-transition path may escape an intervention-owned indefinite/manual hold without explicit user action.",
+    "supervisor_boundary": "Existing process-external scheduled daily restart remains unchanged; intervention hold is not guaranteed across process replacement. Future Supervisor coordination is deferred to task-local backlog observation.",
+    "implementation": "Allowed only after this Final SPEC. Gemini/Antigravity remains workflow-v1 production implementation writer."
+  }
+}

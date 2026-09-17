@@ -511,6 +511,14 @@ class GameStateMachine:
 
 
     def transition_to(self, new_state):
+        intervention = getattr(self, "nemesis_intervention", None)
+        if (
+            intervention is not None
+            and intervention.holds_automation()
+            and not intervention.allows_timeout_recovery_transition()
+        ):
+            logging.warning("[NemesisIntervention] blocked state transition during operator hold: %s", new_state)
+            return False
         if self.current_state != new_state:
             previous_state = self.current_state
             if new_state == self.STATE_DUNGEON_EXPLORING:
@@ -580,6 +588,10 @@ class GameStateMachine:
 
     def request_relaunch(self, reason: str) -> bool:
         """Escalate recovery through the configured process boundary."""
+        intervention = getattr(self, "nemesis_intervention", None)
+        if intervention is not None and intervention.holds_automation():
+            logging.warning("[NemesisIntervention] blocked automatic relaunch during operator hold: %s", reason)
+            return False
         self.navigation_progress.clear()
         return self.process_port.relaunch(self, reason)
 

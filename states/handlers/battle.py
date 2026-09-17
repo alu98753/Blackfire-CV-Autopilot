@@ -1,7 +1,8 @@
 import time
 import os
 import logging
-from config import get_battle_max_duration_seconds, get_battle_stall_settings
+from config import get_battle_max_duration_seconds, get_battle_stall_settings, get_nemesis_intervention_settings
+from runtime.notification_i18n import format_nemesis_intervention
 from states.handlers.base import BaseStateHandler
 from utils.dungeon_catalog import DungeonCatalog
 from utils.battle_stall_detector import extract_health_bar_signature
@@ -371,24 +372,23 @@ class BattleHandler(BaseStateHandler):
                 logging.warning("=" * 60)
                 logging.warning(f"🚨 [領域強敵遭遇 - 暫停接管] 偵測到領域強敵特徵 [{detected_nemesis}] (相似度: {detected_conf:.4f} >= 0.75)！")
                 logging.warning("👉 已依據配置 (nemesis_action = 'pause') 自動暫停腳本運行。")
-                logging.warning("👉 請使用者手動接管操作戰鬥。挑戰完成後，按 [Ctrl + Space] 即可恢復自動掛機！")
+                logging.warning("👉 請回到電腦後按 [Shift+C] 確認；手動處理完成後再按 [Ctrl+Space] 恢復自動化。")
                 logging.warning("=" * 60)
                 intervention = self.machine.__dict__.get("nemesis_intervention")
                 if intervention is not None:
-                    notification_count = cfg.get(
-                        "nemesis_intervention_notification_count",
-                        p_cfg.get("nemesis_intervention_notification_count", 5),
-                    )
-                    grace_period = cfg.get(
-                        "nemesis_intervention_grace_period_seconds",
-                        p_cfg.get("nemesis_intervention_grace_period_seconds", 60.0),
-                    )
+                    settings = get_nemesis_intervention_settings()
+                    notification_count = settings["notification_count"]
+                    grace_period = settings["grace_period_seconds"]
+                    title, reason = format_nemesis_intervention("known")
                     encounter_id = f"{getattr(self.machine, 'battle_start_time', None)}:{detected_nemesis}"
                     intervention.start(
                         encounter_id,
                         lambda: self._run_nemesis_flee_subflow(rect),
                         notification_count=notification_count,
                         grace_period_seconds=grace_period,
+                        notification_code="NEMESIS_KNOWN_STRONG_ENEMY",
+                        notification_title=title,
+                        notification_reason=reason,
                         notification_details={"nemesis": detected_nemesis},
                     )
                 else:
