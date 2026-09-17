@@ -97,7 +97,15 @@ class DetectorRegistry:
 
     @staticmethod
     def classify(template_name, runtime_templates=()):
-        if template_name in {"task_complete.png", "dungeons/dungeons_complete.png"}:
+        # Battle anchors are global safety evidence. An expected lobby tab is
+        # a perception scope, never proof that the game is still in the lobby.
+        if template_name in {
+            "task_complete.png",
+            "dungeons/dungeons_complete.png",
+            "common/auto.png",
+            "battle/battle_features_1.png",
+            "battle/battle_features_2.png",
+        }:
             return DetectorGroup.SAFETY
         if template_name in {"common/door.png", "diamond.png"}:
             return DetectorGroup.TOWN
