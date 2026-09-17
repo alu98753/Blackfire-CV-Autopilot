@@ -18,9 +18,9 @@
     "review": null
   },
   "notes": {
-    "status": "Draft",
+    "status": "Final",
     "workflow": "User requested ChatGPT + Gemini only; OpenCode Scout/Gate intentionally skipped unless later requested.",
-    "architecture": "Nemesis policy is selected by the detected encounter/template, not by mode-level nemesis_action.",
+    "architecture": "Global [nemesis] intervene/flee lists route behavior by matched template; game mode does not select Nemesis policy.",
     "observed_bug": "Runtime can receive a non-empty nemesis template list whose paths all do not exist; current loop silently skips them and produces an empty score summary."
   }
 }
