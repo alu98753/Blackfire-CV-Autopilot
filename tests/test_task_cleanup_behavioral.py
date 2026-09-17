@@ -49,11 +49,14 @@ Write-Output (ConvertTo-Json ([ordered]@{ code = $code; ok = ($code -eq 'DETACHE
 '''
 
 class TaskCleanupBehavioralTests(unittest.TestCase):
-    def run_wrapper(self, *, cwd_kind="other", delete_remote=False, **flags):
+    def run_wrapper(self, *, cwd_kind="other", delete_remote=False, topology_main_matches=True, **flags):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            main, task, other = root / "canonical-main", root / "task", root / "other"
-            for path in (main, task, other): path.mkdir()
+            canonical = root / "BlackfireCrusade_tool"
+            main = canonical if topology_main_matches else root / "other-main"
+            task, other = root / "task", root / "other"
+            for path in (canonical, main, task, other): path.mkdir(exist_ok=True)
+            common_dir = canonical / ".git"; common_dir.mkdir()
             state = root / "state.json"
             state.write_text(json.dumps({"main": str(main), "task": str(task), "branch": "task/fixture", "task_present": True, "post_ownership": bool(flags.get("post_ownership"))}), encoding="utf-8")
             fake_py = root / "fake_git.py"; fake_py.write_text(FAKE_GIT, encoding="utf-8")
@@ -62,7 +65,7 @@ class TaskCleanupBehavioralTests(unittest.TestCase):
             cwd = {"main": main, "task": task, "task-child": task / "scripts", "other": other}[cwd_kind]
             if cwd_kind == "task-child": cwd.mkdir()
             env = os.environ.copy()
-            env.update({"TASK_CLEANUP_GIT_EXE": str(fake_cmd), "TASK_CLEANUP_HELPER": str(helper), "FAKE_STATE": str(state)})
+            env.update({"TASK_CLEANUP_GIT_EXE": str(fake_cmd), "TASK_CLEANUP_HELPER": str(helper), "TASK_CLEANUP_COMMON_DIR_OVERRIDE": str(common_dir), "FAKE_STATE": str(state)})
             for key, value in flags.items(): env["FAKE_" + key.upper()] = "1" if value is True else str(value)
             args = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(WRAPPER), "-Task", "task"]
             if delete_remote: args.append("-DeleteRemoteBranch")
@@ -87,6 +90,13 @@ class TaskCleanupBehavioralTests(unittest.TestCase):
             result, state = self.run_wrapper(cwd_kind=cwd_kind)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(state.get("removed", False))
+
+    def test_main_branch_at_noncanonical_path_fails_closed(self):
+        result, state = self.run_wrapper(topology_main_matches=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(state.get("removed", False))
+        self.assertFalse(state.get("local_deleted", False))
+        self.assertFalse(state.get("remote_deleted", False))
 
     def test_failures_stop_destructive_sequence(self):
         cases = (("dirty", {"dirty": True}), ("unmerged", {"unmerged": True}), ("fetch", {"fetch_fail": True}), ("malformed", {"helper_mode": "malformed"}), ("multiple", {"helper_mode": "multiple"}), ("wrong", {"helper_mode": "wrong"}), ("remove", {"remove_fail": True}), ("post", {"post_ownership": True}), ("local", {"local_delete_fail": True}))

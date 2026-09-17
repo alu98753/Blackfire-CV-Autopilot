@@ -13,6 +13,15 @@ if (-not $repoRoot) { throw 'Unable to discover repository root.' }
 $gitExe = if ($env:TASK_CLEANUP_GIT_EXE) { $env:TASK_CLEANUP_GIT_EXE } else { 'git' }
 $helper = if ($env:TASK_CLEANUP_HELPER) { $env:TASK_CLEANUP_HELPER } else { Join-Path $repoRoot 'scripts\worktree_cleanup_safety.ps1' }
 $currentCwd = [IO.Path]::GetFullPath((Get-Location).Path).TrimEnd('\')
+$commonDirResult = if ($env:TASK_CLEANUP_COMMON_DIR_OVERRIDE) {
+    $env:TASK_CLEANUP_COMMON_DIR_OVERRIDE
+} else {
+    (git -C $scriptRoot rev-parse --git-common-dir 2>$null).Trim()
+}
+if (-not $commonDirResult) { throw 'Unable to discover Git common directory.' }
+$commonDir = [IO.Path]::GetFullPath($commonDirResult)
+$canonicalRoot = if ((Split-Path $commonDir -Leaf) -ieq '.git') { Split-Path $commonDir -Parent } else { $null }
+if (-not $canonicalRoot) { throw 'Git common directory does not identify a permanent repository root.' }
 
 function Invoke-Git([string[]]$Arguments, [string]$Cwd = $repoRoot) {
     $old = (Get-Location).Path
@@ -63,7 +72,11 @@ function Require-Clean([string]$Path, [string]$Label) {
 $topology = Invoke-Git @('worktree', 'list', '--porcelain')
 if ($topology.Code -ne 0) { Stop-Cleanup "cannot read worktree topology: $($topology.Text)" }
 $records = Parse-Worktrees $topology.Lines
-$main = @($records | Where-Object { $_.branch -eq 'main' -and (-not ($_.PSObject.Properties.Name -contains 'detached') -or -not $_.detached) })
+$main = @($records | Where-Object {
+    $_.branch -eq 'main' -and
+    (-not ($_.PSObject.Properties.Name -contains 'detached') -or -not $_.detached) -and
+    (Normalize $_.path) -eq (Normalize $canonicalRoot)
+})
 if ($main.Count -ne 1) { Stop-Cleanup 'canonical main worktree is missing or ambiguous.' }
 $mainPath = $main[0].path
 if (-not (Test-Path -LiteralPath $mainPath -PathType Container)) { Stop-Cleanup 'canonical main worktree path is not present.' }
