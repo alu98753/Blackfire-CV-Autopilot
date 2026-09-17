@@ -143,21 +143,28 @@ Tier 2: 首領 Boss 討伐 (lord_boss)
   ↓ (首領次數耗盡或無可用門票)
 Tier 3: 每日懸賞任務 (QuestScheduler: TaskNode 佇列)
   ↓ (8 項懸賞全數完成，或全數處於冷卻中)
-Tier 4: 常規長駐退守 (自選貪婪地下城 / 普通關卡 / 領地探索)
-  ↓ (地下城全冷卻且未開啟關卡掛機)
+Tier 4: 常規退守桶 (Common Fallback Bucket)
+  ├─ Tier 4A: 就緒定時地下城 (ready cooldown-gated timed dungeon)
+  └─ Tier 4B: 常規長駐退守 (perpetual domain/stage fallback)
+  ↓ (地下城全冷卻且未開啟長駐退守)
 Tier 0: 基底定時待機 (STATE_COLLECT_ONLY)
 ```
 
 #### 核心架構約束與不變量 (Scheduling Invariants)
 1. **單向階梯不變量 (Strict Top-Down Precedence)**：
-   - 只要高層級活動（如 Tier 1 城鎮子流程或 Tier 3 懸賞任務）尚有未完成"且"可執行的工作，系統的唯一承諾即為推進該活動，**嚴禁提前流向或洩漏至 Tier 4 常規退守**。
-2. **退守顯式標記與搶佔武裝 (Explicit Fallback & Preemption Invariant)**：
-   - 僅當懸賞任務全數完成或全處於冷卻中時，方允許調用 `apply_tier4_fallback_config()` 切換至 Tier 4。
-   - 進入 Tier 4 必須明確標記 `is_tier4_fallback = True`，並於懸賞任務未全完成時武裝 `arm_daily_quest_preemption()`，保證在戰鬥結算安全點 (Result Safe Point) 優先插隊切回懸賞任務。
-3. **導航層剝離任務選擇 (Strip Selection from Navigation)**：
+   - 只要高層級活動（如 Tier 1 城鎮子流程或 Tier 3 懸賞任務）尚有未完成"且"可執行的工作（runnable），系統的唯一承諾即為推進該活動，**嚴禁提前流向或洩漏至 Tier 4 常規退守**。
+2. **Tier 4 退守桶內部優先級契約 (Tier 4 Fallback Precedence Invariant)**：
+   - Tier 4 屬於共同退守桶（Common Fallback Bucket），但內部存在明確的就緒優先級：
+     `ready cooldown-gated timed dungeon (Tier 4A) > perpetual domain/stage fallback (Tier 4B)`
+   - 當懸賞任務尚有未完成但全處於冷卻中（pending but cooling）時，系統保留懸賞排程器並維持插隊武裝，繼續向下評估：若定時地下城已冷卻完畢且就緒（`has_available_daily_dungeon()`），優先派發地下城（Tier 4A）；僅當地下城亦不可用或全在冷卻中時，方退守玩家自選之長駐領地/關卡（Tier 4B）。
+   - 此內部優先級絕不提升定時地下城之全域層級，定時地下城絕不高於任一可執行（runnable）之 Tier 1、Tier 1.5、Tier 2 或 Tier 3 懸賞任務。
+3. **退守顯式標記與搶佔武裝 (Explicit Fallback & Preemption Invariant)**：
+   - 進入 Tier 4（包含 Tier 4A 地下城與 Tier 4B domain/stage）必須明確標記 `is_tier4_fallback = True`，並於懸賞任務未全完成時武裝 `arm_daily_quest_preemption()`，保證在戰鬥結算安全點 (Result Safe Point) 優先插隊切回懸賞任務。
+   - 若在 Tier 4B 長駐領地探索中偵測到定時地下城就緒，領地在安全點退出後，由中央調度器保證派發就緒地下城，嚴禁在地下城就緒時無效重入長駐退守形成乒乓活鎖（Preemption-Dispatch Coherence）。
+4. **導航層剝離任務選擇 (Strip Selection from Navigation)**：
    - 底層 `NavigationHandler` 僅專注於執行已下發 `navigation_path` 的畫面元素比對與點擊，**嚴禁在底層查詢 `quest_scheduler` 或 `daily_manager` 做反向任務選擇**。
    - 在受管 Daily 流程下，非 Tier 4 退守模式 (`not is_tier4_fallback`) 嚴禁在活動大廳擅自點擊地下城或普通關卡頁籤切換（禁止未受管的 legacy `type="mix"` 旁路搶跑）。
-4. **過渡期退避相容約束 (Deferral Compatibility Constraint)**：
+5. **過渡期退避相容約束 (Deferral Compatibility Constraint)**：
    - 城鎮領體力/鑽石逾時退避時必須同步清除請求旗標 (`need_bread_collection = False`)。
    - `_collection_pending()` 的 `is_deferred` 感知僅作為過渡期相容邏輯，嚴禁繼續往該函式中堆疊更多業務生命週期狀態。
 
