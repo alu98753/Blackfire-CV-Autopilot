@@ -98,6 +98,7 @@ class InterventionTests(unittest.TestCase):
         self.machine.resume.assert_called_once_with(user_initiated=False)
 
     def test_timeout_with_no_ids_still_flees_and_resumes(self):
+        self.notifier.notify_alarm.side_effect = None
         self.notifier.notify_alarm.return_value = NotificationResult(False)
         self.start(notification_count=2)
         self.machine.is_paused = True
