@@ -406,7 +406,9 @@ class WorkflowScriptContractTests(unittest.TestCase):
             self.assertEqual(self.helper_result(normal)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
             recovery = self.run_cleanup_helper(worktree, canonical, "-PartialRemovalRecovery")
             self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
-            self.assertEqual(self.helper_result(recovery)["code"], "SAFE_RESIDUAL_ABSENT")
+            recovery_result = self.helper_result(recovery)
+            self.assertEqual(recovery_result["code"], "SAFE_RESIDUAL_ABSENT")
+            self.assertTrue(recovery_result["ok"])
 
     def test_explicit_detached_pending_remove_does_not_accept_arbitrary_missing_venv(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -416,7 +418,9 @@ class WorkflowScriptContractTests(unittest.TestCase):
             canonical.mkdir()
             result = self.run_cleanup_helper(worktree, canonical, "-DetachedPendingRemove")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(self.helper_result(result)["code"], "DETACHED_PENDING_REMOVE")
+            pending_result = self.helper_result(result)
+            self.assertEqual(pending_result["code"], "DETACHED_PENDING_REMOVE")
+            self.assertTrue(pending_result["ok"])
 
             worktree_without_marker = root / "without-marker"
             worktree_without_marker.mkdir()

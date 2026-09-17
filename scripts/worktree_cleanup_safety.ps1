@@ -52,7 +52,12 @@ function Normalize-WindowsPath([string]$Path) {
 
 function Write-Result([string]$Code, [string]$Message, [hashtable]$Data = @{}) {
     $result = [ordered]@{
-        ok = ($Code -eq 'DETACHED' -or $Code -eq 'EXPECTED_JUNCTION')
+        ok = (
+            $Code -eq 'DETACHED' -or
+            $Code -eq 'EXPECTED_JUNCTION' -or
+            $Code -eq 'SAFE_RESIDUAL_ABSENT' -or
+            $Code -eq 'DETACHED_PENDING_REMOVE'
+        )
         code = $Code
         message = $Message
         worktree = $WorktreePath
