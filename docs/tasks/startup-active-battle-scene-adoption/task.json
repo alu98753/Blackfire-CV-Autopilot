@@ -1,0 +1,34 @@
+{
+  "id": "startup-active-battle-scene-adoption",
+  "title": "Startup Active Battle Scene Adoption",
+  "status": "Final",
+  "branch": "task/startup-active-battle-scene-adoption",
+  "base_branch": "main",
+  "base_sha": "1c51eb0cc00885eaf5c2b40a967589084595cd36",
+  "owner": "chatgpt",
+  "implementation_writer": "gemini",
+  "workflow": {
+    "mode": "chatgpt-gemini-direct",
+    "scout": false,
+    "ai_gate": false,
+    "final_review": "chatgpt"
+  },
+  "goal": "Recognize and adopt a visually verifiable active battle that already exists when the process cold-starts, without depending on bot-owned navigation history or inferring scene from intent.",
+  "artifacts": {
+    "spec": "docs/tasks/startup-active-battle-scene-adoption/SPEC.md"
+  },
+  "required_tests": [
+    "cold-start active battle recognition",
+    "existing battle session adoption/handoff",
+    "cold-start lobby/non-battle regression",
+    "ambiguous or insufficient scene evidence remains fail-closed",
+    "intent or expected_tab without battle visual evidence does not trigger adoption"
+  ],
+  "notes": [
+    "No OpenCode Scout for this task by explicit user instruction.",
+    "No scripts/ai_gate.ps1 for this task by explicit user instruction.",
+    "Gemini is the sole production implementation writer.",
+    "ChatGPT owns the Final SPEC and final semantic/architecture review.",
+    "Investigate stale expected_tab/navigation progress only for causal relevance; split unrelated cleanup into a follow-up task."
+  ]
+}
