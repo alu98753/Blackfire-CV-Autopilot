@@ -20,6 +20,8 @@
     "implementation_blocked_until_final": false,
     "observed_runtime_failure": "successful git push --delete emitted stderr and Windows PowerShell promoted it to NativeCommandError before LASTEXITCODE handling",
     "implementation_commit": "bed6f49950e7955c40b597457658b158db0a95e5",
-    "review_status": "PASS"
+    "review_status": "PASS",
+    "deterministic_tests": "7/7 wrapper behavioral tests passed",
+    "real_dogfood": "PASS: unmerged fixed wrapper cleaned node-workflow-dependency-bootstrap end-to-end on real Windows/Git/GitHub, including explicit remote branch deletion, with final TASK CLEANUP SUCCEEDED output"
   }
 }
