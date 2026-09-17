@@ -1,0 +1,29 @@
+{
+  "id": "nemesis-intervention-unification",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/nemesis_intervention.py",
+    "states/handlers/battle.py",
+    "states/handlers/result.py",
+    "states/state_machine.py",
+    "runtime/notification_i18n.py",
+    "config/defaults.toml",
+    "templates/nemesis/",
+    "tests/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "repository-default"
+    ],
+    "review": [
+      "repository-default"
+    ]
+  },
+  "notes": {
+    "status": "Draft",
+    "main_base": "b0a734e9fc7751ae5691e2bd5d1b2b129c76e307",
+    "scout_priority": "Enumerate every timeout, watchdog, recovery, relaunch, give-up, and resume path capable of escaping defeat-limit indefinite pause; identify authoritative hotkey owner and Shift+C collisions before Final SPEC.",
+    "implementation": "Blocked until Scout evidence is reviewed and SPEC is Final."
+  }
+}
