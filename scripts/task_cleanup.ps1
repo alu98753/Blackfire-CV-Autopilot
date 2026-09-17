@@ -36,12 +36,33 @@ if (-not $canonicalRoot) { throw 'Git common directory does not identify a perma
 
 function Invoke-Git([string[]]$Arguments, [string]$Cwd = $repoRoot) {
     $old = (Get-Location).Path
+    $captureDir = Join-Path ([IO.Path]::GetTempPath()) ("task-cleanup-git-" + [guid]::NewGuid().ToString('N'))
+    $stdoutPath = Join-Path $captureDir 'stdout.txt'
+    $stderrPath = Join-Path $captureDir 'stderr.txt'
     try {
+        New-Item -ItemType Directory -Path $captureDir -Force | Out-Null
         Set-Location -LiteralPath $Cwd
-        $output = @(& $gitExe @Arguments 2>&1 | ForEach-Object { [string]$_ })
+        # Redirect native streams to files at the process boundary. In Windows
+        # PowerShell, merging stderr into the pipeline can turn normal native
+        # diagnostics into NativeCommandError terminating errors.
+        $oldErrorActionPreference = $ErrorActionPreference
+        try {
+            # This is deliberately scoped to the native call. Native stderr is
+            # captured as data; PowerShell errors outside this boundary remain
+            # terminating under the script's Stop policy.
+            $ErrorActionPreference = 'Continue'
+            & $gitExe @Arguments 1> $stdoutPath 2> $stderrPath
+        } finally {
+            $ErrorActionPreference = $oldErrorActionPreference
+        }
         $code = $LASTEXITCODE
-        return [pscustomobject]@{ Code = $code; Lines = $output; Text = ($output -join "`n") }
-    } finally { Set-Location -LiteralPath $old }
+        $output = @(if (Test-Path $stdoutPath) { Get-Content -LiteralPath $stdoutPath })
+        $stderr = @(if (Test-Path $stderrPath) { Get-Content -LiteralPath $stderrPath })
+        return [pscustomobject]@{ Code = $code; Lines = $output; Stderr = $stderr; Text = (($output + $stderr) -join "`n") }
+    } finally {
+        Set-Location -LiteralPath $old
+        Remove-Item -LiteralPath $captureDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Stop-Cleanup([string]$Message) {
@@ -148,7 +169,7 @@ if ($DeleteRemoteBranch) {
     $remote = Invoke-Git @('push', 'origin', '--delete', $branch) $mainPath
     if ($remote.Code -ne 0) {
         $remoteStatus = 'failed'
-        Write-Error "LOCAL CLEANUP SUCCEEDED; remote branch deletion failed for '$branch': $($remote.Text)"
+        Write-Error "LOCAL CLEANUP SUCCEEDED; remote branch deletion failed for '$branch': $($remote.Text)" -ErrorAction Continue
         exit 2
     }
     $remoteStatus = 'deleted'
