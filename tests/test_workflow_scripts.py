@@ -1,5 +1,7 @@
 import json
+import os
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -375,6 +377,209 @@ class WorkflowScriptContractTests(unittest.TestCase):
         result = subprocess.run(command, cwd=self.root, capture_output=True, text=True, shell=True, timeout=240)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Workflow script harness:", result.stdout + result.stderr)
+
+    def run_cleanup_helper(self, worktree, canonical, *extra):
+        helper = self.root / "scripts" / "worktree_cleanup_safety.ps1"
+        arguments = [
+            "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            str(helper), "-WorktreePath", str(worktree),
+            "-CanonicalEnvironmentPath", str(canonical), *extra,
+        ]
+        command = subprocess.list2cmdline(arguments) + " < NUL"
+        return subprocess.run(
+            ["cmd.exe", "/d", "/s", "/c", command],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @staticmethod
+    def helper_result(result):
+        output = (result.stdout or "").strip().splitlines()
+        if not output:
+            raise AssertionError(result.stdout + result.stderr)
+        return json.loads(output[-1])
+
+    @staticmethod
+    def make_worktree(root):
+        worktree = root / "task-worktree"
+        worktree.mkdir()
+        (worktree / ".git").write_text("gitdir: administrative-marker", encoding="utf-8")
+        return worktree
+
+    @staticmethod
+    def make_junction(link, target):
+        result = subprocess.run(
+            ["cmd.exe", "/d", "/s", "/c", f'mklink /J "{link}" "{target}"'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise unittest.SkipTest(f"junction fixture unavailable: {result.stdout}{result.stderr}")
+
+    def test_cleanup_accepts_and_detaches_exact_junction_without_touching_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            canonical = root / "canonical-env"
+            canonical.mkdir()
+            (canonical / "sentinel.txt").write_text("keep", encoding="utf-8")
+            self.make_junction(worktree / ".venv", canonical)
+
+            result = self.run_cleanup_helper(worktree, Path(str(canonical).upper()) / "")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(self.helper_result(result)["code"], "EXPECTED_JUNCTION")
+
+            result = self.run_cleanup_helper(worktree, canonical, "-Detach")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(self.helper_result(result)["code"], "DETACHED")
+            self.assertFalse((worktree / ".venv").exists())
+            self.assertEqual((canonical / "sentinel.txt").read_text(encoding="utf-8"), "keep")
+
+    def test_cleanup_fail_closed_classifications(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            missing = root / "missing-worktree"
+            missing.mkdir()
+            (missing / ".git").write_text("marker", encoding="utf-8")
+            result = self.run_cleanup_helper(missing, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "MISSING_VENV")
+
+            physical = root / "physical-worktree"
+            physical.mkdir()
+            (physical / ".git").write_text("marker", encoding="utf-8")
+            (physical / ".venv").mkdir()
+            result = self.run_cleanup_helper(physical, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "PHYSICAL_DIRECTORY")
+            self.assertTrue((physical / ".venv").exists())
+
+            wrong = root / "wrong-target"
+            wrong.mkdir()
+            (wrong / ".git").write_text("marker", encoding="utf-8")
+            wrong_target = root / "other-env"
+            wrong_target.mkdir()
+            self.make_junction(wrong / ".venv", wrong_target)
+            result = self.run_cleanup_helper(wrong, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "WRONG_TARGET")
+            self.assertTrue((wrong / ".venv").exists())
+
+    def test_cleanup_classifies_partial_removal_without_force(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            partial = root / "partial-worktree"
+            partial.mkdir()
+            result = self.run_cleanup_helper(partial, root / "canonical")
+            self.assertEqual(self.helper_result(result)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            helper_text = (self.root / "scripts" / "worktree_cleanup_safety.ps1").read_text(encoding="utf-8")
+            self.assertNotIn("worktree remove --force", helper_text.lower())
+            self.assertNotIn("worktree prune", helper_text.lower())
+
+    def test_partial_recovery_detaches_residual_junction_only_after_explicit_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            (worktree / ".git").unlink()
+            canonical = root / "canonical"
+            canonical.mkdir()
+            self.make_junction(worktree / ".venv", canonical)
+
+            normal = self.run_cleanup_helper(worktree, canonical, "-Detach")
+            self.assertEqual(self.helper_result(normal)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            self.assertTrue((worktree / ".venv").exists())
+
+            recovery = self.run_cleanup_helper(worktree, canonical, "-PartialRemovalRecovery", "-Detach")
+            self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
+            self.assertEqual(self.helper_result(recovery)["code"], "DETACHED")
+            self.assertFalse((worktree / ".venv").exists())
+            self.assertTrue(canonical.exists())
+
+    def test_partial_recovery_absent_is_safe_only_in_explicit_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            (worktree / ".git").unlink()
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            normal = self.run_cleanup_helper(worktree, canonical)
+            self.assertEqual(self.helper_result(normal)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+            recovery = self.run_cleanup_helper(worktree, canonical, "-PartialRemovalRecovery")
+            self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
+            recovery_result = self.helper_result(recovery)
+            self.assertEqual(recovery_result["code"], "SAFE_RESIDUAL_ABSENT")
+            self.assertTrue(recovery_result["ok"])
+
+    def test_explicit_detached_pending_remove_does_not_accept_arbitrary_missing_venv(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            canonical = root / "canonical"
+            canonical.mkdir()
+            result = self.run_cleanup_helper(worktree, canonical, "-DetachedPendingRemove")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            pending_result = self.helper_result(result)
+            self.assertEqual(pending_result["code"], "DETACHED_PENDING_REMOVE")
+            self.assertTrue(pending_result["ok"])
+
+            worktree_without_marker = root / "without-marker"
+            worktree_without_marker.mkdir()
+            result = self.run_cleanup_helper(worktree_without_marker, canonical, "-DetachedPendingRemove")
+            self.assertEqual(self.helper_result(result)["code"], "PARTIAL_REMOVAL_REQUIRES_STALE_PROOF")
+
+    def test_partial_recovery_preserves_physical_and_wrong_target_venv(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            canonical = root / "canonical"
+            canonical.mkdir()
+
+            physical = root / "physical"
+            physical.mkdir()
+            (physical / ".venv").mkdir()
+            result = self.run_cleanup_helper(physical, canonical, "-PartialRemovalRecovery")
+            self.assertEqual(self.helper_result(result)["code"], "PHYSICAL_DIRECTORY")
+            self.assertTrue((physical / ".venv").exists())
+
+            wrong = root / "wrong"
+            wrong.mkdir()
+            wrong_target = root / "wrong-env"
+            wrong_target.mkdir()
+            self.make_junction(wrong / ".venv", wrong_target)
+            result = self.run_cleanup_helper(wrong, canonical, "-PartialRemovalRecovery", "-Detach")
+            self.assertEqual(self.helper_result(result)["code"], "WRONG_TARGET")
+            self.assertTrue((wrong / ".venv").exists())
+
+    def test_cleanup_rejects_directory_symlink_as_unsupported_reparse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worktree = self.make_worktree(root)
+            canonical = root / "canonical"
+            canonical.mkdir()
+            try:
+                os.symlink(canonical, worktree / ".venv", target_is_directory=True)
+            except (OSError, NotImplementedError) as error:
+                raise unittest.SkipTest(f"symbolic-link fixture unavailable: {error}")
+            result = self.run_cleanup_helper(worktree, canonical)
+            self.assertEqual(self.helper_result(result)["code"], "UNSUPPORTED_REPARSE")
+            self.assertTrue((worktree / ".venv").is_symlink())
+
+    def test_cleanup_contract_keeps_remove_and_prune_ownership_in_workflow(self):
+        helper = (self.root / "scripts" / "worktree_cleanup_safety.ps1").read_text(encoding="utf-8")
+        completion = (self.root / ".agents" / "skills" / "branch_completion_workflow" / "SKILL.md").read_text(encoding="utf-8")
+        architecture = (self.root / "docs" / "architecture" / "ai_development_workflow.md").read_text(encoding="utf-8")
+        self.assertIn("-Detach", completion)
+        self.assertIn("git worktree remove <path>", completion)
+        self.assertIn("git worktree prune --verbose", completion)
+        self.assertIn("live/dirty", completion.lower())
+        self.assertIn("unrelated worktrees", completion)
+        self.assertLess(completion.index("-Detach"), completion.index("git worktree remove <path>"))
+        self.assertNotIn("worktree remove --force", helper.lower())
+        self.assertNotIn("worktree prune", helper.lower())
+        self.assertIn("worktree_cleanup_safety.ps1", architecture)
 
 
 if __name__ == "__main__":

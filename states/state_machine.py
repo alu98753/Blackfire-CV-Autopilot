@@ -2424,43 +2424,39 @@ class GameStateMachine:
                         fallback_mode=(self.config or {}).get("name", "Tier 4 Loop (mix)")
                     )
                     self.quest_scheduler = None
-                    self.apply_tier4_fallback_config()
-                    return False
                 else:
                     scheduled_node = self.check_and_advance_quest_target()
                     if scheduled_node:
                         return True
-                    # Keep the scheduler attached while temporarily farming Tier 4.
-                    # ResultHandler will preempt Tier 4 at the next safe result
-                    # screen as soon as any Daily quest becomes runnable.
+                    # 當懸賞排程器尚有任務但均在冷卻中時，保留排程器並武裝插隊旗標，
+                    # 往下依序檢查就緒之定時地下城 (Tier 4A) 或長駐退守路由 (Tier 4B)。
                     if self.quest_scheduler.get_pending_tasks():
-                        logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
-                        self.apply_tier4_fallback_config()
-                        return False
-
-            # 4. 檢查 Tier 4 地下城探索 (dungeon)
-            if activity_cfg.get("enable_dungeon", False):
-                if self.has_available_dungeon(target_config=activity_cfg):
-                    dungeon_route = activity_cfg.copy()
-                    self._apply_tier4_stage_selection(dungeon_route)
-                    self._apply_tier4_dungeon_selection(dungeon_route)
-                    dungeon_route["is_tier4_fallback"] = True
-                    self.set_config(dungeon_route)
-                    if self.quest_scheduler:
                         self.arm_daily_quest_preemption()
-                    if self.current_state not in [self.STATE_NAVIGATING, self.STATE_DUNGEON_EXPLORING, self.STATE_BATTLE]:
-                        logging.info("🏰 [Activity Scheduler] 偵測到地下城就緒 ➔ 轉移至 NAVIGATING 前往 Tier 4 地下城！")
-                        self.transition_to(self.STATE_NAVIGATING)
-                    return True
+
+            # 4. 檢查 Tier 4A 定時地下城探索 (dungeon)
+            if self.has_available_daily_dungeon():
+                dungeon_route = activity_cfg.copy()
+                self._apply_tier4_stage_selection(dungeon_route)
+                self._apply_tier4_dungeon_selection(dungeon_route)
+                dungeon_route["is_tier4_fallback"] = True
+                self.set_config(dungeon_route)
+                if self.quest_scheduler:
+                    self.arm_daily_quest_preemption()
+                logging.info("🏰 [Activity Scheduler] 偵測到定時地下城就緒 ➔ 優先於常規長駐退守前往地下城！")
+                if self.current_state not in [self.STATE_NAVIGATING, self.STATE_DUNGEON_EXPLORING, self.STATE_BATTLE]:
+                    self.transition_to(self.STATE_NAVIGATING)
+                return True
 
             # 4.5. 若已有進行中或待辦之城鎮子流程，優先維持活躍導航，不退守 Tier 4 或兜底待機
             if self.has_pending_town_subflow():
                 return True
 
-            # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4 長駐路由。
+            # 5. Daily 無較高優先級工作時，解析玩家選定的 Tier 4B 長駐路由。
             daily_policy = self._daily_activity_config()
             tier4_mode = daily_policy.get("tier4_mode", cfg.get("tier4_mode"))
             if self.is_daily_pipeline_active() and tier4_mode != TIER4_MODE_NONE:
+                if self.quest_scheduler and self.quest_scheduler.get_pending_tasks():
+                    logging.info("⏳ [Daily Pipeline] 尚有未完成懸賞任務，但目前均在冷卻中且無就緒地下城；暫時退守 Tier 4，任務就緒後將在本場結算立即插隊。")
                 self.apply_tier4_fallback_config()
                 return False
 
