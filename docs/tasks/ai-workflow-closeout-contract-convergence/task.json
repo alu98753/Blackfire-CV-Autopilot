@@ -1,0 +1,15 @@
+{
+  "id": "ai-workflow-closeout-contract-convergence",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/architecture/ai_development_workflow.md",
+    "docs/tasks/README.md",
+    ".agents/skills/branch_completion_workflow/SKILL.md",
+    "docs/tasks/ai-workflow-closeout-contract-convergence/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": null,
+    "review": null
+  }
+}
