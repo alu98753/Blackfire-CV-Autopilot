@@ -337,7 +337,17 @@ git merge-base --is-ancestor <task-branch> origin/main
 - 不含未保存的 local-only evidence；
 - `.venv` 只是 junction consumer，不是 environment owner。
 
-接著使用正常 `git worktree remove <path>`；不得 `--force` 處理未知 dirty state。
+先執行 repository-owned `scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -Detach`。
+只有在 helper 回傳 `DETACHED` 且確認 canonical environment 存在後，才可使用正常
+`git worktree remove <path>`；不得 `--force` 處理未知 dirty state。Helper 只負責驗證並
+detach 該 worktree 的 exact canonical `.venv` junction，不負責 ancestry、cleanliness、
+branch deletion 或 prune。若回傳 fail-closed code，停止並保留 filesystem state。
+
+若 worktree 已部分移除（例如 path 或 `.git` administrative marker 缺失），不得 retry
+normal remove 或使用 `--force`。只有在另行明確證明 registration stale、沒有 live/dirty
+state 要保留後，才可由本 workflow 執行 `git worktree prune --verbose`，再重新讀取
+`git worktree list --porcelain` 並確認 intended registration 消失且 unrelated worktrees
+仍存在。Helper 不會自動 prune。
 
 ### Branch deletion
 

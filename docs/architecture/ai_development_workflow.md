@@ -91,6 +91,16 @@ Normal commands consume the environment through the worktree-local path:
 5. Consumer workflows must not silently fall back to system Python when the required worktree-local `.venv` is unavailable.
 6. Do not use another worktree's absolute interpreter path. Use the current worktree's `.venv\Scripts\python.exe`.
 7. Do not run `pip install -e .` or equivalent worktree-specific editable binding into the shared environment.
+
+Worktree closeout has one safety owner: the branch-completion workflow. Before normal
+`git worktree remove <path>`, it must invoke the narrow
+`scripts\worktree_cleanup_safety.ps1` helper to prove that `<path>\.venv` is the exact
+canonical junction, detach only that local reparse object, and verify that the canonical
+environment survived. Missing, physical, wrong-target, unsupported, or ambiguous `.venv`
+states fail closed. The helper never performs force removal, pruning, branch deletion, or
+shared-environment mutation. Partial removal is classified for explicit stale proof; only
+the branch-completion workflow may run `git worktree prune --verbose` after that proof and
+must re-read `git worktree list --porcelain` afterward.
 8. Dependency mutation is a repository-level environment operation, not ordinary branch-local work.
 9. Safe shared-environment mutation/locking/rebuild semantics are deferred to `shared-environment-mutation-protocol` in `docs/tasks/BACKLOG.md`.
 
