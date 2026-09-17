@@ -18,6 +18,9 @@ log_level = "INFO" # 終端機日誌顯示等級: "DEBUG", "INFO", "WARNING", "E
 log_retention_days = 7 # 每日日誌檔案保留天數 (超過 7 天自動清理)
 
 [notification]
+# Nemesis pause intervention policy.
+nemesis_intervention_grace_period_seconds = 60.0
+nemesis_intervention_notification_count = 5
 language = "zh-TW" # 通知語言: "zh-TW" (繁體中文) 或 "en" (英文)
 
 [notification.discord]
@@ -110,6 +113,8 @@ type = "domain"
 domain = "golden_empire"
 bread_cost = 3
 nemesis_action = "pause" # "flee" (自動放棄戰鬥退出) 或 "pause" (自動暫停交給使用者手動打)
+nemesis_intervention_grace_period_seconds = 60.0
+nemesis_intervention_notification_count = 5
 enable_lord_boss = true # 是否在掛古國時若領主 Boss 冷卻結束自動插隊挑戰
 # nemesis_templates 為 list 型態，可在 user_data/<profile>/config.toml 中定義同名 key 整份覆蓋
 # 當角色變強後可縮減此清單，例如只保留 golden_king.png

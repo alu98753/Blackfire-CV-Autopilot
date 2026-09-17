@@ -47,6 +47,7 @@ from states.town_subflow_navigation import TownSubflowPreconditionController
 from states.battle_session import BattleSession
 from states.stamina_retreat import StaminaRetreatRecovery, StaminaRetreatSettings
 from states.daily_pipeline_notifier import NullDailyPipelineNotifier
+from states.nemesis_intervention import NemesisIntervention
 
 from runtime.ports import GameRelaunchProcessAdapter, SystemClock
 from utils.dungeon_catalog import DungeonCatalog
@@ -143,6 +144,9 @@ class GameStateMachine:
         else:
             from ports.notification_port import NullNotifier
             self.notification_port = NullNotifier()
+        self.nemesis_intervention = NemesisIntervention(
+            self, self.notification_port
+        )
 
         self.daily_pipeline_notifier = (
             daily_pipeline_notifier
@@ -358,7 +362,7 @@ class GameStateMachine:
             self.pause_start_time = time.time()
             logging.info(f"⏸️ [StateMachine] 腳本已暫停，鎖定當前狀態: [{self.current_state}]。")
 
-    def resume(self) -> float:
+    def resume(self, user_initiated: bool = True) -> float:
         """
         退出手動暫停狀態，原子化執行內部安全/防卡死計時器補償並放行底層動作門閥。
         
@@ -368,12 +372,14 @@ class GameStateMachine:
         if self.is_paused:
             if self.pause_start_time is not None:
                 pause_duration = max(0.0, time.time() - self.pause_start_time)
-                self.compensate_internal_timers(pause_duration)
+                self.compensate_internal_timers(
+                    pause_duration, user_initiated=user_initiated
+                )
             self.is_paused = False
             self.pause_start_time = None
             if hasattr(self, "resume_event") and self.resume_event:
                 self.resume_event.set()
-            self.just_resumed_from_user = True
+            self.just_resumed_from_user = bool(user_initiated)
             logging.info(f"▶️ [StateMachine] 腳本已恢復運行 (已補償內部計時器 {pause_duration:.1f} 秒)。繼續執行狀態: [{self.current_state}]。")
         return pause_duration
 
@@ -390,7 +396,7 @@ class GameStateMachine:
             self.pause()
             return True
 
-    def compensate_internal_timers(self, pause_duration: float):
+    def compensate_internal_timers(self, pause_duration: float, user_initiated: bool = True):
         """
         【Clean Code 內部安全時鐘補償】
         僅補償腳本自設的防卡死、過渡等待與單場戰鬥統計計時器。
@@ -429,7 +435,7 @@ class GameStateMachine:
             self.mouse.last_action_time = now
         self.last_user_operation_time = 0.0
         self.user_operating = False
-        self.just_resumed_from_user = True
+        self.just_resumed_from_user = bool(user_initiated)
 
         # 6. 反射自動補償所有動態 missing_time_* 模板記憶
         for attr in list(self.__dict__.keys()):

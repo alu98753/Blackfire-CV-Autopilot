@@ -8,14 +8,22 @@ from utils import PauseController
 from runtime.heartbeat import touch_heartbeat
 from runtime.incident_journal import record_unhandled_exception, record_manual_restart
 from runtime.supervisor import MANUAL_EXIT_CODE, MANUAL_RESTART_EXIT_CODE
+from states.nemesis_intervention import UserResumeDecision
 
 def run_main_loop(state_machine, interval):
     pause_controller = None
     try:
         import pyautogui
         def on_pause_toggle():
+            intervention = state_machine.__dict__.get("nemesis_intervention")
+            if intervention is not None and intervention.blocks_user_toggle():
+                return
             if state_machine.is_paused:
-                pause_duration = state_machine.resume()
+                if intervention is not None:
+                    decision = intervention.request_user_resume()
+                    if decision is UserResumeDecision.BLOCKED_TIMEOUT:
+                        return
+                pause_duration = state_machine.resume(user_initiated=True)
                 touch_heartbeat(state_machine, force=True)
                 state_machine.prev_mouse_pos = pyautogui.position()
                 print("\n" + "=" * 60)
@@ -48,6 +56,11 @@ def run_main_loop(state_machine, interval):
                 print("\n[Manual Restart] Ctrl+Q received; restarting bot via supervisor fast-resume...")
                 record_manual_restart(state_machine, "manual_restart_hotkey")
                 raise SystemExit(MANUAL_RESTART_EXIT_CODE)
+
+            intervention = state_machine.__dict__.get("nemesis_intervention")
+            if intervention is not None and intervention.has_pending_timeout_recovery():
+                intervention.run_pending_timeout_recovery()
+                continue
             
             # 1. 檢測熱鍵事件標記 (若為非執行緒模式之備用輪詢)
             if pause_controller.check_toggle_triggered() and not pause_controller._thread:
