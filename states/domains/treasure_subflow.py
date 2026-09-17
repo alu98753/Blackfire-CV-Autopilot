@@ -7,6 +7,11 @@ class DomainTreasureSubflow:
     🎁 領地通用隨機挖寶事件處理器 (Domain Treasure Subflow)。
     負責：偵測挖寶畫面、單次免費開箱 (open.png)、確認獎勵、點擊退出返回領地主場景。
     通用於所有領地（黃金古國、淵獸之巢、冷誓要塞等）。
+
+    Treasure evidence 契約：
+    - open.png: 直接 actionable evidence，觸發開箱與退出流程。
+    - find_treasure.png / treasure.png: treasure-scene evidence，標識處於挖寶畫面。
+      若只有場景特徵而缺少 open.png，嚴格遵守 "Unknown never guesses"，不發出盲點並保留事件邊界。
     """
     OPEN_BUTTON = "domains/common/open.png"
     FIND_TREASURE_TEMPLATE = "domains/common/find_treasure.png"
@@ -30,10 +35,10 @@ class DomainTreasureSubflow:
         """
         檢查並處理領地挖寶事件。
         1. 偵測並點擊【打開 (open.png)】按鈕 (免費開箱，閉環輪詢直到消失)。
-        2. 點擊【確認】彈窗。
-        3. 點擊【離開】按鈕安全返回領地主場景。
+        2. 若無 open.png 但出現 find_treasure.png / treasure.png，識別為挖寶場景證據，不盲點並等待下一輪。
+        3. 處理殘留之確認彈窗。
         """
-        # 1. 檢查並點擊【打開】按鈕 (open.png)
+        # 1. 檢查並點擊【打開】按鈕 (open.png) - 直接 actionable evidence
         if os.path.exists(os.path.join("templates", self.OPEN_BUTTON)):
             pos_open, conf_o = self.matcher.match(screen_img, self.OPEN_BUTTON, threshold=0.75)
             if pos_open:
@@ -80,7 +85,19 @@ class DomainTreasureSubflow:
 
                 return True
 
-        # 2. 獨立檢查畫面上殘留的確認按鈕 (先排除食物不足彈窗 no_bread2.png)
+        # 2. 檢查挖寶場景特徵 (find_treasure.png / treasure.png) - treasure-scene evidence
+        for scene_tpl in (self.FIND_TREASURE_TEMPLATE, self.TREASURE_CARD_TEMPLATE):
+            if os.path.exists(os.path.join("templates", scene_tpl)):
+                pos_sc, conf_sc = self.matcher.match(screen_img, scene_tpl, threshold=0.75, quiet=True)
+                if pos_sc:
+                    logging.info(
+                        f"🎁 [領地挖寶] 偵測到挖寶場景特徵 [{scene_tpl}] (信心度: {conf_sc:.4f})，但未見免費打開按鈕 ({self.OPEN_BUTTON})。"
+                    )
+                    # 依據 "Unknown never guesses"：嚴禁在缺少 open.png 時盲點未知寶箱座標。
+                    # 本 frame 判定為已命中挖寶事件場景，不發出未知點擊，等待下一輪觀察。
+                    return True
+
+        # 3. 獨立檢查畫面上殘留的確認按鈕 (先排除食物不足彈窗 no_bread2.png)
         if os.path.exists(os.path.join("templates", "no_bread/no_bread2.png")):
             pos_nb2, _ = self.matcher.match(screen_img, "no_bread/no_bread2.png", threshold=0.85)
             if pos_nb2:
