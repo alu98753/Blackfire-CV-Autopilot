@@ -415,6 +415,164 @@ class TestDungeonRelaunchRecovery(unittest.TestCase):
         self.assertEqual(self.machine.current_state, self.machine.STATE_UNKNOWN)
         self.assertEqual(explore_handler.dungeon_actionless_escalations, 2)
 
+    @patch("states.exceptions.subflows.game_relaunch.GameRelaunchSubflow.execute")
+    @patch("os.path.exists")
+    def test_11_persistent_livelock_escalates_to_game_relaunch(self, mock_exists, mock_relaunch):
+        """
+        測試 11 [BLOCKER 1]：多輪 UNKNOWN <-> EXPLORING 本地重新定位循環若持續無進展，
+        必須在達到 MAX_ACTIONLESS_RELOCALIZATIONS (3 次) 後終止循環，
+        升級至既有的 GameRelaunchSubflow 進行重啟恢復，而不是永久 livelock。
+        """
+        mock_exists.return_value = True
+        self.machine.is_in_dungeon = True
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.machine.config = {
+            "type": "dungeon",
+            "explore_priorities": ["dungeons/leave.png"]
+        }
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+
+        max_relocalizations = explore_handler.MAX_ACTIONLESS_RELOCALIZATIONS
+
+        # 模擬第 1 輪到第 max_relocalizations 輪的 relocalization
+        # 第 1 輪需要走 DUNGEON_ACTIONLESS_STALL_THRESHOLD ticks
+        # 後續輪次因為保留 budget，只需走 DUNGEON_ACTIONLESS_REENTRY_BUDGET ticks
+        for cycle in range(1, max_relocalizations + 1):
+            ticks_needed = (
+                explore_handler.DUNGEON_ACTIONLESS_STALL_THRESHOLD
+                if cycle == 1
+                else explore_handler.DUNGEON_ACTIONLESS_REENTRY_BUDGET
+            )
+            for _ in range(ticks_needed):
+                explore_handler.handle(self.fake_img, self.rect)
+
+            self.assertEqual(explore_handler.dungeon_actionless_escalations, cycle)
+            self.assertEqual(self.machine.current_state, self.machine.STATE_UNKNOWN)
+            # 尚未觸發 GameRelaunchSubflow
+            mock_relaunch.assert_not_called()
+            # 模擬重新定位後再回到 EXPLORING
+            self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+
+        # 進入第 max_relocalizations + 1 次升級判定 (循環終點)
+        for _ in range(explore_handler.DUNGEON_ACTIONLESS_REENTRY_BUDGET):
+            explore_handler.handle(self.fake_img, self.rect)
+
+        # 斷言：達到升級上限，成功呼叫 GameRelaunchSubflow.execute，且狀態被重設
+        mock_relaunch.assert_called_once()
+        args, kwargs = mock_relaunch.call_args
+        self.assertEqual(args[0], self.machine)
+        self.assertEqual(kwargs.get("reason"), "dungeon_actionless_persistent_livelock")
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+        self.assertEqual(explore_handler.dungeon_actionless_escalations, 0)
+
+    @patch("os.path.exists")
+    def test_12_real_progress_resets_actionless_stall_budget(self, mock_exists):
+        """
+        測試 12 [BLOCKER 2]：真實進度 (battle, complete, treasure 等) 必須完全清空 local stall budget。
+        若累積了接近 threshold 的 actionless ticks，隨後觸發真實事件，
+        stall ticks 與 escalations 必須被乾淨重置為 0。
+        """
+        mock_exists.return_value = True
+        self.machine.is_in_dungeon = True
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.machine.config = {
+            "type": "dungeon",
+            "explore_priorities": [
+                "common/auto.png",
+                "dungeons/dungeons_complete.png",
+                "dungeons/Treasure.png",
+                "dungeons/leave.png",
+            ]
+        }
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+
+        # 1. 累積 9 個 actionless ticks (接近 threshold 10)
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+        for _ in range(9):
+            explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 9)
+
+        # 2. 觸發 common/auto.png -> 進入 STATE_BATTLE
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((100, 100), 0.95) if tpl == "common/auto.png" else (None, 0.0)
+        )
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_BATTLE)
+        # 斷言 stall ticks 被乾淨重置
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+        self.assertEqual(explore_handler.dungeon_actionless_escalations, 0)
+
+        # 3. 再次模擬累積 9 個 ticks 後，觸發 dungeons/dungeons_complete.png
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+        for _ in range(9):
+            explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 9)
+
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((200, 200), 0.95) if tpl == "dungeons/dungeons_complete.png" else (None, 0.0)
+        )
+        explore_handler.handle(self.fake_img, self.rect)
+        self.assertTrue(self.machine.dungeon_completing)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+        self.assertEqual(explore_handler.dungeon_actionless_escalations, 0)
+
+        # 4. 再次模擬累積 ticks 後，觸發 Treasure 寶箱事件
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.machine.dungeon_completing = False
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((50, 50), 0.95) if tpl == "dungeons/leave.png" else (None, 0.0)
+        )
+        for _ in range(8):
+            explore_handler.handle(self.fake_img, self.rect)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 8)
+
+        with patch.object(explore_handler, "_run_treasure_subflow", return_value=True):
+            self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+                ((120, 120), 0.95) if tpl == "dungeons/Treasure.png" else (None, 0.0)
+            )
+            explore_handler.handle(self.fake_img, self.rect)
+            self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+            self.assertEqual(explore_handler.dungeon_actionless_escalations, 0)
+
+    @patch("os.path.exists")
+    def test_13_stale_is_in_dungeon_yields_to_lobby_anchors(self, mock_exists):
+        """
+        測試 13 [BLOCKER 3]：上一 tick 還在 dungeon (machine.is_in_dungeon = True)，
+        但當前 frame 沒有 leave / dungeon event，而是出現了 lobby/stage fallback anchor (如 common/select_stage.png)。
+        ExploreHandler 必須立即識別 fallback anchor 並轉移至 STATE_NAVIGATING，
+        不得被 stale is_in_dungeon 遮蔽或等待 6 ticks。
+        """
+        mock_exists.return_value = True
+        self.machine.is_in_dungeon = True
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+        self.machine.config = {
+            "type": "dungeon",
+            "explore_priorities": ["dungeons/leave.png", "dungeons/gungeon_godown.png"]
+        }
+        explore_handler = self.machine.handlers[self.machine.STATE_DUNGEON_EXPLORING]
+
+        # 當前 frame 無 leave.png，但有 common/select_stage.png
+        self.mock_matcher.match.side_effect = lambda img, tpl, threshold=0.8, **kwargs: (
+            ((300, 300), 0.90) if tpl == "common/select_stage.png" else (None, 0.0)
+        )
+
+        # 執行 handle
+        explore_handler.handle(self.fake_img, self.rect)
+
+        # 斷言：立即轉出 EXPLORING 到 NAVIGATING，且 is_in_dungeon 被清除
+        self.assertFalse(self.machine.is_in_dungeon)
+        self.assertEqual(self.machine.current_state, self.machine.STATE_NAVIGATING)
+        self.assertEqual(explore_handler.dungeon_actionless_ticks, 0)
+        self.assertEqual(explore_handler.no_explore_match_count, 0)
 
 if __name__ == "__main__":
     unittest.main()
