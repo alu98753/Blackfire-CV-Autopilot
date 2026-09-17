@@ -134,6 +134,11 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
                 is_lobby=True,
                 active_tabs=["domain"],
             ),
+            SceneInfo(
+                scene_type=SceneType.DOMAIN_SELECT,
+                is_lobby=True,
+                active_tabs=["domain"],
+            ),
         ]
 
         def match_side_effect(_img, template, **_kwargs):
@@ -166,6 +171,12 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         self.assertTrue(
             all(call.kwargs["brightness_threshold"] == 0.70 for call in target_calls)
         )
+
+        # Repeated active-tab observations must continue the card flow, never
+        # re-enter navigation by clicking the inactive tab template again.
+        self.mock_machine.mouse.reset_mock()
+        self.nav_handler.handle(MagicMock(), self.rect)
+        self.mock_machine.mouse.click.assert_not_called()
 
     @patch("states.handlers.navigation.time.sleep")
     @patch("states.handlers.navigation.CardListNavigator.reset_to_left")

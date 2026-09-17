@@ -34,7 +34,7 @@ def filter_navigation_path(nav_path, active_tabs=None, is_lobby=False):
     """
     動態過濾導航路徑中已被已開啟 UI 頁籤涵蓋的父階按鈕（防重入跳過）。
     :param nav_path: 導航路徑按鈕列表
-    :param active_tabs: 已開啟頁籤名稱列表，如 ["stage"], ["dungeon"]
+    :param active_tabs: 已開啟頁籤名稱列表，如 ["stage"], ["dungeon"], ["domain"]
     :param is_lobby: 是否已身處活動大廳內部 (若在大廳內，剔除 common/door.png)
     """
     skip_btns = set()
@@ -45,6 +45,7 @@ def filter_navigation_path(nav_path, active_tabs=None, is_lobby=False):
         skip_map = {
             "stage": {"common/select_stage.png", "select_stage.png"},
             "dungeon": {"dungeons/dungeon.png", "dungeon.png"},
+            "domain": {"domains/Domains_entry.png"},
         }
         for tab in active_tabs:
             if tab in skip_map:
@@ -1267,6 +1268,8 @@ class NavigationHandler(BaseStateHandler):
             active_tabs.append("stage")
         if dungeon_select_open or is_dungeon_page:
             active_tabs.append("dungeon")
+        if "domain" in scene.active_tabs:
+            active_tabs.append("domain")
 
         filtered_nav_path = filter_navigation_path(nav_path, active_tabs, is_lobby=scene.is_lobby)
 
