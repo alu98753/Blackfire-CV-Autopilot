@@ -4,12 +4,10 @@
   "base_sha": "7a8a609160c7339d0ea242ecc0654f5e8844bf78",
   "scope": [
     "scripts/task_cleanup.ps1",
-    "scripts/worktree_cleanup_safety.ps1",
     "scripts/README.md",
     ".agents/skills/branch_completion_workflow/SKILL.md",
-    "docs/architecture/ai_development_workflow.md",
     "tests/test_workflow_scripts.py",
-    "tests/workflow_scripts/"
+    "docs/tasks/task-cleanup-orchestration-wrapper/"
   ],
   "focused_tests": [
     "tests/test_workflow_scripts.py"
@@ -20,7 +18,9 @@
   },
   "notes": {
     "workflow_mode": "User + ChatGPT + Gemini simplified workflow; no OpenCode Scout/Gate unless user later requests it.",
-    "status": "Draft",
-    "implementation_blocked_until_final": true
+    "status": "Final",
+    "implementation_blocked_until_final": false,
+    "survey_source": "Gemini read-only survey accepted by ChatGPT/user workflow",
+    "architecture_boundary": "task_cleanup.ps1 orchestrates; worktree_cleanup_safety.ps1 remains the sole junction safety primitive"
   }
 }
