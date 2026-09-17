@@ -4,18 +4,22 @@
   "base_sha": "f2c96c7a47c66a8cc03dc0bc3de31e6e4dd46f47",
   "scope": [
     "scripts/task_cleanup.ps1",
-    "tests/test_task_cleanup_behavioral.py"
+    "tests/test_task_cleanup_behavioral.py",
+    "docs/tasks/task-cleanup-native-stderr-handling/"
   ],
   "focused_tests": [
     "tests/test_task_cleanup_behavioral.py"
   ],
   "models": {
-    "scout": ["opencode-default"],
-    "review": ["opencode-default"]
+    "scout": ["skipped-by-user-simplified-workflow"],
+    "review": ["chatgpt-final-review"]
   },
   "notes": {
-    "status": "Draft",
-    "implementation_blocked_until_final": true,
-    "observed_runtime_failure": "successful git push --delete emitted stderr and PowerShell promoted it to NativeCommandError before LASTEXITCODE handling"
+    "workflow_mode": "User + ChatGPT + Gemini simplified workflow; no OpenCode Scout/Gate for this task.",
+    "status": "Final",
+    "implementation_blocked_until_final": false,
+    "observed_runtime_failure": "successful git push --delete emitted stderr and Windows PowerShell promoted it to NativeCommandError before LASTEXITCODE handling",
+    "implementation_commit": "bed6f49950e7955c40b597457658b158db0a95e5",
+    "review_status": "PASS"
   }
 }
