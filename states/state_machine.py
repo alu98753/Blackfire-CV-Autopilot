@@ -2115,13 +2115,6 @@ class GameStateMachine:
             logging.info(f"📌 剩餘待執行子流程 ({len(self.town_subflow_queue)} 個): {self.town_subflow_queue}")
             logging.info("=" * 60)
 
-            # This rollout intentionally covers only the five Town-building
-            # workflows. Boss/dev subflows keep their existing immediate
-            # dispatch behavior until they define a destination contract.
-            from states.town_subflow_navigation import TOWN_SUBFLOW_SPECS
-            if next_flow not in TOWN_SUBFLOW_SPECS:
-                return self.dispatch_current_town_subflow()
-
             logging.info(
                 "🧭 [城鎮流水線] 已建立 REACH_TOWN precondition intent；"
                 "入口成立前保留目前活動 config。"

@@ -48,6 +48,12 @@ TOWN_SUBFLOW_SPECS = {
         "bag_tidy",
         dispatch_on_town=True,
     ),
+    # Lord boss is a Town destination workflow.  Keeping it in the registry
+    # routes selection through REACH_TOWN normalization before its handler.
+    "lord_boss": TownSubflowSpec(
+        "lord_boss",
+        dispatch_on_town=True,
+    ),
 }
 
 

@@ -65,6 +65,25 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
             {NavigationGoal.REACH_TOWN},
         )
 
+    def test_lord_boss_is_a_canonical_town_subflow(self):
+        from states.town_subflow_navigation import TOWN_SUBFLOW_SPECS
+
+        spec = TOWN_SUBFLOW_SPECS["lord_boss"]
+        self.assertEqual(spec.navigation_goal, NavigationGoal.REACH_TOWN)
+        self.assertTrue(spec.dispatch_on_town)
+
+    def test_lord_boss_selection_does_not_dispatch_from_dungeon_owned_frame(self):
+        self.machine.start_subflow_queue(["lord_boss"])
+        self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
+
+        self.assertTrue(
+            self.machine.town_subflow_precondition._should_skip_handle(
+                "lord_boss", self.machine.navigation_progress
+            )
+        )
+        self.assertEqual(self.machine.current_town_subflow, "lord_boss")
+        self.assertNotEqual(self.machine.current_state, self.machine.STATE_LORD_BOSS)
+
     def test_goal_table_is_task_agnostic(self):
         snapshot = SceneSnapshot(
             frame_id=1,
@@ -831,4 +850,3 @@ class TownSubflowResultBoundaryTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
