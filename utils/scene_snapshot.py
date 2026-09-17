@@ -63,6 +63,7 @@ class SceneDetectionRequest:
     expected_tab: Optional[TabId] = None
     tab_scope: LobbyTabScope = LobbyTabScope.FULL_RELOCALIZE
     reason: str = "default"
+    allow_battle_evidence: bool = False
 
 
 @dataclass(frozen=True)
@@ -190,4 +191,3 @@ def next_navigation_frame_id(machine) -> int:
     next_id = int(current) + 1
     machine._navigation_frame_id = next_id
     return next_id
-
