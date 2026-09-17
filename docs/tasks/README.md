@@ -74,6 +74,17 @@ The initial ChatGPT survey should be deep enough to establish the real problem b
 
 Do not create a global `current-task` marker. This repository uses multiple permanent worktrees, so every script requires an explicit task id.
 
+## Backlog ownership
+
+`docs/tasks/BACKLOG.md` is the single shared intake/index for new ideas, unresolved bugs, follow-up observations, and future task candidates that are not yet promoted into a formal task.
+
+- Do **not** create `docs/tasks/<task-id>/backlog.md` for task-local follow-up ideas.
+- While a task is active, append short follow-up observations to the shared `docs/tasks/BACKLOG.md`; include enough context or the originating task id to recover intent later.
+- Once a backlog item is activated, promote it into its own `docs/tasks/<new-task-id>/SPEC.md` + `task.json` and avoid keeping two active SSOT descriptions.
+- AI-workflow roadmap items remain owned by `docs/architecture/ai_development_workflow_roadmap.md`; the shared backlog may hold a brief intake note only until that item is promoted or incorporated into the roadmap.
+
+This convention is exemplified by commit `7862384c7321b2e370691e5b3c22b96f0f7a4cd7`, which moved a Nemesis/Supervisor follow-up out of a task-local `backlog.md` and into `docs/tasks/BACKLOG.md`.
+
 ## Verification gate, parallel reviewers, and resume
 
 Verification runs through:
