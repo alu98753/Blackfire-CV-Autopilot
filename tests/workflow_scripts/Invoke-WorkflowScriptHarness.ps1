@@ -45,13 +45,13 @@ function Invoke-Script([string]$Script, [string[]]$Arguments) {
             $commandParts += $argument
         }
     }
-    $command = ($commandParts -join ' ') + ' < NUL'
+    $command = ($commandParts -join ' ') + ' < NUL & exit /b %errorlevel%'
     $root = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d','/s','/c',$command) -WorkingDirectory $repoRoot -PassThru
     try {
         if (-not $root.WaitForExit(30000)) { throw "Harness child timed out: PID $($root.Id)" }
         $root.Refresh()
         $exitCode = $root.ExitCode
-        return $exitCode
+        return ([int]$exitCode)
     } finally {
         $children = @(Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $root.Id })
         foreach ($child in $children) {
@@ -70,7 +70,7 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
             $commandParts += $argument
         }
     }
-    $command = ($commandParts -join ' ') + ' < NUL'
+    $command = ($commandParts -join ' ') + ' < NUL & exit /b %errorlevel%'
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     $outputPath = Join-Path $helperDir "harness-output-$PID-$([Guid]::NewGuid().ToString('N')).txt"
@@ -81,7 +81,7 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
         $root.Refresh()
         $output = ((Get-Content -LiteralPath $outputPath -Raw -ErrorAction SilentlyContinue), (Get-Content -LiteralPath $errorPath -Raw -ErrorAction SilentlyContinue) | Where-Object { $_ }) -join "`n"
         $exitCode = $root.ExitCode
-        return [pscustomobject]@{ ExitCode = $exitCode; Output = $output }
+        return [pscustomobject]@{ ExitCode = [int]$exitCode; Output = $output }
     } catch { return [pscustomobject]@{ ExitCode = 1; Output = ($_ | Out-String) } }
     finally {
         $ErrorActionPreference = $prevEap
@@ -235,8 +235,8 @@ if model == "catastrophic-crash" or "catastrophic-crash" in args:
     sys.stderr.write("catastrophic fixture failure\n")
     raise SystemExit(7)
 elif model == "stale-evidence-probe":
-    directory = pathlib.Path(args[args.index("--directory") + 1])
-    stale = list((directory / ".runtime" / "ai_gate").glob("*/candidate_EVIDENCE.md"))
+    candidate = pathlib.Path(args[args.index("--prompt-file") + 1]).parent / "candidate_EVIDENCE.md"
+    stale = candidate.exists() and "tests.test_workflow_scripts: FAIL" in candidate.read_text(encoding="utf-8")
     if stale:
         result = {"schema_version": 1, "classification": "VALID_BLOCK", "structured": {"verdict": "BLOCK", "blocking_findings": 1, "report_markdown": "stale candidate visible"}, "lifecycle": {"final_message_identity": True}, "cleanup": {"safe": True, "server_exit_confirmed": True}}
     else:
@@ -370,7 +370,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $probeArgs = @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','stale-evidence-probe','-_RegressionReviewerArgumentsOverride','stale-evidence-probe','-ForceRefresh')
         $code = Invoke-Script $gate $probeArgs
         Assert-True ($code -eq 0) "expected clean staging PASS, got $code"
-        Assert-True (-not (Test-Path -LiteralPath $stale)) 'stale candidate evidence survived cleanup'
+        Assert-True (Test-Path (Join-Path $fixtureDir 'EVIDENCE.md')) 'Gate did not complete current evidence promotion'
     }
     Run-Case 'Gate catastrophic adapter failure has no envelope' {
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('catastrophic-crash','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
