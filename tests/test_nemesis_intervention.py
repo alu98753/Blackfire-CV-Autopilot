@@ -86,6 +86,9 @@ class InterventionTests(unittest.TestCase):
         self.start(notification_count=4)
         self.machine.is_paused = True
         self.assertTrue(self.timers[0].fire())
+        self.flee.assert_not_called()
+        self.assertTrue(self.lifecycle.has_pending_timeout_recovery())
+        self.lifecycle.run_pending_timeout_recovery()
         self.assertEqual(self.lifecycle.outcome, InterventionOutcome.TIMED_OUT)
         self.flee.assert_called_once_with()
         self.assertEqual(
@@ -99,6 +102,7 @@ class InterventionTests(unittest.TestCase):
         self.start(notification_count=2)
         self.machine.is_paused = True
         self.timers[0].fire()
+        self.lifecycle.run_pending_timeout_recovery()
         self.flee.assert_called_once_with()
         self.machine.resume.assert_called_once_with(user_initiated=False)
         self.notifier.delete_message.assert_not_called()
@@ -145,17 +149,25 @@ class InterventionTests(unittest.TestCase):
         self.machine.is_paused = True
         timeout_thread = threading.Thread(target=self.timers[0].fire)
         timeout_thread.start()
+        timeout_thread.join(timeout=1.0)
+        self.assertFalse(started.is_set())
+        self.assertTrue(self.lifecycle.has_pending_timeout_recovery())
+
+        recovery_thread = threading.Thread(
+            target=self.lifecycle.run_pending_timeout_recovery
+        )
+        recovery_thread.start()
         self.assertTrue(started.wait(timeout=1.0))
 
         self.assertEqual(
             self.lifecycle.request_user_resume(),
             UserResumeDecision.BLOCKED_TIMEOUT,
         )
-        self.machine.resume.assert_not_called()
+        self.machine.resume.assert_called_once_with(user_initiated=False)
         self.assertEqual(self.lifecycle.outcome, InterventionOutcome.TIMED_OUT)
 
         release.set()
-        timeout_thread.join(timeout=1.0)
+        recovery_thread.join(timeout=1.0)
         self.machine.resume.assert_called_once_with(user_initiated=False)
 
     def test_timer_factory_failure_converges_through_timeout(self):
@@ -170,6 +182,9 @@ class InterventionTests(unittest.TestCase):
         )
         lifecycle.start("encounter-1", self.flee, notification_count=1)
         self.assertEqual(lifecycle.outcome, InterventionOutcome.TIMED_OUT)
+        self.assertTrue(lifecycle.has_pending_timeout_recovery())
+        self.flee.assert_not_called()
+        lifecycle.run_pending_timeout_recovery()
         self.flee.assert_called_once_with()
         machine.resume.assert_called_once_with(user_initiated=False)
 
@@ -188,8 +203,63 @@ class InterventionTests(unittest.TestCase):
         )
         lifecycle.start("encounter-1", self.flee, notification_count=1)
         self.assertEqual(lifecycle.outcome, InterventionOutcome.TIMED_OUT)
+        self.assertTrue(lifecycle.has_pending_timeout_recovery())
+        self.flee.assert_not_called()
+        lifecycle.run_pending_timeout_recovery()
         self.flee.assert_called_once_with()
         machine.resume.assert_called_once_with(user_initiated=False)
+
+    def test_runtime_owned_recovery_releases_real_pause_gate_before_flee(self):
+        from actions.mouse import MouseController
+
+        resume_event = threading.Event()
+        resume_event.clear()
+        gated_mouse = MouseController(human_like=False, resume_event=resume_event)
+        machine = MagicMock()
+        machine.is_paused = False
+        machine.notification_port = self.notifier
+        order = []
+
+        def pause():
+            machine.is_paused = True
+            resume_event.clear()
+
+        def resume(*, user_initiated):
+            order.append(("resume", user_initiated))
+            machine.is_paused = False
+            resume_event.set()
+
+        machine.pause.side_effect = pause
+        machine.resume.side_effect = resume
+        lifecycle = NemesisIntervention(
+            machine, self.notifier, timer_factory=self._timer_factory
+        )
+
+        def flee():
+            order.append("flee")
+            gated_mouse._wait_if_paused()
+            order.append("flee_done")
+
+        lifecycle.start("gated-encounter", flee, notification_count=1)
+        self.assertFalse(resume_event.is_set())
+        self.timers[-1].fire()
+        self.assertEqual(order, [])
+        self.assertTrue(lifecycle.has_pending_timeout_recovery())
+
+        # This is the runtime-owned handoff: no normal step may run until the
+        # serialized recovery call has returned.
+        lifecycle.run_pending_timeout_recovery()
+        self.assertEqual(
+            order,
+            [("resume", False), "flee", "flee_done"],
+        )
+        order.append("normal_step")
+        self.assertEqual(order[-1], "normal_step")
+
+    def _timer_factory(self, delay, callback):
+        timer = ManualTimer(callback)
+        self.timers.append(timer)
+        return timer
 
 
 if __name__ == "__main__":

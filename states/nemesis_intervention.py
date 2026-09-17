@@ -35,6 +35,9 @@ class _Session:
     message_ids: list[str] = field(default_factory=list)
     timer: Any = None
     timeout_side_effects_complete: bool = False
+    timeout_recovery_pending: bool = False
+    timeout_recovery_in_progress: bool = False
+    timeout_cleanup_message_ids: list[str] = field(default_factory=list)
 
 
 class NemesisIntervention:
@@ -186,6 +189,58 @@ class NemesisIntervention:
             self._delete_best_effort(message_id)
         return UserResumeDecision.ACKNOWLEDGED
 
+    def blocks_user_toggle(self) -> bool:
+        """Return whether timeout-owned recovery currently owns the hotkey."""
+        with self._lock:
+            session = self._active
+            return bool(
+                session
+                and session.outcome is InterventionOutcome.TIMED_OUT
+                and not session.timeout_side_effects_complete
+            )
+
+    def has_pending_timeout_recovery(self) -> bool:
+        """Expose only the bounded recovery handoff to the runtime loop."""
+        with self._lock:
+            session = self._active
+            return bool(
+                session
+                and session.outcome is InterventionOutcome.TIMED_OUT
+                and (
+                    session.timeout_recovery_pending
+                    or session.timeout_recovery_in_progress
+                )
+            )
+
+    def run_pending_timeout_recovery(self) -> bool:
+        """Run timeout-owned game recovery on the authoritative runtime path."""
+        with self._lock:
+            session = self._active
+            if (
+                session is None
+                or session.outcome is not InterventionOutcome.TIMED_OUT
+                or not session.timeout_recovery_pending
+                or session.timeout_recovery_in_progress
+            ):
+                return False
+            session.timeout_recovery_pending = False
+            session.timeout_recovery_in_progress = True
+            message_ids = list(session.timeout_cleanup_message_ids)
+
+        try:
+            # Release the existing action/capture pause gate in this same
+            # execution path immediately before reusing the game-side flow.
+            self.machine.resume(user_initiated=False)
+            self._run_flee(session)
+            for message_id in message_ids:
+                self._delete_best_effort(message_id)
+        finally:
+            with self._lock:
+                if self._active is session:
+                    session.timeout_recovery_in_progress = False
+                    session.timeout_side_effects_complete = True
+        return True
+
     def _on_timeout(self):
         with self._lock:
             session = self._active
@@ -195,22 +250,8 @@ class NemesisIntervention:
             message_ids = list(session.message_ids)
             # The first successfully tracked alarm is the retained history record.
             session.message_ids[:] = message_ids[:1]
-
-        try:
-            # Claim precedes all terminal side effects, including game IO.
-            self._run_flee(session)
-        finally:
-            try:
-                for message_id in message_ids[1:]:
-                    self._delete_best_effort(message_id)
-                if getattr(self.machine, "is_paused", False):
-                    self.machine.resume(user_initiated=False)
-            except Exception:
-                logging.exception("[NemesisIntervention] programmatic timeout resume failed")
-            finally:
-                with self._lock:
-                    if self._active is session:
-                        session.timeout_side_effects_complete = True
+            session.timeout_cleanup_message_ids = message_ids[1:]
+            session.timeout_recovery_pending = True
         return True
 
     def _run_flee(self, session):
