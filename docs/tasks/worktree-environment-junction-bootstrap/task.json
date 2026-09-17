@@ -1,0 +1,31 @@
+{
+  "id": "worktree-environment-junction-bootstrap",
+  "base_ref": "origin/main",
+  "base_sha": "17bdff32e74ef56584a966c8d2973d15d2ae8ed3",
+  "scope": [
+    "scripts/worktree_environment_bootstrap.ps1",
+    "scripts/worktree_cleanup_safety.ps1",
+    ".agents/skills/branch_start_workflow/SKILL.md",
+    "tests/test_worktree_environment_bootstrap.py",
+    "tests/test_workflow_scripts.py",
+    "docs/tasks/worktree-environment-junction-bootstrap/"
+  ],
+  "focused_tests": [
+    "tests.test_worktree_environment_bootstrap",
+    "tests.test_workflow_scripts"
+  ],
+  "models": {
+    "scout": ["opencode-default"],
+    "review": ["opencode-default"]
+  },
+  "notes": {
+    "status": "Final",
+    "implementation_blocked_until_final": false,
+    "observed_gap": "registered task worktree could exist without the required .venv junction; cleanup correctly failed closed with MISSING_VENV",
+    "implementation_boundary": "narrow registered-worktree Python .venv junction bootstrap only; no Git startup orchestration, Node/npm bootstrap, dependency mutation, or cleanup ownership",
+    "classification_policy": "preserve semantic alignment with cleanup classification locally; do not add a shared classification abstraction without new evidence requiring spec reconsideration",
+    "downstream_tasks": [
+      "task-start-orchestration-wrapper"
+    ]
+  }
+}
