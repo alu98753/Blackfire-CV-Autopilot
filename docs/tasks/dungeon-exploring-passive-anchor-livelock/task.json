@@ -1,0 +1,31 @@
+{
+  "id": "dungeon-exploring-passive-anchor-livelock",
+  "base_ref": "origin/main",
+  "base_sha": "79c4734604f7f3c9614ed172d48ebc617bd99b71",
+  "scope": [
+    "states/handlers/explore.py",
+    "states/state_machine.py",
+    "config/defaults.toml",
+    "tests/test_behavior_dungeon_state_machine.py",
+    "tests/test_dungeon_relaunch_recovery.py",
+    "docs/tasks/dungeon-exploring-passive-anchor-livelock/"
+  ],
+  "focused_tests": [
+    "tests.test_behavior_dungeon_state_machine",
+    "tests.test_dungeon_relaunch_recovery"
+  ],
+  "models": {
+    "scout": ["opencode-default"],
+    "review": ["opencode-default"]
+  },
+  "notes": {
+    "status": "Final",
+    "implementation_blocked_until_final": false,
+    "observed_gap": "EXPLORING treats persistent dungeons/leave.png passive anchor matches as handled work, resets local no-match accounting, returns without gameplay progress, and eventually reaches the outer watchdog timeout",
+    "confirmed_root_cause": "two-layer defect: passive dungeon-presence evidence is conflated with actionable progress, and confirmed in-dungeon actionless exploration has no bounded local stall handoff",
+    "authoritative_owner": "ExploreHandler owns dungeon-local action selection and local stall classification; global watchdog remains disaster recovery only",
+    "required_solution_shape": "Option B: give leave.png non-consuming passive semantics and add bounded handling for EXPLORING + confirmed dungeon presence + no actionable event after existing legal transition windows expire",
+    "existing_test_conflict": "tests.test_dungeon_relaunch_recovery::test_3_explore_handler_handles_leave_anchor currently requires no_explore_match_count to reset on leave.png and must be corrected while preserving the no-click invariant",
+    "implementation_constraint": "do not invent destructive leave-click recovery, fake notify_ui_progress heartbeats, background watchdogs, or global exception redesign"
+  }
+}

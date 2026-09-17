@@ -1,37 +1,39 @@
 # AI Development Verification Workflow v1
 
-> Status: canonical development workflow contract. This document defines the repository SSOT for AI-assisted task lifecycle, local workspace topology, environment ownership, role boundaries, verification, and integration authority. It does not define game runtime behavior.
+> Status: canonical development workflow contract. This document is the repository SSOT for AI-assisted task lifecycle, local workspace topology, environment ownership, role boundaries, verification, integration, and task-worktree lifecycle. It does not define game runtime behavior.
 
 ## 1. Purpose
 
-The project uses a contract-driven AI workflow:
+Blackfire uses a contract-driven AI workflow in which semantic authority stays narrow while mechanical setup/teardown is repository-owned automation.
 
 ```text
 Human / ChatGPT
   -> lightweight repository survey
-  -> Draft SPEC.md + task.json
-  -> OpenCode Scout -> CONTEXT.md
-  -> ChatGPT + user finalize SPEC.md
+  -> remote task branch + Draft SPEC.md + task.json
+  -> task_start.ps1 -> TASK_READY
+  -> Scout evidence
+  -> ChatGPT + user finalize SPEC
   -> Gemini/Antigravity implementation
   -> focused tests
-  -> OpenCode read-only reviewers -> reviews/*
-  -> EVIDENCE.md
+  -> independent verification when available/required
   -> ChatGPT final semantic / architecture review
   -> user-authorized integration
+  -> task_cleanup.ps1
 ```
 
-GitHub-tracked task artifacts are the handoff surface. Semantic authority is deliberately narrow:
+GitHub-tracked task artifacts are the handoff surface.
+
+Authority boundaries:
 
 - ChatGPT + user own product intent, architecture, scope, invariants, and Final SPEC.
-- OpenCode Scout provides read-only localization evidence.
+- OpenCode Scout is a read-only evidence provider.
 - Gemini/Antigravity is the production implementation writer in workflow v1.
-- OpenCode reviewers provide independent read-only verification evidence.
+- OpenCode reviewers are independent read-only verification providers when the Gate workflow is used.
 - Local agents never merge to `main`.
-- ChatGPT may integrate through GitHub only after closeout gates pass and the user explicitly authorizes integration.
+- ChatGPT may integrate through GitHub only after the applicable closeout requirements pass and the user explicitly authorizes integration.
+- Repository scripts own deterministic workspace mechanics; they do not inherit semantic authority.
 
 ## 2. Canonical local workspace
-
-Blackfire uses one permanent local `main` worktree and project-scoped task worktrees:
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
@@ -43,79 +45,57 @@ E:\Side_Project\Blackfire-CV-Autopilot\
       └─ .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
 ```
 
-Canonical responsibilities:
+`E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool` is the permanent local `main` worktree and canonical integrated runtime/CV validation home. It remains attached to `main`; the old permanent temp-main / detached-main convention is retired.
 
-```text
-E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool
-    = permanent checkout of local main
-    = canonical integrated runtime home
-    = canonical real CV/runtime validation home
+`E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>` is the canonical path for new branch-scoped temporary task worktrees.
 
-E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
-    = branch-scoped task worktree
-    = temporary
-```
+Existing legacy active worktrees may remain where they are until their task closes. Do not move dirty/active worktrees merely to normalize paths.
 
-Local topology is machine state. Before branch switching, task startup, Scout, Gate, migration, or cleanup, inspect actual ownership with:
-
-```powershell
-git worktree list --porcelain
-```
-
-Never guess branch ownership from a remembered path. Git's one-branch-per-worktree checkout rule remains authoritative.
-
-Existing active worktrees may remain at their current paths until their task closes. New task worktrees use the canonical project-scoped path above.
+Git worktree topology is machine state. Repository automation must inspect `git worktree list --porcelain`; branch ownership must never be guessed from remembered paths.
 
 ## 3. Canonical Python environment
 
-Blackfire uses one repository-global Python environment stored outside every Git worktree:
+Blackfire uses one repository-global Python environment:
 
 ```text
 E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
 ```
 
-Every runnable worktree exposes its own local `.venv` Windows junction directly to that environment.
-
-Normal commands consume the environment through the worktree-local path:
+Every runnable worktree exposes a local `.venv` Windows junction to that environment and consumes Python through its own path:
 
 ```text
 .\.venv\Scripts\python.exe
 ```
 
-### Environment invariants
+Environment invariants:
 
 1. `.venv/` is local-only and Git-ignored.
 2. No Git worktree owns the physical environment.
 3. Main, task worktrees, Scout, Gate, tests, and runtime validation are environment consumers.
-4. Consumer workflows must not run `pip install`, `pip uninstall`, recreate the venv, or otherwise mutate dependencies merely to make a command succeed.
-5. Consumer workflows must not silently fall back to system Python when the required worktree-local `.venv` is unavailable.
-6. Do not use another worktree's absolute interpreter path. Use the current worktree's `.venv\Scripts\python.exe`.
-7. Do not run `pip install -e .` or equivalent worktree-specific editable binding into the shared environment.
+4. Consumer workflows do not run `pip install`, `pip uninstall`, recreate the environment, or silently fall back to system Python.
+5. Do not use another worktree's absolute interpreter path.
+6. Do not use `pip install -e .` or equivalent worktree-specific editable binding in the shared environment.
+7. Shared dependency mutation is a repository-level operation and remains deferred to `shared-environment-mutation-protocol` until explicitly activated.
 
-Worktree closeout has one safety owner: the branch-completion workflow. Before normal
-`git worktree remove <path>`, it must invoke the narrow
-`scripts\worktree_cleanup_safety.ps1` helper to prove that `<path>\.venv` is the exact
-canonical junction, detach only that local reparse object, and verify that the canonical
-environment survived. Missing, physical, wrong-target, unsupported, or ambiguous `.venv`
-states fail closed. The helper never performs force removal, pruning, branch deletion, or
-shared-environment mutation. Partial removal is classified for explicit stale proof; after
-that proof, the same helper may be invoked with `-PartialRemovalRecovery` to inspect residual
-`.venv` and detach only an exact canonical junction. Only the branch-completion workflow may
-run `git worktree prune --verbose`, and it must re-read `git worktree list --porcelain`
-afterward. If a normal detach succeeded but a later worktree removal failed,
-`-DetachedPendingRemove` is an explicit retry evidence mode, not a general missing-`.venv`
-exemption.
-8. Dependency mutation is a repository-level environment operation, not ordinary branch-local work.
-9. Safe shared-environment mutation/locking/rebuild semantics are deferred to `shared-environment-mutation-protocol` in `docs/tasks/BACKLOG.md`.
+### 3.1 Python worktree bootstrap ownership
 
-## 3.1 Canonical Node workflow environment
+The repository-owned primitive is:
 
-AI workflow tooling (including AI Gate reviewer adapters such as `scripts/opencode_structured_review.mjs` and deterministic workflow tests) uses repository-local Node dependencies.
+```powershell
+.\scripts\worktree_environment_bootstrap.ps1 -WorktreePath <worktree>
+```
+
+It validates the registered worktree, validates the canonical environment/interpreter, creates an exact junction when safely absent, verifies the worktree-local interpreter, and fails closed on physical/wrong-target/unsupported/ambiguous states.
+
+For formal AI tasks, users normally do **not** invoke this primitive directly. `scripts/task_start.ps1` owns calling it and validating its JSON result. Direct use is for diagnostics, recovery, or non-standard/manual workflows.
+
+### 3.2 Canonical Node workflow environment
+
+Node workflow tooling uses per-worktree untracked `node_modules` governed by root `package.json` and `package-lock.json`.
 
 ```text
 package.json + package-lock.json
           |
-          | dependency SSOT
           v
 explicit Node bootstrap (npm ci)
           |
@@ -123,15 +103,15 @@ explicit Node bootstrap (npm ci)
 <current-worktree>/node_modules
 ```
 
-### Node environment invariants
+Node invariants:
 
-1. **Per-worktree `node_modules`**: Every runnable worktree owns its own untracked, local `node_modules`.
-2. **SSOT**: Root `package.json` and `package-lock.json` are the exclusive dependency single source of truth. Exact package versions (`@opencode-ai/sdk@1.18.31`, `cross-spawn@7.0.6`, `undici@6.28.1`) and `engines.node >=18.17` are locked.
-3. **No junctions / shared pools**: Node dependencies are small (~3.5 MB) and cheap to materialize; they are **not** shared across worktrees through Windows junctions or external pools. The Python shared venv design is intentionally separate.
-4. **Explicit bootstrap only**: Node dependency materialization is an explicit worktree-level operation via `.\scripts\bootstrap_node_workflow_deps.ps1` (or `npm ci` at the worktree root).
-5. **Consumer / mutator separation**: Scout, Gate, reviewers, and tests are strict consumers. They must never silently run `npm install` or `npm ci`.
-6. **Gate fail-fast preflight**: `scripts/ai_gate.ps1` validates Node executable availability, Node version (`>=18.17`), manifest/lockfile presence, and required package resolvability (`undici`, `@opencode-ai/sdk/v2`) before spawning reviewers. Unbootstrapped worktrees fail fast with clear bootstrap remediation.
-7. **Scout isolation**: `scripts/ai_scout.ps1` consumes the global OpenCode CLI and does not depend on repository `node_modules`.
+1. Node dependencies are not shared through junctions.
+2. Exact package/version requirements come from the tracked manifest/lockfile and repository Node contract.
+3. Materialization is explicit through `.\scripts\bootstrap_node_workflow_deps.ps1` (or repository-approved `npm ci`).
+4. Scout/Gate/reviewers/tests do not silently install dependencies.
+5. `task_start.ps1` intentionally does **not** bootstrap Node.
+6. Scout uses the global OpenCode CLI and does not require repo-local `node_modules`.
+7. Node bootstrap is performed only when a later Node consumer actually requires it.
 
 ## 4. Canonical task package
 
@@ -141,20 +121,14 @@ Every active AI-assisted task uses:
 docs/tasks/<task-id>/
 ├─ SPEC.md
 ├─ task.json
-├─ CONTEXT.md
-├─ EVIDENCE.md
-└─ reviews/
-   ├─ spec-review.md
-   └─ regression-review.md
+├─ CONTEXT.md        # after Scout when used
+├─ EVIDENCE.md       # after verification when used
+└─ reviews/          # reviewer evidence when used
 ```
 
-`SPEC.md` is the normative task contract. Other task files are metadata or evidence and must not silently redefine it.
-
-`task.json` contains automation metadata. Scripts resolve `docs/tasks/<task-id>/SPEC.md` directly.
+`SPEC.md` is the normative task contract. `task.json` is automation metadata. Other files are evidence and must not silently redefine the spec.
 
 ## 5. Specification maturity
-
-The normal task lifecycle is:
 
 ```text
 Draft SPEC
@@ -163,34 +137,11 @@ Draft SPEC
   -> implementation
 ```
 
-### Draft
+Before Draft creation, ChatGPT performs only the lightweight survey needed to establish problem reality, responsibility boundary, architecture parent, known invariants, plausible scope, and uncertainty.
 
-A Draft contains enough information to localize the problem:
+Scout is a bounded read-only evidence provider. It does not own the spec and cannot promote Draft to Final.
 
-- goal / observed problem;
-- initial scope;
-- known invariants;
-- non-goals;
-- provisional acceptance criteria;
-- explicit uncertainty.
-
-ChatGPT performs only the lightweight survey needed to validate the problem, responsibility boundary, architecture parent, known invariants, and plausible scope before creating the Draft.
-
-### Scout
-
-OpenCode Scout is a bounded read-only evidence provider. It localizes actual code, tests, callers, ownership, timing, state, architecture conflicts, and regression risks and writes `CONTEXT.md`.
-
-Scout does not own the spec and cannot promote Draft to Final.
-
-### Final
-
-ChatGPT + user re-read the Draft, Scout evidence, current code/tests, and architecture contracts, resolve unsupported assumptions, and set:
-
-```text
-Status: Final
-```
-
-Production implementation must not begin while a task SPEC is Draft.
+ChatGPT + user reconcile Draft assumptions against current code/tests/contracts and set `Status: Final`. Production implementation must not begin while the SPEC is Draft.
 
 If Scout infrastructure is unavailable and the user explicitly authorizes a temporary fallback, an interactive model may perform one read-only evidence survey. That fallback is not the spec owner and cannot begin production implementation while the SPEC remains Draft.
 
@@ -206,7 +157,7 @@ OpenCode Scout is read-only and produces localization evidence.
 
 ### Writer
 
-Gemini/Antigravity is the production implementation writer in workflow v1. It implements only the Final contract and preserves verified behavior outside scope.
+Gemini/Antigravity is the production implementation writer in workflow v1 and implements only the Final contract.
 
 ### Reviewers
 
@@ -216,71 +167,105 @@ Completed valid StructuredOutput is the terminal reviewer result. Valid structur
 
 ### Final reviewer / remote orchestrator
 
-ChatGPT performs final semantic and architecture review from GitHub using the Final SPEC, current diff/commit, evidence artifacts, and current implementation.
+ChatGPT performs final semantic/architecture review from GitHub using the Final SPEC, current diff/commit, current implementation, tests, and available evidence.
 
 ### Integration authority
 
-- Local Gemini/Antigravity/OpenCode must not merge, push to `main`, delete integrated branches, or perform equivalent integration actions.
-- ChatGPT may integrate via GitHub only after required closeout gates pass and the user explicitly authorizes integration.
+- Local Gemini/Antigravity/OpenCode do not merge, push to `main`, or delete integrated branches.
+- ChatGPT may integrate via GitHub only after the applicable closeout requirements pass and the user explicitly authorizes integration.
 - Integration uses merge-commit semantics; squash/rebase must not silently replace repository history policy.
-- The user remains the ultimate integration authority and may perform the manual merge when preferred.
+- The user remains the ultimate integration authority.
 
-## 7. Remote-to-local task handoff
+## 7. Formal remote-to-local task handoff
 
-After ChatGPT creates or updates task artifacts on GitHub and before any local task command runs:
-
-1. `git fetch origin`.
-2. Inspect `git worktree list --porcelain`.
-3. Ensure the intended task worktree is attached to the expected task branch.
-4. If the task worktree is detached, restore it to the expected task branch before Scout/Gate/implementation.
-5. Synchronize the task branch with remote using non-destructive fast-forward semantics where applicable.
-6. Respect branch exclusivity; never checkout a branch already attached to another worktree.
-
-Canonical new task path:
+For formal AI tasks, GitHub already contains:
 
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
+origin/<approved-task-branch>
+docs/tasks/<task-id>/SPEC.md
+docs/tasks/<task-id>/task.json
 ```
 
-The detailed startup sequence belongs to `.agents/skills/branch_start_workflow/SKILL.md`.
+The normal user-facing handoff is exactly the repository wrapper:
+
+```powershell
+.\scripts\task_start.ps1 -Task <task-id>
+```
+
+For legacy/nonstandard approved branch names:
+
+```powershell
+.\scripts\task_start.ps1 -Task <task-id> -Branch <branch-name>
+```
+
+`task_start.ps1` owns the mechanical startup sequence:
+
+- discover and validate canonical main;
+- inspect actual worktree topology;
+- require clean attached `main`;
+- `git fetch origin`;
+- safely fast-forward canonical main when possible;
+- validate the approved remote task branch and current-main ancestry;
+- validate remote task artifacts;
+- create or safely reuse the canonical task worktree;
+- safely fast-forward the task branch to its remote when allowed;
+- enforce branch exclusivity/path ownership;
+- invoke `worktree_environment_bootstrap.ps1`;
+- return exactly one JSON result with `TASK_READY` on success.
+
+It fails closed on dirty/diverged/detached/conflicting/stale states and preserves evidence. It does not merge/rebase stale task branches, synthesize task artifacts, bootstrap Node, launch Scout/Gate, or perform cleanup.
+
+### Manual startup operations are recovery, not the normal path
+
+Users should not manually execute the underlying fetch/worktree-add/branch-switch/junction sequence when `task_start.ps1` can own it. Low-level Git/worktree/bootstrap commands are retained only for:
+
+- diagnosing a fail-closed result;
+- repairing a state the wrapper intentionally refuses to mutate;
+- non-AI/manual workflows outside the formal task contract.
+
+The detailed recovery rules live in `.agents/skills/branch_start_workflow/SKILL.md`.
 
 ## 8. Task lifecycle
 
 ### Backlog
 
-New ideas and not-yet-specified work go to:
-
-```text
-docs/tasks/BACKLOG.md
-```
-
-When work becomes active, promote it into a unique `docs/tasks/<task-id>/` package. Do not maintain two active SSOT descriptions.
+Unspecified ideas live in `docs/tasks/BACKLOG.md`. When activated, they are promoted into a unique task package; do not keep two active SSOT descriptions.
 
 ### Phase A1 — Contract framing
 
-ChatGPT checks current GitHub `main`, relevant architecture contracts, nearby implementation, tests, and backlog/task material, then creates a Draft SPEC and task descriptor.
+ChatGPT checks current GitHub `main`, architecture contracts, nearby implementation/tests, and backlog context, then creates the remote task branch plus Draft `SPEC.md` and `task.json`.
+
+### Phase A1.5 — Workspace materialization
+
+The user runs the single repository-owned startup command supplied by ChatGPT:
+
+```powershell
+.\scripts\task_start.ps1 -Task <task-id>
+```
+
+Success is `TASK_READY`. The user is not expected to manually recreate the internal Git/worktree/.venv steps.
 
 ### Phase B — Localization
 
-From the correctly attached task worktree:
+From the `TASK_READY` worktree:
 
 ```powershell
 .\scripts\ai_scout.ps1 -Task <task-id>
 ```
 
-Production Scout supports the repository-pinned OpenCode contract. The wrapper owns non-interactive process handling, timeouts, artifact validation, and safe promotion of `CONTEXT.md`.
+Scout remains an explicit lifecycle step; startup does not invoke it automatically.
 
 ### Phase A2 — Contract finalization
 
-ChatGPT + user reconcile Draft assumptions against evidence and produce Final SPEC.
+ChatGPT + user reconcile Draft assumptions against evidence and publish Final SPEC.
 
 ### Phase C — Implementation
 
-Gemini/Antigravity implements the Final SPEC. `.agents/AGENTS.md`, applicable skills, architecture contracts, and Final SPEC remain authoritative.
+Gemini/Antigravity implements the Final SPEC. Applicable repository rules/contracts remain authoritative.
 
 ### Phase D — Verification
 
-Run:
+When the task/lifecycle requires AI Gate and its infrastructure is available:
 
 ```powershell
 .\scripts\ai_gate.ps1 -Task <task-id>
@@ -298,58 +283,57 @@ Reviewer persistence and resume follow:
 - Interrupted or partially failed runs can resume: an infrastructure failure in one reviewer does not discard a valid sibling result.
 - `-ForceRefresh` explicitly bypasses cached reviewer artifacts and forces fresh execution of both reviewers.
 
-Gate outcomes remain mechanically distinct:
+### Phase E — Final review, integration, cleanup
 
 - `0`: trusted verification passed (all reviewers PASS + focused tests pass);
 - `2`: trusted candidate blocker or configured focused-test failure;
 - `1`: verification infrastructure unavailable / no trusted verdict.
 
-### Phase E — Final review and closeout
+After remote integration, normal task cleanup is repository-owned:
 
-Commit/push the candidate and tracked task evidence. ChatGPT performs final semantic/architecture review from GitHub. Branch closeout follows `.agents/skills/branch_completion_workflow/SKILL.md`.
+```powershell
+.\scripts\task_cleanup.ps1 -Task <task-id>
+```
 
-## 9. Test policy
+Optionally, when repository/user policy calls for deleting the remote branch:
+
+```powershell
+.\scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch
+```
+
+`task_cleanup.ps1` owns the safe teardown mechanics: fetches current remote state, validates topology/cleanliness/integrated ancestry, invokes `worktree_cleanup_safety.ps1` to detach only the exact canonical `.venv` junction, removes the task worktree, verifies topology, and safely deletes the local branch. It fails closed instead of forcing ambiguous or unsafe state.
+
+Users should not manually run `worktree_cleanup_safety.ps1`, `git worktree remove`, `git branch -d`, or `git worktree prune` during the normal successful closeout path. Those are lower-level recovery tools only when the wrapper reports a bounded failure requiring diagnosis.
+
+If local permanent `main` must immediately reflect a remote ChatGPT merge for runtime use, synchronize it with a normal fast-forward. Otherwise the next `task_start.ps1` invocation will validate/synchronize canonical main before creating another task workspace.
+
+## 9. Cleanup primitive ownership
+
+`scripts/worktree_cleanup_safety.ps1` is a narrow safety primitive owned by the higher-level cleanup workflow. It classifies/detaches the local `.venv` reparse object only. It does not own ancestry, worktree removal, branch deletion, remote deletion, or general Git repair.
+
+Normal operators should invoke `task_cleanup.ps1`, not manually reconstruct primitive sequencing.
+
+Partial/stale worktree recovery modes remain explicit recovery mechanisms. They are not shortcuts for unknown dirty state and must never become the normal closeout path.
+
+## 10. Test policy
 
 This workflow inherits `.agents/AGENTS.md` and `.agents/skills/project-test-rules/SKILL.md`:
 
 - AI agents run only the smallest directly relevant tests.
-- Gate rejects obvious full-suite discovery targets.
 - Full-suite execution remains user-only when required.
-- Baseline comparisons must execute each worktree through its own `.venv\Scripts\python.exe` path.
-- If tests share runtime/game/user-data resources, execute them serially rather than concurrently.
+- Baseline comparisons execute each worktree through its own `.venv\Scripts\python.exe` path.
+- Tests that share runtime/game/user-data resources execute serially.
+- Docs-only changes do not require unit/full-suite execution; scope still must be audited before commit.
 
-A reviewer finding is not proof of a bug; blocking claims require concrete contract/regression evidence.
+## 11. Multi-worktree task-state invariant
 
-## 10. Multi-worktree task-state invariant
+Task state is namespaced by task id under `docs/tasks/<task-id>/`. Do not introduce a global mutable current-task singleton. Scripts require explicit task identity.
 
-Task state is namespaced by task id under:
+## 12. OpenCode compatibility and fallback
 
-```text
-docs/tasks/<task-id>/
-```
+Repository automation follows the pinned OpenCode version, launcher contract, CLI contract, and provider compatibility baseline documented by the repository. Do not add unverified flags or guess alternate invocation forms. Version/contract mismatch fails fast.
 
-Do not introduce a global mutable current-task singleton. Scripts require explicit task identity.
-
-## 11. OpenCode compatibility and fallback
-
-Repository automation follows the pinned OpenCode version, launcher contract, CLI contract, and provider compatibility baseline documented by the repository, requiring exactly OpenCode CLI version 1.18.31.
-
-Do not add unverified CLI flags or guess alternate invocation forms. Version/contract mismatch must fail fast.
-
-Model routing rules:
-
-- role boundaries remain stable even if candidate models change;
-- ordered fallback is permitted only for mechanically classified infrastructure failures;
-- a valid semantic PASS/BLOCK is terminal;
-- reviewer infrastructure exhaustion must not silently substitute Gemini as an independent reviewer;
-- degraded interactive review, when explicitly used by the outer workflow, is labeled non-independent and does not create Gate PASS authority;
-- provider credentials remain local and untracked.
-
-## 12. Installation boundary
-
-Task execution does not silently install or authenticate OpenCode. Bootstrap is explicit through repository-owned setup tooling. Secrets remain outside the repository.
-
-Python project dependency provisioning is likewise outside Scout/Gate/normal test responsibility; the worktree-local `.venv` must already resolve to the canonical environment.
+Model fallback is permitted only for mechanically classified infrastructure failures. A valid semantic PASS/BLOCK is terminal. Provider credentials remain local and untracked.
 
 ## 13. Windows shell policy
 
@@ -359,7 +343,9 @@ Non-interactive agent shell/tool execution uses:
 cmd.exe /d /s /c "<command>"
 ```
 
-Commands must not wait for stdin. PowerShell automation is wrapped through non-interactive `cmd.exe` execution. Preserve the intended repository working directory and never silently switch to the user home directory.
+Commands must not wait for stdin. PowerShell automation is wrapped through non-interactive `cmd.exe` execution where commands are being handed to automation/agents. Preserve the intended repository working directory.
+
+For human-facing formal task startup/cleanup, ChatGPT should prefer providing the repository-owned high-level script command rather than exposing the internal command sequence.
 
 ## 14. Non-goals
 
@@ -369,8 +355,10 @@ Workflow v1 does not add:
 - competing implementation patches;
 - automatic semantic authority transfer;
 - automatic full-suite execution;
-- dependency mutation orchestration;
 - shared-environment mutation locking/rebuild machinery;
+- startup-owned Node installation;
+- startup-owned Scout/Gate execution;
+- cleanup-owned forced repair of ambiguous state;
 - automatic merge without explicit user authorization.
 
 The north star is a contract-driven development pipeline with increasingly automated mechanics and deliberately narrow semantic authority.

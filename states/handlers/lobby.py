@@ -100,9 +100,12 @@ class LobbyHandler(BaseStateHandler):
         if is_lord_boss_mode:
             daily_manager = getattr(self.machine, "daily_manager", None)
             if daily_manager and self.machine.has_available_selected_lord_boss():
-                logging.info("Lobby: available lord boss found; entering LORD_BOSS.")
-                self.reset_state()
-                self.machine.transition_to(self.machine.STATE_LORD_BOSS)
+                # TownSubflowPreconditionController owns this handoff.  The
+                # Lobby handler must not provide a fallback that dispatches
+                # before physical Town/readiness verification.
+                logging.info(
+                    "Lobby: lord boss remains selected/pending; awaiting canonical Town precondition."
+                )
                 return True
 
             logging.info("Lobby: lord-boss flow complete; proceeding to the next town subflow.")

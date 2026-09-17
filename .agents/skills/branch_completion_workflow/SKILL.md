@@ -1,247 +1,69 @@
 ---
 name: branch_completion_workflow
-description: 個人開發模式下的分支收尾工作流，負責 regression baseline、maintenance refactor、contract convergence、integration readiness、main sync 與 task cleanup。
+description: >
+  Solo-development branch closeout workflow. Owns regression/classification, contract convergence,
+  integration readiness, post-integration synchronization guidance, and repository-owned task cleanup.
 usage_scope: solo_development_only
 ---
 
-# Branch Closeout Gated Workflow 🚀
+# Branch Closeout Gated Workflow
 
-本 Skill 是 Feature / Fix / Refactor / Docs / Test task 完成後的統一收尾流程。
+This skill defines task closeout. It does not grant local agents integration authority.
 
-它負責：
+The canonical workflow contract lives in `docs/architecture/ai_development_workflow.md`.
 
-- closeout context audit；
-- main vs task regression baseline；
-- regression classification；
-- behavior-preserving maintenance refactor safety gate；
-- contract / TODO / spec convergence；
-- PARS story；
-- final branch audit；
-- integration readiness；
-- integration 後 local main sync；
-- task branch/worktree cleanup。
+## 1. Core responsibility
 
-它不允許 local AI agent 自行 merge。
+Closeout owns:
 
-## Canonical workspace contract
+- final task/branch context audit;
+- regression baseline/classification;
+- behavior-preserving maintenance cleanup when justified;
+- contract/document convergence;
+- final semantic/architecture readiness;
+- user-authorized integration handoff;
+- post-integration task cleanup through repository automation.
 
-Workspace SSOT 定義於 `docs/architecture/ai_development_workflow.md`。
+It does not allow local Gemini/Antigravity/OpenCode agents to merge to `main`.
+
+## 2. Canonical workspace
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\        <- permanent main + runtime/CV validation home
+├─ BlackfireCrusade_tool\        <- permanent attached main + runtime/CV validation home
 └─ worktrees\
    └─ <task-id>\                 <- temporary task worktree
 ```
 
-Canonical shared environment：
+Canonical shared Python environment:
 
 ```text
 E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
 ```
 
-每個 runnable worktree 透過自己的 `.venv` junction consume 同一環境。
-
-重要：baseline/task 測試都使用「各自 worktree 的」：
+Each runnable worktree consumes that environment through its own local:
 
 ```text
 .\.venv\Scripts\python.exe
 ```
 
-不得引用另一個 worktree 的 absolute interpreter path。
+Do not use another worktree's absolute interpreter path.
 
-Existing active worktrees 可以在目前位置完成既有 task；不得只為整理目錄而搬動 dirty/active worktree。新 task 使用 canonical project-scoped path。
+The old permanent temp-main / detached-main convention is retired. `BlackfireCrusade_tool` permanently owns local `main`.
 
-## Usage scope guard
+## 3. Integration authority
 
-本 Skill 預設為單人開發模式。
+1. Local Gemini / Antigravity / OpenCode do not merge, push to `main`, delete branches, or perform equivalent integration actions.
+2. ChatGPT may integrate through GitHub only after applicable closeout requirements pass and the user explicitly authorizes integration.
+3. The user may choose manual integration instead.
+4. GitHub integration uses merge-commit semantics; do not silently squash/rebase.
+5. Cleanup never runs before integrated ancestry is proven.
 
-若 repository 已進入多人協作、protected branch、強制 PR review/CI 等模式：
-
-- 保留 regression classification、behavior-preserving refactor、contract convergence 等品質 gate；
-- integration 必須服從團隊 branch-protection / PR / CI 規則；
-- 不得以本地流程繞過遠端治理。
-
-## Trigger identification
-
-以下指令代表「啟動/繼續 closeout」，不是立即 merge：
-
-- `請分支收尾`
-- `分支收尾`
-- `準備 merge`
-- `請 merge`
-- `跑 merge`
-- `收尾分支`
-- `結束分支`
-
-Closeout 是 gated workflow。遇到 user-only full-suite、重大 contract decision、merge authorization 等 gate 時必須停下等待。
-
-## Hard invariants
-
-1. Local Gemini / Antigravity / OpenCode 不執行 merge、push-to-main、branch deletion 或 integration action。
-2. ChatGPT 只有在所有 required closeout gates 通過且使用者明確授權後，才能透過 GitHub 執行 merge-commit integration。
-3. 使用者可選擇自己手動 integration。
-4. GitHub integration 使用 merge commit；不 silent squash/rebase。
-5. `BlackfireCrusade_tool` 永久持有 local `main` 並作為 integrated baseline/runtime home。
-6. task worktree 保持 task branch ownership，直到 integration 已確認包含該 branch。
-7. branch/worktree cleanup 前必須 `git fetch origin` 並以 `git merge-base --is-ancestor` 驗證 integrated ancestry。
-8. 不使用 `reset --hard`、`clean -fd`、force checkout 或其他破壞 dirty state 的 shortcut。
-9. full regression suite 仍是 user-only；AI 只可跑 project policy 允許的 focused tests。
-10. closeout 不得為了測試成功偷偷修改 shared Python environment。
-
-## Closeout phases
+## 4. Closeout phases
 
 ### Phase 0 — Context audit
 
-在 task worktree 確認：
-
-```powershell
-git status --short
-git branch --show-current
-git diff main...HEAD --stat
-git log main..HEAD --oneline
-```
-
-盤點：
-
-- production changes；
-- tests；
-- architecture/contracts；
-- task artifacts；
-- temporary docs/logs；
-- behavior change vs behavior-preserving refactor boundary。
-
-如果 worktree detached、branch 不符 task、或存在 unrelated dirty changes，停止並先處理 ownership/state 問題。
-
-### Phase 1 — Canonical main baseline preflight
-
-在：
-
-```text
-E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool
-```
-
-執行：
-
-```powershell
-git status --short
-git branch --show-current
-git worktree list --porcelain
-git fetch origin
-git rev-parse HEAD
-git rev-parse origin/main
-```
-
-要求：
-
-```text
-branch == main
-working tree == clean
-```
-
-若 HEAD 落後且可 fast-forward：
-
-```powershell
-git pull --ff-only
-```
-
-若 dirty、diverged、detached 或無法 fast-forward，停止並回報。
-
-### Phase 2 — Regression baseline
-
-目標：比較 task HEAD 與 canonical main 的 test baseline。
-
-AI 不自行跑 full suite；由使用者執行需要的 full regression。
-
-Task worktree 測試使用：
-
-```text
-<task-worktree>\.venv\Scripts\python.exe
-```
-
-Main baseline 測試使用：
-
-```text
-E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool\.venv\Scripts\python.exe
-```
-
-每組測試都必須從各自 worktree working directory 執行，讓 branch-local imports 解析到正確 source tree。
-
-Windows 非互動/redirect command 遵循 project shell policy，使用 `cmd.exe /d /s /c`，並輸出獨立 UTF-8 logs。
-
-如果 task/main 測試會競爭 game process、`user_data/`、固定 screenshot/log 等共享 runtime resource，序列執行，不平行跑。
-
-等待使用者確認 full-suite 完成後才進下一 phase。
-
-### Phase 3 — Regression classification
-
-將 failure 分為：
-
-```text
-PRE_EXISTING_FAILURE
-EXPECTED_BEHAVIOR_CHANGE
-BRANCH_REGRESSION
-UNCERTAIN
-```
-
-只要存在 `BRANCH_REGRESSION` 或 `UNCERTAIN`，closeout blocked。
-
-不能用「main 也失敗」掩蓋 task 新增的不同 failure path，也不能把沒有 Final SPEC 支持的 behavior change 分成 EXPECTED。
-
-### Phase 4 — Refactor safety-net gate
-
-在做 closeout maintenance refactor 前，確認相關 behavior 已有足夠 tests/evidence 保護。
-
-沒有 safety net 時，不得因「順便清理」大幅改動 production behavior。
-
-### Phase 5 — Behavior-preserving maintenance refactor
-
-只處理能明確證明 behavior-preserving 的 maintenance，例如：
-
-- dead logic；
-- duplicate glue；
-- stale comments/docstrings；
-- ownership boundary clarity；
-- testability improvements；
-- architecture drift cleanup。
-
-若 Final SPEC 沒要求 behavior change，refactor 不得改變已驗證行為。
-
-Refactor 應與 feature/fix change 有清楚 commit boundary。
-
-### Phase 6 — Post-refactor verification
-
-先跑直接相關 focused tests。
-
-如果 closeout policy 要求 full-suite，停下交由使用者執行。
-
-任何 refactor 造成的新 failure 或 observable behavior change 都會重新 block closeout。
-
-### Phase 7 — Code/doc hygiene
-
-清掉只對 task 過程有意義、會污染 durable code 的暫時名稱、issue wording、debug comment。
-
-但不要把 canonical contract 重複寫進多份文件。
-
-### Phase 8 — Contract convergence
-
-把 durable invariant 收斂到 canonical architecture/workflow SSOT。
-
-Task SPEC / CONTEXT / reviews / EVIDENCE 是 task lifecycle artifact，不應成為永久第二套 architecture authority。
-
-Backlog 中已 promote 的 active task 不保留 duplicate active description。
-
-任何刪除 tracked task/history artifact 的決定若非 Final SPEC 已授權，先列出候選並等待使用者確認。
-
-### Phase 9 — PARS development story
-
-依 repository story convention，紀錄真正值得保留的開發脈絡：Problem / Actions / Results / Significance。
-
-Story 不得取代 architecture SSOT。
-
-### Phase 10 — Final branch audit
-
-在 task worktree 確認：
+From the task worktree, inspect:
 
 ```powershell
 git status --short
@@ -250,144 +72,250 @@ git log --oneline origin/main..HEAD
 git diff --stat origin/main...HEAD
 ```
 
-確認：
+Confirm:
 
-- branch clean；
-- expected commits 已 push；
-- Final SPEC / Gate / review evidence 符合 task lifecycle；
-- 沒有 unrelated files；
-- 沒有未宣告 behavior change；
-- canonical docs 已收斂。
+- expected task branch/worktree identity;
+- no unrelated dirty changes;
+- expected production/tests/docs/task artifacts;
+- behavior change vs behavior-preserving refactor boundary.
 
-### Phase 11 — Integration readiness
+Detached/wrong-branch/unrelated dirty state blocks closeout.
 
-Local agent 只交付 readiness report，不自行 merge。
+### Phase 1 — Canonical main baseline preflight
 
-#### Preferred integration
-
-當 GitHub access 可用且 user 明確授權：
-
-1. ChatGPT 重新檢查 expected head/base 沒有漂移。
-2. ChatGPT final semantic/architecture review 通過。
-3. ChatGPT 使用 merge-commit semantics 整合至 `main`。
-
-#### Manual integration
-
-若使用者選擇手動整合，應在 canonical main worktree：
+Canonical main is:
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool
 ```
 
-先：
+For regression/baseline work, main must be attached to `main` and clean. Fetch `origin`; if local main is behind and safely fast-forwardable, synchronize with fast-forward semantics. Dirty/diverged/detached/wrong-branch state blocks baseline use.
+
+Do not use reset/clean/force checkout shortcuts.
+
+### Phase 2 — Regression baseline
+
+AI agents run only the smallest directly relevant focused tests allowed by project policy. Full-suite execution remains user-only when required.
+
+Task tests use:
+
+```text
+<task-worktree>\.venv\Scripts\python.exe
+```
+
+Main baseline tests use:
+
+```text
+E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool\.venv\Scripts\python.exe
+```
+
+Each command runs from its own worktree root so source imports resolve to the correct tree.
+
+If tests share game/runtime/user-data resources, run them serially.
+
+### Phase 3 — Regression classification
+
+Classify failures as:
+
+```text
+PRE_EXISTING_FAILURE
+EXPECTED_BEHAVIOR_CHANGE
+BRANCH_REGRESSION
+UNCERTAIN
+```
+
+`BRANCH_REGRESSION` or `UNCERTAIN` blocks closeout.
+
+### Phase 4 — Refactor safety gate
+
+Do not perform opportunistic maintenance refactors without tests/evidence protecting the relevant behavior.
+
+### Phase 5 — Behavior-preserving maintenance refactor
+
+Allowed only when clearly behavior-preserving, for example:
+
+- dead logic;
+- duplicate glue;
+- stale comments/docstrings;
+- responsibility-boundary clarity;
+- testability improvements;
+- architecture drift cleanup.
+
+If Final SPEC did not authorize behavior change, closeout refactor must not introduce one.
+
+### Phase 6 — Post-refactor verification
+
+Run the smallest directly relevant focused tests. Any new failure/observable behavior change re-blocks closeout.
+
+### Phase 7 — Code/doc hygiene
+
+Remove task-local/transient wording from durable production code where appropriate. Do not duplicate canonical architecture contracts across many files.
+
+### Phase 8 — Contract convergence
+
+Converge durable invariants into canonical architecture/workflow SSOT. Task SPEC/CONTEXT/reviews/EVIDENCE remain task lifecycle artifacts, not a permanent second architecture authority.
+
+Tracked-history deletion or archival outside the Final SPEC requires explicit user agreement.
+
+### Phase 9 — Development story
+
+When project convention calls for it, record a concise PARS development story. The story is historical narrative, not architecture authority.
+
+### Phase 10 — Final branch audit
+
+Confirm:
 
 ```powershell
 git status --short
-git fetch origin
-git pull --ff-only
-```
-
-再由使用者執行 repository-approved `git merge --no-ff <branch>` 與 push。
-
-Local AI 只能提供指令/檢查，不代為執行 integration。
-
-## Post-integration synchronization
-
-Remote integration 完成後，在 canonical main worktree：
-
-```powershell
-git fetch origin
-git pull --ff-only
-```
-
-驗證：
-
-```powershell
 git branch --show-current
-git rev-parse HEAD
-git rev-parse origin/main
+git log --oneline origin/main..HEAD
+git diff --stat origin/main...HEAD
 ```
 
-必須：
+Verify:
 
-```text
-branch == main
-HEAD == origin/main
-working tree == clean
-```
+- task branch clean;
+- expected commits pushed;
+- no unrelated files;
+- Final SPEC/current implementation/evidence align;
+- no undeclared behavior change;
+- canonical docs converged.
 
-## Task branch / worktree cleanup
+### Phase 11 — Integration readiness
 
-先從任一有效 repository worktree：
+Local agents deliver readiness; they do not merge.
+
+Preferred path:
+
+1. ChatGPT re-checks current expected head/base on GitHub.
+2. ChatGPT performs final semantic/architecture review.
+3. User explicitly authorizes integration.
+4. ChatGPT integrates through GitHub with merge-commit semantics.
+
+Manual fallback is allowed when the user prefers it, but it uses the canonical permanent `main` worktree—not temp-main—and must preserve repository merge policy.
+
+## 5. Post-integration synchronization
+
+After remote integration, local permanent main may be synchronized when immediate local runtime/baseline use is needed:
 
 ```powershell
 git fetch origin
-git worktree list --porcelain
-git merge-base --is-ancestor <task-branch> origin/main
+git pull --ff-only
 ```
 
-只有 ancestry 驗證成功後才能 cleanup。
+This is a main synchronization operation, not task cleanup internals.
 
-### Active task worktree
+If no immediate local-main use is needed, the next formal `task_start.ps1` will validate/fetch/safely synchronize canonical main before materializing another task.
 
-確認：
+## 6. Normal task cleanup: one high-level command
 
-- worktree clean；
-- branch/HEAD 是預期值；
-- 不含未保存的 local-only evidence；
-- `.venv` 只是 junction consumer，不是 environment owner。
+After integration is confirmed, users should **not** manually reconstruct `.venv` detach + `git worktree remove` + branch deletion.
 
-先執行 repository-owned `scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -Detach`。
-只有在 helper 回傳 `DETACHED` 且確認 canonical environment 存在後，才可使用正常
-`git worktree remove <path>`；不得 `--force` 處理未知 dirty state。Helper 只負責驗證並
-detach 該 worktree 的 exact canonical `.venv` junction，不負責 ancestry、cleanliness、
-branch deletion 或 prune。若回傳 fail-closed code，停止並保留 filesystem state。
+Normal cleanup is:
 
-若 worktree 已部分移除（例如 path 或 `.git` administrative marker 缺失），不得 retry
-normal remove 或使用 `--force`。只有在另行明確證明 registration stale、沒有 live/dirty
-state 要保留後，才可先以 `scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -PartialRemovalRecovery -Detach`
-檢查並 detach residual exact canonical junction。若 `.venv` 已安全不存在，recovery
-helper 回傳 `SAFE_RESIDUAL_ABSENT`。只有 filesystem safety proof 完成後，才可由本
-workflow 執行 `git worktree prune --verbose`，再重新讀取 `git worktree list --porcelain`
-並確認 intended registration 消失且 unrelated worktrees 仍存在。Helper 不會自動
-prune；physical、wrong-target、unsupported 或 ambiguous residual `.venv` 一律停止。
+```powershell
+.\scripts\task_cleanup.ps1 -Task <task-id>
+```
 
-若第一次正常 cleanup 已成功 detach `.venv`，但後續 `git worktree remove <path>` 失敗，
-workflow 必須保留該次操作 evidence，並以
-`scripts\worktree_cleanup_safety.ps1 -WorktreePath <path> -DetachedPendingRemove`
-取得 `DETACHED_PENDING_REMOVE` 後再 bounded retry。任意 missing `.venv` 不得被當成已
-detach 的證據。
+If policy/user intent also requires deleting the remote task branch:
 
-### Branch deletion
+```powershell
+.\scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch
+```
 
-worktree 不再持有 branch 後，才允許刪 local branch。
+Run the command from a valid repository worktree outside the task worktree being removed; canonical main is the normal operator location.
 
-Remote branch 是否刪除依 repository/user policy；若 local safe-delete 失敗，保留 branch，不強制。
+### What `task_cleanup.ps1` owns
 
-### Existing non-canonical active worktree paths
+The wrapper owns the normal teardown mechanics:
 
-若 task 在非 canonical path 啟動，只要它仍 active 就可原地完成。Closeout 成功後正常 remove；不要先搬到 canonical path 再刪。
+- discovers canonical repository/main through Git common-dir state;
+- validates canonical main exists and is clean;
+- fetches `origin`;
+- re-reads actual worktree topology;
+- resolves the intended attached task worktree/branch;
+- refuses to remove the current or canonical main worktree;
+- requires the task worktree to be clean;
+- proves task branch ancestry in `origin/main`;
+- invokes `worktree_cleanup_safety.ps1 -Detach`;
+- requires the helper's exact `DETACHED` machine result;
+- runs normal `git worktree remove`;
+- verifies branch/path ownership disappeared from topology;
+- safely deletes the local branch;
+- optionally deletes the remote branch when explicitly requested.
 
-## Environment closeout rules
+It fails closed rather than forcing unknown state.
 
-Closeout 中：
+## 7. What users should no longer do during normal cleanup
 
-- 不 `pip install` / `pip uninstall`；
-- 不 recreate shared venv；
-- 不修改 shared-env dependency state；
-- 不 `pip install -e .`；
-- 每個 worktree 只使用自己的 `.venv\Scripts\python.exe` consumer path；
-- `.venv` junction 缺失/失效時 fail-fast，而不是 fallback system Python。
-
-若 task 本身需要 dependency mutation，必須使用 repository-level environment operation contract；普通 branch closeout 不自行發明 mutation protocol。
-
-## Closeout report
-
-交付至少包含：
+When `task_cleanup.ps1` can own the operation, do not ask users to manually perform:
 
 ```text
-CLOSEOUT REPORT
+worktree_cleanup_safety.ps1 -Detach
+git worktree remove <task-path>
+git branch -d <task-branch>
+git worktree prune
+manual .venv junction deletion
+```
 
+Those are implementation/recovery-level operations, not routine user choreography.
+
+The normal user interaction should be:
+
+```text
+ChatGPT: task is integrated; run this one cleanup command.
+User: runs task_cleanup.ps1.
+Script: returns success or a bounded fail-closed reason.
+```
+
+## 8. Cleanup failure / recovery policy
+
+If `task_cleanup.ps1` fails, preserve the filesystem/Git state and inspect the reported reason before issuing any low-level recovery command.
+
+Typical blockers:
+
+- canonical main dirty;
+- task worktree missing/ambiguous;
+- task worktree dirty;
+- branch not integrated into fetched `origin/main`;
+- unsafe `.venv` state;
+- worktree removal failure;
+- local branch safe-delete failure.
+
+Do not respond to a fail-closed result with `--force`, `reset --hard`, `clean -fd`, or blind prune.
+
+### Low-level cleanup primitive
+
+`scripts/worktree_cleanup_safety.ps1` is a narrow internal/recovery primitive. It owns only `.venv` classification/detachment safety. It does not own ancestry, cleanliness, branch deletion, remote deletion, or normal operator sequencing.
+
+Partial-removal recovery modes (`-PartialRemovalRecovery`, `-DetachedPendingRemove`) are bounded recovery evidence paths. They are not normal task cleanup commands and should only be used after the corresponding state has been proven.
+
+Only after a specific stale-registration recovery proof may `git worktree prune --verbose` be considered, followed by topology re-read. Do not make prune routine.
+
+## 9. Environment closeout rules
+
+Closeout does not:
+
+- `pip install` / `pip uninstall`;
+- recreate the shared venv;
+- modify shared-env dependency state;
+- use `pip install -e .`;
+- use another worktree's interpreter;
+- silently repair a missing/unsafe `.venv`.
+
+Normal cleanup delegates junction safety to repository scripts.
+
+## 10. Gate / verification note
+
+Gate/reviewer policy remains a separate verification concern. A user-authorized temporary decision not to run Gate for workflow-infrastructure work does not silently rewrite the canonical Gate contract.
+
+Closeout must accurately state which verification evidence actually exists.
+
+## 11. Closeout report
+
+A closeout report should include at least:
+
+```text
 Task / Branch:
 Head:
 Main baseline:
@@ -395,56 +323,30 @@ Regression classification:
 Focused verification:
 User full-suite status (if required):
 Contract convergence:
-Gate evidence:
-Final review status:
+Gate / reviewer evidence actually available:
+Final semantic review status:
 Integration authority:
 Cleanup readiness:
 ```
 
-## Completion criteria
+## 12. Completion criteria
 
 ```text
 [ ] task worktree/branch identity verified
-[ ] canonical main clean and synced to fetched origin/main
+[ ] canonical main baseline state valid when needed
 [ ] regression baseline classified
 [ ] no BRANCH_REGRESSION / UNCERTAIN blocker
-[ ] maintenance refactor preserved behavior
+[ ] maintenance changes preserve declared behavior
 [ ] focused verification passed
-[ ] user-only full suite completed when required
-[ ] durable contracts converged to SSOT
+[ ] full suite completed by user when required
+[ ] durable contracts converged
 [ ] final branch audit clean
 [ ] candidate pushed and reviewable
-[ ] user explicitly authorizes integration before merge
-[ ] after integration, canonical main fast-forwards to origin/main
-[ ] task ancestry verified before cleanup
-[ ] task worktree cleanup preserves local state and shared environment
+[ ] explicit user authorization obtained before integration
+[ ] integration confirmed in origin/main
+[ ] normal cleanup delegated to task_cleanup.ps1
 ```
 
 # One-line principle
 
-> Verify task against canonical main, converge durable truth to SSOT, integrate only with explicit authority, then safely remove the temporary task worktree.
-
-## User-facing cleanup wrapper
-
-For a normal merged, clean task, prefer:
-
-```bat
-cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> < NUL"
-```
-
-Remote deletion is opt-in only:
-
-```bat
-cmd.exe /d /s /c "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch < NUL"
-```
-
-The wrapper may be launched from any valid repository worktree, but validates
-canonical `main` and runs destructive Git commands from that cwd. It resolves
-the task path and branch from `git worktree list --porcelain`, never guesses
-historical branch names, invokes `worktree_cleanup_safety.ps1 -Detach`, and
-continues only on one strict JSON result with `code == DETACHED`. Any failure
-stops later destructive actions.
-
-V1 does not automatically run `git worktree prune`,
-`-PartialRemovalRecovery`, or `-DetachedPendingRemove`; stale and partial
-states remain on the manual recovery path above.
+> Review and integration remain gated human/ChatGPT decisions; once integrated, routine task-worktree teardown is one repository cleanup command, not a manual sequence of Git and junction operations.
