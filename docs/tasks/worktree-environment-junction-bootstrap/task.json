@@ -1,0 +1,24 @@
+{
+  "id": "worktree-environment-junction-bootstrap",
+  "base_ref": "origin/main",
+  "base_sha": "17bdff32e74ef56584a966c8d2973d15d2ae8ed3",
+  "scope": [
+    "scripts/",
+    ".agents/skills/branch_start_workflow/SKILL.md",
+    "tests/",
+    "docs/tasks/worktree-environment-junction-bootstrap/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": ["opencode-default"],
+    "review": ["opencode-default"]
+  },
+  "notes": {
+    "status": "Draft",
+    "implementation_blocked_until_final": true,
+    "observed_gap": "registered task worktree could exist without the required .venv junction; cleanup correctly failed closed with MISSING_VENV",
+    "downstream_tasks": [
+      "task-start-orchestration-wrapper"
+    ]
+  }
+}
