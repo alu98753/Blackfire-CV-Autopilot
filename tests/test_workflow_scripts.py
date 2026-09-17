@@ -466,7 +466,7 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertIn("-Detach", completion)
         self.assertIn("git worktree remove <path>", completion)
         self.assertIn("git worktree prune --verbose", completion)
-        self.assertIn("Live or dirty", completion)
+        self.assertIn("live/dirty", completion.lower())
         self.assertIn("unrelated worktrees", completion)
         self.assertLess(completion.index("-Detach"), completion.index("git worktree remove <path>"))
         self.assertNotIn("worktree remove --force", helper.lower())
