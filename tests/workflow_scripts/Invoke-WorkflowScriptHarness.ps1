@@ -10,7 +10,7 @@ $runtimeDirs = @(
     (Join-Path $repoRoot ".runtime\ai_gate\$fixtureId"),
     (Join-Path $repoRoot ".runtime\ai_scout\$fixtureId")
 )
-$helperDir = Join-Path $PSScriptRoot '.runtime-fixtures'
+$helperDir = Join-Path $repoRoot '.runtime\workflow-harness-fixtures'
 $diagnosticRoot = Join-Path $repoRoot '.runtime\test_workflow_harness'
 $reviewer = Join-Path $helperDir 'fake-reviewer.py'
 $scoutChild = Join-Path $helperDir 'fake-scout.ps1'
@@ -454,12 +454,18 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 
     Run-Case 'Gate partial resume reuses surviving sibling and reruns failed reviewer' {
         Reset-DisposableGateState
+        '' | Set-Content -LiteralPath (Join-Path $fixtureDir 'reviews\spec-review.md')
+        '' | Set-Content -LiteralPath (Join-Path $fixtureDir 'reviews\regression-review.md')
+        '' | Set-Content -LiteralPath (Join-Path $fixtureDir 'EVIDENCE.md')
         $code0 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','catastrophic-crash','-ForceRefresh'))
         Assert-True ($code0 -eq 1) "partial resume setup expected 1, got $code0"
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
         $specCountBefore = if (Test-Path $specInvocationsFile) { [int](Get-Content $specInvocationsFile -Raw) } else { 0 }
         $regCountBefore = if (Test-Path $regInvocationsFile) { [int](Get-Content $regInvocationsFile -Raw) } else { 0 }
+        $specHashBefore = (Get-FileHash (Join-Path $fixtureDir 'reviews\spec-review.md')).Hash
+        $statusHashBefore = (Get-FileHash (Join-Path $repoRoot ('.runtime\ai_gate\' + $fixtureId + '\status.txt'))).Hash
+        $diffHashBefore = (Get-FileHash (Join-Path $repoRoot ('.runtime\ai_gate\' + $fixtureId + '\diff.patch'))).Hash
 
         # regression-reviewer now passes as well
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_SpecReviewerArgumentsOverride','terminal-pass','-_RegressionReviewerArgumentsOverride','terminal-pass'))
@@ -467,9 +473,15 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
 
         $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
         $regCountAfter = [int](Get-Content $regInvocationsFile -Raw)
+        $specHashAfter = (Get-FileHash (Join-Path $fixtureDir 'reviews\spec-review.md')).Hash
+        $statusHashAfter = (Get-FileHash (Join-Path $repoRoot ('.runtime\ai_gate\' + $fixtureId + '\status.txt'))).Hash
+        $diffHashAfter = (Get-FileHash (Join-Path $repoRoot ('.runtime\ai_gate\' + $fixtureId + '\diff.patch'))).Hash
 
         Assert-True ($specCountAfter -eq $specCountBefore) "spec-reviewer was launched despite valid cache: before=$specCountBefore, after=$specCountAfter"
         Assert-True ($regCountAfter -gt $regCountBefore) "regression-reviewer was not launched on rerun"
+        Assert-True ($specHashAfter -eq $specHashBefore) 'spec canonical review was rewritten'
+        Assert-True ($statusHashAfter -eq $statusHashBefore) 'status snapshot changed during partial resume'
+        Assert-True ($diffHashAfter -eq $diffHashBefore) 'diff snapshot changed during partial resume'
         Assert-True (Test-Path (Join-Path $fixtureDir 'reviews\spec-review.md')) 'spec-review.md missing'
         Assert-True (Test-Path (Join-Path $fixtureDir 'reviews\regression-review.md')) 'regression-review.md missing'
         Assert-True (Test-Path (Join-Path $fixtureDir 'EVIDENCE.md')) 'EVIDENCE.md missing'
@@ -518,8 +530,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $evidenceCanonical = Join-Path $fixtureDir 'EVIDENCE.md'
 
         $specCountBefore = [int](Get-Content $specInvocationsFile -Raw)
-            $regCountBefore = [int](Get-Content $regInvocationsFile -Raw)
-            & cmd.exe /d /s /c "git update-index --assume-unchanged `"$specCanonical`" `"$regCanonical`" `"$evidenceCanonical`"" 2>&1 | Out-Null
+        $regCountBefore = [int](Get-Content $regInvocationsFile -Raw)
 
             $code = Invoke-Script $gate $cacheReviewArgs
             Assert-True ($code -eq 0) "expected 0, got $code"
@@ -527,8 +538,8 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
             $specCountAfter = [int](Get-Content $specInvocationsFile -Raw)
             $regCountAfter = [int](Get-Content $regInvocationsFile -Raw)
 
-            Assert-True ($specCountAfter -eq $specCountBefore) 'spec-reviewer launched when canonical review was tracked in git'
-            Assert-True ($regCountAfter -eq $regCountBefore) 'regression-reviewer launched when canonical review was tracked in git'
+        Assert-True ($specCountAfter -eq $specCountBefore) 'spec-reviewer launched despite valid canonical reuse'
+        Assert-True ($regCountAfter -eq $regCountBefore) 'regression-reviewer launched despite valid canonical reuse'
     }
 
     Run-Case 'Gate model candidate order changes fingerprint and unchanged order hits cache' {
