@@ -1,5 +1,6 @@
 from states.domains.base_domain import BaseDomainStrategy
 from states.domains.golden_empire import GoldenEmpireStrategy
+from states.domains.treasure_subflow import DomainTreasureSubflow
 
 DOMAIN_STRATEGIES = {
     "golden_empire": GoldenEmpireStrategy,
@@ -16,5 +17,6 @@ def get_domain_strategy(domain_name: str, handler) -> BaseDomainStrategy:
 __all__ = [
     "BaseDomainStrategy",
     "GoldenEmpireStrategy",
+    "DomainTreasureSubflow",
     "get_domain_strategy",
 ]
