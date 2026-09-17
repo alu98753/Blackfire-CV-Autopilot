@@ -13,6 +13,22 @@ class ExploreHandler(BaseStateHandler):
     TREASURE_TERMINAL_THRESHOLD = 0.80
     DUNGEON_EXIT_RETRY_INTERVAL = 1.5
     DUNGEON_EXIT_TIMEOUT = 4.0
+    DUNGEON_ACTIONLESS_STALL_THRESHOLD = 10
+    DUNGEON_ACTIONLESS_REENTRY_BUDGET = 3
+    MAX_ACTIONLESS_RELOCALIZATIONS = 3
+
+    def __init__(self, machine):
+        super().__init__(machine)
+        self.dungeon_actionless_ticks = 0
+        self.dungeon_actionless_escalations = 0
+
+    def _reset_dungeon_actionless_stall(self):
+        """
+        當在地下城中觀察到真實 actionable 遊戲進度時，重設本地 stall 計數與升級計數。
+        """
+        self.dungeon_actionless_ticks = 0
+        self.dungeon_actionless_escalations = 0
+        self.no_explore_match_count = 0
 
     def handle(self, screen_img, rect):
         """
@@ -52,6 +68,7 @@ class ExploreHandler(BaseStateHandler):
             pos_auto, conf_auto = self.matcher.match(screen_img, "common/auto.png", threshold=0.7)
             if pos_auto:
                 logging.info(f"⚔️ 偵測到戰鬥已真正開始（出現 auto 按鈕，相似度: {conf_auto:.4f}），進入戰鬥狀態！")
+                self._reset_dungeon_actionless_stall()
                 self.machine.transition_to(self.machine.STATE_BATTLE)
                 return
 
@@ -92,6 +109,8 @@ class ExploreHandler(BaseStateHandler):
                 ],
             )
 
+        floor_transition_just_settled = False
+        leave_anchor_detected = False
         for btn_name in explore_priorities:
             # 檢查模板檔案是否存在
             if not os.path.exists(os.path.join("templates", btn_name)):
@@ -126,6 +145,7 @@ class ExploreHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
                     self.machine.dungeon_completing = True
                     self.machine.last_dungeon_complete_click_time = time.time()
+                    self._reset_dungeon_actionless_stall()
                     time.sleep(0.04)
                     return
 
@@ -185,14 +205,17 @@ class ExploreHandler(BaseStateHandler):
                     
                 elif btn_name == "dungeons/leave.png":
                     self.machine.is_in_dungeon = True
+                    leave_anchor_detected = True
                     if getattr(self.machine, "dungeon_floor_transitioning", False):
                         self._reset_floor_memory_transition()
+                        floor_transition_just_settled = True
                     logging.info(f"🏰 偵測到地下城樓層起點/錨點 [{btn_name}] (信心度: {conf:.4f})，維護地下城探索狀態。")
+                    continue
                     
                 else:
                     logging.info(f"👉 偵測到探險事件 [{btn_name}]，信心度: {conf:.4f}，點擊處理。")
                     self.mouse.click(rect["left"] + pos[0], rect["top"] + pos[1])
-                self.no_explore_match_count = 0
+                self._reset_dungeon_actionless_stall()
                 return # 成功處理一個優先級最高的事項後即結束該步，等待下一次截圖
 
         # 🛡️ 後置驗證保險：若標記為已領取祝福，但在等待超過 3.5 秒後畫面上仍未出現下樓按鈕 (gungeon_godown.png)
@@ -212,8 +235,87 @@ class ExploreHandler(BaseStateHandler):
                     self.machine.bless_received_this_floor = False
 
 
-        # 防卡死救援：若連續多幀沒有比對到任何地下城探險事件，檢查是否根本已經回到普通關卡/大廳/城鎮介面
+        # 檢查是否處於合法過渡/等待窗口中 (Legal Transition Windows)
+        in_legal_transition = (
+            floor_transition_just_settled
+            or getattr(self.machine, "dungeon_floor_transitioning", False)
+            or getattr(self.machine, "dungeon_completing", False)
+            or (
+                getattr(self.machine, "bless_received_this_floor", False)
+                and (time.time() - getattr(self.machine, "last_bless_claim_time", 0.0) <= 3.5)
+            )
+        )
 
+        # 檢查本 frame 是否有非地下城的大廳/關卡/城鎮 fallback 錨點 (避免 stale is_in_dungeon 遮蔽)
+        if not leave_anchor_detected and not in_legal_transition:
+            for fallback_btn in ["stages/start.png", "common/select_stage.png", "goback_town.png", "common/door.png"]:
+                if os.path.exists(os.path.join("templates", fallback_btn)):
+                    pos_fb, conf_fb = self.matcher.match(screen_img, fallback_btn, threshold=0.8)
+                    if pos_fb:
+                        logging.warning(f"⚠️ 地下城探索中未匹配到事件，但偵測到大廳/關卡介面 [{fallback_btn}] (信心度: {conf_fb:.4f})，判定已非地下城狀態，自動轉移至 NAVIGATING。")
+                        self.machine.is_in_dungeon = False
+                        self.dungeon_actionless_ticks = 0
+                        self.no_explore_match_count = 0
+                        next_state = self.machine.STATE_COLLECT_ONLY if self.machine.is_in_collect_only_mode() else self.machine.STATE_NAVIGATING
+                        self.machine.transition_to(next_state)
+                        return
+
+        # 區分情況 A 與情況 B：
+        # 情況 B: 明確仍在地下城中 (is_in_dungeon 或本輪看見 leave.png)
+        if getattr(self.machine, "is_in_dungeon", False) or leave_anchor_detected:
+            self.no_explore_match_count = 0
+            if in_legal_transition:
+                logging.info("⏳ 地下城探索中，處於合法過渡等待窗口，維持探索狀態。")
+                return
+
+            self.dungeon_actionless_ticks = getattr(self, "dungeon_actionless_ticks", 0) + 1
+            logging.info(
+                f"⏳ 地下城探索中，確認仍在地下城但無 actionable event (本地 stall tick: {self.dungeon_actionless_ticks}/{self.DUNGEON_ACTIONLESS_STALL_THRESHOLD})。"
+            )
+
+            if self.dungeon_actionless_ticks >= self.DUNGEON_ACTIONLESS_STALL_THRESHOLD:
+                # 1. 若有本層記憶標記，先重設本層標記避免因漏點/偽進度而跳過事件
+                has_stale_floor_memory = (
+                    getattr(self.machine, "chest_opened_this_floor", False)
+                    or getattr(self.machine, "skill_selected_this_floor", False)
+                    or getattr(self.machine, "bless_received_this_floor", False)
+                )
+                if has_stale_floor_memory:
+                    logging.warning(
+                        "⚠️ [ExploreHandler] 地下城本地 actionless 超過門檻，嘗試重設本層探索記憶以重新掃描事件。"
+                    )
+                    self._reset_floor_memory_transition()
+                    self.dungeon_actionless_ticks = max(
+                        0, self.DUNGEON_ACTIONLESS_STALL_THRESHOLD - self.DUNGEON_ACTIONLESS_REENTRY_BUDGET
+                    )
+                    return
+
+                # 2. 若無本層記憶可重設，檢查是否已達到本地重新定位升級上限
+                self.dungeon_actionless_escalations = getattr(self, "dungeon_actionless_escalations", 0) + 1
+                if self.dungeon_actionless_escalations > self.MAX_ACTIONLESS_RELOCALIZATIONS:
+                    logging.error(
+                        f"🚨 [ExploreHandler] 地下城本地 relocalization 已達有界上限 ({self.dungeon_actionless_escalations}/{self.MAX_ACTIONLESS_RELOCALIZATIONS})，"
+                        "確認陷入 persistent livelock，終止 local recovery 並升級至 GameRelaunchSubflow！"
+                    )
+                    from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
+                    self.dungeon_actionless_ticks = 0
+                    self.dungeon_actionless_escalations = 0
+                    GameRelaunchSubflow().execute(self.machine, reason="dungeon_actionless_persistent_livelock")
+                    return
+
+                # 3. 退回 STATE_UNKNOWN 進行原生重新定位，並保留 budget 防止 UNKNOWN <-> EXPLORING 無限重置
+                logging.warning(
+                    f"⚠️ [ExploreHandler] 地下城本地 actionless 達到上限且無可重設記憶，轉移至 STATE_UNKNOWN 進行 relocalization (升級次數: {self.dungeon_actionless_escalations}/{self.MAX_ACTIONLESS_RELOCALIZATIONS})。"
+                )
+                self.dungeon_actionless_ticks = max(
+                    0, self.DUNGEON_ACTIONLESS_STALL_THRESHOLD - self.DUNGEON_ACTIONLESS_REENTRY_BUDGET
+                )
+                self.machine.transition_to(self.machine.STATE_UNKNOWN)
+                return
+            return
+
+        # 情況 A: 可能已離開地下城 (未看到任何地下城事件且未看到 leave 錨點)
+        self.dungeon_actionless_ticks = 0
         self.no_explore_match_count = getattr(self, "no_explore_match_count", 0) + 1
         if self.no_explore_match_count >= 6:
             self.no_explore_match_count = 0
