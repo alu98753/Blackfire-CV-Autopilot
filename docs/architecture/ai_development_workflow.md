@@ -161,7 +161,9 @@ Gemini/Antigravity is the production implementation writer in workflow v1 and im
 
 ### Reviewers
 
-OpenCode reviewers, when invoked, are independent read-only blocker detectors. A valid semantic PASS/BLOCK is terminal for that reviewer role; fallback is for infrastructure failure, not review-shopping.
+OpenCode `spec-reviewer` (`steps: 8`) and `regression-reviewer` (`steps: 10`) are independent read-only blocker detectors. They check contract compliance, callers, sibling paths, shared state, lifecycle/ownership, timing/concurrency, testability, dead logic, and architecture drift. Completed valid StructuredOutput is the terminal reviewer result.
+
+Completed valid StructuredOutput is the terminal reviewer result. Valid structured PASS/BLOCK output is terminal for the reviewer role. Reviewer fallback is for infrastructure failure, never semantic review-shopping.
 
 ### Final reviewer / remote orchestrator
 
@@ -269,11 +271,23 @@ When the task/lifecycle requires AI Gate and its infrastructure is available:
 .\scripts\ai_gate.ps1 -Task <task-id>
 ```
 
-Gate remains a later verification concern and is intentionally not part of task startup. Any explicit temporary user-authorized closeout exception does not silently rewrite this canonical Gate contract.
+Gate executes `spec-reviewer` and `regression-reviewer` concurrently using a dual-slot coordinator loop, optionally runs declared focused tests, and promotes trusted review/evidence artifacts. It never substitutes full-suite execution.
+
+Reviewer persistence and resume follow:
+
+- Canonical reviews carry an embedded input fingerprint comment:
+  `<!-- blackfire-gate-fingerprint: {"schema":1,"role":"...","hash":"..."} -->`
+- Each reviewer stage is independently evaluated:
+  - If a valid canonical review exists with a matching input fingerprint, it is reused and its reviewer process is not launched.
+  - If missing, stale, or mismatched, the reviewer is executed fresh.
+- Interrupted or partially failed runs can resume: an infrastructure failure in one reviewer does not discard a valid sibling result.
+- `-ForceRefresh` explicitly bypasses cached reviewer artifacts and forces fresh execution of both reviewers.
 
 ### Phase E — Final review, integration, cleanup
 
-Candidate changes/evidence are pushed. ChatGPT performs final semantic/architecture review. Integration requires explicit user authorization.
+- `0`: trusted verification passed (all reviewers PASS + focused tests pass);
+- `2`: trusted candidate blocker or configured focused-test failure;
+- `1`: verification infrastructure unavailable / no trusted verdict.
 
 After remote integration, normal task cleanup is repository-owned:
 
