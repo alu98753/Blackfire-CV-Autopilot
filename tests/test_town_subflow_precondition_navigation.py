@@ -76,13 +76,16 @@ class TownSubflowPreconditionTestCase(unittest.TestCase):
         self.machine.start_subflow_queue(["lord_boss"])
         self.machine.current_state = self.machine.STATE_DUNGEON_EXPLORING
 
-        self.assertTrue(
-            self.machine.town_subflow_precondition._should_skip_handle(
-                "lord_boss", self.machine.navigation_progress
-            )
-        )
         self.assertEqual(self.machine.current_town_subflow, "lord_boss")
         self.assertNotEqual(self.machine.current_state, self.machine.STATE_LORD_BOSS)
+        self.assertFalse(self.machine.handle_town_subflow_precondition(self.screen, self.rect))
+        self.assertEqual(self.machine.current_state, self.machine.STATE_DUNGEON_EXPLORING)
+
+    def test_unregistered_legacy_flow_keeps_immediate_dispatch(self):
+        self.machine.start_subflow_queue(["demon_lords"])
+
+        self.assertEqual(self.machine.current_town_subflow, "demon_lords")
+        self.assertEqual(self.machine.current_state, self.machine.STATE_DEMON_LORDS)
 
     def test_goal_table_is_task_agnostic(self):
         snapshot = SceneSnapshot(

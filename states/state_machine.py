@@ -2109,6 +2109,13 @@ class GameStateMachine:
                 continue
 
             self.current_town_subflow = next_flow
+            # Preserve the established immediate-dispatch behavior for
+            # unregistered legacy/dev flows. Registered Town destination
+            # flows, including lord_boss, use canonical REACH_TOWN below.
+            from states.town_subflow_navigation import TOWN_SUBFLOW_SPECS
+            if next_flow not in TOWN_SUBFLOW_SPECS:
+                return self.dispatch_current_town_subflow()
+
             flow_name = flow_cfg.get("name", next_flow)
             logging.info("=" * 60)
             logging.info(f"🎯 [城鎮流水線進度] 彈出並切換至任務: [{next_flow}] ({flow_name})")
