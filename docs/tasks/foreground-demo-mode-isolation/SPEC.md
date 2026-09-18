@@ -326,3 +326,60 @@ Scout evidence has been reviewed and incorporated.
 `Status: Final`
 
 Gemini/Antigravity may now perform production implementation under this contract. OpenCode Scout/reviewers remain read-only. Any material deviation from this contract must be surfaced before implementation proceeds.
+
+## Final bounded cleanup appendix
+
+This appendix extends the Final SPEC only for the remaining runtime-I/O cleanup discovered during final review. It does not reopen or weaken any previously completed architecture, behavior-preservation, CLI, fail-closed, timing, launcher, or composition acceptance criteria above.
+
+### Goal
+
+Complete the isolation boundary by removing the remaining legacy mixed-mode API surface from runtime-facing code/tests and by making the relaunch capture dependency an explicit invariant.
+
+### Additional scope
+
+1. **Retire the legacy mixed-mode I/O facade from supported runtime/test usage.**
+   - Production/runtime-facing code must not construct `MouseController(backend_mode=...)` or `ScreenCapturer(backend_mode=...)` as an I/O-selection mechanism.
+   - Backend/foreground selection must use the explicit concrete adapters already established by this task.
+   - Remove legacy `backend_mode` constructor/runtime-switch behavior from the base I/O classes only where required to make the explicit adapters the supported path and where doing so does not alter the already-verified backend/foreground mechanics.
+   - Do not modify the verified Win32/pyautogui capture/input mechanics, coordinate transforms, jitter, callback/finalization behavior, safe-area behavior, or timing sequences.
+
+2. **Align remaining focused/nearby tests with the explicit adapter architecture.**
+   - Migrate `tests.test_mouse_refactor` and any directly affected deterministic tests away from legacy `MouseController(backend_mode=...)` / `ScreenCapturer(backend_mode=...)` construction when those tests are intended to verify production I/O behavior.
+   - Preserve meaningful coverage of shared mode-agnostic mechanics.
+   - Dev-only scripts may remain out of scope unless they break because the retired constructor surface is removed; if touched, migrate only the minimum necessary wiring.
+
+3. **Make `machine.capturer` an explicit relaunch invariant.**
+   - A live runtime `GameStateMachine` created through the supported bootstrap/composition path must always own a non-null already-composed capturer.
+   - `GameRelaunchSubflow` must reuse that capturer and must not reconstruct capture from `machine.backend_mode`.
+   - If relaunch is invoked with no capturer, fail explicitly and deterministically as an invariant violation; do not silently construct a replacement and do not fall back to foreground I/O.
+   - Add deterministic coverage for the supported relaunch path and the missing-capturer invariant/failure contract.
+
+### Additional non-goals
+
+- No changes to dungeon/domain/gameplay/scheduler/navigation behavior.
+- No changes to the already-verified backend click/scroll/drag/safe-area message sequence or timing.
+- No changes to foreground pyautogui behavior.
+- No new I/O factory/composition layer beyond the existing explicit adapter seam.
+- No recovery-policy redesign beyond making missing capturer fail explicitly.
+- No removal of CLI `--foreground` or legacy CLI `--backend` compatibility.
+- No shared-environment or dependency changes.
+
+### Additional acceptance criteria
+
+18. Supported production/runtime paths no longer select I/O by constructing the legacy mixed-mode base classes with `backend_mode`.
+19. Focused production-I/O tests use explicit backend/foreground adapters rather than the legacy constructor-selection path.
+20. Removing the legacy facade does not change the already-reviewed backend/foreground capture/input behavior, especially backend click/scroll/drag/safe-area timing and Win32 message ordering.
+21. A live state machine produced by the supported bootstrap path always has a non-null composed capturer.
+22. Relaunch reuses the machine capturer and never reconstructs capture from `backend_mode`.
+23. Relaunch with a missing capturer fails explicitly/deterministically and never creates a fallback capturer or invokes foreground I/O.
+24. No unrelated gameplay/domain/dungeon/scheduler/runtime-loop behavior changes are introduced.
+
+### Additional verification
+
+At minimum, run the task's existing focused set plus deterministic coverage for:
+- legacy mixed-mode constructor retirement / explicit adapter usage;
+- backend behavior-preservation tests;
+- relaunch reuse of the existing capturer;
+- relaunch missing-capturer invariant failure.
+
+Because this appendix changes production/runtime code after the previous Gate PASS, the prior Gate evidence is historical only. After implementation and focused verification, the user must run `scripts/ai_gate.ps1 -Task foreground-demo-mode-isolation` again. Gemini/Antigravity must not run AI Gate.
