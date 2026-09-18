@@ -29,6 +29,27 @@ DOMAIN_ROUTE_KEYS = (
 )
 
 
+def validate_daily_domain_policy(config: dict) -> None:
+    """Validate Daily Tier 4 Domain policy invariants.
+
+    Invariants:
+    1. If tier4_mode == 'domain', enable_domain MUST be True (fail-fast if False).
+    2. If tier4_mode == 'domain', tier4_domain MUST be explicitly present and non-empty.
+    """
+    if not isinstance(config, dict):
+        return
+    if config.get("tier4_mode") == TIER4_MODE_DOMAIN:
+        if config.get("enable_domain") is False:
+            raise ValueError(
+                "Daily policy 衝突：tier4_mode 設定為 'domain'，但 enable_domain 為 false。"
+            )
+        domain_key = config.get("tier4_domain")
+        if not domain_key or not isinstance(domain_key, str) or not domain_key.strip():
+            raise ValueError(
+                "Daily policy 錯誤：tier4_mode 設定為 'domain' 時，必須明確指定 'tier4_domain'，不可為空或依賴隱式預設值。"
+            )
+
+
 def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dict:
     """Resolve the player's Daily policy into one executable Tier 4 route."""
     fallback = deepcopy(primary_config)
@@ -70,7 +91,10 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
                 fallback[key] = deepcopy(stage_cfg[key])
         return fallback
 
-    domain_key = fallback.get("tier4_domain") or DEFAULT_TIER4_DOMAIN
+    # Phase 1: Enforce Daily Domain policy invariants (fail-fast on contradiction or missing tier4_domain)
+    validate_daily_domain_policy(fallback)
+
+    domain_key = fallback["tier4_domain"]
     if domain_key not in mode_configs or mode_configs[domain_key].get("type") != "domain":
         raise ValueError(f"無效的 Daily Tier 4 領地設定: tier4_domain={domain_key!r} 不存在於合法領地目錄中")
     domain_config = mode_configs[domain_key]
@@ -81,6 +105,7 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
     fallback["name"] = f"每日懸賞任務 (Tier 4 退守: {domain_config['name']})"
     fallback["tier4_mode"] = TIER4_MODE_DOMAIN
     fallback["tier4_domain"] = domain_key
+    fallback["enable_domain"] = True
     fallback["enable_stage_farming"] = False
     fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
     return fallback

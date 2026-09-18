@@ -109,6 +109,7 @@ disassemble_colors = ["gray_or_empty", "green", "blue"]
 keep_colors = ["purple", "orange_yellow", "red"]
 
 [defaults.activities]
+enable_domain = true
 auto_diamond = true
 auto_bread = true # true, false
 lord_boss_targets = ["lord_spider", "lord_spectre", "ghoul_snow"] # 指定 Boss 清單（例如 ["lord_spider"] 僅打蜘蛛，或 [] 完全跳過 Boss
@@ -217,6 +218,7 @@ bread_cd = 300.0
 stamina_retreat_duration = 7
 
 [primary_modes.daily]
+enable_domain = true
 name = "每日懸賞任務"
 type = "mix"
 # 週期活動預設啟用；每位玩家可在 user_data/<profile>/config.toml 覆蓋為 false。

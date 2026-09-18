@@ -9,10 +9,11 @@ from states.domains.treasure_subflow import DomainTreasureSubflow
 from states.domains import get_domain_strategy
 from states.handlers.domain_explore import DomainExploreHandler
 from utils.scene_snapshot import _ELEMENT_TEMPLATE_MAP, ElementId
-from utils.tier4_config import build_tier4_fallback_config
+from utils.tier4_config import build_tier4_fallback_config, validate_daily_domain_policy
 from cli.tier4_setup import setup_daily_tier4_config
 from config import (
     DEFAULTS_PATH,
+    DEFAULT_ACTIVITIES,
     PRIMARY_MODES,
     get_canonical_defaults,
     get_canonical_domain_mode_configs,
@@ -21,6 +22,9 @@ from config import (
     get_supported_domain_ids,
     get_tier4_domain_options,
     is_supported_domain,
+    normalize_config,
+    normalize_domain_execution_config,
+    validate_domain_execution_config,
     validate_profile_mode_overrides,
 )
 import tomllib
@@ -445,6 +449,167 @@ class TestDomainCommonBehavior(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             build_tier4_fallback_config(primary, modes)
         self.assertIn("無效的 Daily Tier 4 領地設定", str(ctx.exception))
+
+    # =========================================================================
+    # Phase 1 — Domain Policy / SSOT Preparation 測試
+    # =========================================================================
+
+    def test_enable_domain_presence_and_separation(self):
+        """[Phase 1] 驗證 enable_domain 存在於 activities 與 daily，且絕不滲透至 golden_empire 或被 normalize 注入領地"""
+        with open(DEFAULTS_PATH, "rb") as f:
+            data = tomllib.load(f)
+
+        # 1. defaults.activities 包含 enable_domain = true
+        activities = data.get("defaults", {}).get("activities", {})
+        self.assertIn("enable_domain", activities)
+        self.assertTrue(activities["enable_domain"])
+
+        # 2. primary_modes.daily 包含 enable_domain = true
+        daily_cfg = data.get("primary_modes", {}).get("daily", {})
+        self.assertIn("enable_domain", daily_cfg)
+        self.assertTrue(daily_cfg["enable_domain"])
+
+        # 3. primary_modes.golden_empire 不包含 enable_domain (責任分離)
+        ge_cfg = data.get("primary_modes", {}).get("golden_empire", {})
+        self.assertNotIn("enable_domain", ge_cfg)
+
+        # 4. normalize_config 對 type='domain' 絕不注入 enable_domain
+        norm_ge = normalize_config(ge_cfg)
+        self.assertNotIn("enable_domain", norm_ge)
+
+    def test_daily_domain_policy_contradiction_fail_fast(self):
+        """[Phase 1] tier4_mode='domain' 且 enable_domain=false ➔ 必須拋出 ValueError (Fail-Fast)"""
+        contradictory_cfg = {
+            "type": "mix",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": False,
+        }
+        modes = {
+            "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"}
+        }
+        # 透過 policy validation 驗證
+        with self.assertRaises(ValueError) as ctx:
+            validate_daily_domain_policy(contradictory_cfg)
+        self.assertIn("Daily policy 衝突", str(ctx.exception))
+
+        # 透過 build_tier4_fallback_config 驗證
+        with self.assertRaises(ValueError) as ctx:
+            build_tier4_fallback_config(contradictory_cfg, modes)
+        self.assertIn("Daily policy 衝突", str(ctx.exception))
+
+    def test_daily_domain_policy_explicit_tier4_domain_required(self):
+        """[Phase 1] tier4_mode='domain' 但缺少 tier4_domain ➔ 必須 fail-fast，絕不依賴隱式預設值 fallback 至 golden_empire"""
+        missing_domain_cfgs = [
+            {"type": "mix", "tier4_mode": "domain", "enable_domain": True},
+            {"type": "mix", "tier4_mode": "domain", "tier4_domain": None, "enable_domain": True},
+            {"type": "mix", "tier4_mode": "domain", "tier4_domain": "", "enable_domain": True},
+            {"type": "mix", "tier4_mode": "domain", "tier4_domain": "   ", "enable_domain": True},
+        ]
+        modes = {
+            "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"}
+        }
+        for cfg in missing_domain_cfgs:
+            with self.subTest(cfg=cfg):
+                with self.assertRaises(ValueError) as ctx:
+                    validate_daily_domain_policy(cfg)
+                self.assertIn("必須明確指定 'tier4_domain'", str(ctx.exception))
+
+                with self.assertRaises(ValueError) as ctx:
+                    build_tier4_fallback_config(cfg, modes)
+                self.assertIn("必須明確指定 'tier4_domain'", str(ctx.exception))
+
+    def test_golden_empire_execution_completeness(self):
+        """[Phase 1] 驗證 defaults.toml 中的 golden_empire 具備完整之必要執行契約與合理型別"""
+        with open(DEFAULTS_PATH, "rb") as f:
+            data = tomllib.load(f)
+        ge_cfg = data.get("primary_modes", {}).get("golden_empire", {})
+
+        # 執行完整驗證不拋出例外
+        validate_domain_execution_config(ge_cfg)
+
+        # 核心結構欄位確認
+        self.assertEqual(ge_cfg["name"], "黃金古國")
+        self.assertEqual(ge_cfg["type"], "domain")
+        self.assertEqual(ge_cfg["domain"], "golden_empire")
+        self.assertIsInstance(ge_cfg["navigation_path"], list)
+        self.assertTrue(len(ge_cfg["navigation_path"]) >= 2)
+        self.assertEqual(ge_cfg["domain_tab_btn"], "domains/Domains_entry.png")
+        self.assertEqual(ge_cfg["domain_tab_after_btn"], "domains/Domains_entry_after.png")
+        self.assertEqual(ge_cfg["domain_entry_btn"], "domains/golden_empire/entry.png")
+        self.assertEqual(ge_cfg["lobby_start_btn"], "domains/common/start_btn.png")
+
+        # 泛型預設欄位確認
+        self.assertEqual(ge_cfg["bread_cost"], 3)
+        self.assertEqual(ge_cfg["domain_reset_max_attempts"], 7)
+        self.assertEqual(ge_cfg["explore_priorities"], ["domains/common/explore_btn.png"])
+        self.assertEqual(ge_cfg["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
+        self.assertIs(ge_cfg["enable_lord_boss"], True)
+
+    def test_direct_domain_independence_from_daily(self):
+        """[Phase 1] 驗證 Golden Empire direct execution config 不依賴 daily 路由配置即可自給自足"""
+        with open(DEFAULTS_PATH, "rb") as f:
+            data = tomllib.load(f)
+        ge_cfg = data.get("primary_modes", {}).get("golden_empire", {})
+
+        # 完全獨立：不依賴任何 daily 的欄位合成，自身即具備完整有效路徑與入口
+        self.assertIn("navigation_path", ge_cfg)
+        self.assertIn("domain_tab_btn", ge_cfg)
+        self.assertIn("domain_entry_btn", ge_cfg)
+        self.assertIn("lobby_start_btn", ge_cfg)
+        self.assertNotIn("stages/start.png", ge_cfg.values())
+
+    def test_generic_domain_execution_schema_invariant(self):
+        """[Phase 1] 泛型領域執行架構契約驗證：完整配置通過，缺少必要結構欄位 fail-fast"""
+        minimal_domain = {
+            "name": "測試領域",
+            "type": "domain",
+            "domain": "test_domain",
+            "navigation_path": ["common/door.png", "domains/test_domain/entry.png"],
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/test_domain/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+        }
+        # 1. 驗證最小結構配置搭配標準化層能自動補全 canonical common defaults
+        normalized = normalize_domain_execution_config(minimal_domain)
+        self.assertEqual(normalized["bread_cost"], 3)
+        self.assertEqual(normalized["domain_reset_max_attempts"], 7)
+        self.assertEqual(normalized["explore_priorities"], ["domains/common/explore_btn.png"])
+        self.assertEqual(normalized["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
+        self.assertTrue(normalized["enable_lord_boss"])
+
+        # 2. 缺少結構欄位依序測試 fail-fast
+        structural_keys = [
+            "name", "type", "domain", "navigation_path",
+            "domain_tab_btn", "domain_tab_after_btn", "domain_entry_btn", "lobby_start_btn"
+        ]
+        for key in structural_keys:
+            with self.subTest(missing_key=key):
+                broken_cfg = minimal_domain.copy()
+                del broken_cfg[key]
+                with self.assertRaises(ValueError) as ctx:
+                    validate_domain_execution_config(broken_cfg)
+                self.assertIn(f"缺少必要結構欄位: '{key}'", str(ctx.exception))
+
+    def test_ssot_generic_activity_class_invariants(self):
+        """[Phase 1 SSOT Invariant] enable_domain 必須為通用活動開關，嚴禁加入 enable_<specific_domain>"""
+        with open(DEFAULTS_PATH, "rb") as f:
+            data = tomllib.load(f)
+        activities = data.get("defaults", {}).get("activities", {})
+
+        # 1. 確保 enable_domain 是活動配置的一部分
+        self.assertIn("enable_domain", activities)
+
+        # 2. 嚴禁任何特定領域名稱的 activity 開關存在
+        for act_key in activities.keys():
+            self.assertFalse(
+                act_key.startswith("enable_") and act_key not in {
+                    "enable_domain", "enable_dungeon", "enable_town_daily",
+                    "enable_demon_lords", "enable_lord_boss", "enable_quests", "enable_stage_farming"
+                },
+                f"非法特定領域活動開關: '{act_key}'！活動開關必須為通用類別 (如 enable_domain)"
+            )
 
     # =========================================================================
     # Strict SSOT Invariant Tests

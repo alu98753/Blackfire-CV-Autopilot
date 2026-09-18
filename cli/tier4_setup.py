@@ -57,21 +57,30 @@ def setup_daily_tier4_config(config, interactive=True):
         return config
 
     if tier4_mode == TIER4_MODE_DOMAIN:
+        if config.get("enable_domain") is False:
+            raise ValueError("Daily policy 衝突：tier4_mode 設定為 'domain'，但 enable_domain 為 false。")
         domain_options = get_tier4_domain_options()
         if not domain_options:
             raise ValueError("配置錯誤：未在 primary_modes 中宣告任何合法領地！")
         valid_keys = [k for k, _ in domain_options]
-        current_domain = config.get("tier4_domain") or DEFAULT_TIER4_DOMAIN
-        if current_domain not in valid_keys:
-            raise ValueError(
-                f"配置錯誤：tier4_domain [{current_domain}] 不存在於合法領地目錄中！可選領地: {valid_keys}"
+        if not interactive:
+            domain_key = config.get("tier4_domain")
+            if not domain_key or not isinstance(domain_key, str) or not domain_key.strip():
+                raise ValueError("配置錯誤：tier4_mode='domain' 時必須明確指定 'tier4_domain'，不可為空或依賴隱式預設值")
+            if domain_key not in valid_keys:
+                raise ValueError(
+                    f"配置錯誤：tier4_domain [{domain_key}] 不存在於合法領地目錄中！可選領地: {valid_keys}"
+                )
+        else:
+            current_domain = config.get("tier4_domain")
+            if not current_domain or current_domain not in valid_keys:
+                current_domain = valid_keys[0]
+            domain_key = _select_from_options(
+                "請選擇要探索的領地：",
+                domain_options,
+                current_domain,
+                interactive,
             )
-        domain_key = _select_from_options(
-            "請選擇要探索的領地：",
-            domain_options,
-            current_domain,
-            interactive,
-        )
         config["tier4_domain"] = domain_key
         config["enable_stage_farming"] = False
         updates.update({"tier4_domain": domain_key, "enable_stage_farming": False})

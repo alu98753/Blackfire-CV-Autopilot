@@ -418,6 +418,83 @@ def get_tier4_domain_options() -> list[tuple[str, str]]:
         for key, cfg in get_domain_mode_configs().items()
     ]
 
+
+DOMAIN_STRUCTURAL_REQUIRED_KEYS = (
+    "name",
+    "type",
+    "domain",
+    "navigation_path",
+    "domain_tab_btn",
+    "domain_tab_after_btn",
+    "domain_entry_btn",
+    "lobby_start_btn",
+)
+
+CANONICAL_DOMAIN_COMMON_DEFAULTS = {
+    "bread_cost": 3,
+    "explore_priorities": ["domains/common/explore_btn.png"],
+    "result_buttons": ["common/continue.png", "common/continue_gray.png"],
+    "domain_reset_max_attempts": 7,
+    "enable_lord_boss": True,
+}
+
+
+def validate_domain_execution_config(cfg: dict) -> None:
+    """Validate that a Domain execution configuration satisfies the minimal execution contract.
+
+    Structural required fields (must be present and valid):
+    - name (non-empty str)
+    - type == 'domain'
+    - domain (non-empty str)
+    - navigation_path (non-empty list of str)
+    - domain_tab_btn (non-empty str)
+    - domain_tab_after_btn (non-empty str)
+    - domain_entry_btn (non-empty str)
+    - lobby_start_btn (non-empty str)
+    """
+    if not isinstance(cfg, dict):
+        raise ValueError("Domain execution config 必須為字典物件")
+
+    for key in DOMAIN_STRUCTURAL_REQUIRED_KEYS:
+        if key not in cfg:
+            raise ValueError(f"Domain execution config 缺少必要結構欄位: '{key}'")
+        val = cfg[key]
+        if key == "type":
+            if val != "domain":
+                raise ValueError(f"Domain execution config 的 'type' 必須為 'domain'，而非 {val!r}")
+        elif key == "navigation_path":
+            if not isinstance(val, list) or not val:
+                raise ValueError("Domain execution config 的 'navigation_path' 必須為非空列表")
+            for p in val:
+                if not isinstance(p, str) or not p.strip():
+                    raise ValueError("Domain execution config 的 'navigation_path' 元素必須為非空字串")
+        else:
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"Domain execution config 的 '{key}' 必須為非空字串")
+
+    if "bread_cost" in cfg and not isinstance(cfg["bread_cost"], int):
+        raise ValueError("Domain execution config 的 'bread_cost' 必須為整數")
+    if "explore_priorities" in cfg and (not isinstance(cfg["explore_priorities"], list) or not cfg["explore_priorities"]):
+        raise ValueError("Domain execution config 的 'explore_priorities' 必須為非空列表")
+    if "result_buttons" in cfg and (not isinstance(cfg["result_buttons"], list) or not cfg["result_buttons"]):
+        raise ValueError("Domain execution config 的 'result_buttons' 必須為非空列表")
+    if "domain_reset_max_attempts" in cfg and not isinstance(cfg["domain_reset_max_attempts"], int):
+        raise ValueError("Domain execution config 的 'domain_reset_max_attempts' 必須為整數")
+    if "enable_lord_boss" in cfg and not isinstance(cfg["enable_lord_boss"], bool):
+        raise ValueError("Domain execution config 的 'enable_lord_boss' 必須為布林值")
+
+
+def normalize_domain_execution_config(cfg: dict) -> dict:
+    """Apply canonical common defaults to a Domain execution config and validate structural requirements."""
+    if not isinstance(cfg, dict):
+        raise ValueError("Domain execution config 必須為字典物件")
+    normalized = deepcopy(cfg)
+    for key, default_val in CANONICAL_DOMAIN_COMMON_DEFAULTS.items():
+        if key not in normalized:
+            normalized[key] = deepcopy(default_val)
+    validate_domain_execution_config(normalized)
+    return normalized
+
 SUBFLOW_CONFIGS = _SETTINGS["subflow_configs"]
 BACKPACK_FULL_SETTINGS = _SETTINGS["backpack_full"]
 BASE_STAGE_LEVELS = _SETTINGS["base_stage_levels"]
@@ -569,8 +646,15 @@ def normalize_config(config):
             cfg[activity_key] = mode_type in ["daily", "mix"]
         elif activity_key == "enable_quests":
             cfg[activity_key] = mode_type == "daily"
+        elif activity_key == "enable_domain":
+            if mode_type == "domain":
+                continue
+            cfg[activity_key] = default_value
         else:
             cfg[activity_key] = default_value
+
+    if mode_type == "domain":
+        cfg.pop("enable_domain", None)
 
     if cfg.get("greedy_dungeon", False):
         if cfg.get("greedy_allowed_indices") is None:

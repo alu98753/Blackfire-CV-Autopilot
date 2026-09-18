@@ -61,26 +61,48 @@ Status: Final
 6. `config/defaults.toml` 的 `[primary_modes.golden_empire].explore_priorities` 唯一配置 `domains/common/explore_btn.png`。
 7. 徹底移除 `enable_golden_empire` 旗標，領域調度純粹由 `type == "domain"`、`domain` 與 `tier4_domain` 表達。
 
-## 3. Minimal Generic Domain Schema
+## 3. Architecture Roadmap & Phased Execution
 
-在 `config/defaults.toml` 中宣告一個 Generic Domain 的最小契約：
+### 3.1 職責邊界定位
+- **Daily**：Scheduling / Activity Policy Owner，負責高層排程與各類活動啟用政策（包含 `enable_domain`、`enable_dungeon`、`enable_lord_boss` 等）。
+- **Domain**：Execution SSOT，負責持有該領域執行所需之完整靜態配置（路徑、按鈕、成本、重試門檻等）。
 
-### 必要欄位 (Required)
-- `name = "<顯示名稱>"`：如 `"淵獸之巢"`，CLI 顯示與 Daily Tier 4 選單標籤唯一權威來源。
+### 3.2 階段藍圖 (Phase Roadmap)
+- **Phase 1 (本階段: Domain Policy / SSOT Preparation)**：
+  - 引入通用活動開關 `enable_domain`（`defaults.activities` 與 `primary_modes.daily` 同步宣告）。
+  - 建立 Daily Domain policy 矛盾核驗：`tier4_mode == "domain"` 時 `enable_domain` 必須為 `true`，且 `tier4_domain` 必須明確存在，違者 Fail-Fast（不依賴 `DEFAULT_TIER4_DOMAIN` 隱式填補）。
+  - 確立 Domain Execution Required Contract（`DOMAIN_STRUCTURAL_REQUIRED_KEYS` 與 `CANONICAL_DOMAIN_COMMON_DEFAULTS`），使 Domain 配置具備自身完整性。
+  - 保持行為完全相容，不切換執行所有權、不移除既有 `build_tier4_fallback_config` 合成。
+- **Phase 2 (Switch Domain Execution Ownership)**：將執行期配置所有權正式由 Daily 移交給 selected Domain。
+- **Phase 3 (Cleanup Fallbacks & Compatibility Duplications)**：清理結構性 fallback 與重複相容路徑。
+
+### 3.3 `enable_domain` 語意與 Invariant 契約
+1. **語意定義**：`enable_domain` 代表 scheduler / Daily policy 是否允許調度 Domain 類活動。其與 `enable_dungeon`、`enable_lord_boss`、`enable_town_daily` 處於同等抽象層級。
+2. **非 Domain 執行配置**：`enable_domain` 僅屬於 Daily / scheduler policy，嚴禁放入任何 `primary_modes.<domain>` 執行配置中。
+3. **禁止領域特化旗標**：嚴禁建立 `enable_golden_empire`、`enable_abyss_nest` 等特定領域名稱之 activity switch。
+4. **Contradiction Invariant**：
+   - `tier4_mode == "domain"` 且 `enable_domain == false` ➔ 必須拋出 `ValueError` (Fail-Fast)，嚴禁靜默改為 stage 或 none。
+   - `tier4_mode == "domain"` 但缺少或未指定 `tier4_domain` ➔ 必須拋出 `ValueError` (Fail-Fast)，嚴禁隱式回退至 `"golden_empire"`。
+
+### 3.4 Domain Execution Required Contract & Schema
+宣告一個 Canonical Domain 執行所需之最小契約：
+
+#### Structural Required (缺少或無效則 Fail-Fast)
+- `name = "<顯示名稱>"`：如 `"黃金古國"`、`"淵獸之巢"`，CLI 顯示與 Daily Tier 4 選單標籤唯一權威來源。
 - `type = "domain"`：宣告為領域模式。
-- `domain = "<領域識別碼>"`：如 `"abyss_nest"`，對應策略實體識別。
-- `navigation_path = [...]`：由大廳進入領域之完整點擊路徑。
+- `domain = "<領域識別碼>"`：如 `"golden_empire"`、`"abyss_nest"`，對應策略實體識別。
+- `navigation_path = [...]`：由大廳進入領域之完整非空點擊路徑列表。
+- `domain_tab_btn = "domains/Domains_entry.png"`：領地分頁未選中按鈕。
+- `domain_tab_after_btn = "domains/Domains_entry_after.png"`：領地分頁已選中特徵。
+- `domain_entry_btn = "domains/.../entry.png"`：該領地入口按鈕。
+- `lobby_start_btn = "domains/common/start_btn.png"`：大廳起手按鈕。
 
-### 通用預設/選填欄位 (Common Default / Optional)
+#### Canonical Common Defaults (由標準化層一次產生)
 - `bread_cost` (int, default: 3)
 - `explore_priorities` (list[str], default: `["domains/common/explore_btn.png"]`)
-- `lobby_start_btn` (str, default: `"domains/common/start_btn.png"`)
-- `domain_tab_btn` (str, default: `"domains/Domains_entry.png"`)
-- `domain_tab_after_btn` (str, default: `"domains/Domains_entry_after.png"`)
-- `domain_entry_btn` (str, optional; default: 自 `navigation_path` 自動推論 `domains/.../entry.png`)
-- `domain_reset_max_attempts` (int, default: 7)
 - `result_buttons` (list[str], default: `["common/continue.png", "common/continue_gray.png"]`)
-- `enable_lord_boss` (bool, default: true)
+- `domain_reset_max_attempts` (int, default: 7)
+- `enable_lord_boss` (bool, default: true; 屬 Domain execution policy field：表示在該領域探索時是否允許領主 Boss 插隊挑戰)
 
 ## 4. 非目標 (Non-goals)
 

@@ -395,12 +395,20 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(stage_fb_false["type"], "stage")
 
         # Domain fallback with enable_dungeon True/False
-        domain_cfg_true = {"tier4_mode": "domain", "enable_dungeon": True}
+        domain_cfg_true = {
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_dungeon": True,
+        }
         domain_fb_true = build_tier4_fallback_config(domain_cfg_true, mode_configs)
         self.assertTrue(domain_fb_true["enable_dungeon"])
         self.assertEqual(domain_fb_true["type"], "domain")
 
-        domain_cfg_false = {"tier4_mode": "domain", "enable_dungeon": False}
+        domain_cfg_false = {
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_dungeon": False,
+        }
         domain_fb_false = build_tier4_fallback_config(domain_cfg_false, mode_configs)
         self.assertFalse(domain_fb_false["enable_dungeon"])
         self.assertEqual(domain_fb_false["type"], "domain")
