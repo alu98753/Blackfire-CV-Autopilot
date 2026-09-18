@@ -15,6 +15,7 @@ DOMAIN_ROUTE_KEYS = (
     "type",
     "domain",
     "bread_cost",
+    "enable_lord_boss",
     "nemesis_action",
     "nemesis_templates",
     "navigation_path",

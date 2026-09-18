@@ -166,9 +166,51 @@ def get_profile_config_path(profile: str | None = None) -> Path:
     return USER_DATA_DIR / p / "config.toml"
 
 
+def validate_profile_mode_overrides(override: dict, canonical_defaults: dict) -> None:
+    """Validate profile overrides against canonical defaults:
+    1. Profiles cannot introduce primary_modes keys not declared in repository defaults catalog.
+    2. Profiles cannot alter the structural 'type' of a mode.
+    3. Profiles cannot alter the 'domain' identity of a domain mode.
+    """
+    if not isinstance(override, dict):
+        return
+    profile_modes = override.get("primary_modes")
+    if not isinstance(profile_modes, dict):
+        return
+
+    canonical_modes = canonical_defaults.get("primary_modes", {})
+    for mode_key, mode_cfg in profile_modes.items():
+        if mode_key not in canonical_modes:
+            raise ValueError(
+                f"Profile mode override error: mode '{mode_key}' is not declared in repository defaults catalog. "
+                "Profiles cannot define new mode identities."
+            )
+        if not isinstance(mode_cfg, dict):
+            continue
+        canonical_cfg = canonical_modes.get(mode_key, {})
+        if not isinstance(canonical_cfg, dict):
+            continue
+
+        if "type" in mode_cfg and mode_cfg["type"] != canonical_cfg.get("type"):
+            raise ValueError(
+                f"Profile mode override error: mode '{mode_key}' cannot alter structural type "
+                f"from '{canonical_cfg.get('type')}' to '{mode_cfg['type']}'."
+            )
+
+        if canonical_cfg.get("type") == "domain" or "domain" in canonical_cfg:
+            if "domain" in mode_cfg and mode_cfg["domain"] != canonical_cfg.get("domain"):
+                raise ValueError(
+                    f"Profile mode override error: domain mode '{mode_key}' cannot alter domain identity "
+                    f"from '{canonical_cfg.get('domain')}' to '{mode_cfg['domain']}'."
+                )
+
+
 def get_defaults_config() -> dict:
     """Return defaults merged with the optional profile/local runtime override file."""
-    settings = _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_override_config())
+    defaults = _DEFAULTS_MANAGER.snapshot()
+    override = _get_override_config()
+    validate_profile_mode_overrides(override, defaults)
+    settings = _deep_merge(defaults, override)
     _validate_nemesis_policy(settings.get("nemesis"))
     return settings
 
@@ -308,36 +350,69 @@ MERCHANT_GOLD_OCR_ROI = _SETTINGS["ocr"]["merchant_gold"]
 PRIMARY_MODES = _restore_mode_key_types(_SETTINGS["primary_modes"])
 
 
-def get_domain_mode_configs() -> dict[str, dict]:
-    """從 PRIMARY_MODES 中動態解析出所有 type == 'domain' 的領地配置字典 (SSOT: config/defaults.toml [primary_modes.*])。"""
+def get_canonical_defaults() -> dict:
+    """Return the unmerged repository defaults snapshot (SSOT: config/defaults.toml)."""
+    return _DEFAULTS_MANAGER.snapshot()
+
+
+def get_canonical_domain_mode_configs() -> dict[str, dict]:
+    """從 raw repository defaults snapshot (config/defaults.toml) 解析所有宣告之領地配置字典。
+
+    此處為 Domain existence authority，不受任何 active profile override 影響。
+    """
+    raw_primary = get_canonical_defaults().get("primary_modes", {})
     return {
         key: cfg
-        for key, cfg in PRIMARY_MODES.items()
+        for key, cfg in raw_primary.items()
         if isinstance(cfg, dict) and cfg.get("type") == "domain"
     }
 
 
-def get_supported_domain_ids() -> set[str]:
-    """回傳所有合法宣告之領域識別碼集合 (例如 {'golden_empire'})。"""
+def get_canonical_supported_domain_ids() -> set[str]:
+    """從 repository canonical defaults 回傳所有合法宣告之領域識別碼集合 (例如 {'golden_empire'})。"""
     return {
         str(cfg.get("domain"))
-        for cfg in get_domain_mode_configs().values()
+        for cfg in get_canonical_domain_mode_configs().values()
         if cfg.get("domain")
     }
 
 
 def is_supported_domain(domain_id_or_mode_key: str) -> bool:
-    """核驗指定領域識別碼或模式 key 是否存在於 canonical repository defaults catalog。"""
+    """核驗指定領域識別碼或模式 key 是否存在於 canonical repository defaults catalog。
+
+    永遠依據 raw repository defaults snapshot 判定 existence，防止 profile 注入虛假領域。
+    """
     if not domain_id_or_mode_key or not isinstance(domain_id_or_mode_key, str):
         return False
-    domain_modes = get_domain_mode_configs()
-    if domain_id_or_mode_key in domain_modes:
+    canonical_modes = get_canonical_domain_mode_configs()
+    if domain_id_or_mode_key in canonical_modes:
         return True
-    return domain_id_or_mode_key in get_supported_domain_ids()
+    return domain_id_or_mode_key in get_canonical_supported_domain_ids()
+
+
+def get_domain_mode_configs() -> dict[str, dict]:
+    """回傳所有 canonical-declared 且融合當前 active profile effective values 的領地配置。
+
+    由 canonical keys / identities 限制有效範圍，過濾掉任何 profile 非法注入的 mode key。
+    """
+    canonical_modes = get_canonical_domain_mode_configs()
+    effective_configs: dict[str, dict] = {}
+    for key, canonical_cfg in canonical_modes.items():
+        eff_cfg = PRIMARY_MODES.get(key)
+        if isinstance(eff_cfg, dict) and eff_cfg.get("type") == "domain":
+            effective_configs[key] = eff_cfg
+        else:
+            effective_configs[key] = canonical_cfg
+    return effective_configs
+
+
+def get_supported_domain_ids() -> set[str]:
+    """回傳所有合法宣告之領域識別碼集合 (相容別名，等價於 get_canonical_supported_domain_ids)。"""
+    return get_canonical_supported_domain_ids()
 
 
 def get_tier4_domain_options() -> list[tuple[str, str]]:
-    """動態回傳 Daily Tier 4 領地選項清單 [(mode_key, display_name), ...]，顯示名稱取自 TOML name。"""
+    """動態回傳 Daily Tier 4 領地選項清單 [(mode_key, display_name), ...]，限制為 canonical domains 但採用 effective display name。"""
     return [
         (key, str(cfg.get("name", key)))
         for key, cfg in get_domain_mode_configs().items()

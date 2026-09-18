@@ -14,10 +14,14 @@ from cli.tier4_setup import setup_daily_tier4_config
 from config import (
     DEFAULTS_PATH,
     PRIMARY_MODES,
+    get_canonical_defaults,
+    get_canonical_domain_mode_configs,
+    get_canonical_supported_domain_ids,
     get_domain_mode_configs,
     get_supported_domain_ids,
     get_tier4_domain_options,
     is_supported_domain,
+    validate_profile_mode_overrides,
 )
 import tomllib
 
@@ -71,7 +75,7 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 "domain": "abyss_beast_nest",
             }
         }
-        with patch.dict(PRIMARY_MODES, mock_declared_modes):
+        with patch("config.get_canonical_domain_mode_configs", return_value=mock_declared_modes):
             requested_domain = "abyss_beast_nest"
             strategy = get_domain_strategy(requested_domain, self.mock_handler)
 
@@ -96,7 +100,7 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 "domain": "abyss_beast_nest",
             }
         }
-        with patch.dict(PRIMARY_MODES, mock_declared_modes):
+        with patch("config.get_canonical_domain_mode_configs", return_value=mock_declared_modes):
             self.mock_machine.config = {
                 "type": "domain",
                 "domain": "abyss_beast_nest",
@@ -224,16 +228,15 @@ class TestDomainCommonBehavior(unittest.TestCase):
     # =========================================================================
 
     def test_domain_catalog_discovers_all_declared_domain_modes(self):
-        """get_domain_mode_configs 自動動態識別所有 type == 'domain' 的模式，支援 is_supported_domain"""
-        mock_modes = {
+        """get_canonical_domain_mode_configs 自動動態識別所有 type == 'domain' 的模式，支援 is_supported_domain"""
+        mock_canonical_modes = {
             "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
             "abyss_nest": {"name": "淵獸之巢", "type": "domain", "domain": "abyss_nest"},
-            "stage": {"name": "普通關卡", "type": "stage"},
         }
-        with patch.dict(PRIMARY_MODES, mock_modes, clear=True):
+        with patch("config.get_canonical_domain_mode_configs", return_value=mock_canonical_modes):
             domain_configs = get_domain_mode_configs()
             self.assertEqual(set(domain_configs.keys()), {"golden_empire", "abyss_nest"})
-            self.assertEqual(get_supported_domain_ids(), {"golden_empire", "abyss_nest"})
+            self.assertEqual(get_canonical_supported_domain_ids(), {"golden_empire", "abyss_nest"})
             self.assertTrue(is_supported_domain("golden_empire"))
             self.assertTrue(is_supported_domain("abyss_nest"))
             self.assertFalse(is_supported_domain("stage"))
@@ -241,16 +244,98 @@ class TestDomainCommonBehavior(unittest.TestCase):
 
     def test_dynamic_tier4_domain_options_discovery(self):
         """get_tier4_domain_options 動態產生選單項目，顯示名稱嚴格取自 TOML name"""
-        mock_modes = {
+        mock_canonical_modes = {
             "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
             "frost_citadel": {"name": "冷誓要塞", "type": "domain", "domain": "frost_citadel"},
         }
-        with patch.dict(PRIMARY_MODES, mock_modes, clear=True):
+        with patch("config.get_canonical_domain_mode_configs", return_value=mock_canonical_modes):
             options = get_tier4_domain_options()
             self.assertEqual(
                 options,
                 [("golden_empire", "黃金古國"), ("frost_citadel", "冷誓要塞")],
             )
+
+    def test_profile_injected_domain_is_rejected_and_fails_fast(self):
+        """[Canonical/Effective Separation] Profile 嘗試注入未宣告領域 ➔ is_supported_domain 為 False 且 validation Fail-Fast"""
+        canonical_defaults = {
+            "primary_modes": {
+                "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"}
+            }
+        }
+        illegal_profile_override = {
+            "primary_modes": {
+                "fake_domain": {"name": "假領域", "type": "domain", "domain": "fake_domain"}
+            }
+        }
+        # 1. 驗證 profile structural validation 直接拒絕
+        with self.assertRaises(ValueError) as ctx:
+            validate_profile_mode_overrides(illegal_profile_override, canonical_defaults)
+        self.assertIn("is not declared in repository defaults catalog", str(ctx.exception))
+
+        # 2. 即使 effective PRIMARY_MODES 被外部污染，is_supported_domain 仍以 canonical defaults 為準
+        with patch.dict(PRIMARY_MODES, {"fake_domain": {"type": "domain", "domain": "fake_domain"}}):
+            self.assertFalse(is_supported_domain("fake_domain"))
+            self.assertNotIn("fake_domain", get_domain_mode_configs())
+            self.assertNotIn("fake_domain", [k for k, _ in get_tier4_domain_options()])
+
+    def test_existing_canonical_domain_override_allowed(self):
+        """[Canonical/Effective Separation] 合法 canonical 領域之數值覆寫 (如 bread_cost) ➔ 正常允許並於 effective config 生效"""
+        canonical_defaults = {
+            "primary_modes": {
+                "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire", "bread_cost": 3}
+            }
+        }
+        valid_profile_override = {
+            "primary_modes": {
+                "golden_empire": {"bread_cost": 5}
+            }
+        }
+        # 不應拋出任何例外
+        validate_profile_mode_overrides(valid_profile_override, canonical_defaults)
+
+        # 驗證 effective values 取得 5
+        with patch.dict(PRIMARY_MODES, {"golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire", "bread_cost": 5}}):
+            configs = get_domain_mode_configs()
+            self.assertEqual(configs["golden_empire"]["bread_cost"], 5)
+
+    def test_domain_identity_and_type_override_rejected(self):
+        """[Canonical/Effective Separation] Profile 嘗試篡改 canonical domain 之 domain identity 或 structural type ➔ Fail-Fast"""
+        canonical_defaults = {
+            "primary_modes": {
+                "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"}
+            }
+        }
+        # 1. 篡改 domain identity
+        identity_tamper = {
+            "primary_modes": {
+                "golden_empire": {"domain": "fake_domain"}
+            }
+        }
+        with self.assertRaises(ValueError) as ctx:
+            validate_profile_mode_overrides(identity_tamper, canonical_defaults)
+        self.assertIn("cannot alter domain identity", str(ctx.exception))
+
+        # 2. 篡改 structural type
+        type_tamper = {
+            "primary_modes": {
+                "golden_empire": {"type": "stage"}
+            }
+        }
+        with self.assertRaises(ValueError) as ctx:
+            validate_profile_mode_overrides(type_tamper, canonical_defaults)
+        self.assertIn("cannot alter structural type", str(ctx.exception))
+
+    def test_canonical_new_domain_without_python_strategy_dispatches_generic(self):
+        """[Canonical Seam] 在 canonical defaults fixture 加入 abyss_nest ➔ supported=True 且 strategy=GenericDomainStrategy"""
+        mock_canonical_modes = {
+            "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
+            "abyss_nest": {"name": "淵獸之巢", "type": "domain", "domain": "abyss_nest"},
+        }
+        with patch("config.get_canonical_domain_mode_configs", return_value=mock_canonical_modes):
+            self.assertTrue(is_supported_domain("abyss_nest"))
+            strategy = get_domain_strategy("abyss_nest", self.mock_handler)
+            self.assertIsInstance(strategy, GenericDomainStrategy)
+            self.assertEqual(strategy.domain_name, "abyss_nest")
 
     def test_tier4_new_generic_domain_selection_has_no_keyerror(self):
         """在 primary_modes 加入新領域後，Daily Tier 4 選單互動解析該領域絕不拋出 KeyError"""
@@ -258,7 +343,7 @@ class TestDomainCommonBehavior(unittest.TestCase):
             "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
             "abyss_nest": {"name": "淵獸之巢", "type": "domain", "domain": "abyss_nest"},
         }
-        with patch.dict(PRIMARY_MODES, mock_modes, clear=True), patch("cli.tier4_setup.persist_mode_updates"):
+        with patch("config.get_canonical_domain_mode_configs", return_value=mock_modes), patch.dict(PRIMARY_MODES, mock_modes, clear=True), patch("cli.tier4_setup.persist_mode_updates"):
             daily_config = {
                 "tier4_mode": "domain",
                 "tier4_domain": "abyss_nest",
@@ -310,6 +395,42 @@ class TestDomainCommonBehavior(unittest.TestCase):
         self.assertEqual(fallback["domain_entry_btn"], "domains/abyss_nest/entry.png")
         self.assertEqual(fallback["domain_reset_max_attempts"], 5)
         self.assertNotIn("enable_golden_empire", fallback)
+
+    def test_tier4_fallback_preserves_enable_lord_boss_ownership(self):
+        """Daily Tier 4 fallback 中的 enable_lord_boss 嚴格以所選領地配置為準，非 Daily 殘留"""
+        modes = {
+            "abyss_nest": {
+                "name": "淵獸之巢",
+                "type": "domain",
+                "domain": "abyss_nest",
+                "enable_lord_boss": False,
+            },
+            "golden_empire": {
+                "name": "黃金古國",
+                "type": "domain",
+                "domain": "golden_empire",
+                "enable_lord_boss": True,
+            }
+        }
+        # 情境 1: Daily enable_lord_boss = True，領地 enable_lord_boss = False ➔ fallback 必須為 False
+        daily_true = {
+            "type": "mix",
+            "tier4_mode": "domain",
+            "tier4_domain": "abyss_nest",
+            "enable_lord_boss": True,
+        }
+        fallback_false = build_tier4_fallback_config(daily_true, modes)
+        self.assertFalse(fallback_false["enable_lord_boss"])
+
+        # 情境 2: Daily enable_lord_boss = False，領地 enable_lord_boss = True ➔ fallback 必須為 True
+        daily_false = {
+            "type": "mix",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_lord_boss": False,
+        }
+        fallback_true = build_tier4_fallback_config(daily_false, modes)
+        self.assertTrue(fallback_true["enable_lord_boss"])
 
     def test_invalid_tier4_domain_fails_deterministically(self):
         """配置不存在之 tier4_domain 時 ➔ build_tier4_fallback_config 拋出明確 ValueError (Fail-Fast)"""

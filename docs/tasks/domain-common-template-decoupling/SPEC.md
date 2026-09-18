@@ -17,10 +17,15 @@ Status: Final
 ## 2. 嚴格不變量 (Strict Invariants)
 
 ### 2.1 領域目錄與目錄權威不變量 (Domain Catalog Authority Invariant)
-1. **Repository Domain Catalog SSOT**：
-   `config/defaults.toml` 中的 `[primary_modes.<mode_key>]`（且滿足 `type = "domain"`）為系統中合法領地的**唯一存在權威（Existence Authority）**。
-2. **Profile 覆寫邊界**：
-   `config/defaults.toml` 定義能力與合法領域身分；`user_data/<profile>/config.toml` 僅能對已宣告領域進行數值覆寫（如 `bread_cost`、`enable_lord_boss`），**嚴禁在 Profile 自行發明 Repository 未宣告之全新領域身分**。
+1. **Canonical Domain existence/catalog = unmerged repository defaults snapshot**：
+   `config/defaults.toml` 中的 `[primary_modes.<mode_key>]`（且滿足 `type = "domain"`）為系統中合法領地的**唯一存在權威（Existence Authority）**。Existence validation 必須直接針對 unmerged repository defaults snapshot 判斷，絕不使用受 profile override 影響之 effective `PRIMARY_MODES` 作為存在權威。
+2. **Effective runtime domain values = canonical domain + profile value overrides**：
+   `config/defaults.toml` 定義能力與合法領域身分；`user_data/<profile>/config.toml` 僅能對已宣告領域進行數值覆寫（如 `bread_cost`、`enable_lord_boss`、`navigation_path` 等）。
+   Profile 配置邊界受到嚴格結構核驗（Profile Structural Validation）：
+   - 嚴禁在 Profile 新增未於 defaults catalog 宣告之全新模式 key；
+   - 嚴禁修改 canonical mode 之結構性 `type`；
+   - 嚴禁修改 canonical domain mode 之 `domain` 識別碼；
+   - 任何違反上述結構不變量之行為一律 Fail-Fast 拋出明確例外。
 3. **Registry 的特化派發定位**：
    Python 的 `DOMAIN_STRATEGIES` 僅為 **Specialized Behavior Override Registry**，絕非 Domain Catalog：
    - TOML 宣告且 Registry 有特化類別 ➔ 實例化特化策略（如 `GoldenEmpireStrategy`）；
