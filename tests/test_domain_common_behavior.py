@@ -9,7 +9,11 @@ from states.domains.treasure_subflow import DomainTreasureSubflow
 from states.domains import get_domain_strategy
 from states.handlers.domain_explore import DomainExploreHandler
 from utils.scene_snapshot import _ELEMENT_TEMPLATE_MAP, ElementId
-from utils.tier4_config import build_tier4_fallback_config, validate_daily_domain_policy
+from utils.tier4_config import (
+    build_domain_execution_route,
+    build_tier4_fallback_config,
+    validate_daily_domain_policy,
+)
 from cli.tier4_setup import setup_daily_tier4_config
 from config import (
     DEFAULTS_PATH,
@@ -385,8 +389,10 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 "domain": "abyss_nest",
                 "bread_cost": 4,
                 "navigation_path": ["common/door.png", "domains/abyss_nest/entry.png"],
-                "lobby_start_btn": "domains/common/start_btn.png",
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
                 "domain_entry_btn": "domains/abyss_nest/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
                 "domain_reset_max_attempts": 5,
             }
         }
@@ -407,12 +413,22 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 "name": "淵獸之巢",
                 "type": "domain",
                 "domain": "abyss_nest",
+                "navigation_path": ["common/door.png", "domains/abyss_nest/entry.png"],
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
+                "domain_entry_btn": "domains/abyss_nest/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
                 "enable_lord_boss": False,
             },
             "golden_empire": {
                 "name": "黃金古國",
                 "type": "domain",
                 "domain": "golden_empire",
+                "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
+                "domain_entry_btn": "domains/golden_empire/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
                 "enable_lord_boss": True,
             }
         }
@@ -663,6 +679,308 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 f"非法特定領域活動開關: '{act_key}'！活動開關必須為通用類別 (如 enable_domain)"
             )
 
+
+    # =========================================================================
+    # Phase 2 — Switch Domain Execution Ownership 測試
+    # =========================================================================
+
+    def test_daily_domain_route_uses_selected_domain_as_execution_base(self):
+        """[Phase 2] Daily policy 選擇 Domain 時，以 selected Domain config 作為 execution base"""
+        daily_policy = {
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            "enable_dungeon": False,
+        }
+        domain_cfg = {
+            "name": "黃金古國",
+            "type": "domain",
+            "domain": "golden_empire",
+            "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/golden_empire/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+            "bread_cost": 3,
+            "explore_priorities": ["domains/common/explore_btn.png"],
+            "result_buttons": ["common/continue.png", "common/continue_gray.png"],
+            "domain_reset_max_attempts": 7,
+            "enable_lord_boss": True,
+            "custom_domain_tag": "ge_special",
+        }
+        route = build_domain_execution_route(daily_policy, domain_cfg)
+
+        # 1. 驗證所有 Domain 執行層欄位完整保留自 domain_cfg
+        self.assertEqual(route["type"], "domain")
+        self.assertEqual(route["domain"], "golden_empire")
+        self.assertEqual(route["navigation_path"], ["common/door.png", "domains/golden_empire/entry.png"])
+        self.assertEqual(route["domain_tab_btn"], "domains/Domains_entry.png")
+        self.assertEqual(route["domain_tab_after_btn"], "domains/Domains_entry_after.png")
+        self.assertEqual(route["domain_entry_btn"], "domains/golden_empire/entry.png")
+        self.assertEqual(route["lobby_start_btn"], "domains/common/start_btn.png")
+        self.assertEqual(route["bread_cost"], 3)
+        self.assertEqual(route["explore_priorities"], ["domains/common/explore_btn.png"])
+        self.assertEqual(route["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
+        self.assertEqual(route["domain_reset_max_attempts"], 7)
+        self.assertTrue(route["enable_lord_boss"])
+        self.assertEqual(route["custom_domain_tag"], "ge_special")
+
+        # 2. 驗證 Tier 4 標籤與排程上下文
+        self.assertEqual(route["tier4_mode"], "domain")
+        self.assertEqual(route["tier4_domain"], "golden_empire")
+        self.assertTrue(route["is_tier4_fallback"])
+        self.assertFalse(route["enable_stage_farming"])
+        self.assertFalse(route["enable_dungeon"])
+
+        # 3. 驗證 enable_domain 絕不滲透至 execution route
+        self.assertNotIn("enable_domain", route)
+
+    def test_daily_execution_fields_cannot_override_domain_ssot(self):
+        """[Phase 2 SSOT Invariant] Daily 的執行性欄位絕不可覆蓋或污染 Domain 執行的 SSOT 契約"""
+        daily_with_conflicts = {
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            # 與 Domain 衝突之同名污染值
+            "navigation_path": ["DAILY_WRONG_DOOR.png"],
+            "lobby_start_btn": "DAILY_WRONG_START.png",
+            "result_buttons": ["DAILY_WRONG_CONTINUE.png"],
+            "bread_cost": 999,
+            "domain_reset_max_attempts": 999,
+            "domain_tab_btn": "DAILY_WRONG_TAB.png",
+            "domain_entry_btn": "DAILY_WRONG_ENTRY.png",
+        }
+        domain_cfg = {
+            "name": "黃金古國",
+            "type": "domain",
+            "domain": "golden_empire",
+            "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/golden_empire/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+            "bread_cost": 3,
+            "explore_priorities": ["domains/common/explore_btn.png"],
+            "result_buttons": ["common/continue.png", "common/continue_gray.png"],
+            "domain_reset_max_attempts": 7,
+            "enable_lord_boss": True,
+        }
+        route = build_domain_execution_route(daily_with_conflicts, domain_cfg)
+
+        # 嚴格斷言：所有執行欄位均為 Domain SSOT 值，絕無 Daily 污染
+        self.assertEqual(route["navigation_path"], ["common/door.png", "domains/golden_empire/entry.png"])
+        self.assertEqual(route["lobby_start_btn"], "domains/common/start_btn.png")
+        self.assertEqual(route["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
+        self.assertEqual(route["bread_cost"], 3)
+        self.assertEqual(route["domain_reset_max_attempts"], 7)
+        self.assertEqual(route["domain_tab_btn"], "domains/Domains_entry.png")
+        self.assertEqual(route["domain_entry_btn"], "domains/golden_empire/entry.png")
+
+    def test_domain_execution_enable_lord_boss_is_independent_from_daily_policy(self):
+        """[Phase 2] enable_lord_boss 雙重所有權分離：Domain execution 控制領地內 preemption，Daily 控制 scheduler policy"""
+        from states.handlers.domain_explore import DomainExploreHandler
+        from states.state_machine import GameStateMachine
+
+        modes = {
+            "golden_empire": {
+                "name": "黃金古國",
+                "type": "domain",
+                "domain": "golden_empire",
+                "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
+                "domain_entry_btn": "domains/golden_empire/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
+                "enable_lord_boss": False,  # 領域執行自身關閉領主 preemption
+            }
+        }
+
+        # Case 1: Daily policy = True, Domain execution = False
+        daily_policy_1 = {
+            "_config_mode_key": "daily",
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            "enable_lord_boss": True,  # 日常總排程政策允許
+        }
+        route_1 = build_tier4_fallback_config(daily_policy_1, modes)
+        self.assertFalse(route_1["enable_lord_boss"], "執行路徑必須以 Domain 的 enable_lord_boss (False) 為準")
+
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        machine.runtime_config_key = "daily"
+        machine.primary_config = daily_policy_1
+        machine.config = route_1
+        self.assertTrue(machine._daily_activity_config()["enable_lord_boss"], "Daily 總政策仍保持 enable_lord_boss=True")
+
+        handler = DomainExploreHandler(machine)
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_available_lord_bosses.return_value = ["lord_spider"]
+        machine.is_daily_pipeline_active = MagicMock(return_value=True)
+        machine.has_pending_daily_activity = MagicMock(return_value=False)
+        # 由於 Domain.enable_lord_boss 為 False，領主插隊檢查必須回傳 False (不被打斷)
+        self.assertFalse(handler._check_lord_boss_preemption(None, {"left": 0, "top": 0}))
+
+        # Case 2: Daily policy = False, Domain execution = True
+        modes_2 = {
+            "golden_empire": {
+                **modes["golden_empire"],
+                "enable_lord_boss": True,
+            }
+        }
+        daily_policy_2 = {
+            "_config_mode_key": "daily",
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            "enable_lord_boss": False,
+        }
+        route_2 = build_tier4_fallback_config(daily_policy_2, modes_2)
+        self.assertTrue(route_2["enable_lord_boss"], "執行路徑必須以 Domain 的 enable_lord_boss (True) 為準")
+        machine.primary_config = daily_policy_2
+        machine.config = route_2
+        self.assertFalse(machine._daily_activity_config()["enable_lord_boss"], "Daily 總政策仍保持 enable_lord_boss=False")
+        # 因 Daily 總政策關閉，has_available_selected_lord_boss 為 False，插隊依然不觸發
+        self.assertFalse(handler._check_lord_boss_preemption(None, {"left": 0, "top": 0}))
+
+    def test_daily_scheduler_policy_survives_domain_execution_route(self):
+        """[Phase 2] Daily 的地下城與排程政策在 Domain residency 期間完好保存，定時地下城可順利插隊"""
+        from states.state_machine import GameStateMachine
+
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        machine.daily_manager = MagicMock()
+        machine.daily_manager.get_pending_town_subflows.return_value = []
+        machine.daily_manager.get_available_lord_bosses.return_value = []
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "name": "Daily",
+            "type": "mix",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            "enable_town_daily": False,
+            "enable_demon_lords": False,
+            "enable_lord_boss": False,
+            "enable_dungeon": True,
+            "dungeon_entries": ["dungeons/Slime_entry.png"],
+            "dungeon_names": ["Slime"],
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [0],
+        }
+        machine.apply_tier4_fallback_config()
+        self.assertEqual(machine.config["type"], "domain")
+        self.assertTrue(machine.config["is_tier4_fallback"])
+
+        # 斷言排程政策在 _daily_activity_config() 存活且可判定定時地下城
+        self.assertTrue(machine._daily_activity_config()["enable_dungeon"])
+        self.assertTrue(machine.has_available_daily_dungeon())
+
+        # 模擬進入 DOMAIN_EXPLORE 狀態，定時地下城冷卻完畢觸發插隊評估
+        machine.current_state = machine.STATE_DOMAIN_EXPLORE
+        self.assertTrue(machine.evaluate_next_activity())
+        self.assertEqual(machine.config["type"], "mix")
+        self.assertEqual(machine.config["navigation_path"], ["common/door.png", "dungeons/dungeon.png"])
+        self.assertTrue(machine.config["is_tier4_fallback"])
+
+    def test_domain_profile_override_rebuilds_active_domain_route(self):
+        """[Phase 2 Hot Reload Invariant] Profile 覆寫領地欄位時 hot reload 重建 active domain route，且 Daily 污染欄位不影響"""
+        from copy import deepcopy
+        from states.state_machine import GameStateMachine
+        import config
+
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        machine.runtime_config_key = "daily"
+        machine.primary_config = {
+            "_config_mode_key": "daily",
+            "type": "mix",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            # Daily 自帶污染值
+            "navigation_path": ["DAILY_GARBAGE_NAV.png"],
+        }
+        machine.apply_tier4_fallback_config()
+        self.assertEqual(machine.config["bread_cost"], 3)
+        self.assertNotEqual(machine.config["navigation_path"], ["DAILY_GARBAGE_NAV.png"])
+
+        # 模擬 profile override 修改 golden_empire 的 bread_cost = 5
+        with patch("states.state_machine.refresh_runtime_config", return_value=True), \
+             patch("states.state_machine.get_runtime_game_config", return_value=deepcopy(machine.primary_config)), \
+             patch.dict(config.GAME_CONFIGS, {
+                 "golden_empire": {
+                     **config.GAME_CONFIGS["golden_empire"],
+                     "bread_cost": 5,
+                 }
+             }):
+            self.assertTrue(machine.refresh_config_at_safe_point())
+
+        # 斷言 hot reload 後 active domain execution 更新為 bread_cost == 5
+        self.assertEqual(machine.config["bread_cost"], 5)
+        # 且 Daily 的污染欄位依然無法覆蓋 Domain 路由
+        self.assertNotEqual(machine.config["navigation_path"], ["DAILY_GARBAGE_NAV.png"])
+        self.assertEqual(machine.config["domain_tab_btn"], "domains/Domains_entry.png")
+
+    def test_daily_domain_generic_strategy_route_uses_generic_domain(self):
+        """[Phase 2] Daily 選定 canonical generic domain (abyss_nest) 時，採用 GenericDomainStrategy 且維持自身 identity"""
+        from states.handlers.domain_explore import DomainExploreHandler
+        from states.domains.generic_domain import GenericDomainStrategy
+        from states.state_machine import GameStateMachine
+
+        abyss_cfg = {
+            "name": "淵獸之巢",
+            "type": "domain",
+            "domain": "abyss_nest",
+            "navigation_path": ["common/door.png", "domains/abyss_nest/entry.png"],
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/abyss_nest/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+        }
+        modes = {"abyss_nest": abyss_cfg}
+        daily_cfg = {
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "abyss_nest",
+            "enable_domain": True,
+        }
+        route = build_tier4_fallback_config(daily_cfg, modes)
+        self.assertEqual(route["domain"], "abyss_nest")
+
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        machine.config = route
+
+        with patch("states.domains.is_supported_domain", return_value=True):
+            handler = DomainExploreHandler(machine)
+            self.assertIsInstance(handler.strategy, GenericDomainStrategy)
+            self.assertEqual(handler.strategy.domain_name, "abyss_nest")
+
+    def test_direct_domain_execution_remains_independent(self):
+        """[Phase 2 Regression] Direct Domain 模式 (如 --mode golden_empire) 執行配置完全獨立，絕無 Daily/Tier4 污染"""
+        from config import GAME_CONFIGS
+
+        ge_direct = GAME_CONFIGS.get("golden_empire")
+        self.assertIsNotNone(ge_direct)
+
+        # 斷言 direct domain 配置純淨性
+        self.assertEqual(ge_direct["type"], "domain")
+        self.assertEqual(ge_direct["domain"], "golden_empire")
+        self.assertNotIn("tier4_mode", ge_direct)
+        self.assertNotIn("tier4_domain", ge_direct)
+        self.assertNotIn("enable_domain", ge_direct)
+        self.assertNotIn("is_tier4_fallback", ge_direct)
+        self.assertFalse(ge_direct.get("enable_stage_farming", True))
+        self.assertFalse(ge_direct.get("enable_dungeon", True))
+
+        # 斷言具備所有必要 Domain 執行屬性
+        self.assertIn("navigation_path", ge_direct)
+        self.assertIn("domain_tab_btn", ge_direct)
+        self.assertIn("domain_entry_btn", ge_direct)
+        self.assertIn("lobby_start_btn", ge_direct)
+        self.assertEqual(ge_direct["bread_cost"], 3)
 
     # =========================================================================
     # Strict SSOT Invariant Tests

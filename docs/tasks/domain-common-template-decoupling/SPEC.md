@@ -67,14 +67,24 @@ Status: Final
 - **Daily**：Scheduling / Activity Policy Owner，負責高層排程與各類活動啟用政策（包含 `enable_domain`、`enable_dungeon`、`enable_lord_boss` 等）。
 - **Domain**：Execution SSOT，負責持有該領域執行所需之完整靜態配置（路徑、按鈕、成本、重試門檻等）。
 
-### 3.2 階段藍圖 (Phase Roadmap)
-- **Phase 1 (本階段: Domain Policy / SSOT Preparation)**：
+### 3.2 階段藍圖與已實作契約 (Phase Roadmap & Implemented Contract)
+- **Phase 1 (Domain Policy / SSOT Preparation - Implemented)**：
   - 引入通用活動開關 `enable_domain`（`defaults.activities` 與 `primary_modes.daily` 同步宣告）。
   - 建立 Daily Domain policy 矛盾核驗：`tier4_mode == "domain"` 時 `enable_domain` 必須為 `true`，且 `tier4_domain` 必須明確存在，違者 Fail-Fast（不依賴 `DEFAULT_TIER4_DOMAIN` 隱式填補）。
   - 確立 Domain Execution Required Contract（`DOMAIN_STRUCTURAL_REQUIRED_KEYS` 與 `CANONICAL_DOMAIN_COMMON_DEFAULTS`），使 Domain 配置具備自身完整性。
-  - 保持行為完全相容，不切換執行所有權、不移除既有 `build_tier4_fallback_config` 合成。
-- **Phase 2 (Switch Domain Execution Ownership)**：將執行期配置所有權正式由 Daily 移交給 selected Domain。
-- **Phase 3 (Cleanup Fallbacks & Compatibility Duplications)**：清理結構性 fallback 與重複相容路徑。
+- **Phase 2 (Switch Domain Execution Ownership - Implemented Contract)**：
+  - **Daily policy selects Domain**：Daily 為排程/活動政策持有者（Scheduler & Activity Policy Owner），負責選擇特定 Domain (`tier4_domain`)。
+  - **Domain is execution-field SSOT**：被選定並經標準化之 effective Domain config 為執行欄位之唯一 SSOT（Execution Base），不再從 Daily deepcopy 上覆蓋欄位。
+  - **Daily execution-like fields MUST NOT override Domain SSOT**：Daily 自身存在之同名或干擾性執行欄位（如 `navigation_path`, `lobby_start_btn`, `result_buttons`, `bread_cost` 等）嚴禁覆蓋或污染 Domain 執行路由。
+  - **Daily scheduler state remains owned by `primary_config` / `_daily_activity_config()`**：Domain residency 期間，所有 Daily 排程與插隊政策（`enable_dungeon`, `dungeon_entries`, `greedy_dungeon`, 體力退避後冷卻喚醒復歸等）皆由 `primary_config` / `_daily_activity_config()` 獨立持有，不混入 Domain 執行配置。
+  - **`enable_lord_boss` Dual Ownership**：
+    - Daily 的 `primary_config.enable_lord_boss` 代表 Daily 整體排程是否啟用領主 Boss；
+    - Domain 執行配置中的 `enable_lord_boss` 代表該領地探索期間是否允許領主 Boss 插隊；
+    - 兩者職責徹底分離，互不干涉。
+  - **`enable_domain` Strict Ownership**：`enable_domain` 僅存在於 Daily 政策，Domain 執行配置中嚴格排除 `enable_domain`。
+  - **Seam Assembly**：移除 `DOMAIN_ROUTE_KEYS` 逐欄覆蓋機制，改由純函式 helper `build_domain_execution_route(daily_policy, selected_domain_config)` 完成最小排程脈絡與 Tier 4 標記附加。
+  - **Hot Reload Invariant**：Hot reload 時重新讀取最新 effective Domain 配置重建 active Domain route；Daily 欄位修改不得污染 Domain 執行路由。
+- **Phase 3 (Cleanup Fallbacks & Compatibility Duplications - Future Phase)**：清理結構性 fallback 與重複相容路徑（非本階段範疇）。
 
 ### 3.3 `enable_domain` 語意與 Invariant 契約
 1. **語意定義**：`enable_domain` 代表 scheduler / Daily policy 是否允許調度 Domain 類活動。其與 `enable_dungeon`、`enable_lord_boss`、`enable_town_daily` 處於同等抽象層級。

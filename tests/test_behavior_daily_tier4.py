@@ -104,6 +104,11 @@ class TestDailyTier4Behavior(unittest.TestCase):
                 "domain": "golden_empire",
                 "navigation_path": ["domains/golden_empire/entry.png"],
                 "explore_priorities": ["domains/common/explore_btn.png"],
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
+                "domain_entry_btn": "domains/golden_empire/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
+                "enable_lord_boss": False,
             }
         }
 
@@ -409,7 +414,16 @@ class TestDailyTier4Behavior(unittest.TestCase):
     def test_tier4_config_preserves_enable_dungeon_in_stage_and_domain(self):
         mode_configs = {
             "stage": {"name": "關卡", "type": "stage"},
-            "golden_empire": {"name": "黃金帝國", "type": "domain"},
+            "golden_empire": {
+                "name": "黃金帝國",
+                "type": "domain",
+                "domain": "golden_empire",
+                "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
+                "domain_entry_btn": "domains/golden_empire/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
+            },
         }
         # Stage fallback with enable_dungeon True/False
         stage_cfg_true = {"tier4_mode": "stage", "enable_dungeon": True}
