@@ -5,8 +5,6 @@ import os
 import sys
 import time
 
-from actions.mouse import MouseController
-from capture.screen import ScreenCapturer
 from config import (
     GAME_CONFIGS,
     TIER4_MODE_DOMAIN,

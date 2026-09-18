@@ -102,7 +102,7 @@ class TestBehaviorSupervisorLifecycle(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_scenario_s3_hung_window_auto_escalates_to_restart_game(self):
         """S3: If window is hung (IsHungAppWindow=True), launch escalates to force_relaunch."""
-        launcher = SteamGameLauncher(game_title="Blackfire Crusade", hwnd=12345)
+        launcher = SteamGameLauncher(capturer=MagicMock(), game_title="Blackfire Crusade", hwnd=12345)
 
         with patch("utils.game_process.ctypes.windll.user32.IsHungAppWindow", return_value=1):
             self.assertTrue(is_window_hung(12345))

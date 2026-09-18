@@ -293,7 +293,6 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("runtime.loop.PauseController")
     @patch("runtime.bootstrap.DailyManager")
     @patch("runtime.bootstrap.GameStateMachine")
-    @patch("runtime.bootstrap.MouseController")
     @patch("runtime.bootstrap.TemplateMatcher")
     @patch("runtime.io_adapters.compose_io")
     @patch("runtime.bootstrap.check_mode_templates", return_value=[])
@@ -301,7 +300,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("runtime.bootstrap.normalize_config", side_effect=lambda config: config)
     @patch("runtime.bootstrap.get_monitor_index", return_value=3)
     def test_initializer_wires_profile_runtime_refresh_and_daily_pipeline(
-        self, _monitor, _normalize, _exists, _templates, compose_io, matcher_class, mouse_class, machine_class,
+        self, _monitor, _normalize, _exists, _templates, compose_io, matcher_class, machine_class,
         daily_manager_class, _pause_controller, _print, _sleep,
     ):
         args = make_args(mode="daily", title="[#] Blackfire Crusade", subflow=None)
@@ -324,12 +323,12 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         self.assertIs(machine.daily_manager, manager)
         self.assertTrue(machine.enable_bread)
 
-    @patch("runtime.bootstrap.ScreenCapturer")
+    @patch("runtime.io_adapters.compose_capture")
     @patch("runtime.bootstrap.check_mode_templates", return_value=["stages/missing.png"])
     @patch("runtime.bootstrap.os.makedirs")
     @patch("builtins.print")
     def test_initializer_fails_before_constructing_game_dependencies_when_required_template_is_missing(
-        self, _print, _mkdir, _templates, capturer_class
+        self, _print, _mkdir, _templates, compose_capture
     ):
         args = make_args()
         config = {"name": "Stage", "type": "stage"}
@@ -338,7 +337,7 @@ class TestMainEntrypointBehavior(unittest.TestCase):
             main.init_state_machine_system(args, config)
 
         self.assertEqual(exited.exception.code, 1)
-        capturer_class.assert_not_called()
+        compose_capture.assert_not_called()
 
     @patch("runtime.loop.time.sleep")
     @patch("builtins.print")

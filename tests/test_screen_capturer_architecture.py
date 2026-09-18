@@ -7,7 +7,7 @@ import sys
 # 將專案根目錄加入系統路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from capture.screen import ScreenCapturer
+from runtime.io_adapters import BackendScreenCapturer, ForegroundScreenCapturer
 
 
 class TestScreenCapturerArchitecture(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
     """
 
     def setUp(self):
-        self.capturer = ScreenCapturer(window_title="Blackfire Crusade", backend_mode=True)
+        self.capturer = BackendScreenCapturer(window_title="Blackfire Crusade")
         self.fake_bgr = np.zeros((1080, 1920, 3), dtype=np.uint8)
         self.fake_bgr[10:20, 10:20] = 255  # 非全黑測試影像
 
@@ -52,7 +52,7 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
     @patch("win32gui.GetWindowRect")
     @patch("win32api.GetMonitorInfo")
     @patch("win32api.EnumDisplayMonitors")
-    @patch("capture.screen.ScreenCapturer.get_hwnd")
+    @patch.object(BackendScreenCapturer, "get_hwnd")
     def test_2_ensure_window_on_monitor_3step_transition(
         self, mock_get_hwnd, mock_enum_monitors, mock_get_mon_info, mock_get_win_rect, mock_set_pos, mock_show_win
     ):
@@ -73,15 +73,14 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
             mock_set_pos.assert_called_once()
             self.assertTrue(mock_show_win.called)
 
-    @patch.object(ScreenCapturer, "_capture_backend")
-    @patch.object(ScreenCapturer, "get_hwnd")
+    @patch.object(BackendScreenCapturer, "_capture_backend")
+    @patch.object(BackendScreenCapturer, "get_hwnd")
     def test_3_capture_tier1_backend_bitblt_priority(self, mock_get_hwnd, mock_capture_backend):
         """
         測試 3.1：後台模式 (backend_mode=True) 下，優先嘗試 Tier 1 後台 BitBlt 截圖
         """
         mock_get_hwnd.return_value = 123456
         mock_capture_backend.return_value = self.fake_bgr
-        self.capturer.backend_mode = True
 
         rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         img = self.capturer.capture(rect)
@@ -90,13 +89,12 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
         mock_capture_backend.assert_called_once_with(123456)
 
     @patch("capture.screen.np.array")
-    @patch.object(ScreenCapturer, "_capture_backend", return_value=None)
-    @patch.object(ScreenCapturer, "get_hwnd", return_value=123456)
+    @patch.object(BackendScreenCapturer, "_capture_backend", return_value=None)
+    @patch.object(BackendScreenCapturer, "get_hwnd", return_value=123456)
     def test_3_backend_capture_failure_does_not_fallback_to_mss(self, mock_get_hwnd, mock_backend, mock_np_array):
         """
         測試 3.2：若後台截圖回傳 None，自動降階至 Tier 2 前台 mss 擷取
         """
-        self.capturer.backend_mode = True
         self.capturer.sct.grab = MagicMock()
 
         rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
@@ -106,10 +104,9 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
         self.capturer.sct.grab.assert_not_called()
 
     @patch("PIL.ImageGrab.grab")
-    @patch.object(ScreenCapturer, "_capture_backend")
-    @patch.object(ScreenCapturer, "get_hwnd", return_value=None)
+    @patch.object(BackendScreenCapturer, "_capture_backend")
+    @patch.object(BackendScreenCapturer, "get_hwnd", return_value=None)
     def test_3_backend_missing_hwnd_does_not_fallback(self, mock_get_hwnd, mock_backend, mock_pil_grab):
-        self.capturer.backend_mode = True
         self.capturer.sct.grab = MagicMock()
 
         self.assertIsNone(self.capturer.capture({"left": 0, "top": 0, "width": 10, "height": 10}))
@@ -118,10 +115,9 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
         mock_pil_grab.assert_not_called()
 
     @patch("PIL.ImageGrab.grab")
-    @patch.object(ScreenCapturer, "_capture_backend")
-    @patch.object(ScreenCapturer, "get_hwnd", return_value=123456)
+    @patch.object(BackendScreenCapturer, "_capture_backend")
+    @patch.object(BackendScreenCapturer, "get_hwnd", return_value=123456)
     def test_3_backend_full_screen_does_not_fallback(self, mock_get_hwnd, mock_backend, mock_pil_grab):
-        self.capturer.backend_mode = True
         self.capturer.sct.grab = MagicMock()
 
         self.assertIsNone(self.capturer.capture(full_screen=True))
@@ -130,13 +126,12 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
         mock_pil_grab.assert_not_called()
 
     @patch("PIL.ImageGrab.grab")
-    @patch.object(ScreenCapturer, "_capture_backend", return_value=None)
-    @patch.object(ScreenCapturer, "get_hwnd", return_value=123456)
-    def test_3_capture_tier3_pil_imagegrab_final_fallback(self, mock_get_hwnd, mock_backend, mock_pil_grab):
+    @patch.object(ForegroundScreenCapturer, "get_hwnd", return_value=123456)
+    def test_3_capture_tier3_pil_imagegrab_final_fallback(self, mock_get_hwnd, mock_pil_grab):
         """
         測試 3.3：若 mss 拋出 Exception 異常，自動降階至 Tier 3 PIL ImageGrab 末線防護
         """
-        self.capturer.backend_mode = False
+        self.capturer = ForegroundScreenCapturer(window_title="Blackfire Crusade")
         self.capturer.sct.grab = MagicMock(side_effect=Exception("MSS grab error"))
 
         fake_pil = MagicMock()
