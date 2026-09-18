@@ -1,0 +1,41 @@
+{
+  "id": "domain-common-template-decoupling",
+  "base_ref": "origin/main",
+  "scope": [
+    "templates/domains/common/",
+    "templates/domains/golden_empire/",
+    "states/domains/treasure_subflow.py",
+    "states/domains/base_domain.py",
+    "states/domains/golden_empire.py",
+    "states/state_machine.py",
+    "states/handlers/navigation.py",
+    "states/handlers/battle.py",
+    "states/handlers/result.py",
+    "utils/scene_snapshot.py",
+    "config.py",
+    "config/defaults.toml",
+    "cli/",
+    "utils/tier4_config.py",
+    "tests/"
+  ],
+  "focused_tests": [
+    "tests/test_domain_common_behavior.py",
+    "tests/test_behavior_golden_empire.py",
+    "tests/test_behavior_navigation.py",
+    "tests/test_behavior_daily_tier4.py",
+    "tests/test_dungeon_relaunch_recovery.py",
+    "tests/test_profile_config_overlay.py"
+  ],
+  "models": {
+    "scout": null,
+    "review": [
+      "opencode/big-pickle"
+    ]
+  },
+  "notes": {
+    "status": "Final",
+    "workflow": "Decoupling common domain explore and treasure templates and subflows from golden_empire to templates/domains/common.",
+    "architecture": "project_arch_greenfield_lite_v1.md",
+    "invariant": "All domain explore button references and treasure templates must strictly resolve to domains/common/ without fallback."
+  }
+}

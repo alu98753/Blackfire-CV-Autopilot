@@ -11,8 +11,9 @@ def parse_arguments():
     parser.add_argument("--target", type=str, default=None,
                         help="指定控制的遊戲實例 (可傳入編號如 1, 2，別名 native, sandbox，或 HWND 如 0x2707a8)")
     parser.add_argument("--interval", type=float, default=0.5, help="畫面偵測間隔秒數 (預設: 0.5)")
+    mode_desc = ", ".join(f"{k} ({cfg.get('name', k)})" for k, cfg in PRIMARY_MODES.items())
     parser.add_argument("--mode", type=str, default="mix", choices=list(PRIMARY_MODES.keys()),
-                        help="主掛機模式：mix (混合模式，預設)、dungeon (地下城)、stage (普通關卡)、golden_empire (黃金古國領地)、collect_only (純領取)")
+                        help=f"主掛機模式 (預設: mix)：支援 {mode_desc}")
     parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
                         help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
     parser.add_argument("--foreground", action="store_true", help="Use visible foreground capture and physical mouse input (demo mode).")

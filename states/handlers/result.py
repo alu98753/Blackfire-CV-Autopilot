@@ -121,7 +121,7 @@ class ResultHandler(BaseStateHandler):
         # 0.1 優先檢查是否已回到領地主場景 (看到 explore_btn 代表戰鬥結算已結束並已回到領地)
         cur_type = self.machine.config.get("type") if self.machine.config else None
         if cur_type == "domain" or (self.machine.config and self.machine.config.get("domain")):
-            for d_btn in ["domains/golden_empire/explore_btn.png", "domains/common/exit_to_lobby.png"]:
+            for d_btn in ["domains/common/explore_btn.png", "domains/common/exit_to_lobby.png"]:
                 if os.path.exists(os.path.join("templates", d_btn)):
                     pos_d, conf_d = self.matcher.match(screen_img, d_btn, threshold=0.75, quiet=True)
                     if pos_d:
@@ -542,7 +542,7 @@ class ResultHandler(BaseStateHandler):
 
         # 檢查領地特徵
         if not has_positive_exit:
-            for dom_temp in ["domains/golden_empire/explore_btn.png", "domains/common/exit_to_lobby.png"]:
+            for dom_temp in ["domains/common/explore_btn.png", "domains/common/exit_to_lobby.png"]:
                 if os.path.exists(os.path.join("templates", dom_temp)):
                     pos_dom, _ = self.matcher.match(screen_img, dom_temp, threshold=0.75, quiet=True)
                     if pos_dom:
