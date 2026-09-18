@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^[a-z0-9][a-z0-9-]*$')][string]$Task,
     [string]$ReviewModel, [switch]$SkipTests, [switch]$ForceRefresh,
-    [int]$ReviewTimeoutSeconds = 540, [int]$TestTimeoutSeconds = 60,
+    [int]$ReviewTimeoutSeconds = 540, [int]$TestTimeoutSeconds = 240,
     [string]$_ReviewerExecutableOverride, [string[]]$_ReviewerArgumentsOverride,
     [string[]]$_SpecReviewerArgumentsOverride, [string[]]$_RegressionReviewerArgumentsOverride,
     [string[]]$_ReviewCandidatesOverride, [string]$_PythonExecutableOverride, [string[]]$_PythonArgumentsOverride,
@@ -11,7 +11,8 @@ param(
 $ErrorActionPreference = 'Stop'; $repoRoot = Split-Path $PSScriptRoot -Parent; Set-Location $repoRoot
 . (Join-Path $PSScriptRoot 'opencode_contract.ps1')
 . (Join-Path $PSScriptRoot 'node_workflow_contract.ps1')
-$taskDir = Join-Path $repoRoot "docs\tasks\$Task"; $taskFile = Join-Path $taskDir 'task.json'; $specPath = Join-Path $taskDir 'SPEC.md'
+. (Join-Path $PSScriptRoot 'task_package_resolver.ps1')
+$taskDir = (Resolve-TaskPackage -Task $Task -RepoRoot $repoRoot -RequireActive).AbsolutePath; $taskFile = Join-Path $taskDir 'task.json'; $specPath = Join-Path $taskDir 'SPEC.md'
 if (-not (Test-Path $taskFile) -or -not (Test-Path $specPath)) { throw "Task package is incomplete: $Task" }
 $config = Get-Content -Raw -Encoding utf8 $taskFile | ConvertFrom-Json; if ($config.id -ne $Task) { throw 'task.json id does not match Task.' }
 if ($_ReviewerExecutableOverride) { if ($_OpenCodeVersionOverride) { Assert-OpenCodeSupportedVersion $_OpenCodeVersionOverride } }
@@ -22,9 +23,15 @@ if (-not $_SkipNodeReadinessCheck) {
 $baseRef = [string]$config.base_ref; if (-not $baseRef) { throw 'task.json must define base_ref.' }
 
 function Resolve-Candidates($raw, [string]$cli, [string[]]$override) {
-    if ($override -and $override.Count) { return @($override | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ }) }
-    if ($cli) { return @($cli.Trim()) }; if ($null -eq $raw) { throw 'models.review is missing.' }
-    return @($raw | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($override -and $override.Count) { $value=([string]$override[0]).Trim() }
+    elseif (-not [string]::IsNullOrWhiteSpace($cli)) { $value=$cli.Trim() }
+    else {
+        if ($null -eq $raw) { throw 'Invalid reviewer model configuration: models.review is required and must be an explicit provider/model string.' }
+        if ($raw -isnot [string]) { throw 'Invalid reviewer model configuration: models.review must be one explicit provider/model string; candidate arrays are not allowed.' }
+        $value=$raw.Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($value) -or $value -notmatch '^[^/\s]+/[^/\s]+$') { throw 'Invalid reviewer model configuration: models.review must be a non-empty provider/model string.' }
+    return @($value)
 }
 function Get-Sha256String([string]$Text) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
@@ -41,8 +48,8 @@ function Get-Sha256File([string]$Path) {
 }
 function Get-ReviewPromptText([string]$Agent) {
     return @"
-Task descriptor: docs/tasks/$Task/task.json
-Canonical spec: docs/tasks/$Task/SPEC.md
+Task descriptor: docs/tasks/active/$Task/task.json
+Canonical spec: docs/tasks/active/$Task/SPEC.md
 Status snapshot: .runtime/ai_gate/$Task/status.txt
 Diff snapshot: .runtime/ai_gate/$Task/diff.patch
 Comparison baseline: $baseRef
@@ -203,7 +210,8 @@ function Render-Review($env, [string]$agent) {
 
 $candidates = @(Resolve-Candidates $config.models.review $ReviewModel $_ReviewCandidatesOverride); if (-not $candidates.Count) { throw 'No review candidates configured.' }
 $runtimeDir = Join-Path $repoRoot ".runtime\ai_gate\$Task"; $reviewDir = Join-Path $taskDir 'reviews'; New-Item -ItemType Directory -Force $runtimeDir,$reviewDir | Out-Null
-$excludes = ":!docs/tasks/$Task/reviews :!docs/tasks/$Task/EVIDENCE.md :!docs/tasks/$Task/CONTEXT.md :!.runtime"
+$activeGitPath = Get-TaskPackageGitPath $Task
+$excludes = ":!$activeGitPath/reviews :!$activeGitPath/EVIDENCE.md :!$activeGitPath/CONTEXT.md :!.runtime"
 (& cmd.exe /d /s /c "chcp 65001 >nul && <nul git status --short -u -- . $excludes" | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'status.txt') -Encoding utf8
 (& cmd.exe /d /s /c "chcp 65001 >nul && <nul git diff --no-ext-diff $baseRef -- . $excludes" | Out-String).TrimEnd() | Set-Content (Join-Path $runtimeDir 'diff.patch') -Encoding utf8
 

@@ -21,6 +21,17 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertNotIn("Get-CanonicalReviewPayload", text)
         self.assertNotIn("Test-ReviewVerdictStructure", text)
 
+    def test_gate_requires_explicit_reviewer_model_without_default_fallback(self):
+        text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("models.review is required", text)
+        self.assertIn("must be one explicit provider/model string", text)
+        self.assertIn("candidate arrays are not allowed", text)
+        self.assertNotIn("locally configured OpenCode default", text)
+
+    def test_gate_default_focused_test_timeout_is_bounded_at_240_seconds(self):
+        text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("[int]$ReviewTimeoutSeconds = 540, [int]$TestTimeoutSeconds = 240", text)
+
     def test_adapter_validates_exact_machine_contract(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"
         script = (
@@ -371,12 +382,36 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertIn("if (-not $_SkipNodeReadinessCheck) {", gate_text)
         self.assertNotIn("if ($_ReviewerExecutableOverride) { if ($_NodeVersionOverride) { Assert-NodeSupportedVersion", gate_text)
 
-    def test_windows_workflow_harness(self):
+    def run_windows_workflow_group(self, group, timeout):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
-        command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'
-        result = subprocess.run(command, cwd=self.root, capture_output=True, text=True, shell=True, timeout=240)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("Workflow script harness:", result.stdout + result.stderr)
+        command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" -Group "{group}" < NUL"'
+        result = subprocess.run(command, cwd=self.root, capture_output=True, shell=True, timeout=timeout, encoding="utf-8", errors="replace")
+        stdout = result.stdout.decode("utf-8", errors="replace") if isinstance(result.stdout, bytes) else result.stdout
+        stderr = result.stderr.decode("utf-8", errors="replace") if isinstance(result.stderr, bytes) else result.stderr
+        self.assertEqual(result.returncode, 0, stdout + stderr)
+        self.assertIn("Workflow script harness:", stdout + stderr)
+        return stdout + stderr
+
+    def test_windows_workflow_process_helpers(self):
+        self.run_windows_workflow_group("process/helpers", 90)
+
+    def test_windows_workflow_gate_readiness(self):
+        self.run_windows_workflow_group("gate-readiness", 60)
+
+    def test_windows_workflow_scout(self):
+        self.run_windows_workflow_group("scout", 75)
+
+    def test_windows_workflow_gate_verdict(self):
+        self.run_windows_workflow_group("gate-verdict", 120)
+
+    def test_windows_workflow_gate_resume_cache(self):
+        self.run_windows_workflow_group("gate-resume-cache", 200)
+
+    def test_windows_workflow_all_selector_compatibility(self):
+        harness = (self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("[string]$Group = 'all'", harness)
+        self.assertIn("$Group -ne 'all'", harness)
+        self.assertIn("'gate-resume-cache'", harness)
 
     def run_cleanup_helper(self, worktree, canonical, *extra):
         helper = self.root / "scripts" / "worktree_cleanup_safety.ps1"
@@ -572,11 +607,11 @@ class WorkflowScriptContractTests(unittest.TestCase):
         completion = (self.root / ".agents" / "skills" / "branch_completion_workflow" / "SKILL.md").read_text(encoding="utf-8")
         architecture = (self.root / "docs" / "architecture" / "ai_development_workflow.md").read_text(encoding="utf-8")
         self.assertIn("-Detach", completion)
-        self.assertIn("git worktree remove <path>", completion)
+        self.assertIn("runs normal `git worktree remove`", completion)
         self.assertIn("git worktree prune --verbose", completion)
         self.assertIn("live/dirty", completion.lower())
         self.assertIn("unrelated worktrees", completion)
-        self.assertLess(completion.index("-Detach"), completion.index("git worktree remove <path>"))
+        self.assertLess(completion.index("-Detach"), completion.index("runs normal `git worktree remove`"))
         self.assertNotIn("worktree remove --force", helper.lower())
         self.assertNotIn("worktree prune", helper.lower())
         self.assertIn("worktree_cleanup_safety.ps1", architecture)

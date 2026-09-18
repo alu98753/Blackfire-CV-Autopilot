@@ -6,6 +6,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'task_package_resolver.ps1')
 
 function Write-TaskStartResult([bool]$Ok, [string]$Code, [string]$Message, [hashtable]$Data = @{}) {
     $result = [ordered]@{
@@ -232,19 +233,20 @@ try {
     }
 
     # 8. Remote task artifact preflight
-    $specRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:docs/tasks/$Task/SPEC.md") $canonicalRoot
-    $taskJsonRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:docs/tasks/$Task/task.json") $canonicalRoot
+    $taskGitPath = Get-TaskPackageGitPath $Task
+    $specRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:$taskGitPath/SPEC.md") $canonicalRoot
+    $taskJsonRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:$taskGitPath/task.json") $canonicalRoot
     if ($specRemoteCheck.Code -ne 0 -or $taskJsonRemoteCheck.Code -ne 0) {
-        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Approved remote task branch is missing required task artifacts under 'docs/tasks/$Task/' (SPEC.md, task.json)." @{
+        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Approved remote task branch is missing required task artifacts under '$taskGitPath/' (SPEC.md, task.json)." @{
             task = $Task
             remote_ref = $remoteRef
         }
     }
 
     # Verify task.json content on remote
-    $taskJsonContentRes = Invoke-GitProcess @('-C', $canonicalRoot, 'show', "$remoteRef`:docs/tasks/$Task/task.json") $canonicalRoot
+    $taskJsonContentRes = Invoke-GitProcess @('-C', $canonicalRoot, 'show', "$remoteRef`:$taskGitPath/task.json") $canonicalRoot
     if ($taskJsonContentRes.Code -ne 0) {
-        Write-TaskStartResult $false 'TASK_PACKAGE_INVALID' "Failed to read remote 'docs/tasks/$Task/task.json'." @{}
+        Write-TaskStartResult $false 'TASK_PACKAGE_INVALID' "Failed to read remote '$taskGitPath/task.json'." @{}
     }
     try {
         $parsedRemoteTaskJson = ($taskJsonContentRes.Lines -join "`n") | ConvertFrom-Json -ErrorAction Stop
@@ -399,10 +401,11 @@ try {
     }
 
     # Post-attachment validation of local task artifacts
-    $localSpecPath = Join-Path (Join-Path (Join-Path $targetWorktreePath 'docs') 'tasks') (Join-Path $Task 'SPEC.md')
-    $localTaskJsonPath = Join-Path (Join-Path (Join-Path $targetWorktreePath 'docs') 'tasks') (Join-Path $Task 'task.json')
+    $localTaskRoot = Join-Path $targetWorktreePath ($taskGitPath -replace '/', '\\')
+    $localSpecPath = Join-Path $localTaskRoot 'SPEC.md'
+    $localTaskJsonPath = Join-Path $localTaskRoot 'task.json'
     if (-not (Test-Path -LiteralPath $localSpecPath) -or -not (Test-Path -LiteralPath $localTaskJsonPath)) {
-        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Task worktree is missing checked-out task artifacts in 'docs/tasks/$Task/'." @{
+        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Task worktree is missing checked-out task artifacts in '$taskGitPath/'." @{
             worktree = $targetWorktreePath
         }
     }

@@ -7,7 +7,7 @@
 Each active task uses one directory:
 
 ```text
-docs/tasks/<task-id>/
+docs/tasks/active/<task-id>/
 ├─ SPEC.md
 ├─ task.json
 ├─ CONTEXT.md
@@ -56,7 +56,7 @@ Rules:
 idea / future work
   -> docs/tasks/BACKLOG.md
   -> ChatGPT lightweight repository survey
-  -> promote to docs/tasks/<task-id>/
+  -> promote to docs/tasks/active/<task-id>/
   -> Draft SPEC.md + task.json
   -> OpenCode Scout creates CONTEXT.md
   -> ChatGPT re-checks code / architecture using Scout evidence
@@ -65,7 +65,10 @@ idea / future work
   -> verification gate creates/updates reviews/* + completed EVIDENCE.md
   -> push candidate + applicable evidence to GitHub
   -> ChatGPT / human final review
-  -> explicit user-authorized integration
+  -> explicit user-authorized integration (package remains ACTIVE)
+  -> task_archive.ps1 prepares a detached closeout and pushes temporary remote handoff `origin/archive/<task-id>-<year>`
+  -> ChatGPT/user integrates closeout branch and resolver verifies ARCHIVED
+  -> ChatGPT/user deletes remote closeout handoff branch
   -> task_cleanup.ps1 removes local task execution/worktree state
   -> tracked task package remains repository history until explicit archival/deletion policy
 ```
@@ -78,9 +81,9 @@ Do not create a global `current-task` marker. This repository uses multiple perm
 
 `docs/tasks/BACKLOG.md` is the single shared intake/index for new ideas, unresolved bugs, follow-up observations, and future task candidates that are not yet promoted into a formal task.
 
-- Do **not** create `docs/tasks/<task-id>/backlog.md` for task-local follow-up ideas.
+- Do **not** create `docs/tasks/active/<task-id>/backlog.md` for task-local follow-up ideas.
 - While a task is active, append short follow-up observations to the shared `docs/tasks/BACKLOG.md`; include enough context or the originating task id to recover intent later.
-- Once a backlog item is activated, promote it into its own `docs/tasks/<new-task-id>/SPEC.md` + `task.json` and avoid keeping two active SSOT descriptions.
+- Once a backlog item is activated, promote it into its own `docs/tasks/active/<new-task-id>/SPEC.md` + `task.json` and avoid keeping two active SSOT descriptions.
 - AI-workflow roadmap items remain owned by `docs/architecture/ai_development_workflow_roadmap.md`; the shared backlog may hold a brief intake note only until that item is promoted or incorporated into the roadmap.
 
 This convention is exemplified by commit `7862384c7321b2e370691e5b3c22b96f0f7a4cd7`, which moved a Nemesis/Supervisor follow-up out of a task-local `backlog.md` and into `docs/tasks/BACKLOG.md`.
@@ -95,7 +98,7 @@ Verification runs through:
 
 Key execution contracts:
 - `spec-reviewer` and `regression-reviewer` execute concurrently using an isolated two-slot process coordinator.
-- Each canonical review artifact (`docs/tasks/<task-id>/reviews/*.md`) carries an embedded machine-readable fingerprint comment:
+- Each canonical review artifact (`docs/tasks/active/<task-id>/reviews/*.md`) carries an embedded machine-readable fingerprint comment:
   `<!-- blackfire-gate-fingerprint: {"schema":1,"role":"...","hash":"..."} -->`
 - Each reviewer stage is independently evaluated on each Gate run:
   - If a valid canonical review artifact exists with a matching input fingerprint, the stage is reused without launching that reviewer process.
@@ -108,7 +111,7 @@ Key execution contracts:
 
 ## Task-history retention vs local cleanup
 
-`task_cleanup.ps1` is a local execution/worktree cleanup operation. It does not imply deletion of tracked files under `docs/tasks/<task-id>/`.
+After task integration, the package remains ACTIVE until explicit `task_archive.ps1` closeout is integrated and the resolver confirms ARCHIVED. The remote closeout branch is a temporary handoff branch: `task_archive.ps1` and `task_cleanup.ps1` do not delete it; only ChatGPT/user may delete it after closeout merge and ARCHIVED verification. If closeout is not merged, it must not be deleted. Original task cleanup occurs only after that closeout deletion. `task_cleanup.ps1` only handles local execution/worktree state; it never moves an active package to archive.
 
 Tracked task packages remain repository history unless an explicit archival/deletion policy or user-authorized task says otherwise. Do not equate branch/worktree cleanup with tracked-history deletion.
 
@@ -132,7 +135,7 @@ Example:
   ],
   "models": {
     "scout": null,
-    "review": null
+    "review": "opencode/big-pickle"
   }
 }
 ```
@@ -144,8 +147,8 @@ Rules:
 - `base_ref` is the comparison baseline used by the verification gate. Before formal Gate, the current configured baseline must be reconciled into the task branch so the Gate snapshot represents task-owned changes rather than stale-branch drift.
 - `scope` helps reviewers detect scope creep; it does not override `SPEC.md`.
 - `focused_tests` contains Python `unittest` module/class/method targets only and must never contain a full-suite discovery command.
-- `models.scout` and `models.review` are optional `provider/model` overrides. `null` uses the locally configured OpenCode default.
+- `models.scout` remains an optional override. `models.review` is required and must be one explicit non-empty `provider/model` string; `null`, missing, empty, arrays, and locally configured defaults are invalid. The canonical reviewer model is `opencode/big-pickle`.
 
 ## Legacy `docs/todos/`
 
-`docs/todos/` is frozen legacy storage. Do not add new tasks there. When an existing legacy item becomes active work, migrate the relevant material into a new `docs/tasks/<task-id>/SPEC.md` and then handle cleanup through the normal branch closeout / canonical archival process.
+`docs/todos/` is frozen legacy storage. Do not add new tasks there. When an existing legacy item becomes active work, migrate the relevant material into a new `docs/tasks/active/<task-id>/SPEC.md` and then handle cleanup through the normal branch closeout / canonical archival process.
