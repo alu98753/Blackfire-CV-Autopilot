@@ -142,3 +142,86 @@ Scout may recommend a narrower or additional deterministic test module if reposi
 - Whether the anomalous click-coordinate log is entirely independent.
 
 These uncertainties may refine implementation shape after Scout, but must not broaden the task into CV tuning, scheduler redesign, or I/O architecture work without a separate task.
+
+
+## Additional Runtime Failure — Domain Scene Adoption Without Domain Execution Identity
+
+A second production failure was observed on 2026-09-18 after the bot was physically inside a Domain exploration scene:
+
+```text
+成功匹配模板 'domains/common/explore_btn.png' ... 0.9995
+全域定位：... 鎖定領地探索狀態 (DOMAIN_EXPLORE)
+狀態轉移: UNKNOWN -> DOMAIN_EXPLORE
+...
+ValueError: 無效的領地運行配置: self.machine.config 缺少必要的 'domain' 識別碼
+```
+
+The preceding PyTorch message about quantized APIs being deprecated is only a deprecation warning emitted while EasyOCR/PyTorch is loading. It is not the crash cause.
+
+The actual crash is a scene/execution-context ownership mismatch:
+
+1. `GameStateMachine.detect_current_state()` treats `domains/common/explore_btn.png` as sufficient visual truth for `STATE_DOMAIN_EXPLORE`.
+2. Its current condition is effectively unconditional for `explore_btn.png`:
+
+   `if pos and (d_btn.endswith("explore_btn.png") or is_domain_mode):`
+
+   Therefore a physical Domain scene can transition `UNKNOWN -> DOMAIN_EXPLORE` even when the current runtime config is not a Domain config and contains no `domain` identity.
+3. `DomainExploreHandler.handle()` immediately requires:
+
+   `(self.machine.config or {}).get("domain")`
+
+   and raises `ValueError` if it is absent.
+4. The state machine therefore has a split contract: global relocalization can adopt Domain scene truth without ensuring that the execution context required by the Domain handler has also been adopted/restored.
+
+This is a deterministic contract mismatch, not a CV false positive in the observed log: `explore_btn.png` matched at 0.9995 and is the canonical Domain exploration feature.
+
+### Relationship To The Original Lobby Bug
+
+The two failures share the same architectural boundary:
+
+- Bug A: a valid Domain primary action is overridden by a legacy stage-specific runtime flag.
+- Bug B: a valid Domain physical scene is adopted without a valid Domain execution identity.
+
+Both are cases where **visual/intent truth and runtime execution config are allowed to diverge across a Domain state transition**.
+
+This task therefore owns the narrow Domain runtime handoff boundary needed to keep these truths coherent. It must not broaden into generic state-machine recovery redesign.
+
+### Additional Scope
+
+- Make `UNKNOWN -> DOMAIN_EXPLORE` relocalization safe when the physical Domain scene is visually verified but `self.config` currently lacks `domain`.
+- Determine the canonical source from which Domain execution identity should be recovered/adopted, if recovery is valid (for example an already-owned direct Domain `primary_config`, Tier-4 Domain fallback owner, navigation/session context, or another existing explicit owner).
+- If no unambiguous Domain identity is owned, fail closed/recover without entering `DomainExploreHandler`; do not invent or guess a specific Domain from the generic `explore_btn.png`.
+- Preserve the ability to cold/restart-relocalize into a Domain scene when an unambiguous Domain owner already exists.
+- Prevent an unhandled `ValueError`/supervisor restart loop caused solely by scene adoption with missing Domain execution identity.
+
+### Additional Invariants
+
+- Scene truth and execution identity are distinct. Seeing `domains/common/explore_btn.png` proves "physically in a Domain exploration scene"; it does **not** by itself identify which Domain is active.
+- `DomainExploreHandler` may require a valid Domain identity; global relocalization must satisfy that precondition before dispatch, or must fail closed before entering the handler.
+- Production code must not default an unknown Domain identity to Golden Empire or any other catalog entry.
+- A stale/non-Domain `self.config` must not be treated as authoritative merely because it is currently installed if a stronger, explicit runtime owner already exists.
+- Conversely, `primary_config` must not be copied blindly unless its ownership semantics prove that it is the correct currently active Domain.
+- Supervisor restart must not become the normal recovery mechanism for this deterministic state/config mismatch.
+
+### Additional Provisional Acceptance Criteria
+
+9. When `domains/common/explore_btn.png` is visually verified while `self.config` lacks `domain`, the state machine does not dispatch into `DomainExploreHandler` with an invalid execution config.
+10. If an unambiguous existing runtime owner identifies the active Domain, global relocalization restores/adopts a valid Domain execution config before `DOMAIN_EXPLORE` handler execution.
+11. If the active Domain identity cannot be determined unambiguously, the bot fails closed through an existing bounded recovery/navigation path rather than guessing a Domain or raising an unhandled `ValueError`.
+12. A valid direct Domain config continues to relocalize from `UNKNOWN` to `DOMAIN_EXPLORE` and execute normally.
+13. A non-Domain/collect-only config plus a generic Domain exploration visual cannot manufacture a Domain identity from the template alone.
+14. Focused tests reproduce the exact contract mismatch: `UNKNOWN + explore_btn visible + config without domain` must not crash on the next handler tick.
+15. The PyTorch/EasyOCR deprecation warning is not modified as part of this task unless Scout discovers a separate repository-owned dependency contract requiring action; it is explicitly non-causal to this runtime crash.
+
+### Additional Scout Questions
+
+7. Which code paths can leave the game physically inside Domain exploration while `self.config` is `collect_only`, stage-like, or otherwise lacks `domain`? In particular, determine whether the original Lobby precondition bug can create or contribute to this divergence.
+8. What is the canonical existing owner of Domain identity during:
+   - direct Domain mode,
+   - Tier-4 Domain fallback,
+   - temporary Daily/mix preemption,
+   - supervisor restart / cold relocalization?
+9. Is `primary_config` always safe to use for Domain identity recovery, or can it name a different primary mode while the physical Domain was entered through a temporary route?
+10. Should the correction live in global relocalization/adoption, in a shared Domain execution-context resolver, or at another existing explicit ownership boundary?
+11. Are there existing tests for `UNKNOWN -> DOMAIN_EXPLORE` that currently assume `explore_btn.png` alone is sufficient regardless of runtime config?
+12. Can `DomainExploreHandler`'s current fail-fast validation remain intact after the upstream handoff is fixed? Prefer preserving it as an invariant check rather than weakening it into silent fallback.
