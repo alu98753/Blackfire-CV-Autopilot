@@ -45,8 +45,8 @@ class TestSafetyAndBattleScenarios(BehavioralScenarioTestCase):
         Then:
           1. 應拒絕執行動作（立即回傳 False），且不呼叫 pyautogui.moveTo。
         """
-        from actions.mouse import MouseController
-        controller = MouseController(
+        from runtime.io_adapters import ForegroundMouseController
+        controller = ForegroundMouseController(
             human_like=False,
             is_paused_fn=lambda: getattr(self.state_machine, 'is_paused', False)
         )
@@ -69,8 +69,8 @@ class TestSafetyAndBattleScenarios(BehavioralScenarioTestCase):
         """
         [行為場景 9] 狀態機恢復後，滑鼠控制器正常恢復點擊能力。
         """
-        from actions.mouse import MouseController
-        controller = MouseController(
+        from runtime.io_adapters import ForegroundMouseController
+        controller = ForegroundMouseController(
             human_like=False,
             is_paused_fn=lambda: getattr(self.state_machine, 'is_paused', False)
         )
@@ -303,8 +303,8 @@ class TestSafetyAndBattleScenarios(BehavioralScenarioTestCase):
           1. 呼叫 mouse.click() ➔ consecutive_stuck_count 應重置為 0。
           2. 呼叫 mouse.scroll() ➔ consecutive_stuck_count 應重置為 0。
         """
-        from actions.mouse import MouseController
-        real_mouse = MouseController(
+        from runtime.io_adapters import ForegroundMouseController
+        real_mouse = ForegroundMouseController(
             human_like=False,
             # Callback 接線 (Issue #11)：動作成功後通知 SM 重置卡死計數
             on_action_success=lambda: setattr(self.state_machine, 'consecutive_stuck_count', 0),

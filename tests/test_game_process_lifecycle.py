@@ -34,7 +34,6 @@ class TestGameProcessLifecycle(unittest.TestCase):
 
         self.launcher = SteamGameLauncher(
             capturer=self.mock_capturer,
-            mouse=self.mock_mouse,
             matcher=self.mock_matcher,
             game_title="Blackfire Crusade",
             action_cooldown=0.0

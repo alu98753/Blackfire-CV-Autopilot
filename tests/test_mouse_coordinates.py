@@ -6,13 +6,13 @@ import sys
 # 將專案根目錄加入系統路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from actions.mouse import MouseController
+from runtime.io_adapters import BackendMouseController, ForegroundMouseController
 
 class TestMouseCoordinates(unittest.TestCase):
     def setUp(self):
         # 以 callback 注入取代 state_machine 直接倘注 (Issue #11)
         self.on_success_count = [0]
-        self.mouse = MouseController(
+        self.mouse = BackendMouseController(
             on_action_success=lambda: self.on_success_count.__setitem__(0, self.on_success_count[0] + 1),
             is_paused_fn=lambda: False,  # 預設不暂停
         )
@@ -40,7 +40,6 @@ class TestMouseCoordinates(unittest.TestCase):
         """
         測試在後台模式下發送以 Client 座標為基底的 PostMessage。
         """
-        self.mouse.backend_mode = True
         self.mouse.get_hwnd = MagicMock(return_value=12345)
         mock_client_to_screen.return_value = (0, 0)
         
@@ -58,7 +57,10 @@ class TestMouseCoordinates(unittest.TestCase):
         """
         測試在前台模式下透過 ClientToScreen 轉換為實體螢幕座標並點擊。
         """
-        self.mouse.backend_mode = False
+        self.mouse = ForegroundMouseController(
+            on_action_success=lambda: self.on_success_count.__setitem__(0, self.on_success_count[0] + 1),
+            is_paused_fn=lambda: False,
+        )
         self.mouse.get_hwnd = MagicMock(return_value=12345)
         # 模擬 ClientToScreen: (0,0)->(100, 200)，(500, 300)->(600, 500)
         def client_to_screen_side_effect(hwnd, pt):
