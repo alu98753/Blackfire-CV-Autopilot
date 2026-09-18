@@ -15,14 +15,25 @@
     "review": "opencode/big-pickle"
   },
   "notes": {
-    "status": "Draft",
-    "implementation_blocked_until_final": true,
+    "status": "Final",
+    "implementation_blocked_until_final": false,
     "goal": "Prevent Daily Tier-4 Domain from being misrouted to COLLECT_ONLY when all eligible dungeons are on cooldown.",
+    "implementation_policy": "Minimal control-flow correction only in the target_idx-is-None dungeon cooldown fallback path; reuse existing _switch_to_stage_or_back authority.",
+    "protected_invariants": [
+      "stamina retreat behavior unchanged",
+      "temporary dungeon-resume behavior unchanged",
+      "pure dungeon cooldown fallback unchanged",
+      "ordinary mix stage fallback semantics unchanged",
+      "Daily Tier-4 none remains COLLECT_ONLY"
+    ],
     "non_goals": [
       "navigation refactor",
       "scheduler redesign",
+      "fallback abstraction",
+      "state_machine changes",
       "cooldown detection changes",
-      "OCR/card navigation changes"
+      "OCR/card navigation changes",
+      "lobby/mix sibling fallback cleanup"
     ]
   }
 }
