@@ -129,13 +129,14 @@ class MouseController:
         :param x: 目標 X 座標 (支援 Client 座標或全域絕對座標)
         :param y: 目標 Y 座標 (支援 Client 座標或全域絕對座標)
         """
+        raise NotImplementedError("Select BackendMouseController or ForegroundMouseController")
         self._wait_if_paused()
         if self.check_user_intervention():
             logging.info("🚫 使用者介入中，取消點擊動作。")
             return False
 
         # 後台點擊模擬 (第一防線)
-        if self.backend_mode:
+        if False:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
@@ -210,13 +211,14 @@ class MouseController:
         滾動滑鼠滾輪。
         在後台模式下發送 WM_MOUSEWHEEL 訊息給視窗，在前台模式下使用 pyautogui.scroll。
         """
+        raise NotImplementedError("Select BackendMouseController or ForegroundMouseController")
         self._wait_if_paused()
         if self.check_user_intervention():
             logging.info("🚫 使用者介入中，取消滾動動作。")
             return False
 
         # 後台模式模擬
-        if self.backend_mode:
+        if False:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
@@ -265,13 +267,14 @@ class MouseController:
         在絕對螢幕座標上執行滑鼠左鍵拖曳。
         在後台模式下發送 WM_LBUTTONDOWN -> MOUSEMOVE -> LBUTTONUP，在前台使用 pyautogui.dragTo。
         """
+        raise NotImplementedError("Select BackendMouseController or ForegroundMouseController")
         self._wait_if_paused()
         if self.check_user_intervention():
             logging.info("🚫 使用者介入中，取消拖曳動作。")
             return False
 
         # 後台拖曳模擬
-        if self.backend_mode:
+        if False:
             hwnd = self.get_hwnd()
             if hwnd:
                 try:
@@ -348,10 +351,11 @@ class MouseController:
         以清除遊戲中因為滑鼠懸停 (hover) 產生的亮邊或高亮效果，避免干擾模板匹配。
         若找不到視窗 hwnd，則 no-op（遊戲關閉時由 ExceptionWatchdog 負責重啟）。
         """
+        raise NotImplementedError("Select BackendMouseController or ForegroundMouseController")
         safe_x, safe_y = SAFE_AREA_CLIENT_POS
         hwnd = self.get_hwnd()
 
-        if self.backend_mode:
+        if False:
             if hwnd:
                 lparam = win32api.MAKELONG(safe_x, safe_y)
                 win32gui.PostMessage(hwnd, win32con.WM_MOUSEMOVE, 0, lparam)

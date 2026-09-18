@@ -3,11 +3,20 @@ from unittest.mock import MagicMock, patch
 
 from runtime.io_adapters import (compose_io, BackendScreenCapturer,
     ForegroundScreenCapturer, BackendMouseController, ForegroundMouseController)
+from actions.mouse import MouseController
+from capture.screen import ScreenCapturer
 from utils.steam_launcher import SteamGameLauncher
 import runtime.io_adapters as adapters
 
 
 class TestForegroundDemoModeIsolation(unittest.TestCase):
+    def test_base_io_classes_are_shared_mechanics_only(self):
+        mouse = MouseController()
+        capture = ScreenCapturer(window_title='x')
+        self.assertFalse(hasattr(mouse, 'backend_mode'))
+        self.assertFalse(hasattr(capture, 'backend_mode'))
+        with self.assertRaises(NotImplementedError): mouse.click(1, 2)
+        with self.assertRaises(NotImplementedError): capture.capture()
     def test_composition_selects_fixed_adapter_families(self):
         with patch('capture.screen.mss.MSS'):
             capture, mouse = compose_io(foreground=False, window_title='x')

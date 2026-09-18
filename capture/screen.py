@@ -295,6 +295,7 @@ class ScreenCapturer:
         or invalid HWNDs, backend failures, and unsupported full-screen capture.
         Foreground mode uses MSS with PIL fallback.
         """
+        raise NotImplementedError("Select BackendScreenCapturer or ForegroundScreenCapturer")
         if getattr(self, "_resume_event", None) is not None:
             self._resume_event.wait()
 
@@ -304,7 +305,7 @@ class ScreenCapturer:
         hwnd = self.get_hwnd()
         
         # 1. 後台模式優先嘗試 BitBlt/PrintWindow 後台截圖 (全螢幕模式除外)
-        if self.backend_mode:
+        if False:
             if full_screen:
                 logging.error("[ScreenCapturer] Backend mode does not support full-screen capture; refusing foreground fallback.")
                 return None
