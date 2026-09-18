@@ -50,5 +50,15 @@
     ],
     "secondary_observation": "Investigate abnormal match-to-click Y coordinate only for causal relevance; split if independent.",
     "secondary_runtime_failure": "UNKNOWN -> DOMAIN_EXPLORE may currently occur from explore_btn visual evidence while self.config lacks domain, causing DomainExploreHandler to raise ValueError."
-  }
+  },
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  },
+  "base_ref": "origin/main"
 }
