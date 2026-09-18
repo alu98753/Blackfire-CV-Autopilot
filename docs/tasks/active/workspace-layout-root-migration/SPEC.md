@@ -36,6 +36,32 @@ E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>
 
 The migration must preserve Git/worktree safety, the external shared Python environment contract, and ignored local runtime/user data already present in the current main checkout.
 
+## Canonical Workspace Topology
+
+The canonical post-migration workspace is:
+
+```text
+E:\Side_Project\
+├─ Blackfire-CV-Autopilot\
+│  └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+│
+├─ Blackfire-CV-Autopilot-worktrees\
+│  └─ <task-id>\
+│     └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+│
+└─ VenvPools\
+   └─ .venvs-Blackfire-CV-Autopilot\   <- single physical canonical Python environment
+```
+
+Ownership semantics:
+
+- `Blackfire-CV-Autopilot` is the permanent attached `main` worktree and integrated runtime/CV validation home.
+- `Blackfire-CV-Autopilot-worktrees\<task-id>` contains temporary branch-scoped task worktrees.
+- `VenvPools\.venvs-Blackfire-CV-Autopilot` is external shared Python environment storage, not a Git worktree.
+- Each runnable worktree exposes its own local `.venv` junction to the same canonical physical environment.
+- `node_modules` is **not** a top-level shared workspace component. When a worktree needs Node workflow tooling, that worktree owns its own untracked `node_modules`, with `package.json` / `package-lock.json` as dependency SSOT and explicit `scripts/bootstrap_node_workflow_deps.ps1` bootstrap.
+- This task does not change Node dependency ownership, package metadata, or bootstrap behavior.
+
 ## Evidence Summary
 
 Current task branch contains Scout evidence in:
@@ -122,15 +148,19 @@ This task does not own:
   - fixture naming may be normalized away from `BlackfireCrusade_tool` where it improves clarity.
 
 - `docs/architecture/ai_development_workflow.md`
-  - define the new canonical main/worktrees layout;
+  - define the complete new canonical topology including main, sibling task-worktree root, external `VenvPools`, and worktree-local `.venv` junction ownership;
   - retain old nested layout only as historical migration context if needed;
   - document post-merge cleanup-before-move ordering.
 
 - `.agents/skills/branch_start_workflow/SKILL.md`
-  - use the new canonical paths.
+  - use the new canonical paths;
+  - show `Blackfire-CV-Autopilot`, `Blackfire-CV-Autopilot-worktrees`, and `VenvPools` as siblings under `E:\Side_Project`;
+  - preserve per-worktree `.venv` consumer semantics.
 
 - `.agents/skills/branch_completion_workflow/SKILL.md`
   - use the new canonical paths;
+  - show `Blackfire-CV-Autopilot`, `Blackfire-CV-Autopilot-worktrees`, and `VenvPools` as siblings under `E:\Side_Project`;
+  - preserve per-worktree `.venv` consumer semantics;
   - keep permanent-main and cleanup safety semantics unchanged.
 
 - `scripts/README.md`
@@ -263,6 +293,9 @@ After physical relocation, verify:
 12. No linked-worktree metadata repair mechanism is introduced.
 13. No ignored personal data, secret, runtime state, local tools, `.venv`, or `node_modules` is committed.
 14. No Python environment dependency mutation occurs.
+15. Canonical architecture/start/completion documentation shows `VenvPools` as an external sibling of the main repo and task-worktree root, not nested inside either.
+16. Canonical documentation shows main/task `.venv` entries as worktree-local junction consumers of the single physical environment at `E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot`.
+17. Node `node_modules` remains per-worktree untracked state and is not redefined as shared workspace infrastructure; no npm/package/bootstrap behavior changes are introduced.
 
 ## Focused Verification
 
@@ -285,7 +318,7 @@ Gate/reviewer evidence may be run afterward according to the normal lifecycle.
 - automatic migration of active worktrees;
 - generic worktree metadata repair;
 - shared-environment rebuild/mutation;
-- Node dependency changes;
+- Node dependency ownership/package/bootstrap changes; existing per-worktree `node_modules` policy remains unchanged;
 - personal `user_data` cloud/private-repo synchronization;
 - gameplay/runtime/CV behavior changes;
 - modifying pause/resume window-focus behavior.
