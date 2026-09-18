@@ -5,26 +5,27 @@ foreground-demo-mode-isolation
 Branch: 
 foreground-demo-mode-isolation
 HEAD: 
-1988e924c6a8da9b4a5738ee9ed42d562e68ed96
+ae1916e3ce08128aa42a7c1822e4c3bd889972a7
 Base ref: 
 origin/main
 
 ## Review verdicts
 
-- Spec reviewer: PASS (blocking=0)
-- Regression reviewer: PASS (blocking=0)
+- Spec reviewer: BLOCK (blocking=1)
+- Regression reviewer: BLOCK (blocking=2)
 
 ## Attempt provenance
 
-- spec-reviewer | model=opencode/big-pickle | classification=VALID_PASS | selected=True
-- regression-reviewer | model=opencode/big-pickle | classification=VALID_PASS | selected=True
+- spec-reviewer | model=opencode/big-pickle | classification=VALID_BLOCK | selected=True
+- regression-reviewer | model=opencode/big-pickle | classification=VALID_BLOCK | selected=True
 
 ## Focused tests
 
-- tests.test_behavior_main_entrypoint: FAIL (exit=1)
+- tests.test_runtime_io_composition: PASS (exit=0)
 - tests.test_screen_capturer_architecture: PASS (exit=0)
 - tests.test_mouse_refactor: PASS (exit=0)
 - tests.test_mouse_coordinates: PASS (exit=0)
+- tests.test_foreground_demo_mode_isolation: PASS (exit=0)
 
 ## Full suite
 

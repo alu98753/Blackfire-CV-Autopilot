@@ -1,36 +1,45 @@
 ﻿# Spec Review
 
-Gate-accepted verdict: PASS
-Blocking findings: 0
+Gate-accepted verdict: BLOCK
+Blocking findings: 1
 
 # Spec Review
 
+Maximum steps for this agent were reached; per the step-ceiling constraint, this text response is the terminal deliverable (the StructuredOutput call was unavailable after tool shutdown). The review below is complete and grounded in the snapshots plus repository reads already performed.
+
 ## Clause coverage
 
-Review of Final SPEC `foreground-demo-mode-isolation` against `.runtime/ai_gate/foreground-demo-mode-isolation/diff.patch` and the current working tree (grounded by reading `runtime/io_adapters.py`, `runtime/bootstrap.py`, `main.py`, `utils/steam_launcher.py`, `states/exceptions/subflows/game_relaunch.py`, `capture/screen.py`, `actions/mouse.py`, `cli/arguments.py`, and affected tests; grepping every `backend_mode`, `ScreenCapturer(`, `MouseController(`, `SteamGameLauncher(` usage).
+Reviewed against: `docs/tasks/foreground-demo-mode-isolation/SPEC.md` (Final), `task.json` scope/contracts, `.runtime/ai_gate/foreground-demo-mode-isolation/diff.patch`, and current worktree files. Git grounding: HEAD `ae1916e`, merge-base with `origin/main` = `145522e4` (the task base_sha), current `origin/main` = `2c433caa`.
 
-- Architecture contract / AC1-2 / AC5: new `runtime/io_adapters.py` selects one fixed I/O family (`compose_io`/`compose_capture`) from the single CLI resolution point `cli/arguments.py:76` (`args.backend_mode = not args.foreground`). `main.py` and `bootstrap.py` both derive `foreground=not backend_mode` from the same policy; two capturer instances of the same family (launcher + state machine) are permitted by SPEC line 168 ("exactly one mode-selection policy"). Default flow composes backend family; `--foreground` composes foreground family. AC16 preserved: `--foreground`/`--backend` flags intact and `test_behavior_main_entrypoint.py:204-206` still proves default/foreground/legacy resolution.
-- AC3-4 / AC6 / critical invariant: `BackendScreenCapturer.capture` returns `None` on full-screen, invalid HWND, backend failure, and black image with no MSS/PIL path; `BackendMouseController` click/scroll/drag/move_to_safe_area are message-for-message and sleep-for-sleep identical to the base backend branches (`actions/mouse.py`), never touching pyautogui, and now fail closed on missing HWND instead of the old base-class fallthrough to pyautogui (deliberate tightening consistent with the critical invariant).
-- AC7 / foreground semantics: `ForegroundScreenCapturer` preserves MSS -> PIL fallback, bbox semantics, `last_monitor`; `ForegroundMouseController` preserves pyautogui coordinate conversion, human-like tween/duration, failsafe re-raise, cooldowns, and `_finalize_action` flags.
-- AC10-11 / launcher + relaunch: `SteamGameLauncher` owns no mouse and no `backend_mode`; it raises `ValueError` without an injected composed capturer. Only production construction sites are `main.py:80` and `game_relaunch.py:48`, both injecting the composed/selected capturer; relaunch reuses `machine.capturer` with no `backend_mode` reconstruction.
-- AC12 / state machine: `states/state_machine.py` keeps `backend_mode` only at serialization guards (1708, 1715) and quest-config metadata propagation (1812-1813); no new I/O-selection branches. `cli/mode_setup.py` writes metadata only. Base classes retain constructor-resolved mode for dev scripts (`scripts/test_single_click.py`) and tests, consistent with the SPEC's "resolved once during construction" allowance ??no production post-construction mutation path remains.
-- AC13-15 / tests: `test_mouse_coordinates.py` and `test_screen_capturer_architecture.py` migrated from `.backend_mode =` mutation to explicit `Backend/ForegroundScreenCapturer`/`MouseController` construction; `test_behavior_supervisor_lifecycle.py:105` and `test_game_process_lifecycle.py:35` updated for the new launcher signature (earlier Block findings B1/BFC-F1/BFC-F2 are resolved in the current tree). New non-skipped `tests/test_foreground_demo_mode_isolation.py` deterministically proves both families, launcher injection/no-mode-owner, backend-no-pyautogui, MSS->PIL, drag timing/release order, and relaunch capture reuse (AC14/15).
-- AC17 / scope: diff touches only in-scope production files plus `tests/`; no gameplay/CV/scheduler changes found.
+- **AC1/AC2, composition contract (select once):** `runtime/io_adapters.py` `compose_io`/`compose_capture` are the single family-selection points. `main.py:76-81` launches via `compose_capture`; `runtime/bootstrap.py:153-157` builds the runtime pair via `compose_io`. Fork is resolved exactly once per site from `args.backend_mode`.
+- **AC3/AC4, critical invariant (fail-closed, no foreground fallback in backend path):** `BackendScreenCapturer.capture` (io_adapters.py:21-29) returns `None` for full-screen/invalid-HWND/backend failure with no MSS/PIL reachability; `BackendMouseController.click/scroll/drag/move_to_safe_area` (io_adapters.py:69-131) are pure Win32 with `pyautogui` unreachable. `test_foreground_demo_mode_isolation.py` asserts `grab/pil/rect` and pyautogui not called.
+- **AC5 (foreground free of backend-selection branches):** `ForegroundScreenCapturer`/`ForegroundMouseController` override all four mode-sensitive methods; `ForegroundScreenCapturer.capture` retains MSS?IL fallback (AC7).
+- **AC10 (launcher):** `utils/steam_launcher.py:28-48` ??`mouse`/`backend_mode` removed; missing `capturer` raises `ValueError`, no fallback construction; body uses only injected `capturer` (`get_hwnd`/`get_window_rect`/`ensure_window_on_monitor`). All production call sites (main.py:80, game_relaunch.py:48) and the two lifecycle tests now pass `capturer=`.
+- **AC11 (relaunch):** `game_relaunch.py:48-52` passes `capturer=getattr(machine, 'capturer', None)`; `backend_mode`/`mouse` removed; test `test_relaunch_reuses_machine_capture` covers it.
+- **AC12:** No new gameplay `backend_mode` I/O-selection branches; remaining `backend_mode` reads are metadata/CLI (`cli/arguments.py:76`, `bootstrap.py:191`, `state_machine.py:1812-1813` quest metadata, `quest_mapper.py:119` config inheritance).
+- **AC13-15:** Focused modules `test_runtime_io_composition`, `test_foreground_demo_mode_isolation` are new, non-skipped, deterministic and cover both families plus launcher/relaunch composition; `test_screen_capturer_architecture`/`test_mouse_coordinates` migrated to adapters without `.backend_mode` mutation.
+- **AC16:** Default/`--foreground`/`--backend` CLI resolution still asserted in `test_runtime_io_composition.test_cli_modes` and entrypoint tests.
 
 ## Blocking findings
 
-None.
+### BD-1
+Severity: BLOCKING
+Contract / invariant: Acceptance criterion 17 ("No unrelated gameplay/CV/scheduling/environment behavior changes") and task.json scope boundaries (baseline `origin/main`)
+Location: `config/defaults.toml` (deleted `[primary_modes.abyssbeast_lair]`, `[primary_modes.coldoath_citadel]`); `docs/tasks/generic-domain-catalog-expansion/*` (SPEC/task.json/reviews deleted); `tests/test_domain_common_behavior.py`; `tests/test_behavior_main_entrypoint.py`
+Claim: The candidate diff, taken against the comparison baseline `origin/main`, removes the two merged canonical domains and the merged generic-domain task artifacts, reverting domain tests to `abyss_nest`/`frost_citadel` placeholders and re-adding redundant Golden Empire keys. These are out-of-scope, unrelated changes that would regress the merged product.
+Evidence: diff.patch lines 1-40 (TOML hunks), 435-883 (deletions of `generic-domain-catalog-expansion` files), 1292-1516 (test reverts). Git grounding: HEAD `ae1916e` has merge-base `145522e4` with `origin/main` `2c433caa`; the merged domain-catalog work exists on main but not on this branch, so the branch predates that merge and the snapshot diffs it against the newer main. `git log` shows two prior gate events (`33d18c4`, `f61aae2` "CANDIDATE_BLOCKED"); `status.txt` is empty. The in-scope I/O-isolation implementation is sound (adapter split, single composition seam, launcher/relaunch ownership stripped, fail-closed preserved), but the branch as presented cannot be integrated into `origin/main` without reverting the canonical Domain catalog ??a direct AC17 violation independent of this task's contract.
+Suggested validation: Rebase/merge `origin/main` into the branch, then regenerate the gate diff; confirm only the task-scope files change. Run `tests.test_foreground_demo_mode_isolation`, `tests.test_runtime_io_composition`, and the focused list against the integrated tree.
+Confidence: 0.92
 
 ## Advisory findings
 
-- `tests/test_behavior_pause_resume.py:473,485` still mutate `capturer.backend_mode = True` on a base `ScreenCapturer`. This is outside the SPEC's required focused-isolation list (AC13 applies to the focused modules, which are clean), the mutations are behaviorally inert against the new adapters, and the pause/resume wiring itself is unchanged. Recommend migrating when the module is next touched; otherwise low risk.
-- `tests/test_mouse_refactor.py` (focused module) is unchanged and exercises the legacy base `MouseController(backend_mode=...)` constructor path rather than the adapters; accepted as testing the shared implementation, but adapter-level coverage for safe-area semantics lives only in the new isolation module.
-- `BackendScreenCapturer.capture` drops the base's three "refusing foreground fallback" error log lines; the None result contract is preserved but the SPEC's "backend capture failure logging" ownership is thinner.
-- The fail-closed no-HWND backend-input behavior (old base fell through to pyautogui) is intentional per the critical invariant but is not directly pinned by a test ??the new adapter tests always inject a valid HWND.
-- `compose_io` forwards `resume_event` only to the mouse; `bootstrap.py` compensates by setting `capturer._resume_event` afterward ??a future-caller misuse seam worth documenting.
+1. `capture/screen.py:292-319` and `actions/mouse.py:139/220/275/355` retain the mixed-mode base `backend_mode` branches, and base classes remain publicly mutable. SPEC permits a thin facade that does not retain mutable runtime switching; production never constructs these raw, and the adapters override all mode-sensitive methods, so this is a compliance nuance rather than an execution-path violation. Also `scripts/test_single_click.py:38` still constructs raw `MouseController(backend_mode=...)` (dev script, out of scope).
+2. `test_mouse_refactor.py:63/76/86` still builds raw `MouseController(backend_mode=True/False)` via constructor arg (mode resolved once, not mutated) ??arguably consistent with AC13's "explicit construction" intent, but it was not migrated to adapters; consider aligning it with the other focused modules.
+3. `test_behavior_pause_resume.py:473/485` still mutate `capturer.backend_mode` post-construction; with the adapters the mutation is inert (override ignores it). If pause/resume wiring is touched, per SPEC that file's deterministic targets should be run/migrated.
+4. The entrypoint runtime-loop test in this branch drops the `has_pending_timeout_recovery` mock from the merged main version; this belongs to the same stale-base artifact as BD-1, but is secondary to the catalog regression.
 
 ## Test evidence gaps
 
-No suite execution was performed (read-only review). Focused modules were verified by inspection and are consistent with the new composition paths. Remaining evidence gap: an actual run of the four focused modules plus `tests.test_foreground_demo_mode_isolation` to confirm no behavioral drift, and a decision on the pause_resume mutation cleanup.
+Static grounding covers the adapter split, composition wiring, launcher/relaunch ownership, and fail-closed behavior; execution of the five focused modules through the shared `.venv` remains the outstanding dynamic evidence (this review is read-only). No dynamic run was performed for any module, and the block does not depend on test execution ??it is grounded entirely in the diff-vs-baseline content.
 
-<!-- blackfire-gate-fingerprint: {"schema":1,"role":"spec-reviewer","hash":"8227eb18b54c3eda4fec4e8594130c1d595275f42ff29393b84da1fe9ac07e4b"} -->
+<!-- blackfire-gate-fingerprint: {"schema":1,"role":"spec-reviewer","hash":"272829e22f397403f8bd790ded389f40b34929a59d1db7f15791ac9f1f08b820"} -->
