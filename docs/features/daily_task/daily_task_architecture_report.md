@@ -80,8 +80,8 @@ flowchart TD
 
 - **Dev 獨立測試旗標 (`--subflow <name>`)**：
   **僅供開發者在單體測試或除錯時使用**。單獨測試指定子流程，測試完畢自動結束程式：
-  - `python main.py --backend --subflow chest` (獨立測試寶箱)
-  - `python main.py --backend --subflow lord_boss` (獨立測試打 Boss)
+  - `python main.py --subflow chest` (獨立測試寶箱)
+  - `python main.py --subflow lord_boss` (獨立測試打 Boss)
 
 ---
 

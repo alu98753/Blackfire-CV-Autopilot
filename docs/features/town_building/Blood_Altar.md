@@ -15,7 +15,7 @@
 ### 1. 獨立單次獻祭模式 (CLI 獨立版)
 使用者可隨時單獨啟動血之祭壇獻祭指令：
 ```powershell
-.venv\Scripts\python main.py --backend --mode blood_altar
+.venv\Scripts\python main.py --mode blood_altar
 ```
 - **互動式設定選單**：啟動後會提示選單供玩家彈性設定：
   - **獻祭血水品質**：可選擇灰/綠/藍獻祭 (紫色保留不賣/不獻祭) 或全部獻祭。

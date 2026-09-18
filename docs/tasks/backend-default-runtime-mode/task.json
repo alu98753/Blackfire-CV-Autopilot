@@ -1,0 +1,60 @@
+{
+  "id": "backend-default-runtime-mode",
+  "base_ref": "origin/main",
+  "base_sha": "55ed5f4196be7596070884fb155588c1edb95053",
+  "scope": [
+    "cli/arguments.py",
+    "cli/mode_setup.py",
+    "main.py",
+    "runtime/bootstrap.py",
+    "runtime/supervisor.py",
+    "actions/mouse.py",
+    "capture/screen.py",
+    "utils/steam_launcher.py",
+    "states/state_machine.py",
+    "states/exceptions/subflows/game_relaunch.py",
+    "tests/test_behavior_main_entrypoint.py",
+    "tests/test_screen_capturer_architecture.py",
+    "tests/test_mouse_coordinates.py",
+    "tests/test_mouse_refactor.py",
+    "tests/test_behavior_supervisor_lifecycle.py",
+    "tests/test_game_process_lifecycle.py",
+    "tests/test_long_run_resilience.py",
+    "README.md",
+    "docs/features/",
+    "docs/guides/sandboxie_dual_instance_guide.md",
+    "docs/architecture/runtime_config_hot_reload_architecture.md",
+    "docs/tasks/backend-default-runtime-mode/"
+  ],
+  "focused_tests": [
+    "tests.test_behavior_main_entrypoint",
+    "tests.test_screen_capturer_architecture",
+    "tests.test_mouse_coordinates",
+    "tests.test_mouse_refactor",
+    "tests.test_behavior_supervisor_lifecycle",
+    "tests.test_game_process_lifecycle"
+  ],
+  "models": {
+    "scout": null,
+    "review": null
+  },
+  "notes": {
+    "status": "Final",
+    "phase": "phase-1",
+    "implementation_blocked_until_final": false,
+    "workflow": "User explicitly requested ChatGPT + Gemini for Scout; scripts/ai_scout.ps1 was intentionally skipped. Gemini/Antigravity is the production implementation writer after Final SPEC.",
+    "goal": "Make backend Win32 I/O the default production runtime mode; foreground becomes explicit --foreground opt-in.",
+    "cli_contract": "No flag means backend; --foreground selects foreground; legacy --backend remains temporarily accepted/deprecated for compatibility.",
+    "capture_fail_safe": "Backend capture failure must not fall through to MSS/PIL foreground capture.",
+    "restart_contract": "Preserve --foreground if present; never synthesize --backend; mode-free restart reparses as backend.",
+    "non_goals": [
+      "foreground implementation deletion or architectural isolation",
+      "video recording",
+      "gameplay or CV behavior changes",
+      "broad dev utility migration",
+      "shared environment mutation",
+      "foreground-demo-mode-isolation phase-2"
+    ],
+    "scout_evidence": "Temporary Gemini read-only Scout report supplied by user; ChatGPT retained SPEC ownership."
+  }
+}

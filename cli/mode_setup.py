@@ -14,7 +14,7 @@ def setup_mode_config(args):
     if args.subflow:
         target_key = args.subflow[0]
         config = GAME_CONFIGS[target_key].copy()
-        config["backend_mode"] = args.backend
+        config["backend_mode"] = getattr(args, "backend_mode", True)
         print(f"🛠️ [Dev 測試模式] 直接發起城鎮子流程: {args.subflow} (免選關卡，直通城鎮)")
         return config
 
@@ -22,7 +22,7 @@ def setup_mode_config(args):
     config = GAME_CONFIGS[target_key].copy()
     # `daily` uses type="mix" at runtime, so retain its TOML table identity.
     config["_config_mode_key"] = target_key
-    config["backend_mode"] = args.backend
+    config["backend_mode"] = getattr(args, "backend_mode", True)
 
     # 覆蓋 CLI 明確傳入之活動開關
     if args.enable_lord_boss is not None:

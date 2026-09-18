@@ -16,7 +16,8 @@ def parse_arguments():
                         help=f"主掛機模式 (預設: mix)：支援 {mode_desc}")
     parser.add_argument("--subflow", nargs="+", choices=list(SUBFLOW_CONFIGS.keys()), default=None,
                         help="【Dev 單體測試專用】直接單獨或組合執行城鎮子流程 (如 --subflow blood_altar 或 --subflow jewelry_workshop)")
-    parser.add_argument("--backend", action="store_true", help="啟用後台掛機模式 (不搶滑鼠，支援雙螢幕)")
+    parser.add_argument("--foreground", action="store_true", help="Use visible foreground capture and physical mouse input (demo mode).")
+    parser.add_argument("--backend", action="store_true", help="Deprecated compatibility flag; backend mode is now the default.")
     parser.add_argument("--monitor", "--screen", type=int, default=None,
                         help="指定全螢幕擷取/開遊戲的顯示器編號 (預設: 依據 Profile TOML [global.monitor_index] 設定)")
     parser.add_argument("--blessmode", type=str, default=None, choices=["combat", "life", "exp"],
@@ -71,4 +72,6 @@ def parse_arguments():
         help="執行隔離歷史的端到端 07:00 期望狀態對帳測試 (需搭配 --live)",
     )
     parser.add_argument("--incident-session-id", type=str, default=None, help=argparse.SUPPRESS)
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.backend_mode = not args.foreground
+    return args

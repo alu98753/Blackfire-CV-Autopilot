@@ -76,7 +76,7 @@
 ### 1. 正式生產主模式 (`--mode daily`) 🚀
 **日常長途掛機運作唯一主入口**。啟動後由 Daily Master Pipeline 全自動運作：
 ```bash
-python main.py --backend --mode daily
+python main.py --mode daily
 ```
 
 啟動時會先顯示 Tier 4 模式選單，再進入 `stage` 或 `domain` 子選單。對應的玩家設定範例如下：
@@ -98,22 +98,22 @@ tier4_sub_stage = "first"
 
 ```bash
 # 獨立測試：開寶箱
-python main.py --backend --subflow chest
+python main.py --subflow chest
 
 # 獨立測試：抽英雄
-python main.py --backend --subflow hero_draw
+python main.py --subflow hero_draw
 
 # 獨立測試：領血
-python main.py --backend --subflow blood_altar
+python main.py --subflow blood_altar
 
 # 獨立測試：領懸賞任務
-python main.py --backend --subflow bulletin_board
+python main.py --subflow bulletin_board
 
 # 獨立測試：打 Boss (預設輪巡所有可用 Boss)
-python main.py --backend --subflow lord_boss
+python main.py --subflow lord_boss
 
 # 組合測試：獨立測試開寶箱 + 領血 + 珠寶賣裝
-python main.py --backend --subflow chest blood_altar jewelry_workshop
+python main.py --subflow chest blood_altar jewelry_workshop
 ```
 
 ---
