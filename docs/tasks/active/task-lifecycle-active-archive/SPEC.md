@@ -107,7 +107,7 @@ Documentation/contracts:
 
 ## Non-goals
 
-- Redesign Scout/Gate model routing or reviewer execution.
+- Redesign Scout/Gate routing beyond the approved reviewer-model contract below.
 - Replace task_start.ps1 worktree orchestration.
 - Change shared Python environment ownership.
 - Delete completed task history.
@@ -115,6 +115,16 @@ Documentation/contracts:
 - Reorganize docs/todos/.
 - Guess legacy completion.
 - Archive before final review/integration.
+
+### Approved reviewer-model contract
+
+- `models.review` is exactly one explicit `provider/model` string.
+- Missing, null, empty, or array reviewer models are invalid and fail fast.
+- A locally configured reviewer default is never used for a formal task.
+- Automatic reviewer-model fallback is not permitted.
+- Infrastructure failure returns `VERIFICATION_UNAVAILABLE` with exit code 1.
+- A valid semantic `PASS` or `BLOCK` is terminal.
+- CLI/internal explicit model overrides remain test/control seams only; they do not provide production fallback routing.
 
 ## Required deterministic tests
 

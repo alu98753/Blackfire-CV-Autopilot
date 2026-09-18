@@ -28,6 +28,10 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertIn("candidate arrays are not allowed", text)
         self.assertNotIn("locally configured OpenCode default", text)
 
+    def test_gate_default_focused_test_timeout_is_bounded_at_240_seconds(self):
+        text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("[int]$ReviewTimeoutSeconds = 540, [int]$TestTimeoutSeconds = 240", text)
+
     def test_adapter_validates_exact_machine_contract(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"
         script = (
@@ -603,11 +607,11 @@ class WorkflowScriptContractTests(unittest.TestCase):
         completion = (self.root / ".agents" / "skills" / "branch_completion_workflow" / "SKILL.md").read_text(encoding="utf-8")
         architecture = (self.root / "docs" / "architecture" / "ai_development_workflow.md").read_text(encoding="utf-8")
         self.assertIn("-Detach", completion)
-        self.assertIn("git worktree remove <path>", completion)
+        self.assertIn("runs normal `git worktree remove`", completion)
         self.assertIn("git worktree prune --verbose", completion)
         self.assertIn("live/dirty", completion.lower())
         self.assertIn("unrelated worktrees", completion)
-        self.assertLess(completion.index("-Detach"), completion.index("git worktree remove <path>"))
+        self.assertLess(completion.index("-Detach"), completion.index("runs normal `git worktree remove`"))
         self.assertNotIn("worktree remove --force", helper.lower())
         self.assertNotIn("worktree prune", helper.lower())
         self.assertIn("worktree_cleanup_safety.ps1", architecture)

@@ -13,6 +13,7 @@ if($resolved.Classification -ne 'ACTIVE'){ Fail "TASK_$($resolved.Classification
 $mainStatus=@(git status --porcelain)
 if($mainStatus.Count){ Fail 'ARCHIVE_REQUIRES_CLEAN_MAIN' }
 git fetch origin main --quiet
+if($LASTEXITCODE -ne 0){ Fail 'ARCHIVE_ORIGIN_FETCH_FAILED' }
 $mainHead=(git rev-parse HEAD).Trim(); $originMain=(git rev-parse origin/main).Trim()
 if($mainHead -ne $originMain){ Fail 'ARCHIVE_REQUIRES_CANONICAL_MAIN_AT_ORIGIN_MAIN' }
 

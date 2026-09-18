@@ -74,7 +74,7 @@ export const OUTCOME_SCHEMA = {
 
 const QUALIFICATION_PROMPT = [
   "Conduct a bounded, read-only review using your production reviewer contract.",
-  "Read docs/tasks/active/opencode-structured-review-provider-compatibility/task.json, docs/tasks/active/opencode-structured-review-provider-compatibility/SPEC.md, and docs/tasks/active/opencode-structured-review-provider-compatibility/CONTEXT.md before finalizing.",
+  "Read docs/tasks/archive/2026/opencode-structured-review-provider-compatibility/task.json, docs/tasks/archive/2026/opencode-structured-review-provider-compatibility/SPEC.md, and docs/tasks/archive/2026/opencode-structured-review-provider-compatibility/CONTEXT.md before finalizing.",
   "Use at least one permitted repository read/search tool (read, glob, or grep) and wait for its successful result.",
   "Stop tool use once sufficient evidence is available; reserve a final assistant turn rather than consuming the maximum step budget.",
   "Do not edit files, execute shell commands, launch subagents, or use external tools.",
@@ -82,7 +82,7 @@ const QUALIFICATION_PROMPT = [
 
 const SMOKE_PROMPT = [
   "Conduct a bounded, read-only compatibility smoke review using your production reviewer contract.",
-  "Read docs/tasks/active/opencode-structured-review-provider-compatibility/task.json before finalizing.",
+  "Read docs/tasks/archive/2026/opencode-structured-review-provider-compatibility/task.json before finalizing.",
   "Use at least one permitted repository read/search tool (read, glob, or grep) and wait for its successful result.",
   "Stop tool use once sufficient evidence is available; reserve a final assistant turn rather than consuming the maximum step budget.",
   "Do not edit files, execute shell commands, launch subagents, or use external tools.",
