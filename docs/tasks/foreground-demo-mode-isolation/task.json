@@ -27,8 +27,13 @@
     "tests.test_game_process_lifecycle"
   ],
   "models": {
-    "scout": null,
-    "review": null
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
   },
   "notes": {
     "status": "Draft",
