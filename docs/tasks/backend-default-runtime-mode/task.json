@@ -1,30 +1,40 @@
 {
-  "task_id": "backend-default-runtime-mode",
-  "status": "draft",
-  "phase": "phase-1",
-  "goal": "Make backend Win32 I/O the default production runtime mode and require explicit opt-in for foreground demo mode.",
-  "base_ref": "main",
-  "base_sha": "1052d9eec964523887d6540ffd45c0585fb84968",
+  "id": "backend-default-runtime-mode",
+  "base_ref": "origin/main",
+  "base_sha": "55ed5f4196be7596070884fb155588c1edb95053",
   "scope": [
-    "CLI runtime I/O mode default and explicit demo opt-in",
-    "runtime mode propagation through startup/bootstrap/launcher/mouse/capture boundaries",
-    "deterministic tests for default, demo opt-in, and propagation",
-    "directly affected documentation"
-  ],
-  "non_goals": [
-    "foreground implementation deletion",
-    "video recording",
-    "gameplay or CV behavior changes",
-    "shared environment mutation",
-    "foreground-demo-mode-isolation phase-2"
+    "cli/arguments.py",
+    "main.py",
+    "actions/mouse.py",
+    "capture/screen.py",
+    "runtime/",
+    "utils/steam_launcher.py",
+    "tests/",
+    "docs/tasks/backend-default-runtime-mode/"
   ],
   "focused_tests": [],
-  "gate_required": false,
-  "scout_mode": "gemini_read_only_temporary_fallback",
-  "notes": [
-    "User explicitly authorized Gemini/Antigravity read-only survey instead of scripts/ai_scout.ps1 for this task.",
-    "Focused test commands remain intentionally empty until Scout identifies existing test surfaces.",
-    "Final SPEC must decide public flag naming and legacy --backend compatibility semantics.",
-    "Gemini must not modify production code or promote Draft SPEC to Final."
-  ]
+  "models": {
+    "scout": null,
+    "review": null
+  },
+  "notes": {
+    "status": "Draft",
+    "phase": "phase-1",
+    "workflow": "User explicitly requested ChatGPT + Gemini only for Scout; scripts/ai_scout.ps1 is intentionally skipped unless later requested.",
+    "goal": "Make backend Win32 I/O the default production runtime mode and require explicit opt-in for foreground demo mode.",
+    "non_goals": [
+      "foreground implementation deletion",
+      "video recording",
+      "gameplay or CV behavior changes",
+      "shared environment mutation",
+      "foreground-demo-mode-isolation phase-2"
+    ],
+    "implementation_blocked_until_final": true,
+    "scout_policy": "Gemini/Antigravity is temporary read-only evidence provider only; ChatGPT + user remain spec owners.",
+    "finalization_open_questions": [
+      "public foreground flag naming",
+      "legacy --backend compatibility behavior",
+      "focused deterministic test commands"
+    ]
+  }
 }
