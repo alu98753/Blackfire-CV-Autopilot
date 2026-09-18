@@ -5,8 +5,6 @@ import os
 import sys
 import time
 
-from actions.mouse import MouseController
-from capture.screen import ScreenCapturer
 from config import (
     GAME_CONFIGS,
     TIER4_MODE_DOMAIN,
@@ -153,10 +151,11 @@ def init_state_machine_system(args, config, target_hwnd=None):
 
     # 初始化模組
     backend_mode = getattr(args, "backend_mode", True)
-    capturer = ScreenCapturer(window_title=args.title, backend_mode=backend_mode, hwnd=target_hwnd, monitor_index=active_monitor)
+    from runtime.io_adapters import compose_io
+    capturer, mouse = compose_io(foreground=not backend_mode, window_title=args.title,
+                                 hwnd=target_hwnd, monitor_index=active_monitor,
+                                 human_like=True)
     matcher = TemplateMatcher(templates_dir="templates", template_scale=1.0, auto_scale=True)
-    mouse = MouseController(human_like=True, backend_mode=backend_mode, window_title=args.title,
-                            capturer=capturer, hwnd=target_hwnd)
 
     profile_name = resolve_profile_name(args, getattr(args, "title", ""))
     daily_manager = DailyManager(profile=profile_name)

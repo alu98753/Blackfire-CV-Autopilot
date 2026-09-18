@@ -8,8 +8,10 @@ import numpy as np
 # 加入專案路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from capture.screen import ScreenCapturer
-from actions.mouse import MouseController
+from runtime.io_adapters import (
+    BackendScreenCapturer, ForegroundScreenCapturer,
+    BackendMouseController, ForegroundMouseController,
+)
 from utils.debug_artifacts import write_debug_image
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
@@ -34,8 +36,12 @@ def main():
         time.sleep(1)
     print("[*] 開始執行偵測！\n", flush=True)
 
-    capturer = ScreenCapturer(window_title="Blackfire Crusade")
-    mouse = MouseController(window_title="Blackfire Crusade", backend_mode=backend_mode)
+    if backend_mode:
+        capturer = BackendScreenCapturer(window_title="Blackfire Crusade")
+        mouse = BackendMouseController(window_title="Blackfire Crusade")
+    else:
+        capturer = ForegroundScreenCapturer(window_title="Blackfire Crusade")
+        mouse = ForegroundMouseController(window_title="Blackfire Crusade")
 
     hwnd = capturer.get_hwnd()
     if not hwnd:

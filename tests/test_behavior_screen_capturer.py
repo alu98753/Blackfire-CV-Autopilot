@@ -13,12 +13,12 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from capture.screen import ScreenCapturer
+from runtime.io_adapters import BackendScreenCapturer
 import win32con
 
 
 def _make_capturer():
-    return ScreenCapturer(window_title="TestWindow", backend_mode=False, monitor_index=1)
+    return BackendScreenCapturer(window_title="TestWindow", monitor_index=1)
 
 
 def _patch_win32(mock_hwnd=12345, monitors=None, mon_info=None,
@@ -34,7 +34,7 @@ def _patch_win32(mock_hwnd=12345, monitors=None, mon_info=None,
         win_rect_side_effect = [(0, 0, 1920, 1080)]
 
     return {
-        "get_hwnd": patch("capture.screen.ScreenCapturer.get_hwnd", return_value=mock_hwnd),
+        "get_hwnd": patch("runtime.io_adapters.BackendScreenCapturer.get_hwnd", return_value=mock_hwnd),
         "enum_monitors": patch("win32api.EnumDisplayMonitors", return_value=monitors),
         "get_mon_info": patch("win32api.GetMonitorInfo", return_value=mon_info),
         "get_win_rect": patch("win32gui.GetWindowRect", side_effect=win_rect_side_effect),

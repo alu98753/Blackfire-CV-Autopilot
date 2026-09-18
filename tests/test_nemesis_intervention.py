@@ -257,7 +257,8 @@ class InterventionTests(unittest.TestCase):
 
         resume_event = threading.Event()
         resume_event.clear()
-        gated_mouse = MouseController(human_like=False, resume_event=resume_event)
+        from runtime.io_adapters import ForegroundMouseController
+        gated_mouse = ForegroundMouseController(human_like=False, resume_event=resume_event)
         machine = MagicMock()
         machine.is_paused = False
         machine.notification_port = self.notifier

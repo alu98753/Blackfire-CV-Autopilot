@@ -14,7 +14,7 @@ from utils.window import WindowHandle
 
 
 class ScreenCapturer:
-    def __init__(self, window_title=WINDOW_TITLE, backend_mode=False, monitor_index=1, resume_event=None, hwnd=None):
+    def __init__(self, window_title=WINDOW_TITLE, monitor_index=1, resume_event=None, hwnd=None):
         """
         :param window_title:  遊戲視窗標題，預設讀取 config.WINDOW_TITLE。
         :param backend_mode:  True 時使用後台截圖 (PrintWindow/BitBlt)，False 時使用前台 mss 截圖。
@@ -25,7 +25,6 @@ class ScreenCapturer:
         """
         # 已關閉 DPI Awareness 宣告以符合專案與使用者需求
         self.window_title = window_title
-        self.backend_mode = backend_mode
         self.monitor_index = monitor_index
         self._resume_event = resume_event
         self.sct = mss.MSS()
@@ -296,67 +295,4 @@ class ScreenCapturer:
         or invalid HWNDs, backend failures, and unsupported full-screen capture.
         Foreground mode uses MSS with PIL fallback.
         """
-        if getattr(self, "_resume_event", None) is not None:
-            self._resume_event.wait()
-
-        if full_screen:
-            rect = None
-
-        hwnd = self.get_hwnd()
-        
-        # 1. 後台模式優先嘗試 BitBlt/PrintWindow 後台截圖 (全螢幕模式除外)
-        if self.backend_mode:
-            if full_screen:
-                logging.error("[ScreenCapturer] Backend mode does not support full-screen capture; refusing foreground fallback.")
-                return None
-            if not isinstance(hwnd, int) or hwnd <= 0:
-                logging.error("[ScreenCapturer] Backend capture requires a valid HWND; refusing foreground fallback.")
-                return None
-            img = self._capture_backend(hwnd)
-            if img is not None:
-                return img
-            logging.error("[ScreenCapturer] Backend capture failed; refusing foreground fallback.")
-            return None
-                
-        # 2. 前台 / MSS 螢幕區域截圖 (第二防線)
-        if rect is None and not full_screen:
-            rect = self.get_window_rect()
-
-        if self.sct is None:
-            logging.error("[ScreenCapturer] Capture requested after MSS handle was closed.")
-            return None
-
-        try:
-            if rect is None or full_screen:
-                logging.info("將擷取主螢幕畫面作為備用方案...")
-                monitor = self.sct.monitors[1]
-            else:
-                monitor = {
-                    "left": rect["left"],
-                    "top": rect["top"],
-                    "width": rect["width"],
-                    "height": rect["height"]
-                }
-            
-            self.last_monitor = monitor
-            screenshot = self.sct.grab(monitor)
-            img = np.array(screenshot)
-            return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-        except Exception as e:
-            logging.warning(f"mss 截圖失敗 ({e})，嘗試使用 PIL ImageGrab 作為備用方案...")
-            try:
-                from PIL import ImageGrab
-                if rect is None:
-                    img_pil = ImageGrab.grab()
-                else:
-                    bbox = (
-                        rect["left"],
-                        rect["top"],
-                        rect["left"] + rect["width"],
-                        rect["top"] + rect["height"]
-                    )
-                    img_pil = ImageGrab.grab(bbox=bbox)
-                return cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-            except Exception as e2:
-                logging.error(f"備份方案 PIL ImageGrab 擷取亦失敗: {e2}")
-                return None
+        raise NotImplementedError("Select BackendScreenCapturer or ForegroundScreenCapturer")
