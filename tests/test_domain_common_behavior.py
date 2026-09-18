@@ -549,12 +549,18 @@ class TestDomainCommonBehavior(unittest.TestCase):
         self.assertEqual(ge_cfg["domain_entry_btn"], "domains/golden_empire/entry.png")
         self.assertEqual(ge_cfg["lobby_start_btn"], "domains/common/start_btn.png")
 
-        # 泛型預設欄位確認
+        # 結構欄位與 raw TOML 驗證 (4 個通用預設不重複宣告)
         self.assertEqual(ge_cfg["bread_cost"], 3)
-        self.assertEqual(ge_cfg["domain_reset_max_attempts"], 7)
-        self.assertEqual(ge_cfg["explore_priorities"], ["domains/common/explore_btn.png"])
-        self.assertEqual(ge_cfg["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
-        self.assertIs(ge_cfg["enable_lord_boss"], True)
+        for redundant_key in ("domain_reset_max_attempts", "explore_priorities", "result_buttons", "enable_lord_boss"):
+            self.assertNotIn(redundant_key, ge_cfg)
+
+        # 經 normalize_domain_execution_config 標準化後注入通用欄位
+        normalized_ge = normalize_domain_execution_config(ge_cfg)
+        self.assertEqual(normalized_ge["bread_cost"], 3)
+        self.assertEqual(normalized_ge["domain_reset_max_attempts"], 7)
+        self.assertEqual(normalized_ge["explore_priorities"], ["domains/common/explore_btn.png"])
+        self.assertEqual(normalized_ge["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
+        self.assertIs(normalized_ge["enable_lord_boss"], True)
 
     def test_direct_domain_independence_from_daily(self):
         """[Phase 1] 驗證 Golden Empire direct execution config 不依賴 daily 路由配置即可自給自足"""
@@ -1100,11 +1106,16 @@ class TestDomainCommonBehavior(unittest.TestCase):
         self.assertNotIn("domains/golden_empire/explore_btn.png", _ELEMENT_TEMPLATE_MAP)
 
     def test_strict_ssot_invariant_config_defaults(self):
-        """[SSOT Invariant] config/defaults.toml 中的 explore_priorities 嚴格映射為 domains/common/explore_btn.png"""
+        """[SSOT Invariant] Raw config/defaults.toml 不重複宣告 explore_priorities，經 normalization 嚴格映射為 domains/common/explore_btn.png"""
         with open(DEFAULTS_PATH, "rb") as f:
             data = tomllib.load(f)
         ge_cfg = data.get("primary_modes", {}).get("golden_empire", {})
-        priorities = ge_cfg.get("explore_priorities", [])
+        # Raw TOML 中不得冗餘宣告
+        self.assertNotIn("explore_priorities", ge_cfg)
+
+        # 經標準化後必須嚴格解析為 domains/common/explore_btn.png，絕不含 golden_empire
+        normalized_ge = normalize_domain_execution_config(ge_cfg)
+        priorities = normalized_ge.get("explore_priorities", [])
         self.assertIn("domains/common/explore_btn.png", priorities)
         self.assertNotIn("domains/golden_empire/explore_btn.png", priorities)
         self.assertEqual(priorities, ["domains/common/explore_btn.png"])
@@ -1331,23 +1342,48 @@ class TestDomainCommonBehavior(unittest.TestCase):
 
 
     def test_canonical_defaults_contains_expanded_generic_domains(self):
-        """[Generic Domain Expansion] 驗證 defaults.toml 宣告的 abyssbeast_lair 與 coldoath_citadel 符合完整契約且不在 DOMAIN_STRATEGIES"""
+        """[Generic Domain Expansion & SSOT Invariant]
+        驗證 defaults.toml 中三大領地 (golden_empire, abyssbeast_lair, coldoath_citadel) 的 SSOT 契約：
+        1. Raw TOML 中均不含 4 個 common defaults (explore_priorities, result_buttons, domain_reset_max_attempts, enable_lord_boss)
+        2. golden_empire 保留 bread_cost = 3
+        3. 經由 normalize_domain_execution_config 後，三者均正確注入 4 個 common defaults 與 bread_cost
+        4. 通過 validate_domain_execution_config (8大必要結構欄位)
+        5. generic domains 未註冊於 DOMAIN_STRATEGIES，一律透過 GenericDomainStrategy 分派
+        """
         from states.domains import DOMAIN_STRATEGIES
 
         with open(DEFAULTS_PATH, "rb") as f:
             data = tomllib.load(f)
         primary_modes = data.get("primary_modes", {})
 
-        for domain_id, expected_name, expected_entry in [
-            ("abyssbeast_lair", "深淵獸巢", "domains/abyssbeast_lair/abyssbeast_lair.png"),
-            ("coldoath_citadel", "寒誓古堡", "domains/coldoath_citadel/coldoath_citadel.png"),
-        ]:
+        redundant_common_keys = (
+            "explore_priorities",
+            "result_buttons",
+            "domain_reset_max_attempts",
+            "enable_lord_boss",
+        )
+
+        all_domains = [
+            ("golden_empire", "黃金古國", "domains/golden_empire/entry.png", True),
+            ("abyssbeast_lair", "深淵獸巢", "domains/abyssbeast_lair/abyssbeast_lair.png", False),
+            ("coldoath_citadel", "寒誓古堡", "domains/coldoath_citadel/coldoath_citadel.png", False),
+        ]
+
+        for domain_id, expected_name, expected_entry, is_specialized in all_domains:
             with self.subTest(domain=domain_id):
                 # 1. 存在於 raw defaults TOML
                 self.assertIn(domain_id, primary_modes)
                 cfg = primary_modes[domain_id]
 
-                # 2. 通過完整驗證 (8大必要結構欄位)
+                # 2. Raw TOML SSOT: 不包含 4 個冗餘的 common default 鍵
+                for common_key in redundant_common_keys:
+                    self.assertNotIn(
+                        common_key,
+                        cfg,
+                        f"Raw TOML config for '{domain_id}' must not contain redundant common default '{common_key}'"
+                    )
+
+                # 3. 通過結構欄位驗證 (8大必要結構欄位)
                 validate_domain_execution_config(cfg)
                 self.assertEqual(cfg["name"], expected_name)
                 self.assertEqual(cfg["type"], "domain")
@@ -1363,7 +1399,7 @@ class TestDomainCommonBehavior(unittest.TestCase):
                     "domains/common/start_btn.png",
                 ])
 
-                # 3. 驗證標準化後能正常補全通用欄位
+                # 4. 驗證標準化後能正常補全通用欄位
                 normalized = normalize_domain_execution_config(cfg)
                 self.assertEqual(normalized["bread_cost"], 3)
                 self.assertEqual(normalized["domain_reset_max_attempts"], 7)
@@ -1371,11 +1407,16 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 self.assertEqual(normalized["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
                 self.assertTrue(normalized["enable_lord_boss"])
 
-                # 4. Critical Invariant: 絕對未註冊於 DOMAIN_STRATEGIES，一律透過 GenericDomainStrategy 分派
-                self.assertNotIn(domain_id, DOMAIN_STRATEGIES)
-                strategy = get_domain_strategy(domain_id, self.mock_handler)
-                self.assertIsInstance(strategy, GenericDomainStrategy)
-                self.assertEqual(strategy.domain_name, domain_id)
+                # 5. Strategy 分派與註冊核驗
+                if is_specialized:
+                    self.assertIn(domain_id, DOMAIN_STRATEGIES)
+                    strategy = get_domain_strategy(domain_id, self.mock_handler)
+                    self.assertIsInstance(strategy, GoldenEmpireStrategy)
+                else:
+                    self.assertNotIn(domain_id, DOMAIN_STRATEGIES)
+                    strategy = get_domain_strategy(domain_id, self.mock_handler)
+                    self.assertIsInstance(strategy, GenericDomainStrategy)
+                    self.assertEqual(strategy.domain_name, domain_id)
 
 if __name__ == "__main__":
     unittest.main()
