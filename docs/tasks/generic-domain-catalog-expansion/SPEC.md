@@ -1,6 +1,6 @@
 # Task Specification: Generic Domain Catalog Expansion
 
-Status: Draft
+Status: Final
 
 ## Goal
 
@@ -61,6 +61,53 @@ The second identity is:
 
 `coldoath_citadel`
 
+## Final Domain configuration contract
+
+Repository game metadata confirms the display identities:
+
+- `abyssbeast_lair` -> `深淵獸巢`
+- `coldoath_citadel` -> `寒誓古堡`
+
+The broader analysis document also uses `冷誓要塞 / 寒誓古堡` for `coldoath_citadel`; this task uses `寒誓古堡` because the dedicated domain guide uses that as its primary display name.
+
+Both are canonical Generic Domains. They MUST NOT be added to `DOMAIN_STRATEGIES`.
+
+### Structural config
+
+Each new Domain must explicitly declare:
+
+- `name`
+- `type = "domain"`
+- `domain`
+- non-empty `navigation_path`
+- `domain_tab_btn = "domains/Domains_entry.png"`
+- `domain_tab_after_btn = "domains/Domains_entry_after.png"`
+- its own `domain_entry_btn`
+- `lobby_start_btn = "domains/common/start_btn.png"`
+
+Expected navigation shape:
+
+`common/door.png -> domains/Domains_entry.png -> <domain entry template> -> domains/common/start_btn.png`
+
+This is a configuration contract for the existing generic Domain flow. This task does not add new navigation logic.
+
+### Entry templates
+
+- `abyssbeast_lair`: `domains/abyssbeast_lair/abyssbeast_lair.png`
+- `coldoath_citadel`: `domains/coldoath_citadel/coldoath_citadel.png`
+
+### Common defaults and ticket semantics
+
+Do not duplicate canonical common defaults into the new TOML sections unless an existing structural requirement needs them. Let `normalize_domain_execution_config()` provide:
+
+- `bread_cost = 3`
+- common explore priorities
+- common result buttons
+- `domain_reset_max_attempts = 7`
+- `enable_lord_boss = true`
+
+Repository game docs show these Domains use domain-specific entry tickets (`nest_fragment_map x1`, `frostbound_sigil x1`). That is separate game-domain metadata. This task MUST NOT reinterpret `bread_cost` as ticket cost or add ticket-consumption automation; no current runtime contract for that behavior was found.
+
 ## Provisional Domain configuration intent
 
 Each new Domain is expected to use:
@@ -113,7 +160,14 @@ Production runtime behavior should not be changed for this test.
 - Do not modify shared Python environment.
 - Do not add a new static Domain list in Python.
 
-## Provisional acceptance criteria
+## Final implementation constraints
+
+1. Expected production change surface is `config/defaults.toml` only for Domain registration. Python production modules should remain unchanged unless implementation evidence proves the finalized contract cannot be satisfied.
+2. `states/domains/__init__.py`, `GenericDomainStrategy`, CLI discovery code, and `utils/tier4_config.py` are verification surfaces, not expected implementation targets.
+3. Do not create static Domain options, special-case branch logic, or identity aliases.
+4. Test-only fixes for the two stale entrypoint regressions must not change production code.
+
+## Acceptance criteria
 
 1. Both new Domains are declared in canonical `config/defaults.toml` with complete structural Domain contracts.
 2. `abyssbeast_lair` uses `domains/abyssbeast_lair/abyssbeast_lair.png`.
@@ -126,10 +180,10 @@ Production runtime behavior should not be changed for this test.
 9. The two reported stale `test_behavior_main_entrypoint` failures are corrected by test maintenance only.
 10. Relevant focused tests pass.
 
-## Uncertainty / Scout questions
+## Resolved uncertainty / bounded residual risk
 
-1. Confirm exact display name for `abyssbeast_lair` from repository game docs / metadata.
-2. Confirm whether either new Domain has a non-bread entry cost that should affect the current `bread_cost` abstraction or whether common default `3` is merely legacy naming that is still operationally valid.
-3. Confirm the exact navigation path around Domain tab -> entry -> common start is visually identical for both new Domains.
-4. Confirm neither Domain currently needs specialized random-event or boss handling beyond common Domain behavior.
-5. Identify the minimal focused test set needed to prove dynamic catalog discovery plus the two stale test repairs.
+- Display names are resolved from repository game docs: `深淵獸巢` and `寒誓古堡`.
+- No evidence requires specialized Python behavior for either Domain; GenericDomainStrategy is the intended implementation.
+- Domain-specific tickets are documented game metadata but are outside this task's automation contract.
+- The shared navigation shape cannot be visually proven from static repository evidence alone. The task therefore validates declarative path wiring, template existence/preflight, CLI/Tier4 discovery, and Generic strategy dispatch. Real-game visual validation remains a post-implementation runtime check, not a reason to add speculative special cases.
+- Minimal focused tests are `tests.test_domain_common_behavior` and `tests.test_behavior_main_entrypoint`; add a nearby focused module only if implementation actually touches another runtime seam.
