@@ -1,0 +1,36 @@
+{
+  "id": "workspace-layout-root-migration",
+  "base_ref": "origin/main",
+  "base_sha": "c229590aa5ccbe1deea00bb158b69615953c1472",
+  "scope": [
+    "scripts/task_start.ps1",
+    "tests/test_task_start_behavioral.py",
+    "docs/architecture/ai_development_workflow.md",
+    ".agents/skills/branch_start_workflow/SKILL.md",
+    ".agents/skills/branch_completion_workflow/SKILL.md",
+    "scripts/README.md",
+    "docs/tasks/workspace-layout-root-migration/"
+  ],
+  "focused_tests": [
+    "tests.test_task_start_behavioral",
+    "tests.test_task_cleanup_behavioral",
+    "tests.test_worktree_environment_bootstrap"
+  ],
+  "models": {
+    "scout": [
+      "opencode-default"
+    ],
+    "review": [
+      "opencode-default"
+    ]
+  },
+  "notes": {
+    "status": "Draft",
+    "implementation_blocked_until_final": true,
+    "canonical_main_target": "E:\\Side_Project\\Blackfire-CV-Autopilot",
+    "canonical_worktrees_target": "E:\\Side_Project\\Blackfire-CV-Autopilot-worktrees\\<task-id>",
+    "canonical_environment": "E:\\Side_Project\\VenvPools\\.venvs-Blackfire-CV-Autopilot",
+    "migration_policy": "preserve the existing complete main checkout including ignored local state; do not replace it with a fresh clone",
+    "scout_policy": "Scout provides evidence only; ChatGPT + user own Final SPEC"
+  }
+}
