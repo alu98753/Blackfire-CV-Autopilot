@@ -28,7 +28,11 @@
     "tests.test_task_archive",
     "tests.test_task_start_behavioral",
     "tests.test_task_cleanup_behavioral",
-    "tests.test_workflow_scripts"
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_process_helpers",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_gate_readiness",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_scout",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_gate_verdict",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_gate_resume_cache"
   ],
   "models": {
     "scout": null,
