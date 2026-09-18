@@ -316,7 +316,7 @@ else:
 print(json.dumps(result, separators=(",", ":")))
 '@ | Set-Content $reviewer -Encoding UTF8
 @'
-param([string[]]$ChildArgs)
+param([Parameter(ValueFromRemainingArguments=$true)][string[]]$ChildArgs)
 if ($ChildArgs -contains 'bad') { 'malformed scout'; exit 0 }
 if ($ChildArgs -contains 'fail') { exit 9 }
 if ($ChildArgs -contains 'sleep') { Start-Sleep -Seconds 2 }
@@ -675,7 +675,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Scout success promotes structured output' {
-        $code = Invoke-Script $scout @('-Task',$fixtureId,'-_ExecutableOverride',$scoutCmd,'-_ModelCandidatesOverride','test/only')
+        $code = Invoke-Script $scout @('-Task',$fixtureId,'-Model','test/only','-_ExecutableOverride',$scoutCmd)
         Assert-True ($code -eq 0) "expected 0, got $code"
         Assert-True ((Get-Content (Join-Path $fixtureDir 'CONTEXT.md') -Raw) -match '# Scout Context') 'context was not promoted'
     }
