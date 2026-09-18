@@ -2,7 +2,7 @@
   "id": "domain-lobby-primary-start-boundary",
   "title": "Domain Lobby Primary Start Boundary",
   "status": "Draft",
-  "branch": "task/domain-lobby-primary-start-boundary",
+  "branch": "domain-lobby-primary-start-boundary",
   "base_branch": "main",
   "base_sha": "2c433caa154a458edfac9235f30eff085b86b6f6",
   "owner": "chatgpt",
