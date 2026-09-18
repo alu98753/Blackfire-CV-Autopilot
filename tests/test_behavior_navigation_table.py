@@ -1,6 +1,6 @@
 import unittest
 
-from states.navigation_intent import ActionId, IntentId, PostconditionId
+from states.navigation_intent import ActionId, IntentId, PostconditionId, ReasonCode
 from states.navigation_table import NavigationTable, V1_NAVIGATION_EDGES
 from utils.scene_snapshot import ElementId, ElementMatch, SceneId, SceneSnapshot
 
@@ -23,7 +23,7 @@ class TestBehaviorNavigationTable(unittest.TestCase):
             for edge in V1_NAVIGATION_EDGES
         }
 
-        self.assertEqual(len(V1_NAVIGATION_EDGES), 16)
+        self.assertEqual(len(V1_NAVIGATION_EDGES), 22)
         self.assertIn(
             (IntentId.COLLECT_BREAD, SceneId.TOWN, SceneId.LOBBY), routes
         )
@@ -337,9 +337,60 @@ class TestBehaviorNavigationTable(unittest.TestCase):
         self.assertEqual(decision.action, ActionId.DISMISS_OVERLAY)
         self.assertEqual(decision.reason, ReasonCode.PRIMARY_CLOSE_OVERLAY)
 
+    def test_collect_diamond_returns_town_from_domain_and_boss_select_scenes(self):
+        """
+        驗證在 DOMAIN_SELECT, LORD_SELECT, DEMON_LORD_SELECT 場景下，
+        若需要領鑽石 (COLLECT_DIAMOND) 且畫面上存在 GOBACK_TOWN，
+        導航路由表能正確匹配出 RETURN_TOWN 邊。
+        """
+        target_scenes = [
+            SceneId.DOMAIN_SELECT,
+            SceneId.LORD_SELECT,
+            SceneId.DEMON_LORD_SELECT,
+        ]
+        table = NavigationTable()
+        for s in target_scenes:
+            scene = SceneSnapshot(
+                1,
+                1.0,
+                s,
+                elements=self._element(ElementId.GOBACK_TOWN),
+            )
+            edge = table.next_edge(scene, IntentId.COLLECT_DIAMOND)
+            self.assertIsNotNone(edge, f"Scene {s} should have edge for COLLECT_DIAMOND")
+            self.assertEqual(edge.action, ActionId.RETURN_TOWN)
+            self.assertEqual(edge.target, SceneId.TOWN)
+            self.assertEqual(edge.reason, ReasonCode.DIAMOND_RETURN_TO_TOWN)
+
+    def test_collect_bread_opens_bread_from_domain_and_boss_select_scenes(self):
+        """
+        驗證在 DOMAIN_SELECT, LORD_SELECT, DEMON_LORD_SELECT 場景下，
+        若需要領麵包 (COLLECT_BREAD) 且畫面上存在 BREAD_ENTRY，
+        導航路由表能正確匹配出 OPEN_BREAD 邊。
+        """
+        target_scenes = [
+            SceneId.DOMAIN_SELECT,
+            SceneId.LORD_SELECT,
+            SceneId.DEMON_LORD_SELECT,
+        ]
+        table = NavigationTable()
+        for s in target_scenes:
+            scene = SceneSnapshot(
+                1,
+                1.0,
+                s,
+                elements=self._element(ElementId.BREAD_ENTRY),
+            )
+            edge = table.next_edge(scene, IntentId.COLLECT_BREAD)
+            self.assertIsNotNone(edge, f"Scene {s} should have edge for COLLECT_BREAD")
+            self.assertEqual(edge.action, ActionId.OPEN_BREAD)
+            self.assertEqual(edge.target, SceneId.BREAD_WINDOW)
+            self.assertEqual(edge.reason, ReasonCode.BREAD_ENTRY_READY)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 
