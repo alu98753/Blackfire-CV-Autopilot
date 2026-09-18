@@ -244,15 +244,20 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         launcher_class.return_value.ensure_game_ready.return_value = True
         init_system.return_value = machine
 
-        main.main()
+        composed = MagicMock(name="backend_capturer")
+        with patch("runtime.io_adapters.compose_capture", return_value=composed) as compose_capture:
+            main.main()
 
         self.assertEqual(args.title, "[#] Blackfire Crusade")
         set_active_profile.assert_called_once_with("sandbox")
         setup_log_level.assert_called_once_with(args, profile_name="sandbox", is_resume=False)
         setup_mode.assert_called_once_with(args)
         setup_equipment.assert_called_once_with(config)
+        compose_capture.assert_called_once_with(
+            foreground=False, window_title=args.title, monitor_index=3, hwnd=0x123
+        )
         launcher_class.assert_called_once_with(
-            game_title=args.title, backend_mode=True, monitor_index=3, hwnd=0x123
+            game_title=args.title, capturer=composed, monitor_index=3, hwnd=0x123
         )
         init_system.assert_called_once_with(args, config, target_hwnd=0x123)
         run_loop.assert_called_once_with(machine, 0.5)
@@ -290,14 +295,14 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     @patch("runtime.bootstrap.GameStateMachine")
     @patch("runtime.bootstrap.MouseController")
     @patch("runtime.bootstrap.TemplateMatcher")
-    @patch("runtime.bootstrap.ScreenCapturer")
+    @patch("runtime.io_adapters.compose_io")
     @patch("runtime.bootstrap.check_mode_templates", return_value=[])
     @patch("runtime.bootstrap.os.path.exists", return_value=True)
     @patch("runtime.bootstrap.normalize_config", side_effect=lambda config: config)
     @patch("runtime.bootstrap.get_monitor_index", return_value=3)
     def test_initializer_wires_profile_runtime_refresh_and_daily_pipeline(
-        self, _monitor, _normalize, _exists, _templates, capturer_class, matcher_class, mouse_class,
-        machine_class, daily_manager_class, _pause_controller, _print, _sleep,
+        self, _monitor, _normalize, _exists, _templates, compose_io, matcher_class, mouse_class, machine_class,
+        daily_manager_class, _pause_controller, _print, _sleep,
     ):
         args = make_args(mode="daily", title="[#] Blackfire Crusade", subflow=None)
         config = {"name": "Daily", "type": "mix", "auto_bread": True, "auto_diamond": True}
@@ -305,12 +310,13 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         manager = daily_manager_class.return_value
         manager.load_quest_scheduler.return_value = "scheduler"
 
+        composed_capturer, composed_mouse = MagicMock(name="capturer"), MagicMock(name="mouse")
+        compose_io.return_value = (composed_capturer, composed_mouse)
         returned = main.init_state_machine_system(args, config, target_hwnd=0x456)
 
         self.assertIs(returned, machine)
-        capturer_class.assert_called_once_with(
-            window_title=args.title, backend_mode=True, hwnd=0x456, monitor_index=3
-        )
+        compose_io.assert_called_once_with(foreground=False, window_title=args.title,
+                                           hwnd=0x456, monitor_index=3, human_like=True)
         machine.enable_runtime_config_refresh.assert_called_once_with("daily", config)
         daily_manager_class.assert_called_once_with(profile="sandbox")
         machine.attach_quest_scheduler.assert_called_once_with("scheduler")
