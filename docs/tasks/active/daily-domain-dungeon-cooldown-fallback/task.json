@@ -1,21 +1,28 @@
 {
   "id": "daily-domain-dungeon-cooldown-fallback",
-  "status": "Draft",
-  "branch": "daily-domain-dungeon-cooldown-fallback",
-  "base_branch": "main",
+  "base_ref": "origin/main",
   "base_sha": "6e187b6724f80209951e0afdc24f82c0a978fbdb",
-  "goal": "Prevent Daily Tier-4 Domain from being misrouted to COLLECT_ONLY when all eligible dungeons are on cooldown.",
   "scope": [
     "states/handlers/navigation.py",
-    "tests/test_behavior_navigation.py"
+    "tests/test_behavior_navigation.py",
+    "docs/tasks/active/daily-domain-dungeon-cooldown-fallback/"
   ],
   "focused_tests": [
-    "tests/test_behavior_navigation.py"
+    "tests.test_behavior_navigation"
   ],
-  "non_goals": [
-    "navigation refactor",
-    "scheduler redesign",
-    "cooldown detection changes",
-    "OCR/card navigation changes"
-  ]
+  "models": {
+    "scout": "opencode/big-pickle",
+    "review": "opencode/big-pickle"
+  },
+  "notes": {
+    "status": "Draft",
+    "implementation_blocked_until_final": true,
+    "goal": "Prevent Daily Tier-4 Domain from being misrouted to COLLECT_ONLY when all eligible dungeons are on cooldown.",
+    "non_goals": [
+      "navigation refactor",
+      "scheduler redesign",
+      "cooldown detection changes",
+      "OCR/card navigation changes"
+    ]
+  }
 }
