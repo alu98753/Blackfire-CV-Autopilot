@@ -1157,6 +1157,120 @@ class TestDomainCommonBehavior(unittest.TestCase):
                                 f"Found obsolete reference '{obsolete}' in {f_path}"
                             )
 
+    def test_default_tier4_domain_constant_completely_removed(self):
+        """[Phase 3 Invariant] DEFAULT_TIER4_DOMAIN 已完全自 production/config 移除，且任何路徑都不允許 fallback 到 golden_empire"""
+        import config
+        self.assertFalse(hasattr(config, "DEFAULT_TIER4_DOMAIN"), "DEFAULT_TIER4_DOMAIN 常數應已自 config 移除")
+
+        scanned_dirs = ["states", "utils", "config", "cli"]
+        for s_dir in scanned_dirs:
+            for root, _, files in os.walk(s_dir):
+                for f in files:
+                    if f.endswith((".py", ".toml")):
+                        f_path = os.path.join(root, f)
+                        with open(f_path, "r", encoding="utf-8", errors="ignore") as file_obj:
+                            content = file_obj.read()
+                        self.assertNotIn(
+                            "DEFAULT_TIER4_DOMAIN",
+                            content,
+                            f"Found obsolete reference 'DEFAULT_TIER4_DOMAIN' in {f_path}"
+                        )
+
+    def test_explicit_domain_selection_fails_fast_on_missing_tier4_domain(self):
+        """[Phase 3 Invariant] tier4_mode == 'domain' 但缺少 tier4_domain 時一律 fail-fast，絕不自動猜測或借用 golden_empire / 第一個 domain"""
+        invalid_daily = {
+            "type": "daily",
+            "tier4_mode": "domain",
+            "enable_domain": True,
+        }
+        with self.assertRaises(ValueError) as ctx:
+            validate_daily_domain_policy(invalid_daily)
+        self.assertIn("tier4_domain", str(ctx.exception))
+
+        with self.assertRaises(ValueError):
+            build_tier4_fallback_config(invalid_daily, {})
+
+    def test_structural_path_contract_fail_fast_without_inference(self):
+        """[Phase 3 Invariant] domain_tab_btn 與 domain_entry_btn 為 structural required，缺失時 fail-fast，Navigation 絕不從 navigation_path 猜測"""
+        # 1. 缺少 domain_tab_btn
+        cfg_no_tab = {
+            "name": "測試領地",
+            "type": "domain",
+            "domain": "golden_empire",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/golden_empire/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+            "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+        }
+        with self.assertRaises(ValueError) as ctx:
+            validate_domain_execution_config(cfg_no_tab)
+        self.assertIn("domain_tab_btn", str(ctx.exception))
+
+        # 2. 即使 navigation_path 包含 entry.png，只要 domain_entry_btn 缺失即 fail-fast
+        cfg_no_entry = {
+            "name": "測試領地",
+            "type": "domain",
+            "domain": "golden_empire",
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+            "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+        }
+        with self.assertRaises(ValueError) as ctx:
+            validate_domain_execution_config(cfg_no_entry)
+        self.assertIn("domain_entry_btn", str(ctx.exception))
+
+        # 3. 驗證 NavigationHandler 決策層絕不從 navigation_path 猜測 entry template
+        from states.handlers.navigation import NavigationHandler
+        nav_machine = MagicMock()
+        nav_machine.config = cfg_no_entry
+        nav_handler = NavigationHandler(nav_machine)
+        tab_tpl, entry_tpl = nav_handler._resolve_domain_navigation_templates()
+        self.assertIsNone(entry_tpl, "NavigationHandler 不得從 navigation_path 偷猜 entry template")
+
+    def test_domain_identity_contract_rejects_domain_name_fallback(self):
+        """[Phase 3 Invariant] domain 為唯一 strategy identity；domain 缺失即使 domain_name 存在也必須 fail-fast"""
+        machine = MagicMock()
+        machine.config = {
+            "name": "黃金古國",
+            "type": "domain",
+            "domain_name": "golden_empire",  # 僅有 display/legacy domain_name，缺少 domain
+        }
+        handler = DomainExploreHandler(machine)
+        self.assertIsNone(handler.strategy, "domain 缺失時不得以 domain_name 初始化 strategy")
+        with self.assertRaises(ValueError) as ctx:
+            handler.handle(MagicMock(), self.rect)
+        self.assertIn("domain", str(ctx.exception))
+
+    def test_apply_tier4_fallback_fails_fast_without_primary_config(self):
+        """[Phase 3 Invariant] Daily Tier4 rebuild 必須擁有合法 primary_config，缺失時立即 fail-fast，絕不偷偷切換至 Daily/Mix"""
+        from states.state_machine import GameStateMachine
+        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        machine.primary_config = None
+        machine.config = {"type": "daily"}
+
+        with self.assertRaises(RuntimeError) as ctx:
+            machine._build_tier4_fallback_config()
+        self.assertIn("primary_config", str(ctx.exception))
+
+        with self.assertRaises(RuntimeError) as ctx:
+            machine.apply_tier4_fallback_config()
+        self.assertIn("primary_config", str(ctx.exception))
+
+    def test_domain_consumer_defaults_single_ssot_regression(self):
+        """[Phase 3 Invariant] Domain 規範預設值單一 SSOT 來自 normalize_domain_execution_config，consumer 端不得硬編碼預設 fallback"""
+        with open("cli/mode_setup.py", "r", encoding="utf-8") as f:
+            cli_content = f.read()
+        self.assertNotIn(
+            'config.get("bread_cost", 3)',
+            cli_content,
+            "cli/mode_setup.py 不得保留 hardcoded bread_cost fallback，應直接讀取 normalized config['bread_cost']"
+        )
+        self.assertIn(
+            'bread_cost = config["bread_cost"]',
+            cli_content
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

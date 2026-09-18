@@ -229,20 +229,8 @@ class NavigationHandler(BaseStateHandler):
 
     def _resolve_domain_navigation_templates(self):
         config = self.machine.config or {}
-        nav_path = config.get("navigation_path", [])
-        tab_template = config.get("domain_tab_btn", "domains/Domains_entry.png")
+        tab_template = config.get("domain_tab_btn")
         target_template = config.get("domain_entry_btn")
-        if not target_template:
-            target_template = next(
-                (
-                    template
-                    for template in nav_path
-                    if template.startswith("domains/")
-                    and template.endswith("/entry.png")
-                    and template != tab_template
-                ),
-                None,
-            )
         return tab_template, target_template
 
     def _handle_primary_card_alignment(self, screen_img, rect, scene):

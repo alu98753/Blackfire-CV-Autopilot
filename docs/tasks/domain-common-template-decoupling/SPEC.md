@@ -83,8 +83,17 @@ Status: Final
     - 兩者職責徹底分離，互不干涉。
   - **`enable_domain` Strict Ownership**：`enable_domain` 僅存在於 Daily 政策，Domain 執行配置中嚴格排除 `enable_domain`。
   - **Seam Assembly**：移除 `DOMAIN_ROUTE_KEYS` 逐欄覆蓋機制，改由純函式 helper `build_domain_execution_route(daily_policy, selected_domain_config)` 完成最小排程脈絡與 Tier 4 標記附加。
-  - **Hot Reload Invariant**：Hot reload 時重新讀取最新 effective Domain 配置重建 active Domain route；Daily 欄位修改不得污染 Domain 執行路由。
-- **Phase 3 (Cleanup Fallbacks & Compatibility Duplications - Future Phase)**：清理結構性 fallback 與重複相容路徑（非本階段範疇）。
+- **Phase 3 (Cleanup Structural Fallbacks & Compatibility Duplications - Implemented Contract)**：
+  - **Remove `DEFAULT_TIER4_DOMAIN` runtime fallback**：完全移除 `DEFAULT_TIER4_DOMAIN` 常數；`tier4_mode == "domain"` 時必須明確提供 `tier4_domain`，缺少時在 policy boundary 立即 Fail-Fast，絕不自動猜測或回退至 `golden_empire` 或第一個 domain。
+  - **Remove `domain_tab_btn` & `domain_entry_btn` consumer fallbacks / inference**：NavigationHandler 不再硬編碼 `domain_tab_btn` 預設路徑，亦不再從 `navigation_path` 搜尋猜測 `domain_entry_btn`；結構欄位缺失直接在 normalization / validation 邊界 Fail-Fast。
+  - **Sole Domain strategy identity (`domain`)**：`domain` 為唯一 execution strategy identity，徹底移除 `domain -> domain_name` identity compatibility fallback；若缺少 `domain`（即使存在純顯示欄位 `domain_name`）立即 Fail-Fast，不得拿 `domain_name` 當 strategy identity。
+  - **Tighten `primary_config` ownership on Tier 4 route rebuild**：Daily Tier4 fallback rebuild 與套用嚴格要求合法 `primary_config` / policy owner，缺失時 Fail-Fast（拋出 `RuntimeError`），絕不靜默回退至 `mix` 或 `daily`。
+  - **Single Authority for Domain defaults**：Domain consumer 端的規範預設值（`bread_cost`, `domain_reset_max_attempts`, `explore_priorities`, `result_buttons`, `enable_lord_boss`）統一且唯一由 `normalize_domain_execution_config()` SSOT 提供，consumer 端移除二次預設值 fallback。
+  - **Audit Daily scheduling context & bounded compatibility context**：
+    - Category A (Domain execution / 整理背包直接需要)：`keep_colors`, `disassemble_colors`。
+    - Category B (排程器可自 `_daily_activity_config()` / `primary_config` 取得)：`enable_town_daily`, `enable_demon_lords`, `subflow_configs`。
+    - Category C (過渡期/相容性處理器暫時自 `machine.config` 讀取之 bounded compatibility context)：`enable_dungeon`, `dungeon_names`, `dungeon_entries`, `cooldown_map`, `greedy_dungeon`, `greedy_allowed_indices`, `auto_resume_dungeon_on_cd`。
+  - **Structural validation invariant**：Structural configuration errors are rejected at normalization / policy boundaries. Consumers do not infer missing Domain identity or paths. Canonical common defaults have one owner: Domain normalization. No Golden Empire / first-domain / Daily-route fallback may repair an invalid Domain execution configuration.
 
 ### 3.3 `enable_domain` 語意與 Invariant 契約
 1. **語意定義**：`enable_domain` 代表 scheduler / Daily policy 是否允許調度 Domain 類活動。其與 `enable_dungeon`、`enable_lord_boss`、`enable_town_daily` 處於同等抽象層級。

@@ -109,7 +109,7 @@ def setup_mode_config(args):
 
     elif config.get("type") == "domain":
         domain_name = config.get("name") or target_key
-        bread_cost = config.get("bread_cost", 3)
+        bread_cost = config["bread_cost"]
         print(f"\n🏛️ [領地模式] 啟動【{domain_name}】自動探索 (每次消耗 {bread_cost} 麵包，含挖寶與戰鬥處理)...")
 
     elif args.mode == "blood_altar":

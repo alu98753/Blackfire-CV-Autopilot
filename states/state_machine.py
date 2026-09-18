@@ -1534,9 +1534,9 @@ class GameStateMachine:
 
     def _build_tier4_fallback_config(self):
         """Build the route selected by the Daily Profile without mutating policy."""
-        source = getattr(self, "primary_config", None) or getattr(self, "config", None)
+        source = getattr(self, "primary_config", None)
         if not source:
-            source = GAME_CONFIGS["daily"]
+            raise RuntimeError("無法構建 Tier 4 退守配置：缺少主要政策擁有者 primary_config")
         fallback = build_tier4_fallback_config(source, GAME_CONFIGS)
         if {"tier4_stage_level", "tier4_sub_stage"} & fallback.keys():
             self._apply_tier4_stage_selection(fallback)
@@ -1670,7 +1670,7 @@ class GameStateMachine:
         dm = getattr(self, "daily_manager", None)
         if not dm or not hasattr(dm, "is_demon_lords_available"):
             return False
-        cfg = self.config or {}
+        cfg = self._daily_activity_config()
         mode_type = cfg.get("type")
         is_daily_active = self.is_daily_pipeline_active() or getattr(self, "quest_scheduler", None) is not None
         default_enable = True if (mode_type in ["daily", "mix"] or is_daily_active or not cfg) else False
@@ -1726,35 +1726,24 @@ class GameStateMachine:
         Daily quests may temporarily enable their required activity; this
         restores the baseline and marks it as Tier 4 for safe preemption.
         """
-        if getattr(self, "primary_config", None):
-            fallback_cfg = self._build_tier4_fallback_config()
-            if (
-                self.config.get("is_tier4_fallback", False)
-                and all(self.config.get(key) == value for key, value in fallback_cfg.items())
-            ):
-                logging.debug("[GameStateMachine] Tier 4 fallback configuration is already active.")
-                self.arm_daily_quest_preemption()
-                return False
-            self.set_config(fallback_cfg)
-            self.arm_daily_quest_preemption()
-            logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
-            if fallback_cfg.get("tier4_mode") == TIER4_MODE_NONE or fallback_cfg.get("type") == "collect_only":
-                if not self.is_in_collect_only_mode():
-                    logging.info("💤 [GameStateMachine] Tier 4 長駐已停用 ➔ 自動轉入 COLLECT_ONLY 待機...")
-                    self.transition_to(self.STATE_COLLECT_ONLY)
-        else:
-            from config import PRIMARY_MODES
-            mix_config = PRIMARY_MODES["mix"].copy()
-            mix_config["greedy_dungeon"] = False
-            mix_config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
-            mix_config["is_tier4_fallback"] = True
-            if hasattr(self, "backend_mode"):
-                mix_config["backend_mode"] = self.backend_mode
+        if not getattr(self, "primary_config", None):
+            raise RuntimeError("無法套用 Tier 4 退守配置：缺少主要政策擁有者 primary_config")
 
-            self.set_config(mix_config)
-            self.primary_config = mix_config.copy()
+        fallback_cfg = self._build_tier4_fallback_config()
+        if (
+            self.config.get("is_tier4_fallback", False)
+            and all(self.config.get(key) == value for key, value in fallback_cfg.items())
+        ):
+            logging.debug("[GameStateMachine] Tier 4 fallback configuration is already active.")
             self.arm_daily_quest_preemption()
-            logging.info(f"🔄 [GameStateMachine] 未找到使用者基準配置，已切換至預設 Tier 4 退守配置: {mix_config['name']}")
+            return False
+        self.set_config(fallback_cfg)
+        self.arm_daily_quest_preemption()
+        logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
+        if fallback_cfg.get("tier4_mode") == TIER4_MODE_NONE or fallback_cfg.get("type") == "collect_only":
+            if not self.is_in_collect_only_mode():
+                logging.info("💤 [GameStateMachine] Tier 4 長駐已停用 ➔ 自動轉入 COLLECT_ONLY 待機...")
+                self.transition_to(self.STATE_COLLECT_ONLY)
 
 
 

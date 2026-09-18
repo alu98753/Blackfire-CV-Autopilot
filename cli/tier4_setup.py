@@ -1,7 +1,6 @@
 """Interactive Daily Tier 4 route selection."""
 
 from config import (
-    DEFAULT_TIER4_DOMAIN,
     TIER4_MODE_DOMAIN,
     TIER4_MODE_NONE,
     TIER4_MODE_OPTIONS,

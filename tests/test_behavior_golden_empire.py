@@ -40,6 +40,8 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
             "type": "domain",
             "domain": "golden_empire",
             "domain_name": "golden_empire",
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_entry_btn": "domains/golden_empire/entry.png",
             "bread_cost": 3,
             "navigation_path": [
                 "common/door.png",

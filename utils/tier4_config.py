@@ -3,7 +3,6 @@
 from copy import deepcopy
 
 from config import (
-    DEFAULT_TIER4_DOMAIN,
     TIER4_MODE_DOMAIN,
     TIER4_MODE_NONE,
     TIER4_MODE_STAGE,
