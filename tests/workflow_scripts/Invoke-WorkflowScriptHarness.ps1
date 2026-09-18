@@ -152,7 +152,7 @@ try {
         }
         Assert-True ($workflowText -match '`spec-reviewer`[\s\S]*?`steps: 8`') 'architecture spec-reviewer budget drifted'
         Assert-True ($workflowText -match '`regression-reviewer`[\s\S]*?`steps: 10`') 'architecture regression-reviewer budget drifted'
-        Assert-True ($workflowText -match 'Completed valid StructuredOutput is the terminal reviewer result') 'architecture StructuredOutput finalization contract missing'
+        Assert-True ($workflowText -match 'Valid structured PASS/BLOCK output is terminal for the reviewer role') 'architecture terminal reviewer contract missing'
     }
     Run-Case 'OpenCode launcher contract is pinned and flag-free' {
         $contractText = Get-Content $openCodeContract -Raw
@@ -390,17 +390,17 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','markdown'))
         Assert-True ($code -eq 1) "expected 1, got $code"
     }
-    Run-Case 'Gate pre-authority failure falls back to next candidate' {
+    Run-Case 'Gate pre-authority infrastructure failure is terminal' {
         $groundingMarker = Join-Path $helperDir 'fallback-grounding.marker'
         $passMarker = Join-Path $helperDir 'fallback-pass.marker'
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = 'opencode/big-pickle'; $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         if (Test-Path $groundingMarker) { Remove-Item -LiteralPath $groundingMarker -Force }; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
-        try { $code = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','test/fallback-grounding','test/fallback-pass'); Assert-True ($code.ExitCode -eq 0) "expected explicit override success, got $($code.ExitCode): $($code.Output)"; Assert-True (Test-Path $groundingMarker) 'explicit first candidate was not invoked'; Assert-True (Test-Path $passMarker) 'explicit second candidate was not invoked'; Write-Host 'Explicit reviewer override exercised; no task.json fallback.' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+        try { $code = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','test/fallback-grounding','test/fallback-pass'); Assert-True ($code.ExitCode -eq 1) "expected verification unavailable, got $($code.ExitCode): $($code.Output)"; Assert-True (Test-Path $groundingMarker) 'configured reviewer was not invoked'; Assert-True (-not (Test-Path $passMarker)) 'second reviewer was silently attempted' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
-    Run-Case 'Gate safe transport envelope falls back with exit zero' {
+    Run-Case 'Gate safe transport failure is unavailable without fallback' {
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = 'opencode/big-pickle'; $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         $passMarker = Join-Path $helperDir 'fallback-pass.marker'; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
-        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','test/transport-safe','test/fallback-pass'); Assert-True ($code -eq 0) "expected explicit override success, got $code"; Assert-True (Test-Path $passMarker) 'explicit override second candidate was not invoked' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','test/transport-safe','test/fallback-pass'); Assert-True ($code -eq 1) "expected verification unavailable, got $code"; Assert-True (-not (Test-Path $passMarker)) 'second reviewer was silently attempted' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate clears stale candidate evidence before reviewer phase' {
         $stale = Join-Path $repoRoot ".runtime\ai_gate\$fixtureId\candidate_EVIDENCE.md"
@@ -411,11 +411,11 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($code -eq 0) "expected clean staging PASS, got $code"
         Assert-True (Test-Path (Join-Path $fixtureDir 'EVIDENCE.md')) 'Gate did not complete current evidence promotion'
     }
-    Run-Case 'Gate catastrophic adapter failure has no envelope' {
+    Run-Case 'Gate catastrophic adapter failure has no fallback' {
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = 'opencode/big-pickle'; $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         $firstMarker = Join-Path $helperDir 'catastrophic-crash.marker'; $secondMarker = Join-Path $helperDir 'fallback-pass.marker'
         if (Test-Path $firstMarker) { Remove-Item -LiteralPath $firstMarker -Force }; if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }
-        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 1) "expected catastrophic failure, got $code"; Assert-True (Test-Path $firstMarker) 'catastrophic candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'catastrophic no-envelope failure incorrectly fell back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','test/catastrophic-crash','test/fallback-pass'); Assert-True ($code -eq 1) "expected catastrophic failure, got $code"; Assert-True (Test-Path $firstMarker) 'catastrophic candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'catastrophic no-envelope failure incorrectly fell back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate unsafe adapter cleanup stops fallback' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','unsafe'))
@@ -568,32 +568,29 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True ($regCountAfter -eq $regCountBefore) 'regression-reviewer launched despite valid canonical reuse'
     }
 
-    Run-Case 'Gate model candidate order changes fingerprint and unchanged order hits cache' {
+    Run-Case 'Gate explicit reviewer model changes fingerprint and same model reuses cache' {
         Reset-DisposableGateState
         $specInvocationsFile = Join-Path $helperDir 'spec-reviewer.invocations.txt'
         $regInvocationsFile = Join-Path $helperDir 'regression-reviewer.invocations.txt'
         $json = $originalTaskJson | ConvertFrom-Json
 
         try {
-            # Order 1: [first, second]
-            $orderOne = @('test/terminal-first-pass', 'test/terminal-second')
-            $code1 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$orderOne,'-ForceRefresh'))
-            Assert-True ($code1 -eq 0) "Order 1 expected 0, got $code1"
+            $modelOne = 'test/terminal-first-pass'
+            $code1 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$modelOne,'-ForceRefresh'))
+            Assert-True ($code1 -eq 0) "Initial model expected 0, got $code1"
 
-            # Cache hit check with unchanged order [first, second]
             $specCountBeforeSame = [int](Get-Content $specInvocationsFile -Raw)
-            $codeSame = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$orderOne))
-            Assert-True ($codeSame -eq 0) "Order same expected 0, got $codeSame"
+            $codeSame = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$modelOne))
+            Assert-True ($codeSame -eq 0) "Same model expected 0, got $codeSame"
             $specCountAfterSame = [int](Get-Content $specInvocationsFile -Raw)
-            Assert-True ($specCountAfterSame -eq $specCountBeforeSame) 'spec-reviewer was rerun despite identical candidate order'
+            Assert-True ($specCountAfterSame -eq $specCountBeforeSame) 'spec-reviewer was rerun despite identical model and inputs'
 
-            # Order 2: Reversed order [second, first]
-            $orderTwo = @('test/terminal-second', 'test/terminal-first-pass')
-            $specCountBeforeReversed = [int](Get-Content $specInvocationsFile -Raw)
-            $code2 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$orderTwo))
-            Assert-True ($code2 -eq 0) "Order 2 expected 0, got $code2"
-            $specCountAfterReversed = [int](Get-Content $specInvocationsFile -Raw)
-            Assert-True ($specCountAfterReversed -gt $specCountBeforeReversed) 'spec-reviewer was NOT rerun when candidate order reversed ([A,B] vs [B,A])'
+            $modelTwo = 'test/terminal-second'
+            $specCountBeforeChanged = [int](Get-Content $specInvocationsFile -Raw)
+            $code2 = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride',$modelTwo))
+            Assert-True ($code2 -eq 0) "Changed model expected 0, got $code2"
+            $specCountAfterChanged = [int](Get-Content $specInvocationsFile -Raw)
+            Assert-True ($specCountAfterChanged -gt $specCountBeforeChanged) 'spec-reviewer was NOT rerun when explicit model changed'
         } finally {
             $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         }
@@ -678,7 +675,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Scout success promotes structured output' {
-        $code = Invoke-Script $scout @('-Task',$fixtureId,'-_ExecutableOverride',$scoutCmd,'-_ModelCandidatesOverride','only')
+        $code = Invoke-Script $scout @('-Task',$fixtureId,'-_ExecutableOverride',$scoutCmd,'-_ModelCandidatesOverride','test/only')
         Assert-True ($code -eq 0) "expected 0, got $code"
         Assert-True ((Get-Content (Join-Path $fixtureDir 'CONTEXT.md') -Raw) -match '# Scout Context') 'context was not promoted'
     }
