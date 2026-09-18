@@ -114,6 +114,7 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 "domain": "abyss_beast_nest",
                 "name": "淵獸之巢",
                 "navigation_path": [],
+                "enable_lord_boss": True,
             }
             handler = DomainExploreHandler(self.mock_machine)
             initial_strategy = handler.strategy
@@ -1258,7 +1259,7 @@ class TestDomainCommonBehavior(unittest.TestCase):
         self.assertIn("primary_config", str(ctx.exception))
 
     def test_domain_consumer_defaults_single_ssot_regression(self):
-        """[Phase 3 Invariant] Domain 規範預設值單一 SSOT 來自 normalize_domain_execution_config，consumer 端不得硬編碼預設 fallback"""
+        """[Phase 3 Invariant] Domain 規範預設值單一 SSOT 來自 normalize_domain_execution_config，已知 Domain consumer 端不得重新硬編碼 5 個 canonical 預設 fallback"""
         with open("cli/mode_setup.py", "r", encoding="utf-8") as f:
             cli_content = f.read()
         self.assertNotIn(
@@ -1270,6 +1271,69 @@ class TestDomainCommonBehavior(unittest.TestCase):
             'bread_cost = config["bread_cost"]',
             cli_content
         )
+
+        with open("states/handlers/domain_explore.py", "r", encoding="utf-8") as f:
+            domain_explore_content = f.read()
+
+        # 鎖定 5 個 canonical domain defaults 不得在 DomainExploreHandler 中重複 hardcode fallback
+        forbidden_patterns = [
+            '.get("enable_lord_boss", True)',
+            '.get("enable_lord_boss",True)',
+            '.get("bread_cost", 3)',
+            '.get("bread_cost",3)',
+            '.get("domain_reset_max_attempts", 7)',
+            '.get("domain_reset_max_attempts",7)',
+            '.get("explore_priorities",',
+            '.get("result_buttons",',
+        ]
+        for pat in forbidden_patterns:
+            self.assertNotIn(
+                pat,
+                domain_explore_content,
+                f"states/handlers/domain_explore.py 不得建立第二 consumer fallback 權威: '{pat}'"
+            )
+        self.assertIn(
+            'domain_allows_boss = self.machine.config["enable_lord_boss"]',
+            domain_explore_content,
+            "DomainExploreHandler 必須直接讀取 normalized execution config 的 enable_lord_boss"
+        )
+
+    def test_domain_explore_handler_reads_enable_lord_boss_directly_and_fails_if_unnormalized(self):
+        """[Phase 3 Behavior Invariant] DomainExploreHandler 直接讀取 normalized enable_lord_boss；若 unnormalized 缺失則拋出 KeyError 暴露契約違規，絕不默認 True"""
+        machine = MagicMock()
+        machine.current_state = "DOMAIN_EXPLORE"
+        machine.is_daily_pipeline_active.return_value = False
+        machine.has_available_selected_lord_boss.return_value = True
+
+        # Case 1: Normalized config 設為 False ➔ 直接生效為 False，不離場
+        machine.config = {
+            "type": "domain",
+            "domain": "golden_empire",
+            "enable_lord_boss": False,
+        }
+        handler = DomainExploreHandler(machine)
+        res_false = handler._check_lord_boss_preemption(None, {"left": 0, "top": 0})
+        self.assertFalse(res_false)
+
+        # Case 2: Normalized config 設為 True ➔ 直接生效為 True，若有 Boss 則離場
+        machine.config = {
+            "type": "domain",
+            "domain": "golden_empire",
+            "enable_lord_boss": True,
+        }
+        with patch("os.path.exists", return_value=False):
+            res_true = handler._check_lord_boss_preemption(None, {"left": 0, "top": 0})
+        self.assertTrue(res_true)
+
+        # Case 3: Malformed / unnormalized config 缺失 enable_lord_boss ➔ 拋出 KeyError，絕不偷 assume True
+        machine.config = {
+            "type": "domain",
+            "domain": "golden_empire",
+            # 故意缺失 enable_lord_boss
+        }
+        with self.assertRaises(KeyError) as ctx:
+            handler._check_lord_boss_preemption(None, {"left": 0, "top": 0})
+        self.assertIn("enable_lord_boss", str(ctx.exception))
 
 
 if __name__ == "__main__":

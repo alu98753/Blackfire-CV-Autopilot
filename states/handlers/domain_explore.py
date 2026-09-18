@@ -128,7 +128,7 @@ class DomainExploreHandler(BaseStateHandler):
 
     def _check_lord_boss_preemption(self, screen_img, rect) -> bool:
         """Exit the domain when any enabled Daily activity is ready to preempt."""
-        domain_allows_boss = (self.machine.config or {}).get("enable_lord_boss", True)
+        domain_allows_boss = self.machine.config["enable_lord_boss"]
         dm = getattr(self.machine, "daily_manager", None)
         boss_ready = bool(domain_allows_boss and dm and self.machine.has_available_selected_lord_boss())
         daily_ready = (

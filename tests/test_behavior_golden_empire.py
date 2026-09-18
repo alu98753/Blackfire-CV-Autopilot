@@ -50,7 +50,9 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
                 "domains/common/start_btn.png"
             ],
             "explore_priorities": ["domains/common/explore_btn.png"],
-            "result_buttons": ["common/continue.png", "common/continue_gray.png"]
+            "result_buttons": ["common/continue.png", "common/continue_gray.png"],
+            "domain_reset_max_attempts": 7,
+            "enable_lord_boss": True,
         }
 
         self.rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
