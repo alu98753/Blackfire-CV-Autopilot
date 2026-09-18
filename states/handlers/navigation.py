@@ -1003,13 +1003,15 @@ class NavigationHandler(BaseStateHandler):
                 if target_idx is None:
                     is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
                     is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
-                    if is_in_retreat or is_temp_resume or not self._is_stage_farming_allowed():
-                        reason = (
-                            "體力退避或臨時地下城喚醒期間所有地下城皆已進入冷卻"
-                            if (is_in_retreat or is_temp_resume)
-                            else "所有地下城皆已進入冷卻且未啟用普通關卡打怪"
+                    if is_in_retreat or is_temp_resume:
+                        self._enter_collect_only_after_dungeon_cooldown(
+                            screen_img, rect, "體力退避或臨時地下城喚醒期間所有地下城皆已進入冷卻"
                         )
-                        self._enter_collect_only_after_dungeon_cooldown(screen_img, rect, reason)
+                        return
+                    if not self.machine.is_daily_pipeline_active() and not self._is_stage_farming_allowed():
+                        self._enter_collect_only_after_dungeon_cooldown(
+                            screen_img, rect, "所有地下城皆已進入冷卻且未啟用普通關卡打怪"
+                        )
                         return
                     if self.machine.config.get("type") == "dungeon":
                         self._enter_collect_only_after_dungeon_cooldown(
