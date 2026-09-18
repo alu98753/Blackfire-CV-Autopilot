@@ -1,48 +1,35 @@
 ﻿# Regression Review
 
-Gate-accepted verdict: BLOCK
-Blocking findings: 2
+Gate-accepted verdict: PASS
+Blocking findings: 0
 
 # Regression Review
 
 ## Behavior-preservation assessment
 
-The diff isolates backend/foreground I/O behind fixed adapter subclasses selected once by `runtime.io_adapters.compose_io/compose_capture`. Comparing each override against the base implementation (`actions/mouse.py`, `capture/screen.py`) at the composition sites (`main.py`, `runtime/bootstrap.py`, `utils/steam_launcher.py`, `game_relaunch.py`):
+Reviewed the diff against `origin/main` (base `145522e4`) with line-by-line comparison of `runtime/io_adapters.py` adapters versus the original per-mode paths in `capture/screen.py` and `actions/mouse.py`.
 
-- **Backend click/scroll/drag/safe-area**: message sequence, jitter, inter-message sleeps (.01/.04/.04; .05; .03/.05/steps/.15-or-.02/.02), `_finalize_action` cooldown/move_safe flags, and callback/finalization semantics match the base backend branches exactly. `move_to_safe_area` dispatches through the override, so `_finalize_action(move_safe=True)` stays backend-only.
-- **Foreground click/scroll/drag/safe-area**: coordinate conversion, human-like tween/duration, failsafe re-raise, `moveTo`-based scroll, and inertia drag behavior match the base foreground branches.
-- **Backend capture**: `_resume_event` gate, `full_screen -> None`, valid-HWND gate, and `_capture_backend(hwnd)` (rect ignored, black-image -> None) match base backend semantics.
-- **Foreground capture**: MSS -> PIL fallback, bbox semantics, `last_monitor`, `sct is None -> None` all match.
-- **Mode selection**: exactly one policy (`args.backend_mode` -> `foreground=not backend_mode`) is resolved once; launcher and relaunch reuse the composed/adapter capture, and `SteamGameLauncher` no longer constructs mixed-mode I/O.
-
-Two contract/regression problems block acceptance (below). Otherwise the composed paths are behavior-preserving.
+- **Backend capture**: `BackendScreenCapturer.capture()` reproduces the base backend branch exactly ??`None` for `full_screen`, non-int/invalid HWND, and backend failure; otherwise `_capture_backend(hwnd)`. MSS/PIL are unreachable (invariant 3). Only diagnostic `logging.error` calls were dropped; the externally observable result contract is identical.
+- **Foreground capture**: `ForegroundScreenCapturer.capture()` matches the base foreground path (MSS region/monitor selection, `last_monitor` update, BGRA2BGR, PIL bbox fallback) including `full_screen` ??`monitors[1]`.
+- **Backend input**: message sequences, sleeps (`.01/.04/.04` click, `.05` scroll, `.03/.05/step/.15-or-.02/.02` drag), jitter, `_draw_debug_click`, and `_finalize_action` flags (`move_safe=True`; `cooldown=.3, move_safe=False`; `cooldown=.3, move_safe=True`) are byte-for-byte equivalent. `test_backend_drag_preserves_timing_and_release_sequence` pins the drag contract.
+- **Foreground input**: pyautogui coordinate conversion, `human_like` tween, `mouseDown/mouseUp` timing, `FailSafeException` re-raise, and cooldowns match the base foreground branch.
+- **Composition**: `main.py` and `runtime/bootstrap.py` select one fixed adapter family once; `compose_capture`/`compose_io` are patched consistently in `test_behavior_main_entrypoint.py`. `state_machine.backend_mode` remains metadata-only (serialization guards at `state_machine.py:1708,1715` and quest propagation at `1812-1813` unchanged; `state_machine.py` itself is untouched by the diff).
+- **Launcher/relaunch**: `SteamGameLauncher` lost `mouse`/`backend_mode`; no launcher method used them after construction. All production callers inject capturer (`main.py:80`, `game_relaunch.py:48`); `machine.capturer` is always set (`bootstrap.py:182-189`, `GameStateMachine.__init__` stores it). Relaunch no longer reconstructs I/O from `machine.backend_mode`.
+- **Phase-1 CLI semantics** (`cli/arguments.py`) are untouched; `--foreground`/`--backend`/default resolution is preserved.
 
 ## Blocking findings
 
-### BFC-F1
-Severity: BLOCKING
-Regression / invariant: `SteamGameLauncher` constructor contract change breaks an existing non-skipped deterministic test.
-Location: `utils/steam_launcher.py:41-42` (`SteamGameLauncher.__init__`); `tests/test_behavior_supervisor_lifecycle.py:105`
-Claim: The new constructor raises `ValueError` when `capturer` is None, but `tests/test_behavior_supervisor_lifecycle.py::test_scenario_s3_hung_window_auto_escalates_to_restart_game` still constructs `SteamGameLauncher(game_title="Blackfire Crusade", hwnd=12345)` with no capturer and no constructor mocking, so the test now errors at construction.
-Evidence: Diff removes the `capturer or ScreenCapturer(...)` fallback and adds an unconditional `raise ValueError` on None; grep shows this unpatched construction is the real class (the test only later patches `is_game_open`/`run_launch_subflow`); the diff does not migrate this file even though the launcher contract change is in scope (`tests/`).
-Suggested validation: Run `tests.test_behavior_supervisor_lifecycle`; migrate the test to inject a composed/mock capturer and assert `launcher.capturer` reuse.
-Confidence: 0.97
-
-### BFC-F2
-Severity: BLOCKING
-Regression / invariant: SPEC acceptance criterion 13 / task `test_contract` unmet; mutable `.backend_mode` switching survives in focused tests and in the retained base classes.
-Location: `tests/test_screen_capturer_architecture.py:84,99,112,124,139`; `tests/test_mouse_coordinates.py:43,61`; SPEC.md 禮Compatibility policy and AC13; task.json `test_contract`
-Claim: The Final SPEC requires direct `.backend_mode` mutation to be removed from focused isolation tests in favor of explicit adapter construction, and any retained facade must not permit switching implementations by mutating the boolean after construction; the diff migrates only `test_behavior_main_entrypoint.py`, leaving the other required focused modules on the mutable pattern while `ScreenCapturer.capture()`/`MouseController.click()` still branch on `self.backend_mode` at action time.
-Evidence: Repository grep shows `.backend_mode =` mutations in the two named focused modules; the base classes remain mutable and branchy; no migration or removal of these test patterns appears in the diff.
-Suggested validation: Migrate the named focused tests to `BackendScreenCapturer`/`BackendMouseController` (or foreground variants), then grep to confirm zero `.backend_mode =` mutations in the focused modules.
-Confidence: 0.85
+None.
 
 ## Advisory findings
 
-- Backend input with a missing HWND is now fail-closed (`return False`) whereas the old base class fell through to physical pyautogui clicks/scrells/drags when `backend_mode=True` and `get_hwnd()` was falsy. This matches the task's critical invariant, but it is a deliberate semantic tightening; the new adapter tests always inject a valid HWND, so the no-HWND backend-input case is not directly pinned by a test.
-- `tests/test_game_process_lifecycle.py:35-41` (class-skipped) still passes the removed `mouse=` kwarg and would raise TypeError if unskipped; update it alongside the migration.
-- `BackendScreenCapturer.capture()` silently returns None, dropping the base's three "refusing foreground fallback" log lines; the result contract is preserved but the SPEC's "backend capture failure logging" ownership regressed.
-- `runtime/bootstrap.py:8-9` retains now-unused `ScreenCapturer`/`MouseController` imports.
-- `compose_io(resume_event=...)` forwards `resume_event` only to the mouse, not the capturer; bootstrap compensates by setting `capturer._resume_event` afterward, which is an easy misuse seam for future callers.
+1. **Intentional fail-open removal (backend input, missing hwnd).** The base `MouseController.click/scroll/drag` fell through to pyautogui physical movement when `backend_mode=True` but `get_hwnd()` returned falsy; the adapters return `False` instead. This strengthens the critical invariant (no silent foreground fallback) and is covered by `test_backend_input_never_calls_pyautogui`, but it is a genuine semantic tightening versus origin/main worth recording in regression documentation.
+2. **Thinned diagnostics.** Adapter capture refusals (`full_screen`, invalid hwnd, closed MSS handle) and PIL-fallback exceptions no longer emit the base class's error/warning logs. Result contract unchanged; only observability is reduced.
+3. **Legacy mixed-mode base classes remain.** `ScreenCapturer`/`MouseController` still expose the mutable `backend_mode` branch for dev scripts (`scripts/*.py`) and non-focused tests (`test_mouse_refactor.py`, `test_behavior_pause_resume.py`). Permitted by SPEC compatibility policy, but the "no action-time mode selection" property now relies on composition discipline; a future cleanup could delete the mixed branch.
+4. **`SteamGameLauncher` now raises `ValueError` when capturer is absent.** Fail-fast by design; all known call sites (production and tests, including the previously skipped `test_game_process_lifecycle.py` and the non-skipped `test_behavior_supervisor_lifecycle.py`) inject a capturer. Any future constructor call without capturer will break loudly rather than silently create a default-mode capturer ??intended, but a hard API change outside the old constructor's implicit contract.
 
-<!-- blackfire-gate-fingerprint: {"schema":1,"role":"regression-reviewer","hash":"a11b2bf8306e6e38429e07b0442b04965c4edad39418efd27afbffc5087731eb"} -->
+## Testability
+
+The diff adds non-skipped deterministic coverage for composition families, launcher no-mode-owner, backend fail-closed capture/input, foreground pyautogui/PIL paths, drag timing/release sequence, and relaunch capturer reuse (`test_foreground_demo_mode_isolation.py`), satisfying acceptance criteria 13-15.
+
+<!-- blackfire-gate-fingerprint: {"schema":1,"role":"regression-reviewer","hash":"3855550e0d041ca0f5c41806931ee3b65468afed9ed9178931fb4296cf95db46"} -->
