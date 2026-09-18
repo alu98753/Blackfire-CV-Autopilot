@@ -66,7 +66,7 @@ idea / future work
   -> push candidate + applicable evidence to GitHub
   -> ChatGPT / human final review
   -> explicit user-authorized integration (package remains ACTIVE)
-  -> task_archive.ps1 creates/pushes archive closeout branch
+  -> task_archive.ps1 prepares a detached closeout and pushes archive closeout branch
   -> closeout branch integration and resolver verification (ARCHIVED)
   -> task_cleanup.ps1 removes local task execution/worktree state
   -> tracked task package remains repository history until explicit archival/deletion policy

@@ -35,13 +35,13 @@ $year=([DateTimeOffset]::Parse($integrationTimestamp).ToUniversalTime().Year).To
 $destination="docs/tasks/archive/$year/$Task"
 if(@(git ls-tree -r --name-only origin/main $destination).Count){ Fail 'ARCHIVE_DESTINATION_COLLISION' }
 $closeoutBranch="archive/$Task-$year"
-if((git ls-remote --heads origin $closeoutBranch) -or (git show-ref --verify --quiet "refs/heads/$closeoutBranch")){ Fail 'ARCHIVE_CLOSEOUT_BRANCH_COLLISION' }
+if(git ls-remote --heads origin $closeoutBranch){ Fail 'ARCHIVE_CLOSEOUT_BRANCH_COLLISION' }
 
 # Prepare the move in an isolated worktree/branch; canonical main is untouched.
 $closeoutPath=Join-Path $repoRoot ".runtime\archive-closeout-$Task-$year"
 if(Test-Path $closeoutPath){ Fail 'ARCHIVE_CLOSEOUT_PATH_COLLISION' }
 New-Item -ItemType Directory -Force (Split-Path $closeoutPath) | Out-Null
-git worktree add -b $closeoutBranch $closeoutPath origin/main | Out-Null
+git worktree add --detach $closeoutPath origin/main | Out-Null
 try {
     New-Item -ItemType Directory -Force (Join-Path $closeoutPath "docs\tasks\archive\$year") | Out-Null
     git -C $closeoutPath mv -- "docs/tasks/active/$Task" $destination

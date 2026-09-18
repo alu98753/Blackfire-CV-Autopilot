@@ -305,7 +305,7 @@ Preferred closeout path:
 2. ChatGPT re-checks the expected task HEAD and current base on GitHub and performs final semantic/architecture review.
 3. The user explicitly authorizes integration.
 4. ChatGPT integrates the task branch through GitHub using merge-commit semantics. The task package remains ACTIVE after this integration.
-5. Run `scripts\task_archive.ps1 -Task <task-id>`; it creates and pushes an isolated archive closeout branch and reports `ARCHIVE_CLOSEOUT_READY`. This is not yet `ARCHIVED`.
+5. Run `scripts\task_archive.ps1 -Task <task-id>`; it prepares the move in a temporary detached worktree, pushes an isolated remote archive closeout branch, and reports `ARCHIVE_CLOSEOUT_READY`. No persistent local closeout branch is created, and this is not yet `ARCHIVED`.
 6. ChatGPT/user integrates the closeout branch through the existing merge authority. The resolver must then find exactly one ARCHIVED package in `origin/main`.
 7. Only after closeout integration and ARCHIVED verification is local cleanup delegated to `task_cleanup.ps1`.
 

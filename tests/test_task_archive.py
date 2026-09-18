@@ -52,6 +52,7 @@ class ArchiveBehavioralTests(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stderr)
             payload = json.loads(p.stdout.strip().splitlines()[-1]); self.assertEqual(payload["outcome"], "ARCHIVE_CLOSEOUT_READY")
             self.assertIn(payload["closeout_branch"], self.git(main, "ls-remote", "--heads", "origin").stdout)
+            self.assertNotEqual(self.git(main, "show-ref", "--verify", f"refs/heads/{payload['closeout_branch']}", check=False).returncode, 0)
             self.assertEqual(self.git(main, "status", "--porcelain").stdout, "")
             self.assertEqual(self.git(main, "rev-parse", "HEAD").stdout.strip(), self.git(main, "rev-parse", "origin/main").stdout.strip())
         finally: self.git(main, "worktree", "remove", wt, check=False); td.cleanup()
