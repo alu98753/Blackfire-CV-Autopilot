@@ -41,6 +41,7 @@ Do not duplicate the AI workflow roadmap in this backlog. New workflow ideas may
 - [ ] 思考凌晨與平日戰鬥的策略變化 像是平常要暫停的template,要暫時移到flee的等等
 - [ ] ai workflow要調整具體而言不需要archive 的部分(active可以保留),因為archived應該放到docs/architecture 並SSOT, git pr本身就是archived的證據
 - [ ] ai workflow 要重新構思 整理,並把測試精簡化
+    task 開起來要限制ai只能看該資料夾 不准看其他worktree的, 做serach ...任何事情都一樣
 - [ ] venv, npm等架構要思考怎麼可以用腳本build起來, 讓不同"windows"都可以順利安裝
 - [ ] user data要思考怎麼可以在不同電腦間同步 首先要想的是 是否能在同一個資料夾下,然後就可以直接複製貼上而不用git
 - [ ] 分析兩隻帳號的七星英雄下一隻應該是誰 以及是否可以慢慢玩也就是不用一次到位 可以完很久 來把想玩的7興英雄收集到 或是一開始就要換到(權衡想要的陣容 在打怪 boss是否打得過)
