@@ -148,6 +148,12 @@ class TestBehaviorSupervisorLifecycle(unittest.TestCase):
         self.assertNotIn("--restart-game", resumed)
         self.assertIn("--resume", resumed)
 
+    def test_foreground_mode_survives_resume_without_backend_injection(self):
+        command = ["python", "main.py", "--foreground", "--profile", "native"]
+        resumed = prepare_resume_command(command, {"profile": "native"}, restart_game=True)
+        self.assertIn("--foreground", resumed)
+        self.assertNotIn("--backend", resumed)
+
     # -------------------------------------------------------------------------
     # Scenario S6: KeyboardInterrupt (Ctrl+C) Clean Shutdown
     # -------------------------------------------------------------------------

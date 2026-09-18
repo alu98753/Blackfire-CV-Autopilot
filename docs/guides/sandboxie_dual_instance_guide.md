@@ -88,11 +88,11 @@ flowchart TD
 適用於捷徑啟動或批次指令：
 * **指定沙盒帳號**：
   ```bash
-  python main.py --backend --mode daily --target sandbox
+  python main.py --mode daily --target sandbox
   ```
 * **指定本機原生帳號**：
   ```bash
-  python main.py --backend --mode daily --target native
+  python main.py --mode daily --target native
   ```
 * **依選單序號或指定 HWND**：
   ```bash

@@ -92,20 +92,18 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
     @patch("capture.screen.np.array")
     @patch.object(ScreenCapturer, "_capture_backend", return_value=None)
     @patch.object(ScreenCapturer, "get_hwnd", return_value=123456)
-    def test_3_capture_tier2_mss_foreground_fallback(self, mock_get_hwnd, mock_backend, mock_np_array):
+    def test_3_backend_capture_failure_does_not_fallback_to_mss(self, mock_get_hwnd, mock_backend, mock_np_array):
         """
         測試 3.2：若後台截圖回傳 None，自動降階至 Tier 2 前台 mss 擷取
         """
         self.capturer.backend_mode = True
-        fake_bgra = np.zeros((1080, 1920, 4), dtype=np.uint8)
-        self.capturer.sct.grab = MagicMock(return_value=fake_bgra)
-        mock_np_array.return_value = fake_bgra
+        self.capturer.sct.grab = MagicMock()
 
         rect = {"left": 0, "top": 0, "width": 1920, "height": 1080}
         img = self.capturer.capture(rect)
 
-        self.assertIsNotNone(img)
-        self.capturer.sct.grab.assert_called_once()
+        self.assertIsNone(img)
+        self.capturer.sct.grab.assert_not_called()
 
     @patch("PIL.ImageGrab.grab")
     @patch.object(ScreenCapturer, "_capture_backend", return_value=None)

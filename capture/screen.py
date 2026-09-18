@@ -307,6 +307,8 @@ class ScreenCapturer:
             img = self._capture_backend(hwnd)
             if img is not None:
                 return img
+            logging.error("[ScreenCapturer] Backend capture failed; refusing foreground fallback.")
+            return None
                 
         # 2. 前台 / MSS 螢幕區域截圖 (第二防線)
         if rect is None and not full_screen:

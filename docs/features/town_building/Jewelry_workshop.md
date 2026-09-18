@@ -39,7 +39,7 @@
 ### 獨立單次出售模式 (CLI 獨立版)
 使用者可由命令列單獨發起珠寶加工廠出售：
 ```powershell
-.venv\Scripts\python main.py --backend --mode jewelry_workshop
+.venv\Scripts\python main.py --mode jewelry_workshop
 ```
 
 - **自動進門與開啟選單**：於城鎮自動辨識並點擊 `Jewelry_workshop.png` ➔ 點擊 `sell_out.png` 開啟出售選單。

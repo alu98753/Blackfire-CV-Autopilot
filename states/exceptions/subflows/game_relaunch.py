@@ -50,7 +50,7 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
             mouse=getattr(machine, 'mouse', None),
             matcher=getattr(machine, 'matcher', None),
             game_title=game_title,
-            backend_mode=getattr(machine, 'backend_mode', False),
+            backend_mode=getattr(machine, 'backend_mode', True),
         )
         if not launcher.ensure_game_ready():
             logging.error('[GameRelaunchSubflow] Game launch failed; preserving failure state for external supervisor recovery.')
