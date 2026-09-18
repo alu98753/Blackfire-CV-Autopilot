@@ -86,7 +86,7 @@
 * **核心 API**：`config.normalize_config(config)`
 * **規範**：
   - ⚠️ **嚴禁**在 Handler 內部使用過低降級硬編碼（例如 fallback 為僅分解綠色），以免丟失預設品質狀態。
-  - ✅ **必須**在全入口 (CLI `--backend`, `--subflow`, `main.py` 與 `GameStateMachine`) 設定 config 時，一律呼叫 `normalize_config(config)`，確保 `disassemble_colors` (`["gray_or_empty", "green", "blue"]`) 與 `keep_colors` 在任何啟動與切換時都 100% 精準。
+  - ✅ **必須**在全入口 (CLI backend default, `--subflow`, `main.py` 與 `GameStateMachine`) 設定 config 時，一律呼叫 `normalize_config(config)`，確保 `disassemble_colors` (`["gray_or_empty", "green", "blue"]`) 與 `keep_colors` 在任何啟動與切換時都 100% 精準。
 
 ---
 

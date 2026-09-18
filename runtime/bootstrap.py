@@ -151,6 +151,7 @@ def init_state_machine_system(args, config, target_hwnd=None):
 
     # 初始化模組
     backend_mode = getattr(args, "backend_mode", True)
+    print("[*] I/O mode: " + ("Backend Production (Win32)" if backend_mode else "Foreground Demo (Visible Capture + Physical Mouse)"), flush=True)
     from runtime.io_adapters import compose_io
     capturer, mouse = compose_io(foreground=not backend_mode, window_title=args.title,
                                  hwnd=target_hwnd, monitor_index=active_monitor,
