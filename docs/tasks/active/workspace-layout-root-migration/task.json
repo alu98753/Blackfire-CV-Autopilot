@@ -18,10 +18,10 @@
   ],
   "models": {
     "scout": [
-      "opencode-default"
+      "opencode/big-pickle"
     ],
     "review": [
-      "opencode-default"
+      "opencode/big-pickle"
     ]
   },
   "notes": {
