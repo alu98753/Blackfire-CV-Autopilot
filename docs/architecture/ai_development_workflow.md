@@ -38,6 +38,15 @@ Authority boundaries:
 
 ## 2. Canonical local workspace
 
+The current canonical layout is:
+
+```text
+E:\Side_Project\Blackfire-CV-Autopilot\
+E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>\
+```
+
+The legacy nested tree shown below is historical migration context only. New task worktrees must use the sibling namespace above.
+
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
 ├─ BlackfireCrusade_tool\
@@ -48,11 +57,13 @@ E:\Side_Project\Blackfire-CV-Autopilot\
       └─ .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
 ```
 
-`E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool` is the permanent local `main` worktree and canonical integrated runtime/CV validation home. It remains attached to `main`; the old permanent temp-main / detached-main convention is retired.
+`E:\Side_Project\Blackfire-CV-Autopilot` is the permanent local `main` worktree and canonical integrated runtime/CV validation home. It remains attached to `main`; the old nested checkout and permanent temp-main / detached-main conventions are retired.
 
-`E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>` is the canonical path for new branch-scoped temporary task worktrees.
+`E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>` is the canonical path for new branch-scoped temporary task worktrees.
 
 Existing legacy active worktrees may remain where they are until their task closes. Do not move dirty/active worktrees merely to normalize paths.
+
+After this migration is integrated, run normal task cleanup and confirm no relevant linked task worktrees remain before physically relocating the existing main checkout. Preserve that checkout as a whole, including ignored local state and its `.venv` junction.
 
 Git worktree topology is machine state. Repository automation must inspect `git worktree list --porcelain`; branch ownership must never be guessed from remembered paths.
 

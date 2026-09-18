@@ -81,8 +81,8 @@ The wrapper intentionally does **not**:
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\        <- permanent attached main + runtime/CV home
-└─ worktrees\
+├─ Blackfire-CV-Autopilot\      <- permanent attached main + runtime/CV home
+└─ Blackfire-CV-Autopilot-worktrees\
    └─ <task-id>\                 <- branch-scoped task worktree
 ```
 
@@ -100,7 +100,7 @@ Every runnable worktree uses its own local consumer path:
 
 The `.venv` entry is a junction to the canonical shared environment. No worktree owns the physical environment.
 
-New formal task worktrees use the project-scoped path above. Existing active legacy worktrees may remain where they are until closeout; do not relocate dirty/active worktrees merely for tidiness.
+New formal task worktrees use the sibling project-scoped path above: `E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>`. Existing active legacy worktrees may remain where they are until closeout; do not relocate dirty/active worktrees merely for tidiness.
 
 ## 4. Trigger identification
 
@@ -248,7 +248,7 @@ Useful snapshot:
 
 ```text
 Task / Branch: <name>
-Worktree: E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
+Worktree: E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>
 Base: origin/main @ <sha>
 Goal: <from SPEC>
 Remote: origin/<branch>
