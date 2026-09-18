@@ -31,7 +31,7 @@ class TaskPackageResolverTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout.split(), ["ACTIVE", "MISSING", "ARCHIVED", "MALFORMED", "AMBIGUOUS_ARCHIVE"])
 
-    def test_contract_has_canonical_active_path_and_classifications(self):
+    def test_contract_has_canonical_active_path_and_resolver_outcomes(self):
         text = RESOLVER.read_text(encoding="utf-8")
         self.assertIn('docs/tasks/active/$Task', text)
         for classification in ("ACTIVE", "ARCHIVED", "MISSING", "MALFORMED", "AMBIGUOUS_ARCHIVE"):

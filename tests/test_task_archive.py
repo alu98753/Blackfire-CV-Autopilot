@@ -10,9 +10,10 @@ class TaskArchiveContractTests(unittest.TestCase):
         cleanup = (ROOT / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
         self.assertIn("origin/main", archive)
         self.assertIn("integration_year", archive)
-        self.assertIn("ARCHIVE_REMOTE_DURABILITY_REQUIRED", archive)
+        self.assertIn("ARCHIVE_CLOSEOUT_READY", archive)
+        self.assertIn("pushed closeout branch", archive)
         self.assertNotIn("task_archive.ps1", cleanup)
-        self.assertNotIn("worktree", archive.lower())
+        self.assertIn("git worktree add", archive.lower())
 
     def test_archive_fails_closed_for_unsafe_states(self):
         text = (ROOT / "scripts" / "task_archive.ps1").read_text(encoding="utf-8")

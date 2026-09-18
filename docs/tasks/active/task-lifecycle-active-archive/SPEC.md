@@ -18,7 +18,7 @@ Active workflow commands operate only on active packages. Archived packages rema
 1. Path is the lifecycle-location SSOT. Do not add task.json.status as lifecycle authority.
 2. SPEC.md remains the behavioral contract; task.json remains automation metadata.
 3. Add scripts/task_package_resolver.ps1 as the single owner of canonical task-package path semantics.
-4. Resolver classifications must cover ACTIVE, ARCHIVED, MISSING, MALFORMED, and AMBIGUOUS_ARCHIVE.
+4. Resolver outcomes must cover ACTIVE, ARCHIVED, MISSING, MALFORMED, and AMBIGUOUS_ARCHIVE. Only ACTIVE and ARCHIVED are lifecycle states.
 5. Resolver semantics must be usable by both checked-out filesystem consumers and Git-ref/tree consumers.
 6. task_start.ps1 may continue using Git plumbing for remote-tree inspection, but must obtain canonical active relative paths from the resolver rather than reconstructing docs/tasks/... itself.
 7. ai_scout.ps1 and ai_gate.ps1 must resolve only ACTIVE packages.

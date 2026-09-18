@@ -1,3 +1,4 @@
+# Lifecycle states are ACTIVE and ARCHIVED. The other values below are resolver outcomes.
 Set-StrictMode -Version Latest
 
 function Get-TaskPackageRelativePath {
