@@ -79,12 +79,20 @@ The wrapper intentionally does **not**:
 
 ## 3. Canonical workspace contract
 
+The canonical topology is sibling-based, not nested:
+
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\        <- permanent attached main + runtime/CV home
-└─ worktrees\
-   └─ <task-id>\                 <- branch-scoped task worktree
+E:\Side_Project\
+├─ Blackfire-CV-Autopilot\
+│  └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+├─ Blackfire-CV-Autopilot-worktrees\
+│  └─ <task-id>\
+│     └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+└─ VenvPools\
+   └─ .venvs-Blackfire-CV-Autopilot\
 ```
+
+`VenvPools` is the external sibling holding the only physical shared Python environment. Worktree `.venv` entries are junction consumers; `node_modules` remains untracked per-worktree state.
 
 Canonical shared Python environment:
 
@@ -100,7 +108,7 @@ Every runnable worktree uses its own local consumer path:
 
 The `.venv` entry is a junction to the canonical shared environment. No worktree owns the physical environment.
 
-New formal task worktrees use the project-scoped path above. Existing active legacy worktrees may remain where they are until closeout; do not relocate dirty/active worktrees merely for tidiness.
+New formal task worktrees use the sibling project-scoped path above: `E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>`. Existing active legacy worktrees may remain where they are until closeout; do not relocate dirty/active worktrees merely for tidiness.
 
 ## 4. Trigger identification
 
@@ -248,7 +256,7 @@ Useful snapshot:
 
 ```text
 Task / Branch: <name>
-Worktree: E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
+Worktree: E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>
 Base: origin/main @ <sha>
 Goal: <from SPEC>
 Remote: origin/<branch>

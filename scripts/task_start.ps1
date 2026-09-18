@@ -264,7 +264,9 @@ try {
     $worktreesRoot = if ($env:TASK_START_WORKTREES_ROOT_OVERRIDE) {
         Normalize-WindowsPath $env:TASK_START_WORKTREES_ROOT_OVERRIDE
     } else {
-        Normalize-WindowsPath (Join-Path (Split-Path $canonicalRoot -Parent) 'worktrees')
+        $canonicalParent = Split-Path $canonicalRoot -Parent
+        $canonicalName = Split-Path $canonicalRoot -Leaf
+        Normalize-WindowsPath (Join-Path $canonicalParent ($canonicalName + '-worktrees'))
     }
     $targetWorktreePath = Normalize-WindowsPath (Join-Path $worktreesRoot $Task)
 

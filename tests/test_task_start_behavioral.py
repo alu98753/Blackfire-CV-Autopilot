@@ -89,8 +89,8 @@ class TaskStartBehavioralTests(unittest.TestCase):
             branch_name = task_id
         base = Path(temp_dir)
         origin_dir = base / "origin.git"
-        main_dir = base / "BlackfireCrusade_tool"
-        worktrees_dir = base / "worktrees"
+        main_dir = base / "Blackfire-CV-Autopilot"
+        worktrees_dir = base / "Blackfire-CV-Autopilot-worktrees"
         worktrees_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Bare remote origin
@@ -148,6 +148,21 @@ class TaskStartBehavioralTests(unittest.TestCase):
             "worktrees_root": worktrees_dir,
             "fake_helper": fake_helper,
         }
+
+    def test_default_worktree_root_is_sibling_of_canonical_main(self):
+        with tempfile.TemporaryDirectory() as temp:
+            f = self.create_git_fixture(temp, task_id="default-root-task")
+            env = {
+                "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
+                "TASK_START_COMMON_DIR_OVERRIDE": str(f["main"] / ".git"),
+                "TASK_START_CANONICAL_MAIN_OVERRIDE": str(f["main"]),
+            }
+            proc = self.run_task_start(task="default-root-task", env=env)
+            data = self.parse_result(proc)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["worktree"], str(f["worktrees_root"] / "default-root-task"))
+            self.assertTrue((f["worktrees_root"] / "default-root-task").exists())
 
     def test_argument_validation_fails_with_invalid_argument(self):
         proc = self.run_task_start(task="INVALID_UPPERCASE")
