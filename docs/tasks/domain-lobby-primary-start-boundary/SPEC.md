@@ -342,3 +342,65 @@ If the active user_data file is required to prove the cause and is not available
 ### Additional acceptance criterion
 
 19. The implementation must fix the proven source of Domain execution-identity loss or the proven ownership-restoration gap, not merely suppress the downstream `ValueError`. If the identity loss is intentional because a temporary non-Domain config owns execution, then the fix must make Domain scene adoption respect that ownership and recover safely rather than fabricating identity.
+
+
+## Proven Config Provenance Result
+
+A bounded local read-only investigation on the active `sandbox` profile resolved the remaining provenance uncertainty.
+
+### Proven facts
+
+- Active local profile source: `user_data/sandbox/config.toml`.
+- No `config/local.toml` is active.
+- The active profile does **not** override `[primary_modes.golden_empire]`.
+- Canonical Golden Empire remains:
+  - `type = "domain"`
+  - `domain = "golden_empire"`
+  - `lobby_start_btn = "domains/common/start_btn.png"`
+  - normalized `enable_stage_farming = false`
+- Recursive `_deep_merge()` preserves omitted canonical keys.
+- `validate_profile_mode_overrides()` rejects changes to canonical Domain `type` or `domain` identity.
+- No profile-validation bypass was found in static load or hot-reload paths.
+
+### Proven classification
+
+- `user_data`: **EXONERATED**
+- Root cause class:
+  - **runtime config replacement**
+  - **execution-context restoration gap**
+
+### Proven runtime causal chain
+
+Two runtime scenarios are valid and must both remain safe:
+
+1. **Direct Domain mode**
+   - a valid Domain config enters Lobby;
+   - legacy `enable_stage_farming == false` fallback converts execution ownership toward `collect_only`;
+   - the physical game may still be in / return to a Domain scene;
+   - generic Domain visual adoption must not dispatch `DOMAIN_EXPLORE` without restoring valid Domain execution identity.
+
+2. **Daily / non-Domain runtime ownership (observed incident)**
+   - `primary_config` is Daily (`type="mix"`) with `tier4_mode="none"`;
+   - town-subflow / scheduler flow restores Daily or CollectOnly runtime config with no `domain` field;
+   - physical game is nevertheless observed in a Domain exploration scene;
+   - `detect_current_state()` matches `domains/common/explore_btn.png` and currently adopts `DOMAIN_EXPLORE` unconditionally;
+   - `DomainExploreHandler` correctly fails fast because the active runtime config has no Domain identity.
+
+The observed production crash therefore does **not** justify restoring Golden Empire from `tier4_domain` when Tier 4 Domain mode is disabled, nor does it justify copying `primary_config` blindly. In the observed Daily case, `primary_config` intentionally has no active Domain execution identity.
+
+### Final implementation consequence
+
+The implementation MUST distinguish:
+
+- **Domain execution is currently owned**: a valid Domain config may adopt `DOMAIN_EXPLORE`.
+- **Domain execution is not currently owned**: generic Domain visuals are scene evidence only; they must not manufacture or reactivate a Domain identity.
+
+For non-Domain ownership (including Daily/CollectOnly with `tier4_mode="none"`), the correct behavior is bounded fail-closed recovery/navigation, not Domain identity restoration.
+
+For direct Domain ownership, the Lobby bug must be fixed so the Domain execution config is not incorrectly discarded merely because `enable_stage_farming == false`.
+
+### Resolved uncertainty
+
+The question "did user_data erase the Domain identity?" is closed: **No**.
+
+The remaining non-blocking uncertainty is only how the physical game arrived at the Domain exploration scene while runtime ownership was Daily/CollectOnly. That origin is not required to implement the safety boundary because scene evidence alone cannot authorize Domain execution.
