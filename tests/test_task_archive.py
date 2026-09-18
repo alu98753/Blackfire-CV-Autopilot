@@ -9,8 +9,8 @@ class TaskArchiveContractTests(unittest.TestCase):
         archive = (ROOT / "scripts" / "task_archive.ps1").read_text(encoding="utf-8")
         cleanup = (ROOT / "scripts" / "task_cleanup.ps1").read_text(encoding="utf-8")
         self.assertIn("origin/main", archive)
-        self.assertIn("git mv", archive)
         self.assertIn("integration_year", archive)
+        self.assertIn("ARCHIVE_REMOTE_DURABILITY_REQUIRED", archive)
         self.assertNotIn("task_archive.ps1", cleanup)
         self.assertNotIn("worktree", archive.lower())
 
