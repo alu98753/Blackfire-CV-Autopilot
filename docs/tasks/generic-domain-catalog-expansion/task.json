@@ -27,11 +27,16 @@
     ]
   },
   "notes": {
-    "status": "Draft",
+    "status": "Final",
     "architecture": "project_arch_greenfield_lite_v1.md",
     "depends_on": [
       "domain-common-template-decoupling"
     ],
-    "intent": "Add abyssbeast_lair and coldoath_citadel as canonical Generic Domains and repair two stale merged-contract regression tests without changing production behavior for those test failures."
+    "intent": "Add abyssbeast_lair and coldoath_citadel as canonical Generic Domains and repair two stale merged-contract regression tests without changing production behavior for those test failures.",
+    "display_names": {
+      "abyssbeast_lair": "深淵獸巢",
+      "coldoath_citadel": "寒誓古堡"
+    },
+    "implementation_boundary": "Domain registration should be TOML-only in production; two stale main-entrypoint failures are test-fixture maintenance only."
   }
 }
