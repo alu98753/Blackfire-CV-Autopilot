@@ -5,7 +5,7 @@ $repoRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
 $gate = Join-Path $repoRoot 'scripts\ai_gate.ps1'
 $scout = Join-Path $repoRoot 'scripts\ai_scout.ps1'
 $fixtureId = "workflow-harness-fixture-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))-$PID"
-$fixtureDir = Join-Path \$repoRoot "docs\\tasks\\active\\\$fixtureId"
+$fixtureDir = Join-Path $repoRoot "docs\tasks\active\$fixtureId"
 $runtimeDirs = @(
     (Join-Path $repoRoot ".runtime\ai_gate\$fixtureId"),
     (Join-Path $repoRoot ".runtime\ai_scout\$fixtureId")
