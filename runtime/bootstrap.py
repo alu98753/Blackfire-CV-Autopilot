@@ -152,9 +152,10 @@ def init_state_machine_system(args, config, target_hwnd=None):
     print("=" * 60)
 
     # 初始化模組
-    capturer = ScreenCapturer(window_title=args.title, backend_mode=args.backend, hwnd=target_hwnd, monitor_index=active_monitor)
+    backend_mode = getattr(args, "backend_mode", True)
+    capturer = ScreenCapturer(window_title=args.title, backend_mode=backend_mode, hwnd=target_hwnd, monitor_index=active_monitor)
     matcher = TemplateMatcher(templates_dir="templates", template_scale=1.0, auto_scale=True)
-    mouse = MouseController(human_like=True, backend_mode=args.backend, window_title=args.title,
+    mouse = MouseController(human_like=True, backend_mode=backend_mode, window_title=args.title,
                             capturer=capturer, hwnd=target_hwnd)
 
     profile_name = resolve_profile_name(args, getattr(args, "title", ""))
@@ -188,7 +189,7 @@ def init_state_machine_system(args, config, target_hwnd=None):
         daily_pipeline_notifier=daily_pipeline_notifier,
     )
     state_machine.daily_manager = daily_manager
-    state_machine.backend_mode = args.backend
+    state_machine.backend_mode = backend_mode
     state_machine.window_title = args.title
     state_machine.target_hwnd = target_hwnd
     state_machine.is_sandbox = ("[#]" in args.title)

@@ -14,7 +14,7 @@ def setup_mode_config(args):
     if args.subflow:
         target_key = args.subflow[0]
         config = GAME_CONFIGS[target_key].copy()
-        config["backend_mode"] = args.backend
+        config["backend_mode"] = getattr(args, "backend_mode", True)
         print(f"🛠️ [Dev 測試模式] 直接發起城鎮子流程: {args.subflow} (免選關卡，直通城鎮)")
         return config
 
@@ -22,7 +22,7 @@ def setup_mode_config(args):
     config = GAME_CONFIGS[target_key].copy()
     # `daily` uses type="mix" at runtime, so retain its TOML table identity.
     config["_config_mode_key"] = target_key
-    config["backend_mode"] = args.backend
+    config["backend_mode"] = getattr(args, "backend_mode", True)
 
     # 覆蓋 CLI 明確傳入之活動開關
     if args.enable_lord_boss is not None:
@@ -107,9 +107,10 @@ def setup_mode_config(args):
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 
-    elif args.mode == "golden_empire" or config.get("type") == "domain":
-        domain_name = config.get("name", "黃金古國")
-        print(f"\n🏛️ [領地模式] 啟動【{domain_name}】自動探索 (每次消耗 3 麵包，含挖寶與戰鬥處理)...")
+    elif config.get("type") == "domain":
+        domain_name = config.get("name") or target_key
+        bread_cost = config["bread_cost"]
+        print(f"\n🏛️ [領地模式] 啟動【{domain_name}】自動探索 (每次消耗 {bread_cost} 麵包，含挖寶與戰鬥處理)...")
 
     elif args.mode == "blood_altar":
         print("\n請選擇要獻祭/消耗的血水品質（設定為『否/保留』者將不進行點選獻祭）：")

@@ -99,7 +99,7 @@ Profile-specific state includes configuration and runtime data required to resum
 
 Native and Sandbox instances also use separate heartbeat files, allowing two supervised bot instances to run without treating the other instance's heartbeat as their own.
 
-With `--backend`, supported actions are sent to the target Windows game window without requiring ownership of the physical mouse for every interaction.
+By default, supported actions are sent to the target Windows game window without requiring ownership of the physical mouse for every interaction. Use `--foreground` for visible demo operation; legacy `--backend` remains accepted for compatibility.
 
 ---
 
@@ -258,7 +258,7 @@ Running `main.py` directly is useful for development and targeted execution, but
 Run the daily pipeline:
 
 ```powershell
-.\.venv\Scripts\python main.py --mode daily --backend
+.\.venv\Scripts\python main.py --mode daily
 ```
 
 Daily activities can also be selectively enabled or disabled:
@@ -290,7 +290,7 @@ Run stage farming:
 Enable background control:
 
 ```powershell
-.\.venv\Scripts\python main.py --mode mix --backend
+.\.venv\Scripts\python main.py --mode mix
 ```
 
 Target the Sandbox instance:

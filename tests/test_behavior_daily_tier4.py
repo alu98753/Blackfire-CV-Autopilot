@@ -59,6 +59,34 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(config["tier4_domain"], "golden_empire")
         self.assertFalse(config["enable_stage_farming"])
 
+    @patch("cli.tier4_setup.persist_mode_updates")
+    @patch("builtins.input", side_effect=["2", "", "invalid", "1"])
+    def test_interactive_domain_selection_requires_explicit_choice_when_current_missing(
+        self, mock_input, persist
+    ):
+        """[Phase 1] 驗證互動模式下當 tier4_domain 缺失時，不得將目錄首項視為預設，必須拒絕空輸入與無效輸入，直到使用者明確輸入有效選項為止"""
+        config = {
+            "_config_mode_key": "daily",
+            "tier4_mode": "stage",
+            "tier4_stage_level": 6,
+            "enable_stage_farming": True,
+        }
+
+        setup_daily_tier4_config(config, interactive=True)
+
+        # 確保所有輸入都被消耗（"2" 選擇 domain、"" 被拒絕、"invalid" 被拒絕、"1" 被接受）
+        self.assertEqual(mock_input.call_count, 4)
+        persist.assert_called_once_with(
+            config,
+            {
+                "tier4_mode": "domain",
+                "tier4_domain": "golden_empire",
+                "enable_stage_farming": False,
+            },
+        )
+        self.assertEqual(config["tier4_domain"], "golden_empire")
+        self.assertFalse(config["enable_stage_farming"])
+
     def test_domain_fallback_preserves_daily_timed_activity_policy(self):
         daily = {
             "_config_mode_key": "daily",
@@ -75,7 +103,12 @@ class TestDailyTier4Behavior(unittest.TestCase):
                 "type": "domain",
                 "domain": "golden_empire",
                 "navigation_path": ["domains/golden_empire/entry.png"],
-                "explore_priorities": ["domains/golden_empire/explore_btn.png"],
+                "explore_priorities": ["domains/common/explore_btn.png"],
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
+                "domain_entry_btn": "domains/golden_empire/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
+                "enable_lord_boss": False,
             }
         }
 
@@ -381,7 +414,16 @@ class TestDailyTier4Behavior(unittest.TestCase):
     def test_tier4_config_preserves_enable_dungeon_in_stage_and_domain(self):
         mode_configs = {
             "stage": {"name": "關卡", "type": "stage"},
-            "golden_empire": {"name": "黃金帝國", "type": "domain"},
+            "golden_empire": {
+                "name": "黃金帝國",
+                "type": "domain",
+                "domain": "golden_empire",
+                "navigation_path": ["common/door.png", "domains/golden_empire/entry.png"],
+                "domain_tab_btn": "domains/Domains_entry.png",
+                "domain_tab_after_btn": "domains/Domains_entry_after.png",
+                "domain_entry_btn": "domains/golden_empire/entry.png",
+                "lobby_start_btn": "domains/common/start_btn.png",
+            },
         }
         # Stage fallback with enable_dungeon True/False
         stage_cfg_true = {"tier4_mode": "stage", "enable_dungeon": True}
@@ -395,12 +437,20 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(stage_fb_false["type"], "stage")
 
         # Domain fallback with enable_dungeon True/False
-        domain_cfg_true = {"tier4_mode": "domain", "enable_dungeon": True}
+        domain_cfg_true = {
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_dungeon": True,
+        }
         domain_fb_true = build_tier4_fallback_config(domain_cfg_true, mode_configs)
         self.assertTrue(domain_fb_true["enable_dungeon"])
         self.assertEqual(domain_fb_true["type"], "domain")
 
-        domain_cfg_false = {"tier4_mode": "domain", "enable_dungeon": False}
+        domain_cfg_false = {
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_dungeon": False,
+        }
         domain_fb_false = build_tier4_fallback_config(domain_cfg_false, mode_configs)
         self.assertFalse(domain_fb_false["enable_dungeon"])
         self.assertEqual(domain_fb_false["type"], "domain")
@@ -794,7 +844,7 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(fallback["type"], "collect_only")
         self.assertEqual(fallback["tier4_mode"], "none")
         self.assertFalse(fallback["enable_stage_farming"])
-        self.assertFalse(fallback["enable_golden_empire"])
+        self.assertNotIn("enable_golden_empire", fallback)
         self.assertTrue(fallback["enable_dungeon"])
 
     def test_build_tier4_fallback_config_stage_coherence_and_pure_dungeon(self):

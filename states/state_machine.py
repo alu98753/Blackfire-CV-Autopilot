@@ -649,7 +649,7 @@ class GameStateMachine:
         Visual state detection and bag-cleanup recovery can enter EXPLORING
         while a temporary town/subflow or non-dungeon config (e.g. domain, stage)
         is active. Those configs either lack ``explore_priorities`` or define
-        non-dungeon priorities (e.g. ``domains/golden_empire/explore_btn.png``).
+        non-dungeon priorities (e.g. ``domains/common/explore_btn.png``).
         """
         active_config = self.config or {}
         if self.is_dungeon_explore_config(active_config):
@@ -1197,7 +1197,7 @@ class GameStateMachine:
                         
         # 4.5 檢查是否在領地探索中 (例如黃金古國主場景 explore_btn.png 或 exit_to_lobby.png)
         domain_features = [
-            "domains/golden_empire/explore_btn.png",
+            "domains/common/explore_btn.png",
             "domains/common/exit_to_lobby.png",
         ]
         is_domain_mode = (
@@ -1534,9 +1534,9 @@ class GameStateMachine:
 
     def _build_tier4_fallback_config(self):
         """Build the route selected by the Daily Profile without mutating policy."""
-        source = getattr(self, "primary_config", None) or getattr(self, "config", None)
+        source = getattr(self, "primary_config", None)
         if not source:
-            source = GAME_CONFIGS["daily"]
+            raise RuntimeError("無法構建 Tier 4 退守配置：缺少主要政策擁有者 primary_config")
         fallback = build_tier4_fallback_config(source, GAME_CONFIGS)
         if {"tier4_stage_level", "tier4_sub_stage"} & fallback.keys():
             self._apply_tier4_stage_selection(fallback)
@@ -1597,7 +1597,7 @@ class GameStateMachine:
             return False
         return self.has_available_dungeon(target_config=policy)
 
-    def has_pending_daily_activity(self):
+    def has_pending_daily_activity(self, include_lord_boss: bool = True):
         """Report whether a higher-priority Daily activity should exit Tier 4."""
         if not self.is_daily_pipeline_active():
             return False
@@ -1606,7 +1606,9 @@ class GameStateMachine:
         if manager and policy.get("enable_town_daily", True):
             if manager.get_pending_town_subflows():
                 return True
-        if self.has_available_demon_lords() or self.has_available_selected_lord_boss():
+        if self.has_available_demon_lords():
+            return True
+        if include_lord_boss and self.has_available_selected_lord_boss():
             return True
         if self.poll_daily_quest_preemption():
             return True
@@ -1668,7 +1670,7 @@ class GameStateMachine:
         dm = getattr(self, "daily_manager", None)
         if not dm or not hasattr(dm, "is_demon_lords_available"):
             return False
-        cfg = self.config or {}
+        cfg = self._daily_activity_config()
         mode_type = cfg.get("type")
         is_daily_active = self.is_daily_pipeline_active() or getattr(self, "quest_scheduler", None) is not None
         default_enable = True if (mode_type in ["daily", "mix"] or is_daily_active or not cfg) else False
@@ -1724,35 +1726,24 @@ class GameStateMachine:
         Daily quests may temporarily enable their required activity; this
         restores the baseline and marks it as Tier 4 for safe preemption.
         """
-        if getattr(self, "primary_config", None):
-            fallback_cfg = self._build_tier4_fallback_config()
-            if (
-                self.config.get("is_tier4_fallback", False)
-                and all(self.config.get(key) == value for key, value in fallback_cfg.items())
-            ):
-                logging.debug("[GameStateMachine] Tier 4 fallback configuration is already active.")
-                self.arm_daily_quest_preemption()
-                return False
-            self.set_config(fallback_cfg)
-            self.arm_daily_quest_preemption()
-            logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
-            if fallback_cfg.get("tier4_mode") == TIER4_MODE_NONE or fallback_cfg.get("type") == "collect_only":
-                if not self.is_in_collect_only_mode():
-                    logging.info("💤 [GameStateMachine] Tier 4 長駐已停用 ➔ 自動轉入 COLLECT_ONLY 待機...")
-                    self.transition_to(self.STATE_COLLECT_ONLY)
-        else:
-            from config import PRIMARY_MODES
-            mix_config = PRIMARY_MODES["mix"].copy()
-            mix_config["greedy_dungeon"] = False
-            mix_config["navigation_path"] = ["common/door.png", "dungeons/dungeon.png", "dungeons/Ice_entry.png"]
-            mix_config["is_tier4_fallback"] = True
-            if hasattr(self, "backend_mode"):
-                mix_config["backend_mode"] = self.backend_mode
+        if not getattr(self, "primary_config", None):
+            raise RuntimeError("無法套用 Tier 4 退守配置：缺少主要政策擁有者 primary_config")
 
-            self.set_config(mix_config)
-            self.primary_config = mix_config.copy()
+        fallback_cfg = self._build_tier4_fallback_config()
+        if (
+            self.config.get("is_tier4_fallback", False)
+            and all(self.config.get(key) == value for key, value in fallback_cfg.items())
+        ):
+            logging.debug("[GameStateMachine] Tier 4 fallback configuration is already active.")
             self.arm_daily_quest_preemption()
-            logging.info(f"🔄 [GameStateMachine] 未找到使用者基準配置，已切換至預設 Tier 4 退守配置: {mix_config['name']}")
+            return False
+        self.set_config(fallback_cfg)
+        self.arm_daily_quest_preemption()
+        logging.info(f"🔄 [GameStateMachine] 已切換至使用者設定的 Tier 4 退守配置: {self.config.get('name', 'fallback')} (關卡: {self.config.get('stage_name', 'default')})")
+        if fallback_cfg.get("tier4_mode") == TIER4_MODE_NONE or fallback_cfg.get("type") == "collect_only":
+            if not self.is_in_collect_only_mode():
+                logging.info("💤 [GameStateMachine] Tier 4 長駐已停用 ➔ 自動轉入 COLLECT_ONLY 待機...")
+                self.transition_to(self.STATE_COLLECT_ONLY)
 
 
 

@@ -229,20 +229,8 @@ class NavigationHandler(BaseStateHandler):
 
     def _resolve_domain_navigation_templates(self):
         config = self.machine.config or {}
-        nav_path = config.get("navigation_path", [])
-        tab_template = config.get("domain_tab_btn", "domains/Domains_entry.png")
+        tab_template = config.get("domain_tab_btn")
         target_template = config.get("domain_entry_btn")
-        if not target_template:
-            target_template = next(
-                (
-                    template
-                    for template in nav_path
-                    if template.startswith("domains/")
-                    and template.endswith("/entry.png")
-                    and template != tab_template
-                ),
-                None,
-            )
         return tab_template, target_template
 
     def _handle_primary_card_alignment(self, screen_img, rect, scene):
@@ -724,7 +712,7 @@ class NavigationHandler(BaseStateHandler):
             return
 
         # 領地主場景優先判定：若未標記清理背包且畫面上已經出現領地探索按鈕，說明已進入領地，轉移狀態至 DOMAIN_EXPLORE
-        domain_explore_btn = "domains/golden_empire/explore_btn.png"
+        domain_explore_btn = "domains/common/explore_btn.png"
         if not self.machine.need_bag_cleaning and os.path.exists(os.path.join("templates", domain_explore_btn)):
             pos_de, conf_de = self.matcher.match(screen_img, domain_explore_btn, threshold=0.80)
             if pos_de:
