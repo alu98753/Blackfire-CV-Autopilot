@@ -287,3 +287,58 @@ Add the narrowest state-machine/relocalization test module already used by the r
 Prefer the smallest ownership-correct change. A shared helper such as a Domain execution-context resolver is acceptable only if it reduces duplicated ownership logic across the two adoption paths without expanding scope. Otherwise, two explicit guarded call sites are acceptable.
 
 Production implementation remains blocked until this Final SPEC is consumed by the designated implementation writer.
+
+
+## Mandatory Config Provenance Verification
+
+Before production implementation, the implementer/Scout must determine **why the runtime Domain execution identity became absent**, rather than only guarding the resulting crash.
+
+Canonical repository defaults already declare a `domain` identity for every supported Domain mode. The current configuration boundary also provides important evidence:
+
+- `get_defaults_config()` recursively merges defaults with `user_data/<profile>/config.toml` (or `config/local.toml`) through `_deep_merge()`.
+- An override that simply omits `domain` should therefore inherit the canonical defaults value rather than delete it.
+- `validate_profile_mode_overrides()` rejects a profile that changes a canonical Domain's structural `type` or changes its `domain` identity.
+- Therefore a legal profile override is **not expected** to erase a canonical Domain identity merely by being partial.
+
+This makes runtime config replacement a strong alternative hypothesis: a complete Domain config may be correct at startup, but later replaced by `collect_only`, dungeon-resume, Daily/Tier-4, stamina, or another temporary execution route before the physical screen is relocalized as Domain.
+
+This is a hypothesis, not yet the final causal conclusion.
+
+### Required provenance trace
+
+Trace the exact value lineage for the failing run:
+
+`config/defaults.toml`
+→ active `user_data/<profile>/config.toml` / `config/local.toml`
+→ `get_defaults_config()`
+→ `GAME_CONFIGS` / `get_runtime_game_config()`
+→ startup `primary_config`
+→ startup/runtime `self.config`
+→ every `set_config()` or direct `self.config = ...` replacement relevant to Domain / collect-only / Tier-4 / dungeon cooldown / stamina recovery
+→ the config present immediately before `UNKNOWN -> DOMAIN_EXPLORE`.
+
+The investigation must distinguish these possibilities:
+
+1. **Profile merge corruption**: active user_data/local override actually causes the effective canonical Domain config to lose `domain`.
+2. **Invalid profile content rejected too late or bypassed**: structural validation exists but some load/update path bypasses it.
+3. **Runtime config replacement**: effective Domain config is initially correct, but a later state transition intentionally installs a non-Domain config while the physical game remains inside Domain.
+4. **Ownership restoration gap**: `primary_config` still owns the Domain identity, but scene relocalization does not reinstall the correct execution config.
+5. **Other concrete path** supported by code/runtime evidence.
+
+### Required evidence
+
+The final implementation report must state:
+
+- active profile/config source used in the reproduction;
+- whether the effective Golden Empire/selected Domain config still contains `type="domain"` and `domain=<id>` after defaults+profile merge;
+- the last known code path that changes `self.config` before the crash;
+- whether `primary_config` still contains Domain identity at that moment;
+- whether user_data is causal, contributory, or exonerated.
+
+Do **not** modify user_data or weaken profile structural validation merely to make the crash disappear.
+
+If the active user_data file is required to prove the cause and is not available in repository-tracked artifacts, local Scout/implementer should inspect it read-only and record only the relevant configuration keys/provenance in `CONTEXT.md` or the implementation report; do not commit private/local profile data.
+
+### Additional acceptance criterion
+
+19. The implementation must fix the proven source of Domain execution-identity loss or the proven ownership-restoration gap, not merely suppress the downstream `ValueError`. If the identity loss is intentional because a temporary non-Domain config owns execution, then the fix must make Domain scene adoption respect that ownership and recover safely rather than fabricating identity.
