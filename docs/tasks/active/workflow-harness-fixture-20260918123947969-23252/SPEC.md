@@ -1,0 +1,1 @@
+﻿# Final disposable harness fixture
