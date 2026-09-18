@@ -403,8 +403,11 @@ class WorkflowScriptContractTests(unittest.TestCase):
     def test_windows_workflow_gate_resume_cache(self):
         self.run_windows_workflow_group("gate-resume-cache", 200)
 
-    def test_windows_workflow_harness(self):
-        self.run_windows_workflow_group("all", 240)
+    def test_windows_workflow_all_selector_compatibility(self):
+        harness = (self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("[string]$Group = 'all'", harness)
+        self.assertIn("$Group -ne 'all'", harness)
+        self.assertIn("'gate-resume-cache'", harness)
 
     def run_cleanup_helper(self, worktree, canonical, *extra):
         helper = self.root / "scripts" / "worktree_cleanup_safety.ps1"
