@@ -133,7 +133,7 @@ class DomainExploreHandler(BaseStateHandler):
         boss_ready = bool(domain_allows_boss and dm and self.machine.has_available_selected_lord_boss())
         daily_ready = (
             self.machine.is_daily_pipeline_active() is True
-            and self.machine.has_pending_daily_activity() is True
+            and self.machine.has_pending_daily_activity(include_lord_boss=False) is True
         )
         if boss_ready or daily_ready:
             logging.info("⏰ [領地探索 ➔ Daily 插隊] 偵測到較高優先級活動已就緒；退出領地並重新排程！")

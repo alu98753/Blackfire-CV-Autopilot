@@ -47,11 +47,15 @@ def build_domain_execution_route(daily_policy: dict, selected_domain_config: dic
     route.pop("enable_domain", None)
 
     # 2. 附加 Daily 在領地長駐期間所需的必要排程上下文與 Tier4 運行標籤
-    domain_key = selected_domain_config.get("domain") or daily_policy.get("tier4_domain")
-    domain_name = selected_domain_config.get("name", domain_key)
+    # 嚴格區分：tier4_domain 為 primary mode selection key，domain 為 strategy/domain identity，嚴禁互相 fallback
+    mode_selection_key = daily_policy["tier4_domain"]
+    domain_identity = selected_domain_config["domain"]
+    domain_name = selected_domain_config.get("name", mode_selection_key)
     route["name"] = f"每日懸賞任務 (Tier 4 退守: {domain_name})"
+    route["type"] = "domain"
     route["tier4_mode"] = TIER4_MODE_DOMAIN
-    route["tier4_domain"] = domain_key
+    route["tier4_domain"] = mode_selection_key
+    route["domain"] = domain_identity
     route["is_tier4_fallback"] = True
     route["enable_stage_farming"] = False
 

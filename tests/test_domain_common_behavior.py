@@ -779,11 +779,11 @@ class TestDomainCommonBehavior(unittest.TestCase):
         self.assertEqual(route["domain_entry_btn"], "domains/golden_empire/entry.png")
 
     def test_domain_execution_enable_lord_boss_is_independent_from_daily_policy(self):
-        """[Phase 2] enable_lord_boss 雙重所有權分離：Domain execution 控制領地內 preemption，Daily 控制 scheduler policy"""
+        """[Phase 2] enable_lord_boss 雙重所有權分離與未 mock has_pending_daily_activity 的真實整合測試 (Cases A/B/C/D)"""
         from states.handlers.domain_explore import DomainExploreHandler
         from states.state_machine import GameStateMachine
 
-        modes = {
+        modes_domain_boss_false = {
             "golden_empire": {
                 "name": "黃金古國",
                 "type": "domain",
@@ -796,55 +796,139 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 "enable_lord_boss": False,  # 領域執行自身關閉領主 preemption
             }
         }
+        modes_domain_boss_true = {
+            "golden_empire": {
+                **modes_domain_boss_false["golden_empire"],
+                "enable_lord_boss": True,  # 領域執行自身允許領主 preemption
+            }
+        }
 
-        # Case 1: Daily policy = True, Domain execution = False
-        daily_policy_1 = {
+        # 基礎狀態機設置 helper：不 mock has_pending_daily_activity，使用真實調度邏輯
+        def _create_machine_and_handler(daily_cfg, domain_modes):
+            route = build_tier4_fallback_config(daily_cfg, domain_modes)
+            machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+            machine.runtime_config_key = "daily"
+            machine.primary_config = daily_cfg
+            machine.config = route
+            machine.quest_scheduler = None
+            machine.is_daily_pipeline_active = MagicMock(return_value=True)
+
+            # 設置 daily_manager 模擬日常狀態
+            machine.daily_manager = MagicMock()
+            machine.daily_manager.get_pending_town_subflows.return_value = []
+            machine.daily_manager.is_demon_lords_available.return_value = (False, "")
+            machine.daily_manager.has_available_dungeon.return_value = False
+            machine.matcher.match.return_value = (None, 0.0)
+
+            handler = DomainExploreHandler(machine)
+            return machine, handler
+
+        # ---------------------------------------------------------------------
+        # Case A: Daily.enable_lord_boss = True, Domain.enable_lord_boss = False, Boss ready = True
+        # No other Daily activity ready -> Domain MUST NOT preempt
+        # ---------------------------------------------------------------------
+        daily_a = {
             "_config_mode_key": "daily",
             "type": "daily",
             "tier4_mode": "domain",
             "tier4_domain": "golden_empire",
             "enable_domain": True,
-            "enable_lord_boss": True,  # 日常總排程政策允許
+            "enable_lord_boss": True,
+            "enable_town_daily": False,
+            "enable_demon_lords": False,
+            "enable_dungeon": False,
+            "lord_boss_targets": ["lord_spider"],
         }
-        route_1 = build_tier4_fallback_config(daily_policy_1, modes)
-        self.assertFalse(route_1["enable_lord_boss"], "執行路徑必須以 Domain 的 enable_lord_boss (False) 為準")
+        mach_a, handler_a = _create_machine_and_handler(daily_a, modes_domain_boss_false)
+        mach_a.daily_manager.get_available_lord_bosses.return_value = ["lord_spider"]
+        self.assertFalse(mach_a.config["enable_lord_boss"], "Domain 路由之 enable_lord_boss 應為 False")
+        self.assertTrue(mach_a._daily_activity_config()["enable_lord_boss"], "Daily 政策之 enable_lord_boss 應為 True")
+        self.assertTrue(mach_a.has_available_selected_lord_boss(), "Boss 本身已就緒")
+        # 不 mock has_pending_daily_activity，呼叫 _check_lord_boss_preemption 必須不退出領地
+        self.assertFalse(
+            handler_a._check_lord_boss_preemption(None, {"left": 0, "top": 0}),
+            "Case A: Domain.enable_lord_boss=False 時，即便 Boss ready 且 Daily=True，絕不得插隊退出 Domain",
+        )
 
-        machine = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
-        machine.runtime_config_key = "daily"
-        machine.primary_config = daily_policy_1
-        machine.config = route_1
-        self.assertTrue(machine._daily_activity_config()["enable_lord_boss"], "Daily 總政策仍保持 enable_lord_boss=True")
-
-        handler = DomainExploreHandler(machine)
-        machine.daily_manager = MagicMock()
-        machine.daily_manager.get_available_lord_bosses.return_value = ["lord_spider"]
-        machine.is_daily_pipeline_active = MagicMock(return_value=True)
-        machine.has_pending_daily_activity = MagicMock(return_value=False)
-        # 由於 Domain.enable_lord_boss 為 False，領主插隊檢查必須回傳 False (不被打斷)
-        self.assertFalse(handler._check_lord_boss_preemption(None, {"left": 0, "top": 0}))
-
-        # Case 2: Daily policy = False, Domain execution = True
-        modes_2 = {
-            "golden_empire": {
-                **modes["golden_empire"],
-                "enable_lord_boss": True,
-            }
-        }
-        daily_policy_2 = {
+        # ---------------------------------------------------------------------
+        # Case B: Daily.enable_lord_boss = False, Domain.enable_lord_boss = True, Boss ready = True
+        # No other Daily activity ready -> Domain MUST NOT preempt
+        # ---------------------------------------------------------------------
+        daily_b = {
             "_config_mode_key": "daily",
             "type": "daily",
             "tier4_mode": "domain",
             "tier4_domain": "golden_empire",
             "enable_domain": True,
             "enable_lord_boss": False,
+            "enable_town_daily": False,
+            "enable_demon_lords": False,
+            "enable_dungeon": False,
+            "lord_boss_targets": ["lord_spider"],
         }
-        route_2 = build_tier4_fallback_config(daily_policy_2, modes_2)
-        self.assertTrue(route_2["enable_lord_boss"], "執行路徑必須以 Domain 的 enable_lord_boss (True) 為準")
-        machine.primary_config = daily_policy_2
-        machine.config = route_2
-        self.assertFalse(machine._daily_activity_config()["enable_lord_boss"], "Daily 總政策仍保持 enable_lord_boss=False")
-        # 因 Daily 總政策關閉，has_available_selected_lord_boss 為 False，插隊依然不觸發
-        self.assertFalse(handler._check_lord_boss_preemption(None, {"left": 0, "top": 0}))
+        mach_b, handler_b = _create_machine_and_handler(daily_b, modes_domain_boss_true)
+        mach_b.daily_manager.get_available_lord_bosses.return_value = ["lord_spider"]
+        self.assertTrue(mach_b.config["enable_lord_boss"], "Domain 路由之 enable_lord_boss 應為 True")
+        self.assertFalse(mach_b._daily_activity_config()["enable_lord_boss"], "Daily 政策之 enable_lord_boss 應為 False")
+        self.assertFalse(mach_b.has_available_selected_lord_boss(), "Daily 政策關閉時 has_available_selected_lord_boss 應為 False")
+        self.assertFalse(
+            handler_b._check_lord_boss_preemption(None, {"left": 0, "top": 0}),
+            "Case B: Daily.enable_lord_boss=False 時，即便 Domain=True，亦不得插隊退出 Domain",
+        )
+
+        # ---------------------------------------------------------------------
+        # Case C: Daily.enable_lord_boss = True, Domain.enable_lord_boss = True, Boss ready = True
+        # -> Domain SHOULD preempt
+        # ---------------------------------------------------------------------
+        daily_c = {
+            "_config_mode_key": "daily",
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            "enable_lord_boss": True,
+            "enable_town_daily": False,
+            "enable_demon_lords": False,
+            "enable_dungeon": False,
+            "lord_boss_targets": ["lord_spider"],
+        }
+        mach_c, handler_c = _create_machine_and_handler(daily_c, modes_domain_boss_true)
+        mach_c.daily_manager.get_available_lord_bosses.return_value = ["lord_spider"]
+        self.assertTrue(mach_c.config["enable_lord_boss"])
+        self.assertTrue(mach_c._daily_activity_config()["enable_lord_boss"])
+        self.assertTrue(mach_c.has_available_selected_lord_boss())
+        self.assertTrue(
+            handler_c._check_lord_boss_preemption(None, {"left": 0, "top": 0}),
+            "Case C: Daily 與 Domain 均為 True 且 Boss 就緒時，Domain 必須成功被 Lord Boss 插隊退出",
+        )
+
+        # ---------------------------------------------------------------------
+        # Case D: Domain.enable_lord_boss = False, Timed Dungeon ready = True
+        # -> Domain MUST still preempt (確保其他高優先 Daily 活動未被誤擋)
+        # ---------------------------------------------------------------------
+        daily_d = {
+            "_config_mode_key": "daily",
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "golden_empire",
+            "enable_domain": True,
+            "enable_lord_boss": False,
+            "enable_town_daily": False,
+            "enable_demon_lords": False,
+            "enable_dungeon": True,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [0],
+            "dungeon_entries": ["dungeons/Slime_entry.png"],
+            "dungeon_names": ["Slime"],
+        }
+        mach_d, handler_d = _create_machine_and_handler(daily_d, modes_domain_boss_false)
+        # 模擬定時地下城已就緒
+        mach_d.daily_manager.has_available_dungeon.return_value = True
+        self.assertTrue(mach_d.has_available_daily_dungeon(), "定時地下城已就緒")
+        self.assertTrue(
+            handler_d._check_lord_boss_preemption(None, {"left": 0, "top": 0}),
+            "Case D: 即使 Domain.enable_lord_boss=False，當定時地下城就緒時 Domain 依然必須被正常插隊！",
+        )
 
     def test_daily_scheduler_policy_survives_domain_execution_route(self):
         """[Phase 2] Daily 的地下城與排程政策在 Domain residency 期間完好保存，定時地下城可順利插隊"""
@@ -957,6 +1041,36 @@ class TestDomainCommonBehavior(unittest.TestCase):
             handler = DomainExploreHandler(machine)
             self.assertIsInstance(handler.strategy, GenericDomainStrategy)
             self.assertEqual(handler.strategy.domain_name, "abyss_nest")
+
+    def test_tier4_domain_and_domain_distinct_identity(self):
+        """[Phase 2 Distinct Key Invariant] tier4_domain (mode key) 與 domain (strategy identity) 語意嚴格分離，絕不互相 fallback 或坍塌"""
+        abyss_t6_cfg = {
+            "name": "淵獸之巢 T6",
+            "type": "domain",
+            "domain": "abyss_nest",
+            "navigation_path": ["common/door.png", "domains/abyss_nest/entry.png"],
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/abyss_nest/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+        }
+        modes = {"abyss_nest_t6": abyss_t6_cfg}
+        daily_cfg = {
+            "_config_mode_key": "daily",
+            "type": "daily",
+            "tier4_mode": "domain",
+            "tier4_domain": "abyss_nest_t6",
+            "enable_domain": True,
+        }
+        route = build_tier4_fallback_config(daily_cfg, modes)
+        self.assertEqual(route["tier4_domain"], "abyss_nest_t6", "tier4_domain 必須精確保持 mode selection key")
+        self.assertEqual(route["domain"], "abyss_nest", "domain 必須精確保持 domain strategy identity")
+        self.assertIn("淵獸之巢 T6", route["name"])
+
+        # 驗證後續 selected mode lookup 與 rebuild 不因 identity collapse 而失效
+        rebuilt = build_tier4_fallback_config(route, modes)
+        self.assertEqual(rebuilt["tier4_domain"], "abyss_nest_t6")
+        self.assertEqual(rebuilt["domain"], "abyss_nest")
 
     def test_direct_domain_execution_remains_independent(self):
         """[Phase 2 Regression] Direct Domain 模式 (如 --mode golden_empire) 執行配置完全獨立，絕無 Daily/Tier4 污染"""

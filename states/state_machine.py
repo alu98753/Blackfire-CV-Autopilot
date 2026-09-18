@@ -1597,7 +1597,7 @@ class GameStateMachine:
             return False
         return self.has_available_dungeon(target_config=policy)
 
-    def has_pending_daily_activity(self):
+    def has_pending_daily_activity(self, include_lord_boss: bool = True):
         """Report whether a higher-priority Daily activity should exit Tier 4."""
         if not self.is_daily_pipeline_active():
             return False
@@ -1606,7 +1606,9 @@ class GameStateMachine:
         if manager and policy.get("enable_town_daily", True):
             if manager.get_pending_town_subflows():
                 return True
-        if self.has_available_demon_lords() or self.has_available_selected_lord_boss():
+        if self.has_available_demon_lords():
+            return True
+        if include_lord_boss and self.has_available_selected_lord_boss():
             return True
         if self.poll_daily_quest_preemption():
             return True
