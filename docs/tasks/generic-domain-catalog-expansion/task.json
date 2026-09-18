@@ -1,0 +1,42 @@
+{
+  "id": "generic-domain-catalog-expansion",
+  "base_ref": "origin/main",
+  "base_sha": "145522e4a7fbb773c45f10fb358ce310c0b095d6",
+  "scope": [
+    "config/defaults.toml",
+    "templates/domains/abyssbeast_lair/",
+    "templates/domains/coldoath_citadel/",
+    "states/domains/",
+    "cli/",
+    "utils/tier4_config.py",
+    "tests/test_domain_common_behavior.py",
+    "tests/test_behavior_main_entrypoint.py",
+    "docs/tasks/generic-domain-catalog-expansion/"
+  ],
+  "focused_tests": [
+    "tests.test_domain_common_behavior",
+    "tests.test_behavior_main_entrypoint"
+  ],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  },
+  "notes": {
+    "status": "Final",
+    "architecture": "project_arch_greenfield_lite_v1.md",
+    "depends_on": [
+      "domain-common-template-decoupling"
+    ],
+    "intent": "Add abyssbeast_lair and coldoath_citadel as canonical Generic Domains and repair two stale merged-contract regression tests without changing production behavior for those test failures.",
+    "display_names": {
+      "abyssbeast_lair": "深淵獸巢",
+      "coldoath_citadel": "寒誓古堡"
+    },
+    "implementation_boundary": "Production config change is limited to adding the two generic Domain declarations and removing four redundant Golden Empire common-default overrides; bread_cost and Python production behavior remain unchanged. The two stale main-entrypoint failures are test-fixture maintenance only."
+  }
+}

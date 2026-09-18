@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from actions.mouse import MouseController, SAFE_AREA_CLIENT_POS
+from runtime.io_adapters import BackendMouseController, ForegroundMouseController
 from vision.matcher import TemplateMatcher, DEFAULT_MATCH_SCALES
 
 
@@ -60,7 +61,7 @@ class TestMouseRefactorAndScales(unittest.TestCase):
     @patch("actions.mouse.win32api.MAKELONG", return_value=9999)
     def test_move_to_safe_area_backend_mode(self, mock_makelong, mock_post_msg):
         """驗證 Issue #15：後台模式下以純淨 Client (15, 15) 發送 WM_MOUSEMOVE。"""
-        mouse = MouseController(backend_mode=True)
+        mouse = BackendMouseController()
         with patch.object(mouse, "get_hwnd", return_value=12345):
             mouse.move_to_safe_area()
 
@@ -73,7 +74,7 @@ class TestMouseRefactorAndScales(unittest.TestCase):
     @patch("actions.mouse.win32gui.ClientToScreen", return_value=(115, 215))
     def test_move_to_safe_area_frontend_mode_with_hwnd(self, mock_client_to_screen, mock_move_to):
         """驗證 Issue #15：前台模式下透過 ClientToScreen 轉換 (15, 15) 到實體螢幕座標。"""
-        mouse = MouseController(backend_mode=False)
+        mouse = ForegroundMouseController()
         with patch.object(mouse, "get_hwnd", return_value=12345):
             mouse.move_to_safe_area()
 
@@ -83,7 +84,7 @@ class TestMouseRefactorAndScales(unittest.TestCase):
     @patch("actions.mouse.pyautogui.moveTo")
     def test_move_to_safe_area_frontend_noop_when_no_hwnd(self, mock_move_to):
         """驗證 Issue #11 (last_rect 移除)：前台模式找不到 hwnd 時為 no-op，不再依賴 state_machine.last_rect。"""
-        mouse = MouseController(backend_mode=False)
+        mouse = ForegroundMouseController()
         with patch.object(mouse, "get_hwnd", return_value=0):
             mouse.move_to_safe_area()  # 應不拋出異常
 

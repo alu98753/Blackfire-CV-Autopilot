@@ -272,11 +272,11 @@ class TestBehaviorPauseResume(unittest.TestCase):
         【雙層防護驗證】測試當 is_paused_fn() == True 時，
         底層 mouse.click() / mouse.drag() 於發射前透過 check_user_intervention() 立刻熔斷攔截。
         """
-        from actions.mouse import MouseController
+        from runtime.io_adapters import ForegroundMouseController
 
         # 以可變旗標模擬 state_machine.is_paused 的切換 (Issue #11 callback 接線)
         paused_flag = [False]
-        mouse = MouseController(human_like=False, is_paused_fn=lambda: paused_flag[0])
+        mouse = ForegroundMouseController(human_like=False, is_paused_fn=lambda: paused_flag[0])
 
         # 1. 正常運行狀態 (is_paused_fn 回傳 False) -> check_user_intervention 應為 False
         paused_flag[0] = False
@@ -306,7 +306,8 @@ class TestBehaviorPauseResume(unittest.TestCase):
 
         resume_event = threading.Event()
         resume_event.set() # 預設放行
-        mouse = MouseController(human_like=False, resume_event=resume_event)
+        from runtime.io_adapters import ForegroundMouseController
+        mouse = ForegroundMouseController(human_like=False, resume_event=resume_event)
 
         # 1. 正常放行狀態
         with patch.object(mouse, '_finalize_action', return_value=True):
@@ -399,7 +400,8 @@ class TestBehaviorPauseResume(unittest.TestCase):
         import threading
         from actions.mouse import MouseController
 
-        mouse = MouseController(human_like=False, resume_event=self.state_machine.resume_event)
+        from runtime.io_adapters import ForegroundMouseController
+        mouse = ForegroundMouseController(human_like=False, resume_event=self.state_machine.resume_event)
         self.state_machine.resume_event.set()
         self.assertFalse(self.state_machine.is_paused)
 
@@ -462,15 +464,14 @@ class TestBehaviorPauseResume(unittest.TestCase):
         直到 resume_event.set() 後立即放行並成功回傳畫面。
         """
         import threading
-        from capture.screen import ScreenCapturer
+        from runtime.io_adapters import BackendScreenCapturer
 
         resume_event = threading.Event()
         resume_event.set() # 預設放行
-        capturer = ScreenCapturer(window_title="TestWindow", resume_event=resume_event)
+        capturer = BackendScreenCapturer(window_title="TestWindow", resume_event=resume_event)
 
         # 1. 正常放行狀態
         with patch.object(capturer, '_capture_backend', return_value="img_mock"):
-            capturer.backend_mode = True
             capturer.get_hwnd = MagicMock(return_value=12345)
             img = capturer.capture()
             self.assertEqual(img, "img_mock")
@@ -482,7 +483,6 @@ class TestBehaviorPauseResume(unittest.TestCase):
         def capture_worker():
             execution_order.append("capture_start")
             with patch.object(capturer, '_capture_backend', return_value="img_mock_2"):
-                capturer.backend_mode = True
                 capturer.get_hwnd = MagicMock(return_value=12345)
                 res = capturer.capture()
                 execution_order.append(f"capture_done_{res}")
