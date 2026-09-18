@@ -1,153 +1,323 @@
 # foreground-demo-mode-isolation
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Isolate visible foreground physical I/O as an explicit demo/compatibility adapter path while making production runtime composition depend on backend Win32 capture/input adapters without spreading `backend_mode` conditionals through production I/O components.
+Isolate visible foreground physical I/O as an explicit demo/compatibility path, while production runtime uses backend Win32 capture/input implementations selected once at composition time.
 
-This is Phase 2 after `backend-default-runtime-mode`. Phase 1 already changed public semantics to backend-by-default, added explicit `--foreground`, preserved temporary legacy `--backend` compatibility, and made backend capture/input fail closed. This task is structural isolation, not another semantic inversion.
+This is Phase 2 after `backend-default-runtime-mode`. Phase 1 established:
 
-## Lightweight survey evidence
+- no flag -> backend production semantics;
+- `--foreground` -> explicit visible foreground mode;
+- legacy `--backend` remains accepted for compatibility;
+- backend capture/input failures fail closed rather than silently invoking foreground I/O.
 
-Latest `main` base:
+This task is a behavior-preserving architecture refactor. It does not re-decide those semantics.
 
-`145522e4a7fbb773c45f10fb358ce310c0b095d6` — merge of `backend-default-runtime-mode`.
+## Evidence base
 
-Current production composition resolves the I/O mode at startup and passes a boolean into shared mixed-mode implementations:
+Base:
 
-- `cli/arguments.py` sets `args.backend_mode = not args.foreground`.
-- `runtime/bootstrap.py` constructs `ScreenCapturer(... backend_mode=...)` and `MouseController(... backend_mode=...)`.
-- `main.py` / `SteamGameLauncher` also propagate the resolved mode.
-- `actions/mouse.py::MouseController` contains backend/foreground branches for click, scroll, drag, and safe-area movement.
-- `capture/screen.py::ScreenCapturer.capture` contains backend/foreground branches; Phase 1 already made the backend branch fail closed.
-- `utils/steam_launcher.py::SteamGameLauncher` can construct both capturer and mouse from `backend_mode`.
-- `states/exceptions/subflows/game_relaunch.py` still propagates the mode into `SteamGameLauncher`.
+`145522e4a7fbb773c45f10fb358ce310c0b095d6`
 
-The Greenfield-lite architecture already defines the desired dependency direction:
+Scout evidence:
+
+`docs/tasks/foreground-demo-mode-isolation/CONTEXT.md`
+
+Scout confirmed that `backend_mode` is currently threaded through multiple construction sites and re-checked inside ordinary I/O operations:
+
+- `cli/arguments.py` resolves `args.backend_mode = not args.foreground`;
+- `main.py` passes the mode into `SteamGameLauncher`;
+- `runtime/bootstrap.py` constructs `ScreenCapturer` and `MouseController` with the mode and stores it on `GameStateMachine`;
+- `actions/mouse.py` branches inside click/scroll/drag/safe-area movement;
+- `capture/screen.py` branches inside capture;
+- `utils/steam_launcher.py` can construct its own capture/input objects from the mode;
+- `states/exceptions/subflows/game_relaunch.py` passes `machine.backend_mode` back into the launcher.
+
+Additional Final-SPEC review established:
+
+- `SteamGameLauncher` does not require mouse ownership for its current launch/readiness flow; it uses capture/window responsibilities for HWND/window rect/monitor placement.
+- `tests/test_game_process_lifecycle.py` is class-level skipped and therefore is not sufficient focused verification by itself.
+- Existing tests directly mutate `.backend_mode`; these are test-shape artifacts and must not force preservation of a mutable production mode switch.
+- `state_machine.config["backend_mode"]` propagation is compatibility/runtime metadata, not permission for gameplay code to choose I/O implementations.
+
+## Architecture contract
+
+Target:
 
 ```text
-main / composition root
-  → agent loop
-    → perception / intent / navigation / recovery
-      → ports
-        → capture / matcher / input / process adapters
+CLI / composition root
+  |
+  +-- Production (default)
+  |     +-- Backend capture adapter
+  |     |     \-- Win32 HWND capture only
+  |     \-- Backend input adapter
+  |           \-- Win32 message input only
+  |
+  \-- Demo (--foreground)
+        +-- Foreground capture adapter
+        |     \-- MSS -> PIL fallback
+        \-- Foreground input adapter
+              \-- pyautogui physical mouse
 ```
 
-and explicitly states that input adapters are business-blind.
+Downstream consumers receive already-selected dependencies.
 
-## Intended responsibility boundary
+The ordinary capture/input execution path must not decide backend vs foreground at action time.
 
-Target architecture, subject to Scout confirmation against the full nearby implementation:
+The repository already relies on constructor injection and duck-typed concrete APIs. This task therefore does **not** introduce a framework-scale ABC/Protocol hierarchy. Prefer explicit concrete backend/foreground implementations plus a small composition/factory seam. A thin compatibility facade is allowed only where it prevents unnecessary unrelated churn; such a facade must not retain mutable runtime mode switching.
 
-```text
-Production Runtime
-  └─ Backend I/O adapters
-      ├─ Win32 capture
-      └─ Win32 mouse/input
+Exact class/module names are implementation details, but responsibility must follow this contract.
 
-Demo / Compatibility Runtime
-  └─ Foreground I/O adapters
-      ├─ visible MSS/PIL capture
-      └─ pyautogui physical input
-```
+## Responsibility boundaries
 
-The composition root may still resolve `--foreground`, but production consumers should receive an already-selected capture/input dependency rather than repeatedly deciding backend vs foreground at action time.
+### CLI / composition
+
+Owns:
+
+- interpreting `--foreground`;
+- retaining legacy `--backend` parser compatibility;
+- choosing production vs demo I/O family once.
+
+Does not own:
+
+- capture mechanics;
+- click/drag/scroll mechanics;
+- gameplay logic.
+
+### Backend capture
+
+Owns:
+
+- HWND-backed Win32 capture;
+- current backend capture resource cleanup;
+- backend capture failure logging/result contract;
+- window lookup/geometry behavior needed by existing runtime.
+
+Must never:
+
+- call MSS;
+- call PIL ImageGrab;
+- silently switch to visible capture.
+
+### Foreground capture
+
+Owns:
+
+- visible MSS capture;
+- existing PIL fallback when MSS fails;
+- visible/full-screen behavior currently belonging to foreground mode.
+
+Must never be entered because backend capture failed.
+
+### Backend input
+
+Owns:
+
+- Win32 message click;
+- Win32 scroll;
+- Win32 drag;
+- Win32 safe-area cursor message;
+- existing backend coordinate conversion, jitter, delays, callback/finalization semantics.
+
+Must never:
+
+- invoke pyautogui after a backend failure.
+
+### Foreground input
+
+Owns:
+
+- pyautogui click;
+- pyautogui scroll;
+- pyautogui drag;
+- physical safe-area movement;
+- existing foreground coordinate conversion, human-like motion, failsafe, delays, callback/finalization semantics.
+
+### GameStateMachine / gameplay
+
+Consumes selected capture/input dependencies.
+
+Must not select an I/O implementation.
+
+A legacy/runtime `backend_mode` fact may temporarily remain on state/config only where required by unrelated compatibility/serialization paths, but:
+
+- it is metadata, not an I/O selector;
+- new gameplay branches on it are forbidden;
+- capture/input/launcher construction must not depend on re-reading it downstream.
+
+Removing all legacy metadata propagation is not required for this task unless it is proven dead and removal is local/risk-free.
+
+### SteamGameLauncher
+
+Owns process/window readiness only.
+
+It may use an injected capture/window-capable dependency for:
+
+- `get_hwnd`;
+- `get_window_rect`;
+- `ensure_window_on_monitor`.
+
+It must not:
+
+- own or construct a mouse/input adapter solely because an old constructor parameter existed;
+- create mixed-mode capture/input fallbacks from `backend_mode`;
+- become a second runtime I/O mode owner.
+
+For initial startup, composition may create the appropriate capture/window dependency before state-machine construction, or use a small shared factory. There must still be exactly one mode-selection policy.
+
+### GameRelaunchSubflow
+
+Must reuse the machine's already-selected capture/window dependency when invoking launcher behavior.
+
+It must not use `machine.backend_mode` to reconstruct a fresh competing I/O family.
 
 ## Scope
 
-- Identify the smallest architecture-consistent seam for separate backend and foreground capture/input adapters.
-- Move runtime mode selection toward the composition root / factory boundary.
-- Remove broad `if self.backend_mode ... else ...` duplication from production input/capture execution paths where the adapter split owns that decision.
-- Preserve the existing public CLI contract from Phase 1:
-  - no mode flag → backend production path;
-  - `--foreground` → explicit visible demo path;
-  - legacy `--backend` remains accepted until separately deprecated/removed.
-- Preserve current HWND/target ownership and multi-instance semantics.
-- Preserve backend fail-closed behavior: backend failure must never silently invoke foreground physical input or foreground capture.
-- Preserve foreground demo behavior: visible capture plus pyautogui physical interaction.
-- Keep state machine, navigation, gameplay policy, timing, coordinates, and CV semantics behavior-preserving.
-- Update deterministic tests around composition and adapter boundaries.
-- Make only directly required launcher/relaunch compatibility changes.
+- Split or strategy-isolate backend and foreground capture behavior so ordinary capture execution has no mutable `backend_mode` branch.
+- Split or strategy-isolate backend and foreground input behavior so click/scroll/drag/safe-area execution has no mutable `backend_mode` branch.
+- Add the smallest composition/factory seam necessary to select production vs demo dependencies once.
+- Update `runtime/bootstrap.py` and `main.py` to use that seam.
+- Remove `SteamGameLauncher` mouse ownership/construction if no current behavior requires it.
+- Remove launch/relaunch reconstruction based on downstream `backend_mode`.
+- Preserve window targeting/HWND ownership and multi-instance behavior.
+- Migrate deterministic tests from mutating `.backend_mode` toward constructing/selecting the intended adapter.
+- Add non-skipped deterministic launcher/relaunch composition coverage sufficient to verify isolation.
+- Preserve Phase-1 CLI semantics and backend fail-closed behavior.
 
 ## Known invariants
 
-- Production runtime uses backend Win32 I/O by default.
-- Production backend failure never silently falls back to foreground capture or physical mouse input.
-- `--foreground` remains explicit opt-in demo/compatibility behavior.
-- Target HWND / window selection remains a separate responsibility from selecting the I/O adapter.
-- Input/capture adapters remain business-blind and do not own gameplay intent/state.
-- Gameplay handlers and state-machine code should not gain new mode-selection responsibilities.
-- One tick / one-frame and existing capture semantics must remain intact.
-- Behavior-preserving refactor: backend click/scroll/drag coordinates, delays, post-message behavior, capture result contract, and foreground demo behavior must not change unless the Final SPEC explicitly says so.
-- No shared Python environment mutation.
+1. Production runtime is backend by default.
+2. `--foreground` is explicit demo/compatibility opt-in.
+3. Backend capture failure never invokes foreground MSS/PIL.
+4. Backend input failure never invokes pyautogui.
+5. Foreground capture retains MSS -> PIL fallback.
+6. Backend and foreground coordinate semantics remain behavior-preserving.
+7. Existing click/scroll/drag timings, jitter, callbacks, pause gate, action-success notification, and safe-area semantics remain behavior-preserving.
+8. HWND/target selection and multi-instance behavior remain unchanged.
+9. One tick / one frame semantics remain unchanged.
+10. Capture/input adapters remain business-blind.
+11. State machine/navigation/handlers do not gain new I/O-selection responsibilities.
+12. No shared Python environment mutation.
+13. Behavior-preserving refactor: no gameplay, CV, scheduler, navigation, or recovery-policy semantic change.
 
-## Provisional design direction
+## Compatibility policy
 
-Preferred direction to validate during Scout:
+### CLI
 
-1. Keep CLI/runtime mode resolution at startup.
-2. Introduce or expose explicit backend and foreground concrete adapters (or equivalent factories) behind the existing capture/input consumer contracts.
-3. Select the concrete adapters once in the composition root.
-4. Pass selected dependencies downstream.
-5. Retain only narrowly justified compatibility facades where existing tests/dev utilities materially benefit; do not preserve mixed-mode branching solely for convenience.
+Preserve:
 
-The exact class/module names are intentionally not Final yet.
+```text
+no flag       -> backend production
+--foreground  -> foreground demo
+--backend     -> accepted legacy compatibility flag
+```
+
+This task does not remove `--backend`.
+
+### Python constructors / tests
+
+Compatibility with mutable runtime toggling such as:
+
+```python
+capturer.backend_mode = True
+mouse.backend_mode = False
+```
+
+is **not** an invariant.
+
+Tests that use this pattern must migrate to explicit adapter construction/selection.
+
+A legacy constructor/facade may remain temporarily only if required by meaningful external/dev call sites and only if its mode is resolved once during construction. It must not permit switching the implementation by mutating a boolean after construction.
 
 ## Non-goals
 
-- Changing the Phase-1 CLI semantics.
 - Removing `--foreground`.
-- Removing legacy `--backend` in this task unless Scout proves it is required for the isolation and the Final SPEC explicitly approves it.
+- Removing legacy `--backend`.
 - Video recording functionality.
-- Gameplay/state-machine refactors unrelated to I/O dependency selection.
-- CV detector/matcher changes.
-- Navigation, scheduler, recovery-policy, or timing changes.
-- HWND/window ownership redesign.
-- Broad cleanup of unrelated dev scripts.
-- Shared environment or dependency mutation.
-- Replacing the repository architecture with a new framework/DI container.
+- Rewriting HWND/window management.
+- Reworking TemplateMatcher or detector architecture.
+- Gameplay/state-machine behavior changes.
+- Navigation/scheduler/recovery/timing changes.
+- Broad quest-config cleanup.
+- Serialization redesign.
+- DI frameworks, service containers, generalized plugin systems, or unnecessary ABC hierarchies.
+- Broad dev-tool migration unrelated to runtime I/O isolation.
+- Shared environment/dependency mutation.
 
-## Provisional acceptance criteria
+## Acceptance criteria
 
-1. Normal production startup composes backend capture/input implementations without downstream production code needing to branch on foreground/backend for ordinary capture/click/scroll/drag execution.
-2. `--foreground` composes the foreground demo/compatibility implementations and preserves visible capture + pyautogui behavior.
-3. Backend capture failure remains fail-closed and never invokes MSS/PIL as an implicit fallback.
-4. Backend input failure remains fail-closed and never invokes pyautogui as an implicit fallback.
-5. Foreground capture retains its existing MSS → PIL fallback behavior.
-6. Existing backend and foreground coordinate/click/drag/scroll semantics remain behavior-preserving.
-7. HWND target selection and multi-instance targeting remain unchanged.
-8. Launcher/relaunch paths reuse the already selected runtime I/O responsibility instead of creating a contradictory mode owner.
-9. State-machine/gameplay code does not acquire new I/O mode-selection conditionals.
-10. Focused deterministic tests prove production and demo composition plus fail-closed behavior.
-11. No unrelated gameplay, CV, scheduling, or environment changes are introduced.
+1. Default startup selects backend capture and backend input exactly once at composition time.
+2. `--foreground` selects foreground capture and foreground input exactly once at composition time.
+3. Ordinary backend capture execution contains no foreground fallback path.
+4. Ordinary backend click/scroll/drag/safe-area execution contains no pyautogui fallback path.
+5. Ordinary foreground capture/input execution does not contain backend-selection branches.
+6. Backend failure remains fail-closed with the existing externally observable result contract.
+7. Foreground capture preserves MSS -> PIL fallback.
+8. Existing backend click/scroll/drag coordinate and timing semantics remain unchanged.
+9. Existing foreground pyautogui coordinate, failsafe, human-like, timing, and safe-area semantics remain unchanged.
+10. `SteamGameLauncher` no longer constructs/owns an unused mouse adapter and does not independently select a runtime I/O mode.
+11. Relaunch reuses the machine's selected capture/window dependency and does not reconstruct I/O from `machine.backend_mode`.
+12. Gameplay/state-machine code does not acquire new `backend_mode` branches for I/O selection.
+13. Direct test mutation of `.backend_mode` is removed from focused isolation tests in favor of explicit adapter construction.
+14. Deterministic non-skipped tests prove both production and demo composition.
+15. Deterministic non-skipped tests prove launcher/relaunch cannot silently create a contradictory I/O family.
+16. Phase-1 CLI tests still prove default backend, explicit `--foreground`, and legacy `--backend` acceptance.
+17. No unrelated gameplay/CV/scheduling/environment behavior changes are introduced.
 
-## Initial focused verification candidates
+## Focused verification
 
-At minimum inspect/retain/update coverage around:
+Required focused modules:
 
-- `tests/test_behavior_main_entrypoint.py`
-- `tests/test_screen_capturer_architecture.py`
-- `tests/test_mouse_refactor.py`
-- `tests/test_mouse_coordinates.py`
-- `tests/test_game_process_lifecycle.py`
+```text
+tests.test_behavior_main_entrypoint
+tests.test_screen_capturer_architecture
+tests.test_mouse_refactor
+tests.test_mouse_coordinates
+```
 
-Scout should determine whether launcher/relaunch-specific tests need to be added to the focused set.
+Add or update a non-skipped deterministic test module for launcher/relaunch composition. The existing class-level skipped `tests.test_game_process_lifecycle` does not satisfy this acceptance criterion unless the relevant tests are safely refactored into non-side-effecting, non-skipped deterministic coverage.
 
-## Uncertainty for Scout
+If implementation touches pause/resume adapter wiring, also run the relevant deterministic `tests.test_behavior_pause_resume` target(s).
 
-Scout must answer before this Draft becomes Final:
+Focused verification must run through the repository's shared `.venv`; no dependency mutation.
 
-- What is the smallest stable consumer contract already relied on by `TemplateMatcher`, `GameStateMachine`, handlers, and tests: concrete `ScreenCapturer/MouseController` APIs or an existing port/protocol seam?
-- Should Phase 2 use separate concrete classes, factories returning common protocols, composition wrappers, or a narrowly compatible facade?
-- Which `backend_mode` usages are true architectural mode selection versus legitimate demo-specific/window-management behavior?
-- Does `SteamGameLauncher` actually need mouse ownership, or can it reuse injected runtime dependencies without constructing mixed-mode components?
-- Which dev utilities intentionally rely on direct foreground constructors and therefore need explicit demo adapter construction?
-- Are any tests asserting constructor defaults/mutable `backend_mode` toggling that should be migrated rather than preserved?
-- Can runtime/state-machine `backend_mode` propagation be removed completely in this task, or is some compatibility field still required at relaunch/supervisor boundaries?
-- Are there any full-screen capture consumers that are demo-only and should move explicitly to the foreground adapter?
-- What is the correct module/package location consistent with existing repository architecture and naming?
+## Implementation guidance
 
-## Lifecycle note
+Preferred minimal shape:
 
-This SPEC remains Draft until `scripts/task_start.ps1 -Task foreground-demo-mode-isolation` returns `TASK_READY`, `scripts/ai_scout.ps1 -Task foreground-demo-mode-isolation` produces `CONTEXT.md`, and ChatGPT + user re-read the evidence and finalize the responsibility boundary. Production implementation must not begin while Status is Draft.
+```text
+resolve CLI mode
+  -> small I/O composition factory
+      -> backend concrete capture + input
+      OR
+      -> foreground concrete capture + input
+  -> inject selected dependencies
+      -> launcher window/process readiness
+      -> GameStateMachine
+      -> relaunch reuses same capture/window dependency
+```
+
+Reuse shared mode-agnostic mechanics such as `WindowHandle`, callbacks, pause gate, and action finalization rather than duplicating them.
+
+Do not preserve a mixed-mode production class merely to keep old tests unchanged.
+
+## Scout uncertainties resolved
+
+- **Consumer seam:** current code uses constructor-injected concrete/duck-typed APIs; no new broad Protocol/ABC framework is required.
+- **Pattern:** explicit backend/foreground concrete implementations selected by a small composition/factory seam.
+- **Launcher mouse ownership:** not required by current launcher behavior; remove it from launcher responsibility.
+- **Mutable test mode:** migrate tests; do not preserve mutable production mode switching for test convenience.
+- **State-machine backend_mode:** may remain temporarily as compatibility metadata where unrelated consumers/serialization require it, but cannot own I/O selection.
+- **Relaunch:** must reuse selected dependencies rather than reconstructing by mode.
+- **Full-screen capture:** foreground/demo concern; backend remains unsupported/fail-closed.
+- **Launcher/relaunch verification:** must gain non-skipped deterministic coverage.
+
+## Lifecycle
+
+Scout evidence has been reviewed and incorporated.
+
+`Status: Final`
+
+Gemini/Antigravity may now perform production implementation under this contract. OpenCode Scout/reviewers remain read-only. Any material deviation from this contract must be surfaced before implementation proceeds.
