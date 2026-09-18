@@ -59,6 +59,34 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(config["tier4_domain"], "golden_empire")
         self.assertFalse(config["enable_stage_farming"])
 
+    @patch("cli.tier4_setup.persist_mode_updates")
+    @patch("builtins.input", side_effect=["2", "", "invalid", "1"])
+    def test_interactive_domain_selection_requires_explicit_choice_when_current_missing(
+        self, mock_input, persist
+    ):
+        """[Phase 1] 驗證互動模式下當 tier4_domain 缺失時，不得將目錄首項視為預設，必須拒絕空輸入與無效輸入，直到使用者明確輸入有效選項為止"""
+        config = {
+            "_config_mode_key": "daily",
+            "tier4_mode": "stage",
+            "tier4_stage_level": 6,
+            "enable_stage_farming": True,
+        }
+
+        setup_daily_tier4_config(config, interactive=True)
+
+        # 確保所有輸入都被消耗（"2" 選擇 domain、"" 被拒絕、"invalid" 被拒絕、"1" 被接受）
+        self.assertEqual(mock_input.call_count, 4)
+        persist.assert_called_once_with(
+            config,
+            {
+                "tier4_mode": "domain",
+                "tier4_domain": "golden_empire",
+                "enable_stage_farming": False,
+            },
+        )
+        self.assertEqual(config["tier4_domain"], "golden_empire")
+        self.assertFalse(config["enable_stage_farming"])
+
     def test_domain_fallback_preserves_daily_timed_activity_policy(self):
         daily = {
             "_config_mode_key": "daily",

@@ -653,8 +653,9 @@ def normalize_config(config):
         else:
             cfg[activity_key] = default_value
 
-    if mode_type == "domain":
+    if mode_type == "domain" or "domain" in cfg:
         cfg.pop("enable_domain", None)
+        cfg = normalize_domain_execution_config(cfg)
 
     if cfg.get("greedy_dungeon", False):
         if cfg.get("greedy_allowed_indices") is None:

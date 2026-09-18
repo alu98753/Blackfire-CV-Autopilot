@@ -15,28 +15,44 @@ from cli.stage_setup import setup_stage_config
 
 def _select_from_options(title, options, current_key, interactive):
     keys = [key for key, _label in options]
-    default_number = str(keys.index(current_key) + 1) if current_key in keys else "1"
+    has_valid_current = current_key in keys
+    default_number = str(keys.index(current_key) + 1) if has_valid_current else None
     print(f"\n{title}")
     for number, (key, label) in enumerate(options, start=1):
-        marker = " - 當前預設" if key == current_key else ""
+        marker = " - 當前預設" if has_valid_current and key == current_key else ""
         print(f" {number}) {label}{marker}")
     if not interactive:
-        return keys[int(default_number) - 1]
-    choice = prompt_choice(
-        f"請輸入數字 [1-{len(options)}] (直接 Enter 保留 {default_number}): ",
-        default_number,
-    )
-    if choice not in {str(index) for index in range(1, len(options) + 1)}:
-        print(f"[!] 無效選擇 '{choice}'，已保留目前設定。")
-        choice = default_number
-    return keys[int(choice) - 1]
+        if default_number is not None:
+            return keys[int(default_number) - 1]
+        raise ValueError(f"非互動模式下缺少必要選項: {title}")
+
+    valid_indexes = {str(index) for index in range(1, len(options) + 1)}
+    if default_number is not None:
+        choice = prompt_choice(
+            f"請輸入數字 [1-{len(options)}] (直接 Enter 保留 {default_number}): ",
+            default_number,
+        )
+        if choice not in valid_indexes:
+            print(f"[!] 無效選擇 '{choice}'，已保留目前設定。")
+            choice = default_number
+        return keys[int(choice) - 1]
+
+    prompt_msg = f"請輸入數字 [1-{len(options)}]: "
+    while True:
+        try:
+            raw = input(prompt_msg).strip()
+        except (EOFError, KeyboardInterrupt):
+            raise ValueError(f"未進行必要選擇，終止設定: {title}")
+        if raw in valid_indexes:
+            return keys[int(raw) - 1]
+        print(f"[!] 無效選擇 '{raw}'，請明確輸入有效選項 [1-{len(options)}]。")
 
 
 def setup_daily_tier4_config(config, interactive=True):
     """Select and persist the continuous activity used after Daily work."""
     original = {
         "tier4_mode": config.get("tier4_mode", TIER4_MODE_STAGE),
-        "tier4_domain": config.get("tier4_domain", DEFAULT_TIER4_DOMAIN),
+        "tier4_domain": config.get("tier4_domain"),
         "enable_stage_farming": config.get("enable_stage_farming", True),
     }
     current_mode = config.get("tier4_mode", TIER4_MODE_STAGE)
@@ -73,12 +89,11 @@ def setup_daily_tier4_config(config, interactive=True):
                 )
         else:
             current_domain = config.get("tier4_domain")
-            if not current_domain or current_domain not in valid_keys:
-                current_domain = valid_keys[0]
+            current_key = current_domain if current_domain in valid_keys else None
             domain_key = _select_from_options(
                 "請選擇要探索的領地：",
                 domain_options,
-                current_domain,
+                current_key,
                 interactive,
             )
         config["tier4_domain"] = domain_key

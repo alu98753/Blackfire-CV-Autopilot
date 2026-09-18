@@ -592,6 +592,58 @@ class TestDomainCommonBehavior(unittest.TestCase):
                     validate_domain_execution_config(broken_cfg)
                 self.assertIn(f"缺少必要結構欄位: '{key}'", str(ctx.exception))
 
+    def test_normalize_config_applies_domain_common_defaults(self):
+        """[Phase 1 Production Seam] 驗證 normalize_config 套用於只有結構必要欄位的 Generic Domain 時，自動補齊 canonical defaults 且移除 enable_domain"""
+        minimal_domain = {
+            "name": "測試領域",
+            "type": "domain",
+            "domain": "test_domain",
+            "navigation_path": ["common/door.png", "domains/test_domain/entry.png"],
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/test_domain/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+            # 模擬可能意外傳入的 enable_domain (policy leakage)
+            "enable_domain": True,
+        }
+
+        normalized = normalize_config(minimal_domain)
+
+        # 1. 驗證 canonical common defaults 由 production normalize_config 自動賦予
+        self.assertEqual(normalized["bread_cost"], 3)
+        self.assertEqual(normalized["explore_priorities"], ["domains/common/explore_btn.png"])
+        self.assertEqual(normalized["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
+        self.assertEqual(normalized["domain_reset_max_attempts"], 7)
+        self.assertIs(normalized["enable_lord_boss"], True)
+
+        # 2. 驗證 enable_domain 絕不留存於 Domain execution config
+        self.assertNotIn("enable_domain", normalized)
+
+    def test_normalize_config_rejects_incomplete_domain_structure(self):
+        """[Phase 1 Production Seam] 驗證 normalize_config 當 Domain 缺失任何結構必要欄位時，必須 deterministic 拋出 ValueError"""
+        minimal_domain = {
+            "name": "測試領域",
+            "type": "domain",
+            "domain": "test_domain",
+            "navigation_path": ["common/door.png", "domains/test_domain/entry.png"],
+            "domain_tab_btn": "domains/Domains_entry.png",
+            "domain_tab_after_btn": "domains/Domains_entry_after.png",
+            "domain_entry_btn": "domains/test_domain/entry.png",
+            "lobby_start_btn": "domains/common/start_btn.png",
+        }
+
+        structural_keys = [
+            "name", "type", "domain", "navigation_path",
+            "domain_tab_btn", "domain_tab_after_btn", "domain_entry_btn", "lobby_start_btn"
+        ]
+        for key in structural_keys:
+            with self.subTest(missing_key=key):
+                broken = minimal_domain.copy()
+                del broken[key]
+                with self.assertRaises(ValueError) as ctx:
+                    normalize_config(broken)
+                self.assertIn(f"缺少必要結構欄位: '{key}'", str(ctx.exception))
+
     def test_ssot_generic_activity_class_invariants(self):
         """[Phase 1 SSOT Invariant] enable_domain 必須為通用活動開關，嚴禁加入 enable_<specific_domain>"""
         with open(DEFAULTS_PATH, "rb") as f:
@@ -610,6 +662,7 @@ class TestDomainCommonBehavior(unittest.TestCase):
                 },
                 f"非法特定領域活動開關: '{act_key}'！活動開關必須為通用類別 (如 enable_domain)"
             )
+
 
     # =========================================================================
     # Strict SSOT Invariant Tests
