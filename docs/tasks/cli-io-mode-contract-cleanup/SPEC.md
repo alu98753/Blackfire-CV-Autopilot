@@ -1,148 +1,176 @@
 # cli-io-mode-contract-cleanup
 
-Status: Draft
+Status: Final
 
 ## Goal
 
-Align the public CLI and launcher surface with the post-isolation runtime contract:
-
+Align the public CLI with the post-isolation runtime contract:
 - production runtime uses backend Win32 I/O by default;
-- foreground visible/physical I/O is an explicit `--foreground` demo/compatibility path;
-- the CLI must no longer present backend operation as an opt-in production feature;
-- determine whether the legacy `--backend` flag still has any real semantic responsibility. If it has none, remove it completely rather than hiding/deprecating it.
+- `--foreground` is the only explicit I/O selector and selects foreground demo/compatibility I/O;
+- remove the legacy public `--backend` flag completely because it has no independent runtime semantic responsibility;
+- preserve internal `backend_mode` metadata only where it remains useful as metadata/config propagation and does not select I/O implementations.
 
-## Scope
+## Scout conclusion
 
-- `run.bat` main-mode menu, default command construction, subflow menu, and CLI help text.
-- `cli/arguments.py` I/O-mode flags and resolved-mode contract.
-- restart/resume/supervisor command preservation where I/O-mode tokens may survive.
-- dev/diagnostic scripts that expose `--backend` as a public or test-facing selector, but only where they are materially part of the same CLI contract.
-- directly affected CLI/runtime composition tests.
-- directly affected user documentation, especially stale Traditional Chinese examples.
-- startup observability for the selected I/O family if this can be added without changing runtime behavior.
+Scout commit `73304d597bfdb00f160c2e3b6cedd04d577c4b9b`, followed by ChatGPT review of the nearby implementation, resolves the central uncertainty:
 
-## Known invariants
+- `cli/arguments.py` stores `args.backend`, but no production runtime consumer reads it.
+- Runtime mode is derived solely from `args.foreground` through `args.backend_mode = not args.foreground`.
+- `main.py` and `runtime/bootstrap.py` compose explicit backend/foreground adapters from the resolved mode.
+- `run.bat`, quest command generators, tests, and docs still emit or mention `--backend`, but those uses are redundant.
+- Supervisor restart preserves the token only incidentally because it preserves the original command list wholesale.
+- `scripts/test_single_click.py` has a separate parser, but its `--backend` option is still redundant because default/no flag already means backend.
 
-1. Production runtime is backend by default.
-2. `--foreground` explicitly selects foreground demo/compatibility I/O.
-3. Backend and foreground concrete adapters are selected at composition time.
-4. Backend failure must never silently fall back to foreground capture or physical input.
-5. Gameplay/state-machine code must not become an I/O-selection owner.
-6. Win32 capture/input mechanics, pyautogui mechanics, timing, coordinate transforms, pause behavior, callbacks, and gameplay behavior are out of scope for semantic changes.
-7. Existing target/profile/native/sandbox/supervisor/subflow flows must remain behavior-preserving.
-8. No shared Python environment mutation.
-
-## Provisional CLI target
-
-Normal launcher/menu usage should represent backend as the production default rather than as an explicit token.
-
-Examples:
-
-```text
---mode daily
---mode mix
---subflow chest
-```
-
-Foreground demo remains explicit:
-
-```text
---mode daily --foreground
-```
-
-The normal launcher should not generate `--backend`.
-
-## Core uncertainty: does `--backend` still have meaning?
-
-Scout must not assume compatibility retention.
-
-Scout must inventory every current `--backend` reference and classify each one:
-
-- real semantic selector;
-- compatibility-only parser acceptance;
-- launcher-generated redundant token;
-- restart/resume preservation artifact;
-- dev/diagnostic-only surface;
-- stale documentation/test residue;
-- other independently justified responsibility.
-
-Scout must determine whether any current behavior exists that cannot be expressed by:
+Therefore `--backend` has no behavior that cannot be represented by:
 
 ```text
 no I/O flag  -> backend production
 --foreground -> foreground demo
 ```
 
-### Decision rule
+The public flag is to be removed rather than hidden or deprecated.
 
-If `--backend` has no independent semantic responsibility:
+## Architecture contract
 
-- remove it from `cli/arguments.py`;
-- remove all generation from `run.bat`;
-- remove it from normal help/output;
-- remove or migrate tests that assert acceptance;
-- remove stale documentation/examples;
-- remove restart/resume logic whose only purpose is preserving this dead flag;
-- migrate dev/diagnostic scripts where their `--backend` option is likewise redundant;
-- do not leave a hidden/deprecated no-op alias solely for historical compatibility.
+```text
+CLI / launcher
+  |
+  +-- no I/O flag
+  |     -> BackendScreenCapturer + BackendMouseController
+  |
+  \-- --foreground
+        -> ForegroundScreenCapturer + ForegroundMouseController
+```
 
-If Scout finds a real independent responsibility:
+There is no public `--backend` selector.
 
-- document the exact behavior;
-- identify concrete call sites depending on it;
-- explain why backend-by-default plus `--foreground` cannot represent that behavior;
-- propose the smallest explicit contract that preserves the responsibility without reviving broad mixed-mode selection.
+Internal `backend_mode` state/config metadata may remain temporarily where existing code consumes or propagates it, but it is not a public CLI contract and must not become a second I/O-selection authority.
 
-The Final SPEC must resolve this uncertainty before implementation.
+## Scope
+
+- `run.bat` main-mode menu, defaults, subflow menu, generated arguments, and help text.
+- `cli/arguments.py` public I/O-mode contract.
+- `utils/quest_mapper.py` and `utils/quest_scheduler.py` generated command strings.
+- `scripts/test_single_click.py` CLI alignment.
+- directly affected parser/composition/restart tests.
+- active user-facing documentation and active architecture/dev guidance that still presents `--backend` as current.
+- bounded startup observability for the selected I/O family.
+
+Historical task artifacts may retain historical `--backend` references when changing them would falsify the historical record.
+
+## Required behavior
+
+Normal production:
+```text
+python main.py --mode daily
+```
+selects backend production I/O.
+
+Foreground demo:
+```text
+python main.py --mode daily --foreground
+```
+selects foreground demo I/O.
+
+`python main.py --backend ...` is no longer part of the supported CLI contract. Do not keep a hidden/deprecated no-op alias.
+
+## Launcher requirements
+
+- `run.bat` must stop displaying and generating `--backend` in main modes, defaults, and subflows.
+- Launcher help must describe backend as the production default and `--foreground` as the visible/physical demo path.
+- Target/profile/native/sandbox/blessing/supervisor/hotkey flows remain unchanged.
+
+## Generated command requirements
+
+Remove `--backend` from active generated command strings, including `utils/quest_mapper.py`, `utils/quest_scheduler.py`, and any other active command builder discovered during implementation.
+
+## Supervisor / restart contract
+
+- Do not add compatibility logic solely to preserve or translate the removed `--backend` token.
+- Active launchers and command generators must stop producing it, so supported new runs and their restarts remain valid.
+- Restart/resume must preserve `--foreground` when originally selected.
+- Backward compatibility for an already-running pre-upgrade supervisor whose original child command contains `--backend` while the codebase is live-upgraded underneath it is not an invariant.
+
+## Dev diagnostic script
+
+`scripts/test_single_click.py` must use the same model:
+- no I/O flag -> backend adapter;
+- `--foreground` -> foreground adapter;
+- remove redundant `--backend` / `-b`.
+
+## Internal metadata
+
+Existing internal `backend_mode` propagation may remain in places such as `cli/mode_setup.py`, `state_machine.backend_mode`, and quest config propagation. This task does not require broad metadata cleanup. It must remain metadata only and must not select/reconstruct I/O implementations.
+
+## Startup observability
+
+Preferred bounded output:
+```text
+[*] I/O 模式: Backend Production (Win32)
+```
+or:
+```text
+[*] I/O 模式: Foreground Demo (Visible Capture + Physical Mouse)
+```
+
+This is observability only.
+
+## Known invariants
+
+1. Production runtime is backend by default.
+2. `--foreground` explicitly selects foreground demo I/O.
+3. Adapter selection occurs at composition time.
+4. Backend failure never silently falls back to foreground capture or physical input.
+5. Gameplay/state-machine code does not own I/O selection.
+6. Win32/pyautogui mechanics, timing, message ordering, jitter, coordinates, pause behavior, callbacks, and gameplay behavior remain unchanged.
+7. Target/profile/native/sandbox/subflow/supervisor behavior remains unchanged except removal of redundant `--backend` syntax.
+8. No shared Python environment mutation.
 
 ## Non-goals
 
 - Reworking backend/foreground adapter internals.
-- Reintroducing symmetric production `--backend` / `--foreground` mode switching without evidence.
-- Introducing a new `--io backend|foreground` abstraction solely for aesthetics.
-- Gameplay, scheduler, CV, navigation, recovery, or domain behavior changes.
-- Broad refactors outside CLI/public contract alignment.
-- Shared environment/dependency changes.
+- Introducing symmetric `--backend` / `--foreground` modes.
+- Introducing `--io backend|foreground`.
+- Removing `--foreground`.
+- Broad cleanup of internal `backend_mode` metadata.
+- Gameplay, scheduler policy, CV, navigation, recovery, or domain behavior changes.
+- Rewriting historical task records merely to remove old terminology.
+- Supporting live-code-upgrade compatibility for an already-running old supervisor command containing `--backend`.
 
-## Provisional acceptance criteria
+## Acceptance criteria
 
-1. Normal `run.bat` mode choices no longer require or generate an explicit backend token.
-2. Normal subflow choices no longer require or generate an explicit backend token.
-3. No I/O flag resolves backend production.
-4. `--foreground` resolves foreground demo I/O.
-5. Launcher help accurately describes the asymmetric production/default vs demo/opt-in relationship.
-6. Startup output makes the selected I/O family observable if implemented.
-7. Traditional Chinese documentation no longer instructs users to add `--backend` for normal production use.
-8. Runtime composition and fail-closed behavior remain unchanged.
-9. Target/profile/native/sandbox/supervisor/restart behavior remains unchanged.
-10. Final SPEC explicitly resolves whether `--backend` is deleted or retained, with evidence.
-11. If `--backend` is determined redundant, removal is complete across parser, launcher generation, relevant tests, docs, restart/resume handling, and materially affected dev utilities.
-12. No unrelated behavior changes.
+1. `cli/arguments.py` no longer defines or accepts main CLI `--backend`.
+2. No I/O flag resolves backend production.
+3. `--foreground` resolves foreground demo I/O.
+4. `run.bat` main choices, subflows, help, and default Enter path no longer display or generate `--backend`.
+5. `utils/quest_mapper.py` and `utils/quest_scheduler.py` active generated commands contain no `--backend`.
+6. `scripts/test_single_click.py` removes redundant `--backend` / `-b` while preserving default backend and explicit foreground behavior.
+7. Directly affected tests no longer assert legacy `--backend` acceptance.
+8. Deterministic tests still prove default backend and explicit foreground composition.
+9. Restart/resume preserves `--foreground` and never synthesizes a backend token.
+10. Active user-facing docs no longer tell users to pass `--backend` for production.
+11. Active architecture/dev guidance no longer presents `--backend` as a current composition entry point.
+12. Internal `backend_mode` metadata, if retained, remains metadata only.
+13. Backend fail-closed and foreground demo behavior remain unchanged.
+14. No unrelated runtime/gameplay semantic changes.
 
-## Scout questions
+## Focused verification
 
-1. List every current repository reference to literal `--backend` and every code path that derives runtime I/O mode.
-2. Does `args.backend` or an equivalent parser field influence runtime behavior anywhere?
-3. Does preserving `--backend` across supervisor restart/resume change behavior, or is it inert?
-4. Are there scripts, shortcuts, tests, or docs where `--backend` is still a real selector rather than redundant syntax?
-5. Does any code need an explicit force-backend override when `--foreground` is also present? If yes, is that behavior intentional and documented?
-6. Can `backend_mode` runtime metadata remain while removing the public `--backend` flag, and which consumers still require that metadata?
-7. What focused tests are sufficient to prove CLI alignment without reopening runtime I/O mechanics?
+At minimum:
+```text
+tests.test_runtime_io_composition
+tests.test_foreground_demo_mode_isolation
+tests.test_behavior_main_entrypoint
+```
 
-## Expected Scout evidence
+Also run deterministic supervisor/restart tests covering argument preservation if they exist or are added.
 
-Inspect at minimum:
+Add focused assertions for parser removal of `--backend`, default backend, explicit `--foreground`, launcher/generated command cleanup, dev single-click selection, and restart/resume preservation of `--foreground`.
 
-- `run.bat`
-- `cli/arguments.py`
-- `main.py`
-- `runtime/bootstrap.py`
-- `runtime/io_adapters.py`
-- `runtime/supervisor.py`
-- game relaunch/restart paths
-- `scripts/test_single_click.py` and nearby I/O diagnostics
-- focused foreground/backend composition tests
-- README / README.zh-TW.md
-- prior backend-default and foreground-isolation task contracts for historical intent only
+## Lifecycle
 
-Scout is evidence provider only. It must not finalize this SPEC or implement production changes.
+Scout evidence has been reviewed and the central uncertainty is resolved: `--backend` has no independent semantic responsibility.
+
+`Status: Final`
+
+Gemini/Antigravity may now perform production implementation under this contract. OpenCode Scout/reviewers remain read-only.
