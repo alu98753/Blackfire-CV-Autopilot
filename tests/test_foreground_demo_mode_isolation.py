@@ -50,6 +50,25 @@ class TestForegroundDemoModeIsolation(unittest.TestCase):
         with patch.object(mouse, 'get_hwnd', return_value=None), patch.object(mouse, '_finalize_action', return_value=True), patch.object(adapters.pyautogui, 'moveTo'), patch.object(adapters.pyautogui, 'mouseDown'), patch.object(adapters.pyautogui, 'mouseUp'), patch.object(adapters.pyautogui, 'scroll') as scroll, patch.object(adapters.pyautogui, 'dragTo'):
             self.assertTrue(mouse.click(1, 2)); self.assertTrue(mouse.scroll(1)); self.assertTrue(mouse.drag(1, 2, 3, 4)); mouse.move_to_safe_area(); scroll.assert_called_once_with(1)
 
+    def test_backend_drag_preserves_timing_and_release_sequence(self):
+        mouse = BackendMouseController(window_title='x', hwnd=123)
+        sleeps = []
+        with patch.object(mouse, 'get_hwnd', return_value=123), \
+             patch.object(mouse, '_screen_to_client', side_effect=[(10, 20), (30, 40)]), \
+             patch.object(mouse, '_finalize_action', return_value=True) as finalize, \
+             patch.object(adapters.win32gui, 'SendMessage') as send, \
+             patch.object(adapters.win32api, 'MAKELONG', side_effect=lambda x, y: (x, y)), \
+             patch.object(adapters.time, 'sleep', side_effect=lambda value: sleeps.append(value)):
+            self.assertTrue(mouse.drag(1, 2, 3, 4, duration=.1, inertia=False))
+        messages = [call.args[1] for call in send.call_args_list]
+        self.assertEqual(messages[0:2], [adapters.win32con.WM_MOUSEMOVE, adapters.win32con.WM_LBUTTONDOWN])
+        self.assertEqual(messages[-2:], [adapters.win32con.WM_MOUSEMOVE, adapters.win32con.WM_LBUTTONUP])
+        self.assertIn(.03, sleeps)
+        self.assertIn(.05, sleeps)
+        self.assertIn(.15, sleeps)
+        self.assertIn(.02, sleeps)
+        finalize.assert_called_once_with(cooldown=.3, move_safe=True)
+
     @patch('states.exceptions.subflows.game_relaunch.terminate_game_process')
     @patch('states.exceptions.subflows.game_relaunch.time.sleep')
     @patch('states.exceptions.subflows.game_relaunch.SteamGameLauncher')

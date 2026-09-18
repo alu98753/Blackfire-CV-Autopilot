@@ -111,6 +111,7 @@ class BackendMouseController(MouseController):
             ex, ey = self._screen_to_client(hwnd, end_x, end_y)
             win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, 0, win32api.MAKELONG(int(sx), int(sy)))
             time.sleep(.03); win32gui.SendMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, win32api.MAKELONG(int(sx), int(sy)))
+            time.sleep(.05)
             steps = max(5, int(duration / .02)); step_sleep = duration / steps
             for i in range(1, steps + 1):
                 px = int(sx + (ex - sx) * i / steps); py = int(sy + (ey - sy) * i / steps)
