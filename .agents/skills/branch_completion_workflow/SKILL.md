@@ -210,7 +210,10 @@ Preferred path:
 2. ChatGPT re-checks current expected head/base on GitHub.
 3. ChatGPT performs final semantic/architecture review.
 4. User explicitly authorizes integration.
-5. ChatGPT integrates through GitHub with merge-commit semantics.
+5. ChatGPT integrates through GitHub with merge-commit semantics; the task package remains ACTIVE after this integration.
+6. Run `scripts\task_archive.ps1 -Task <task-id>` to create and push the archive closeout branch. `ARCHIVE_CLOSEOUT_READY` is not `ARCHIVED`.
+7. ChatGPT/user integrates the closeout branch through the existing merge authority and verifies the resolver reports exactly one ARCHIVED package.
+8. Only then delegate local teardown to `task_cleanup.ps1`.
 
 Manual fallback is allowed when the user prefers it, but it uses the canonical permanent `main` worktree—not temp-main—and must preserve repository merge policy.
 
@@ -229,7 +232,7 @@ If no immediate local-main use is needed, the next formal `task_start.ps1` will 
 
 ## 6. Normal task cleanup: one high-level command
 
-After integration is confirmed, users should **not** manually reconstruct `.venv` detach + `git worktree remove` + branch deletion.
+After closeout integration is confirmed and the resolver reports ARCHIVED, users should **not** manually reconstruct `.venv` detach + `git worktree remove` + branch deletion.
 
 Normal cleanup is:
 
@@ -370,6 +373,8 @@ Cleanup readiness:
 [ ] applicable canonical Gate reviews/EVIDENCE pushed before remote final review
 [ ] explicit user authorization obtained before integration
 [ ] integration confirmed in origin/main
+[ ] archive closeout branch created and pushed
+[ ] closeout branch integrated and resolver confirms ARCHIVED
 [ ] normal cleanup delegated to task_cleanup.ps1
 ```
 

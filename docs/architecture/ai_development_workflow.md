@@ -18,6 +18,9 @@ Human / ChatGPT
   -> independent verification when available/required
   -> ChatGPT final semantic / architecture review
   -> user-authorized integration
+  -> explicit task_archive.ps1 closeout
+  -> closeout branch integration into origin/main
+  -> resolver confirms ARCHIVED
   -> task_cleanup.ps1
 ```
 
@@ -292,7 +295,7 @@ Reviewer persistence and resume follow:
 
 When formal Gate succeeds and remote ChatGPT final review is required, the canonical `reviews/*.md` and `EVIDENCE.md` must be committed and pushed to the task branch before handoff. Local-only Gate evidence is not sufficient for the GitHub-based final-review step.
 
-### Phase E — Final review, integration, cleanup
+### Phase E — Final review, integration, archive closeout, cleanup
 
 Phase E begins only after the applicable verification path is complete and the candidate/evidence required for remote review is available on GitHub.
 
@@ -301,12 +304,14 @@ Preferred closeout path:
 1. Push the current task HEAD and applicable canonical review/evidence artifacts.
 2. ChatGPT re-checks the expected task HEAD and current base on GitHub and performs final semantic/architecture review.
 3. The user explicitly authorizes integration.
-4. ChatGPT integrates through GitHub using merge-commit semantics.
-5. After integrated ancestry is confirmed in `origin/main`, local task cleanup is delegated to `task_cleanup.ps1`.
+4. ChatGPT integrates the task branch through GitHub using merge-commit semantics. The task package remains ACTIVE after this integration.
+5. Run `scripts\task_archive.ps1 -Task <task-id>`; it creates and pushes an isolated archive closeout branch and reports `ARCHIVE_CLOSEOUT_READY`. This is not yet `ARCHIVED`.
+6. ChatGPT/user integrates the closeout branch through the existing merge authority. The resolver must then find exactly one ARCHIVED package in `origin/main`.
+7. Only after closeout integration and ARCHIVED verification is local cleanup delegated to `task_cleanup.ps1`.
 
 A Gate result of `CANDIDATE_BLOCKED` (`2`) or `VERIFICATION_UNAVAILABLE` (`1`) does not advance to integration; it returns to bounded diagnosis/correction/verification.
 
-After remote integration, normal task cleanup is repository-owned:
+After archive closeout integration and ARCHIVED verification, normal task cleanup is repository-owned:
 
 ```powershell
 .\scripts\task_cleanup.ps1 -Task <task-id>

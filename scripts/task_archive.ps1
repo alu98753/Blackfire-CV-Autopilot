@@ -30,7 +30,8 @@ if($LASTEXITCODE -ne 0){ Fail 'ARCHIVE_INTEGRATION_UNPROVEN' }
 $boundaries=@(git log origin/main --first-parent --merges --format='%H %P' | ForEach-Object { $parts=$_.Split(' '); if($parts.Count -ge 3){$m=$parts[0];$p=$parts[1]; git merge-base --is-ancestor $taskHead $m 2>$null; $a=$LASTEXITCODE; git merge-base --is-ancestor $taskHead $p 2>$null; $b=$LASTEXITCODE; if($a -eq 0 -and $b -ne 0){$m}}})
 if($boundaries.Count -ne 1){ Fail 'ARCHIVE_INTEGRATION_COMMIT_AMBIGUOUS' }
 $integrationCommit=$boundaries[0].Trim()
-$year=(git show -s --format='%ad' --date=format:'%Y' --date=iso-strict $integrationCommit).Trim().Substring(0,4)
+$integrationTimestamp=(git show -s --format='%cI' $integrationCommit).Trim()
+$year=([DateTimeOffset]::Parse($integrationTimestamp).ToUniversalTime().Year).ToString()
 $destination="docs/tasks/archive/$year/$Task"
 if(@(git ls-tree -r --name-only origin/main $destination).Count){ Fail 'ARCHIVE_DESTINATION_COLLISION' }
 $closeoutBranch="archive/$Task-$year"
@@ -47,5 +48,8 @@ try {
     git -C $closeoutPath commit -m "archive task $Task ($year)" --quiet
     $closeoutCommit=(git -C $closeoutPath rev-parse HEAD).Trim()
     git -C $closeoutPath push origin "HEAD:refs/heads/$closeoutBranch" --quiet
-} finally { git worktree remove --force $closeoutPath 2>$null | Out-Null }
+} finally {
+    $removeOutput = git worktree remove $closeoutPath 2>&1
+    if($LASTEXITCODE -ne 0){ throw "ARCHIVE_CLOSEOUT_WORKTREE_REMOVE_FAILED: $($removeOutput -join ' ')" }
+}
 [pscustomobject]@{ok=$true;outcome='ARCHIVE_CLOSEOUT_READY';task=$Task;task_head=$taskHead;integration_commit=$integrationCommit;integration_year=$year;archive_path=$destination;closeout_branch=$closeoutBranch;closeout_commit=$closeoutCommit;durability='pushed closeout branch'} | ConvertTo-Json -Compress

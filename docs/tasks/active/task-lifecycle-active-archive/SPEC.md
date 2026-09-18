@@ -62,8 +62,8 @@ This task begins at the legacy flat path docs/tasks/task-lifecycle-active-archiv
 
 - Move still-active/paused/unresolved formal tasks needed by the workflow to docs/tasks/active/<task-id>/.
 - Do not bulk-archive by name, age, Final status, EVIDENCE, or reviews.
-- Historical packages may be archived only when integration into origin/main can be mechanically proven.
-- Uncertain packages remain unarchived and are reported as migration debt.
+- One-time initial migration follows explicit human classification authority: this task remains ACTIVE; the independent domain-common-template-decoupling task is governed by its own active branch; other explicitly classified legacy formal packages are ARCHIVED.
+- This one-time migration exception does not change the future `task_archive.ps1` rule: every future archive closeout requires mechanical Git integration proof.
 - docs/todos/ remains frozen legacy storage.
 
 ## Confirmed affected scope

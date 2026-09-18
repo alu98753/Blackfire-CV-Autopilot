@@ -65,7 +65,9 @@ idea / future work
   -> verification gate creates/updates reviews/* + completed EVIDENCE.md
   -> push candidate + applicable evidence to GitHub
   -> ChatGPT / human final review
-  -> explicit user-authorized integration
+  -> explicit user-authorized integration (package remains ACTIVE)
+  -> task_archive.ps1 creates/pushes archive closeout branch
+  -> closeout branch integration and resolver verification (ARCHIVED)
   -> task_cleanup.ps1 removes local task execution/worktree state
   -> tracked task package remains repository history until explicit archival/deletion policy
 ```
@@ -108,7 +110,7 @@ Key execution contracts:
 
 ## Task-history retention vs local cleanup
 
-`task_cleanup.ps1` is a local execution/worktree cleanup operation. It does not imply deletion of tracked files under `docs/tasks/active/<task-id>/`.
+After task integration, the package remains ACTIVE until explicit `task_archive.ps1` closeout is integrated and the resolver confirms ARCHIVED. `task_cleanup.ps1` only handles local execution/worktree state; it never moves an active package to archive.
 
 Tracked task packages remain repository history unless an explicit archival/deletion policy or user-authorized task says otherwise. Do not equate branch/worktree cleanup with tracked-history deletion.
 
