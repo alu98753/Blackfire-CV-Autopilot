@@ -37,6 +37,6 @@
       "abyssbeast_lair": "深淵獸巢",
       "coldoath_citadel": "寒誓古堡"
     },
-    "implementation_boundary": "Domain registration should be TOML-only in production; two stale main-entrypoint failures are test-fixture maintenance only."
+    "implementation_boundary": "Production config change is limited to adding the two generic Domain declarations and removing four redundant Golden Empire common-default overrides; bread_cost and Python production behavior remain unchanged. The two stale main-entrypoint failures are test-fixture maintenance only."
   }
 }
