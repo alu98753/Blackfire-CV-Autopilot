@@ -271,11 +271,16 @@ A legacy constructor/facade may remain temporarily only if required by meaningfu
 Required focused modules:
 
 ```text
-tests.test_behavior_main_entrypoint
+tests.test_runtime_io_composition
 tests.test_screen_capturer_architecture
 tests.test_mouse_refactor
 tests.test_mouse_coordinates
+tests.test_foreground_demo_mode_isolation
 ```
+
+`tests.test_runtime_io_composition` is the dedicated deterministic module for
+this task's CLI/main/bootstrap composition contract, avoiding unrelated
+dungeon/runtime-loop behavior contained in `tests.test_behavior_main_entrypoint`.
 
 Add or update a non-skipped deterministic test module for launcher/relaunch composition. The existing class-level skipped `tests.test_game_process_lifecycle` does not satisfy this acceptance criterion unless the relevant tests are safely refactored into non-side-effecting, non-skipped deterministic coverage.
 
