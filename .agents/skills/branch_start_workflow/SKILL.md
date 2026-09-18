@@ -79,6 +79,21 @@ The wrapper intentionally does **not**:
 
 ## 3. Canonical workspace contract
 
+The canonical topology is sibling-based, not nested:
+
+```text
+E:\Side_Project\
+├─ Blackfire-CV-Autopilot\
+│  └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+├─ Blackfire-CV-Autopilot-worktrees\
+│  └─ <task-id>\
+│     └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+└─ VenvPools\
+   └─ .venvs-Blackfire-CV-Autopilot\
+```
+
+`VenvPools` is the external sibling holding the only physical shared Python environment. Worktree `.venv` entries are junction consumers; `node_modules` remains untracked per-worktree state.
+
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
 ├─ Blackfire-CV-Autopilot\      <- permanent attached main + runtime/CV home

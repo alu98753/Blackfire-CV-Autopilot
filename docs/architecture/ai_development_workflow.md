@@ -41,11 +41,17 @@ Authority boundaries:
 The current canonical layout is:
 
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\
-E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>\
+E:\Side_Project\
+├─ Blackfire-CV-Autopilot\
+│  └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+├─ Blackfire-CV-Autopilot-worktrees\
+│  └─ <task-id>\
+│     └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+└─ VenvPools\
+   └─ .venvs-Blackfire-CV-Autopilot\
 ```
 
-The legacy nested tree shown below is historical migration context only. New task worktrees must use the sibling namespace above.
+The legacy nested tree shown below is historical migration context only. New task worktrees must use the sibling namespace above. `VenvPools` is external shared environment storage; `node_modules` remains untracked per-worktree state and is not a shared top-level component.
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
