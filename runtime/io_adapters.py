@@ -111,11 +111,14 @@ class BackendMouseController(MouseController):
             ex, ey = self._screen_to_client(hwnd, end_x, end_y)
             win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, 0, win32api.MAKELONG(int(sx), int(sy)))
             time.sleep(.03); win32gui.SendMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, win32api.MAKELONG(int(sx), int(sy)))
-            steps = max(5, int(duration / .02))
+            steps = max(5, int(duration / .02)); step_sleep = duration / steps
             for i in range(1, steps + 1):
                 px = int(sx + (ex - sx) * i / steps); py = int(sy + (ey - sy) * i / steps)
-                win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, win32api.MAKELONG(px, py)); time.sleep(duration / steps)
-            win32gui.SendMessage(hwnd, win32con.WM_LBUTTONUP, 0, win32api.MAKELONG(int(ex), int(ey)))
+                win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, win32api.MAKELONG(px, py)); time.sleep(step_sleep)
+            time.sleep(.15 if not inertia else .02)
+            end_lp = win32api.MAKELONG(int(ex), int(ey))
+            win32gui.SendMessage(hwnd, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, end_lp); time.sleep(.02)
+            win32gui.SendMessage(hwnd, win32con.WM_LBUTTONUP, 0, end_lp)
             return self._finalize_action(cooldown=.3, move_safe=True)
         except Exception as exc:
             logging.error("Backend drag failed: %s", exc); return False
@@ -141,9 +144,11 @@ class ForegroundMouseController(MouseController):
             if hwnd:
                 cx, cy = self._screen_to_client(hwnd, x, y); target = win32gui.ClientToScreen(hwnd, (int(cx + dx), int(cy + dy)))
             else: target = (int(x) + dx, int(y) + dy)
-            if self.human_like: pyautogui.moveTo(*target, duration=random.uniform(*move_duration), tween=pyautogui.easeOutQuad)
+            if self.human_like:
+                pyautogui.moveTo(*target, duration=random.uniform(*move_duration), tween=pyautogui.easeOutQuad)
+                time.sleep(random.uniform(.01, .02))
             else: pyautogui.moveTo(*target)
-            time.sleep(random.uniform(.01, .02)); pyautogui.mouseDown(); time.sleep(.04); pyautogui.mouseUp(); time.sleep(.04)
+            pyautogui.mouseDown(); time.sleep(.04); pyautogui.mouseUp(); time.sleep(.04)
             return self._finalize_action(target_pos=target, move_safe=True)
         except pyautogui.FailSafeException: raise
         except Exception as exc: logging.error("Foreground click failed: %s", exc); return False
