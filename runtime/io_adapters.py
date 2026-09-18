@@ -15,8 +15,7 @@ import win32con
 
 class BackendScreenCapturer(ScreenCapturer):
     def __init__(self, *args, **kwargs):
-        kwargs.pop("backend_mode", None)
-        super().__init__(*args, backend_mode=True, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def capture(self, rect=None, full_screen=False):
         if self._resume_event is not None:
@@ -31,8 +30,7 @@ class BackendScreenCapturer(ScreenCapturer):
 
 class ForegroundScreenCapturer(ScreenCapturer):
     def __init__(self, *args, **kwargs):
-        kwargs.pop("backend_mode", None)
-        super().__init__(*args, backend_mode=False, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def capture(self, rect=None, full_screen=False):
         if self._resume_event is not None:
@@ -63,8 +61,7 @@ class ForegroundScreenCapturer(ScreenCapturer):
 
 class BackendMouseController(MouseController):
     def __init__(self, *args, **kwargs):
-        kwargs.pop("backend_mode", None)
-        super().__init__(*args, backend_mode=True, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(0.03, 0.07)):
         self._wait_if_paused()
@@ -133,8 +130,7 @@ class BackendMouseController(MouseController):
 
 class ForegroundMouseController(MouseController):
     def __init__(self, *args, **kwargs):
-        kwargs.pop("backend_mode", None)
-        super().__init__(*args, backend_mode=False, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def click(self, x, y, offset_range=(-3, 3), move_duration=(.03, .07)):
         self._wait_if_paused()

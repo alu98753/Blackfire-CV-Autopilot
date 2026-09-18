@@ -84,3 +84,12 @@ class TestForegroundDemoModeIsolation(unittest.TestCase):
         GameRelaunchSubflow().execute(machine, 'test')
         self.assertIs(launcher_type.call_args.kwargs['capturer'], machine.capturer)
         self.assertNotIn('backend_mode', launcher_type.call_args.kwargs)
+
+    @patch('states.exceptions.subflows.game_relaunch.SteamGameLauncher')
+    def test_relaunch_missing_capture_fails_before_launcher(self, launcher_type):
+        machine = MagicMock(capturer=None)
+        machine.window_title = 'x'
+        from states.exceptions.subflows.game_relaunch import GameRelaunchSubflow
+        with self.assertRaisesRegex(RuntimeError, 'machine.capturer'):
+            GameRelaunchSubflow().execute(machine, 'missing')
+        launcher_type.assert_not_called()

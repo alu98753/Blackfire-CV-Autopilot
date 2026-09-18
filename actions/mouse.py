@@ -21,10 +21,9 @@ pyautogui.PAUSE = 0.002
 SAFE_AREA_CLIENT_POS = (15, 15)
 
 class MouseController:
-    def __init__(self, human_like=False, backend_mode=False, window_title=WINDOW_TITLE,
+    def __init__(self, human_like=False, window_title=WINDOW_TITLE,
                  on_action_success=None, is_paused_fn=None, capturer=None, resume_event=None, hwnd=None):
         self.human_like = human_like
-        self.backend_mode = backend_mode
         self.window_title = window_title
         self.last_action_time = 0.0
         self.last_target_pos = None

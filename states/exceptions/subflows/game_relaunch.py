@@ -26,6 +26,10 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
             game_title = getattr(machine.capturer, 'window_title', WINDOW_TITLE)
         game_title = game_title or WINDOW_TITLE
 
+        capturer = getattr(machine, 'capturer', None)
+        if capturer is None:
+            raise RuntimeError("GameRelaunchSubflow requires machine.capturer")
+
         is_sandbox = getattr(machine, 'is_sandbox', None)
         if is_sandbox is None:
             is_sandbox = SandboxManager.is_sandbox_title(game_title)
@@ -38,15 +42,14 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         record_recovery(machine, "game_relaunch_started", incident_details)
 
         target_hwnd = None
-        if hasattr(machine, 'capturer') and machine.capturer:
-            target_hwnd = machine.capturer.get_hwnd()
+        target_hwnd = capturer.get_hwnd()
 
         terminate_game_process(game_title=game_title, hwnd=target_hwnd)
         time.sleep(2.0)
 
         logging.info('🚀 [GameRelaunchSubflow] 調用 SteamGameLauncher 發起專屬遊戲直連啟動與視窗定位...')
         launcher = SteamGameLauncher(
-            capturer=getattr(machine, 'capturer', None),
+            capturer=capturer,
             matcher=getattr(machine, 'matcher', None),
             game_title=game_title,
         )

@@ -14,7 +14,7 @@ from utils.window import WindowHandle
 
 
 class ScreenCapturer:
-    def __init__(self, window_title=WINDOW_TITLE, backend_mode=False, monitor_index=1, resume_event=None, hwnd=None):
+    def __init__(self, window_title=WINDOW_TITLE, monitor_index=1, resume_event=None, hwnd=None):
         """
         :param window_title:  遊戲視窗標題，預設讀取 config.WINDOW_TITLE。
         :param backend_mode:  True 時使用後台截圖 (PrintWindow/BitBlt)，False 時使用前台 mss 截圖。
@@ -25,7 +25,6 @@ class ScreenCapturer:
         """
         # 已關閉 DPI Awareness 宣告以符合專案與使用者需求
         self.window_title = window_title
-        self.backend_mode = backend_mode
         self.monitor_index = monitor_index
         self._resume_event = resume_event
         self.sct = mss.MSS()
