@@ -5,19 +5,19 @@ foreground-demo-mode-isolation
 Branch: 
 foreground-demo-mode-isolation
 HEAD: 
-ae1916e3ce08128aa42a7c1822e4c3bd889972a7
+970b96b74761eaabfba6d948f097dfa565518f8f
 Base ref: 
 origin/main
 
 ## Review verdicts
 
-- Spec reviewer: BLOCK (blocking=1)
-- Regression reviewer: BLOCK (blocking=2)
+- Spec reviewer: PASS (blocking=0)
+- Regression reviewer: PASS (blocking=0)
 
 ## Attempt provenance
 
-- spec-reviewer | model=opencode/big-pickle | classification=VALID_BLOCK | selected=True
-- regression-reviewer | model=opencode/big-pickle | classification=VALID_BLOCK | selected=True
+- spec-reviewer | model=opencode/big-pickle | classification=VALID_PASS | selected=True
+- regression-reviewer | model=opencode/big-pickle | classification=VALID_PASS | selected=True
 
 ## Focused tests
 
