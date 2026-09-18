@@ -42,8 +42,13 @@ class SteamGameLauncher:
         self.backend_mode = backend_mode
         self.monitor_index = monitor_index
         self.hwnd = hwnd
-        self.capturer = capturer or ScreenCapturer(window_title=game_title, backend_mode=backend_mode, monitor_index=monitor_index, hwnd=hwnd)
-        self.mouse = mouse or MouseController(window_title=game_title, backend_mode=backend_mode, hwnd=hwnd)
+        if capturer is None:
+            from runtime.io_adapters import compose_capture
+            capturer = compose_capture(
+                foreground=not backend_mode, window_title=game_title,
+                hwnd=hwnd, monitor_index=monitor_index)
+        self.capturer = capturer
+        self.mouse = mouse
         self.matcher = matcher or TemplateMatcher()
         self.action_cooldown = action_cooldown
         self.phase = LauncherPhase.LAUNCHING
