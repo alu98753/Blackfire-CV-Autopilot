@@ -137,6 +137,26 @@ explore_priorities = ["domains/common/explore_btn.png"]
 lobby_start_btn = "domains/common/start_btn.png"
 result_buttons = ["common/continue.png", "common/continue_gray.png"]
 
+[primary_modes.abyssbeast_lair]
+name = "深淵獸巢"
+type = "domain"
+domain = "abyssbeast_lair"
+navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/abyssbeast_lair/abyssbeast_lair.png", "domains/common/start_btn.png"]
+domain_tab_btn = "domains/Domains_entry.png"
+domain_tab_after_btn = "domains/Domains_entry_after.png"
+domain_entry_btn = "domains/abyssbeast_lair/abyssbeast_lair.png"
+lobby_start_btn = "domains/common/start_btn.png"
+
+[primary_modes.coldoath_citadel]
+name = "寒誓古堡"
+type = "domain"
+domain = "coldoath_citadel"
+navigation_path = ["common/door.png", "domains/Domains_entry.png", "domains/coldoath_citadel/coldoath_citadel.png", "domains/common/start_btn.png"]
+domain_tab_btn = "domains/Domains_entry.png"
+domain_tab_after_btn = "domains/Domains_entry_after.png"
+domain_entry_btn = "domains/coldoath_citadel/coldoath_citadel.png"
+lobby_start_btn = "domains/common/start_btn.png"
+
 
 [primary_modes.stage]
 name = "普通關卡"

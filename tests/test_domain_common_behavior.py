@@ -240,14 +240,16 @@ class TestDomainCommonBehavior(unittest.TestCase):
         """get_canonical_domain_mode_configs 自動動態識別所有 type == 'domain' 的模式，支援 is_supported_domain"""
         mock_canonical_modes = {
             "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
-            "abyss_nest": {"name": "淵獸之巢", "type": "domain", "domain": "abyss_nest"},
+            "abyssbeast_lair": {"name": "深淵獸巢", "type": "domain", "domain": "abyssbeast_lair"},
+            "coldoath_citadel": {"name": "寒誓古堡", "type": "domain", "domain": "coldoath_citadel"},
         }
         with patch("config.get_canonical_domain_mode_configs", return_value=mock_canonical_modes):
             domain_configs = get_domain_mode_configs()
-            self.assertEqual(set(domain_configs.keys()), {"golden_empire", "abyss_nest"})
-            self.assertEqual(get_canonical_supported_domain_ids(), {"golden_empire", "abyss_nest"})
+            self.assertEqual(set(domain_configs.keys()), {"golden_empire", "abyssbeast_lair", "coldoath_citadel"})
+            self.assertEqual(get_canonical_supported_domain_ids(), {"golden_empire", "abyssbeast_lair", "coldoath_citadel"})
             self.assertTrue(is_supported_domain("golden_empire"))
-            self.assertTrue(is_supported_domain("abyss_nest"))
+            self.assertTrue(is_supported_domain("abyssbeast_lair"))
+            self.assertTrue(is_supported_domain("coldoath_citadel"))
             self.assertFalse(is_supported_domain("stage"))
             self.assertFalse(is_supported_domain("nonexistent"))
 
@@ -255,13 +257,14 @@ class TestDomainCommonBehavior(unittest.TestCase):
         """get_tier4_domain_options 動態產生選單項目，顯示名稱嚴格取自 TOML name"""
         mock_canonical_modes = {
             "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
-            "frost_citadel": {"name": "冷誓要塞", "type": "domain", "domain": "frost_citadel"},
+            "abyssbeast_lair": {"name": "深淵獸巢", "type": "domain", "domain": "abyssbeast_lair"},
+            "coldoath_citadel": {"name": "寒誓古堡", "type": "domain", "domain": "coldoath_citadel"},
         }
         with patch("config.get_canonical_domain_mode_configs", return_value=mock_canonical_modes):
             options = get_tier4_domain_options()
             self.assertEqual(
                 options,
-                [("golden_empire", "黃金古國"), ("frost_citadel", "冷誓要塞")],
+                [("golden_empire", "黃金古國"), ("abyssbeast_lair", "深淵獸巢"), ("coldoath_citadel", "寒誓古堡")],
             )
 
     def test_profile_injected_domain_is_rejected_and_fails_fast(self):
@@ -335,44 +338,34 @@ class TestDomainCommonBehavior(unittest.TestCase):
         self.assertIn("cannot alter structural type", str(ctx.exception))
 
     def test_canonical_new_domain_without_python_strategy_dispatches_generic(self):
-        """[Canonical Seam] 在 canonical defaults fixture 加入 abyss_nest ➔ supported=True 且 strategy=GenericDomainStrategy"""
-        mock_canonical_modes = {
-            "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
-            "abyss_nest": {"name": "淵獸之巢", "type": "domain", "domain": "abyss_nest"},
-        }
-        with patch("config.get_canonical_domain_mode_configs", return_value=mock_canonical_modes):
-            self.assertTrue(is_supported_domain("abyss_nest"))
-            strategy = get_domain_strategy("abyss_nest", self.mock_handler)
-            self.assertIsInstance(strategy, GenericDomainStrategy)
-            self.assertEqual(strategy.domain_name, "abyss_nest")
+        """[Canonical Seam] 宣告的 generic domain (abyssbeast_lair / coldoath_citadel) ➔ supported=True 且 strategy=GenericDomainStrategy"""
+        for domain_id in ("abyssbeast_lair", "coldoath_citadel"):
+            with self.subTest(domain=domain_id):
+                self.assertTrue(is_supported_domain(domain_id))
+                strategy = get_domain_strategy(domain_id, self.mock_handler)
+                self.assertIsInstance(strategy, GenericDomainStrategy)
+                self.assertEqual(strategy.domain_name, domain_id)
 
     def test_tier4_new_generic_domain_selection_has_no_keyerror(self):
         """在 primary_modes 加入新領域後，Daily Tier 4 選單互動解析該領域絕不拋出 KeyError"""
-        mock_modes = {
-            "golden_empire": {"name": "黃金古國", "type": "domain", "domain": "golden_empire"},
-            "abyss_nest": {"name": "淵獸之巢", "type": "domain", "domain": "abyss_nest"},
-        }
-        with patch("config.get_canonical_domain_mode_configs", return_value=mock_modes), patch.dict(PRIMARY_MODES, mock_modes, clear=True), patch("cli.tier4_setup.persist_mode_updates"):
+        with patch("cli.tier4_setup.persist_mode_updates"):
             daily_config = {
                 "tier4_mode": "domain",
-                "tier4_domain": "abyss_nest",
+                "tier4_domain": "abyssbeast_lair",
             }
             # interactive=False 模擬非互動自動載入
             res = setup_daily_tier4_config(daily_config, interactive=False)
-            self.assertEqual(res["tier4_domain"], "abyss_nest")
-            self.assertEqual(res["name"], "每日懸賞任務 (Tier 4: 淵獸之巢)")
+            self.assertEqual(res["tier4_domain"], "abyssbeast_lair")
+            self.assertEqual(res["name"], "每日懸賞任務 (Tier 4: 深淵獸巢)")
 
     def test_cli_discovers_declared_domain_in_mode_choices(self):
         """CLI arguments 解析器 choices 動態包含 PRIMARY_MODES 中宣告的所有模式，且能正確接受新領域模式"""
         from cli.arguments import parse_arguments
-        mock_modes = {
-            "golden_empire": {"name": "黃金古國", "type": "domain"},
-            "abyss_nest": {"name": "淵獸之巢", "type": "domain"},
-        }
-        with patch.dict(PRIMARY_MODES, mock_modes, clear=True):
-            with patch("sys.argv", ["main.py", "--mode", "abyss_nest"]):
-                args = parse_arguments()
-                self.assertEqual(args.mode, "abyss_nest")
+        for domain_id in ("abyssbeast_lair", "coldoath_citadel"):
+            with self.subTest(domain=domain_id):
+                with patch("sys.argv", ["main.py", "--mode", domain_id]):
+                    args = parse_arguments()
+                    self.assertEqual(args.mode, domain_id)
 
     def test_tier4_fallback_preserves_domain_route_fields(self):
         """Daily Tier 4 fallback 完整保留所選領地的起手按鈕與自訂路由欄位，且不殘留 enable_golden_empire"""
@@ -1335,6 +1328,54 @@ class TestDomainCommonBehavior(unittest.TestCase):
             handler._check_lord_boss_preemption(None, {"left": 0, "top": 0})
         self.assertIn("enable_lord_boss", str(ctx.exception))
 
+
+
+    def test_canonical_defaults_contains_expanded_generic_domains(self):
+        """[Generic Domain Expansion] 驗證 defaults.toml 宣告的 abyssbeast_lair 與 coldoath_citadel 符合完整契約且不在 DOMAIN_STRATEGIES"""
+        from states.domains import DOMAIN_STRATEGIES
+
+        with open(DEFAULTS_PATH, "rb") as f:
+            data = tomllib.load(f)
+        primary_modes = data.get("primary_modes", {})
+
+        for domain_id, expected_name, expected_entry in [
+            ("abyssbeast_lair", "深淵獸巢", "domains/abyssbeast_lair/abyssbeast_lair.png"),
+            ("coldoath_citadel", "寒誓古堡", "domains/coldoath_citadel/coldoath_citadel.png"),
+        ]:
+            with self.subTest(domain=domain_id):
+                # 1. 存在於 raw defaults TOML
+                self.assertIn(domain_id, primary_modes)
+                cfg = primary_modes[domain_id]
+
+                # 2. 通過完整驗證 (8大必要結構欄位)
+                validate_domain_execution_config(cfg)
+                self.assertEqual(cfg["name"], expected_name)
+                self.assertEqual(cfg["type"], "domain")
+                self.assertEqual(cfg["domain"], domain_id)
+                self.assertEqual(cfg["domain_entry_btn"], expected_entry)
+                self.assertEqual(cfg["domain_tab_btn"], "domains/Domains_entry.png")
+                self.assertEqual(cfg["domain_tab_after_btn"], "domains/Domains_entry_after.png")
+                self.assertEqual(cfg["lobby_start_btn"], "domains/common/start_btn.png")
+                self.assertEqual(cfg["navigation_path"], [
+                    "common/door.png",
+                    "domains/Domains_entry.png",
+                    expected_entry,
+                    "domains/common/start_btn.png",
+                ])
+
+                # 3. 驗證標準化後能正常補全通用欄位
+                normalized = normalize_domain_execution_config(cfg)
+                self.assertEqual(normalized["bread_cost"], 3)
+                self.assertEqual(normalized["domain_reset_max_attempts"], 7)
+                self.assertEqual(normalized["explore_priorities"], ["domains/common/explore_btn.png"])
+                self.assertEqual(normalized["result_buttons"], ["common/continue.png", "common/continue_gray.png"])
+                self.assertTrue(normalized["enable_lord_boss"])
+
+                # 4. Critical Invariant: 絕對未註冊於 DOMAIN_STRATEGIES，一律透過 GenericDomainStrategy 分派
+                self.assertNotIn(domain_id, DOMAIN_STRATEGIES)
+                strategy = get_domain_strategy(domain_id, self.mock_handler)
+                self.assertIsInstance(strategy, GenericDomainStrategy)
+                self.assertEqual(strategy.domain_name, domain_id)
 
 if __name__ == "__main__":
     unittest.main()
