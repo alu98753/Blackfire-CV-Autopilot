@@ -1,0 +1,35 @@
+{
+  "id": "cli-io-mode-contract-cleanup",
+  "base_ref": "origin/main",
+  "base_sha": "6523e43a8794d7796b982f14b1362a1fbe5a4ca9",
+  "scope": [
+    "run.bat",
+    "cli/arguments.py",
+    "main.py",
+    "runtime/bootstrap.py",
+    "runtime/supervisor.py",
+    "runtime/io_adapters.py",
+    "states/exceptions/subflows/game_relaunch.py",
+    "scripts/",
+    "tests/",
+    "README.md",
+    "README.zh-TW.md",
+    "docs/tasks/cli-io-mode-contract-cleanup/"
+  ],
+  "focused_tests": [],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  },
+  "notes": {
+    "status": "Draft",
+    "goal": "Align the CLI with backend-by-default / foreground-opt-in semantics and determine whether the legacy --backend flag has any independent meaning; delete it completely if redundant.",
+    "critical_uncertainty": "Do not assume --backend compatibility retention. Scout must inventory and classify all uses before Final SPEC.",
+    "runtime_boundary": "Do not reopen backend/foreground adapter mechanics or gameplay behavior."
+  }
+}
