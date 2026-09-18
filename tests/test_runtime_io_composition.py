@@ -62,7 +62,7 @@ class TestRuntimeIOComposition(unittest.TestCase):
     def test_missing_templates_precede_io_composition(self):
         selected = args()
         with patch("runtime.bootstrap.check_mode_templates", return_value=["missing.png"]), \
-             patch("runtime.bootstrap.compose_io", create=True) as compose, \
+             patch("runtime.io_adapters.compose_io") as compose, \
              patch("builtins.print"), patch("runtime.bootstrap.os.makedirs"):
             with self.assertRaises(SystemExit):
                 init_state_machine_system(selected, {"name": "Stage", "type": "stage"})
