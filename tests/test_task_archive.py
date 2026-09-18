@@ -42,8 +42,11 @@ class ArchiveBehavioralTests(unittest.TestCase):
             self.git(main, "worktree", "add", wt, task)
         return td, main, wt, task, task_head
 
-    def run_archive(self, main, task):
-        return subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(main / "scripts" / "task_archive.ps1"), "-Task", task], cwd=main, text=True, capture_output=True)
+    def run_archive(self, main, task, fail_step=None):
+        command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(main / "scripts" / "task_archive.ps1"), "-Task", task]
+        if fail_step:
+            command += ["-_FailGitStep", fail_step]
+        return subprocess.run(command, cwd=main, text=True, capture_output=True)
 
     def test_proven_integration_and_remote_closeout(self):
         td, main, wt, task, _ = self.fixture(True)
@@ -76,6 +79,31 @@ class ArchiveBehavioralTests(unittest.TestCase):
         try:
             p = self.run_archive(main, task); self.assertEqual(p.returncode, 0, p.stderr)
             payload = json.loads(p.stdout.strip().splitlines()[-1]); self.assertEqual(payload["integration_year"], "2025")
+        finally: self.git(main, "worktree", "remove", wt, check=False); td.cleanup()
+
+    def test_critical_git_failures_fail_closed_without_ready(self):
+        for step, marker in (("mv", "ARCHIVE_CLOSEOUT_MOVE_FAILED"), ("commit", "ARCHIVE_CLOSEOUT_COMMIT_FAILED"), ("push", "ARCHIVE_CLOSEOUT_PUSH_FAILED")):
+            td, main, wt, task, _ = self.fixture(True)
+            try:
+                p = self.run_archive(main, task, step)
+                self.assertNotEqual(p.returncode, 0, step)
+                self.assertIn(marker, p.stderr, step)
+                self.assertNotIn("ARCHIVE_CLOSEOUT_READY", p.stdout + p.stderr, step)
+                self.assertEqual(self.git(main, "status", "--porcelain").stdout, "", step)
+                self.assertEqual(self.git(main, "rev-parse", "HEAD").stdout.strip(), self.git(main, "rev-parse", "origin/main").stdout.strip(), step)
+            finally:
+                self.git(main, "worktree", "remove", wt, check=False); td.cleanup()
+
+    def test_real_push_failure_fails_closed(self):
+        td, main, wt, task, _ = self.fixture(True)
+        try:
+            self.git(main, "remote", "set-url", "--push", "origin", str(Path(td.name) / "missing-push.git"))
+            p = self.run_archive(main, task)
+            self.assertNotEqual(p.returncode, 0)
+            self.assertIn("ARCHIVE_CLOSEOUT_PUSH_FAILED", p.stderr)
+            self.assertNotIn("ARCHIVE_CLOSEOUT_READY", p.stdout + p.stderr)
+            self.assertEqual(self.git(main, "status", "--porcelain").stdout, "")
+            self.assertEqual(self.git(main, "rev-parse", "HEAD").stdout.strip(), self.git(main, "rev-parse", "origin/main").stdout.strip())
         finally: self.git(main, "worktree", "remove", wt, check=False); td.cleanup()
 
 

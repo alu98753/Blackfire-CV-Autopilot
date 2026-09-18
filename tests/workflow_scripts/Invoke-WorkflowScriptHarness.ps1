@@ -174,7 +174,7 @@ try {
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     New-Item -ItemType Directory -Force -Path $diagnosticRoot | Out-Null
     $env:WORKFLOW_HARNESS_DIAGNOSTIC_DIR = $diagnosticRoot
-    '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/active/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
+    '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/active/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":"opencode/big-pickle"}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
     $taskJsonPath = Join-Path $fixtureDir 'task.json'
     $originalTaskJson = Get-Content -LiteralPath $taskJsonPath -Raw
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
@@ -361,12 +361,12 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     Run-Case 'Gate valid structured BLOCK returns 2 and is terminal' {
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('terminal-first-block','terminal-second'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }; $firstMarker = Join-Path $helperDir 'first-candidate-invoked.marker'; if (Test-Path $firstMarker) { Remove-Item -LiteralPath $firstMarker -Force }
-        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 2) "expected 2, got $code"; Assert-True (Test-Path $firstMarker) 'terminal BLOCK first candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'trusted BLOCK incorrectly invoked the second candidate' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','terminal-first-block','terminal-second'); Assert-True ($code -eq 2) "expected 2, got $code"; Assert-True (Test-Path $firstMarker) 'terminal BLOCK first candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'trusted BLOCK incorrectly invoked the second candidate' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate valid structured PASS is terminal' {
         $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('terminal-first-pass','terminal-second'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }; $firstMarker = Join-Path $helperDir 'first-candidate-invoked.marker'; if (Test-Path $firstMarker) { Remove-Item -LiteralPath $firstMarker -Force }
-        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 0) "expected 0, got $code"; Assert-True (Test-Path $firstMarker) 'terminal PASS first candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'trusted PASS incorrectly invoked the second candidate' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','terminal-first-pass','terminal-second'); Assert-True ($code -eq 0) "expected 0, got $code"; Assert-True (Test-Path $firstMarker) 'terminal PASS first candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'trusted PASS incorrectly invoked the second candidate' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate malformed adapter envelope returns 1' {
         $code = Invoke-Script $gate (@('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewerArgumentsOverride','malformed'))
@@ -379,14 +379,14 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     Run-Case 'Gate pre-authority failure falls back to next candidate' {
         $groundingMarker = Join-Path $helperDir 'fallback-grounding.marker'
         $passMarker = Join-Path $helperDir 'fallback-pass.marker'
-        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('fallback-grounding','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = 'opencode/big-pickle'; $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         if (Test-Path $groundingMarker) { Remove-Item -LiteralPath $groundingMarker -Force }; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
-        try { $code = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code.ExitCode -eq 0) "expected fallback success, got $($code.ExitCode): $($code.Output)"; Assert-True (Test-Path $groundingMarker) 'fallback-grounding candidate was not invoked'; Assert-True (Test-Path $passMarker) 'fallback-pass candidate was not invoked'; Write-Host ('BF1 candidate 1 argv: ' + (Get-Content (Join-Path $helperDir 'fallback-grounding.argv.txt') -Raw)); Write-Host ('BF1 candidate 2 argv: ' + (Get-Content (Join-Path $helperDir 'fallback-pass.argv.txt') -Raw)); Write-Host 'BF1 classifications: GROUNDING_FAILED -> VALID_PASS'; Write-Host 'BF1 Gate exit: 0' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+        try { $code = Invoke-ScriptOutput $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','fallback-grounding','fallback-pass'); Assert-True ($code.ExitCode -eq 0) "expected explicit override success, got $($code.ExitCode): $($code.Output)"; Assert-True (Test-Path $groundingMarker) 'explicit first candidate was not invoked'; Assert-True (Test-Path $passMarker) 'explicit second candidate was not invoked'; Write-Host 'Explicit reviewer override exercised; no task.json fallback.' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate safe transport envelope falls back with exit zero' {
-        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('transport-safe','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = 'opencode/big-pickle'; $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         $passMarker = Join-Path $helperDir 'fallback-pass.marker'; if (Test-Path $passMarker) { Remove-Item -LiteralPath $passMarker -Force }
-        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 0) "expected safe transport fallback success, got $code"; Assert-True (Test-Path $passMarker) 'safe transport envelope did not fall back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
+        try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd,'-_ReviewCandidatesOverride','transport-safe','fallback-pass'); Assert-True ($code -eq 0) "expected explicit override success, got $code"; Assert-True (Test-Path $passMarker) 'explicit override second candidate was not invoked' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }
     }
     Run-Case 'Gate clears stale candidate evidence before reviewer phase' {
         $stale = Join-Path $repoRoot ".runtime\ai_gate\$fixtureId\candidate_EVIDENCE.md"
@@ -398,7 +398,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         Assert-True (Test-Path (Join-Path $fixtureDir 'EVIDENCE.md')) 'Gate did not complete current evidence promotion'
     }
     Run-Case 'Gate catastrophic adapter failure has no envelope' {
-        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = @('catastrophic-crash','fallback-pass'); $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
+        $json = $originalTaskJson | ConvertFrom-Json; $json.models.review = 'opencode/big-pickle'; $json | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8
         $firstMarker = Join-Path $helperDir 'catastrophic-crash.marker'; $secondMarker = Join-Path $helperDir 'fallback-pass.marker'
         if (Test-Path $firstMarker) { Remove-Item -LiteralPath $firstMarker -Force }; if (Test-Path $secondMarker) { Remove-Item -LiteralPath $secondMarker -Force }
         try { $code = Invoke-Script $gate @('-Task',$fixtureId,'-_ReviewerExecutableOverride',$reviewerCmd); Assert-True ($code -eq 1) "expected catastrophic failure, got $code"; Assert-True (Test-Path $firstMarker) 'catastrophic candidate was not invoked'; Assert-True (-not (Test-Path $secondMarker)) 'catastrophic no-envelope failure incorrectly fell back' } finally { $originalTaskJson | Set-Content -LiteralPath $taskJsonPath -Encoding UTF8 }

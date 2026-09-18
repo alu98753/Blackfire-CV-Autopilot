@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][ValidatePattern('^[a-z0-9][a-z0-9-]*$')][string]$Task)
+param(
+    [Parameter(Mandatory=$true)][ValidatePattern('^[a-z0-9][a-z0-9-]*$')][string]$Task,
+    [ValidateSet('worktree-add','mv','commit','push')][string]$_FailGitStep
+)
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path $PSScriptRoot -Parent; Set-Location $repoRoot
 . (Join-Path $PSScriptRoot 'task_package_resolver.ps1')
@@ -38,18 +41,34 @@ $closeoutBranch="archive/$Task-$year"
 if(git ls-remote --heads origin $closeoutBranch){ Fail 'ARCHIVE_CLOSEOUT_BRANCH_COLLISION' }
 
 # Prepare the move in an isolated worktree/branch; canonical main is untouched.
-$closeoutPath=Join-Path $repoRoot ".runtime\archive-closeout-$Task-$year"
+$closeoutPath=Join-Path ([IO.Path]::GetTempPath()) "blackfire-archive-closeout-$Task-$year-$PID"
 if(Test-Path $closeoutPath){ Fail 'ARCHIVE_CLOSEOUT_PATH_COLLISION' }
 New-Item -ItemType Directory -Force (Split-Path $closeoutPath) | Out-Null
-git worktree add --detach $closeoutPath origin/main | Out-Null
+$archiveGitErrorAction = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$closeoutFailure = $null
+$worktreeAddOutput = if ($_FailGitStep -eq 'worktree-add') { @('forced test failure') } else { @(git worktree add --detach $closeoutPath origin/main 2>$null | Out-Null) }
+if ($_FailGitStep -eq 'worktree-add') { $global:LASTEXITCODE = 1 }
+if ($LASTEXITCODE -ne 0) { Fail "ARCHIVE_CLOSEOUT_WORKTREE_ADD_FAILED: $($worktreeAddOutput -join ' ')" }
 try {
     New-Item -ItemType Directory -Force (Join-Path $closeoutPath "docs\tasks\archive\$year") | Out-Null
-    git -C $closeoutPath mv -- "docs/tasks/active/$Task" $destination
-    git -C $closeoutPath commit -m "archive task $Task ($year)" --quiet
+    $mvOutput = if ($_FailGitStep -eq 'mv') { @('forced test failure') } else { @(git -C $closeoutPath mv -- "docs/tasks/active/$Task" $destination 2>$null | Out-Null) }
+    if ($_FailGitStep -eq 'mv') { $global:LASTEXITCODE = 1 }
+    if ($LASTEXITCODE -ne 0) { Fail "ARCHIVE_CLOSEOUT_MOVE_FAILED: $($mvOutput -join ' ')" }
+    $commitOutput = if ($_FailGitStep -eq 'commit') { @('forced test failure') } else { @(git -C $closeoutPath commit -m "archive task $Task ($year)" --quiet 2>$null | Out-Null) }
+    if ($_FailGitStep -eq 'commit') { $global:LASTEXITCODE = 1 }
+    if ($LASTEXITCODE -ne 0) { Fail "ARCHIVE_CLOSEOUT_COMMIT_FAILED: $($commitOutput -join ' ')" }
     $closeoutCommit=(git -C $closeoutPath rev-parse HEAD).Trim()
-    git -C $closeoutPath push origin "HEAD:refs/heads/$closeoutBranch" --quiet
+    $pushOutput = if ($_FailGitStep -eq 'push') { @('forced test failure') } else { @(git -C $closeoutPath push origin "HEAD:refs/heads/$closeoutBranch" --quiet 2>$null | Out-Null) }
+    if ($_FailGitStep -eq 'push') { $global:LASTEXITCODE = 1 }
+    if ($LASTEXITCODE -ne 0) { Fail "ARCHIVE_CLOSEOUT_PUSH_FAILED: $($pushOutput -join ' ')" }
+} catch {
+    $closeoutFailure = $_.Exception.Message
 } finally {
+    $ErrorActionPreference = 'Continue'
     $removeOutput = git worktree remove $closeoutPath 2>&1
-    if($LASTEXITCODE -ne 0){ throw "ARCHIVE_CLOSEOUT_WORKTREE_REMOVE_FAILED: $($removeOutput -join ' ')" }
+    if($LASTEXITCODE -ne 0 -and -not $closeoutFailure){ $closeoutFailure = "ARCHIVE_CLOSEOUT_WORKTREE_REMOVE_FAILED: $($removeOutput -join ' ')" }
+    $ErrorActionPreference = $archiveGitErrorAction
 }
+if($closeoutFailure){ throw $closeoutFailure }
 [pscustomobject]@{ok=$true;outcome='ARCHIVE_CLOSEOUT_READY';task=$Task;task_head=$taskHead;integration_commit=$integrationCommit;integration_year=$year;archive_path=$destination;closeout_branch=$closeoutBranch;closeout_commit=$closeoutCommit;durability='pushed closeout branch'} | ConvertTo-Json -Compress
