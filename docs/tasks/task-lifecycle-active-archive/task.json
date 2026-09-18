@@ -1,0 +1,26 @@
+{
+  "id": "task-lifecycle-active-archive",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/",
+    "scripts/task_start.ps1",
+    "scripts/ai_scout.ps1",
+    "scripts/ai_gate.ps1",
+    "scripts/task_cleanup.ps1",
+    "scripts/task_archive.ps1",
+    "scripts/task_package_resolver.ps1",
+    "tests/test_task_start_behavioral.py",
+    "tests/test_task_cleanup_behavioral.py",
+    "tests/test_workflow_scripts.py",
+    "tests/"
+  ],
+  "focused_tests": [
+    "tests.test_task_start_behavioral",
+    "tests.test_task_cleanup_behavioral",
+    "tests.test_workflow_scripts"
+  ],
+  "models": {
+    "scout": null,
+    "review": null
+  }
+}
