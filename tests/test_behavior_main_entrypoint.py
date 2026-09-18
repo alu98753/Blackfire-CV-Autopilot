@@ -21,7 +21,6 @@ def make_args(**overrides):
         "profile": None,
         "mode": "stage",
         "subflow": None,
-        "backend": True,
         "backend_mode": True,
         "monitor": None,
         "interval": 0.5,
@@ -201,12 +200,12 @@ class TestMainEntrypointBehavior(unittest.TestCase):
             default_args = main.parse_arguments()
         with patch("sys.argv", ["main.py", "--foreground"]):
             foreground_args = main.parse_arguments()
-        with patch("sys.argv", ["main.py", "--backend"]):
-            legacy_args = main.parse_arguments()
-
         self.assertTrue(default_args.backend_mode)
         self.assertFalse(foreground_args.backend_mode)
-        self.assertTrue(legacy_args.backend_mode)
+
+        with patch("sys.argv", ["main.py", "--backend"]):
+            with self.assertRaises(SystemExit):
+                main.parse_arguments()
 
     def test_profile_selection_prefers_explicit_profile_then_target_then_window_title(self):
         self.assertEqual(main.resolve_profile_name(make_args(profile="ACC2"), "[#] Game"), "acc2")

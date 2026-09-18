@@ -9,7 +9,7 @@ from cli.arguments import parse_arguments
 
 def args(**overrides):
     values = dict(title="Blackfire Crusade", target=None, profile=None,
-                  mode="stage", subflow=None, backend=True,
+                  mode="stage", subflow=None,
                   backend_mode=True, monitor=None, interval=.5)
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -21,8 +21,6 @@ class TestRuntimeIOComposition(unittest.TestCase):
             self.assertTrue(parse_arguments().backend_mode)
         with patch("sys.argv", ["main.py", "--foreground"]):
             self.assertFalse(parse_arguments().backend_mode)
-        with patch("sys.argv", ["main.py", "--backend"]):
-            self.assertTrue(parse_arguments().backend_mode)
 
     def test_main_uses_composed_capture_for_backend_and_foreground(self):
         for foreground in (False, True):

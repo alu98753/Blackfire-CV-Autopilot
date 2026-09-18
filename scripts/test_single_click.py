@@ -22,7 +22,6 @@ def main():
     parser = argparse.ArgumentParser(description="單圖比對與點擊即時診斷工具")
     parser.add_argument("--template", "-t", type=str, default="common/door.png", help="要比對的模板圖片路徑 (相對於 templates/，預設 common/door.png)")
     parser.add_argument("--click", "-c", action="store_true", help="是否發起實際點擊")
-    parser.add_argument("--backend", "-b", action="store_true", default=True, help="是否使用後台模式 (預設 True)")
     parser.add_argument("--foreground", "-f", action="store_true", help="強制使用前台模式點擊")
     parser.add_argument("--scale", "-s", type=float, default=None, help="手動指定比對縮放比例 (例如 0.8, 1.0, 1.25)")
     parser.add_argument("--scene", action="store_true", help="執行完整的 SceneDetector 場景辨識診斷")

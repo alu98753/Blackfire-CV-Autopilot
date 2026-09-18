@@ -66,12 +66,12 @@ class TaskNode:
         """
         if self.mode_type == "dungeon":
             idx_str = str(self.dungeon_index)
-            return f".venv\\Scripts\\python main.py --backend --mode dungeon --dungeon {idx_str}"
+            return f".venv\\Scripts\\python main.py --mode dungeon --dungeon {idx_str}"
         elif self.mode_type == "stage":
             lvl_str = str(self.stage_level)
             sub_str = self.sub_stage or "first"
-            return f".venv\\Scripts\\python main.py --backend --mode stage --stage {lvl_str} --sub {sub_str}"
-        return f".venv\\Scripts\\python main.py --backend --mode mix"
+            return f".venv\\Scripts\\python main.py --mode stage --stage {lvl_str} --sub {sub_str}"
+        return f".venv\\Scripts\\python main.py --mode mix"
 
     def to_config_dict(self, base_config=None):
         """
