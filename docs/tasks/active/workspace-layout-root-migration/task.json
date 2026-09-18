@@ -36,6 +36,9 @@
     "migration_order": "implement -> merge to main -> task_cleanup -> verify no relevant linked worktrees -> physically relocate existing main checkout",
     "cleanup_policy": "task_cleanup.ps1 remains behaviorally unchanged",
     "pause_resume_policy": "out of scope; BlackfireCrusade_tool appears only in third-party-window title test examples, not as the production acceptance key",
-    "linked_worktree_policy": "do not repair metadata in place; physical migration is blocked until relevant linked worktrees are cleaned up"
+    "linked_worktree_policy": "do not repair metadata in place; physical migration is blocked until relevant linked worktrees are cleaned up",
+    "workspace_topology": "E:\\Side_Project siblings: Blackfire-CV-Autopilot (main), Blackfire-CV-Autopilot-worktrees (task worktrees), VenvPools (external shared Python env storage)",
+    "venv_policy": "each runnable worktree keeps a local .venv junction to E:\\Side_Project\\VenvPools\\.venvs-Blackfire-CV-Autopilot; no environment mutation",
+    "node_policy": "node_modules remains per-worktree untracked local state; package.json/package-lock.json remain SSOT; no Node bootstrap/package changes in this task"
   }
 }
