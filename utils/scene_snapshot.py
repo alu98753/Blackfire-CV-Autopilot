@@ -123,7 +123,7 @@ _ELEMENT_TEMPLATE_MAP = {
     "common/bread.png": ElementId.BREAD_ENTRY,
     "common/quit.png": ElementId.CLOSE_OVERLAY,
     "domains/common/exit_to_lobby.png": ElementId.EXIT_TO_LOBBY,
-    "domains/golden_empire/explore_btn.png": ElementId.DOMAIN_EXPLORE_BTN,
+    "domains/common/explore_btn.png": ElementId.DOMAIN_EXPLORE_BTN,
 }
 
 

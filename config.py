@@ -68,14 +68,10 @@ def compute_screen_scale_y(
 TIER4_MODE_STAGE = "stage"
 TIER4_MODE_DOMAIN = "domain"
 TIER4_MODE_NONE = "none"
-DEFAULT_TIER4_DOMAIN = "golden_empire"
 TIER4_MODE_OPTIONS = (
     (TIER4_MODE_STAGE, "普通關卡 (Stage)"),
     (TIER4_MODE_DOMAIN, "領地探索 (Domain)"),
     (TIER4_MODE_NONE, "停用 (全冷卻時collect only)"),
-)
-TIER4_DOMAIN_OPTIONS = (
-    (DEFAULT_TIER4_DOMAIN, "黃金古國"),
 )
 TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.35
 TOWN_BUILDING_BRIGHTNESS_THRESHOLD = 0.35
@@ -169,9 +165,51 @@ def get_profile_config_path(profile: str | None = None) -> Path:
     return USER_DATA_DIR / p / "config.toml"
 
 
+def validate_profile_mode_overrides(override: dict, canonical_defaults: dict) -> None:
+    """Validate profile overrides against canonical defaults:
+    1. Profiles cannot introduce primary_modes keys not declared in repository defaults catalog.
+    2. Profiles cannot alter the structural 'type' of a mode.
+    3. Profiles cannot alter the 'domain' identity of a domain mode.
+    """
+    if not isinstance(override, dict):
+        return
+    profile_modes = override.get("primary_modes")
+    if not isinstance(profile_modes, dict):
+        return
+
+    canonical_modes = canonical_defaults.get("primary_modes", {})
+    for mode_key, mode_cfg in profile_modes.items():
+        if mode_key not in canonical_modes:
+            raise ValueError(
+                f"Profile mode override error: mode '{mode_key}' is not declared in repository defaults catalog. "
+                "Profiles cannot define new mode identities."
+            )
+        if not isinstance(mode_cfg, dict):
+            continue
+        canonical_cfg = canonical_modes.get(mode_key, {})
+        if not isinstance(canonical_cfg, dict):
+            continue
+
+        if "type" in mode_cfg and mode_cfg["type"] != canonical_cfg.get("type"):
+            raise ValueError(
+                f"Profile mode override error: mode '{mode_key}' cannot alter structural type "
+                f"from '{canonical_cfg.get('type')}' to '{mode_cfg['type']}'."
+            )
+
+        if canonical_cfg.get("type") == "domain" or "domain" in canonical_cfg:
+            if "domain" in mode_cfg and mode_cfg["domain"] != canonical_cfg.get("domain"):
+                raise ValueError(
+                    f"Profile mode override error: domain mode '{mode_key}' cannot alter domain identity "
+                    f"from '{canonical_cfg.get('domain')}' to '{mode_cfg['domain']}'."
+                )
+
+
 def get_defaults_config() -> dict:
     """Return defaults merged with the optional profile/local runtime override file."""
-    settings = _deep_merge(_DEFAULTS_MANAGER.snapshot(), _get_override_config())
+    defaults = _DEFAULTS_MANAGER.snapshot()
+    override = _get_override_config()
+    validate_profile_mode_overrides(override, defaults)
+    settings = _deep_merge(defaults, override)
     _validate_nemesis_policy(settings.get("nemesis"))
     return settings
 
@@ -309,6 +347,153 @@ BULLETIN_BOARD_OCR_OFFSET = _SETTINGS["ocr"]["bulletin_board"]
 MERCHANT_GOLD_OCR_ROI = _SETTINGS["ocr"]["merchant_gold"]
 
 PRIMARY_MODES = _restore_mode_key_types(_SETTINGS["primary_modes"])
+
+
+def get_canonical_defaults() -> dict:
+    """Return the unmerged repository defaults snapshot (SSOT: config/defaults.toml)."""
+    return _DEFAULTS_MANAGER.snapshot()
+
+
+def get_canonical_domain_mode_configs() -> dict[str, dict]:
+    """從 raw repository defaults snapshot (config/defaults.toml) 解析所有宣告之領地配置字典。
+
+    此處為 Domain existence authority，不受任何 active profile override 影響。
+    """
+    raw_primary = get_canonical_defaults().get("primary_modes", {})
+    return {
+        key: cfg
+        for key, cfg in raw_primary.items()
+        if isinstance(cfg, dict) and cfg.get("type") == "domain"
+    }
+
+
+def get_canonical_supported_domain_ids() -> set[str]:
+    """從 repository canonical defaults 回傳所有合法宣告之領域識別碼集合 (例如 {'golden_empire'})。"""
+    return {
+        str(cfg.get("domain"))
+        for cfg in get_canonical_domain_mode_configs().values()
+        if cfg.get("domain")
+    }
+
+
+def is_supported_domain(domain_id_or_mode_key: str) -> bool:
+    """核驗指定領域識別碼或模式 key 是否存在於 canonical repository defaults catalog。
+
+    永遠依據 raw repository defaults snapshot 判定 existence，防止 profile 注入虛假領域。
+    """
+    if not domain_id_or_mode_key or not isinstance(domain_id_or_mode_key, str):
+        return False
+    canonical_modes = get_canonical_domain_mode_configs()
+    if domain_id_or_mode_key in canonical_modes:
+        return True
+    return domain_id_or_mode_key in get_canonical_supported_domain_ids()
+
+
+def get_domain_mode_configs() -> dict[str, dict]:
+    """回傳所有 canonical-declared 且融合當前 active profile effective values 的領地配置。
+
+    由 canonical keys / identities 限制有效範圍，過濾掉任何 profile 非法注入的 mode key。
+    """
+    canonical_modes = get_canonical_domain_mode_configs()
+    effective_configs: dict[str, dict] = {}
+    for key, canonical_cfg in canonical_modes.items():
+        eff_cfg = PRIMARY_MODES.get(key)
+        if isinstance(eff_cfg, dict) and eff_cfg.get("type") == "domain":
+            effective_configs[key] = eff_cfg
+        else:
+            effective_configs[key] = canonical_cfg
+    return effective_configs
+
+
+def get_supported_domain_ids() -> set[str]:
+    """回傳所有合法宣告之領域識別碼集合 (相容別名，等價於 get_canonical_supported_domain_ids)。"""
+    return get_canonical_supported_domain_ids()
+
+
+def get_tier4_domain_options() -> list[tuple[str, str]]:
+    """動態回傳 Daily Tier 4 領地選項清單 [(mode_key, display_name), ...]，限制為 canonical domains 但採用 effective display name。"""
+    return [
+        (key, str(cfg.get("name", key)))
+        for key, cfg in get_domain_mode_configs().items()
+    ]
+
+
+DOMAIN_STRUCTURAL_REQUIRED_KEYS = (
+    "name",
+    "type",
+    "domain",
+    "navigation_path",
+    "domain_tab_btn",
+    "domain_tab_after_btn",
+    "domain_entry_btn",
+    "lobby_start_btn",
+)
+
+CANONICAL_DOMAIN_COMMON_DEFAULTS = {
+    "bread_cost": 3,
+    "explore_priorities": ["domains/common/explore_btn.png"],
+    "result_buttons": ["common/continue.png", "common/continue_gray.png"],
+    "domain_reset_max_attempts": 7,
+    "enable_lord_boss": True,
+}
+
+
+def validate_domain_execution_config(cfg: dict) -> None:
+    """Validate that a Domain execution configuration satisfies the minimal execution contract.
+
+    Structural required fields (must be present and valid):
+    - name (non-empty str)
+    - type == 'domain'
+    - domain (non-empty str)
+    - navigation_path (non-empty list of str)
+    - domain_tab_btn (non-empty str)
+    - domain_tab_after_btn (non-empty str)
+    - domain_entry_btn (non-empty str)
+    - lobby_start_btn (non-empty str)
+    """
+    if not isinstance(cfg, dict):
+        raise ValueError("Domain execution config 必須為字典物件")
+
+    for key in DOMAIN_STRUCTURAL_REQUIRED_KEYS:
+        if key not in cfg:
+            raise ValueError(f"Domain execution config 缺少必要結構欄位: '{key}'")
+        val = cfg[key]
+        if key == "type":
+            if val != "domain":
+                raise ValueError(f"Domain execution config 的 'type' 必須為 'domain'，而非 {val!r}")
+        elif key == "navigation_path":
+            if not isinstance(val, list) or not val:
+                raise ValueError("Domain execution config 的 'navigation_path' 必須為非空列表")
+            for p in val:
+                if not isinstance(p, str) or not p.strip():
+                    raise ValueError("Domain execution config 的 'navigation_path' 元素必須為非空字串")
+        else:
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"Domain execution config 的 '{key}' 必須為非空字串")
+
+    if "bread_cost" in cfg and not isinstance(cfg["bread_cost"], int):
+        raise ValueError("Domain execution config 的 'bread_cost' 必須為整數")
+    if "explore_priorities" in cfg and (not isinstance(cfg["explore_priorities"], list) or not cfg["explore_priorities"]):
+        raise ValueError("Domain execution config 的 'explore_priorities' 必須為非空列表")
+    if "result_buttons" in cfg and (not isinstance(cfg["result_buttons"], list) or not cfg["result_buttons"]):
+        raise ValueError("Domain execution config 的 'result_buttons' 必須為非空列表")
+    if "domain_reset_max_attempts" in cfg and not isinstance(cfg["domain_reset_max_attempts"], int):
+        raise ValueError("Domain execution config 的 'domain_reset_max_attempts' 必須為整數")
+    if "enable_lord_boss" in cfg and not isinstance(cfg["enable_lord_boss"], bool):
+        raise ValueError("Domain execution config 的 'enable_lord_boss' 必須為布林值")
+
+
+def normalize_domain_execution_config(cfg: dict) -> dict:
+    """Apply canonical common defaults to a Domain execution config and validate structural requirements."""
+    if not isinstance(cfg, dict):
+        raise ValueError("Domain execution config 必須為字典物件")
+    normalized = deepcopy(cfg)
+    for key, default_val in CANONICAL_DOMAIN_COMMON_DEFAULTS.items():
+        if key not in normalized:
+            normalized[key] = deepcopy(default_val)
+    validate_domain_execution_config(normalized)
+    return normalized
+
 SUBFLOW_CONFIGS = _SETTINGS["subflow_configs"]
 BACKPACK_FULL_SETTINGS = _SETTINGS["backpack_full"]
 BASE_STAGE_LEVELS = _SETTINGS["base_stage_levels"]
@@ -460,10 +645,16 @@ def normalize_config(config):
             cfg[activity_key] = mode_type in ["daily", "mix"]
         elif activity_key == "enable_quests":
             cfg[activity_key] = mode_type == "daily"
-        elif activity_key == "enable_golden_empire":
-            cfg[activity_key] = (mode_type == "domain" and cfg.get("domain") == "golden_empire")
+        elif activity_key == "enable_domain":
+            if mode_type == "domain":
+                continue
+            cfg[activity_key] = default_value
         else:
             cfg[activity_key] = default_value
+
+    if mode_type == "domain" or "domain" in cfg:
+        cfg.pop("enable_domain", None)
+        cfg = normalize_domain_execution_config(cfg)
 
     if cfg.get("greedy_dungeon", False):
         if cfg.get("greedy_allowed_indices") is None:
