@@ -32,6 +32,6 @@
   ],
   "models": {
     "scout": null,
-    "review": null
+    "review": "opencode/big-pickle"
   }
 }

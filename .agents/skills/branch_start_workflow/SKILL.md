@@ -58,6 +58,7 @@ For formal AI tasks, the wrapper owns the mechanical startup sequence:
 - validates that the approved remote task branch exists;
 - validates that current `origin/main` is an ancestor of that remote task branch;
 - validates remote `SPEC.md` and `task.json` and matching task id;
+- requires every formal task `task.json` to contain one explicit `models.review` provider/model string (canonical default: `opencode/big-pickle`); null, missing, empty, array, or locally configured defaults are invalid;
 - creates or safely reuses the canonical task worktree;
 - respects Git multi-worktree branch exclusivity;
 - safely fast-forwards a clean local task branch to the remote when allowed;

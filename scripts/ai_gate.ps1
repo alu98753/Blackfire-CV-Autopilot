@@ -23,9 +23,15 @@ if (-not $_SkipNodeReadinessCheck) {
 $baseRef = [string]$config.base_ref; if (-not $baseRef) { throw 'task.json must define base_ref.' }
 
 function Resolve-Candidates($raw, [string]$cli, [string[]]$override) {
-    if ($override -and $override.Count) { return @($override | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ }) }
-    if ($cli) { return @($cli.Trim()) }; if ($null -eq $raw) { throw 'models.review is missing.' }
-    return @($raw | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    if ($override -and $override.Count) { $value=([string]$override[0]).Trim() }
+    elseif (-not [string]::IsNullOrWhiteSpace($cli)) { $value=$cli.Trim() }
+    else {
+        if ($null -eq $raw) { throw 'Invalid reviewer model configuration: models.review is required and must be an explicit provider/model string.' }
+        if ($raw -isnot [string]) { throw 'Invalid reviewer model configuration: models.review must be one explicit provider/model string; candidate arrays are not allowed.' }
+        $value=$raw.Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($value) -or $value -notmatch '^[^/\s]+/[^/\s]+$') { throw 'Invalid reviewer model configuration: models.review must be a non-empty provider/model string.' }
+    return @($value)
 }
 function Get-Sha256String([string]$Text) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)

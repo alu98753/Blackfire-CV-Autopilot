@@ -21,6 +21,13 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertNotIn("Get-CanonicalReviewPayload", text)
         self.assertNotIn("Test-ReviewVerdictStructure", text)
 
+    def test_gate_requires_explicit_reviewer_model_without_default_fallback(self):
+        text = (self.root / "scripts" / "ai_gate.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("models.review is required", text)
+        self.assertIn("must be one explicit provider/model string", text)
+        self.assertIn("candidate arrays are not allowed", text)
+        self.assertNotIn("locally configured OpenCode default", text)
+
     def test_adapter_validates_exact_machine_contract(self):
         probe = self.root / "scripts" / "opencode_structured_review.mjs"
         script = (

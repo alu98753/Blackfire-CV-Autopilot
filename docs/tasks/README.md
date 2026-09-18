@@ -135,7 +135,7 @@ Example:
   ],
   "models": {
     "scout": null,
-    "review": null
+    "review": "opencode/big-pickle"
   }
 }
 ```
@@ -147,7 +147,7 @@ Rules:
 - `base_ref` is the comparison baseline used by the verification gate. Before formal Gate, the current configured baseline must be reconciled into the task branch so the Gate snapshot represents task-owned changes rather than stale-branch drift.
 - `scope` helps reviewers detect scope creep; it does not override `SPEC.md`.
 - `focused_tests` contains Python `unittest` module/class/method targets only and must never contain a full-suite discovery command.
-- `models.scout` and `models.review` are optional `provider/model` overrides. `null` uses the locally configured OpenCode default.
+- `models.scout` remains an optional override. `models.review` is required and must be one explicit non-empty `provider/model` string; `null`, missing, empty, arrays, and locally configured defaults are invalid. The canonical reviewer model is `opencode/big-pickle`.
 
 ## Legacy `docs/todos/`
 

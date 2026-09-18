@@ -234,7 +234,7 @@ Unspecified ideas live in `docs/tasks/BACKLOG.md`. When activated, they are prom
 
 ### Phase A1 — Contract framing
 
-ChatGPT checks current GitHub `main`, architecture contracts, nearby implementation/tests, and backlog context, then creates the remote task branch plus Draft `SPEC.md` and `task.json`.
+ChatGPT checks current GitHub `main`, architecture contracts, nearby implementation/tests, and backlog context, then creates the remote task branch plus Draft `SPEC.md` and `task.json`. Formal task creation must include an explicit `models.review` provider/model string; the canonical reviewer model is `opencode/big-pickle`. Missing, null, empty, array, or locally-default reviewer configuration is invalid and Gate must fail fast.
 
 ### Phase A1.5 — Workspace materialization
 
