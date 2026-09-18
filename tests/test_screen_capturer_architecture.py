@@ -106,6 +106,30 @@ class TestScreenCapturerArchitecture(unittest.TestCase):
         self.capturer.sct.grab.assert_not_called()
 
     @patch("PIL.ImageGrab.grab")
+    @patch.object(ScreenCapturer, "_capture_backend")
+    @patch.object(ScreenCapturer, "get_hwnd", return_value=None)
+    def test_3_backend_missing_hwnd_does_not_fallback(self, mock_get_hwnd, mock_backend, mock_pil_grab):
+        self.capturer.backend_mode = True
+        self.capturer.sct.grab = MagicMock()
+
+        self.assertIsNone(self.capturer.capture({"left": 0, "top": 0, "width": 10, "height": 10}))
+        mock_backend.assert_not_called()
+        self.capturer.sct.grab.assert_not_called()
+        mock_pil_grab.assert_not_called()
+
+    @patch("PIL.ImageGrab.grab")
+    @patch.object(ScreenCapturer, "_capture_backend")
+    @patch.object(ScreenCapturer, "get_hwnd", return_value=123456)
+    def test_3_backend_full_screen_does_not_fallback(self, mock_get_hwnd, mock_backend, mock_pil_grab):
+        self.capturer.backend_mode = True
+        self.capturer.sct.grab = MagicMock()
+
+        self.assertIsNone(self.capturer.capture(full_screen=True))
+        mock_backend.assert_not_called()
+        self.capturer.sct.grab.assert_not_called()
+        mock_pil_grab.assert_not_called()
+
+    @patch("PIL.ImageGrab.grab")
     @patch.object(ScreenCapturer, "_capture_backend", return_value=None)
     @patch.object(ScreenCapturer, "get_hwnd", return_value=123456)
     def test_3_capture_tier3_pil_imagegrab_final_fallback(self, mock_get_hwnd, mock_backend, mock_pil_grab):

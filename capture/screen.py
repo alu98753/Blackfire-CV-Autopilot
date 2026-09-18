@@ -290,6 +290,7 @@ class ScreenCapturer:
             self._release_backend_resources(saveBitMap, saveDC, mfcDC, hwnd, hwndDC)
 
     def capture(self, rect=None, full_screen: bool = False):
+        """Capture BGR data; backend mode fails closed without foreground fallback."""
         """
         擷取螢幕或指定區域，回傳 OpenCV 格式 (BGR) 影像。
         3 層備援截圖瀑布：後台 PrintWindow/BitBlt 優先 ➔ 前台 mss 備用 ➔ PIL ImageGrab 末線防護。
@@ -303,7 +304,13 @@ class ScreenCapturer:
         hwnd = self.get_hwnd()
         
         # 1. 後台模式優先嘗試 BitBlt/PrintWindow 後台截圖 (全螢幕模式除外)
-        if self.backend_mode and hwnd and not full_screen:
+        if self.backend_mode:
+            if full_screen:
+                logging.error("[ScreenCapturer] Backend mode does not support full-screen capture; refusing foreground fallback.")
+                return None
+            if not isinstance(hwnd, int) or hwnd <= 0:
+                logging.error("[ScreenCapturer] Backend capture requires a valid HWND; refusing foreground fallback.")
+                return None
             img = self._capture_backend(hwnd)
             if img is not None:
                 return img
