@@ -1,4 +1,7 @@
-﻿param()
+﻿param(
+    [ValidateSet('all','process/helpers','scout','gate-readiness','gate-verdict','gate-resume-cache')]
+    [string]$Group = 'all'
+)
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
@@ -31,6 +34,10 @@ $nodeContract = Join-Path $repoRoot 'scripts\node_workflow_contract.ps1'
 $bootstrapNode = Join-Path $repoRoot 'scripts\bootstrap_node_workflow_deps.ps1'
 $scoutScript = Join-Path $repoRoot 'scripts\ai_scout.ps1'
 $gateScript = Join-Path $repoRoot 'scripts\ai_gate.ps1'
+
+# Helper scripts are required by process/helper cases before the disposable
+# task fixture is materialized below.
+New-Item -ItemType Directory -Force -Path $helperDir | Out-Null
 
 function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -99,6 +106,12 @@ function Invoke-ScriptOutput([string]$Script, [string[]]$Arguments) {
 }
 
 function Run-Case([string]$Name, [scriptblock]$Body) {
+    $caseGroup = if ($Name -match 'Scout') { 'scout' }
+        elseif ($Name -match 'candidate evidence|promotion rollback|partial resume|successful run|canonical reviews|candidate order|ForceRefresh|SPEC change|reviewer contract|fingerprint|review artifact') { 'gate-resume-cache' }
+        elseif ($Name -match 'unsupported OpenCode|unsupported Node|unbootstrapped Node|SkipNodeReadiness|invocation probe') { 'gate-readiness' }
+        elseif ($Name -match 'Reviewer budgets|OpenCode launcher contract|Node workflow contract|Invoke-Script|process tree|event consumer') { 'process/helpers' }
+        else { 'gate-verdict' }
+    if ($Group -ne 'all' -and $Group -ne $caseGroup) { return }
     try { & $Body; Write-Host "PASS $Name"; $script:passed++ }
     catch { Write-Host "FAIL $Name - $($_.Exception.Message)"; $script:failed++ }
 }
@@ -350,7 +363,7 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
         $args = @($probe.Arguments)
         Assert-True ($probe.Agent -eq 'spec-reviewer') "expected spec-reviewer probe, got $($probe.Agent)"
         Assert-True (($args -join ' ') -match '--agent spec-reviewer') 'Gate production args missing reviewer agent'
-        Assert-True (($args -join ' ') -match '--model first') 'Gate production args missing model'
+        Assert-True (($args -join ' ') -match '--model opencode/big-pickle') 'Gate production args missing configured model'
         Assert-True (($args -join ' ') -match '--prompt-file') 'Gate production args missing prompt file'
         Assert-True (($args -join ' ') -notmatch '--standalone|--pure') 'Gate production args contain unsupported flags'
     }

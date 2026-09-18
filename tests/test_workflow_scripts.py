@@ -378,12 +378,33 @@ class WorkflowScriptContractTests(unittest.TestCase):
         self.assertIn("if (-not $_SkipNodeReadinessCheck) {", gate_text)
         self.assertNotIn("if ($_ReviewerExecutableOverride) { if ($_NodeVersionOverride) { Assert-NodeSupportedVersion", gate_text)
 
-    def test_windows_workflow_harness(self):
+    def run_windows_workflow_group(self, group, timeout):
         harness = self.root / "tests" / "workflow_scripts" / "Invoke-WorkflowScriptHarness.ps1"
-        command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" < NUL"'
-        result = subprocess.run(command, cwd=self.root, capture_output=True, text=True, shell=True, timeout=240)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("Workflow script harness:", result.stdout + result.stderr)
+        command = f'cmd.exe /d /s /c "chcp 65001 >nul && powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{harness}" -Group "{group}" < NUL"'
+        result = subprocess.run(command, cwd=self.root, capture_output=True, shell=True, timeout=timeout, encoding="utf-8", errors="replace")
+        stdout = result.stdout.decode("utf-8", errors="replace") if isinstance(result.stdout, bytes) else result.stdout
+        stderr = result.stderr.decode("utf-8", errors="replace") if isinstance(result.stderr, bytes) else result.stderr
+        self.assertEqual(result.returncode, 0, stdout + stderr)
+        self.assertIn("Workflow script harness:", stdout + stderr)
+        return stdout + stderr
+
+    def test_windows_workflow_process_helpers(self):
+        self.run_windows_workflow_group("process/helpers", 90)
+
+    def test_windows_workflow_gate_readiness(self):
+        self.run_windows_workflow_group("gate-readiness", 60)
+
+    def test_windows_workflow_scout(self):
+        self.run_windows_workflow_group("scout", 75)
+
+    def test_windows_workflow_gate_verdict(self):
+        self.run_windows_workflow_group("gate-verdict", 120)
+
+    def test_windows_workflow_gate_resume_cache(self):
+        self.run_windows_workflow_group("gate-resume-cache", 200)
+
+    def test_windows_workflow_harness(self):
+        self.run_windows_workflow_group("all", 240)
 
     def run_cleanup_helper(self, worktree, canonical, *extra):
         helper = self.root / "scripts" / "worktree_cleanup_safety.ps1"
