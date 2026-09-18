@@ -36,4 +36,6 @@ Do not duplicate the AI workflow roadmap in this backlog. New workflow ideas may
 - [ ] 觀察 `NemesisIntervention` 是否需要與 process-external Supervisor daily restart 協作／延後重啟；本 task 先維持既有每日重啟語意，不保證 intervention hold 跨 process 持久化。
 - [ ] prompt 太長了 需要縮減(GPT給scout 的)
 - [ ] config 位置統一任務
+- [ ] `task-start-review-model-preflight`：釐清 formal task startup 是否應在 `task_start.ps1` 提前驗證單一 explicit `models.review` contract，讓文件、startup fail-fast 與 Gate ownership 一致。
+- [ ] `legacy-task-package-classification-cleanup`：逐一用 Git/integration evidence 分類殘留 flat formal task packages，明確移入 `active/` 或 `archive/<year>/`，不依 `Status: Final` 或舊 evidence 猜測。
 - [ ] AI Gate Node workflow dependency bootstrap：目前 `scripts/ai_gate.ps1` 必須通過 worktree-local `node_modules` readiness（含 `undici` / `@opencode-ai/sdk`），但 formal task startup `scripts/task_start.ps1` 不會 bootstrap Node，導致正常流程可能到 Gate 才 fail-fast 要求手動執行 `scripts/bootstrap_node_workflow_deps.ps1`。後續需正式決定 Node bootstrap ownership（例如 task startup、Gate preflight/explicit prepare step，或其他 deterministic orchestration），目標是讓需要 Gate/Node reviewer 的 task 在進 Gate 前自動或明確準備完成，同時維持 worktree-local untracked `node_modules`、`package.json`/`package-lock.json` SSOT、版本檢查與 fail-closed，不做 silent dependency mutation。
