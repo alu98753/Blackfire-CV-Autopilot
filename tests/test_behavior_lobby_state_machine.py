@@ -46,6 +46,25 @@ class TestBehaviorLobbyStateMachine(unittest.TestCase):
         self.assertEqual(self.state_machine.run_count, 0)
         self.state_machine.notify_ui_progress.assert_not_called()
 
+    def test_domain_start_is_not_diverted_by_stage_farming_disabled(self):
+        self.state_machine.config = {
+            "type": "domain",
+            "domain": "golden_empire",
+            "lobby_start_btn": "domains/common/start_btn.png",
+            "enable_stage_farming": False,
+        }
+        self.matcher.match.side_effect = lambda image, template, **kwargs: (
+            ((200, 300), 0.95)
+            if template == "domains/common/start_btn.png"
+            else (None, 0.0)
+        )
+
+        self.handler.handle(self.dummy_img, self.rect)
+
+        self.mouse.click.assert_called_once_with(300, 400)
+        self.assertEqual(self.state_machine.current_state, GameStateMachine.STATE_LOBBY)
+        self.assertNotEqual(self.state_machine.current_state, GameStateMachine.STATE_COLLECT_ONLY)
+
     def test_retry_uses_last_click_time_without_resetting_watchdog(self):
         self._match_start_button_only()
         self.handler.start_first_click_time = time.time() - 1.5

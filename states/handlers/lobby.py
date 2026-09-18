@@ -116,7 +116,14 @@ class LobbyHandler(BaseStateHandler):
             return True
 
         stage_farming_enabled = self.machine.config.get("enable_stage_farming", False)
-        if not stage_farming_enabled and not getattr(self.machine, "is_in_dungeon", False):
+        is_domain_mode = self.machine.config.get("type") == "domain" or bool(
+            self.machine.config.get("domain")
+        )
+        if (
+            not stage_farming_enabled
+            and not is_domain_mode
+            and not getattr(self.machine, "is_in_dungeon", False)
+        ):
             logging.info("Lobby: stage farming disabled; entering COLLECT_ONLY.")
             pos_back, _ = self.matcher.match(screen_img, "goback_town.png", threshold=0.75, quiet=True)
             if pos_back:
