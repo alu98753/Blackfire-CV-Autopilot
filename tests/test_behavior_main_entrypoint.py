@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import main
+from config import DUNGEON_NAMES
 from cli.dungeon_setup import setup_dungeon_config
 from cli.profile_updates import persist_mode_updates
 from cli.prompts import prompt_choice
@@ -106,10 +107,12 @@ class TestMainEntrypointBehavior(unittest.TestCase):
         )
 
     @patch("cli.dungeon_setup.persist_mode_updates")
-    @patch("builtins.input", side_effect=["8", "113", "1"])
+    @patch("builtins.input")
     def test_greedy_dungeon_deduplicates_targets_and_persists_only_changed_policy(
-        self, _input, persist
+        self, mock_input, persist
     ):
+        greedy_choice = str(len(DUNGEON_NAMES) + 1)
+        mock_input.side_effect = [greedy_choice, "113", "1"]
         config = {
             "greedy_dungeon": False, "tier4_dungeon_index": 4,
             "greedy_allowed_indices": [1, 2], "bless_mode": "combat",
@@ -342,8 +345,12 @@ class TestMainEntrypointBehavior(unittest.TestCase):
     ):
         state_machine = MagicMock()
         state_machine.is_paused = False
+        state_machine.nemesis_intervention.has_pending_timeout_recovery.return_value = False
         state_machine.step.side_effect = KeyboardInterrupt
-        pause_controller_class.return_value.check_toggle_triggered.return_value = False
+        pause_controller_mock = pause_controller_class.return_value
+        pause_controller_mock.check_manual_exit_triggered.return_value = False
+        pause_controller_mock.check_manual_restart_triggered.return_value = False
+        pause_controller_mock.check_toggle_triggered.return_value = False
 
         with self.assertRaises(SystemExit):
             run_main_loop(state_machine, interval=0.5)
