@@ -111,7 +111,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
 
         # 3. Create task branch from main
         self.run_git(main_dir, "checkout", "-b", branch_name)
-        task_docs_dir = main_dir / "docs" / "tasks" / task_id
+        task_docs_dir = main_dir / "docs" / "tasks" / "active" / task_id
         task_docs_dir.mkdir(parents=True, exist_ok=True)
 
         if not missing_spec:
