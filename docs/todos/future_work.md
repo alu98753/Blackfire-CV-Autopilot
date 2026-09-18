@@ -165,11 +165,6 @@
     1. **四層設定架構治理**：正式切分 ① Product Defaults (`config/defaults.toml`) ➔ ② Shared Policy Defaults (`config/policies/*.toml`) ➔ ③ Profile Overrides (`user_data/<profile>/config.toml`、`item_policy.toml`) ➔ ④ Runtime State。
     2. **大型政策集合與 Map 治理**：採用 Boolean map + deep merge 或 set-like `add/remove` 機制，避免陣列覆寫與整檔複製漂移。
     3. **Effective Config 預覽與 Config Editor**：提供 `show --profile` 完整合成展開預覽，未來規劃 GUI/Web Config Editor（左側完整選項、右側 override 標記，儲存僅存差異）。
-- [ ] 🟡 **將 `--backend` 轉為預設模式並逐步淘汰前台點擊模式 (Deprecate Foreground Click Mode)**：
-  - **背景與現狀**：專案目前預設仍為前台模式（搶佔實體滑鼠、依賴 `pyautogui` 全螢幕實體座標），需明確帶入 `--backend` 旗標才會走 Win32 視窗訊息 (`PostMessage` / `SendMessage` / `BitBlt`)。然而當前所有長期掛機、多實例與沙盒環境均已 100% 依賴後台非搶占模式，前台模式維護成本高且容易因滑鼠位移導致非預期點擊。
-  - **規劃方向**：
-    1. **預設轉移**：將全域 `backend_mode` 預設值調整為 `True`，CLI 旗標改為可選之 `--foreground` / `--no-backend`（過渡期）或直接全面啟用。
-    2. **淘汰清理**：逐步移除 [`actions/mouse.py`](../../actions/mouse.py) 與 [`utils/capturer.py`](../../utils/capturer.py) 中前台實體點擊、實體拖曳與非必要的 `pyautogui` 依賴，精簡架構與測試案例。
 - [ ] 優化終端 `config.toml` 與執行參數呈現排版，提升操作員檢視直觀度。
 
 ### 多實例與沙盒環境 (Multi-Instance & Sandboxie)
