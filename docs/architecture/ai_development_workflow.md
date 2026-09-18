@@ -305,9 +305,10 @@ Preferred closeout path:
 2. ChatGPT re-checks the expected task HEAD and current base on GitHub and performs final semantic/architecture review.
 3. The user explicitly authorizes integration.
 4. ChatGPT integrates the task branch through GitHub using merge-commit semantics. The task package remains ACTIVE after this integration.
-5. Run `scripts\task_archive.ps1 -Task <task-id>`; it prepares the move in a temporary detached worktree, pushes an isolated remote archive closeout branch, and reports `ARCHIVE_CLOSEOUT_READY`. No persistent local closeout branch is created, and this is not yet `ARCHIVED`.
-6. ChatGPT/user integrates the closeout branch through the existing merge authority. The resolver must then find exactly one ARCHIVED package in `origin/main`.
-7. Only after closeout integration and ARCHIVED verification is local cleanup delegated to `task_cleanup.ps1`.
+5. Run `scripts\task_archive.ps1 -Task <task-id>`; it prepares the move in a temporary detached worktree, pushes the temporary handoff branch `origin/archive/<task-id>-<year>`, and reports `ARCHIVE_CLOSEOUT_READY`. No persistent local closeout branch is created, and this is not yet `ARCHIVED`.
+6. ChatGPT/user integrates the remote closeout branch through the existing merge authority. The resolver must then find exactly one ARCHIVED package in `origin/main`.
+7. Only after closeout merge and ARCHIVED verification may ChatGPT/user delete `origin/archive/<task-id>-<year>`. If the closeout is not merged, that remote handoff branch must not be deleted.
+8. Only after remote closeout branch deletion is local cleanup delegated to `task_cleanup.ps1`; neither `task_archive.ps1` nor `task_cleanup.ps1` deletes the closeout branch.
 
 A Gate result of `CANDIDATE_BLOCKED` (`2`) or `VERIFICATION_UNAVAILABLE` (`1`) does not advance to integration; it returns to bounded diagnosis/correction/verification.
 
@@ -317,7 +318,7 @@ After archive closeout integration and ARCHIVED verification, normal task cleanu
 .\scripts\task_cleanup.ps1 -Task <task-id>
 ```
 
-Optionally, when repository/user policy calls for deleting the remote branch:
+Optionally, when repository/user policy calls for deleting the original remote task branch (not the archive closeout handoff branch):
 
 ```powershell
 .\scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch

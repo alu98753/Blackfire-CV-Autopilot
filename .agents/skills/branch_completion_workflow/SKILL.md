@@ -212,8 +212,9 @@ Preferred path:
 4. User explicitly authorizes integration.
 5. ChatGPT integrates through GitHub with merge-commit semantics; the task package remains ACTIVE after this integration.
 6. Run `scripts\task_archive.ps1 -Task <task-id>` to prepare the move in a temporary detached worktree and push the remote archive closeout branch. No persistent local closeout branch is created; `ARCHIVE_CLOSEOUT_READY` is not `ARCHIVED`.
-7. ChatGPT/user integrates the closeout branch through the existing merge authority and verifies the resolver reports exactly one ARCHIVED package.
-8. Only then delegate local teardown to `task_cleanup.ps1`.
+7. ChatGPT/user integrates the temporary remote closeout handoff branch `origin/archive/<task-id>-<year>` through the existing merge authority and verifies the resolver reports exactly one ARCHIVED package.
+8. Only after that merge and ARCHIVED verification may ChatGPT/user delete the remote closeout branch. If it is not merged, it must not be deleted. Neither `task_archive.ps1` nor `task_cleanup.ps1` owns this deletion.
+9. Only then delegate original task local teardown to `task_cleanup.ps1`.
 
 Manual fallback is allowed when the user prefers it, but it uses the canonical permanent `main` worktree—not temp-main—and must preserve repository merge policy.
 
@@ -232,7 +233,7 @@ If no immediate local-main use is needed, the next formal `task_start.ps1` will 
 
 ## 6. Normal task cleanup: one high-level command
 
-After closeout integration is confirmed and the resolver reports ARCHIVED, users should **not** manually reconstruct `.venv` detach + `git worktree remove` + branch deletion.
+After closeout integration is confirmed, the resolver reports ARCHIVED, and the temporary remote closeout branch has been deleted by ChatGPT/user, users should **not** manually reconstruct `.venv` detach + `git worktree remove` + branch deletion.
 
 Normal cleanup is:
 

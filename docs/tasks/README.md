@@ -66,8 +66,9 @@ idea / future work
   -> push candidate + applicable evidence to GitHub
   -> ChatGPT / human final review
   -> explicit user-authorized integration (package remains ACTIVE)
-  -> task_archive.ps1 prepares a detached closeout and pushes archive closeout branch
-  -> closeout branch integration and resolver verification (ARCHIVED)
+  -> task_archive.ps1 prepares a detached closeout and pushes temporary remote handoff `origin/archive/<task-id>-<year>`
+  -> ChatGPT/user integrates closeout branch and resolver verifies ARCHIVED
+  -> ChatGPT/user deletes remote closeout handoff branch
   -> task_cleanup.ps1 removes local task execution/worktree state
   -> tracked task package remains repository history until explicit archival/deletion policy
 ```
@@ -110,7 +111,7 @@ Key execution contracts:
 
 ## Task-history retention vs local cleanup
 
-After task integration, the package remains ACTIVE until explicit `task_archive.ps1` closeout is integrated and the resolver confirms ARCHIVED. `task_cleanup.ps1` only handles local execution/worktree state; it never moves an active package to archive.
+After task integration, the package remains ACTIVE until explicit `task_archive.ps1` closeout is integrated and the resolver confirms ARCHIVED. The remote closeout branch is a temporary handoff branch: `task_archive.ps1` and `task_cleanup.ps1` do not delete it; only ChatGPT/user may delete it after closeout merge and ARCHIVED verification. If closeout is not merged, it must not be deleted. Original task cleanup occurs only after that closeout deletion. `task_cleanup.ps1` only handles local execution/worktree state; it never moves an active package to archive.
 
 Tracked task packages remain repository history unless an explicit archival/deletion policy or user-authorized task says otherwise. Do not equate branch/worktree cleanup with tracked-history deletion.
 
