@@ -94,13 +94,6 @@ E:\Side_Project\
 
 `VenvPools` is the external sibling holding the only physical shared Python environment. Worktree `.venv` entries are junction consumers; `node_modules` remains untracked per-worktree state.
 
-```text
-E:\Side_Project\Blackfire-CV-Autopilot\
-├─ Blackfire-CV-Autopilot\      <- permanent attached main + runtime/CV home
-└─ Blackfire-CV-Autopilot-worktrees\
-   └─ <task-id>\                 <- branch-scoped task worktree
-```
-
 Canonical shared Python environment:
 
 ```text
