@@ -1,50 +1,34 @@
 ﻿# Regression Review
 
-Gate-accepted verdict: BLOCK
-Blocking findings: 2
+Gate-accepted verdict: PASS
+Blocking findings: 0
 
 # Regression Review
 
-NOTE: The agent reached its maximum step budget before it could emit the structured result; this output is the final grounded assessment produced from the completed evidence gathering.
-
 ## Behavior-preservation assessment
 
-The diff is a behavior-preserving adapter split that is largely faithful to the Final SPEC:
+The diff retires the mutable `backend_mode` switch from `MouseController`/`ScreenCapturer`, moves the concrete backend/foreground mechanics into explicit adapters (`runtime/io_adapters.py`), and composes I/O once at the root (`main.py:76-81`, `runtime/bootstrap.py:153-157`). The adapter bodies are faithful line-for-line ports of the old mode branches:
 
-- Production composition is now centralized in `runtime/io_adapters.py` (`compose_io`/`compose_capture`); `main.py:76-81`, `runtime/bootstrap.py:153-157` select backend vs foreground once. No production file outside `runtime/io_adapters.py` constructs legacy `MouseController(...)`/`ScreenCapturer(...)` (repo grep confirmed).
-- Shared mechanics (`_finalize_action`, `_wait_if_paused`, `check_user_intervention`, `_screen_to_client`, `_draw_debug_click`, `get_window_rect`, `ensure_window_on_monitor`, `close`) remain in the base classes.
-- Timing/ordering fidelity verified by comparing the removed origin/main bodies with the new adapter bodies: backend click/scroll/drag Win32 message sequence, sleeps (0.01/0.04/0.05/0.03/0.15/0.02), `_finalize_action` args, and foreground pyautogui sequences all match. The `click` `move_duration` default is `(0.03, 0.07)` in origin/main and in the adapters ??foreground human-like motion timing is unchanged (`click_relative` still defaults to `(0.05, 0.12)` and forwards explicitly).
-- `SteamGameLauncher` no longer constructs/owns a mouse adapter and has no leftover `self.mouse` references; missing capturer now fails explicitly with `ValueError` (per SPEC appendix).
-- `GameRelaunchSubflow` reuses `machine.capturer` and raises `RuntimeError` when it is missing ??per SPEC appendix AC22/23. Watchdog invokes the subflow with no try/except (`states/exceptions/watchdog.py:55,75,129`); the failure propagates as an explicit invariant violation, which the appendix mandates. The machine is always composed with a non-null capturer in the supported bootstrap path (`runtime/bootstrap.py:182-189`); no pickle/serialization path produces a capturer-less machine (the `backend_mode` guards at `state_machine.py:1708/1715` are config hot-reload flag preservation, not machine serialization).
-- One deliberate behavior change: backend click/scroll/drag with a missing hwnd now returns `False` instead of falling through to the pyautogui path (origin/main had a latent foreground fall-through in `backend_mode=True`). This is exactly the fail-closed hardening mandated by SPEC acceptance criteria 3/4 and invariant 4.
-- Legacy `backend_mode` remains only as metadata on the state machine (`bootstrap.py:191`, `cli/mode_setup.py`, `state_machine.py:1812-1813`) ??no I/O selection re-reads it downstream.
+- Backend click/scroll/drag message sequences, sleeps (0.01/0.04/0.04; 0.05; 0.03/0.05/step/0.15/0.02), cooldowns (0.3), `_finalize_action(cooldown=..., move_safe=...)` calls, and `_draw_debug_click` ordering are preserved; `tests/test_foreground_demo_mode_isolation.py:test_backend_drag_preserves_timing_and_release_sequence` pins them.
+- Foreground pyautogui click/scroll/drag, failsafe re-raise, human-like tween, safe-area ClientToScreen semantics are preserved.
+- Public action signatures/defaults are unchanged ??the diff never touches the `def click/scroll/drag` lines, so defaults like `move_duration=(0.03, 0.07)` and `click_relative`'s `(0.05, 0.12)` positional pass-through are identical. No foreground timing regression.
+- Fail-closed is now strict: a backend click/scroll/drag with no HWND returns `False` instead of the old code silently falling through to pyautogui. This is the SPEC's critical invariant, not a regression.
+- `SteamGameLauncher` no longer references `self.mouse` anywhere; all production callers inject a composed capturer (`main.py`, `game_relaunch.py`); `test_behavior_supervisor_lifecycle.py` and the skipped `test_game_process_lifecycle.py` were updated to the constructor.
+- `GameRelaunchSubflow` reuses `machine.capturer`, raises `RuntimeError` when capturer is missing, and constructs the launcher without `backend_mode` (tests: `test_relaunch_reuses_machine_capture`, `test_relaunch_missing_capture_fails_before_launcher`).
+- Remaining `backend_mode` references are metadata only (CLI resolution, `cli/mode_setup.py` config, `state_machine.py` serialization/quest-cfg propagation, `quest_mapper.py`); no production code constructs I/O from it.
+- Existing tests that still construct base `ScreenCapturer`/`MouseController` (`test_long_run_resilience.py`, `test_mouse_refactor.py`, `test_debug_visualizer.py`) only exercise inherited mechanics (`_release_backend_resources`, `close`, `_finalize_action`), so the base-class `NotImplementedError` stubs do not break them.
 
 ## Blocking findings
 
-### F1
-Severity: BLOCKING
-Regression / invariant: Existing deterministic behavior tests break because legacy base-class action methods now raise `NotImplementedError`; SPEC Compatibility policy ("Tests that use this pattern must migrate to explicit adapter construction/selection") was not applied to these tests.
-Location: `tests/test_behavior_safety_and_battle_scenarios.py:test_mouse_controller_prohibits_movement_on_user_operating` (line 40-65) and `test_stuck_count_reset_on_mouse_action` (line 298-331)
-Claim: Two previously passing tests now error; the base `MouseController.click/scroll` raise `NotImplementedError` on the very calls the tests exercise (`controller.click(500, 500)`, `controller.scroll(-5, 500, 500)`, `real_mouse.click(100, 100)`, `real_mouse.scroll(-800, 100, 100)`).
-Evidence: `actions/mouse.py:132,146` raise `NotImplementedError` after `backend_mode` removal; the tests construct `MouseController` from `actions.mouse` (unmigrated); these pause-gate and stuck-count contracts are preserved by `BackendMouseController`/`ForegroundMouseController` but the tests were never converted, so the suite now errors instead of passing. The diff migration covered `test_mouse_refactor`, `test_mouse_coordinates`, `test_behavior_pause_resume`, `test_behavior_screen_capturer`, `test_screen_capturer_architecture`, `test_behavior_main_entrypoint` but not this module.
-Suggested validation: Migrate both tests to `ForegroundMouseController` (pausing semantics under test apply to the paused-gate contract) and run `tests.test_behavior_safety_and_battle_scenarios`; verify green.
-Confidence: 0.95
-
-### F2
-Severity: BLOCKING
-Regression / invariant: Dev/verification tooling that the Final SPEC appendix declared in scope ("dev-only scripts may remain out of scope unless they break... if touched, migrate only the minimum necessary wiring") was left broken by the retired constructor surface.
-Location: `scripts/crop_tool.py:46,70`; `scripts/diagnose_merchant_gold_ocr.py:56,58`; `tests/test_capture.py:21,32,45`
-Claim: These tools construct base `ScreenCapturer` and call `capture()`, which now raises `NotImplementedError` (`capture/screen.py:298`), so the tools crash at runtime instead of capturing.
-Evidence: `capture/screen.py:291-298` ??base `capture()` body replaced with `raise NotImplementedError("Select BackendScreenCapturer or ForegroundScreenCapturer")`; none of the three files was updated in the diff (only `scripts/test_single_click.py` was migrated). `mss.MSS()` is still constructed by the base `__init__` but `capture()` cannot execute.
-Suggested validation: Migrate each tool to an explicit adapter (`BackendScreenCapturer`/`ForegroundScreenCapturer` selected by the tool's intended mode or via `runtime.io_adapters.compose_capture`), or explicitly exclude them in the SPEC; then smoke-run each tool path.
-Confidence: 0.9
+None.
 
 ## Advisory findings
 
-- `tests/test_behavior_pause_resume.py:407` (approx.) retains an unused `from actions.mouse import MouseController` import after migration to `ForegroundMouseController` ??harmless stale import.
-- `BackendScreenCapturer` drops the original backend failure logging (`[ScreenCapturer] Backend capture failed; refusing foreground fallback.`) ??externally observable result contract (`None`) preserved; only diagnostics changed.
-- `ForegroundMouseController.click` no longer logs on `pyautogui.FailSafeException` (original logged then re-raised); re-raise still present.
-- A `mss.MSS()` handle is still created inside the base `ScreenCapturer.__init__` for backend adapters that never use it (construction-time side effect kept, matching origin/main; `close()` still released by `GameStateMachine` shutdown).
-- Unverified within budget: full run of the focused test modules (`tests.test_runtime_io_composition`, `tests.test_screen_capturer_architecture`, `tests.test_mouse_refactor`, `tests.test_mouse_coordinates`, `tests.test_foreground_demo_mode_isolation`) was not executed (read-only review; no test runner invocation permitted).
+1. **Dev-script capture semantics changed** ??`scripts/diagnose_merchant_gold_ocr.py` previously constructed `ScreenCapturer(window_title=..., hwnd=...)` with the old default (`backend_mode=False`, foreground MSS) and now uses `BackendScreenCapturer` (HWND PrintWindow/BitBlt, black-image ??None). For an OCR diagnosis tool this can change the captured image or fail where foreground previously succeeded; the minimum-wiring migration would have been `ForegroundScreenCapturer` (as `crop_tool.py`/`test_capture.py` did). Dev-only, so non-blocking.
+2. **Stale docstring** ??`capture/screen.py:20` still documents the removed `backend_mode` constructor parameter; cosmetic.
+3. **Logging loss in fail-closed paths** ??old backend branches logged "refusing foreground fallback" / error reasons before returning `None`/`False`; the adapters return silently. Result contract is unchanged; only diagnostic logging is thinner.
+4. **Dual capturer instances at startup** ??`main.py` composes one capturer for the launcher gate and `bootstrap.py` composes a second for the machine; relaunch reuses the machine's. Same family, one selection policy per SPEC, but the first capturer's MSS handle stays open for the process lifetime. Acceptable per contract.
 
-<!-- blackfire-gate-fingerprint: {"schema":1,"role":"regression-reviewer","hash":"0b3008595ee0b9836a50556a30342398411280186d7760e9436c38f6d8091a0d"} -->
+Confidence in PASS: grounded in the diff snapshot plus direct reads of `actions/mouse.py`, `runtime/io_adapters.py`, `capture/screen.py`, `utils/steam_launcher.py`, `main.py`, `runtime/bootstrap.py`, `game_relaunch.py`, and the migrated/new tests; repo-wide `backend_mode`/constructor greps found no production re-selection path.
+
+<!-- blackfire-gate-fingerprint: {"schema":1,"role":"regression-reviewer","hash":"2abc6f5dceaffb51f17faa904444f8c08e73b0f8b17737307525d714a652eda3"} -->
