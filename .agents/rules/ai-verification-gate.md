@@ -1,4 +1,4 @@
-﻿# AI Verification Gate Writer Rule
+# AI Verification Gate Writer Rule
 
 This rule applies when the current branch contains an active task package at `docs/tasks/active/<task-id>/` with both `SPEC.md` and `task.json`.
 
@@ -33,5 +33,4 @@ Before declaring the task ready for final review:
 4. A PASS from the local gate is not final approval; ChatGPT/human final review remains required.
 5. After focused verification passes, ask the user to run the full suite manually when required by `.agents/AGENTS.md`.
 
-Never create `.ai/current-task`, `docs/tasks/active/current`, or another global mutable task marker. This project uses multiple permanent worktrees; all workflow commands must name the task explicitly.
-
+Never create `.ai/current-task`, `docs/tasks/current`, or another global mutable task marker. This project uses multiple permanent worktrees; all workflow commands must name the task explicitly.

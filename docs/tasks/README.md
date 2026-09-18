@@ -1,4 +1,4 @@
-﻿# Development Tasks
+# Development Tasks
 
 `docs/tasks/` is the canonical home for new development work that is ready to be specified, implemented, reviewed, or verified.
 
@@ -8,13 +8,13 @@ Each active task uses one directory:
 
 ```text
 docs/tasks/active/<task-id>/
-?? SPEC.md
-?? task.json
-?? CONTEXT.md
-?? EVIDENCE.md
-?? reviews/
-   ?? spec-review.md
-   ?? regression-review.md
+├─ SPEC.md
+├─ task.json
+├─ CONTEXT.md
+├─ EVIDENCE.md
+└─ reviews/
+   ├─ spec-review.md
+   └─ regression-review.md
 ```
 
 Only `SPEC.md` is the normative behavioral contract. The other files are execution metadata or evidence and must not silently redefine the spec.
@@ -80,7 +80,7 @@ Do not create a global `current-task` marker. This repository uses multiple perm
 
 - Do **not** create `docs/tasks/active/<task-id>/backlog.md` for task-local follow-up ideas.
 - While a task is active, append short follow-up observations to the shared `docs/tasks/BACKLOG.md`; include enough context or the originating task id to recover intent later.
-- Once a backlog item is activated, promote it into its own `docs/tasks/<new-task-id>/SPEC.md` + `task.json` and avoid keeping two active SSOT descriptions.
+- Once a backlog item is activated, promote it into its own `docs/tasks/active/<new-task-id>/SPEC.md` + `task.json` and avoid keeping two active SSOT descriptions.
 - AI-workflow roadmap items remain owned by `docs/architecture/ai_development_workflow_roadmap.md`; the shared backlog may hold a brief intake note only until that item is promoted or incorporated into the roadmap.
 
 This convention is exemplified by commit `7862384c7321b2e370691e5b3c22b96f0f7a4cd7`, which moved a Nemesis/Supervisor follow-up out of a task-local `backlog.md` and into `docs/tasks/BACKLOG.md`.
@@ -149,4 +149,3 @@ Rules:
 ## Legacy `docs/todos/`
 
 `docs/todos/` is frozen legacy storage. Do not add new tasks there. When an existing legacy item becomes active work, migrate the relevant material into a new `docs/tasks/active/<task-id>/SPEC.md` and then handle cleanup through the normal branch closeout / canonical archival process.
-

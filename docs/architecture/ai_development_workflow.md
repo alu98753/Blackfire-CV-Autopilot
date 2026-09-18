@@ -1,4 +1,4 @@
-﻿# AI Development Verification Workflow v1
+# AI Development Verification Workflow v1
 
 > Status: canonical development workflow contract. This document is the repository SSOT for AI-assisted task lifecycle, local workspace topology, environment ownership, role boundaries, verification, integration, and task-worktree lifecycle. It does not define game runtime behavior.
 
@@ -37,11 +37,12 @@ Authority boundaries:
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
-?? BlackfireCrusade_tool\
-?? ?? .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
-???? worktrees\
-   ?? <task-id>\
-      ?? .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+├─ BlackfireCrusade_tool\
+│  └─ .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+│
+└─ worktrees\
+   └─ <task-id>\
+      └─ .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
 ```
 
 `E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool` is the permanent local `main` worktree and canonical integrated runtime/CV validation home. It remains attached to `main`; the old permanent temp-main / detached-main convention is retired.
@@ -118,11 +119,11 @@ Every active AI-assisted task uses:
 
 ```text
 docs/tasks/active/<task-id>/
-?? SPEC.md
-?? task.json
-?? CONTEXT.md        # after Scout when used
-?? EVIDENCE.md       # after verification when used
-?? reviews/          # reviewer evidence when used
+├─ SPEC.md
+├─ task.json
+├─ CONTEXT.md        # after Scout when used
+├─ EVIDENCE.md       # after verification when used
+└─ reviews/          # reviewer evidence when used
 ```
 
 `SPEC.md` is the normative task contract. `task.json` is automation metadata. Other files are evidence and must not silently redefine the spec.
@@ -228,11 +229,11 @@ The detailed recovery rules live in `.agents/skills/branch_start_workflow/SKILL.
 
 Unspecified ideas live in `docs/tasks/BACKLOG.md`. When activated, they are promoted into a unique task package; do not keep two active SSOT descriptions.
 
-### Phase A1 ??Contract framing
+### Phase A1 — Contract framing
 
 ChatGPT checks current GitHub `main`, architecture contracts, nearby implementation/tests, and backlog context, then creates the remote task branch plus Draft `SPEC.md` and `task.json`.
 
-### Phase A1.5 ??Workspace materialization
+### Phase A1.5 — Workspace materialization
 
 The user runs the single repository-owned startup command supplied by ChatGPT:
 
@@ -242,7 +243,7 @@ The user runs the single repository-owned startup command supplied by ChatGPT:
 
 Success is `TASK_READY`. The user is not expected to manually recreate the internal Git/worktree/.venv steps.
 
-### Phase B ??Localization
+### Phase B — Localization
 
 From the `TASK_READY` worktree:
 
@@ -252,15 +253,15 @@ From the `TASK_READY` worktree:
 
 Scout remains an explicit lifecycle step; startup does not invoke it automatically.
 
-### Phase A2 ??Contract finalization
+### Phase A2 — Contract finalization
 
 ChatGPT + user reconcile Draft assumptions against evidence and publish Final SPEC.
 
-### Phase C ??Implementation
+### Phase C — Implementation
 
 Gemini/Antigravity implements the Final SPEC. Applicable repository rules/contracts remain authoritative.
 
-### Phase D ??Verification
+### Phase D — Verification
 
 Before formal Gate, refresh the configured comparison baseline and require the current `base_ref` (normally fetched `origin/main`) to be an ancestor of the task HEAD. A long-lived task branch that is stale or diverged from the current baseline must be reconciled with the latest baseline through repository-approved non-destructive merge semantics and re-verified before Gate. Do not review a stale branch against a newer baseline in a way that makes newer-base files appear to be task-owned deletions or unrelated changes.
 
@@ -291,7 +292,7 @@ Reviewer persistence and resume follow:
 
 When formal Gate succeeds and remote ChatGPT final review is required, the canonical `reviews/*.md` and `EVIDENCE.md` must be committed and pushed to the task branch before handoff. Local-only Gate evidence is not sufficient for the GitHub-based final-review step.
 
-### Phase E ??Final review, integration, cleanup
+### Phase E — Final review, integration, cleanup
 
 Phase E begins only after the applicable verification path is complete and the candidate/evidence required for remote review is available on GitHub.
 
@@ -380,4 +381,3 @@ Workflow v1 does not add:
 - automatic merge without explicit user authorization.
 
 The north star is a contract-driven development pipeline with increasingly automated mechanics and deliberately narrow semantic authority.
-

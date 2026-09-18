@@ -10,15 +10,21 @@ if($status.Count){ throw 'ARCHIVE_REQUIRES_CLEAN_MAIN' }
 git fetch origin main --quiet
 $head=(git rev-parse HEAD).Trim(); $originMain=(git rev-parse origin/main).Trim()
 if($head -ne $originMain){ throw 'ARCHIVE_REQUIRES_LOCAL_MAIN_AT_ORIGIN_MAIN' }
-$touching=@(git log origin/main --format='%H' -- "docs/tasks/active/$Task")
-if($touching.Count -eq 0){ throw 'ARCHIVE_INTEGRATION_UNPROVEN' }
-$integrationSha=$touching[0].Trim()
+$activePath="docs/tasks/active/$Task"
+$evidence=Join-Path $resolved.AbsolutePath 'EVIDENCE.md'
+if(-not (Test-Path -LiteralPath $evidence)){ throw 'ARCHIVE_INTEGRATION_UNPROVEN' }
+$evidenceText=Get-Content -LiteralPath $evidence -Raw -Encoding UTF8
+$shaMatch=[regex]::Match($evidenceText,'(?im)^(?:HEAD|Integration commit|Merged commit):\s*([0-9a-f]{7,40})\s*$')
+if(-not $shaMatch.Success){ throw 'ARCHIVE_INTEGRATION_UNPROVEN' }
+$integrationSha=$shaMatch.Groups[1].Value
+$shaCheck=git cat-file -e "$integrationSha^{commit}" 2>$null
+if($LASTEXITCODE -ne 0){ throw 'ARCHIVE_INTEGRATION_UNPROVEN' }
+$ancestor=git merge-base --is-ancestor $integrationSha origin/main 2>$null
+if($LASTEXITCODE -ne 0){ throw 'ARCHIVE_INTEGRATION_UNPROVEN' }
 $year=(git show -s --format='%ad' --date=format:'%Y' $integrationSha).Trim()
 $destination=Join-Path $repoRoot "docs\tasks\archive\$year\$Task"
 if(Test-Path -LiteralPath $destination){ throw 'ARCHIVE_DESTINATION_COLLISION' }
-$archiveParent=Split-Path $destination -Parent
-New-Item -ItemType Directory -Force -Path $archiveParent | Out-Null
-git mv -- "docs/tasks/active/$Task" "docs/tasks/archive/$year/$Task"
-git commit -m "archive task $Task ($year)" --quiet
-if(@(git status --porcelain).Count){ throw 'ARCHIVE_POSTCONDITION_DIRTY' }
-[pscustomobject]@{ok=$true;task=$Task;integration_commit=$integrationSha;integration_year=$year;archived_path="docs/tasks/archive/$year/$Task";commit=(git rev-parse HEAD).Trim()} | ConvertTo-Json -Compress
+$remoteArchived=@(git ls-tree -r --name-only origin/main "docs/tasks/archive/$year/$Task")
+if($remoteArchived.Count -eq 0){ throw 'ARCHIVE_REMOTE_DURABILITY_REQUIRED' }
+if(@(git ls-tree -r --name-only origin/main $activePath).Count -gt 0){ throw 'ARCHIVE_REMOTE_STILL_ACTIVE' }
+[pscustomobject]@{ok=$true;task=$Task;integration_commit=$integrationSha;integration_year=$year;archived_path="docs/tasks/archive/$year/$Task";durability='origin/main'} | ConvertTo-Json -Compress
