@@ -1,0 +1,78 @@
+{
+  "id": "domain-lobby-primary-start-boundary",
+  "title": "Domain Lobby Primary Start Boundary",
+  "status": "Final",
+  "branch": "domain-lobby-primary-start-boundary",
+  "base_branch": "main",
+  "base_sha": "2c433caa154a458edfac9235f30eff085b86b6f6",
+  "owner": "chatgpt",
+  "implementation_writer": "gemini",
+  "workflow": {
+    "mode": "standard",
+    "scout": true,
+    "ai_gate": true,
+    "final_review": "chatgpt"
+  },
+  "scope": [
+    "states/handlers/lobby.py",
+    "states/navigation_routing.py",
+    "config.py",
+    "config/defaults.toml",
+    "vision/matcher.py",
+    "actions/mouse.py",
+    "capture/screen.py",
+    "tests/test_behavior_lobby_state_machine.py",
+    "tests/test_behavior_navigation.py",
+    "tests/test_domain_common_behavior.py",
+    "docs/tasks/domain-lobby-primary-start-boundary/",
+    "states/handlers/domain_explore.py",
+    "states/state_machine.py",
+    "utils/scene_detector.py"
+  ],
+  "focused_tests": [
+    "tests.test_behavior_lobby_state_machine",
+    "tests.test_behavior_navigation",
+    "tests.test_domain_common_behavior",
+    "tests.test_behavior_golden_empire"
+  ],
+  "artifacts": {
+    "spec": "docs/tasks/domain-lobby-primary-start-boundary/SPEC.md",
+    "context": "docs/tasks/domain-lobby-primary-start-boundary/CONTEXT.md"
+  },
+  "notes": {
+    "architecture": "docs/architecture/navigation_intent_routing_spec.md",
+    "intent": "Fix Domain runtime handoff coherence: preserve valid Domain primary start and prevent scene adoption without Domain execution identity.",
+    "preserve": [
+      "domain card alignment",
+      "entry brightness filtering",
+      "scheduler priority",
+      "committed lobby start retry/disappearance semantics"
+    ],
+    "secondary_observation": "Investigate abnormal match-to-click Y coordinate only for causal relevance; split if independent.",
+    "secondary_runtime_failure": "UNKNOWN -> DOMAIN_EXPLORE may currently occur from explore_btn visual evidence while self.config lacks domain, causing DomainExploreHandler to raise ValueError.",
+    "status": "Final",
+    "implementation_boundary": "Fix legacy Lobby stage-farming gating and enforce valid Domain execution identity before every DOMAIN_EXPLORE adoption path, including global relocalization and navigation.",
+    "scout_evidence": "OpenCode Scout selected opencode/big-pickle after mimo malformed output; CONTEXT.md confirms both root causes and the NavigationHandler sibling adoption path.",
+    "config_provenance": "Mandatory: trace defaults -> active profile override -> effective config -> primary_config -> runtime self.config replacements, and determine whether user_data is causal or exonerated before implementation.",
+    "config_provenance_result": {
+      "active_profile": "sandbox",
+      "user_data_classification": "EXONERATED",
+      "root_cause": [
+        "runtime config replacement",
+        "execution-context restoration gap"
+      ],
+      "observed_daily_case": "primary_config is daily/mix with tier4_mode=none; runtime config has no domain and must not adopt DOMAIN_EXPLORE from generic explore_btn alone",
+      "direct_domain_case": "legacy lobby stage-farming fallback must not discard valid Domain execution ownership"
+    }
+  },
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  },
+  "base_ref": "origin/main"
+}

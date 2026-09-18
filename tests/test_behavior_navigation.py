@@ -922,6 +922,25 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.assertEqual(filtered, nav_path)
         self.assertIn("domains/Domains_entry.png", filtered)
 
+    @patch("os.path.exists", return_value=True)
+    def test_navigation_does_not_adopt_domain_scene_without_domain_identity(self, _mock_exists):
+        self.mock_machine.config = {
+            "type": "stage",
+            "navigation_path": [],
+        }
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.detect.return_value = SceneInfo(SceneType.UNKNOWN)
+        self.mock_machine.matcher.match.side_effect = lambda _image, template, **_kwargs: (
+            ((100, 200), 0.95)
+            if template == "domains/common/explore_btn.png"
+            else (None, 0.0)
+        )
+
+        self.handler.handle(MagicMock(), self.rect)
+
+        transitioned_states = [call.args[0] for call in self.mock_machine.transition_to.call_args_list]
+        self.assertNotIn("DOMAIN_EXPLORE", transitioned_states)
+
     def test_filter_navigation_path_skips_domain_tab_when_active(self):
         """Observed active domain tab is completed progress, like stage/dungeon."""
         nav_path = [

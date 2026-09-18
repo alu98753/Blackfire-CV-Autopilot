@@ -1203,13 +1203,12 @@ class GameStateMachine:
         is_domain_mode = (
             self.config.get("type") == "domain"
             or bool(self.config.get("domain"))
-            or bool(getattr(self, "primary_config", {}).get("domain"))
         )
         for d_btn in domain_features:
             if os.path.exists(os.path.join("templates", d_btn)):
                 thresh = 0.80 if d_btn.endswith("explore_btn.png") else 0.85
                 pos, conf = self.matcher.match(screen_img, d_btn, threshold=thresh)
-                if pos and (d_btn.endswith("explore_btn.png") or is_domain_mode):
+                if pos and is_domain_mode:
                     logging.info(f"🏛️ 全域定位：偵測到領地探索主場景特徵 [{d_btn}] (信心度: {conf:.4f})，鎖定領地探索狀態 (DOMAIN_EXPLORE)！")
                     self.transition_to(self.STATE_DOMAIN_EXPLORE)
                     return
