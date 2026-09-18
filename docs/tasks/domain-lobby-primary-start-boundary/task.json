@@ -33,7 +33,7 @@
     "tests.test_behavior_lobby_state_machine",
     "tests.test_behavior_navigation",
     "tests.test_domain_common_behavior",
-    "tests.test_behavior_state_machine"
+    "tests.test_behavior_golden_empire"
   ],
   "artifacts": {
     "spec": "docs/tasks/domain-lobby-primary-start-boundary/SPEC.md",
