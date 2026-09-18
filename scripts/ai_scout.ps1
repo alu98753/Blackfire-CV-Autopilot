@@ -176,10 +176,10 @@ function Invoke-ScoutProcessAttempt {
     }
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $execFile
+    $invokeThroughCmd = (-not [string]::IsNullOrWhiteSpace($_ExecutableOverride)) -and ($execFile -match '(?i)\.(cmd|bat)$')
+    $escapedArgs = @()
     $psi.WorkingDirectory = $repoRoot
-    if ($execArgs.Count -gt 0) {
-        $escapedArgs = @()
+    if (@($execArgs).Count -gt 0) {
         foreach ($arg in $execArgs) {
             if ($arg -match '[\s"]') {
                 $escaped = $arg -replace '(\\*)(")', '$1$1\"'
@@ -189,6 +189,12 @@ function Invoke-ScoutProcessAttempt {
                 $escapedArgs += $arg
             }
         }
+    }
+    if ($invokeThroughCmd) {
+        $psi.FileName = Join-Path $env:SystemRoot 'System32\cmd.exe'
+        $psi.Arguments = '/d /s /c ""' + $execFile + '" ' + ($escapedArgs -join ' ') + '"'
+    } else {
+        $psi.FileName = $execFile
         $psi.Arguments = $escapedArgs -join " "
     }
     $psi.RedirectStandardOutput = $true
@@ -311,7 +317,7 @@ $provenanceList = [System.Collections.Generic.List[object]]::new()
 
 foreach ($candidateModel in $candidates) {
     $attemptIndex++
-    Write-Host "Running OpenCode scout candidate [$attemptIndex/$($candidates.Count)] '$candidateModel' (timeout: ${TimeoutSeconds}s)..."
+    Write-Host "Running OpenCode scout candidate [$attemptIndex/$(@($candidates).Count)] '$candidateModel' (timeout: ${TimeoutSeconds}s)..."
 
     $attempt = Invoke-ScoutProcessAttempt -CandidateModel $candidateModel -AttemptIndex $attemptIndex -TimeoutLimit $TimeoutSeconds
 

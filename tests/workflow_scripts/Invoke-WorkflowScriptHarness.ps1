@@ -317,6 +317,8 @@ print(json.dumps(result, separators=(",", ":")))
 '@ | Set-Content $reviewer -Encoding UTF8
 @'
 param([Parameter(ValueFromRemainingArguments=$true)][string[]]$ChildArgs)
+$diagnosticPath = Join-Path $env:WORKFLOW_HARNESS_DIAGNOSTIC_DIR 'fake-scout.args.txt'
+($ChildArgs -join "`n") | Set-Content -LiteralPath $diagnosticPath -Encoding UTF8
 if ($ChildArgs -contains 'bad') { 'malformed scout'; exit 0 }
 if ($ChildArgs -contains 'fail') { exit 9 }
 if ($ChildArgs -contains 'sleep') { Start-Sleep -Seconds 2 }
@@ -675,8 +677,10 @@ Write-Output "# Scout Context`n`n## Relevant files`n- disposable fixture"
     }
 
     Run-Case 'Scout success promotes structured output' {
-        $code = Invoke-Script $scout @('-Task',$fixtureId,'-Model','test/only','-_ExecutableOverride',$scoutCmd)
-        Assert-True ($code -eq 0) "expected 0, got $code"
+        $result = Invoke-ScriptOutput $scout @('-Task',$fixtureId,'-Model','test/only','-_ExecutableOverride',$scoutCmd)
+        Assert-True ($result.ExitCode -eq 0) "expected 0, got $($result.ExitCode): $($result.Output)"
+        $scoutArgs = Get-Content (Join-Path $diagnosticRoot 'fake-scout.args.txt') -Raw
+        Assert-True ($scoutArgs -match '--model\s+test/only') 'fake scout did not receive --model test/only'
         Assert-True ((Get-Content (Join-Path $fixtureDir 'CONTEXT.md') -Raw) -match '# Scout Context') 'context was not promoted'
     }
     Run-Case 'Scout malformed output preserves context' {
