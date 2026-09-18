@@ -6,8 +6,8 @@
     "cli/arguments.py",
     "main.py",
     "runtime/bootstrap.py",
-    "actions/mouse.py",
-    "capture/screen.py",
+    "actions/",
+    "capture/",
     "utils/steam_launcher.py",
     "states/state_machine.py",
     "states/exceptions/subflows/game_relaunch.py",
@@ -15,7 +15,9 @@
     "tests/test_screen_capturer_architecture.py",
     "tests/test_mouse_refactor.py",
     "tests/test_mouse_coordinates.py",
+    "tests/test_behavior_pause_resume.py",
     "tests/test_game_process_lifecycle.py",
+    "tests/",
     "docs/architecture/project_arch_greenfield_lite_v1.md",
     "docs/tasks/foreground-demo-mode-isolation/"
   ],
@@ -23,8 +25,7 @@
     "tests.test_behavior_main_entrypoint",
     "tests.test_screen_capturer_architecture",
     "tests.test_mouse_refactor",
-    "tests.test_mouse_coordinates",
-    "tests.test_game_process_lifecycle"
+    "tests.test_mouse_coordinates"
   ],
   "models": {
     "scout": [
@@ -36,12 +37,17 @@
     ]
   },
   "notes": {
-    "status": "Draft",
+    "status": "Final",
     "phase": "phase-2",
-    "implementation_blocked_until_final": true,
+    "implementation_blocked_until_final": false,
     "goal": "Isolate foreground visible/physical I/O as an explicit demo compatibility path and compose backend production I/O without broad runtime backend_mode branching.",
     "phase_1_dependency": "backend-default-runtime-mode merged into main at 145522e4a7fbb773c45f10fb358ce310c0b095d6.",
+    "scout_commit": "6b196d85bc5e41781eef178afc57ce9bfdccc072",
     "critical_invariant": "Production backend I/O failure must never silently fall back to foreground capture or physical input.",
-    "workflow": "Run task_start.ps1, then ai_scout.ps1. Scout provides evidence only; ChatGPT + user own Final SPEC. Gemini/Antigravity must not implement while Draft."
+    "composition_contract": "Select explicit backend or foreground capture/input implementations once at the composition root. Downstream runtime components must not re-select I/O via backend_mode.",
+    "launcher_contract": "SteamGameLauncher owns process/window readiness, not mouse/input construction or runtime I/O mode selection.",
+    "relaunch_contract": "Game relaunch reuses the machine's selected capture/window dependency and must not reconstruct I/O from machine.backend_mode.",
+    "test_contract": "Mutable .backend_mode test toggling is not preserved. Add non-skipped deterministic launcher/relaunch composition coverage; skipped game-process lifecycle tests alone are insufficient.",
+    "workflow": "Final SPEC approved after OpenCode Scout evidence plus ChatGPT repository review. Gemini/Antigravity is the sole production implementation writer."
   }
 }
