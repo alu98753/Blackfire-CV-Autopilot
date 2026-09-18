@@ -34,6 +34,7 @@ class TaskPackageResolverTests(unittest.TestCase):
     def test_contract_has_canonical_active_path_and_resolver_outcomes(self):
         text = RESOLVER.read_text(encoding="utf-8")
         self.assertIn('docs/tasks/active/$Task', text)
+        self.assertIn('function Get-TaskArchiveRelativePath', text)
         for classification in ("ACTIVE", "ARCHIVED", "MISSING", "MALFORMED", "AMBIGUOUS_ARCHIVE"):
             self.assertIn(classification, text)
 

@@ -36,7 +36,8 @@ if($boundaries.Count -ne 1){ Fail 'ARCHIVE_INTEGRATION_COMMIT_AMBIGUOUS' }
 $integrationCommit=$boundaries[0].Trim()
 $integrationTimestamp=(git show -s --format='%cI' $integrationCommit).Trim()
 $year=([DateTimeOffset]::Parse($integrationTimestamp).ToUniversalTime().Year).ToString()
-$destination="docs/tasks/archive/$year/$Task"
+$sourcePath=Get-TaskPackageRelativePath $Task
+$destination=Get-TaskArchiveRelativePath $Task $year
 if(@(git ls-tree -r --name-only origin/main $destination).Count){ Fail 'ARCHIVE_DESTINATION_COLLISION' }
 $closeoutBranch="archive/$Task-$year"
 if(git ls-remote --heads origin $closeoutBranch){ Fail 'ARCHIVE_CLOSEOUT_BRANCH_COLLISION' }
@@ -52,8 +53,8 @@ $worktreeAddOutput = if ($_FailGitStep -eq 'worktree-add') { @('forced test fail
 if ($_FailGitStep -eq 'worktree-add') { $global:LASTEXITCODE = 1 }
 if ($LASTEXITCODE -ne 0) { Fail "ARCHIVE_CLOSEOUT_WORKTREE_ADD_FAILED: $($worktreeAddOutput -join ' ')" }
 try {
-    New-Item -ItemType Directory -Force (Join-Path $closeoutPath "docs\tasks\archive\$year") | Out-Null
-    $mvOutput = if ($_FailGitStep -eq 'mv') { @('forced test failure') } else { @(git -C $closeoutPath mv -- "docs/tasks/active/$Task" $destination 2>$null | Out-Null) }
+    New-Item -ItemType Directory -Force (Join-Path $closeoutPath (Split-Path ($destination -replace '/', '\') -Parent)) | Out-Null
+    $mvOutput = if ($_FailGitStep -eq 'mv') { @('forced test failure') } else { @(git -C $closeoutPath mv -- $sourcePath $destination 2>$null | Out-Null) }
     if ($_FailGitStep -eq 'mv') { $global:LASTEXITCODE = 1 }
     if ($LASTEXITCODE -ne 0) { Fail "ARCHIVE_CLOSEOUT_MOVE_FAILED: $($mvOutput -join ' ')" }
     $commitOutput = if ($_FailGitStep -eq 'commit') { @('forced test failure') } else { @(git -C $closeoutPath commit -m "archive task $Task ($year)" --quiet 2>$null | Out-Null) }

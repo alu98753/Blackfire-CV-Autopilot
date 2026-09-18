@@ -7,6 +7,15 @@ function Get-TaskPackageRelativePath {
     return "docs/tasks/active/$Task"
 }
 
+function Get-TaskArchiveRelativePath {
+    param(
+        [Parameter(Mandatory=$true)][string]$Task,
+        [Parameter(Mandatory=$true)][ValidatePattern('^[0-9]{4}$')][string]$Year
+    )
+    if ($Task -notmatch '^[a-z0-9][a-z0-9-]*$') { throw "Invalid task id: $Task" }
+    return "docs/tasks/archive/$Year/$Task"
+}
+
 function Resolve-TaskPackage {
     param(
         [Parameter(Mandatory=$true)][string]$Task,
