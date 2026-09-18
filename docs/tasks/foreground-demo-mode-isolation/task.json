@@ -22,10 +22,11 @@
     "docs/tasks/foreground-demo-mode-isolation/"
   ],
   "focused_tests": [
-    "tests.test_behavior_main_entrypoint",
+    "tests.test_runtime_io_composition",
     "tests.test_screen_capturer_architecture",
     "tests.test_mouse_refactor",
-    "tests.test_mouse_coordinates"
+    "tests.test_mouse_coordinates",
+    "tests.test_foreground_demo_mode_isolation"
   ],
   "models": {
     "scout": [
