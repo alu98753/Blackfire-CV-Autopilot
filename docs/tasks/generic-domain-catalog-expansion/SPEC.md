@@ -96,17 +96,22 @@ This is a configuration contract for the existing generic Domain flow. This task
 - `abyssbeast_lair`: `domains/abyssbeast_lair/abyssbeast_lair.png`
 - `coldoath_citadel`: `domains/coldoath_citadel/coldoath_citadel.png`
 
-### Common defaults and ticket semantics
+### Common defaults and Golden Empire cleanup
 
-Do not duplicate canonical common defaults into the new TOML sections unless an existing structural requirement needs them. Let `normalize_domain_execution_config()` provide:
+Canonical common Domain defaults are owned by `normalize_domain_execution_config()`.
 
-- `bread_cost = 3`
-- common explore priorities
-- common result buttons
+The following fields are confirmed common across the currently supported Domains and MUST NOT be redundantly declared in individual Domain TOML sections unless a future Domain intentionally overrides them with a documented domain-specific value:
+
+- `explore_priorities = ["domains/common/explore_btn.png"]`
+- `result_buttons = ["common/continue.png", "common/continue_gray.png"]`
 - `domain_reset_max_attempts = 7`
 - `enable_lord_boss = true`
 
-Repository game docs show these Domains use domain-specific entry tickets (`nest_fragment_map x1`, `frostbound_sigil x1`). That is separate game-domain metadata. This task MUST NOT reinterpret `bread_cost` as ticket cost or add ticket-consumption automation; no current runtime contract for that behavior was found.
+For this task, `golden_empire` has no documented domain-specific override for those four fields. Remove those four redundant declarations from `[primary_modes.golden_empire]` so all three Domains inherit the same normalized common defaults from the single SSOT.
+
+`bread_cost` is explicitly out of scope for this cleanup. Do not rename, reinterpret, remove, or otherwise modify its semantics in this task.
+
+Repository game docs show the two new Domains use domain-specific entry tickets (`nest_fragment_map x1`, `frostbound_sigil x1`). This task MUST NOT add ticket-consumption automation or couple those ticket semantics to `bread_cost`.
 
 ## Provisional Domain configuration intent
 
@@ -166,6 +171,8 @@ Production runtime behavior should not be changed for this test.
 2. `states/domains/__init__.py`, `GenericDomainStrategy`, CLI discovery code, and `utils/tier4_config.py` are verification surfaces, not expected implementation targets.
 3. Do not create static Domain options, special-case branch logic, or identity aliases.
 4. Test-only fixes for the two stale entrypoint regressions must not change production code.
+5. `[primary_modes.golden_empire]` must remove the redundant explicit declarations of `explore_priorities`, `result_buttons`, `domain_reset_max_attempts`, and `enable_lord_boss`; runtime behavior must remain unchanged through normalization.
+6. `bread_cost` is not part of this cleanup and must not be changed.
 
 ## Acceptance criteria
 
@@ -176,9 +183,11 @@ Production runtime behavior should not be changed for this test.
 5. Both appear automatically in direct CLI mode choices through canonical mode discovery.
 6. Both appear automatically in Daily Tier 4 Domain options.
 7. Daily Tier 4 route assembly preserves each selected Domain's own identity and entry/navigation config.
-8. Existing Golden Empire behavior remains unchanged.
-9. The two reported stale `test_behavior_main_entrypoint` failures are corrected by test maintenance only.
-10. Relevant focused tests pass.
+8. Existing Golden Empire runtime behavior remains unchanged after removing redundant common-default declarations.
+9. Raw `[primary_modes.golden_empire]` no longer redundantly declares `explore_priorities`, `result_buttons`, `domain_reset_max_attempts`, or `enable_lord_boss`; normalized Golden Empire config still receives the canonical values.
+10. `bread_cost` is unchanged.
+11. The two reported stale `test_behavior_main_entrypoint` failures are corrected by test maintenance only.
+12. Relevant focused tests pass.
 
 ## Resolved uncertainty / bounded residual risk
 
