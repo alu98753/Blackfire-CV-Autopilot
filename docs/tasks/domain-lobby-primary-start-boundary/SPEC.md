@@ -1,6 +1,6 @@
 # domain-lobby-primary-start-boundary
 
-Status: Draft
+Status: Final
 
 ## Goal
 
@@ -225,3 +225,65 @@ This task therefore owns the narrow Domain runtime handoff boundary needed to ke
 10. Should the correction live in global relocalization/adoption, in a shared Domain execution-context resolver, or at another existing explicit ownership boundary?
 11. Are there existing tests for `UNKNOWN -> DOMAIN_EXPLORE` that currently assume `explore_btn.png` alone is sufficient regardless of runtime config?
 12. Can `DomainExploreHandler`'s current fail-fast validation remain intact after the upstream handoff is fixed? Prefer preserving it as an invariant check rather than weakening it into silent fallback.
+
+
+## Finalized Implementation Boundary
+
+Scout and bounded follow-up verification confirmed two independent entry points can adopt `DOMAIN_EXPLORE` from the generic exploration visual:
+
+1. `GameStateMachine.detect_current_state()`
+2. `NavigationHandler.handle()`
+
+Both currently allow `domains/common/explore_btn.png` to drive `DOMAIN_EXPLORE` without first proving that the runtime owns a valid Domain execution identity.
+
+The implementation MUST therefore enforce one shared semantic rule across all Domain-scene adoption paths:
+
+> **No production path may transition into `DOMAIN_EXPLORE` unless a valid, unambiguous Domain execution identity is already installed or can be deterministically restored from an existing canonical runtime owner.**
+
+This does not require a new broad abstraction if two narrow guards are sufficient, but behavior must be consistent across both call sites.
+
+The accepted implementation shape is:
+
+- Bug A: make the `enable_stage_farming == false -> COLLECT_ONLY` fallback explicitly non-Domain so a direct Domain lobby can execute its configured `START_PRIMARY`.
+- Bug B: before any `DOMAIN_EXPLORE` adoption from generic visual evidence, ensure `self.config["domain"]` is valid or deterministically restore a complete Domain config from an already-owned canonical source.
+- If identity cannot be determined unambiguously, fail closed through an existing bounded recovery/navigation path and do not dispatch `DomainExploreHandler`.
+- Preserve `DomainExploreHandler`'s fail-fast validation as an invariant assertion; do not weaken it into a silent fallback.
+- Do not infer Domain identity from `explore_btn.png`, `exit_to_lobby.png`, or any other generic Domain visual alone.
+- Do not assume `primary_config` is universally authoritative. It may be used only when its ownership semantics prove it identifies the currently active Domain route, including Tier-4 fallback cases.
+
+## Final Acceptance Criteria
+
+1. Direct `type="domain"` configs with `enable_stage_farming=false` are not diverted to `COLLECT_ONLY` solely by the legacy stage-farming precondition.
+2. A verified direct Domain lobby executes the existing `START_PRIMARY` path using its configured `lobby_start_btn`.
+3. Golden Empire, Abyssbeast Lair, and Coldoath Citadel all inherit the fix through the generic Domain path.
+4. Existing stage/mix/daily fallback behavior that legitimately depends on `enable_stage_farming=false` remains unchanged.
+5. Existing higher-priority Lobby preconditions and committed-start retry/disappearance semantics remain unchanged.
+6. Domain card alignment, navigation templates, and brightness filtering remain unchanged.
+7. `detect_current_state()` must not transition into `DOMAIN_EXPLORE` with a runtime config that lacks a valid Domain identity.
+8. `NavigationHandler.handle()` must not transition into `DOMAIN_EXPLORE` with a runtime config that lacks a valid Domain identity.
+9. If a canonical existing owner unambiguously identifies the active Domain, relocalization/navigation may restore/install that complete Domain execution context before entering `DOMAIN_EXPLORE`.
+10. If no unambiguous Domain owner exists, generic Domain visual evidence alone must fail closed; production code must not guess Golden Empire or any other Domain.
+11. `DomainExploreHandler` continues to fail fast on an invalid direct call/config; upstream transitions are responsible for satisfying its precondition.
+12. The exact runtime crash is covered by a deterministic regression: `UNKNOWN + explore_btn visible + config without domain` must not produce an unhandled `ValueError` on the next tick.
+13. A navigation-path regression covers `NAVIGATING + explore_btn visible + config without domain` and verifies it does not adopt `DOMAIN_EXPLORE`.
+14. A valid direct Domain config still supports `UNKNOWN -> DOMAIN_EXPLORE` and `NAVIGATING -> DOMAIN_EXPLORE` when scene evidence is present.
+15. Tier-4 Domain fallback ownership remains correct and does not silently adopt a different Domain.
+16. Existing focused Lobby, navigation, and Domain behavior tests pass.
+17. The PyTorch/EasyOCR deprecation warning remains out of scope because it is non-causal to the crash.
+18. The abnormal logged click Y-coordinate remains a separate follow-up candidate unless implementation evidence proves direct causality.
+
+## Required Focused Tests
+
+At minimum:
+
+- `tests.test_behavior_lobby_state_machine`
+- `tests.test_behavior_navigation`
+- `tests.test_domain_common_behavior`
+
+Add the narrowest state-machine/relocalization test module already used by the repository if required to exercise `detect_current_state()`; do not create broad unrelated coverage.
+
+## Implementation Notes
+
+Prefer the smallest ownership-correct change. A shared helper such as a Domain execution-context resolver is acceptable only if it reduces duplicated ownership logic across the two adoption paths without expanding scope. Otherwise, two explicit guarded call sites are acceptable.
+
+Production implementation remains blocked until this Final SPEC is consumed by the designated implementation writer.
