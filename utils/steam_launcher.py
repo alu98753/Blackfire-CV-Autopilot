@@ -7,7 +7,6 @@ from enum import Enum, auto
 from typing import Optional, Tuple
 from capture.screen import ScreenCapturer
 from vision.matcher import TemplateMatcher
-from actions.mouse import MouseController
 from utils.sandbox_manager import SandboxManager
 from config import STEAM_APP_ID
 
@@ -29,26 +28,19 @@ class SteamGameLauncher:
     def __init__(
         self,
         capturer: Optional[ScreenCapturer] = None,
-        mouse: Optional[MouseController] = None,
         matcher: Optional[TemplateMatcher] = None,
         game_title: str = "Blackfire Crusade",
-        backend_mode: bool = False,
         monitor_index: Optional[int] = 1,
         action_cooldown: float = 1.0,
         hwnd: Optional[int] = None,
         sandbox_manager: Optional[SandboxManager] = None,
     ):
         self.game_title = game_title
-        self.backend_mode = backend_mode
         self.monitor_index = monitor_index
         self.hwnd = hwnd
         if capturer is None:
-            from runtime.io_adapters import compose_capture
-            capturer = compose_capture(
-                foreground=not backend_mode, window_title=game_title,
-                hwnd=hwnd, monitor_index=monitor_index)
+            raise ValueError("SteamGameLauncher requires the composed capture dependency")
         self.capturer = capturer
-        self.mouse = mouse
         self.matcher = matcher or TemplateMatcher()
         self.action_cooldown = action_cooldown
         self.phase = LauncherPhase.LAUNCHING

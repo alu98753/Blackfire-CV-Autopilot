@@ -47,7 +47,6 @@ class GameRelaunchSubflow(BaseExceptionSubflow):
         logging.info('🚀 [GameRelaunchSubflow] 調用 SteamGameLauncher 發起專屬遊戲直連啟動與視窗定位...')
         launcher = SteamGameLauncher(
             capturer=getattr(machine, 'capturer', None),
-            mouse=getattr(machine, 'mouse', None),
             matcher=getattr(machine, 'matcher', None),
             game_title=game_title,
         )
