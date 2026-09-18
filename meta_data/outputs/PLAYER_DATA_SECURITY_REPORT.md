@@ -84,5 +84,5 @@ flowchart TD
 .\.venv\Scripts\python scripts/set_battle_settings.py --speed 50
 
 # 2. 啟動自動化掛機狀態機
-.\.venv\Scripts\python main.py --mode dungeon --backend
+.\.venv\Scripts\python main.py --mode dungeon
 ```
