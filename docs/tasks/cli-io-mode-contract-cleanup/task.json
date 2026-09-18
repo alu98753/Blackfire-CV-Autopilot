@@ -1,0 +1,45 @@
+{
+  "id": "cli-io-mode-contract-cleanup",
+  "base_ref": "origin/main",
+  "base_sha": "6523e43a8794d7796b982f14b1362a1fbe5a4ca9",
+  "scope": [
+    "run.bat",
+    "cli/arguments.py",
+    "main.py",
+    "runtime/bootstrap.py",
+    "runtime/supervisor.py",
+    "utils/quest_mapper.py",
+    "utils/quest_scheduler.py",
+    "scripts/test_single_click.py",
+    "tests/",
+    "README.md",
+    "README.zh-TW.md",
+    "docs/architecture/",
+    ".agents/skills/",
+    "docs/tasks/cli-io-mode-contract-cleanup/"
+  ],
+  "focused_tests": [
+    "tests.test_runtime_io_composition",
+    "tests.test_foreground_demo_mode_isolation",
+    "tests.test_behavior_main_entrypoint"
+  ],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  },
+  "notes": {
+    "status": "Final",
+    "goal": "Align the CLI with backend-by-default / foreground-opt-in semantics and completely remove the redundant public --backend flag.",
+    "scout_commit": "73304d597bfdb00f160c2e3b6cedd04d577c4b9b",
+    "resolved_uncertainty": "--backend has zero independent runtime semantic responsibility; args.backend is not consumed and runtime mode derives solely from --foreground.",
+    "public_cli_contract": "No I/O flag means backend production; --foreground selects foreground demo; --backend is removed rather than hidden or deprecated.",
+    "metadata_contract": "Internal backend_mode metadata may remain where currently consumed as metadata/config propagation, but it must not select or reconstruct I/O.",
+    "runtime_boundary": "Do not reopen backend/foreground adapter mechanics, fail-closed behavior, timing, or gameplay behavior.",
+    "supervisor_contract": "Supported new runs must not generate --backend; restart/resume must preserve --foreground and must not synthesize backend tokens."
+  }
+}

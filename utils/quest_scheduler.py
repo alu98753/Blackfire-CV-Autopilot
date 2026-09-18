@@ -155,7 +155,7 @@ class QuestScheduler:
                 msg = f"⚔️ 執行關卡懸賞任務 [{target_task.quest_title}] (進度: {target_task.completed_count}/{target_task.target_count})"
                 return cli_cmd, msg
 
-        return ".venv\\Scripts\\python main.py --backend --mode mix", "🔄 執行預設混合模式"
+        return ".venv\\Scripts\\python main.py --mode mix", "🔄 執行預設混合模式"
 
     def get_next_action_node(self, dungeon_cooldowns=None, now_ts=None, log_cooldowns=False):
         """
@@ -452,4 +452,3 @@ class QuestScheduler:
                 updated_any = True
 
         return updated_any
-

@@ -26,13 +26,13 @@ echo [*] 成功偵測到虛擬環境 Python。
 :MENU_LOOP
 echo ============================================================
 echo 常用啟動模式選單：
-echo  1. 每日懸賞任務 (Daily Master 推薦): --backend --mode daily
-echo  2. 混合模式 (副本 + 推關退守):       --backend --mode mix
-echo  3. 貪婪地下城模式:                 --backend --mode dungeon
-echo  4. 普通關卡模式:                 --backend --mode stage
-echo  5. 背包整理模式:                 --backend --mode bag_clean
-echo  6. 定時領取體力與鑽石:           --backend --mode collect_only
-echo  7. 領地探索模式 (黃金古國):         --backend --mode golden_empire
+echo  1. 每日懸賞任務 (Daily Master 推薦): --mode daily
+echo  2. 混合模式 (副本 + 推關退守):       --mode mix
+echo  3. 貪婪地下城模式:                 --mode dungeon
+echo  4. 普通關卡模式:                 --mode stage
+echo  5. 背包整理模式:                 --mode bag_clean
+echo  6. 定時領取體力與鑽石:           --mode collect_only
+echo  7. 領地探索模式 (黃金古國):         --mode golden_empire
 echo  8. Dev 城鎮子流程獨立測試:       --subflow 選單 (獨立測試單一建築)
 echo  9. 查看遊戲理智公約:             顯示防制衝動消費心態指引
 echo ------------------------------------------------------------
@@ -40,7 +40,8 @@ echo 參數說明：
 echo  --mode [名稱]      : 設定運行主模式 (daily / mix / dungeon / stage / golden_empire)
 echo  --target [目標]    : 雙開指定視窗 (1 / 2 / native / sandbox)
 echo  --subflow [子任務]  : 發起獨立子流程測試 (chest / blood_altar / lord_boss)
-echo  --backend          : 啟用後台點擊與截圖 (推薦)
+echo  (default)         : Backend Production (Win32)
+echo  --foreground      : Foreground Demo (visible capture + physical mouse)
 echo  --interval [秒]    : 偵測時間間隔 (預設: 0.5)
 echo ============================================================
 echo.
@@ -54,15 +55,15 @@ if /i "%custom_args%"=="covenant" goto VIEW_COVENANT
 if "%custom_args%"=="8" goto SUBFLOW_MENU
 if /i "%custom_args%"=="subflow" goto SUBFLOW_MENU
 
-if "%custom_args%"=="1" set custom_args=--backend --mode daily
-if "%custom_args%"=="2" set custom_args=--backend --mode mix
-if "%custom_args%"=="3" set custom_args=--backend --mode dungeon
-if "%custom_args%"=="4" set custom_args=--backend --mode stage
-if "%custom_args%"=="5" set custom_args=--backend --mode bag_clean
-if "%custom_args%"=="6" set custom_args=--backend --mode collect_only
-if "%custom_args%"=="7" set custom_args=--backend --mode golden_empire
+if "%custom_args%"=="1" set custom_args=--mode daily
+if "%custom_args%"=="2" set custom_args=--mode mix
+if "%custom_args%"=="3" set custom_args=--mode dungeon
+if "%custom_args%"=="4" set custom_args=--mode stage
+if "%custom_args%"=="5" set custom_args=--mode bag_clean
+if "%custom_args%"=="6" set custom_args=--mode collect_only
+if "%custom_args%"=="7" set custom_args=--mode golden_empire
 
-if "%custom_args%"=="" set custom_args=--backend --mode daily
+if "%custom_args%"=="" set custom_args=--mode daily
 
 echo %custom_args% | findstr /i "dungeon mix daily" >nul
 if %errorlevel% neq 0 goto RUN_SCRIPT
@@ -88,14 +89,14 @@ cls
 echo ============================================================
 echo 🛠️ Dev 城鎮子流程獨立測試選單 (--subflow)
 echo ============================================================
-echo  1. 神秘寶箱 (chest):                     --backend --subflow chest
-echo  2. 抽英雄招募 (hero_draw):               --backend --subflow hero_draw
-echo  3. 血之祭壇領血與獻祭 (blood_altar):       --backend --subflow blood_altar
-echo  4. 珠寶加工廠出售 (jewelry_workshop):    --backend --subflow jewelry_workshop
-echo  5. 懸賞告示牌領任務 (bulletin_board):    --backend --subflow bulletin_board
-echo  6. 討伐首領 Boss (lord_boss):             --backend --subflow lord_boss
-echo  7. 背包整理大量分解 (bag_clean):          --backend --subflow bag_clean
-echo  8. 深淵魔王 (demon_lords):                --backend --subflow demon_lords
+echo  1. 神秘寶箱 (chest):                     --subflow chest
+echo  2. 抽英雄招募 (hero_draw):               --subflow hero_draw
+echo  3. 血之祭壇領血與獻祭 (blood_altar):       --subflow blood_altar
+echo  4. 珠寶加工廠出售 (jewelry_workshop):    --subflow jewelry_workshop
+echo  5. 懸賞告示牌領任務 (bulletin_board):    --subflow bulletin_board
+echo  6. 討伐首領 Boss (lord_boss):             --subflow lord_boss
+echo  7. 背包整理大量分解 (bag_clean):          --subflow bag_clean
+echo  8. 深淵魔王 (demon_lords):                --subflow demon_lords
 echo  9. 城鎮三大速領組合 (chest + blood + jewelry)
 echo 10. 背包維護流水線 (bag_maintenance: 獻祭 + 整理 + 出售)
 echo 11. 自訂輸入子流程名稱 (例如 blood_altar lord_boss)
@@ -109,38 +110,38 @@ set /p sub_choice="請選擇 Dev 測試項 [1-12] 或直接輸入名稱 (預設�
 if "%sub_choice%"=="" set sub_choice=3
 if "%sub_choice%"=="12" goto MENU_LOOP
 
-if "%sub_choice%"=="1" set custom_args=--backend --subflow chest
-if "%sub_choice%"=="2" set custom_args=--backend --subflow hero_draw
-if "%sub_choice%"=="3" set custom_args=--backend --subflow blood_altar
-if "%sub_choice%"=="4" set custom_args=--backend --subflow jewelry_workshop
-if "%sub_choice%"=="5" set custom_args=--backend --subflow bulletin_board
-if "%sub_choice%"=="6" set custom_args=--backend --subflow lord_boss
-if "%sub_choice%"=="7" set custom_args=--backend --subflow bag_clean
-if "%sub_choice%"=="8" set custom_args=--backend --subflow demon_lords
-if "%sub_choice%"=="9" set custom_args=--backend --subflow chest blood_altar jewelry_workshop
-if "%sub_choice%"=="10" set custom_args=--backend --subflow bag_maintenance
+if "%sub_choice%"=="1" set custom_args=--subflow chest
+if "%sub_choice%"=="2" set custom_args=--subflow hero_draw
+if "%sub_choice%"=="3" set custom_args=--subflow blood_altar
+if "%sub_choice%"=="4" set custom_args=--subflow jewelry_workshop
+if "%sub_choice%"=="5" set custom_args=--subflow bulletin_board
+if "%sub_choice%"=="6" set custom_args=--subflow lord_boss
+if "%sub_choice%"=="7" set custom_args=--subflow bag_clean
+if "%sub_choice%"=="8" set custom_args=--subflow demon_lords
+if "%sub_choice%"=="9" set custom_args=--subflow chest blood_altar jewelry_workshop
+if "%sub_choice%"=="10" set custom_args=--subflow bag_maintenance
 
-if /i "%sub_choice%"=="chest" set custom_args=--backend --subflow chest
-if /i "%sub_choice%"=="hero_draw" set custom_args=--backend --subflow hero_draw
-if /i "%sub_choice%"=="blood_altar" set custom_args=--backend --subflow blood_altar
-if /i "%sub_choice%"=="jewelry_workshop" set custom_args=--backend --subflow jewelry_workshop
-if /i "%sub_choice%"=="bulletin_board" set custom_args=--backend --subflow bulletin_board
-if /i "%sub_choice%"=="lord_boss" set custom_args=--backend --subflow lord_boss
-if /i "%sub_choice%"=="bag_clean" set custom_args=--backend --subflow bag_clean
-if /i "%sub_choice%"=="demon_lords" set custom_args=--backend --subflow demon_lords
-if /i "%sub_choice%"=="bag_maintenance" set custom_args=--backend --subflow bag_maintenance
+if /i "%sub_choice%"=="chest" set custom_args=--subflow chest
+if /i "%sub_choice%"=="hero_draw" set custom_args=--subflow hero_draw
+if /i "%sub_choice%"=="blood_altar" set custom_args=--subflow blood_altar
+if /i "%sub_choice%"=="jewelry_workshop" set custom_args=--subflow jewelry_workshop
+if /i "%sub_choice%"=="bulletin_board" set custom_args=--subflow bulletin_board
+if /i "%sub_choice%"=="lord_boss" set custom_args=--subflow lord_boss
+if /i "%sub_choice%"=="bag_clean" set custom_args=--subflow bag_clean
+if /i "%sub_choice%"=="demon_lords" set custom_args=--subflow demon_lords
+if /i "%sub_choice%"=="bag_maintenance" set custom_args=--subflow bag_maintenance
 
 if "%sub_choice%"=="11" goto CUSTOM_SUBFLOW_INPUT
 
 :: 若非選單號碼 1-8 或常見 subflow 名稱，嘗試直接作為子流程名稱
-if "%custom_args%"=="" set custom_args=--backend --subflow %sub_choice%
+if "%custom_args%"=="" set custom_args=--subflow %sub_choice%
 
 goto RUN_SCRIPT
 
 :CUSTOM_SUBFLOW_INPUT
 set "custom_subflow="
 set /p custom_subflow="請輸入 subflow 名稱 (例如 blood_altar lord_boss): "
-set custom_args=--backend --subflow %custom_subflow%
+set custom_args=--subflow %custom_subflow%
 goto RUN_SCRIPT
 
 :RUN_SCRIPT
