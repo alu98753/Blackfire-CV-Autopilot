@@ -99,7 +99,7 @@ Profile 保存重新啟動同一實例時所需的設定與 Runtime 資料。
 
 Native 與 Sandbox 也使用不同的 Heartbeat 檔案，因此可以同時由各自的 Supervisor 執行，而不會將另一個實例的存活訊號視為自己的 Heartbeat。
 
-啟用 backend default 後，支援的動作可以直接送往指定的 Windows 遊戲視窗，不需要每次互動都佔用實體滑鼠。
+預設使用 Win32 後台控制，支援的動作可以直接送往指定的 Windows 遊戲視窗，不需要每次互動都佔用實體滑鼠；若要進行可見示範，請使用 `--foreground`。
 
 ---
 

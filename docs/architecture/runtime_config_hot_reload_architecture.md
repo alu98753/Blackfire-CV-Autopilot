@@ -42,7 +42,8 @@ flowchart TD
 | 參數 | 職責 | 不可熱重載原因 |
 | :--- | :--- | :--- |
 | `--target` / `--title` | 鎖定目標遊戲視窗與 Win32 HWND | 腳本已對準特定沙盒/本機視窗進行截圖與發送點擊，無法動態跳轉目標視窗。 |
-| default / backend default | 後台 (`SendMessage`)；`--foreground` selects 前台 (`pyautogui`) | 底層滑鼠控制器的通訊協定在初始化時已決定。 |
+| 無 I/O 旗標 | Backend Production (`SendMessage`) | 生產模式預設使用 Win32 後台控制。 |
+| `--foreground` | Foreground Demo (`pyautogui`) | 明確選擇可見畫面與實體滑鼠示範模式。 |
 | `--profile` | 指定使用者資料目錄 (如 `sandbox`, `native`) | 決定當前進程監聽哪一個 `user_data/<profile>/` 目錄。 |
 | `--monitor` | 綁定全螢幕/截圖之顯示器編號 (1 或 2) | DXGI / GDI 截圖裝置在啟動時完成配置。 |
 | `--subflow` | 開發者一次性子流程除錯 (如 `--subflow blood_altar`) | 屬於 Dev 模式除錯佇列，完成即退出。 |
