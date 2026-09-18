@@ -23,7 +23,8 @@
     "tests/test_behavior_golden_empire.py",
     "tests/test_behavior_navigation.py",
     "tests/test_behavior_daily_tier4.py",
-    "tests/test_dungeon_relaunch_recovery.py"
+    "tests/test_dungeon_relaunch_recovery.py",
+    "tests/test_profile_config_overlay.py"
   ],
   "models": {
     "scout": null,
