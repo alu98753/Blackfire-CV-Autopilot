@@ -713,7 +713,15 @@ class NavigationHandler(BaseStateHandler):
 
         # 領地主場景優先判定：若未標記清理背包且畫面上已經出現領地探索按鈕，說明已進入領地，轉移狀態至 DOMAIN_EXPLORE
         domain_explore_btn = "domains/common/explore_btn.png"
-        if not self.machine.need_bag_cleaning and os.path.exists(os.path.join("templates", domain_explore_btn)):
+        current_config = self.machine.config or {}
+        is_domain_mode = current_config.get("type") == "domain" or bool(
+            current_config.get("domain")
+        )
+        if (
+            is_domain_mode
+            and not self.machine.need_bag_cleaning
+            and os.path.exists(os.path.join("templates", domain_explore_btn))
+        ):
             pos_de, conf_de = self.matcher.match(screen_img, domain_explore_btn, threshold=0.80)
             if pos_de:
                 logging.info(f"🧭 尋路成功！偵測到領地探索按鈕 [{domain_explore_btn}] (信心度: {conf_de:.4f})，已進入領地，狀態轉移至 DOMAIN_EXPLORE。")

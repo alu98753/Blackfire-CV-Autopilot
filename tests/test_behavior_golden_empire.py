@@ -728,6 +728,21 @@ class TestBehaviorGoldenEmpire(unittest.TestCase):
         battle_handler.handle(mock_screen, self.rect)
         self.mock_machine.transition_to.assert_called_with("DOMAIN_EXPLORE")
 
+    @patch("os.path.exists", return_value=True)
+    def test_unknown_domain_visual_does_not_adopt_without_domain_identity(self, _mock_exists):
+        sm = GameStateMachine(MagicMock(), MagicMock(), MagicMock(), preload_ocr=False)
+        sm.config = {"type": "collect_only"}
+        sm.current_state = sm.STATE_UNKNOWN
+        sm.matcher.match.side_effect = lambda _screen, template, **_kwargs: (
+            ((100, 200), 0.95)
+            if template == "domains/common/explore_btn.png"
+            else (None, 0.0)
+        )
+
+        sm.detect_current_state(MagicMock(), self.rect)
+
+        self.assertNotEqual(sm.current_state, sm.STATE_DOMAIN_EXPLORE)
+
     # 14. 首領討伐在領地內部激活時，觸發退場邊 (Egress Edge) 返回大廳
     @patch("states.handlers.lord_boss.LordBossHandler.click_and_wait_until_gone")
     def test_lord_boss_handler_egress_from_domain(self, mock_click_gone):
