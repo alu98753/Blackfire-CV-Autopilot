@@ -74,9 +74,6 @@ TIER4_MODE_OPTIONS = (
     (TIER4_MODE_DOMAIN, "領地探索 (Domain)"),
     (TIER4_MODE_NONE, "停用 (全冷卻時collect only)"),
 )
-TIER4_DOMAIN_OPTIONS = (
-    (DEFAULT_TIER4_DOMAIN, "黃金古國"),
-)
 TOWN_ANCHOR_BRIGHTNESS_THRESHOLD = 0.35
 TOWN_BUILDING_BRIGHTNESS_THRESHOLD = 0.35
 
@@ -309,6 +306,43 @@ BULLETIN_BOARD_OCR_OFFSET = _SETTINGS["ocr"]["bulletin_board"]
 MERCHANT_GOLD_OCR_ROI = _SETTINGS["ocr"]["merchant_gold"]
 
 PRIMARY_MODES = _restore_mode_key_types(_SETTINGS["primary_modes"])
+
+
+def get_domain_mode_configs() -> dict[str, dict]:
+    """從 PRIMARY_MODES 中動態解析出所有 type == 'domain' 的領地配置字典 (SSOT: config/defaults.toml [primary_modes.*])。"""
+    return {
+        key: cfg
+        for key, cfg in PRIMARY_MODES.items()
+        if isinstance(cfg, dict) and cfg.get("type") == "domain"
+    }
+
+
+def get_supported_domain_ids() -> set[str]:
+    """回傳所有合法宣告之領域識別碼集合 (例如 {'golden_empire'})。"""
+    return {
+        str(cfg.get("domain"))
+        for cfg in get_domain_mode_configs().values()
+        if cfg.get("domain")
+    }
+
+
+def is_supported_domain(domain_id_or_mode_key: str) -> bool:
+    """核驗指定領域識別碼或模式 key 是否存在於 canonical repository defaults catalog。"""
+    if not domain_id_or_mode_key or not isinstance(domain_id_or_mode_key, str):
+        return False
+    domain_modes = get_domain_mode_configs()
+    if domain_id_or_mode_key in domain_modes:
+        return True
+    return domain_id_or_mode_key in get_supported_domain_ids()
+
+
+def get_tier4_domain_options() -> list[tuple[str, str]]:
+    """動態回傳 Daily Tier 4 領地選項清單 [(mode_key, display_name), ...]，顯示名稱取自 TOML name。"""
+    return [
+        (key, str(cfg.get("name", key)))
+        for key, cfg in get_domain_mode_configs().items()
+    ]
+
 SUBFLOW_CONFIGS = _SETTINGS["subflow_configs"]
 BACKPACK_FULL_SETTINGS = _SETTINGS["backpack_full"]
 BASE_STAGE_LEVELS = _SETTINGS["base_stage_levels"]
@@ -460,8 +494,6 @@ def normalize_config(config):
             cfg[activity_key] = mode_type in ["daily", "mix"]
         elif activity_key == "enable_quests":
             cfg[activity_key] = mode_type == "daily"
-        elif activity_key == "enable_golden_empire":
-            cfg[activity_key] = (mode_type == "domain" and cfg.get("domain") == "golden_empire")
         else:
             cfg[activity_key] = default_value
 

@@ -118,7 +118,6 @@ enable_demon_lords = true
 enable_lord_boss = true
 enable_quests = false
 enable_stage_farming = false
-enable_golden_empire = false
 
 [primary_modes]
 

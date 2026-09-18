@@ -20,6 +20,11 @@ DOMAIN_ROUTE_KEYS = (
     "navigation_path",
     "explore_priorities",
     "result_buttons",
+    "lobby_start_btn",
+    "domain_tab_btn",
+    "domain_tab_after_btn",
+    "domain_entry_btn",
+    "domain_reset_max_attempts",
 )
 
 
@@ -36,7 +41,6 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
         fallback["type"] = "collect_only"
         fallback["tier4_mode"] = TIER4_MODE_NONE
         fallback["enable_stage_farming"] = False
-        fallback["enable_golden_empire"] = False
         fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
         fallback["name"] = "每日懸賞任務 (定時待機 collect_only)"
         return fallback
@@ -46,7 +50,6 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
         fallback["type"] = "stage"
         fallback["tier4_mode"] = TIER4_MODE_STAGE
         fallback["enable_stage_farming"] = True
-        fallback["enable_golden_empire"] = False
         fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
         fallback["greedy_dungeon"] = False
 
@@ -66,9 +69,9 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
                 fallback[key] = deepcopy(stage_cfg[key])
         return fallback
 
-    domain_key = fallback.get("tier4_domain", DEFAULT_TIER4_DOMAIN)
-    if domain_key not in mode_configs:
-        domain_key = DEFAULT_TIER4_DOMAIN
+    domain_key = fallback.get("tier4_domain") or DEFAULT_TIER4_DOMAIN
+    if domain_key not in mode_configs or mode_configs[domain_key].get("type") != "domain":
+        raise ValueError(f"無效的 Daily Tier 4 領地設定: tier4_domain={domain_key!r} 不存在於合法領地目錄中")
     domain_config = mode_configs[domain_key]
     for key in DOMAIN_ROUTE_KEYS:
         if key in domain_config:
@@ -78,6 +81,5 @@ def build_tier4_fallback_config(primary_config: dict, mode_configs: dict) -> dic
     fallback["tier4_mode"] = TIER4_MODE_DOMAIN
     fallback["tier4_domain"] = domain_key
     fallback["enable_stage_farming"] = False
-    fallback["enable_golden_empire"] = True
     fallback["enable_dungeon"] = primary_config.get("enable_dungeon", True)
     return fallback

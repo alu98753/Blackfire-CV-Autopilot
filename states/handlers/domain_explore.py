@@ -12,22 +12,32 @@ class DomainExploreHandler(BaseStateHandler):
     def __init__(self, machine):
         super().__init__(machine)
         self.strategy = None
-        self._init_strategy()
+        domain_name = (self.machine.config or {}).get("domain") or (self.machine.config or {}).get("domain_name")
+        if domain_name:
+            self._init_strategy()
 
     def _init_strategy(self):
-        domain_name = self.machine.config.get("domain") or self.machine.config.get("domain_name") or "golden_empire"
+        domain_name = (self.machine.config or {}).get("domain") or (self.machine.config or {}).get("domain_name")
+        if not domain_name:
+            raise ValueError("無效的領地運行配置: self.machine.config 缺少必要的 'domain' 識別碼")
         self.strategy = get_domain_strategy(domain_name, self)
 
     def reset_state(self):
         """重置處理器內部狀態並重新裝載對應領地策略"""
-        self._init_strategy()
+        domain_name = (self.machine.config or {}).get("domain") or (self.machine.config or {}).get("domain_name")
+        if domain_name:
+            self._init_strategy()
+        else:
+            self.strategy = None
 
     def handle(self, screen_img, rect):
         """
         領域探索主迴圈入口。
         """
         # 0. 確保當前策略與 config 保持一致
-        domain_name = self.machine.config.get("domain") or self.machine.config.get("domain_name") or "golden_empire"
+        domain_name = self.machine.config.get("domain") or self.machine.config.get("domain_name")
+        if not domain_name:
+            raise ValueError("無效的領地運行配置: self.machine.config 缺少必要的 'domain' 識別碼")
         if not self.strategy or getattr(self.strategy, "domain_name", None) != domain_name:
             self._init_strategy()
 
@@ -62,7 +72,8 @@ class DomainExploreHandler(BaseStateHandler):
             if os.path.exists(os.path.join("templates", nav_btn)):
                 pos, conf = self.matcher.match(screen_img, nav_btn, threshold=0.75, quiet=True)
                 if pos:
-                    logging.info(f"🧭 [領地探索] 偵測到尋路按鈕 [{nav_btn}] (相似度: {conf:.4f})，判定已在外部選單，轉移至 NAVIGATING 進入古國。")
+                    domain_label = self.machine.config.get("name") or getattr(self.strategy, "domain_name", "domain")
+                    logging.info(f"🧭 [領地探索] 偵測到尋路按鈕 [{nav_btn}] (相似度: {conf:.4f})，判定已在外部選單，轉移至 NAVIGATING 進入領地【{domain_label}】。")
                     self.machine.transition_to(self.machine.STATE_NAVIGATING)
                     return
 

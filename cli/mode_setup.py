@@ -107,9 +107,10 @@ def setup_mode_config(args):
         config["lobby_start_btn"] = "stages/start.png"
         config["result_buttons"] = ["stages/retry.png", "common/continue.png", "common/continue_gray.png"]
 
-    elif args.mode == "golden_empire" or config.get("type") == "domain":
-        domain_name = config.get("name", "黃金古國")
-        print(f"\n🏛️ [領地模式] 啟動【{domain_name}】自動探索 (每次消耗 3 麵包，含挖寶與戰鬥處理)...")
+    elif config.get("type") == "domain":
+        domain_name = config.get("name") or target_key
+        bread_cost = config.get("bread_cost", 3)
+        print(f"\n🏛️ [領地模式] 啟動【{domain_name}】自動探索 (每次消耗 {bread_cost} 麵包，含挖寶與戰鬥處理)...")
 
     elif args.mode == "blood_altar":
         print("\n請選擇要獻祭/消耗的血水品質（設定為『否/保留』者將不進行點選獻祭）：")

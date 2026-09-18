@@ -794,7 +794,7 @@ class TestDailyTier4Behavior(unittest.TestCase):
         self.assertEqual(fallback["type"], "collect_only")
         self.assertEqual(fallback["tier4_mode"], "none")
         self.assertFalse(fallback["enable_stage_farming"])
-        self.assertFalse(fallback["enable_golden_empire"])
+        self.assertNotIn("enable_golden_empire", fallback)
         self.assertTrue(fallback["enable_dungeon"])
 
     def test_build_tier4_fallback_config_stage_coherence_and_pure_dungeon(self):

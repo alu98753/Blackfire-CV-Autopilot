@@ -2,11 +2,11 @@
 
 from config import (
     DEFAULT_TIER4_DOMAIN,
-    TIER4_DOMAIN_OPTIONS,
     TIER4_MODE_DOMAIN,
     TIER4_MODE_NONE,
     TIER4_MODE_OPTIONS,
     TIER4_MODE_STAGE,
+    get_tier4_domain_options,
 )
 from cli.profile_updates import persist_mode_updates
 from cli.prompts import prompt_choice
@@ -57,10 +57,18 @@ def setup_daily_tier4_config(config, interactive=True):
         return config
 
     if tier4_mode == TIER4_MODE_DOMAIN:
-        current_domain = config.get("tier4_domain", DEFAULT_TIER4_DOMAIN)
+        domain_options = get_tier4_domain_options()
+        if not domain_options:
+            raise ValueError("配置錯誤：未在 primary_modes 中宣告任何合法領地！")
+        valid_keys = [k for k, _ in domain_options]
+        current_domain = config.get("tier4_domain") or DEFAULT_TIER4_DOMAIN
+        if current_domain not in valid_keys:
+            raise ValueError(
+                f"配置錯誤：tier4_domain [{current_domain}] 不存在於合法領地目錄中！可選領地: {valid_keys}"
+            )
         domain_key = _select_from_options(
             "請選擇要探索的領地：",
-            TIER4_DOMAIN_OPTIONS,
+            domain_options,
             current_domain,
             interactive,
         )
@@ -68,7 +76,7 @@ def setup_daily_tier4_config(config, interactive=True):
         config["enable_stage_farming"] = False
         updates.update({"tier4_domain": domain_key, "enable_stage_farming": False})
         _persist_changed(config, original, updates)
-        domain_label = dict(TIER4_DOMAIN_OPTIONS)[domain_key]
+        domain_label = dict(domain_options)[domain_key]
         config["name"] = f"每日懸賞任務 (Tier 4: {domain_label})"
         return config
 

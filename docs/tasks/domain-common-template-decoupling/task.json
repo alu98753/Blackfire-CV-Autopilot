@@ -12,7 +12,10 @@
     "states/handlers/battle.py",
     "states/handlers/result.py",
     "utils/scene_snapshot.py",
+    "config.py",
     "config/defaults.toml",
+    "cli/",
+    "utils/tier4_config.py",
     "tests/"
   ],
   "focused_tests": [
