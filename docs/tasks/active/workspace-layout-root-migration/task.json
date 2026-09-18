@@ -1,0 +1,44 @@
+{
+  "id": "workspace-layout-root-migration",
+  "base_ref": "origin/main",
+  "base_sha": "c229590aa5ccbe1deea00bb158b69615953c1472",
+  "scope": [
+    "scripts/task_start.ps1",
+    "tests/test_task_start_behavioral.py",
+    "tests/test_task_cleanup_behavioral.py",
+    "docs/architecture/ai_development_workflow.md",
+    ".agents/skills/branch_start_workflow/SKILL.md",
+    ".agents/skills/branch_completion_workflow/SKILL.md",
+    "scripts/README.md",
+    "docs/tasks/active/workspace-layout-root-migration/"
+  ],
+  "focused_tests": [
+    "tests.test_task_start_behavioral",
+    "tests.test_task_cleanup_behavioral",
+    "tests.test_worktree_environment_bootstrap"
+  ],
+  "models": {
+    "scout": [
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/big-pickle"
+    ]
+  },
+  "notes": {
+    "status": "Final",
+    "implementation_blocked_until_final": false,
+    "canonical_main_target": "E:\\Side_Project\\Blackfire-CV-Autopilot",
+    "canonical_worktrees_target": "E:\\Side_Project\\Blackfire-CV-Autopilot-worktrees\\<task-id>",
+    "canonical_environment": "E:\\Side_Project\\VenvPools\\.venvs-Blackfire-CV-Autopilot",
+    "migration_policy": "preserve the existing complete main checkout including ignored local state; do not replace it with a fresh clone",
+    "scout_policy": "Scout provides evidence only; ChatGPT + user own Final SPEC",
+    "migration_order": "implement -> merge to main -> task_cleanup -> verify no relevant linked worktrees -> physically relocate existing main checkout",
+    "cleanup_policy": "task_cleanup.ps1 remains behaviorally unchanged",
+    "pause_resume_policy": "out of scope; BlackfireCrusade_tool appears only in third-party-window title test examples, not as the production acceptance key",
+    "linked_worktree_policy": "do not repair metadata in place; physical migration is blocked until relevant linked worktrees are cleaned up",
+    "workspace_topology": "E:\\Side_Project siblings: Blackfire-CV-Autopilot (main), Blackfire-CV-Autopilot-worktrees (task worktrees), VenvPools (external shared Python env storage)",
+    "venv_policy": "each runnable worktree keeps a local .venv junction to E:\\Side_Project\\VenvPools\\.venvs-Blackfire-CV-Autopilot; no environment mutation",
+    "node_policy": "node_modules remains per-worktree untracked local state; package.json/package-lock.json remain SSOT; no Node bootstrap/package changes in this task"
+  }
+}

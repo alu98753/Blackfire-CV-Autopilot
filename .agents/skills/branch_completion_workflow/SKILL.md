@@ -28,12 +28,20 @@ It does not allow local Gemini/Antigravity/OpenCode agents to merge to `main`.
 
 ## 2. Canonical workspace
 
+The canonical topology is sibling-based, not nested:
+
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\        <- permanent attached main + runtime/CV validation home
-└─ worktrees\
-   └─ <task-id>\                 <- temporary task worktree
+E:\Side_Project\
+├─ Blackfire-CV-Autopilot\
+│  └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+├─ Blackfire-CV-Autopilot-worktrees\
+│  └─ <task-id>\
+│     └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+└─ VenvPools\
+   └─ .venvs-Blackfire-CV-Autopilot\
 ```
+
+`VenvPools` is the external sibling holding the only physical shared Python environment. Worktree `.venv` entries are junction consumers; `node_modules` remains untracked per-worktree state.
 
 Canonical shared Python environment:
 
@@ -49,7 +57,7 @@ Each runnable worktree consumes that environment through its own local:
 
 Do not use another worktree's absolute interpreter path.
 
-The old permanent temp-main / detached-main convention is retired. `BlackfireCrusade_tool` permanently owns local `main`.
+The old nested checkout and permanent temp-main / detached-main conventions are retired. `Blackfire-CV-Autopilot` permanently owns local `main`.
 
 ## 3. Integration authority
 
@@ -86,7 +94,7 @@ Detached/wrong-branch/unrelated dirty state blocks closeout.
 Canonical main is:
 
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool
+E:\Side_Project\Blackfire-CV-Autopilot
 ```
 
 For regression/baseline work, main must be attached to `main` and clean. Fetch `origin`; if local main is behind and safely fast-forwardable, synchronize with fast-forward semantics. Dirty/diverged/detached/wrong-branch state blocks baseline use.
@@ -110,7 +118,7 @@ Task tests use:
 Main baseline tests use:
 
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool\.venv\Scripts\python.exe
+E:\Side_Project\Blackfire-CV-Autopilot\.venv\Scripts\python.exe
 ```
 
 Each command runs from its own worktree root so source imports resolve to the correct tree.
