@@ -24,12 +24,16 @@
     "tests/test_behavior_lobby_state_machine.py",
     "tests/test_behavior_navigation.py",
     "tests/test_domain_common_behavior.py",
-    "docs/tasks/domain-lobby-primary-start-boundary/"
+    "docs/tasks/domain-lobby-primary-start-boundary/",
+    "states/handlers/domain_explore.py",
+    "states/state_machine.py",
+    "utils/scene_detector.py"
   ],
   "focused_tests": [
     "tests.test_behavior_lobby_state_machine",
     "tests.test_behavior_navigation",
-    "tests.test_domain_common_behavior"
+    "tests.test_domain_common_behavior",
+    "tests.test_behavior_state_machine"
   ],
   "artifacts": {
     "spec": "docs/tasks/domain-lobby-primary-start-boundary/SPEC.md",
@@ -37,13 +41,14 @@
   },
   "notes": {
     "architecture": "docs/architecture/navigation_intent_routing_spec.md",
-    "intent": "Prevent legacy stage-farming fallback from overriding a verified direct Domain START_PRIMARY decision.",
+    "intent": "Fix Domain runtime handoff coherence: preserve valid Domain primary start and prevent scene adoption without Domain execution identity.",
     "preserve": [
       "domain card alignment",
       "entry brightness filtering",
       "scheduler priority",
       "committed lobby start retry/disappearance semantics"
     ],
-    "secondary_observation": "Investigate abnormal match-to-click Y coordinate only for causal relevance; split if independent."
+    "secondary_observation": "Investigate abnormal match-to-click Y coordinate only for causal relevance; split if independent.",
+    "secondary_runtime_failure": "UNKNOWN -> DOMAIN_EXPLORE may currently occur from explore_btn visual evidence while self.config lacks domain, causing DomainExploreHandler to raise ValueError."
   }
 }
