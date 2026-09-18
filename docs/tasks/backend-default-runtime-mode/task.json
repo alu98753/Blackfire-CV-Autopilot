@@ -1,0 +1,30 @@
+{
+  "task_id": "backend-default-runtime-mode",
+  "status": "draft",
+  "phase": "phase-1",
+  "goal": "Make backend Win32 I/O the default production runtime mode and require explicit opt-in for foreground demo mode.",
+  "base_ref": "main",
+  "base_sha": "1052d9eec964523887d6540ffd45c0585fb84968",
+  "scope": [
+    "CLI runtime I/O mode default and explicit demo opt-in",
+    "runtime mode propagation through startup/bootstrap/launcher/mouse/capture boundaries",
+    "deterministic tests for default, demo opt-in, and propagation",
+    "directly affected documentation"
+  ],
+  "non_goals": [
+    "foreground implementation deletion",
+    "video recording",
+    "gameplay or CV behavior changes",
+    "shared environment mutation",
+    "foreground-demo-mode-isolation phase-2"
+  ],
+  "focused_tests": [],
+  "gate_required": false,
+  "scout_mode": "gemini_read_only_temporary_fallback",
+  "notes": [
+    "User explicitly authorized Gemini/Antigravity read-only survey instead of scripts/ai_scout.ps1 for this task.",
+    "Focused test commands remain intentionally empty until Scout identifies existing test surfaces.",
+    "Final SPEC must decide public flag naming and legacy --backend compatibility semantics.",
+    "Gemini must not modify production code or promote Draft SPEC to Final."
+  ]
+}
