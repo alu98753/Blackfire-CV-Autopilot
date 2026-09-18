@@ -53,7 +53,17 @@
     "status": "Final",
     "implementation_boundary": "Fix legacy Lobby stage-farming gating and enforce valid Domain execution identity before every DOMAIN_EXPLORE adoption path, including global relocalization and navigation.",
     "scout_evidence": "OpenCode Scout selected opencode/big-pickle after mimo malformed output; CONTEXT.md confirms both root causes and the NavigationHandler sibling adoption path.",
-    "config_provenance": "Mandatory: trace defaults -> active profile override -> effective config -> primary_config -> runtime self.config replacements, and determine whether user_data is causal or exonerated before implementation."
+    "config_provenance": "Mandatory: trace defaults -> active profile override -> effective config -> primary_config -> runtime self.config replacements, and determine whether user_data is causal or exonerated before implementation.",
+    "config_provenance_result": {
+      "active_profile": "sandbox",
+      "user_data_classification": "EXONERATED",
+      "root_cause": [
+        "runtime config replacement",
+        "execution-context restoration gap"
+      ],
+      "observed_daily_case": "primary_config is daily/mix with tier4_mode=none; runtime config has no domain and must not adopt DOMAIN_EXPLORE from generic explore_btn alone",
+      "direct_domain_case": "legacy lobby stage-farming fallback must not discard valid Domain execution ownership"
+    }
   },
   "models": {
     "scout": [
