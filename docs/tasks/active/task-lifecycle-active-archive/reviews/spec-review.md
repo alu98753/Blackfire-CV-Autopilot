@@ -1,45 +1,39 @@
 ﻿# Spec Review
 
-Gate-accepted verdict: BLOCK
-Blocking findings: 1
+Gate-accepted verdict: PASS
+Blocking findings: 0
 
-Maximum steps for this agent have been reached before finalization of the structured verdict. The following text summarizes the bounded spec-review work completed.
+# Spec Review
 
-## What was accomplished
+## Clause coverage
 
-Read all four supplied snapshots (task.json, SPEC.md Final, status.txt, 1978-line diff.patch) and grounded them against the current worktree:
+**Goal / canonical layout (SPEC 禮Goal, decisions 1??):** Resolved. `docs/tasks/active/<task-id>/` package present and tracked (SPEC.md, task.json, CONTEXT.md, reviews/); ~31 legacy packages renamed to `docs/tasks/archive/2026/<task-id>/` with 100% similarity (no artifact loss); path remains the lifecycle SSOT ??no task.json.status authority added.
 
-- **Resolver** (`scripts/task_package_resolver.ps1`): implements ACTIVE / ARCHIVED / MISSING / MALFORMED / AMBIGUOUS_ARCHIVE with `RequireActive` fail-closed; single owner of `docs/tasks/active/<task-id>` path semantics. Grounded in repo; matches SPEC decisions 1/3/4/5.
-- **Archive command** (`scripts/task_archive.ps1`): requires clean main at origin/main, exactly one task worktree, mechanically verifies integration via unique first-parent merge boundary, derives UTC year from the integration commit, checks destination/closeout-branch collisions, prepares the move in a temporary detached worktree, pushes `origin/archive/<task>-<year>`, and fails closed on every critical step (tested via `$_FailGitStep`). Matches SPEC "Archive command" and decision clauses.
-- **Caller migration**: ai_gate.ps1, ai_scout.ps1, task_start.ps1 all consume the resolver; prompts/excludes/EVIDENCE/reviews now resolve under the active package. Grep confirmed zero remaining hardcoded flat `docs/tasks/$Task` constructs in `scripts/`.
-- **Docs/contracts**: .agents rules/skills, ai_development_workflow.md, docs/tasks/README.md, BACKLOG.md, todos/README.md updated to active-path semantics.
-- **Tests**: new test_task_package_resolver.py and test_task_archive.py present with deterministic fixtures; harness fixture migrated to `docs/tasks/active/`; harness split into runnable groups with per-case selection.
-- **Migration**: ~31 legacy flat packages renamed to `docs/tasks/archive/2026/`; current task package present at `docs/tasks/active/task-lifecycle-active-archive/` (SPEC.md, task.json, CONTEXT.md, reviews/).
+**Resolver (decisions 3??, 7??; acceptance 3??):** `scripts/task_package_resolver.ps1` is the single owner of path semantics (`Get-TaskPackageRelativePath`, `Resolve-TaskPackage`, `Get-TaskPackageGitPath`) and produces ACTIVE / ARCHIVED / MISSING / MALFORMED / AMBIGUOUS_ARCHIVE with `-RequireActive` fail-closed. `task_start.ps1`, `ai_scout.ps1`, `ai_gate.ps1` all consume the resolver; grep confirms zero remaining `docs/tasks/$Task` constructions in `scripts/`. No flat-layout compatibility fallback exists (acceptance 12 holds for the code paths).
 
-## Blocking finding identified (grounded)
+**Archive command (SPEC 禮Archive; acceptance 7??):** `scripts/task_archive.ps1` fails closed on missing/archived/ambiguous/malformed/non-ACTIVE classification; requires clean canonical main at `origin/main`; maps exactly one clean task worktree; proves integration by unique first-parent merge boundary containing task HEAD; derives year from UTC committer date of the verified integration commit; performs `git mv` in an isolated detached worktree and pushes `archive/<task-id>-<year>`; performs no local cleanup and no destructive git operations (`git worktree remove --force` absent).
 
-### B1 — Diff changes Gate reviewer execution semantics that the Final SPEC explicitly lists as a non-goal
-Severity: BLOCKING
-Contract / invariant: SPEC.md "Non-goals": "Redesign Scout/Gate model routing or reviewer execution"; Architecture decision 2 "SPEC.md remains the behavioral contract"
-Location: scripts/ai_gate.ps1 `Resolve-Candidates` (diff hunk at index b0138b1..07ea6d9); scripts/task_archive.ps1 unchanged; tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1
-Claim: `ai_gate.ps1` previously treated `models.review` as an optional array of candidates with fallback; the diff makes it a single required `provider/model` string, rejects null/arrays/locally configured defaults, silently discards additional `_ReviewCandidatesOverride` entries beyond `[0]`, and converts pre-authority candidate failures from fallback (exit 0) to terminal VERIFICATION_UNAVAILABLE (exit 1).
-Evidence: diff.patch `Resolve-Candidates` rewrite (`if ($raw -isnot [string]) { throw ... candidate arrays are not allowed }`), harness cases renamed "…is terminal", "…has no fallback", "…failure is unavailable without fallback" (e.g. `Assert-True ($code.ExitCode -eq 1)` where the baseline asserted exit 0 fallback), plus branch_start_workflow SKILL.md new requirement "null, missing, empty, array, or locally configured defaults are invalid".
-Why this is a contract break: SPEC.md (Status: Final) never authorizes this reviewer-execution change; the new `models.review` mandatory-string contract appears only in diff-side docs, not in the canonical behavioral contract. The change is coherent and consistently documented on the branch, but it alters production runtime behavior beyond the Final SPEC's declared non-goal boundary. Per the gate rule "Treat SPEC.md scope, invariants, acceptance criteria, and non-goals as authoritative", this divergence must be resolved (either amend the Final SPEC to authorize the reviewer-model contract, or restore baseline candidate semantics) before acceptance.
+**Reviewer-model contract (SPEC non-goals):** `ai_gate.ps1` `Resolve-Candidates` requires one explicit `provider/model` string (`^[^/\s]+/[^/\s]+$`), rejects missing/null/array, and removes candidate fallback; infrastructure failure is terminal (exit 1); CLI/override remain test seams. Task `models.review` = `opencode/big-pickle`. Harness cases converted from fallback semantics to no-fallback assertions.
+
+**Bootstrap migration:** Current package resolves ACTIVE under `docs/tasks/active/`; the migrating gate itself produced the active-path snapshot (empty status.txt; diff excludes active-path reviews/EVIDENCE/CONTEXT).
+
+**Docs/contracts (acceptance 13):** `docs/tasks/README.md`, `BACKLOG.md`, `docs/todos/README.md`, `docs/architecture/ai_development_workflow.md`, `.agents/rules/ai-verification-gate.md`, both `.agents/skills/...` files, harness, and probe now teach active-path semantics. Tree-art and prose verified clean on disk.
+
+**Required tests (SPEC 禮Required deterministic tests):** `tests/test_task_package_resolver.py` (ACTIVE/MISSING/ARCHIVED/MALFORMED/AMBIGUOUS_ARCHIVE, caller wiring), `tests/test_task_archive.py` (integrated closeout, destination/branch collision tokens, fail-closed integration/missing, UTC boundary year 2025, per-step git failure, real push failure, protected repository state), updated `test_task_start_behavioral.py` (active-path fixtures), `test_workflow_scripts.py` grouped harness runs.
+
+## Blocking findings
+
+None.
 
 ## Advisory findings
 
-- `scripts/opencode_structured_review_probe.mjs` QUALIFICATION_PROMPT/SMOKE_PROMPT (lines 77, 85) hardcode `docs/tasks/active/opencode-structured-review-provider-compatibility/` while the same diff archives that package to `docs/tasks/archive/2026/...`; post-merge the probe instructs reviewers to read a non-existent path. Verify whether the probe runs in any production gate/readiness path; otherwise update the prompt.
-- Six flat legacy packages remain at `docs/tasks/<id>/` (generic-domain-catalog-expansion, backend-default-runtime-mode, foreground-demo-mode-isolation, cli-io-mode-contract-cleanup, domain-lobby-primary-start-boundary, plus domain-common-template-decoupling which the SPEC says is governed by its own branch). The resolver has no flat fallback, so any start/Scout/Gate on those tasks resolves MISSING. SPEC item 9 allows a temporary bridge only until acceptance; confirm the five unclassified packages are explicitly classified (active move vs archive) before acceptance.
-- `task_archive.ps1`: `git fetch origin main` exit code is not checked before `git rev-parse origin/main`; a failed fetch could silently use a stale remote ref (fails closed in most cases, but error determinism is weaker than the rest of the script).
-- New BOM artifacts in diff (docs/todos/README.md, probe .mjs, harness .ps1) are consistent with the snapshot-encoding issue noted in the existing `reviews/spec-review.md`; working-tree bytes were reported intact there. Advisory only.
+1. **Snapshot-pipeline encoding:** `.runtime/ai_gate/task-lifecycle-active-archive/diff.patch` contains mojibake (`??`, `?ㄗmport`, `?` in tree art/em-dashes). Verified on disk that all affected working-tree files are clean (`# Legacy Todos`, `import { execFile...`, `param(`, tree art, SKILL prose). Artifact-only, but it degrades reviewer consumption of diff.patch; the gate's `chcp 65001` snapshot writer should be hardened.
+2. **`task_archive.ps1` hardcodes the move source** (`git mv -- "docs/tasks/active/$Task"` at line 56) instead of `Get-TaskPackageRelativePath`, despite dot-sourcing the resolver. Same result today; mild drift against "single owner of path semantics" (already noted in the package's regression-review).
+3. **Skill vs. behavior drift:** `branch_start_workflow/SKILL.md` states the start wrapper "requires every formal task `task.json` to contain one explicit `models.review`"; `task_start.ps1` validates only id/JSON/SPEC presence. Fail-fast enforcement lives in the Gate, which satisfies the SPEC contract; the SKILL wording overstates the wrapper.
+4. **Unclassified flat packages:** six legacy flat packages remain at `docs/tasks/<id>/` (e.g., `generic-domain-catalog-expansion`, `domain-lobby-primary-start-boundary`); the resolver reports MISSING for them. This matches SPEC's "uncertain tasks are not guessed into archive", but they need explicit classification (active-move or archive) on their owning branches before acceptance criterion 14 is fully closed.
 
-## Test evidence gaps / remaining verification
+## Test evidence gaps
 
-- Could not execute focused tests (read-only review); deterministic fixtures exist for resolver (ACTIVE/MISSING/ARCHIVED/MALFORMED/AMBIGUOUS_ARCHIVE) and archive (integration, collision, not-integrated, UTC year boundary, critical git failures, real push failure).
-- Did not read the existing `reviews/spec-review.md` / `regression-review.md` in the active package to compare prior findings; recommend the next reviewer do so and confirm how the `Resolve-Candidates` non-goal tension was previously adjudicated.
+Focused deterministic tests exist for resolver classifications, archive fail-closed paths (incl. real push failure and UTC year boundary), active-path task_start fixtures, and grouped harness runs. Not executed here per read-only policy. Remaining evidence gaps: `task_archive.ps1` live run against a real `origin/main` with >1 matching worktree, and the five unclassified flat packages' migration/archive classification.
 
-## Recommendation for next step
-
-Resume this review (or a new spec-review run) with: (1) read `docs/tasks/active/task-lifecycle-active-archive/reviews/*.md` for prior adjudication, (2) resolve B1 by either amending the Final SPEC to authorize the mandatory `models.review` single-string contract or reverting `Resolve-Candidates` to baseline semantics, (3) decide the five unclassified flat packages, (4) repair the probe's archived package path reference.
-
-<!-- blackfire-gate-fingerprint: {"schema":1,"role":"spec-reviewer","hash":"e7a6b5f79ab2f96e4057f2fc58c3d93f30b8be067d29f16dcedb88e0780bf197"} -->
+<!-- blackfire-gate-fingerprint: {"schema":1,"role":"spec-reviewer","hash":"0895fe58332b4d02ec41b98d66480a962836954a1c23cf580d5a5b0fb8fe9eb7"} -->
