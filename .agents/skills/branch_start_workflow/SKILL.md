@@ -18,8 +18,8 @@ A formal AI task is expected to already have on GitHub:
 
 ```text
 origin/<approved-task-branch>
-docs/tasks/<task-id>/SPEC.md
-docs/tasks/<task-id>/task.json
+docs/tasks/active/<task-id>/SPEC.md
+docs/tasks/active/<task-id>/task.json
 ```
 
 Those artifacts are created by ChatGPT/user before local task execution.
@@ -58,6 +58,7 @@ For formal AI tasks, the wrapper owns the mechanical startup sequence:
 - validates that the approved remote task branch exists;
 - validates that current `origin/main` is an ancestor of that remote task branch;
 - validates remote `SPEC.md` and `task.json` and matching task id;
+- requires every formal task `task.json` to contain one explicit `models.review` provider/model string (canonical default: `opencode/big-pickle`); null, missing, empty, array, or locally configured defaults are invalid;
 - creates or safely reuses the canonical task worktree;
 - respects Git multi-worktree branch exclusivity;
 - safely fast-forwards a clean local task branch to the remote when allowed;
@@ -241,7 +242,7 @@ For generic/manual branches outside the formal AI task lifecycle, publishing an 
 
 ## 12. Development boundary snapshot
 
-The authoritative scope comes from `docs/tasks/<task-id>/SPEC.md` when present. Do not create a second local spec.
+The authoritative scope comes from `docs/tasks/active/<task-id>/SPEC.md` when present. Do not create a second local spec.
 
 Useful snapshot:
 

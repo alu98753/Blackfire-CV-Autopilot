@@ -198,7 +198,7 @@ If formal AI Gate is applicable, run it only after this baseline-freshness check
 
 `2` or `1` blocks integration and returns to bounded diagnosis/correction/verification.
 
-After a successful formal Gate, canonical `docs/tasks/<task-id>/reviews/*.md` and `EVIDENCE.md` required for remote final review must be committed and pushed to the task branch. Local-only Gate evidence is not a complete GitHub handoff.
+After a successful formal Gate, canonical `docs/tasks/active/<task-id>/reviews/*.md` and `EVIDENCE.md` required for remote final review must be committed and pushed to the task branch. Local-only Gate evidence is not a complete GitHub handoff.
 
 ### Phase 11 — Integration readiness
 
@@ -210,7 +210,11 @@ Preferred path:
 2. ChatGPT re-checks current expected head/base on GitHub.
 3. ChatGPT performs final semantic/architecture review.
 4. User explicitly authorizes integration.
-5. ChatGPT integrates through GitHub with merge-commit semantics.
+5. ChatGPT integrates through GitHub with merge-commit semantics; the task package remains ACTIVE after this integration.
+6. Run `scripts\task_archive.ps1 -Task <task-id>` to prepare the move in a temporary detached worktree and push the remote archive closeout branch. No persistent local closeout branch is created; `ARCHIVE_CLOSEOUT_READY` is not `ARCHIVED`.
+7. ChatGPT/user integrates the temporary remote closeout handoff branch `origin/archive/<task-id>-<year>` through the existing merge authority and verifies the resolver reports exactly one ARCHIVED package.
+8. Only after that merge and ARCHIVED verification may ChatGPT/user delete the remote closeout branch. If it is not merged, it must not be deleted. Neither `task_archive.ps1` nor `task_cleanup.ps1` owns this deletion.
+9. Only then delegate original task local teardown to `task_cleanup.ps1`.
 
 Manual fallback is allowed when the user prefers it, but it uses the canonical permanent `main` worktree—not temp-main—and must preserve repository merge policy.
 
@@ -229,7 +233,7 @@ If no immediate local-main use is needed, the next formal `task_start.ps1` will 
 
 ## 6. Normal task cleanup: one high-level command
 
-After integration is confirmed, users should **not** manually reconstruct `.venv` detach + `git worktree remove` + branch deletion.
+After closeout integration is confirmed, the resolver reports ARCHIVED, and the temporary remote closeout branch has been deleted by ChatGPT/user, users should **not** manually reconstruct `.venv` detach + `git worktree remove` + branch deletion.
 
 Normal cleanup is:
 
@@ -370,6 +374,8 @@ Cleanup readiness:
 [ ] applicable canonical Gate reviews/EVIDENCE pushed before remote final review
 [ ] explicit user authorization obtained before integration
 [ ] integration confirmed in origin/main
+[ ] archive closeout branch created and pushed
+[ ] closeout branch integrated and resolver confirms ARCHIVED
 [ ] normal cleanup delegated to task_cleanup.ps1
 ```
 
