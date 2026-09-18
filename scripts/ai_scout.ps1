@@ -19,6 +19,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
 . (Join-Path $PSScriptRoot "opencode_contract.ps1")
+. (Join-Path $PSScriptRoot "task_package_resolver.ps1")
 
 if ([string]::IsNullOrWhiteSpace($_ExecutableOverride) -and -not (Get-Command opencode -ErrorAction SilentlyContinue)) {
     throw "OpenCode is not installed. Run .\scripts\bootstrap_opencode.ps1 first."
@@ -32,15 +33,15 @@ if ([string]::IsNullOrWhiteSpace($_ExecutableOverride)) {
     Assert-OpenCodeSupportedVersion -Version $_OpenCodeVersionOverride.Trim()
 }
 
-$taskDir = Join-Path $repoRoot "docs\tasks\$Task"
+$taskDir = (Resolve-TaskPackage -Task $Task -RepoRoot $repoRoot -RequireActive).AbsolutePath
 $taskFile = Join-Path $taskDir "task.json"
 $specPath = Join-Path $taskDir "SPEC.md"
 
 if (-not (Test-Path $taskFile)) {
-    throw "Task descriptor not found: docs/tasks/$Task/task.json"
+        throw "Task descriptor not found: docs/tasks/active/$Task/task.json"
 }
 if (-not (Test-Path $specPath)) {
-    throw "Canonical spec not found: docs/tasks/$Task/SPEC.md"
+    throw "Canonical spec not found: docs/tasks/active/$Task/SPEC.md"
 }
 
 $config = Get-Content $taskFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -103,8 +104,8 @@ function Resolve-NormalModelList {
 $candidates = Resolve-NormalModelList -RawConfigModels $config.models.scout -CliOverride $Model -TestCandidatesOverride $_ModelCandidatesOverride
 
 $prompt = @"
-Task descriptor: docs/tasks/$Task/task.json
-Canonical spec: docs/tasks/$Task/SPEC.md
+Task descriptor: docs/tasks/active/$Task/task.json
+Canonical spec: docs/tasks/active/$Task/SPEC.md
 
 Perform a read-only localization audit for this task using the repository state currently checked out.
 Follow the scout agent contract exactly:
@@ -438,4 +439,4 @@ if ($null -eq $selectedResult) {
 Set-Content -Path $candidatePath -Value $selectedResult.Text -Encoding UTF8
 Move-Item -Path $candidatePath -Destination $contextPath -Force
 
-Write-Host "Scout context successfully written to docs/tasks/$Task/CONTEXT.md (selected candidate: '$($selectedResult.Model)')."
+Write-Host "Scout context successfully written to docs/tasks/active/$Task/CONTEXT.md (selected candidate: '$($selectedResult.Model)')."

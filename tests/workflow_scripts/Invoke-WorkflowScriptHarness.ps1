@@ -1,11 +1,11 @@
-param()
+﻿param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
 $gate = Join-Path $repoRoot 'scripts\ai_gate.ps1'
 $scout = Join-Path $repoRoot 'scripts\ai_scout.ps1'
 $fixtureId = "workflow-harness-fixture-$([DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))-$PID"
-$fixtureDir = Join-Path $repoRoot "docs\tasks\$fixtureId"
+$fixtureDir = Join-Path \$repoRoot "docs\\tasks\\active\\\$fixtureId"
 $runtimeDirs = @(
     (Join-Path $repoRoot ".runtime\ai_gate\$fixtureId"),
     (Join-Path $repoRoot ".runtime\ai_scout\$fixtureId")
@@ -174,7 +174,7 @@ try {
     New-Item -ItemType Directory -Force -Path $fixtureDir, (Join-Path $fixtureDir 'reviews'), $helperDir | Out-Null
     New-Item -ItemType Directory -Force -Path $diagnosticRoot | Out-Null
     $env:WORKFLOW_HARNESS_DIAGNOSTIC_DIR = $diagnosticRoot
-    '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
+    '{"id":"PLACEHOLDER","base_ref":"origin/main","scope":["docs/tasks/active/PLACEHOLDER/"],"focused_tests":[],"models":{"scout":["first","second"],"review":["first","second"]}}'.Replace('PLACEHOLDER',$fixtureId) | Set-Content (Join-Path $fixtureDir 'task.json') -Encoding UTF8
     $taskJsonPath = Join-Path $fixtureDir 'task.json'
     $originalTaskJson = Get-Content -LiteralPath $taskJsonPath -Raw
     '# Final disposable harness fixture' | Set-Content (Join-Path $fixtureDir 'SPEC.md') -Encoding UTF8
@@ -701,3 +701,5 @@ if ($failed -gt 0) {
 if ($failed -gt 0) { exit 1 }
 Write-Host "Workflow script harness: $passed cases passed."
 exit 0
+
+

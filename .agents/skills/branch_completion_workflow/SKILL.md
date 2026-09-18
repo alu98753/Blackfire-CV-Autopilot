@@ -1,4 +1,4 @@
----
+﻿---
 name: branch_completion_workflow
 description: >
   Solo-development branch closeout workflow. Owns regression/classification, contract convergence,
@@ -30,9 +30,9 @@ It does not allow local Gemini/Antigravity/OpenCode agents to merge to `main`.
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\        <- permanent attached main + runtime/CV validation home
-└─ worktrees\
-   └─ <task-id>\                 <- temporary task worktree
+?? BlackfireCrusade_tool\        <- permanent attached main + runtime/CV validation home
+?? worktrees\
+   ?? <task-id>\                 <- temporary task worktree
 ```
 
 Canonical shared Python environment:
@@ -61,7 +61,7 @@ The old permanent temp-main / detached-main convention is retired. `BlackfireCru
 
 ## 4. Closeout phases
 
-### Phase 0 — Context audit
+### Phase 0 ??Context audit
 
 From the task worktree, inspect:
 
@@ -81,7 +81,7 @@ Confirm:
 
 Detached/wrong-branch/unrelated dirty state blocks closeout.
 
-### Phase 1 — Canonical main baseline preflight
+### Phase 1 ??Canonical main baseline preflight
 
 Canonical main is:
 
@@ -97,7 +97,7 @@ Do not run Gate against a stale long-lived branch where newer-main files can be 
 
 Do not use reset/clean/force checkout shortcuts.
 
-### Phase 2 — Regression baseline
+### Phase 2 ??Regression baseline
 
 AI agents run only the smallest directly relevant focused tests allowed by project policy. Full-suite execution remains user-only when required.
 
@@ -117,7 +117,7 @@ Each command runs from its own worktree root so source imports resolve to the co
 
 If tests share game/runtime/user-data resources, run them serially.
 
-### Phase 3 — Regression classification
+### Phase 3 ??Regression classification
 
 Classify failures as:
 
@@ -130,11 +130,11 @@ UNCERTAIN
 
 `BRANCH_REGRESSION` or `UNCERTAIN` blocks closeout.
 
-### Phase 4 — Refactor safety gate
+### Phase 4 ??Refactor safety gate
 
 Do not perform opportunistic maintenance refactors without tests/evidence protecting the relevant behavior.
 
-### Phase 5 — Behavior-preserving maintenance refactor
+### Phase 5 ??Behavior-preserving maintenance refactor
 
 Allowed only when clearly behavior-preserving, for example:
 
@@ -147,25 +147,25 @@ Allowed only when clearly behavior-preserving, for example:
 
 If Final SPEC did not authorize behavior change, closeout refactor must not introduce one.
 
-### Phase 6 — Post-refactor verification
+### Phase 6 ??Post-refactor verification
 
 Run the smallest directly relevant focused tests. Any new failure/observable behavior change re-blocks closeout.
 
-### Phase 7 — Code/doc hygiene
+### Phase 7 ??Code/doc hygiene
 
 Remove task-local/transient wording from durable production code where appropriate. Do not duplicate canonical architecture contracts across many files.
 
-### Phase 8 — Contract convergence
+### Phase 8 ??Contract convergence
 
 Converge durable invariants into canonical architecture/workflow SSOT. Task SPEC/CONTEXT/reviews/EVIDENCE remain task lifecycle/history artifacts, not a permanent second architecture authority.
 
 Tracked-history deletion or archival outside the Final SPEC requires explicit user agreement. Local worktree cleanup does not imply deletion of tracked task-history artifacts.
 
-### Phase 9 — Development story
+### Phase 9 ??Development story
 
 When project convention calls for it, record a concise PARS development story. The story is historical narrative, not architecture authority.
 
-### Phase 10 — Final branch audit and verification handoff
+### Phase 10 ??Final branch audit and verification handoff
 
 Confirm:
 
@@ -198,9 +198,9 @@ If formal AI Gate is applicable, run it only after this baseline-freshness check
 
 `2` or `1` blocks integration and returns to bounded diagnosis/correction/verification.
 
-After a successful formal Gate, canonical `docs/tasks/<task-id>/reviews/*.md` and `EVIDENCE.md` required for remote final review must be committed and pushed to the task branch. Local-only Gate evidence is not a complete GitHub handoff.
+After a successful formal Gate, canonical `docs/tasks/active/<task-id>/reviews/*.md` and `EVIDENCE.md` required for remote final review must be committed and pushed to the task branch. Local-only Gate evidence is not a complete GitHub handoff.
 
-### Phase 11 — Integration readiness
+### Phase 11 ??Integration readiness
 
 Local agents deliver readiness; they do not merge.
 
@@ -212,7 +212,7 @@ Preferred path:
 4. User explicitly authorizes integration.
 5. ChatGPT integrates through GitHub with merge-commit semantics.
 
-Manual fallback is allowed when the user prefers it, but it uses the canonical permanent `main` worktree—not temp-main—and must preserve repository merge policy.
+Manual fallback is allowed when the user prefers it, but it uses the canonical permanent `main` worktree?ot temp-main?nd must preserve repository merge policy.
 
 ## 5. Post-integration synchronization
 
@@ -376,3 +376,4 @@ Cleanup readiness:
 # One-line principle
 
 > Review and integration remain gated human/ChatGPT decisions; once integrated, routine task-worktree teardown is one repository cleanup command, not a manual sequence of Git and junction operations.
+

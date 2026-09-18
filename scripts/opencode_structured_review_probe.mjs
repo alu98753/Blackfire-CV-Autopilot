@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+﻿import { execFile, spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve, delimiter } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -74,7 +74,7 @@ export const OUTCOME_SCHEMA = {
 
 const QUALIFICATION_PROMPT = [
   "Conduct a bounded, read-only review using your production reviewer contract.",
-  "Read docs/tasks/opencode-structured-review-provider-compatibility/task.json, docs/tasks/opencode-structured-review-provider-compatibility/SPEC.md, and docs/tasks/opencode-structured-review-provider-compatibility/CONTEXT.md before finalizing.",
+  "Read docs/tasks/active/opencode-structured-review-provider-compatibility/task.json, docs/tasks/active/opencode-structured-review-provider-compatibility/SPEC.md, and docs/tasks/active/opencode-structured-review-provider-compatibility/CONTEXT.md before finalizing.",
   "Use at least one permitted repository read/search tool (read, glob, or grep) and wait for its successful result.",
   "Stop tool use once sufficient evidence is available; reserve a final assistant turn rather than consuming the maximum step budget.",
   "Do not edit files, execute shell commands, launch subagents, or use external tools.",
@@ -82,7 +82,7 @@ const QUALIFICATION_PROMPT = [
 
 const SMOKE_PROMPT = [
   "Conduct a bounded, read-only compatibility smoke review using your production reviewer contract.",
-  "Read docs/tasks/opencode-structured-review-provider-compatibility/task.json before finalizing.",
+  "Read docs/tasks/active/opencode-structured-review-provider-compatibility/task.json before finalizing.",
   "Use at least one permitted repository read/search tool (read, glob, or grep) and wait for its successful result.",
   "Stop tool use once sufficient evidence is available; reserve a final assistant turn rather than consuming the maximum step budget.",
   "Do not edit files, execute shell commands, launch subagents, or use external tools.",
@@ -734,3 +734,4 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     process.exitCode = 1;
   });
 }
+

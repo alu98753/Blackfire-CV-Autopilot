@@ -1,4 +1,4 @@
----
+﻿---
 name: branch_start_workflow
 description: >
   Formal AI task startup and branch/worktree startup guidance. Formal AI tasks use
@@ -18,8 +18,8 @@ A formal AI task is expected to already have on GitHub:
 
 ```text
 origin/<approved-task-branch>
-docs/tasks/<task-id>/SPEC.md
-docs/tasks/<task-id>/task.json
+docs/tasks/active/<task-id>/SPEC.md
+docs/tasks/active/<task-id>/task.json
 ```
 
 Those artifacts are created by ChatGPT/user before local task execution.
@@ -80,9 +80,9 @@ The wrapper intentionally does **not**:
 
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\        <- permanent attached main + runtime/CV home
-└─ worktrees\
-   └─ <task-id>\                 <- branch-scoped task worktree
+?? BlackfireCrusade_tool\        <- permanent attached main + runtime/CV home
+?? worktrees\
+   ?? <task-id>\                 <- branch-scoped task worktree
 ```
 
 Canonical shared Python environment:
@@ -105,11 +105,11 @@ New formal task worktrees use the project-scoped path above. Existing active leg
 
 Use this workflow when the user explicitly starts implementation lifecycle work, for example:
 
-- `開始 XXX task`
-- `正式開始 XXX`
-- `建立 XXX task`
-- `開始這個功能`
-- `開始修這個 bug`
+- `?? XXX task`
+- `甇???? XXX`
+- `撱箇? XXX task`
+- `?????窯
+- `??靽桅?bug`
 
 Discussion, brainstorming, design review, and code review alone do not create a local worktree.
 
@@ -241,7 +241,7 @@ For generic/manual branches outside the formal AI task lifecycle, publishing an 
 
 ## 12. Development boundary snapshot
 
-The authoritative scope comes from `docs/tasks/<task-id>/SPEC.md` when present. Do not create a second local spec.
+The authoritative scope comes from `docs/tasks/active/<task-id>/SPEC.md` when present. Do not create a second local spec.
 
 Useful snapshot:
 
@@ -288,3 +288,4 @@ Do not ask the user to repeat the internal worktree/bootstrap checks after a suc
 # One-line principle
 
 > Formal AI task startup is one repository command; low-level Git/worktree/environment commands are recovery tools, not routine user choreography.
+

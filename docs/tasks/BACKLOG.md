@@ -1,12 +1,12 @@
-# Development Backlog
+﻿# Development Backlog
 
 > Document role: **backlog intake/index** for new ideas, unresolved bugs, future work, and tasks that are not yet ready for a full `SPEC.md`. This file is not the AI workflow roadmap and must not duplicate that roadmap.
 
 When an item becomes active development work, promote it into:
 
 ```text
-docs/tasks/<task-id>/SPEC.md
-docs/tasks/<task-id>/task.json
+docs/tasks/active/<task-id>/SPEC.md
+docs/tasks/active/<task-id>/task.json
 ```
 
 Do not keep two active SSOT descriptions for the same task. Historical task detail belongs in the task package and Git history.
@@ -33,6 +33,5 @@ Do not duplicate the AI workflow roadmap in this backlog. New workflow ideas may
 
 ## Task todo
 
-- [ ] 觀察 `NemesisIntervention` 是否需要與 process-external Supervisor daily restart 協作／延後重啟；本 task 先維持既有每日重啟語意，不保證 intervention hold 跨 process 持久化。
-- [ ] prompt 太長了 需要縮減(GPT給scout 的)
-- [ ] config 位置統一任務
+- [ ] 閫撖?`NemesisIntervention` ?臬?閬? process-external Supervisor daily restart ??嚗辣敺?????task ?雁????仿?????銝?霅?intervention hold 頝?process ????- [ ] prompt 憭芷鈭??閬葬皜?GPT蝯存cout ??
+- [ ] config 雿蔭蝯曹?隞餃?

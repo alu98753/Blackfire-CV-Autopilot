@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import shutil
 import subprocess
@@ -195,7 +195,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
 
             expected_worktree = f["worktrees_root"] / "my-feature"
             self.assertTrue(expected_worktree.exists())
-            self.assertTrue((expected_worktree / "docs" / "tasks" / "my-feature" / "SPEC.md").exists())
+            self.assertTrue((expected_worktree / "docs" / "tasks" / "active" / "my-feature" / "SPEC.md").exists())
 
     def test_canonical_main_behind_fast_forwards_safely(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -486,7 +486,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
             # Worktree must be preserved!
             target_wt = f["worktrees_root"] / "py-fail-task"
             self.assertTrue(target_wt.exists())
-            self.assertTrue((target_wt / "docs" / "tasks" / "py-fail-task" / "SPEC.md").exists())
+            self.assertTrue((target_wt / "docs" / "tasks" / "active" / "py-fail-task" / "SPEC.md").exists())
 
     def test_python_bootstrap_malformed_json_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -523,3 +523,5 @@ class TaskStartBehavioralTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

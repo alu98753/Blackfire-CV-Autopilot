@@ -1,4 +1,4 @@
-# Development Tasks
+﻿# Development Tasks
 
 `docs/tasks/` is the canonical home for new development work that is ready to be specified, implemented, reviewed, or verified.
 
@@ -7,14 +7,14 @@
 Each active task uses one directory:
 
 ```text
-docs/tasks/<task-id>/
-├─ SPEC.md
-├─ task.json
-├─ CONTEXT.md
-├─ EVIDENCE.md
-└─ reviews/
-   ├─ spec-review.md
-   └─ regression-review.md
+docs/tasks/active/<task-id>/
+?? SPEC.md
+?? task.json
+?? CONTEXT.md
+?? EVIDENCE.md
+?? reviews/
+   ?? spec-review.md
+   ?? regression-review.md
 ```
 
 Only `SPEC.md` is the normative behavioral contract. The other files are execution metadata or evidence and must not silently redefine the spec.
@@ -56,7 +56,7 @@ Rules:
 idea / future work
   -> docs/tasks/BACKLOG.md
   -> ChatGPT lightweight repository survey
-  -> promote to docs/tasks/<task-id>/
+  -> promote to docs/tasks/active/<task-id>/
   -> Draft SPEC.md + task.json
   -> OpenCode Scout creates CONTEXT.md
   -> ChatGPT re-checks code / architecture using Scout evidence
@@ -78,7 +78,7 @@ Do not create a global `current-task` marker. This repository uses multiple perm
 
 `docs/tasks/BACKLOG.md` is the single shared intake/index for new ideas, unresolved bugs, follow-up observations, and future task candidates that are not yet promoted into a formal task.
 
-- Do **not** create `docs/tasks/<task-id>/backlog.md` for task-local follow-up ideas.
+- Do **not** create `docs/tasks/active/<task-id>/backlog.md` for task-local follow-up ideas.
 - While a task is active, append short follow-up observations to the shared `docs/tasks/BACKLOG.md`; include enough context or the originating task id to recover intent later.
 - Once a backlog item is activated, promote it into its own `docs/tasks/<new-task-id>/SPEC.md` + `task.json` and avoid keeping two active SSOT descriptions.
 - AI-workflow roadmap items remain owned by `docs/architecture/ai_development_workflow_roadmap.md`; the shared backlog may hold a brief intake note only until that item is promoted or incorporated into the roadmap.
@@ -95,7 +95,7 @@ Verification runs through:
 
 Key execution contracts:
 - `spec-reviewer` and `regression-reviewer` execute concurrently using an isolated two-slot process coordinator.
-- Each canonical review artifact (`docs/tasks/<task-id>/reviews/*.md`) carries an embedded machine-readable fingerprint comment:
+- Each canonical review artifact (`docs/tasks/active/<task-id>/reviews/*.md`) carries an embedded machine-readable fingerprint comment:
   `<!-- blackfire-gate-fingerprint: {"schema":1,"role":"...","hash":"..."} -->`
 - Each reviewer stage is independently evaluated on each Gate run:
   - If a valid canonical review artifact exists with a matching input fingerprint, the stage is reused without launching that reviewer process.
@@ -108,7 +108,7 @@ Key execution contracts:
 
 ## Task-history retention vs local cleanup
 
-`task_cleanup.ps1` is a local execution/worktree cleanup operation. It does not imply deletion of tracked files under `docs/tasks/<task-id>/`.
+`task_cleanup.ps1` is a local execution/worktree cleanup operation. It does not imply deletion of tracked files under `docs/tasks/active/<task-id>/`.
 
 Tracked task packages remain repository history unless an explicit archival/deletion policy or user-authorized task says otherwise. Do not equate branch/worktree cleanup with tracked-history deletion.
 
@@ -148,4 +148,5 @@ Rules:
 
 ## Legacy `docs/todos/`
 
-`docs/todos/` is frozen legacy storage. Do not add new tasks there. When an existing legacy item becomes active work, migrate the relevant material into a new `docs/tasks/<task-id>/SPEC.md` and then handle cleanup through the normal branch closeout / canonical archival process.
+`docs/todos/` is frozen legacy storage. Do not add new tasks there. When an existing legacy item becomes active work, migrate the relevant material into a new `docs/tasks/active/<task-id>/SPEC.md` and then handle cleanup through the normal branch closeout / canonical archival process.
+
