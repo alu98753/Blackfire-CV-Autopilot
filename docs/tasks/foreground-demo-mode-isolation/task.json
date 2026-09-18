@@ -1,0 +1,42 @@
+{
+  "id": "foreground-demo-mode-isolation",
+  "base_ref": "origin/main",
+  "base_sha": "145522e4a7fbb773c45f10fb358ce310c0b095d6",
+  "scope": [
+    "cli/arguments.py",
+    "main.py",
+    "runtime/bootstrap.py",
+    "actions/mouse.py",
+    "capture/screen.py",
+    "utils/steam_launcher.py",
+    "states/state_machine.py",
+    "states/exceptions/subflows/game_relaunch.py",
+    "tests/test_behavior_main_entrypoint.py",
+    "tests/test_screen_capturer_architecture.py",
+    "tests/test_mouse_refactor.py",
+    "tests/test_mouse_coordinates.py",
+    "tests/test_game_process_lifecycle.py",
+    "docs/architecture/project_arch_greenfield_lite_v1.md",
+    "docs/tasks/foreground-demo-mode-isolation/"
+  ],
+  "focused_tests": [
+    "tests.test_behavior_main_entrypoint",
+    "tests.test_screen_capturer_architecture",
+    "tests.test_mouse_refactor",
+    "tests.test_mouse_coordinates",
+    "tests.test_game_process_lifecycle"
+  ],
+  "models": {
+    "scout": null,
+    "review": null
+  },
+  "notes": {
+    "status": "Draft",
+    "phase": "phase-2",
+    "implementation_blocked_until_final": true,
+    "goal": "Isolate foreground visible/physical I/O as an explicit demo compatibility path and compose backend production I/O without broad runtime backend_mode branching.",
+    "phase_1_dependency": "backend-default-runtime-mode merged into main at 145522e4a7fbb773c45f10fb358ce310c0b095d6.",
+    "critical_invariant": "Production backend I/O failure must never silently fall back to foreground capture or physical input.",
+    "workflow": "Run task_start.ps1, then ai_scout.ps1. Scout provides evidence only; ChatGPT + user own Final SPEC. Gemini/Antigravity must not implement while Draft."
+  }
+}
