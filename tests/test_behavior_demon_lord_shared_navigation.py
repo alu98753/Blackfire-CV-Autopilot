@@ -188,6 +188,28 @@ class TestDemonLordSharedNavigationIntegration(unittest.TestCase):
             [call.args[1] for call in self.machine.matcher.match.call_args_list],
         )
 
+    @patch("states.handlers.demon_lords.execute_lobby_tab_route", return_value=False)
+    @patch("states.handlers.demon_lords.time.sleep")
+    def test_handler_miss_exhaustion_reacquires_subscene_before_localization(
+        self, _sleep, _route
+    ):
+        self.handler._handle_popup_guards = MagicMock(return_value=False)
+        self.handler.classify_subscene = MagicMock(
+            return_value=DemonSubScene.CARD_SELECTION
+        )
+        self._evidence(["demon_lords/boss_a.png"])
+        self.handler.handle(self.screen, self.rect)
+
+        self._evidence([])
+        for _ in range(len(self.catalog)):
+            self.handler.handle(self.screen, self.rect)
+        self.assertIsNone(self.handler.demon_card_session)
+
+        self._evidence(["demon_lords/boss_a.png"])
+        self.handler.handle(self.screen, self.rect)
+        self.assertTrue(self.handler.demon_card_session.owns_tracking)
+        self.assertEqual(self.handler.classify_subscene.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

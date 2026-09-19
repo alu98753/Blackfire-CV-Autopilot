@@ -242,6 +242,41 @@ class TestStageSharedNavigationIntegration(unittest.TestCase):
             [call.args[1] for call in self.machine.matcher.match.call_args_list],
         )
 
+    @patch("states.handlers.navigation.os.path.exists", return_value=False)
+    @patch("states.handlers.navigation.time.sleep")
+    def test_handle_miss_exhaustion_releases_then_reacquires(self, _sleep, _exists):
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.machine.matcher
+        self.handler.scene_detector.detect.return_value = self.scene
+        self._evidence(["stages/level1_sky_plains.png"])
+        self.handler.handle(self.screen, self.rect)
+
+        self._evidence([])
+        for _ in range(len(self.catalog) - 1):
+            self.handler.handle(self.screen, self.rect)
+            self.assertIsNotNone(self.handler.stage_card_session)
+        self.handler.handle(self.screen, self.rect)
+        self.assertIsNone(self.handler.stage_card_session)
+        self.assertEqual(self.handler.scene_detector.detect.call_count, 1)
+
+        self._evidence(["stages/level1_sky_plains.png"])
+        self.handler.handle(self.screen, self.rect)
+        self.assertEqual(self.handler.scene_detector.detect.call_count, 2)
+        self.assertTrue(self.handler.stage_card_session.owns_tracking)
+
+    def test_production_contradictory_localization_releases_tracking(self):
+        lower = next(entry.template for entry in self.catalog if entry.index == 5)
+        upper = next(entry.template for entry in self.catalog if entry.index == 7)
+        self._evidence([lower, upper])
+
+        self.assertTrue(
+            self.handler._handle_stage_shared_navigation(
+                self.screen, self.rect, self.scene
+            )
+        )
+        self.assertFalse(self.handler.stage_card_session.owns_tracking)
+        self.machine.mouse.drag.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

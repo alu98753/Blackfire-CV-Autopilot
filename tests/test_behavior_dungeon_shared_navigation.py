@@ -219,6 +219,22 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
             [call.args[1] for call in self.machine.matcher.match.call_args_list],
         )
 
+    @patch("states.handlers.navigation.time.sleep")
+    def test_same_index_with_changed_semantic_entry_invalidates(self, _sleep):
+        self._evidence(["dungeons/a.png"])
+        self.handler._handle_fixed_dungeon_navigation(self.screen, self.rect, self.scene)
+        self.machine.config["dungeon_entries"][2] = "dungeons/c_reloaded.png"
+        self.machine.matcher.reset_mock()
+
+        self.assertFalse(
+            self.handler._handle_dungeon_tracking_fast_path(self.screen, self.rect)
+        )
+        self.assertIsNone(self.handler.dungeon_card_session)
+        self.assertNotIn(
+            "dungeons/c.png",
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+        )
+
     @patch.object(NavigationHandler, "_handle_primary_card_alignment", return_value=False)
     @patch("states.handlers.navigation.NavigationDecisionExecutor.execute", return_value=False)
     @patch("states.handlers.navigation.os.path.exists", return_value=False)

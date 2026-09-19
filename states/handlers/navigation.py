@@ -345,7 +345,20 @@ class NavigationHandler(BaseStateHandler):
         if config.get("type") not in {"dungeon", "mix"} or target_index is None:
             session.invalidate_cross_mode_action()
             return False
-        if target_index != session.target_index:
+        catalog = dungeon_navigation_catalog(
+            custom_names=config.get("dungeon_names"),
+            custom_entries=config.get("dungeon_entries"),
+        )
+        target_key = catalog[target_index - 1].key
+        current_template = catalog[target_index - 1].template
+        previous_template = getattr(
+            getattr(self.dungeon_card_navigator, "target", None), "template", None
+        )
+        if (
+            target_index != session.target_index
+            or target_key != session.target_key
+            or current_template != previous_template
+        ):
             session.invalidate_target_change()
             return False
         return True
