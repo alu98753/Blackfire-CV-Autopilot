@@ -32,6 +32,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
             "blood_altar": {"enabled": True, "name": "血之祭壇獻祭"},
             "jewelry_workshop": {"enabled": True, "name": "珠寶加工廠出售"},
             "bulletin_board": {"enabled": True, "name": "懸賞告示牌"},
+            "lord_boss": {"enabled": True, "name": "首領討伐"},
         }
         self.patcher = patch("config.SUBFLOW_CONFIGS", self.mock_subflow_configs)
         self.patcher.start()
@@ -566,6 +567,8 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
             scheduled_lord = sm.evaluate_and_schedule_daily_pipeline()
             self.assertTrue(scheduled_lord)
+            self.assertEqual(sm.current_town_subflow, "lord_boss")
+            sm.dispatch_current_town_subflow()
             self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
     def test_tier1_5_demon_lords_disabled_skips_to_lord_boss(self):
@@ -586,6 +589,8 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         with patch("config.SUBFLOW_CONFIGS", custom_subflow_configs):
             scheduled = sm.evaluate_and_schedule_daily_pipeline()
             self.assertTrue(scheduled)
+            self.assertEqual(sm.current_town_subflow, "lord_boss")
+            sm.dispatch_current_town_subflow()
             self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
 class TestTierConfigMatrix(unittest.TestCase):
