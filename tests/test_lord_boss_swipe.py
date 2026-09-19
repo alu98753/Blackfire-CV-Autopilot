@@ -5,6 +5,8 @@ import time
 from unittest.mock import MagicMock, patch
 from states.handlers.lord_boss import LordBossHandler
 from config import GAME_CONFIGS
+from states.navigation_progress import NavigationProgress, NavigationProgressSettings
+from utils.scene_snapshot import TabId
 from tests.support.fake_clock import FakeClock
 
 class TestLordBossSwipeLogic(unittest.TestCase):
@@ -113,6 +115,50 @@ class TestLordBossSwipeLogic(unittest.TestCase):
 
         # 驗證發動向左滑動: 100 + 600 = 700 -> 100 + 400 = 500, duration=0.8, inertia=False
         self.mock_mouse.drag.assert_called_once_with(700, 450, 500, 450, duration=0.8, inertia=False)
+
+    @patch("os.path.exists", return_value=True)
+    def test_lord_subflow_uses_declarative_tab_route_and_waits_for_scene(self, _mock_exists):
+        """The real Lord handler path commits the tab action and requires later evidence."""
+        self.mock_machine.current_town_subflow = "lord_boss"
+        self.mock_machine.need_diamond_collection = False
+        self.mock_machine.enable_bread = False
+        self.mock_machine.need_bread_collection = False
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+        self.mock_machine.navigation_progress = NavigationProgress(
+            NavigationProgressSettings(5.0, 2, 60.0, 2)
+        )
+        self.mock_matcher.match.side_effect = lambda _img, template, **_kwargs: (
+            ((333, 444), 0.95)
+            if template == "load/Lord_entry.png"
+            else (None, 0.0)
+        )
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False, False, 0.10, 0.10
+        )
+        screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
+
+        self.handler.handle(screen_img, self.rect)
+
+        self.mock_mouse.click.assert_called_once()
+        self.assertEqual(
+            self.mock_machine.navigation_progress.in_flight.expected_tab,
+            TabId.LORD,
+        )
+
+        # The click itself is not success; only the next frame's active-tab evidence clears it.
+        self.mock_mouse.reset_mock()
+        self.mock_matcher.match.side_effect = lambda _img, template, **_kwargs: (
+            ((333, 444), 0.95)
+            if template == "load/Lord_entry_after.png"
+            else (None, 0.0)
+        )
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False, False, 0.10, 0.10
+        )
+        self.handler.has_reset_to_left = True
+        self.handler.handle(screen_img, self.rect)
+        self.assertIsNone(self.mock_machine.navigation_progress.in_flight)
 
     @patch("states.handlers.lord_boss.time.sleep")
     @patch("states.handlers.lord_boss.detect_cooldown_sign_and_time")

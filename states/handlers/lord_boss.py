@@ -6,6 +6,8 @@ from states.handlers.base import BaseStateHandler
 from utils.time_parser import format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardAlignmentStatus, CardListNavigator
+from utils.scene_snapshot import TabId
+from states.navigation_routing import execute_lobby_tab_route
 
 class LordBossHandler(BaseStateHandler):
     """
@@ -157,6 +159,9 @@ class LordBossHandler(BaseStateHandler):
                 if hasattr(dm, "record_subflow_completed"):
                     dm.record_subflow_completed("lord_boss")
             self.machine.pop_and_next_town_subflow()
+            return True
+
+        if execute_lobby_tab_route(self, screen_img, rect, TabId.LORD):
             return True
 
         # 0. 全域最高優先防護：若畫面上出現歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防止遮罩擋住選關與大門

@@ -150,7 +150,7 @@ class NavigationIntentPolicy:
 
         target_tab = self._target_tab(intent)
         tab_edge = None
-        if intent.intent_id == IntentId.PRIMARY_NAVIGATION and target_tab is not None:
+        if intent.intent_id in {IntentId.PRIMARY_NAVIGATION, IntentId.TOWN_SUBFLOW} and target_tab is not None:
             tab_edge = NavigationTable().next_tab_edge(scene, target_tab)
         if tab_edge is not None:
             return ActionDecision.click(
@@ -188,6 +188,8 @@ class NavigationIntentPolicy:
             "domain": TabId.DOMAIN,
             "lord": TabId.LORD,
             "demon_lord": TabId.DEMON_LORD,
+            "lord_boss": TabId.LORD,
+            "demon_lords": TabId.DEMON_LORD,
         }
         return values.get(payload.mode)
 

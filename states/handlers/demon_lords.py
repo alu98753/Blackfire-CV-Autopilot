@@ -4,6 +4,8 @@ import logging
 from enum import Enum
 from states.handlers.base import BaseStateHandler
 from utils.card_navigator import CardAlignmentStatus, CardListNavigator
+from utils.scene_snapshot import TabId
+from states.navigation_routing import execute_lobby_tab_route
 from utils.debug_artifacts import write_debug_image
 
 class DemonSubScene(str, Enum):
@@ -62,6 +64,9 @@ class DemonLordsHandler(BaseStateHandler):
 
         if self.launch_pending:
             return self._observe_launch_outcome(screen_img)
+
+        if execute_lobby_tab_route(self, screen_img, rect, TabId.DEMON_LORD):
+            return True
 
         subscene = self.classify_subscene(screen_img)
         dispatch = {

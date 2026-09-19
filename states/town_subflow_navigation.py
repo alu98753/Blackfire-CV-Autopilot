@@ -10,6 +10,7 @@ from states.navigation_intent import (
     DecisionKind,
     IntentId,
     PostconditionId,
+    PrimaryPayload,
     ReasonCode,
 )
 from states.navigation_progress import NavigationProgress, ProgressStatus
@@ -148,7 +149,14 @@ class TownSubflowPreconditionController:
 
         # Phase 2: Physically verified in Town (SceneId.TOWN).
         # Execute business dispatch / red-dot check / entry wait.
-        self.machine.active_navigation_intent = ActiveIntent(IntentId.TOWN_SUBFLOW)
+        target_mode = {
+            "lord_boss": "lord",
+            "demon_lords": "demon_lord",
+        }.get(flow_key, flow_key)
+        self.machine.active_navigation_intent = ActiveIntent(
+            IntentId.TOWN_SUBFLOW,
+            PrimaryPayload(target_mode),
+        )
         decision = self.policy.resolve(scene, flow_key)
         if decision.kind == DecisionKind.WAIT:
             self._reset_no_red_dot()

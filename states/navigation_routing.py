@@ -13,6 +13,7 @@ from states.navigation_intent import (
     IntentSnapshot,
     NavigationIntentPolicy,
     IntentId,
+    PrimaryPayload,
     PostconditionId,
     ReasonCode,
 )
@@ -30,6 +31,7 @@ from utils.scene_snapshot import (
     next_navigation_frame_id,
     snapshot_from_scene_info,
 )
+from utils.scene_detector import SceneDetector
 from utils.scene_types import LOBBY_TAB_BY_NAME
 from utils.scene_types import SceneId
 
@@ -149,12 +151,18 @@ def resolve_expected_tab_from_machine(machine) -> Optional[TabId]:
     # 檢查是否有正在進行的 activity intent (如首領或魔王討伐)
     active_intent = getattr(machine, "active_navigation_intent", None)
     if active_intent and getattr(active_intent, "intent_id", None) == IntentId.TOWN_SUBFLOW:
-        payload = getattr(active_intent, "payload", {}) or {}
-        subflow = payload.get("flow_type") or payload.get("subflow")
-        if subflow == "lord_boss":
+        payload = getattr(active_intent, "primary_payload", None)
+        subflow = getattr(payload, "mode", None)
+        if subflow in {"lord", "lord_boss"}:
             return TabId.LORD
-        if subflow == "demon_lord":
+        if subflow in {"demon_lord", "demon_lords"}:
             return TabId.DEMON_LORD
+
+    current_subflow = getattr(machine, "current_town_subflow", None)
+    if current_subflow == "lord_boss":
+        return TabId.LORD
+    if current_subflow == "demon_lords":
+        return TabId.DEMON_LORD
 
     _CONFIG_TYPE_TO_TAB: dict[str, TabId] = {
         "stage": TabId.STAGE,
@@ -220,7 +228,7 @@ def resolve_detection_request(machine) -> SceneDetectionRequest:
     )
 
 
-def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
+def resolve_navigation_context(machine, scene_info, *, target_tab: Optional[TabId] = None) -> NavigationRoutingContext:
     start_template = (machine.config or {}).get("lobby_start_btn", "stages/start.png")
     now = _monotonic_now(machine)
     scene = snapshot_from_scene_info(
@@ -258,7 +266,11 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
             observed_action,
         )
     if progress_status == ProgressStatus.WAITING:
-        active_intent = ActiveIntent(progress.in_flight.intent_id)
+        active_intent = (
+            _lobby_tab_intent(target_tab)
+            if target_tab is not None
+            else ActiveIntent(progress.in_flight.intent_id)
+        )
         decision = ActionDecision.wait(ReasonCode.IN_FLIGHT_ACTION_WAITING)
         machine.active_navigation_intent = active_intent
         return NavigationRoutingContext(
@@ -270,7 +282,11 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
             observed_action,
         )
 
-    active_intent = _select_available_intent(policy, intent_snapshot, progress, now)
+    active_intent = (
+        _lobby_tab_intent(target_tab)
+        if target_tab is not None
+        else _select_available_intent(policy, intent_snapshot, progress, now)
+    )
     machine.active_navigation_intent = active_intent
     decision = policy.resolve(scene, active_intent)
     if progress_status == ProgressStatus.TIMED_OUT and decision.kind != DecisionKind.WAIT:
@@ -285,15 +301,64 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
     )
 
 
+def _lobby_tab_intent(target_tab: TabId) -> ActiveIntent:
+    return ActiveIntent(
+        IntentId.TOWN_SUBFLOW,
+        PrimaryPayload(target_tab.value),
+    )
+
+
+def execute_lobby_tab_route(handler, screen_img, rect, target_tab: TabId) -> bool:
+    """Run the declarative tab route before a subflow handler's legacy fallback."""
+    detector = getattr(handler, "scene_detector", None)
+    if detector is None or getattr(detector, "matcher", None) is not handler.matcher:
+        detector = SceneDetector(handler.matcher)
+        handler.scene_detector = detector
+
+    request = SceneDetectionRequest(
+        profile=TAB_ID_TO_PROFILE[target_tab],
+        expected_tab=target_tab,
+        tab_scope=LobbyTabScope.EXPECTED_TAB,
+        reason="town_subflow_lobby_tab",
+        allow_battle_evidence=True,
+    )
+    scene_info = detector.detect(
+        screen_img,
+        machine=handler.machine,
+        request=request,
+    )
+    context = resolve_navigation_context(
+        handler.machine,
+        scene_info,
+        target_tab=target_tab,
+    )
+    if (
+        context.progress_status == ProgressStatus.WAITING
+        or context.decision.action == ActionId.SWITCH_LOBBY_TAB
+    ):
+        return NavigationDecisionExecutor(handler).execute(context, screen_img, rect)
+    return False
+
+
 def _resolve_tab_templates(machine):
     config = getattr(machine, "config", None) or {}
+    config_type = config.get("type")
     result = {}
     for tab_name, definition in LOBBY_TAB_BY_NAME.items():
         active = definition.active_template
         inactive = definition.inactive_template
-        if definition.config_active_key:
+        # Lord and Demon Lord handlers share the generic entry_btn keys.  Those
+        # overrides describe the currently configured subflow only; applying
+        # them to both tab definitions would alias one tab's semantic element
+        # to the other tab's template.
+        shared_entry_tab = {
+            "lord": {"lord", "lord_boss"},
+            "demon_lord": {"demon_lord", "demon_lords"},
+        }.get(tab_name)
+        use_config_entry = shared_entry_tab is None or config_type in shared_entry_tab
+        if definition.config_active_key and use_config_entry:
             active = config.get(definition.config_active_key) or active
-        if definition.config_inactive_key:
+        if definition.config_inactive_key and use_config_entry:
             inactive = config.get(definition.config_inactive_key) or inactive
         result[TabId(tab_name)] = (active, inactive)
     return result
