@@ -87,7 +87,6 @@ DEFAULT_NOTIFICATION_LANGUAGE: str = "zh-TW"
 CONFIG_DIR = Path(__file__).with_name("config")
 USER_DATA_DIR = Path(__file__).with_name("user_data")
 DEFAULTS_PATH = CONFIG_DIR / "defaults.toml"
-LOCAL_CONFIG_PATH = CONFIG_DIR / "local.toml"
 _ACTIVE_PROFILE: str = "native"
 _PROFILE_MANAGER = None
 
@@ -205,7 +204,7 @@ def validate_profile_mode_overrides(override: dict, canonical_defaults: dict) ->
 
 
 def get_defaults_config() -> dict:
-    """Return defaults merged with the optional profile/local runtime override file."""
+    """Return canonical defaults merged with the optional profile override file."""
     defaults = _DEFAULTS_MANAGER.snapshot()
     override = _get_override_config()
     validate_profile_mode_overrides(override, defaults)
@@ -263,15 +262,14 @@ def get_nemesis_policy() -> dict[str, list[str]]:
 
 
 def _get_override_config() -> dict:
-    """Load user_data/<profile>/config.toml (or fallback config/local.toml) transactionally when it exists."""
+    """Load the active profile override transactionally when it exists."""
     global _PROFILE_MANAGER
     profile_path = get_profile_config_path()
-    target_path = profile_path if profile_path.exists() else LOCAL_CONFIG_PATH
-    if not target_path.exists():
+    if not profile_path.exists():
         _PROFILE_MANAGER = None
         return {}
-    if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
-        _PROFILE_MANAGER = TomlConfigManager(target_path, default={})
+    if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != profile_path:
+        _PROFILE_MANAGER = TomlConfigManager(profile_path, default={})
     return _normalize_legacy_override(_PROFILE_MANAGER.snapshot())
 
 
@@ -833,7 +831,7 @@ def refresh_runtime_config() -> bool:
     override_changed = False
     
     profile_path = get_profile_config_path()
-    target_path = profile_path if profile_path.exists() else LOCAL_CONFIG_PATH
+    target_path = profile_path
     
     if target_path.exists():
         if _PROFILE_MANAGER is None or _PROFILE_MANAGER.path != target_path:
@@ -853,8 +851,7 @@ def refresh_runtime_config() -> bool:
         logging.error("[HotReload] ignored unsupported TOML config_version")
         return False
     _reapply_all_settings(settings)
-    target_desc = f"user_data/{_ACTIVE_PROFILE}/config.toml" if target_path == profile_path else "config/local.toml"
-    logging.info(f"[HotReload] applied config/defaults.toml and {target_desc}")
+    logging.info(f"[HotReload] applied config/defaults.toml and user_data/{_ACTIVE_PROFILE}/config.toml")
     return True
 
 

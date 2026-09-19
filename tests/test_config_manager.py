@@ -73,10 +73,9 @@ class TestJsonConfigManager(unittest.TestCase):
         self.assertEqual(settings["config_version"], 1)
         self.assertIn("dungeon", settings["primary_modes"])
 
-    def test_local_toml_overrides_mode_and_can_be_removed(self):
+    def test_missing_profile_override_uses_defaults(self):
         import config
 
-        original_path = config.LOCAL_CONFIG_PATH
         original_manager = config._PROFILE_MANAGER
         original_settings = deepcopy(config._SETTINGS)
         original_exports = {
@@ -90,24 +89,13 @@ class TestJsonConfigManager(unittest.TestCase):
         original_profile = config.get_active_profile()
         try:
             with tempfile.TemporaryDirectory() as directory:
-                local_path = Path(directory) / "local.toml"
-                local_path.write_text(
-                    "[primary_modes.dungeon]\nbless_mode = 'exp'\n",
-                    encoding="utf-8",
-                )
-                config.LOCAL_CONFIG_PATH = local_path
                 config._ACTIVE_PROFILE = "non_existent_profile_for_test"
                 config._PROFILE_MANAGER = None
 
-                self.assertTrue(config.refresh_runtime_config())
-                self.assertEqual(config.get_runtime_game_config("dungeon")["bless_mode"], "exp")
-
-                local_path.unlink()
-                self.assertTrue(config.refresh_runtime_config())
+                config.refresh_runtime_config()
                 self.assertEqual(config.get_runtime_game_config("dungeon")["bless_mode"], "combat")
         finally:
             config._ACTIVE_PROFILE = original_profile
-            config.LOCAL_CONFIG_PATH = original_path
             config._PROFILE_MANAGER = original_manager
             config._SETTINGS = original_settings
             config._replace_mapping(config.GLOBAL_SETTINGS, original_exports["global"])

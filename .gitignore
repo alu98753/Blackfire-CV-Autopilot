@@ -46,7 +46,6 @@ scratch/
 # User runtime data & state persistence
 user_data/
 user_data_test_temp/
-config/local.toml
 
 # Application-exported resource files are local-only.
 *.tres
