@@ -229,10 +229,12 @@ Clone 專案並建立虛擬環境：
 git clone https://github.com/alu98753/Blackfire-CV-Autopilot.git
 cd Blackfire-CV-Autopilot
 
-python -m venv .venv
-.\.venv\Scripts\activate
+py -0p
+# 請確認已安裝 Python 3.11.2；必要時使用該版本的完整路徑：
+& "C:\Path\To\Python311\python.exe" -m venv .venv
 
-pip install -r requirements.txt
+.\.venv\Scripts\python.exe --version
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 主要 Runtime Dependency 包含 OpenCV、MSS、PyAutoGUI、NumPy、Pillow 與 pywin32。
