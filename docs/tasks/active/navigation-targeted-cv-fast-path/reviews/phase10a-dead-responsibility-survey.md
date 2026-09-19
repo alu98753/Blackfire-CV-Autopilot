@@ -102,6 +102,5 @@ For fixed Dungeon hot reload, the Phase 9 implementation compares the resolved t
 
 - DELETE_CANDIDATE count: **0**
 - SPLIT count: **9**
-- KEEP count: **1**
+- KEEP count: **2**
 - UNKNOWN count: **0**
-
