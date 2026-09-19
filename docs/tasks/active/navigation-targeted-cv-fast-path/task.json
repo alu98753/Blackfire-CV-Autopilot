@@ -26,7 +26,20 @@
     "tests/test_domain_common_behavior.py",
     "tests/test_lord_boss_subflow.py",
     "tests/test_lord_boss_swipe.py",
-    "tests/test_demon_lords_subflow.py"
+    "tests/test_demon_lords_subflow.py",
+    "utils/navigation_catalog.py",
+    "utils/shared_card_navigator.py",
+    "utils/card_navigation_session.py",
+    "tests/test_behavior_card_navigation_session.py",
+    "tests/test_behavior_navigation_catalog.py",
+    "tests/test_behavior_routing_observability.py",
+    "tests/test_behavior_stage_shared_navigation.py",
+    "tests/test_behavior_domain_shared_navigation.py",
+    "tests/test_behavior_dungeon_shared_navigation.py",
+    "tests/test_behavior_lord_shared_navigation.py",
+    "tests/test_behavior_demon_lord_shared_navigation.py",
+    "tests/test_behavior_dungeon_cards.py",
+    "tests/test_behavior_dungeon_scenarios.py"
   ],
   "focused_tests": [
     "tests/test_behavior_navigation.py",
@@ -39,7 +52,17 @@
     "tests/test_domain_common_behavior.py",
     "tests/test_lord_boss_subflow.py",
     "tests/test_lord_boss_swipe.py",
-    "tests/test_demon_lords_subflow.py"
+    "tests/test_demon_lords_subflow.py",
+    "tests/test_behavior_card_navigation_session.py",
+    "tests/test_behavior_navigation_catalog.py",
+    "tests/test_behavior_routing_observability.py",
+    "tests/test_behavior_stage_shared_navigation.py",
+    "tests/test_behavior_domain_shared_navigation.py",
+    "tests/test_behavior_dungeon_shared_navigation.py",
+    "tests/test_behavior_lord_shared_navigation.py",
+    "tests/test_behavior_demon_lord_shared_navigation.py",
+    "tests/test_behavior_dungeon_cards.py",
+    "tests/test_behavior_dungeon_scenarios.py"
   ],
   "models": {
     "scout": [
