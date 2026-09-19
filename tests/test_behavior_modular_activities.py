@@ -107,7 +107,9 @@ class TestBehaviorModularActivities(unittest.TestCase):
         self.state_machine.daily_manager.get_available_lord_bosses.return_value = ["lord_spider"]
         handler.handle(mock_img, self.rect)
 
-        # 斷言：自動喚醒並轉移至 LORD_BOSS
+        # 斷言：自動喚醒並發起 lord_boss 子流程，派發後轉移至 LORD_BOSS
+        self.assertEqual(self.state_machine.current_town_subflow, "lord_boss")
+        self.state_machine.dispatch_current_town_subflow()
         self.assertEqual(self.state_machine.current_state, self.state_machine.STATE_LORD_BOSS)
 
     # =========================================================================
