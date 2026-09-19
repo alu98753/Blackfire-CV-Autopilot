@@ -474,6 +474,359 @@ Expected production/reference surfaces include:
 - `config/defaults.toml`
 - one narrowly scoped new shared catalog/navigation helper if needed
 
+
+## Required phased migration order
+
+Implementation MUST proceed in the following order. A later phase must not begin until the previous phase has focused test evidence for its exit criteria. Do not collapse several phases into one rewrite merely because the final architecture is already known.
+
+### Phase 0 — Baseline and regression lock
+
+Purpose:
+- Freeze current verified behavior before routing/card-navigation changes.
+- Make downstream ownership boundaries observable in tests.
+
+Required work:
+- Run current focused navigation/card-selection tests.
+- Add characterization tests only where an upcoming phase otherwise has no regression boundary.
+- Record the current owner boundary for lobby-mode routing, main-card selection, and post-card behavior.
+
+Must not change:
+- production navigation behavior;
+- CV scope;
+- swipe geometry;
+- reset-to-left behavior;
+- downstream Stage/Dungeon/Domain/Lord/Demon-Lord logic.
+
+Exit criteria:
+- focused tests are green or pre-existing failures are explicitly documented;
+- tests can detect accidental changes to Stage sub-stage navigation, Dungeon status/fight/start handoff, Domain start/explore handoff, Lord cooldown/start/fight handoff, and Demon Lord stone/prepare/start handoff.
+
+### Phase 1 — Declarative lobby mode switching
+
+Purpose:
+- Move only the responsibility for switching among Stage, Domain, Dungeon, Lord, and Demon Lord into the declarative routing layer.
+- Do not change card localization or scrolling yet.
+
+Required work:
+- Expose semantic clickable elements for all five lobby tabs.
+- Make NavigationIntentPolicy / NavigationTable target-aware.
+- Add an explicit switch-tab action/postcondition contract.
+- Bind the in-flight action to expected_tab.
+- Require later current-frame Scene evidence showing expected_tab active before the switch succeeds.
+
+Compatibility rule:
+- Keep legacy tab-switch mechanisms physically present as bounded fallback during this phase.
+- Do not delete generic navigation_path tab clicking, mix-specific Stage/Dungeon switching, or _switch_to_stage_or_back() yet.
+- Tests must nevertheless prove that supported normal-path transitions use the new declarative route first.
+
+Must not change:
+- main-card search;
+- reset-first behavior;
+- card catalogs;
+- card swipe logic;
+- Scene CV suppression;
+- post-card behavior.
+
+Exit criteria:
+- representative transitions Stage↔Dungeon, Stage↔Domain, Stage↔Lord, Stage↔Demon Lord, plus generic Lobby→target tab are resolved declaratively;
+- clicking the target tab alone does not satisfy the postcondition;
+- transition succeeds only after Scene reports expected_tab active.
+
+### Phase 2 — Unified ordered card catalogs
+
+Purpose:
+- Establish one factual indexing contract before changing any scrolling.
+
+Required output:
+- Every scoped mode exposes stable 1-based navigation metadata equivalent to [(index, card_key, template), ...].
+- This metadata represents physical card order only.
+
+Authority by mode:
+- Stage: derive from base_stage_levels numeric level identity and canonical entry. Do not use raw stage_templates positions because aliases can shift positions.
+- Dungeon: reuse DungeonCatalog.
+- Domain: derive from canonical repository Domain declarations and each domain_entry_btn. Canonical declaration order becomes left-to-right navigation order.
+- Lord: formalize existing bosses declaration order as physical card order.
+- Demon Lord: formalize existing bosses declaration order as physical card order.
+
+Must not change:
+- tab routing behavior;
+- card CV;
+- scrolling;
+- reset-to-left;
+- target eligibility;
+- post-card behavior.
+
+Exit criteria:
+- all five modes resolve stable target index/template pairs;
+- Stage aliases do not alter semantic stage indices;
+- Domain additions automatically receive indices from canonical order;
+- Lord/Demon Lord availability filtering never renumbers physical positions;
+- Dungeon remains owned by DungeonCatalog.
+
+### Phase 3 — Shared card navigator in isolation
+
+Purpose:
+- Implement and test the shared card-search state machine before attaching it to production handlers.
+
+Shared responsibilities:
+- target-first localization;
+- one ordered-catalog localization pass;
+- visible index evidence;
+- direction derivation;
+- common page swipe request;
+- target-only tracking state;
+- miss counting;
+- relocalization;
+- reset-to-left fallback orchestration.
+
+Required semantics:
+- FOUND;
+- localized target is to higher indices;
+- localized target is to lower indices;
+- TRACKING;
+- RELOCALIZE;
+- NEED_RESET_LEFT;
+- CONTRADICTORY.
+
+Required localization order:
+1. Match committed target first.
+2. If target visible, return FOUND.
+3. Otherwise scan the ordered catalog once.
+4. Build visible_indices from actual CV observations.
+5. Derive direction from target_idx relative to observed indices.
+6. If no usable evidence exists, request reset-left fallback.
+
+Tracking rule:
+- Once direction exists, each search observation matches only the committed target.
+- Miss → common directional swipe → increment miss counter.
+- No exact post-swipe index may be inferred.
+
+Miss bound:
+- Default maximum target-tracking misses equals current catalog size.
+- Exhaustion invalidates localization and requests relocalization.
+- It must not immediately declare the target impossible or jump directly to reset-left.
+
+Must not change:
+- no production handler is migrated in this phase.
+
+Exit criteria:
+- initially visible target produces FOUND with zero reset/swipe;
+- lower visible indices produce higher-index direction;
+- higher visible indices produce lower-index direction;
+- contradictory observed range causes no blind swipe;
+- tracking matches target only;
+- miss exhaustion causes relocalization;
+- failed localization may request reset-left;
+- swipe history never creates a synthetic exact index.
+
+### Phase 4 — Migrate Stage main-card navigation
+
+Purpose:
+- Use Stage as the first production consumer because its sub-stage logic gives a clean handoff boundary.
+
+Required work:
+- Replace only Stage main-card localization/scroll/search with the shared navigator.
+- Flow becomes: Stage Scene confirmed → target Stage known → target-first localization → common directional navigation → FOUND → existing Stage card click/entry path.
+- Existing sub-stage behavior remains untouched.
+- Remove reset-first behavior from the Stage normal path.
+
+Temporary safety rule:
+- Do not suppress recurring Stage Scene/tab verification yet. Keep it as a safety net during integration.
+
+Must not change:
+- sub-stage scrolling;
+- sub-stage candidate scanning;
+- Stage post-card start/fight/result behavior;
+- general Scene CV policy.
+
+Exit criteria:
+- visible target causes no reset drag;
+- both navigation directions use the shared swipe primitive;
+- shared navigator releases ownership at FOUND;
+- all Stage sub-stage tests remain unchanged.
+
+### Phase 5 — Migrate Domain main-card navigation
+
+Purpose:
+- Prove the common algorithm works for a catalog expected to grow.
+
+Required work:
+- Use the ordered Domain catalog from Phase 2.
+- Apply target-first localization, real-index direction, shared swipe, and target tracking.
+- Do not special-case Domain because the current catalog is small.
+
+Temporary safety rule:
+- Keep recurring Domain Scene/tab verification enabled.
+
+Must not change:
+- Domain start behavior;
+- Domain explore transition;
+- Domain strategy selection;
+- treasure/explore logic;
+- Domain scheduler policy.
+
+Exit criteria:
+- visible Domain target short-circuits with no reset;
+- unseen Domain target uses catalog-derived direction;
+- adding another canonical Domain requires no new navigation branch;
+- existing Domain start/explore tests remain unchanged.
+
+### Phase 6 — Migrate Demon Lord card navigation
+
+Purpose:
+- Convert Demon Lord from target-first + reset fallback to target-first + localization + directional tracking.
+
+Required work:
+- Keep current target-first lookup.
+- On miss, localize visible Demon Lord cards, derive direction, use common swipe, then target-only tracking.
+- Reset-left becomes localization fallback only.
+
+Temporary safety rule:
+- Keep existing Demon Lord subscene classification active.
+
+Must not change:
+- target eligibility;
+- card click behavior after FOUND;
+- stone selection/insertion;
+- prepare modal;
+- start/fight/result behavior.
+
+Exit criteria:
+- visible target causes no reset;
+- absent target uses index-directed common swipe;
+- post-FOUND stone/preparation tests remain unchanged.
+
+### Phase 7 — Migrate fixed-target Dungeon navigation
+
+Purpose:
+- Remove the highest-cost repeated all-entry scan only after the shared navigator is already proven in simpler modes.
+
+Required work:
+- For a concrete committed Dungeon target: Scene confirmed → target-first localization → at most one catalog localization scan if target absent → direction → target-only tracking → FOUND → existing target-specific status logic.
+- Repeated all-dungeon_entries scans must disappear from target-tracking frames.
+
+Greedy Dungeon boundary:
+- Greedy target selection may still use broader evidence before a single target is committed.
+- Do not redesign greedy priority/eligibility semantics.
+- Once greedy logic commits one target index, shared navigation may take over.
+
+Temporary safety rule:
+- Keep recurring Dungeon Scene/tab verification until Phase 9.
+
+Must not change:
+- cooldown semantics;
+- locked-entry handling;
+- unavailable checks;
+- fight/start behavior;
+- exploration/combat;
+- greedy target selection.
+
+Exit criteria:
+- visible fixed target causes no reset/full-scan after target hit;
+- localization may scan the catalog once;
+- tracking frames match only target within the card-search layer;
+- FOUND hands back to existing Dungeon status/cooldown/locked logic;
+- existing Dungeon downstream tests remain unchanged.
+
+### Phase 8 — Migrate Lord after separating target selection from target navigation
+
+Purpose:
+- Prevent business target selection from being absorbed into the shared physical navigator.
+
+Required conceptual split:
+- Target Selection asks which Lord should be attempted.
+- Target Navigation asks where the already committed Lord card is.
+- Only Target Navigation belongs to the shared navigator.
+
+Required work:
+- Preserve existing availability/cooldown policy that chooses candidates.
+- Establish one unique committed target before invoking shared navigation.
+- Use full physical Lord catalog indices, not filtered available-list positions.
+- After commitment, do not repeatedly scan unrelated Lord card templates while scrolling.
+- On FOUND, return to existing cooldown OCR / click / start flow.
+
+Temporary safety rule:
+- Keep existing Lord tab verification until Phase 9.
+
+Must not change:
+- availability semantics;
+- cooldown update semantics;
+- cooldown OCR;
+- start/fight/result behavior.
+
+Exit criteria:
+- target-selection semantics remain unchanged;
+- availability filtering does not renumber physical indices;
+- committed target uses shared direction/tracking;
+- unrelated boss templates are not repeatedly matched after commitment;
+- downstream Lord behavior remains unchanged.
+
+### Phase 9 — Enable verified-session target-only CV
+
+Purpose:
+- Only after all five modes consume the shared session, suppress repeated Scene/tab CV during steady card tracking.
+
+Entry requirement:
+- Phases 4–8 must prove each shared session has explicit verified mode identity, committed target, target index, direction, miss count, and invalidation.
+
+Required behavior:
+- ACQUIRE / RELOCALIZE may run Scene/tab CV, target-first matching, and ordered-catalog localization.
+- TRACK must match exactly the committed target card template inside the card-search path.
+- TRACK must not re-match active tab, inactive tab, unrelated cards, first-card anchor, door, start, or other Scene templates inside that ownership window.
+
+Invalidation returns to Scene verification/localization on:
+- desired mode change;
+- committed target change;
+- cross-mode action;
+- miss-bound exhaustion;
+- contradictory localization;
+- handler/subflow reset;
+- recovery/relaunch;
+- target FOUND;
+- leaving card-selection surface.
+
+Safety boundary:
+- Do not remove global runtime safety mechanisms outside the card-search ownership window.
+- This phase suppresses duplicate perception only while a verified card-navigation session owns the search frame.
+
+Exit criteria:
+- matcher-call tests for every scoped mode show target-only card-search frames;
+- invalidation resumes Scene verification;
+- cross-mode switching cannot inherit previous verified mode/index knowledge.
+
+### Phase 10 — Remove proven-dead legacy responsibilities
+
+Purpose:
+- Remove only legacy responsibilities that earlier phases have replaced and tested.
+
+Eligible cleanup:
+- navigation_path responsibility for lobby tab switching;
+- mix-specific direct Stage/Dungeon tab switching that duplicates declarative routing;
+- _switch_to_stage_or_back() tab-routing responsibility where declarative routing owns it;
+- reset-first normal-path card alignment;
+- duplicated mode-specific horizontal card-search loops.
+
+Important constraint:
+- Do not delete an entire legacy function or navigation_path just because part of its responsibility moved.
+- If a legacy path still owns valid downstream behavior, keep that portion.
+- Cleanup unit is responsibility, not file size or code age.
+
+Exit criteria:
+- no normal-path lobby mode switch bypasses NavigationIntentPolicy / NavigationTable;
+- no scoped mode owns a second independent horizontal card-search algorithm;
+- no normal-path card navigation resets left before target-first localization;
+- dead branches are removed only after replacement coverage is proven;
+- all focused tests pass.
+
+## Phase-gate invariant
+
+Every phase must leave the branch runnable and testable.
+
+A production change in phase N must not depend on unfinished behavior planned for phase N+1.
+
+If implementation evidence invalidates a later-phase assumption, stop at the current safe phase, update the SPEC with that evidence, and do not widen implementation opportunistically.
+
+
 ## Acceptance criteria
 
 1. All five modes consume one shared card-navigation lifecycle.
