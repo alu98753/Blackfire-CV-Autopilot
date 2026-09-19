@@ -4,55 +4,132 @@ Status: Final
 
 ## Current implementation checkpoint (authoritative handoff)
 
-This section is the progress SSOT for context reconstruction. The historical phase sections below retain the original Final contract and rationale; they are not evidence that completed phases are still pending. `CONTEXT.md` is the original Scout evidence and must not be treated as the current implementation-status SSOT.
+This section is the current progress SSOT. The historical Phase 0–10 sections below are retained as the original Final contract and rationale; they are not evidence that deferred legacy-retirement work is still required before this task can close.
 
-Last reviewed production anchor before this checkpoint: `87ff4eb8d588ccacab1368301d576a5d6919a7c6`.
+### Checkpoint A — Shared Navigation Foundation
 
-### Completed
+Status: **Complete**
 
-- **Phases 0–9: complete.** Declarative five-tab routing, ordered catalogs, `SharedCardNavigator`, Stage/Domain/Demon Lord/fixed-Dungeon/Lord migrations, and verified-session target-only CV are implemented and reviewed.
-- **Phase 10A: complete.** Dead-responsibility survey established that cleanup units are responsibilities, not whole functions. See `reviews/phase10a-dead-responsibility-survey.md`.
-- **Phase 10B-1: complete.** Generic `navigation_path` no longer owns canonical normal Stage/Dungeon/Domain lobby-tab clicks; declarative routing is the normal owner.
-- **Phase 10B-2: complete survey/correction.** Canonical fixed-target Dungeon horizontal search is already fully deduplicated; remaining `swipe_towards_target()` ownership is greedy/compatibility, not canonical fixed search. See `reviews/phase10b2-fixed-dungeon-responsibility-survey.md`.
-- **Phase 10B-3: complete.** Dungeon shared fixed-target resolution and legacy compatibility resolution are explicit separate owners with their historical precedence/validation semantics preserved.
-- **Phase 10B-4: complete.** After canonical fixed Dungeon `FOUND`, the shared committed target index flows directly into target-only rescan/status/click; the canonical path no longer re-enters the legacy compatibility resolver.
-- **Phase 10B-5: complete.** Lord canonical shared reset recovery is decoupled from legacy `has_reset_to_left` / `reset_swipe_count` bookkeeping. Supported shared navigation no longer manufactures the sentinel that can hand physical search back to the legacy broad scan/direct-swipe path after later target/session clear. Explicit legacy/non-canonical compatibility remains isolated and preserved. Reviewed production commit: `e9cf7e49cfb22b4258783bd058e0f5c44746dcb1`. See `reviews/phase10b5-lord-legacy-navigation-survey.md` and `reviews/phase10b5-semantic-review.md`.
+Implemented and reviewed:
 
-### In progress
+- declarative lobby routing for Stage, Domain, Dungeon, Lord, and Demon Lord;
+- stable ordered navigation catalogs for all five scoped card surfaces;
+- one shared `SharedCardNavigator` lifecycle;
+- target-first localization;
+- catalog-derived directional navigation;
+- bounded reset-left only as localization fallback;
+- verified card-navigation sessions;
+- target-only CV during steady TRACK;
+- explicit invalidation on target/mode/session changes.
 
-- **Phase 10B-6 — Stage legacy main-card cleanup.** Stage-only survey is complete; implementation has not started. Supported pure Stage and Daily Tier-4 Stage already resolve through the shared owner. The main live supported legacy owner is ordinary `mix` Stage fallback, because `_stage_shared_navigation_enabled()` currently requires `type == "stage"` even though mix Stage farming has canonical `stage_entry` / `stage_navigation_path`. A second compatibility gap exists for partial Stage configs whose canonical identity can still be recovered from `stage_level` or canonical templates in `navigation_path`. Recommended sequence is Stage-A target-resolution expansion, Stage-B mix shared ownership, then Stage-C deletion of duplicate main-card alignment/manual horizontal search after recovery semantics are characterized. See `reviews/phase10b6-stage-legacy-navigation-survey.md`.
+Phases 0–9 provide the historical implementation record for this checkpoint.
 
-### Remaining Phase 10 work
+### Checkpoint B — Canonical Path Migration
 
-Recommended order for a fresh conversation:
+Status: **Complete**
 
-1. **Finish Stage cleanup incrementally.** Stage-A: broaden authoritative Stage target resolution without using raw alias-bearing `stage_templates` positions. Stage-B: move ordinary mix Stage fallback physical navigation to `SharedCardNavigator` after routing has already chosen Stage. Stage-C: delete duplicate Stage first-card alignment/manual horizontal main-card search only after supported callers and old exhaustion recovery semantics are characterized. Preserve main-card click and all sub-stage behavior.
-2. **Cooldown/mix fallback tab-routing cleanup.** In `_switch_to_stage_or_back()` and nearby mix/daily fallback code, separate direct tab-click responsibilities already owned by declarative routing from live cooldown, scheduler, collect-only, stamina-retreat, and fallback policy. Do not delete the function as a unit.
-3. **Demon Lord incomplete-catalog fallback decision.** The legacy fallback remains KEEP until a repository-level contract proves supported configs always provide a complete canonical Demon Lord catalog, or characterization proves a narrower removable slice.
-4. **Final Phase 10 acceptance review.** Re-run focused tests and verify: no supported normal-path lobby switch bypasses declarative routing; no scoped mode owns a second independent horizontal card-search algorithm; no supported normal-path card search resets left before target-first localization; only proven-dead responsibilities were removed.
+Canonical fixed-target execution paths now use the shared navigation owner:
 
-### Explicit KEEP boundaries while finishing Phase 10
+- **Stage:** supported canonical Stage execution uses shared main-card navigation. Stage sub-stage behavior remains downstream and unchanged.
+- **Domain:** canonical Domain execution uses shared card navigation.
+- **Fixed-target Dungeon:** canonical fixed target resolution, card navigation, and post-FOUND target identity use the shared path; canonical FOUND no longer re-enters the legacy compatibility resolver.
+- **Lord:** canonical committed-target navigation uses the shared path while target selection/cooldown policy remains owned by Lord business logic.
+- **Demon Lord:** canonical catalog-backed target navigation uses the shared path while stone/prepare/start behavior remains downstream.
 
-- Greedy Dungeon broad scan/priority/eligibility/cooldown/locked-unavailable selection.
-- Dungeon post-FOUND cooldown/status/OCR/click/fight/start/explore behavior.
-- Bounded reset-left recovery when localization cannot establish useful evidence.
-- Stage sub-stage behavior.
-- Domain downstream start/explore behavior.
-- Lord availability/cooldown business policy and downstream combat behavior.
-- Demon Lord stone/prepare/start behavior and incomplete-catalog compatibility until proven removable.
-- Legacy/non-canonical compatibility behavior unless characterization proves it dead.
+Known compatibility exception:
 
-### Known verification context
+- ordinary historical `mix -> Stage` execution can still use the legacy Stage main-card search because its runtime identity remains `type="mix"`; this is an upstream orchestration/config-ownership issue, not missing shared-navigation capability.
 
-The recent Dungeon-focused Phase 10B-4 run reported **94 tests, 90 passed, 4 known pre-existing branch failures**. This is a local focused baseline, not a substitute for the final task-wide gate.
+Intentional non-migration:
 
-### Out-of-scope future work
+- Greedy Dungeon broader scanning remains because it still owns target selection before a unique Dungeon target is committed. It is not classified as duplicate fixed-target navigation legacy.
 
-External/manual Scene drift during verified TRACK and concurrent Scene validation / generation-aware guarded physical-action commit are **not Phase 10 work**. They are tracked separately at:
+### Checkpoint C — Legacy Retirement
+
+Status: **Deferred by architecture boundary**
+
+Phase 10 removed or isolated the legacy responsibilities that are provably dead under the current config/orchestration contracts:
+
+- generic `navigation_path` no longer owns canonical normal Stage/Dungeon/Domain lobby-tab switching;
+- canonical fixed-target Dungeon no longer owns a second horizontal search algorithm;
+- canonical fixed Dungeon target resolution is separated from legacy compatibility resolution;
+- canonical fixed Dungeon FOUND no longer re-enters the legacy compatibility resolver;
+- Lord shared recovery state is decoupled from legacy `has_reset_to_left` / `reset_swipe_count` bookkeeping.
+
+Remaining compatibility paths are intentionally **not** extended or force-deleted in this task because their callers are tied to unresolved upstream contracts:
+
+- Stage historical `mix -> Stage` main-card search and related reset/manual-scroll compatibility;
+- Domain noncanonical identity fallback;
+- fixed-Dungeon legacy config resolver compatibility;
+- Lord explicit noncanonical navigation compatibility;
+- Demon Lord incomplete-catalog fallback;
+- cooldown/`mix` branches that still combine Activity-selection policy with direct physical tab routing.
+
+These are tracked in:
+
+- [Activity Execution Config SSOT](../../todos/activity-execution-config-ssot.md)
+- [Activity Plan + Mode Consolidation](../../todos/activity-plan-mode-consolidation.md)
+- [Navigation Legacy Retirement](../../todos/navigation-legacy-retirement.md)
+
+Dependency:
+
+```text
+Activity Execution Config SSOT
+        ↓
+Activity Plan + Mode Consolidation
+        ↓
+Navigation Legacy Retirement
+```
+
+### Task completion boundary
+
+This task does **not** define completion as "the repository contains no historical navigation code."
+
+The completion boundary is:
+
+> The shared five-mode navigation architecture and canonical fixed-target migration are complete; duplicate responsibilities proven dead under the current architecture contracts have been removed or isolated. Remaining compatibility retirement is deferred where deletion requires stronger Activity config ownership or orchestration contracts.
+
+This boundary prevents adding new transitional compatibility code merely to finish deletion against an orchestration model that is itself scheduled for consolidation.
+
+### Mode-by-mode closeout
+
+| Area | Canonical owner now | Remaining compatibility / old logic | Closeout classification |
+| --- | --- | --- | --- |
+| Stage main card | `SharedCardNavigator` for canonical Stage | ordinary `mix -> Stage` manual search; partial/noncanonical config fallback | Deferred upstream |
+| Domain main card | `SharedCardNavigator` | noncanonical identity / primary-alignment compatibility | Deferred upstream |
+| Fixed Dungeon | `SharedCardNavigator` + `DungeonCatalog` | legacy config resolver compatibility | Deferred upstream |
+| Greedy Dungeon | existing greedy selector | broad scan/priority/eligibility before target commitment | Intentional KEEP |
+| Lord card navigation | `SharedCardNavigator` after business target commitment | explicit noncanonical reset/broad-search compatibility | Deferred upstream |
+| Demon Lord card navigation | `SharedCardNavigator` for catalog-backed target | incomplete-catalog legacy fallback | Deferred upstream |
+| Lobby tab routing | `NavigationIntentPolicy` / `NavigationTable` | historical `mix` / cooldown direct tab routing | Deferred orchestration cleanup |
+
+### Explicit KEEP boundaries
+
+The following are not classified as duplicate card-navigation legacy:
+
+- Greedy Dungeon broad scan/priority/eligibility/cooldown/locked-unavailable target selection before unique commitment;
+- Dungeon post-FOUND cooldown/status/OCR/click/fight/start/explore behavior;
+- bounded reset-left recovery when localization cannot establish useful evidence;
+- Stage main-card click handoff and all sub-stage behavior;
+- Domain downstream start/explore behavior;
+- Lord availability/cooldown/OCR/business policy and downstream combat behavior;
+- Demon Lord stone/prepare/start behavior.
+
+### Verification and merge evidence
+
+The final merge review must record the exact available verification evidence in `reviews/phase10-checkpoint-review.md`.
+
+`ai_gate.ps1` is unavailable for this closeout and is not a merge prerequisite. The closeout must not claim Gate evidence.
+
+Known earlier branch evidence includes focused migration/regression tests for routing, catalogs, card sessions, Stage, Domain, fixed Dungeon, Lord, and Demon Lord. Final closeout must distinguish already-recorded local focused evidence from any GitHub CI evidence available at merge time.
+
+### Other out-of-scope future work
+
+External/manual Scene drift during verified TRACK and generation-aware guarded physical-action commit remain separately tracked at:
 
 `docs/tasks/todos/concurrent-scene-validation-action-commit.md`
 
-Do not reopen Phase 9 or pull that future architecture into this cleanup task.
+Do not reopen Phase 9 for that work.
 
 ## Goal
 
