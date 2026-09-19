@@ -89,7 +89,7 @@ class LordBossHandler(BaseStateHandler):
             if self.lord_navigation_target is None:
                 self.lord_navigation_target = avail_bosses[0]
             self.lord_card_navigator = None
-            self.lord_card_reset_attempts = self.reset_swipe_count
+            self.lord_card_reset_attempts = 0
         target_key = self.lord_navigation_target
         if target_key not in catalog_keys:
             # Preserve the legacy path for incomplete configurations without a
@@ -143,11 +143,8 @@ class LordBossHandler(BaseStateHandler):
                 inertia=False,
             )
             self.lord_card_reset_attempts = attempts
-            self.reset_swipe_count = attempts
             if status == CardAlignmentStatus.ALIGNED:
                 self.lord_card_reset_attempts = 0
-                self.reset_swipe_count = 0
-                self.has_reset_to_left = True
                 return "HANDLED"
             if status == CardAlignmentStatus.RETRYING:
                 self.notify_ui_progress()

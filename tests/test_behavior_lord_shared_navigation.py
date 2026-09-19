@@ -101,12 +101,30 @@ class TestLordSharedNavigationIntegration(unittest.TestCase):
     def test_no_localization_evidence_uses_bounded_reset_fallback(self, align):
         from utils.card_navigator import CardAlignmentStatus
 
+        self.handler.has_reset_to_left = False
+        self.handler.reset_swipe_count = 7
         self._evidence([])
-        align.return_value = (CardAlignmentStatus.RETRYING, 1, 0.0)
+        align.return_value = (CardAlignmentStatus.ALIGNED, 1, 0.0)
 
         self.assertEqual(self._navigate(), "HANDLED")
         align.assert_called_once()
-        self.assertEqual(self.handler.lord_card_reset_attempts, 1)
+        self.assertEqual(self.handler.lord_card_reset_attempts, 0)
+        self.assertFalse(self.handler.has_reset_to_left)
+        self.assertEqual(self.handler.reset_swipe_count, 7)
+
+    @patch("states.handlers.lord_boss.CardListNavigator.align_first_card")
+    def test_shared_recovery_then_target_clear_reenters_shared_navigation(self, align):
+        from utils.card_navigator import CardAlignmentStatus
+
+        self._evidence([])
+        align.return_value = (CardAlignmentStatus.ALIGNED, 1, 0.0)
+        self.assertEqual(self._navigate(), "HANDLED")
+        self.handler._clear_lord_card_session()
+
+        self._evidence(["lords/boss_c.png"])
+        self.assertEqual(self._navigate(), "FOUND")
+        self.assertEqual(self.handler.lord_navigation_target, "boss_c")
+        self.assertIsNone(self.handler.lord_card_session)
 
     def test_target_change_and_surface_exit_clear_session(self):
         self._evidence(["lords/boss_a.png"])

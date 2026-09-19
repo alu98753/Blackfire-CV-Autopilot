@@ -51,12 +51,19 @@ class TestLordBossSwipeLogic(unittest.TestCase):
 
         self.rect = {"left": 100, "top": 50, "width": 1000, "height": 800}
 
+    def _use_noncanonical_legacy_config(self):
+        """Keep these alignment assertions on the explicit compatibility path."""
+        self.mock_machine.get_available_selected_lord_bosses.return_value = [
+            "legacy_boss"
+        ]
+
     @patch("states.handlers.lord_boss.detect_cooldown_sign_and_time")
     @patch("os.path.exists")
     def test_lord_boss_first_entry_resets_to_left(self, mock_exists, mock_detect_cd):
         """[Lord Boss 滑動測試 1] 首次進入選關介面，優先發動拉至最左側 (reset_to_left)"""
         mock_exists.return_value = True
         mock_detect_cd.return_value = (False, None, "")
+        self._use_noncanonical_legacy_config()
 
         screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
         # 第一次呼叫 handle：第一個 Boss 未出現，執行向右拖曳拉回第 1 次
@@ -75,6 +82,10 @@ class TestLordBossSwipeLogic(unittest.TestCase):
 
         self.mock_matcher.match.side_effect = mock_match_first
         self.mock_mouse.reset_mock()
+        self.mock_machine.get_available_selected_lord_bosses.return_value = [
+            "lila_spider",
+            "ancient_spirit",
+        ]
         self.handler.handle(screen_img, self.rect)
         self.assertFalse(self.handler.has_reset_to_left)
         self.mock_mouse.drag.assert_not_called()
@@ -169,6 +180,7 @@ class TestLordBossSwipeLogic(unittest.TestCase):
         self, _mock_exists, mock_detect_cd, _mock_sleep
     ):
         mock_detect_cd.return_value = (False, None, "")
+        self._use_noncanonical_legacy_config()
         self.handler.reset_swipe_count = 7
 
         self.handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), self.rect)
