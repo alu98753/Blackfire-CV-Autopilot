@@ -243,6 +243,8 @@ py -0p
 
 完整安裝流程請參考[純遊戲執行環境](docs/setup_runtime.md)與[開發環境](docs/setup_development.md)。
 
+要將腳本設定的遊戲方式轉移到另一台電腦，請參考[user_data 轉移說明](docs/migrate_user_data.md)。
+
 ### 建議啟動方式
 
 一般長時間執行請從專案根目錄啟動：
