@@ -1,3 +1,4 @@
+import pytest
 import json
 import os
 import subprocess
@@ -5,6 +6,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+pytestmark = pytest.mark.ai_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
 WRAPPER = ROOT / "scripts" / "task_cleanup.ps1"

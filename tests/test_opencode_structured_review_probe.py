@@ -1,6 +1,9 @@
+import pytest
 import subprocess
 import unittest
 from pathlib import Path
+
+pytestmark = pytest.mark.ai_workflow
 
 
 class StructuredReviewProbeDeterministicTests(unittest.TestCase):
