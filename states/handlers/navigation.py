@@ -23,6 +23,8 @@ from utils.card_navigator import CardAlignmentStatus, CardListNavigator
 from utils.sub_stage_navigator import SubStageDirection, SubStageListNavigator
 from utils.scene_detector import SceneDetector, SceneType
 from utils.dungeon_catalog import DungeonCatalog
+from utils.navigation_catalog import stage_navigation_catalog
+from utils.shared_card_navigator import CardNavigatorState, SharedCardNavigator
 from states.navigation_routing import (
     NavigationDecisionExecutor,
     resolve_detection_request,
@@ -226,12 +228,117 @@ class NavigationHandler(BaseStateHandler):
         self.card_alignment_tab = None
         self.card_alignment_attempts = 0
         self.sub_stage_scroll_attempts = 0
+        self.stage_card_navigator = None
+        self.stage_card_target_key = None
+        self.stage_card_reset_attempts = 0
+        self._stage_card_handoff = False
 
     def _resolve_domain_navigation_templates(self):
         config = self.machine.config or {}
         tab_template = config.get("domain_tab_btn")
         target_template = config.get("domain_entry_btn")
         return tab_template, target_template
+
+    def _stage_navigation_catalog(self):
+        from config import BASE_STAGE_LEVELS
+
+        return stage_navigation_catalog(BASE_STAGE_LEVELS)
+
+    def _resolve_stage_card_target_key(self, catalog):
+        config = self.machine.config or {}
+        by_key = {entry.key: entry for entry in catalog}
+
+        raw_level = config.get("tier4_stage_level")
+        if raw_level is not None and str(raw_level) in by_key:
+            return str(raw_level)
+
+        candidates = [config.get("stage_entry")]
+        candidates.extend(config.get("stage_navigation_path") or [])
+        for candidate in candidates:
+            for entry in catalog:
+                if candidate == entry.template:
+                    return entry.key
+        return None
+
+    def _clear_stage_card_session(self):
+        self.stage_card_navigator = None
+        self.stage_card_target_key = None
+        self.stage_card_reset_attempts = 0
+
+    def _stage_shared_navigation_enabled(self, scene):
+        return (
+            (self.machine.config or {}).get("type") == "stage"
+            and "stage" in scene.active_tabs
+        )
+
+    def _handle_stage_shared_navigation(self, screen_img, rect, scene):
+        """Own only Stage main-card localization until FOUND handoff."""
+        if not self._stage_shared_navigation_enabled(scene):
+            self._clear_stage_card_session()
+            return False
+
+        catalog = self._stage_navigation_catalog()
+        target_key = self._resolve_stage_card_target_key(catalog)
+        if target_key is None:
+            # Preserve the legacy route for configurations without a canonical
+            # Stage identity; shared navigation must not guess from aliases.
+            self._clear_stage_card_session()
+            return False
+
+        if self.stage_card_target_key != target_key:
+            self.stage_card_navigator = SharedCardNavigator(catalog, target_key)
+            self.stage_card_target_key = target_key
+            self.stage_card_reset_attempts = 0
+
+        result = self.stage_card_navigator.observe(screen_img, self.matcher)
+        if result.state == CardNavigatorState.FOUND:
+            # Release ownership immediately. The existing generic Stage card
+            # click/entry loop handles the committed visible card below.
+            self._clear_stage_card_session()
+            self._stage_card_handoff = True
+            return False
+
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self._sleep(1.2)
+            return True
+
+        if result.state == CardNavigatorState.NEED_RESET_LEFT:
+            first_entry = catalog[0].template
+            max_attempts = int(
+                (self.machine.config or {}).get(
+                    "stage_reset_max_attempts",
+                    self.CARD_RESET_MAX_ATTEMPTS,
+                )
+            )
+            status, attempts, confidence = CardListNavigator.align_first_card(
+                screen_img,
+                self.matcher,
+                self.mouse,
+                rect,
+                first_entry,
+                self.stage_card_reset_attempts,
+                max_attempts=max_attempts,
+                threshold=get_template_threshold(first_entry, default=ENTRY_THRESHOLD),
+                duration=0.8,
+                inertia=False,
+            )
+            self.stage_card_reset_attempts = attempts
+            if status == CardAlignmentStatus.ALIGNED:
+                self.stage_card_reset_attempts = 0
+                return True
+            if status == CardAlignmentStatus.RETRYING:
+                self.notify_ui_progress()
+                self._sleep(1.2)
+                return True
+            self.machine.request_relaunch("stage_card_alignment_failed")
+            self._clear_stage_card_session()
+            return True
+
+        # CONTRADICTORY and RELOCALIZE deliberately do not swipe. The next
+        # confirmed Stage frame re-enters localization on the same session.
+        return True
 
     def _handle_primary_card_alignment(self, screen_img, rect, scene):
         """Align primary-mode shared cards only after the active tab is observed."""
@@ -756,7 +863,22 @@ class NavigationHandler(BaseStateHandler):
         if executor.execute(routing, screen_img, rect):
             return
 
-        if self._handle_primary_card_alignment(screen_img, rect, scene):
+        self._stage_card_handoff = False
+        self._stage_detail_evidence_checked = False
+        self._stage_detail_evidence = None
+        if self._stage_shared_navigation_enabled(scene):
+            if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
+                self._stage_detail_evidence_checked = True
+                self._stage_detail_evidence, _ = self.matcher.match(
+                    screen_img, "stages/stage_label.png", threshold=0.70
+                )
+            if self._stage_detail_evidence is None:
+                if self._handle_stage_shared_navigation(screen_img, rect, scene):
+                    return
+                if not self._stage_card_handoff and self.stage_card_target_key is None:
+                    if self._handle_primary_card_alignment(screen_img, rect, scene):
+                        return
+        elif self._handle_primary_card_alignment(screen_img, rect, scene):
             return
 
         # 檢查體力退避期間是否所有地下城皆已進入冷卻 (僅當前配置非 collect_only 時評估)
@@ -1138,7 +1260,9 @@ class NavigationHandler(BaseStateHandler):
         # 判斷是否已經在關卡內部細節畫面 (提前判定以避免小島在抽屜下方時水平滑動邏輯誤觸)
         in_detail_screen = False
         pos_label = None
-        if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
+        if self._stage_detail_evidence_checked:
+            pos_label = self._stage_detail_evidence
+        elif os.path.exists(os.path.join("templates", "stages/stage_label.png")):
             pos_label, _ = match_current_frame("stages/stage_label.png", threshold=0.70)
         
         # 尋找路徑中是否有魔王關 / 小關卡目標 (first, middle, six, final) 出現在畫面上
@@ -1164,7 +1288,12 @@ class NavigationHandler(BaseStateHandler):
             in_detail_screen = True
 
         # 如果處於關卡選擇介面，且目標關卡入口小島尚未出現在畫面上，執行向左滑動清單 (只在尚未進入細節畫面時執行)
-        if self.machine.config.get("type") in ["stage", "mix"] and stage_select_open and not in_detail_screen:
+        if (
+            self.machine.config.get("type") in ["stage", "mix"]
+            and stage_select_open
+            and not in_detail_screen
+            and not self._stage_card_handoff
+        ):
             target_level_btn = None
             for btn in nav_path:
                 is_sub = self._is_sub_stage_target(btn)
@@ -1261,6 +1390,7 @@ class NavigationHandler(BaseStateHandler):
                 return
 
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
+        self._stage_card_handoff = False
         active_tabs = []
         if stage_select_open:
             active_tabs.append("stage")
