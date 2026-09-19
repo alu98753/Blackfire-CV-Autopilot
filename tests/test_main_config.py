@@ -58,16 +58,18 @@ class TestMainConfig(unittest.TestCase):
         self.assertIn("stages/boss_skull.png", config["navigation_path"])
 
     @patch('os.path.exists')
-    @patch('builtins.input', side_effect=["8", "135", "1"])
-    def test_setup_dungeon_config_greedy_custom(self, mock_input, mock_exists):
+    def test_setup_dungeon_config_greedy_custom(self, mock_exists):
         """測試 setup_dungeon_config 自訂貪婪挑選 [1, 3, 5] 關卡與戰鬥祝福"""
+        from config import DUNGEON_NAMES
+        greedy_option = str(len(DUNGEON_NAMES) + 1)
         mock_exists.return_value = True
         config = GAME_CONFIGS["dungeon"].copy()
         mock_args = MagicMock()
         mock_args.blessmode = None
-        
-        setup_dungeon_config(config, mock_args)
-        
+
+        with patch('builtins.input', side_effect=[greedy_option, "135", "1"]):
+            setup_dungeon_config(config, mock_args)
+
         self.assertTrue(config["greedy_dungeon"])
         self.assertEqual(config["greedy_allowed_indices"], [1, 3, 5])
         self.assertEqual(config["bless_mode"], "combat")
