@@ -353,7 +353,7 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
         ):
             self.handler.handle(screen, self.rect)
 
-        self.assertEqual(legacy_resolver.call_count, 1)
+        legacy_resolver.assert_not_called()
         self.assertEqual(self.machine.current_dungeon_index, 3)
         self.assertTrue(self.machine.is_in_dungeon)
         self.machine.mouse.click.assert_called_once_with(161, 210)

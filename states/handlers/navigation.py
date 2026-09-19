@@ -1375,11 +1375,14 @@ class NavigationHandler(BaseStateHandler):
             wants_dungeon_scan = self.machine.has_available_dungeon()
         should_scan_dungeons = wants_dungeon_scan and dungeon_select_open
         fixed_dungeon_search = False
+        fixed_dungeon_target_idx = None
         if should_scan_dungeons and type(screen_img).__name__ == "ndarray":
             fixed_result = self._handle_fixed_dungeon_navigation(screen_img, rect, scene)
             if fixed_result == "HANDLED":
                 return
             fixed_dungeon_search = fixed_result == "FOUND"
+            if fixed_dungeon_search:
+                fixed_dungeon_target_idx = self._resolve_shared_fixed_dungeon_target_idx()
         
         # 為了避免在單元測試中使用 MagicMock 時 cv2 運算崩潰，僅在 screen_img 有 shape 屬性時執行 OpenCV 模板匹配
         is_dungeon_page = False
@@ -1416,7 +1419,7 @@ class NavigationHandler(BaseStateHandler):
             temp_confidences = {}
             
             scan_entries = (
-                [(self._resolve_shared_fixed_dungeon_target_idx(), entry_templates[self._resolve_shared_fixed_dungeon_target_idx() - 1])]
+                [(fixed_dungeon_target_idx, entry_templates[fixed_dungeon_target_idx - 1])]
                 if fixed_dungeon_search
                 else list(enumerate(entry_templates, start=1))
             )
@@ -1543,11 +1546,13 @@ class NavigationHandler(BaseStateHandler):
                             break
                 else:
                     # 非貪婪模式（指定特定副本）：目標 index 直接從 navigation_path 中尋找
-                    nav_path = self.machine.config.get("navigation_path", [])
-                    target_idx = self._resolve_legacy_compat_dungeon_target_idx(
-                        self.machine.config,
-                        entry_templates,
-                    )
+                    if fixed_dungeon_target_idx is not None:
+                        target_idx = fixed_dungeon_target_idx
+                    else:
+                        target_idx = self._resolve_legacy_compat_dungeon_target_idx(
+                            self.machine.config,
+                            entry_templates,
+                        )
                             
                     if target_idx is not None:
                         # 1. 優先檢查記憶體冷卻
