@@ -1,5 +1,7 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
+
+import numpy as np
 
 from states.handlers.navigation import NavigationHandler
 from utils.dungeon_catalog import DungeonCatalog
@@ -25,6 +27,14 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
                 "dungeons/d.png",
             ],
         }
+        self.machine.need_bag_cleaning = False
+        self.machine.need_diamond_collection = False
+        self.machine.need_bread_collection = False
+        self.machine.enable_bread = False
+        self.machine.is_daily_pipeline_active.return_value = False
+        self.machine.dungeon_cooldowns = {}
+        self.machine.stamina_retreat_start_time = None
+        self.machine.original_config = None
         self.handler = NavigationHandler(self.machine)
         self.rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
         self.screen = object()
@@ -192,6 +202,48 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
             ),
             3,
         )
+
+    @patch("states.handlers.navigation.time.sleep")
+    def test_target_change_invalidates_before_old_target_match(self, _sleep):
+        self._evidence(["dungeons/a.png"])
+        self.handler._handle_fixed_dungeon_navigation(self.screen, self.rect, self.scene)
+        self.machine.config["dungeon_index"] = 4
+        self.machine.matcher.reset_mock()
+
+        self.assertFalse(
+            self.handler._handle_dungeon_tracking_fast_path(self.screen, self.rect)
+        )
+        self.assertIsNone(self.handler.dungeon_card_session)
+        self.assertNotIn(
+            "dungeons/c.png",
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+        )
+
+    @patch.object(NavigationHandler, "_handle_primary_card_alignment", return_value=False)
+    @patch("states.handlers.navigation.NavigationDecisionExecutor.execute", return_value=False)
+    @patch("states.handlers.navigation.os.path.exists", return_value=False)
+    @patch("states.handlers.navigation.time.sleep")
+    def test_real_handler_tracking_matches_only_committed_target(
+        self, _sleep, _exists, _route, _alignment
+    ):
+        screen = np.zeros((800, 1000, 3), dtype=np.uint8)
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.machine.matcher
+        self.handler.scene_detector.detect.return_value = self.scene
+        self._evidence(["dungeons/a.png"])
+
+        self.handler.handle(screen, self.rect)
+        self.assertTrue(self.handler.dungeon_card_session.owns_tracking)
+
+        self.machine.matcher.reset_mock()
+        self._evidence([])
+        self.handler.handle(screen, self.rect)
+
+        self.assertEqual(
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+            ["dungeons/c.png"],
+        )
+        self.handler.scene_detector.detect.assert_called_once()
 
 
 if __name__ == "__main__":

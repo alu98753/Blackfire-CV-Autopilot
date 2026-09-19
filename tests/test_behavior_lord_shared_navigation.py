@@ -146,6 +146,23 @@ class TestLordSharedNavigationIntegration(unittest.TestCase):
         )
         self.handler.match_mutually_exclusive_tabs.assert_called_once()
 
+    def test_availability_change_invalidates_before_old_target_match(self):
+        self._evidence(["lords/boss_a.png"])
+        self._navigate()
+        self.machine.get_available_selected_lord_bosses.return_value = ["boss_b"]
+        self.machine.matcher.reset_mock()
+
+        self.assertFalse(
+            self.handler._handle_lord_tracking_fast_path(
+                self.screen, self.rect, ["boss_b"]
+            )
+        )
+        self.assertIsNone(self.handler.lord_card_session)
+        self.assertNotIn(
+            "lords/boss_c.png",
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+        )
+
         self.handler.lord_navigation_target = "boss_b"
         self.handler.lord_card_navigator = object()
         self.handler.reset_state()

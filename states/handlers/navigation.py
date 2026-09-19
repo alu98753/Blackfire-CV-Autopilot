@@ -314,9 +314,48 @@ class NavigationHandler(BaseStateHandler):
             target_index=target_index,
         )
 
+    def _stage_tracking_identity_valid(self, session):
+        config = self.machine.config or {}
+        if config.get("type") != "stage":
+            session.invalidate_cross_mode_action()
+            return False
+        target_key = self._resolve_stage_card_target_key(self._stage_navigation_catalog())
+        if target_key != session.target_key:
+            session.invalidate_target_change()
+            return False
+        return True
+
+    def _domain_tracking_identity_valid(self, session):
+        config = self.machine.config or {}
+        if config.get("type") != "domain":
+            session.invalidate_cross_mode_action()
+            return False
+        target_key = self._resolve_domain_card_target_key(self._domain_navigation_catalog())
+        if target_key != session.target_key:
+            session.invalidate_target_change()
+            return False
+        return True
+
+    def _dungeon_tracking_identity_valid(self, session):
+        config = self.machine.config or {}
+        if config.get("greedy_dungeon"):
+            session.invalidate_cross_mode_action()
+            return False
+        target_index = self._resolve_fixed_dungeon_target_idx()
+        if config.get("type") not in {"dungeon", "mix"} or target_index is None:
+            session.invalidate_cross_mode_action()
+            return False
+        if target_index != session.target_index:
+            session.invalidate_target_change()
+            return False
+        return True
+
     def _handle_stage_tracking_fast_path(self, screen_img, rect):
         session = self.stage_card_session
         if session is None or not session.owns_tracking:
+            return False
+        if not self._stage_tracking_identity_valid(session):
+            self._clear_stage_card_session()
             return False
         navigator = self.stage_card_navigator
         if navigator is None:
@@ -439,6 +478,9 @@ class NavigationHandler(BaseStateHandler):
         session = self.domain_card_session
         if session is None or not session.owns_tracking:
             return False
+        if not self._domain_tracking_identity_valid(session):
+            self._clear_domain_card_session()
+            return False
         navigator = self.domain_card_navigator
         if navigator is None:
             session.invalidate_reset_recovery()
@@ -557,6 +599,9 @@ class NavigationHandler(BaseStateHandler):
     def _handle_dungeon_tracking_fast_path(self, screen_img, rect):
         session = self.dungeon_card_session
         if session is None or not session.owns_tracking:
+            return False
+        if not self._dungeon_tracking_identity_valid(session):
+            self._clear_dungeon_card_session()
             return False
         navigator = self.dungeon_card_navigator
         if navigator is None:

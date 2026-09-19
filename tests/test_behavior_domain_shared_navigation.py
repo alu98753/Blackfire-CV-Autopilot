@@ -189,6 +189,20 @@ class TestDomainSharedNavigationIntegration(unittest.TestCase):
         self.assertEqual(catalog[-1].key, "new_domain")
         self.assertEqual(catalog[-1].index, len(catalog))
 
+    def test_target_change_invalidates_before_old_target_match(self):
+        self._evidence(["domains/golden_empire/entry.png"])
+        self.handler._handle_domain_shared_navigation(self.screen, self.rect, self.scene)
+        self.machine.config["domain"] = "golden_empire"
+        self.machine.config["domain_entry_btn"] = "domains/golden_empire/entry.png"
+        self.machine.matcher.reset_mock()
+
+        self.assertFalse(self.handler._handle_domain_tracking_fast_path(self.screen, self.rect))
+        self.assertIsNone(self.handler.domain_card_session)
+        self.assertNotIn(
+            self.target,
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

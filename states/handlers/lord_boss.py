@@ -163,9 +163,16 @@ class LordBossHandler(BaseStateHandler):
         # never issue an unverified blind swipe.
         return "HANDLED"
 
-    def _handle_lord_tracking_fast_path(self, screen_img, rect):
+    def _handle_lord_tracking_fast_path(self, screen_img, rect, avail_bosses):
         session = self.lord_card_session
         if session is None or not session.owns_tracking:
+            return False
+        if (
+            self.lord_navigation_target != session.target_key
+            or session.target_key not in avail_bosses
+        ):
+            session.invalidate_target_change()
+            self._clear_lord_card_session()
             return False
         navigator = self.lord_card_navigator
         if navigator is None:
@@ -324,7 +331,7 @@ class LordBossHandler(BaseStateHandler):
                     self._sleep(0.5)
                     return True
 
-        if self._handle_lord_tracking_fast_path(screen_img, rect):
+        if self._handle_lord_tracking_fast_path(screen_img, rect, avail_bosses):
             return True
         shared_lord_handoff = self._lord_card_handoff
 

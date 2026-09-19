@@ -50,9 +50,23 @@ class DemonLordsHandler(BaseStateHandler):
         self.demon_card_reset_attempts = 0
         self._demon_card_handoff = False
 
+    def _current_policy_target(self):
+        targets = self._get_configured_targets()
+        dm = getattr(self.machine, "daily_manager", None)
+        if dm and hasattr(dm, "get_available_demon_lords"):
+            available = dm.get_available_demon_lords(targets)
+        else:
+            available = targets
+        return available[0] if available else None
+
     def _handle_demon_tracking_fast_path(self, screen_img, rect):
         session = self.demon_card_session
         if session is None or not session.owns_tracking:
+            return False
+        policy_target = self._current_policy_target()
+        if policy_target != session.target_key:
+            session.invalidate_target_change()
+            self._clear_card_navigation_session()
             return False
         navigator = self.demon_card_navigator
         if navigator is None:

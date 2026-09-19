@@ -197,6 +197,51 @@ class TestStageSharedNavigationIntegration(unittest.TestCase):
         )
         self.handler.scene_detector.detect.assert_called_once()
 
+    @patch("states.handlers.navigation.os.path.exists", return_value=False)
+    @patch("states.handlers.navigation.time.sleep")
+    def test_cross_mode_change_invalidates_before_old_target_match(self, _sleep, _exists):
+        domain_scene = SceneInfo(
+            scene_type=SceneType.LOBBY_OTHER,
+            is_lobby=True,
+            active_tabs=["domain"],
+        )
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.machine.matcher
+        self.handler.scene_detector.detect.side_effect = [self.scene, domain_scene]
+        self._evidence(["stages/level1_sky_plains.png"])
+        self.handler.handle(self.screen, self.rect)
+        self.assertTrue(self.handler.stage_card_session.owns_tracking)
+
+        self.machine.config = {
+            "type": "domain",
+            "domain": "coldoath_citadel",
+            "domain_entry_btn": "domains/coldoath_citadel/coldoath_citadel.png",
+        }
+        self.machine.matcher.reset_mock()
+        self._evidence([])
+        self.handler.handle(self.screen, self.rect)
+
+        self.assertIsNone(self.handler.stage_card_session)
+        self.assertEqual(self.handler.scene_detector.detect.call_count, 2)
+        self.assertNotIn(
+            self.target,
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+        )
+
+    def test_target_change_invalidates_before_old_target_match(self):
+        self._evidence(["stages/level1_sky_plains.png"])
+        self.handler._handle_stage_shared_navigation(self.screen, self.rect, self.scene)
+        self.machine.config["tier4_stage_level"] = "7"
+        self.machine.config["stage_entry"] = "stages/level7_forgotten_wasteland.png"
+        self.machine.matcher.reset_mock()
+
+        self.assertFalse(self.handler._handle_stage_tracking_fast_path(self.screen, self.rect))
+        self.assertIsNone(self.handler.stage_card_session)
+        self.assertNotIn(
+            self.target,
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, call, patch
 
 from states.handlers.demon_lords import DemonLordsHandler, DemonSubScene
 from utils.navigation_catalog import demon_lord_navigation_catalog
+from utils.scene_snapshot import SceneSnapshot, TabId
+from utils.scene_types import SceneId
 from utils.shared_card_navigator import CardNavigatorState, SwipeDirection
 
 
@@ -163,6 +165,28 @@ class TestDemonLordSharedNavigationIntegration(unittest.TestCase):
             ["demon_lords/boss_c.png"],
         )
         self.handler.classify_subscene.assert_called_once()
+
+    @patch("states.handlers.demon_lords.time.sleep")
+    def test_policy_target_change_invalidates_before_old_target_match(self, _sleep):
+        scene = SceneSnapshot(
+            frame_id=1,
+            captured_at=0.0,
+            scene=SceneId.DEMON_LORD_SELECT,
+            active_tabs=frozenset({TabId.DEMON_LORD}),
+        )
+        self._evidence(["demon_lords/boss_a.png"])
+        self.handler._step_select_boss_card(
+            self.screen, self.rect, verified_scene=scene
+        )
+        self.machine.daily_manager.get_available_demon_lords.return_value = ["boss_b"]
+        self.machine.matcher.reset_mock()
+
+        self.assertFalse(self.handler._handle_demon_tracking_fast_path(self.screen, self.rect))
+        self.assertIsNone(self.handler.demon_card_session)
+        self.assertNotIn(
+            "demon_lords/boss_c.png",
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+        )
 
 
 if __name__ == "__main__":
