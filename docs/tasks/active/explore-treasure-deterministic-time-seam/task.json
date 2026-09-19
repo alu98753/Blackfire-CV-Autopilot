@@ -1,0 +1,50 @@
+{
+  "id": "explore-treasure-deterministic-time-seam",
+  "base_ref": "origin/main",
+  "base_sha": "525bb35ad9385efd0a5619429436c4fdff67367a",
+  "scope": [
+    "states/handlers/explore.py",
+    "states/domains/treasure_subflow.py",
+    "tests/test_explore_subflow.py",
+    "tests/test_domain_common_behavior.py",
+    "docs/tasks/active/explore-treasure-deterministic-time-seam/"
+  ],
+  "focused_tests": [
+    "tests.test_explore_subflow.TestExploreSubflow.test_run_treasure_subflow_success",
+    "tests.test_explore_subflow.TestExploreSubflow.test_run_treasure_subflow_waits_through_transient_misses",
+    "tests.test_explore_subflow.TestExploreSubflow.test_run_treasure_subflow_reclicks_confirm_until_disappeared",
+    "tests.test_explore_subflow.TestExploreSubflow.test_run_treasure_subflow_accepts_terminal_anchor_without_quit",
+    "tests.test_domain_common_behavior.TestDomainCommonBehavior.test_treasure_evidence_scenario_a_open_actionable",
+    "tests.test_domain_common_behavior.TestDomainCommonBehavior.test_treasure_evidence_scenario_b_find_treasure_scene_evidence_only",
+    "tests.test_domain_common_behavior.TestDomainCommonBehavior.test_treasure_evidence_scenario_c_treasure_card_scene_evidence_only"
+  ],
+  "models": {
+    "scout": "opencode/big-pickle",
+    "review": "opencode/big-pickle"
+  },
+  "notes": {
+    "status": "Draft",
+    "implementation_blocked_until_final": true,
+    "goal": "Remove real wall-clock dependency from scoped Explore/Treasure deterministic tests by reusing the existing ClockPort seam while preserving production timing semantics.",
+    "implementation_policy": "Behavior-preserving timing seam only; keep existing blocking Treasure control flow and all timeout/delay values unchanged.",
+    "protected_invariants": [
+      "SystemClock production behavior remains real-time",
+      "Treasure blocking control flow remains unchanged",
+      "Treasure click/retry/terminal semantics remain unchanged",
+      "Domain Treasure open-confirm-quit behavior remains unchanged",
+      "scene-evidence-only Domain Treasure remains zero-click without open.png"
+    ],
+    "non_goals": [
+      "tick-driven Treasure refactor",
+      "BaseStateHandler changes",
+      "state_machine changes",
+      "runtime ports changes",
+      "Bless/Relic/Skill timing cleanup",
+      "Blood Altar timing",
+      "Game Relaunch timing",
+      "Navigation or Result timing",
+      "test deletion",
+      "parallel test execution"
+    ]
+  }
+}
