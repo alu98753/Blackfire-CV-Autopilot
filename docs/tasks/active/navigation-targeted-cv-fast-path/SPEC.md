@@ -2,6 +2,54 @@
 
 Status: Final
 
+## Current implementation checkpoint (authoritative handoff)
+
+This section is the progress SSOT for context reconstruction. The historical phase sections below retain the original Final contract and rationale; they are not evidence that completed phases are still pending.
+
+Last reviewed production anchor before this checkpoint: `87ff4eb8d588ccacab1368301d576a5d6919a7c6`.
+
+### Completed
+
+- **Phases 0–9: complete.** Declarative five-tab routing, ordered catalogs, `SharedCardNavigator`, Stage/Domain/Demon Lord/fixed-Dungeon/Lord migrations, and verified-session target-only CV are implemented and reviewed.
+- **Phase 10A: complete.** Dead-responsibility survey established that cleanup units are responsibilities, not whole functions. See `reviews/phase10a-dead-responsibility-survey.md`.
+- **Phase 10B-1: complete.** Generic `navigation_path` no longer owns canonical normal Stage/Dungeon/Domain lobby-tab clicks; declarative routing is the normal owner.
+- **Phase 10B-2: complete survey/correction.** Canonical fixed-target Dungeon horizontal search is already fully deduplicated; remaining `swipe_towards_target()` ownership is greedy/compatibility, not canonical fixed search. See `reviews/phase10b2-fixed-dungeon-responsibility-survey.md`.
+- **Phase 10B-3: complete.** Dungeon shared fixed-target resolution and legacy compatibility resolution are explicit separate owners with their historical precedence/validation semantics preserved.
+- **Phase 10B-4: complete.** After canonical fixed Dungeon `FOUND`, the shared committed target index flows directly into target-only rescan/status/click; the canonical path no longer re-enters the legacy compatibility resolver.
+
+### Remaining Phase 10 work
+
+Recommended order for a fresh conversation:
+
+1. **Lord legacy reset/search/swipe cleanup.** Survey current `has_reset_to_left`, first-card alignment, candidate scan, and direct swipe reachability. Remove only physical-navigation responsibilities proven replaced by shared navigation; preserve availability selection, cooldown OCR, bookkeeping, click/start/fight.
+2. **Stage/Domain legacy main-card fallback audit.** Re-check whether any canonical normal-path reset-first alignment or horizontal search remains reachable. Preserve Stage sub-stage flow and Domain entry/start/explore. Compatibility/recovery paths are not automatically dead.
+3. **Cooldown/mix fallback tab-routing cleanup.** In `_switch_to_stage_or_back()` and nearby mix/daily fallback code, separate direct tab-click responsibilities already owned by declarative routing from live cooldown, scheduler, collect-only, stamina-retreat, and fallback policy. Do not delete the function as a unit.
+4. **Demon Lord incomplete-catalog fallback decision.** The legacy fallback remains KEEP until a repository-level contract proves supported configs always provide a complete canonical Demon Lord catalog, or characterization proves a narrower removable slice.
+5. **Final Phase 10 acceptance review.** Re-run focused tests and verify: no supported normal-path lobby switch bypasses declarative routing; no scoped mode owns a second independent horizontal card-search algorithm; no supported normal-path card search resets left before target-first localization; only proven-dead responsibilities were removed.
+
+### Explicit KEEP boundaries while finishing Phase 10
+
+- Greedy Dungeon broad scan/priority/eligibility/cooldown/locked-unavailable selection.
+- Dungeon post-FOUND cooldown/status/OCR/click/fight/start/explore behavior.
+- Bounded reset-left recovery when localization cannot establish useful evidence.
+- Stage sub-stage behavior.
+- Domain downstream start/explore behavior.
+- Lord availability/cooldown business policy and downstream combat behavior.
+- Demon Lord stone/prepare/start behavior and incomplete-catalog compatibility until proven removable.
+- Legacy/non-canonical compatibility behavior unless characterization proves it dead.
+
+### Known verification context
+
+The recent Dungeon-focused Phase 10B-4 run reported **94 tests, 90 passed, 4 known pre-existing branch failures**. This is a local focused baseline, not a substitute for the final task-wide gate.
+
+### Out-of-scope future work
+
+External/manual Scene drift during verified TRACK and concurrent Scene validation / generation-aware guarded physical-action commit are **not Phase 10 work**. They are tracked separately at:
+
+`docs/tasks/todos/concurrent-scene-validation-action-commit.md`
+
+Do not reopen Phase 9 or pull that future architecture into this cleanup task.
+
 ## Goal
 
 Unify lobby card navigation for these five modes:
@@ -332,18 +380,19 @@ The shared card algorithm starts only after the desired lobby mode is Scene-conf
 
 If current Scene is not the desired mode, switching among Stage/Domain/Dungeon/Lord/Demon-Lord must be owned by declarative navigation routing rather than each handler's legacy custom path.
 
-### Survey-confirmed infrastructure gap
+### Historical survey gap — resolved in Phase 1
 
-Current `navigation_table.py` does not yet provide target-aware cross-mode routing among the five lobby select scenes.
+The original survey found that `navigation_table.py` lacked target-aware cross-mode routing. That gap is resolved.
 
-Current limitations:
+Current implementation provides:
 
-- `NavigationTable.next_edge(scene, intent_id)` does not receive the desired target tab/mode;
-- `SceneSnapshot` exposes `active_tabs` but no semantic click element for each target lobby tab;
-- inactive target-tab matches found by Scene detection are not currently exposed as a navigation-table click element;
-- `NavigationProgress.InFlightAction` already has `expected_tab`, but current postcondition handling does not use it to prove a generic expected-tab-active transition.
+- semantic Scene-derived clickable elements for all five scoped lobby tabs;
+- target-aware declarative lobby-tab edges through `NavigationIntentPolicy` / `NavigationTable`;
+- `SWITCH_LOBBY_TAB` with `expected_tab`;
+- `NavigationProgress` postcondition handling that waits for later current-frame evidence that the expected tab is active;
+- normal supported lobby-tab switching ownership in the declarative route rather than the generic `navigation_path` loop.
 
-### Required routing result
+### Routing contract (implemented)
 
 The implementation must extend the existing navigation policy/table contract so that:
 
@@ -442,17 +491,18 @@ The shared card-search session is invalidated by:
 - target card FOUND and ownership handed off;
 - leaving the card-selection surface for detail/preparation/battle/loading.
 
-## Survey findings that constrain implementation
+## Original survey findings and current resolution
 
-1. Dungeon already has `DungeonCatalog`; reuse it.
-2. Stage has numeric `base_stage_levels`; use those as semantic indices, not raw `stage_templates` list positions.
-3. Domain has canonical discovery helpers but lacks an explicit ordered navigation index helper.
-4. Lord and Demon Lord already rely on declaration order to identify their first card, so that order can be formalized as navigation order.
-5. Stage/Dungeon/Domain currently call `_handle_primary_card_alignment()` before normal target search; this is the reset-first behavior that must be removed from the normal path.
-6. Lord likewise aligns to first card before its candidate scan.
-7. Demon Lord already checks its selected target before reset-to-left, but does not yet share the common index/directional-search lifecycle.
-8. Existing `NavigationTable` does not currently own target lobby-tab switching and must be extended before legacy mode-switch paths can be removed from this scope.
-9. `NavigationProgress` already carries `expected_tab`, providing an existing place to bind visual tab-transition postconditions.
+1. Dungeon index authority remains `DungeonCatalog`.
+2. Stage navigation indices are derived from numeric `base_stage_levels`, not alias-bearing raw `stage_templates` positions.
+3. An explicit ordered Domain navigation catalog now exists and uses canonical repository declaration order.
+4. Lord and Demon Lord declared boss order is formalized as physical navigation order; availability filtering does not renumber it.
+5. Canonical Stage, Domain, fixed Dungeon, Lord, and Demon Lord navigation consume the shared card-navigation lifecycle.
+6. Canonical fixed-target Dungeon horizontal search is already deduplicated. Do not remove greedy/compatibility `swipe_towards_target()` merely to force cleanup.
+7. Dungeon shared target resolution and legacy compatibility resolution intentionally remain distinct; Phase 10B-3 made this ownership explicit without normalizing historical semantics.
+8. Canonical fixed Dungeon `FOUND` now carries shared target identity into status/click handoff without re-entering the legacy resolver.
+9. Remaining cleanup evidence is concentrated in Lord legacy physical-navigation slices, Stage/Domain compatibility/fallback leftovers, cooldown/mix direct tab-click slices, and Demon Lord incomplete-catalog compatibility.
+10. The original NavigationTable target-tab routing gap is resolved; `expected_tab` is part of the implemented visual postcondition contract.
 
 ## Production scope
 
@@ -476,6 +526,9 @@ Expected production/reference surfaces include:
 
 
 ## Required phased migration order
+
+> **Progress note:** Phases 0–9 are complete. The phase descriptions below are retained as the original Final migration contract and regression boundary. Phase 10 is partially complete as recorded in the authoritative checkpoint at the top of this SPEC.
+
 
 Implementation MUST proceed in the following order. A later phase must not begin until the previous phase has focused test evidence for its exit criteria. Do not collapse several phases into one rewrite merely because the final architecture is already known.
 
