@@ -8,8 +8,10 @@ import numpy as np
 # 加入專案路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from capture.screen import ScreenCapturer
-from actions.mouse import MouseController
+from runtime.io_adapters import (
+    BackendScreenCapturer, ForegroundScreenCapturer,
+    BackendMouseController, ForegroundMouseController,
+)
 from utils.debug_artifacts import write_debug_image
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
@@ -20,7 +22,6 @@ def main():
     parser = argparse.ArgumentParser(description="單圖比對與點擊即時診斷工具")
     parser.add_argument("--template", "-t", type=str, default="common/door.png", help="要比對的模板圖片路徑 (相對於 templates/，預設 common/door.png)")
     parser.add_argument("--click", "-c", action="store_true", help="是否發起實際點擊")
-    parser.add_argument("--backend", "-b", action="store_true", default=True, help="是否使用後台模式 (預設 True)")
     parser.add_argument("--foreground", "-f", action="store_true", help="強制使用前台模式點擊")
     parser.add_argument("--scale", "-s", type=float, default=None, help="手動指定比對縮放比例 (例如 0.8, 1.0, 1.25)")
     parser.add_argument("--scene", action="store_true", help="執行完整的 SceneDetector 場景辨識診斷")
@@ -34,8 +35,12 @@ def main():
         time.sleep(1)
     print("[*] 開始執行偵測！\n", flush=True)
 
-    capturer = ScreenCapturer(window_title="Blackfire Crusade")
-    mouse = MouseController(window_title="Blackfire Crusade", backend_mode=backend_mode)
+    if backend_mode:
+        capturer = BackendScreenCapturer(window_title="Blackfire Crusade")
+        mouse = BackendMouseController(window_title="Blackfire Crusade")
+    else:
+        capturer = ForegroundScreenCapturer(window_title="Blackfire Crusade")
+        mouse = ForegroundMouseController(window_title="Blackfire Crusade")
 
     hwnd = capturer.get_hwnd()
     if not hwnd:

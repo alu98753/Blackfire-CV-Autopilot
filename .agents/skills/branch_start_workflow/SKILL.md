@@ -18,8 +18,8 @@ A formal AI task is expected to already have on GitHub:
 
 ```text
 origin/<approved-task-branch>
-docs/tasks/<task-id>/SPEC.md
-docs/tasks/<task-id>/task.json
+docs/tasks/active/<task-id>/SPEC.md
+docs/tasks/active/<task-id>/task.json
 ```
 
 Those artifacts are created by ChatGPT/user before local task execution.
@@ -52,12 +52,13 @@ For formal AI tasks, the wrapper owns the mechanical startup sequence:
 
 - discovers/validates the canonical permanent main worktree;
 - inspects actual Git worktree topology;
-- requires canonical main to be attached to `main` and clean;
+- requires canonical main to be attached to `main`; canonical main local changes are not part of task startup;
 - fetches `origin`;
-- safely fast-forwards canonical main when possible;
+- resolves `origin/main` without changing canonical main;
 - validates that the approved remote task branch exists;
 - validates that current `origin/main` is an ancestor of that remote task branch;
 - validates remote `SPEC.md` and `task.json` and matching task id;
+- requires every formal task `task.json` to contain one explicit `models.review` provider/model string (canonical default: `opencode/big-pickle`); null, missing, empty, array, or locally configured defaults are invalid;
 - creates or safely reuses the canonical task worktree;
 - respects Git multi-worktree branch exclusivity;
 - safely fast-forwards a clean local task branch to the remote when allowed;
@@ -78,12 +79,20 @@ The wrapper intentionally does **not**:
 
 ## 3. Canonical workspace contract
 
+The canonical topology is sibling-based, not nested:
+
 ```text
-E:\Side_Project\Blackfire-CV-Autopilot\
-├─ BlackfireCrusade_tool\        <- permanent attached main + runtime/CV home
-└─ worktrees\
-   └─ <task-id>\                 <- branch-scoped task worktree
+E:\Side_Project\
+├─ Blackfire-CV-Autopilot\
+│  └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+├─ Blackfire-CV-Autopilot-worktrees\
+│  └─ <task-id>\
+│     └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+└─ VenvPools\
+   └─ .venvs-Blackfire-CV-Autopilot\
 ```
+
+`VenvPools` is the external sibling holding the only physical shared Python environment. Worktree `.venv` entries are junction consumers; `node_modules` remains untracked per-worktree state.
 
 Canonical shared Python environment:
 
@@ -99,7 +108,7 @@ Every runnable worktree uses its own local consumer path:
 
 The `.venv` entry is a junction to the canonical shared environment. No worktree owns the physical environment.
 
-New formal task worktrees use the project-scoped path above. Existing active legacy worktrees may remain where they are until closeout; do not relocate dirty/active worktrees merely for tidiness.
+New formal task worktrees use the sibling project-scoped path above: `E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>`. Existing active legacy worktrees may remain where they are until closeout; do not relocate dirty/active worktrees merely for tidiness.
 
 ## 4. Trigger identification
 
@@ -147,7 +156,7 @@ The user-facing handoff should therefore normally be one command, not a copied l
 
 Typical blockers include:
 
-- canonical main dirty, detached, wrong branch, or diverged;
+- canonical main detached or wrong branch;
 - remote task branch missing;
 - task branch stale relative to current `origin/main`;
 - required task artifacts missing/malformed;
@@ -241,13 +250,13 @@ For generic/manual branches outside the formal AI task lifecycle, publishing an 
 
 ## 12. Development boundary snapshot
 
-The authoritative scope comes from `docs/tasks/<task-id>/SPEC.md` when present. Do not create a second local spec.
+The authoritative scope comes from `docs/tasks/active/<task-id>/SPEC.md` when present. Do not create a second local spec.
 
 Useful snapshot:
 
 ```text
 Task / Branch: <name>
-Worktree: E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>
+Worktree: E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>
 Base: origin/main @ <sha>
 Goal: <from SPEC>
 Remote: origin/<branch>
@@ -287,4 +296,4 @@ Do not ask the user to repeat the internal worktree/bootstrap checks after a suc
 
 # One-line principle
 
-> Formal AI task startup is one repository command; low-level Git/worktree/environment commands are recovery tools, not routine user choreography.
+> Formal AI task startup is one repository command; low-level Git/worktree/environment commands are recovery tools, not routine user choreography. Canonical main may contain unrelated local state: startup fetches remote refs and materializes the task worktree from the approved remote branch without copying or modifying canonical main state.

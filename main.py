@@ -73,7 +73,12 @@ def main():
 
     # 3. 檢查遊戲是否開啟，發起直連啟動並傳送至指定螢幕與最大化全螢幕
     active_monitor = args.monitor if args.monitor is not None else get_monitor_index()
-    launcher = SteamGameLauncher(game_title=args.title, backend_mode=getattr(args, "backend_mode", True), monitor_index=active_monitor, hwnd=target_hwnd)
+    from runtime.io_adapters import compose_capture
+    launcher_capturer = compose_capture(
+        foreground=not getattr(args, "backend_mode", True), window_title=args.title,
+        monitor_index=active_monitor, hwnd=target_hwnd)
+    launcher = SteamGameLauncher(game_title=args.title, capturer=launcher_capturer,
+                                 monitor_index=active_monitor, hwnd=target_hwnd)
 
     force_relaunch = getattr(args, "restart_game", False) is True
     if not force_relaunch and target_hwnd and is_window_hung(target_hwnd):

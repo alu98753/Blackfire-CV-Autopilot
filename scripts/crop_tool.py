@@ -19,7 +19,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from capture.screen import ScreenCapturer
+from runtime.io_adapters import ForegroundScreenCapturer
 
 def main():
     if sys.platform.startswith('win'):
@@ -43,7 +43,7 @@ def main():
     
     # 初始化畫面擷取器
     target_title = "Blackfire Crusade"
-    capturer = ScreenCapturer(window_title=target_title)
+    capturer = ForegroundScreenCapturer(window_title=target_title)
     
     if args.full_screen:
         print("[*] 模式: 🌐 全螢幕擷取 (Full Screen Capture)")

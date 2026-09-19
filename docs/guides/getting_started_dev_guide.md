@@ -664,3 +664,39 @@ main.py                # 主迴圈
 3. **架構說明與 4-Step 開發指引**：
    詳細開發規範與 Mermaid 圖表請參閱：[docs/exception_subsystem_architecture.md](../architecture/exception_subsystem_architecture.md)。
 
+## 跨電腦同步使用者資料
+
+使用者設定依 Profile 儲存在 `user_data/`：
+
+```text
+user_data/
+├── native/
+│   ├── config.toml
+│   └── daily_status.json
+└── sandbox/
+    ├── config.toml
+    └── daily_status.json
+```
+
+換電腦或重新 clone 專案時，只需要複製各 Profile 的：
+
+```text
+user_data/<profile>/config.toml
+user_data/<profile>/daily_status.json
+```
+
+不要複製執行期與暫存資料：
+
+```text
+user_data/*/logs/
+user_data/*/runtime/
+.runtime/
+scratch/
+.pytest_cache/
+__pycache__/
+*.log
+```
+
+`config/defaults.toml` 是 Git 管理的共用預設設定；若 Profile 沒有
+`config.toml`，程式會直接使用共用預設值。
+

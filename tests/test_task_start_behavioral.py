@@ -1,3 +1,4 @@
+import pytest
 import json
 import os
 import shutil
@@ -6,6 +7,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+pytestmark = pytest.mark.ai_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_START_SCRIPT = ROOT / "scripts" / "task_start.ps1"
@@ -89,8 +92,8 @@ class TaskStartBehavioralTests(unittest.TestCase):
             branch_name = task_id
         base = Path(temp_dir)
         origin_dir = base / "origin.git"
-        main_dir = base / "BlackfireCrusade_tool"
-        worktrees_dir = base / "worktrees"
+        main_dir = base / "Blackfire-CV-Autopilot"
+        worktrees_dir = base / "Blackfire-CV-Autopilot-worktrees"
         worktrees_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Bare remote origin
@@ -111,7 +114,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
 
         # 3. Create task branch from main
         self.run_git(main_dir, "checkout", "-b", branch_name)
-        task_docs_dir = main_dir / "docs" / "tasks" / task_id
+        task_docs_dir = main_dir / "docs" / "tasks" / "active" / task_id
         task_docs_dir.mkdir(parents=True, exist_ok=True)
 
         if not missing_spec:
@@ -148,6 +151,21 @@ class TaskStartBehavioralTests(unittest.TestCase):
             "worktrees_root": worktrees_dir,
             "fake_helper": fake_helper,
         }
+
+    def test_default_worktree_root_is_sibling_of_canonical_main(self):
+        with tempfile.TemporaryDirectory() as temp:
+            f = self.create_git_fixture(temp, task_id="default-root-task")
+            env = {
+                "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
+                "TASK_START_COMMON_DIR_OVERRIDE": str(f["main"] / ".git"),
+                "TASK_START_CANONICAL_MAIN_OVERRIDE": str(f["main"]),
+            }
+            proc = self.run_task_start(task="default-root-task", env=env)
+            data = self.parse_result(proc)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["worktree"], str(f["worktrees_root"] / "default-root-task"))
+            self.assertTrue((f["worktrees_root"] / "default-root-task").exists())
 
     def test_argument_validation_fails_with_invalid_argument(self):
         proc = self.run_task_start(task="INVALID_UPPERCASE")
@@ -195,7 +213,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
 
             expected_worktree = f["worktrees_root"] / "my-feature"
             self.assertTrue(expected_worktree.exists())
-            self.assertTrue((expected_worktree / "docs" / "tasks" / "my-feature" / "SPEC.md").exists())
+            self.assertTrue((expected_worktree / "docs" / "tasks" / "active" / "my-feature" / "SPEC.md").exists())
 
     def test_canonical_main_behind_fast_forwards_safely(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -236,7 +254,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
             main_after = self.run_git(f["main"], "rev-parse", "HEAD").stdout.strip()
             self.assertEqual(main_after, origin_main_now)
 
-    def test_canonical_main_dirty_fails_closed(self):
+    def test_canonical_main_dirty_does_not_block_task_start(self):
         with tempfile.TemporaryDirectory() as temp:
             f = self.create_git_fixture(temp, task_id="dirty-main-task")
             (f["main"] / "untracked.txt").write_text("dirty\n", encoding="utf-8")
@@ -247,12 +265,28 @@ class TaskStartBehavioralTests(unittest.TestCase):
                 "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
             }
             proc = self.run_task_start(task="dirty-main-task", env=env)
-            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual(proc.returncode, 0, f"stdout: {proc.stdout}\nstderr: {proc.stderr}")
             data = self.parse_result(proc)
-            self.assertFalse(data["ok"])
-            self.assertEqual(data["code"], "CANONICAL_MAIN_DIRTY")
-            # Verify no task worktree created
-            self.assertFalse((f["worktrees_root"] / "dirty-main-task").exists())
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["code"], "TASK_READY")
+            self.assertTrue((f["worktrees_root"] / "dirty-main-task").exists())
+
+    def test_canonical_main_local_commit_does_not_block_or_enter_task_worktree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            f = self.create_git_fixture(temp, task_id="local-main-task")
+            (f["main"] / "local_only.txt").write_text("local\n", encoding="utf-8")
+            self.run_git(f["main"], "add", "local_only.txt")
+            self.run_git(f["main"], "commit", "-m", "Local-only main commit")
+
+            env = {
+                "TASK_START_CANONICAL_MAIN_OVERRIDE": str(f["main"]),
+                "TASK_START_WORKTREES_ROOT_OVERRIDE": str(f["worktrees_root"]),
+                "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
+            }
+            proc = self.run_task_start(task="local-main-task", env=env)
+            self.assertEqual(proc.returncode, 0, f"stdout: {proc.stdout}\nstderr: {proc.stderr}")
+            self.assertEqual(self.parse_result(proc)["code"], "TASK_READY")
+            self.assertFalse((f["worktrees_root"] / "local-main-task" / "local_only.txt").exists())
 
     def test_canonical_main_wrong_branch_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -270,21 +304,9 @@ class TaskStartBehavioralTests(unittest.TestCase):
             self.assertFalse(data["ok"])
             self.assertEqual(data["code"], "CANONICAL_MAIN_WRONG_BRANCH")
 
-    def test_canonical_main_diverged_fails_closed(self):
+    def test_canonical_main_local_only_commit_does_not_block_task_start(self):
         with tempfile.TemporaryDirectory() as temp:
             f = self.create_git_fixture(temp, task_id="diverged-main-task")
-            # Advance remote origin/main via temporary clone
-            tmp_clone = Path(temp) / "tmp_clone"
-            self.run_git(Path(temp), "clone", str(f["origin"]), str(tmp_clone))
-            self.run_git(tmp_clone, "config", "user.name", "Test User")
-            self.run_git(tmp_clone, "config", "user.email", "test@example.com")
-            self.run_git(tmp_clone, "checkout", "main")
-            (tmp_clone / "remote_change.txt").write_text("remote\n", encoding="utf-8")
-            self.run_git(tmp_clone, "add", "remote_change.txt")
-            self.run_git(tmp_clone, "commit", "-m", "Remote commit on main")
-            self.run_git(tmp_clone, "push", "origin", "main")
-
-            # Create local unpushed commit on canonical main
             (f["main"] / "local_change.txt").write_text("local\n", encoding="utf-8")
             self.run_git(f["main"], "add", "local_change.txt")
             self.run_git(f["main"], "commit", "-m", "Local unpushed commit on main")
@@ -295,10 +317,10 @@ class TaskStartBehavioralTests(unittest.TestCase):
                 "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
             }
             proc = self.run_task_start(task="diverged-main-task", env=env)
-            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual(proc.returncode, 0, f"stdout: {proc.stdout}\nstderr: {proc.stderr}")
             data = self.parse_result(proc)
-            self.assertFalse(data["ok"])
-            self.assertEqual(data["code"], "CANONICAL_MAIN_DIVERGED")
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["code"], "TASK_READY")
 
     def test_missing_remote_task_branch_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -486,7 +508,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
             # Worktree must be preserved!
             target_wt = f["worktrees_root"] / "py-fail-task"
             self.assertTrue(target_wt.exists())
-            self.assertTrue((target_wt / "docs" / "tasks" / "py-fail-task" / "SPEC.md").exists())
+            self.assertTrue((target_wt / "docs" / "tasks" / "active" / "py-fail-task" / "SPEC.md").exists())
 
     def test_python_bootstrap_malformed_json_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -523,3 +545,5 @@ class TaskStartBehavioralTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

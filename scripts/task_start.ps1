@@ -6,6 +6,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'task_package_resolver.ps1')
 
 function Write-TaskStartResult([bool]$Ok, [string]$Code, [string]$Message, [hashtable]$Data = @{}) {
     $result = [ordered]@{
@@ -170,49 +171,20 @@ try {
         }
     }
 
-    # 3. Canonical main cleanliness
-    $mainStatus = Invoke-GitProcess @('-C', $canonicalRoot, 'status', '--porcelain') $canonicalRoot
-    if ($mainStatus.Code -ne 0) {
-        Write-TaskStartResult $false 'INTERNAL_ERROR' "Failed to inspect canonical main status: $($mainStatus.Text)" @{}
-    }
-    if ($mainStatus.Lines.Count -gt 0) {
-        Write-TaskStartResult $false 'CANONICAL_MAIN_DIRTY' 'Canonical main worktree is dirty. Aborting task startup.' @{}
-    }
-
-    # 4. Fetch origin from canonical main
+    # 3. Fetch origin without reading or changing canonical main state
     $fetchRes = Invoke-GitProcess @('-C', $canonicalRoot, 'fetch', 'origin') $canonicalRoot
     if ($fetchRes.Code -ne 0) {
         Write-TaskStartResult $false 'FETCH_FAILED' "git fetch origin failed: $($fetchRes.Text)" @{}
     }
 
-    # 5. Canonical main synchronization
-    $mainHeadRes = Invoke-GitProcess @('-C', $canonicalRoot, 'rev-parse', 'HEAD') $canonicalRoot
+    # 4. Resolve the fetched remote base; canonical main is intentionally not synchronized.
     $originMainRes = Invoke-GitProcess @('-C', $canonicalRoot, 'rev-parse', 'refs/remotes/origin/main') $canonicalRoot
-    if ($mainHeadRes.Code -ne 0 -or $originMainRes.Code -ne 0) {
-        Write-TaskStartResult $false 'INTERNAL_ERROR' 'Unable to resolve HEAD or origin/main refs in canonical main.' @{}
+    if ($originMainRes.Code -ne 0) {
+        Write-TaskStartResult $false 'INTERNAL_ERROR' 'Unable to resolve origin/main after fetching remote refs.' @{}
     }
-    $mainHeadSha = $mainHeadRes.Lines[0].Trim()
     $originMainSha = $originMainRes.Lines[0].Trim()
 
-    if ($mainHeadSha -ne $originMainSha) {
-        # Check if HEAD is ancestor of origin/main
-        $ancRes = Invoke-GitProcess @('-C', $canonicalRoot, 'merge-base', '--is-ancestor', 'HEAD', 'refs/remotes/origin/main') $canonicalRoot
-        if ($ancRes.Code -ne 0) {
-            Write-TaskStartResult $false 'CANONICAL_MAIN_DIVERGED' 'Canonical main has diverged or contains local-only unpushed commits relative to origin/main.' @{
-                main_head = $mainHeadSha
-                origin_main = $originMainSha
-            }
-        }
-        # Safe fast-forward
-        $ffRes = Invoke-GitProcess @('-C', $canonicalRoot, 'merge', '--ff-only', 'refs/remotes/origin/main') $canonicalRoot
-        if ($ffRes.Code -ne 0) {
-            Write-TaskStartResult $false 'CANONICAL_MAIN_DIVERGED' "Failed to fast-forward canonical main to origin/main: $($ffRes.Text)" @{}
-        }
-        $refreshedHead = Invoke-GitProcess @('-C', $canonicalRoot, 'rev-parse', 'HEAD') $canonicalRoot
-        $mainHeadSha = $refreshedHead.Lines[0].Trim()
-    }
-
-    # 6. Approved remote task branch verification
+    # 5. Approved remote task branch verification
     $remoteRef = "refs/remotes/origin/$effectiveBranch"
     $remoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'show-ref', '--verify', '--quiet', $remoteRef) $canonicalRoot
     if ($remoteCheck.Code -ne 0) {
@@ -222,7 +194,7 @@ try {
         }
     }
 
-    # 7. Fresh-base validation: origin/main must be ancestor of origin/<branch>
+    # 6. Fresh-base validation: origin/main must be ancestor of origin/<branch>
     $baseCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'merge-base', '--is-ancestor', 'refs/remotes/origin/main', $remoteRef) $canonicalRoot
     if ($baseCheck.Code -ne 0) {
         Write-TaskStartResult $false 'TASK_BRANCH_STALE_BASE' "Remote task branch '$remoteRef' does not contain current origin/main ($originMainSha) as an ancestor." @{
@@ -231,20 +203,21 @@ try {
         }
     }
 
-    # 8. Remote task artifact preflight
-    $specRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:docs/tasks/$Task/SPEC.md") $canonicalRoot
-    $taskJsonRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:docs/tasks/$Task/task.json") $canonicalRoot
+    # 7. Remote task artifact preflight
+    $taskGitPath = Get-TaskPackageGitPath $Task
+    $specRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:$taskGitPath/SPEC.md") $canonicalRoot
+    $taskJsonRemoteCheck = Invoke-GitProcess @('-C', $canonicalRoot, 'cat-file', '-e', "$remoteRef`:$taskGitPath/task.json") $canonicalRoot
     if ($specRemoteCheck.Code -ne 0 -or $taskJsonRemoteCheck.Code -ne 0) {
-        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Approved remote task branch is missing required task artifacts under 'docs/tasks/$Task/' (SPEC.md, task.json)." @{
+        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Approved remote task branch is missing required task artifacts under '$taskGitPath/' (SPEC.md, task.json)." @{
             task = $Task
             remote_ref = $remoteRef
         }
     }
 
     # Verify task.json content on remote
-    $taskJsonContentRes = Invoke-GitProcess @('-C', $canonicalRoot, 'show', "$remoteRef`:docs/tasks/$Task/task.json") $canonicalRoot
+    $taskJsonContentRes = Invoke-GitProcess @('-C', $canonicalRoot, 'show', "$remoteRef`:$taskGitPath/task.json") $canonicalRoot
     if ($taskJsonContentRes.Code -ne 0) {
-        Write-TaskStartResult $false 'TASK_PACKAGE_INVALID' "Failed to read remote 'docs/tasks/$Task/task.json'." @{}
+        Write-TaskStartResult $false 'TASK_PACKAGE_INVALID' "Failed to read remote '$taskGitPath/task.json'." @{}
     }
     try {
         $parsedRemoteTaskJson = ($taskJsonContentRes.Lines -join "`n") | ConvertFrom-Json -ErrorAction Stop
@@ -258,11 +231,13 @@ try {
         Write-TaskStartResult $false 'TASK_PACKAGE_INVALID' "Remote task.json is malformed JSON: $($_.Exception.Message)" @{}
     }
 
-    # 9. Worktree topology state machine
+    # 8. Worktree topology state machine
     $worktreesRoot = if ($env:TASK_START_WORKTREES_ROOT_OVERRIDE) {
         Normalize-WindowsPath $env:TASK_START_WORKTREES_ROOT_OVERRIDE
     } else {
-        Normalize-WindowsPath (Join-Path (Split-Path $canonicalRoot -Parent) 'worktrees')
+        $canonicalParent = Split-Path $canonicalRoot -Parent
+        $canonicalName = Split-Path $canonicalRoot -Leaf
+        Normalize-WindowsPath (Join-Path $canonicalParent ($canonicalName + '-worktrees'))
     }
     $targetWorktreePath = Normalize-WindowsPath (Join-Path $worktreesRoot $Task)
 
@@ -399,10 +374,11 @@ try {
     }
 
     # Post-attachment validation of local task artifacts
-    $localSpecPath = Join-Path (Join-Path (Join-Path $targetWorktreePath 'docs') 'tasks') (Join-Path $Task 'SPEC.md')
-    $localTaskJsonPath = Join-Path (Join-Path (Join-Path $targetWorktreePath 'docs') 'tasks') (Join-Path $Task 'task.json')
+    $localTaskRoot = Join-Path $targetWorktreePath ($taskGitPath -replace '/', '\\')
+    $localSpecPath = Join-Path $localTaskRoot 'SPEC.md'
+    $localTaskJsonPath = Join-Path $localTaskRoot 'task.json'
     if (-not (Test-Path -LiteralPath $localSpecPath) -or -not (Test-Path -LiteralPath $localTaskJsonPath)) {
-        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Task worktree is missing checked-out task artifacts in 'docs/tasks/$Task/'." @{
+        Write-TaskStartResult $false 'TASK_PACKAGE_MISSING' "Task worktree is missing checked-out task artifacts in '$taskGitPath/'." @{
             worktree = $targetWorktreePath
         }
     }

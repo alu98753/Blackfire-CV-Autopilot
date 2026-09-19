@@ -27,7 +27,7 @@ if sys.platform.startswith("win"):
     except AttributeError:
         pass
 
-from capture.screen import ScreenCapturer
+from runtime.io_adapters import BackendScreenCapturer
 from config import WINDOW_TITLE
 from utils.debug_artifacts import debug_image_path
 from utils.merchant_gold_detector import MerchantGoldDetector
@@ -53,7 +53,7 @@ def run_diagnose(image_path: str | None = None) -> None:
         hwnd = WindowHandle.find_window(WINDOW_TITLE)
         if not hwnd:
             print(f"⚠️ 找不到遊戲視窗 [{WINDOW_TITLE}]，請指定 --image 參數。")
-        capturer = ScreenCapturer(window_title=WINDOW_TITLE, hwnd=hwnd)
+        capturer = BackendScreenCapturer(window_title=WINDOW_TITLE, hwnd=hwnd)
         rect = capturer.get_window_rect()
         img = capturer.capture(rect)
         if img is None:

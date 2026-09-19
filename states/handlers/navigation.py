@@ -713,7 +713,15 @@ class NavigationHandler(BaseStateHandler):
 
         # 領地主場景優先判定：若未標記清理背包且畫面上已經出現領地探索按鈕，說明已進入領地，轉移狀態至 DOMAIN_EXPLORE
         domain_explore_btn = "domains/common/explore_btn.png"
-        if not self.machine.need_bag_cleaning and os.path.exists(os.path.join("templates", domain_explore_btn)):
+        current_config = self.machine.config or {}
+        is_domain_mode = current_config.get("type") == "domain" or bool(
+            current_config.get("domain")
+        )
+        if (
+            is_domain_mode
+            and not self.machine.need_bag_cleaning
+            and os.path.exists(os.path.join("templates", domain_explore_btn))
+        ):
             pos_de, conf_de = self.matcher.match(screen_img, domain_explore_btn, threshold=0.80)
             if pos_de:
                 logging.info(f"🧭 尋路成功！偵測到領地探索按鈕 [{domain_explore_btn}] (信心度: {conf_de:.4f})，已進入領地，狀態轉移至 DOMAIN_EXPLORE。")
@@ -995,13 +1003,15 @@ class NavigationHandler(BaseStateHandler):
                 if target_idx is None:
                     is_in_retreat = getattr(self.machine, "stamina_retreat_start_time", None) is not None
                     is_temp_resume = bool(self.machine.config.get("is_dungeon_temporary_resume", False))
-                    if is_in_retreat or is_temp_resume or not self._is_stage_farming_allowed():
-                        reason = (
-                            "體力退避或臨時地下城喚醒期間所有地下城皆已進入冷卻"
-                            if (is_in_retreat or is_temp_resume)
-                            else "所有地下城皆已進入冷卻且未啟用普通關卡打怪"
+                    if is_in_retreat or is_temp_resume:
+                        self._enter_collect_only_after_dungeon_cooldown(
+                            screen_img, rect, "體力退避或臨時地下城喚醒期間所有地下城皆已進入冷卻"
                         )
-                        self._enter_collect_only_after_dungeon_cooldown(screen_img, rect, reason)
+                        return
+                    if not self.machine.is_daily_pipeline_active() and not self._is_stage_farming_allowed():
+                        self._enter_collect_only_after_dungeon_cooldown(
+                            screen_img, rect, "所有地下城皆已進入冷卻且未啟用普通關卡打怪"
+                        )
                         return
                     if self.machine.config.get("type") == "dungeon":
                         self._enter_collect_only_after_dungeon_cooldown(

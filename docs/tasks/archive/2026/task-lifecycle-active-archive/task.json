@@ -1,0 +1,41 @@
+{
+  "id": "task-lifecycle-active-archive",
+  "base_ref": "origin/main",
+  "scope": [
+    "docs/tasks/",
+    "docs/architecture/ai_development_workflow.md",
+    "docs/todos/README.md",
+    ".agents/rules/ai-verification-gate.md",
+    ".agents/skills/branch_start_workflow/SKILL.md",
+    ".agents/skills/branch_completion_workflow/SKILL.md",
+    "scripts/task_package_resolver.ps1",
+    "scripts/task_archive.ps1",
+    "scripts/task_start.ps1",
+    "scripts/ai_scout.ps1",
+    "scripts/ai_gate.ps1",
+    "scripts/task_cleanup.ps1",
+    "scripts/opencode_structured_review_probe.mjs",
+    "scripts/README.md",
+    "tests/test_task_start_behavioral.py",
+    "tests/test_task_cleanup_behavioral.py",
+    "tests/test_workflow_scripts.py",
+    "tests/workflow_scripts/Invoke-WorkflowScriptHarness.ps1",
+    "tests/test_task_package_resolver.py",
+    "tests/test_task_archive.py"
+  ],
+  "focused_tests": [
+    "tests.test_task_package_resolver",
+    "tests.test_task_archive",
+    "tests.test_task_start_behavioral",
+    "tests.test_task_cleanup_behavioral",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_process_helpers",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_gate_readiness",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_scout",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_gate_verdict",
+    "tests.test_workflow_scripts.WorkflowScriptContractTests.test_windows_workflow_gate_resume_cache"
+  ],
+  "models": {
+    "scout": null,
+    "review": "opencode/big-pickle"
+  }
+}

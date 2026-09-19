@@ -922,6 +922,25 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.assertEqual(filtered, nav_path)
         self.assertIn("domains/Domains_entry.png", filtered)
 
+    @patch("os.path.exists", return_value=True)
+    def test_navigation_does_not_adopt_domain_scene_without_domain_identity(self, _mock_exists):
+        self.mock_machine.config = {
+            "type": "stage",
+            "navigation_path": [],
+        }
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.detect.return_value = SceneInfo(SceneType.UNKNOWN)
+        self.mock_machine.matcher.match.side_effect = lambda _image, template, **_kwargs: (
+            ((100, 200), 0.95)
+            if template == "domains/common/explore_btn.png"
+            else (None, 0.0)
+        )
+
+        self.handler.handle(MagicMock(), self.rect)
+
+        transitioned_states = [call.args[0] for call in self.mock_machine.transition_to.call_args_list]
+        self.assertNotIn("DOMAIN_EXPLORE", transitioned_states)
+
     def test_filter_navigation_path_skips_domain_tab_when_active(self):
         """Observed active domain tab is completed progress, like stage/dungeon."""
         nav_path = [
@@ -1268,6 +1287,256 @@ class TestBehaviorNavigation(unittest.TestCase):
         self.handler.click_and_wait_until_gone.assert_not_called()
         # 斷言：點擊子關卡 (500, 300)
         self.mock_machine.mouse.click.assert_called_with(500, 300)
+
+
+
+    # =========================================================================
+    # 1.5 Daily Tier-4 Domain 地下城全冷卻退守行為測試 (SPEC-bound)
+    # =========================================================================
+
+    def _setup_dungeon_cooldown_screen(
+        self,
+        daily_active: bool = False,
+        tier4_mode: str = "domain",
+        config_type: str = "mix",
+        enable_stage_farming: bool = False,
+        is_retreat: bool = False,
+        is_temp_resume: bool = False,
+    ):
+        import time
+        import numpy as np
+
+        self._set_active_tab_mock("dungeon")
+        self.handler.card_alignment_tab = "dungeon"
+        self.mock_machine.STATE_NAVIGATING = "NAVIGATING"
+        self.mock_machine.STATE_COLLECT_ONLY = "COLLECT_ONLY"
+        self.mock_machine.current_state = "NAVIGATING"
+        self.mock_machine.has_available_dungeon.return_value = True
+        self.mock_machine.is_daily_pipeline_active.return_value = daily_active
+        self.mock_machine.quest_scheduler = None
+        self.mock_machine.stamina_retreat_start_time = time.time() if is_retreat else None
+
+        self.mock_machine.primary_config = {
+            "_config_mode_key": "daily" if daily_active else config_type,
+            "tier4_mode": tier4_mode,
+            "enable_stage_farming": enable_stage_farming,
+        }
+        self.mock_machine.config = {
+            "name": "測試模式",
+            "type": config_type,
+            "enable_stage_farming": enable_stage_farming,
+            "is_dungeon_temporary_resume": is_temp_resume,
+            "greedy_dungeon": True,
+            "greedy_allowed_indices": [1],
+            "dungeon_names": ["Slime Cave"],
+            "dungeon_entries": ["dungeons/Slime_entry.png"],
+            "navigation_path": ["dungeons/dungeon.png"],
+        }
+        self.mock_machine.dungeon_cooldowns = {1: time.time() + 999.0}
+
+        def fake_match(_screen, tmpl, **_kwargs):
+            if tmpl == "goback_town.png":
+                return ((64, 726), 0.95)
+            if tmpl == "common/select_stage.png":
+                return ((648, 715), 0.95)
+            return (None, 0.0)
+
+        self.mock_machine.matcher.match.side_effect = fake_match
+        return np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+    @patch("cv2.minMaxLoc", return_value=(0.0, 0.95, (0, 0), (100, 100)))
+    @patch("cv2.matchTemplate", return_value=None)
+    @patch("cv2.resize", return_value=None)
+    @patch("cv2.imread", return_value=None)
+    @patch("os.path.exists", return_value=True)
+    def test_daily_tier4_domain_cooldown_fallback_applies_fallback_and_stays_navigating(
+        self, _mock_exists, mock_imread, mock_resize, _mock_match, _mock_min_max
+    ):
+        """
+        [AC 1 & 2 驗證]
+        Given: Daily 流水線啟動，Tier 4 設為 Domain，enable_stage_farming=False，且所有地下城全冷卻 (target_idx is None)
+        When: 執行 NavigationHandler.handle()
+        Then: 絕不進入 COLLECT_ONLY，而是委託既有 Daily 退守權力套用 Tier 4 Domain 退守並維持 NAVIGATING。
+        """
+        import numpy as np
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+
+        dummy_screen = self._setup_dungeon_cooldown_screen(
+            daily_active=True,
+            tier4_mode="domain",
+            config_type="mix",
+            enable_stage_farming=False,
+        )
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        # 斷言：絕不進入 COLLECT_ONLY
+        for call_args in self.mock_machine.transition_to.call_args_list:
+            self.assertNotEqual(
+                call_args.args[0],
+                self.mock_machine.STATE_COLLECT_ONLY,
+                "Must not enter COLLECT_ONLY when Daily Tier-4 Domain has all dungeons on cooldown",
+            )
+
+        # 斷言：已套用 Tier-4 退守配置，並轉移至 STATE_NAVIGATING
+        self.mock_machine.apply_tier4_fallback_config.assert_called_once()
+        self.mock_machine.transition_to.assert_called_with(self.mock_machine.STATE_NAVIGATING)
+
+    @patch("cv2.minMaxLoc", return_value=(0.0, 0.95, (0, 0), (100, 100)))
+    @patch("cv2.matchTemplate", return_value=None)
+    @patch("cv2.resize", return_value=None)
+    @patch("cv2.imread", return_value=None)
+    @patch("os.path.exists", return_value=True)
+    def test_stamina_retreat_preserves_collect_only_even_if_daily_active(
+        self, _mock_exists, mock_imread, mock_resize, _mock_match, _mock_min_max
+    ):
+        """
+        [AC 3 驗證]
+        Given: 體力退避中，即使 Daily 流水線啟動且 Tier 4 為 Domain
+        When: 地下城全冷卻時
+        Then: 必須嚴格保持原退守行為進入 COLLECT_ONLY，絕不套用 Tier 4 Domain 退守。
+        """
+        import numpy as np
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+
+        dummy_screen = self._setup_dungeon_cooldown_screen(
+            daily_active=True,
+            tier4_mode="domain",
+            config_type="mix",
+            enable_stage_farming=False,
+            is_retreat=True,
+        )
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        self.mock_machine.apply_tier4_fallback_config.assert_not_called()
+        self.mock_machine.transition_to.assert_called_with(self.mock_machine.STATE_COLLECT_ONLY)
+
+    @patch("cv2.minMaxLoc", return_value=(0.0, 0.95, (0, 0), (100, 100)))
+    @patch("cv2.matchTemplate", return_value=None)
+    @patch("cv2.resize", return_value=None)
+    @patch("cv2.imread", return_value=None)
+    @patch("os.path.exists", return_value=True)
+    def test_temporary_dungeon_resume_preserves_collect_only_even_if_daily_active(
+        self, _mock_exists, mock_imread, mock_resize, _mock_match, _mock_min_max
+    ):
+        """
+        [AC 4 驗證]
+        Given: 臨時地下城喚醒模式 (is_dungeon_temporary_resume=True)，即使 Daily 流水線啟動且 Tier 4 為 Domain
+        When: 地下城全冷卻時
+        Then: 必須嚴格保持原退守行為進入 COLLECT_ONLY，絕不套用 Tier 4 Domain 退守。
+        """
+        import numpy as np
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+
+        dummy_screen = self._setup_dungeon_cooldown_screen(
+            daily_active=True,
+            tier4_mode="domain",
+            config_type="mix",
+            enable_stage_farming=False,
+            is_temp_resume=True,
+        )
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        self.mock_machine.apply_tier4_fallback_config.assert_not_called()
+        self.mock_machine.transition_to.assert_called_with(self.mock_machine.STATE_COLLECT_ONLY)
+
+    @patch("cv2.minMaxLoc", return_value=(0.0, 0.95, (0, 0), (100, 100)))
+    @patch("cv2.matchTemplate", return_value=None)
+    @patch("cv2.resize", return_value=None)
+    @patch("cv2.imread", return_value=None)
+    @patch("os.path.exists", return_value=True)
+    def test_pure_dungeon_mode_cooldown_enters_collect_only(
+        self, _mock_exists, mock_imread, mock_resize, _mock_match, _mock_min_max
+    ):
+        """
+        [AC 5 驗證]
+        Given: 純地下城模式 (type='dungeon', Daily 未啟用)
+        When: 地下城全冷卻時
+        Then: 保持原契約進入 COLLECT_ONLY。
+        """
+        import numpy as np
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+
+        dummy_screen = self._setup_dungeon_cooldown_screen(
+            daily_active=False,
+            config_type="dungeon",
+            enable_stage_farming=False,
+        )
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        self.mock_machine.apply_tier4_fallback_config.assert_not_called()
+        self.mock_machine.transition_to.assert_called_with(self.mock_machine.STATE_COLLECT_ONLY)
+
+    @patch("cv2.minMaxLoc", return_value=(0.0, 0.95, (0, 0), (100, 100)))
+    @patch("cv2.matchTemplate", return_value=None)
+    @patch("cv2.resize", return_value=None)
+    @patch("cv2.imread", return_value=None)
+    @patch("os.path.exists", return_value=True)
+    def test_ordinary_mix_mode_stage_farming_enabled_switches_to_stage(
+        self, _mock_exists, mock_imread, mock_resize, _mock_match, _mock_min_max
+    ):
+        """
+        [AC 6 驗證]
+        Given: 一般 mix 模式 (Daily 未啟用)，且 enable_stage_farming=True
+        When: 地下城全冷卻時
+        Then: 保持原契約切換至普通關卡 (點擊 common/select_stage.png)，絕不進入 COLLECT_ONLY。
+        """
+        import numpy as np
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+
+        dummy_screen = self._setup_dungeon_cooldown_screen(
+            daily_active=False,
+            config_type="mix",
+            enable_stage_farming=True,
+        )
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        for call_args in self.mock_machine.transition_to.call_args_list:
+            self.assertNotEqual(
+                call_args.args[0],
+                self.mock_machine.STATE_COLLECT_ONLY,
+                "Must not enter COLLECT_ONLY for mix mode with enable_stage_farming=True",
+            )
+        self.mock_machine.mouse.click.assert_called_with(648, 715)
+
+    @patch("cv2.minMaxLoc", return_value=(0.0, 0.95, (0, 0), (100, 100)))
+    @patch("cv2.matchTemplate", return_value=None)
+    @patch("cv2.resize", return_value=None)
+    @patch("cv2.imread", return_value=None)
+    @patch("os.path.exists", return_value=True)
+    def test_daily_tier4_none_enters_collect_only(
+        self, _mock_exists, mock_imread, mock_resize, _mock_match, _mock_min_max
+    ):
+        """
+        [AC 7 驗證]
+        Given: Daily 流水線啟動，但 Tier 4 設為 none (tier4_mode=none)
+        When: 地下城全冷卻時
+        Then: 委託既有 _switch_to_stage_or_back 判定後轉入 COLLECT_ONLY，絕不誤切至 Domain 或 Stage。
+        """
+        import numpy as np
+        mock_imread.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+        mock_resize.return_value = np.zeros((50, 50, 3), dtype=np.uint8)
+
+        dummy_screen = self._setup_dungeon_cooldown_screen(
+            daily_active=True,
+            tier4_mode="none",
+            config_type="mix",
+            enable_stage_farming=False,
+        )
+
+        self.handler.handle(dummy_screen, self.rect)
+
+        self.mock_machine.apply_tier4_fallback_config.assert_not_called()
+        self.mock_machine.transition_to.assert_called_with(self.mock_machine.STATE_COLLECT_ONLY)
 
 
 if __name__ == "__main__":

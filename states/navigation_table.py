@@ -104,41 +104,41 @@ V1_NAVIGATION_EDGES = (
         PostconditionId.LOADING_OR_BATTLE,
         ReasonCode.PRIMARY_START_READY,
     ),
-    NavigationEdge(
-        IntentId.COLLECT_DIAMOND,
-        SceneId.STAGE_SELECT,
-        SceneId.TOWN,
-        ElementId.GOBACK_TOWN,
-        ActionId.RETURN_TOWN,
-        PostconditionId.TOWN,
-        ReasonCode.DIAMOND_RETURN_TO_TOWN,
+    *(
+        NavigationEdge(
+            IntentId.COLLECT_DIAMOND,
+            source,
+            SceneId.TOWN,
+            ElementId.GOBACK_TOWN,
+            ActionId.RETURN_TOWN,
+            PostconditionId.TOWN,
+            ReasonCode.DIAMOND_RETURN_TO_TOWN,
+        )
+        for source in (
+            SceneId.STAGE_SELECT,
+            SceneId.DUNGEON_SELECT,
+            SceneId.DOMAIN_SELECT,
+            SceneId.LORD_SELECT,
+            SceneId.DEMON_LORD_SELECT,
+        )
     ),
-    NavigationEdge(
-        IntentId.COLLECT_DIAMOND,
-        SceneId.DUNGEON_SELECT,
-        SceneId.TOWN,
-        ElementId.GOBACK_TOWN,
-        ActionId.RETURN_TOWN,
-        PostconditionId.TOWN,
-        ReasonCode.DIAMOND_RETURN_TO_TOWN,
-    ),
-    NavigationEdge(
-        IntentId.COLLECT_BREAD,
-        SceneId.STAGE_SELECT,
-        SceneId.BREAD_WINDOW,
-        ElementId.BREAD_ENTRY,
-        ActionId.OPEN_BREAD,
-        PostconditionId.BREAD_WINDOW,
-        ReasonCode.BREAD_ENTRY_READY,
-    ),
-    NavigationEdge(
-        IntentId.COLLECT_BREAD,
-        SceneId.DUNGEON_SELECT,
-        SceneId.BREAD_WINDOW,
-        ElementId.BREAD_ENTRY,
-        ActionId.OPEN_BREAD,
-        PostconditionId.BREAD_WINDOW,
-        ReasonCode.BREAD_ENTRY_READY,
+    *(
+        NavigationEdge(
+            IntentId.COLLECT_BREAD,
+            source,
+            SceneId.BREAD_WINDOW,
+            ElementId.BREAD_ENTRY,
+            ActionId.OPEN_BREAD,
+            PostconditionId.BREAD_WINDOW,
+            ReasonCode.BREAD_ENTRY_READY,
+        )
+        for source in (
+            SceneId.STAGE_SELECT,
+            SceneId.DUNGEON_SELECT,
+            SceneId.DOMAIN_SELECT,
+            SceneId.LORD_SELECT,
+            SceneId.DEMON_LORD_SELECT,
+        )
     ),
     NavigationEdge(
         IntentId.PRIMARY_NAVIGATION,

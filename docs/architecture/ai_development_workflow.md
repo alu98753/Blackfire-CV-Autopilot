@@ -18,6 +18,9 @@ Human / ChatGPT
   -> independent verification when available/required
   -> ChatGPT final semantic / architecture review
   -> user-authorized integration
+  -> explicit task_archive.ps1 closeout
+  -> closeout branch integration into origin/main
+  -> resolver confirms ARCHIVED
   -> task_cleanup.ps1
 ```
 
@@ -35,6 +38,21 @@ Authority boundaries:
 
 ## 2. Canonical local workspace
 
+The current canonical layout is:
+
+```text
+E:\Side_Project\
+├─ Blackfire-CV-Autopilot\
+│  └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+├─ Blackfire-CV-Autopilot-worktrees\
+│  └─ <task-id>\
+│     └─ .venv -> junction to E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
+└─ VenvPools\
+   └─ .venvs-Blackfire-CV-Autopilot\
+```
+
+The legacy nested tree shown below is historical migration context only. New task worktrees must use the sibling namespace above. `VenvPools` is external shared environment storage; `node_modules` remains untracked per-worktree state and is not a shared top-level component.
+
 ```text
 E:\Side_Project\Blackfire-CV-Autopilot\
 ├─ BlackfireCrusade_tool\
@@ -45,11 +63,13 @@ E:\Side_Project\Blackfire-CV-Autopilot\
       └─ .venv -> E:\Side_Project\VenvPools\.venvs-Blackfire-CV-Autopilot
 ```
 
-`E:\Side_Project\Blackfire-CV-Autopilot\BlackfireCrusade_tool` is the permanent local `main` worktree and canonical integrated runtime/CV validation home. It remains attached to `main`; the old permanent temp-main / detached-main convention is retired.
+`E:\Side_Project\Blackfire-CV-Autopilot` is the permanent local `main` worktree and canonical integrated runtime/CV validation home. It remains attached to `main`; the old nested checkout and permanent temp-main / detached-main conventions are retired.
 
-`E:\Side_Project\Blackfire-CV-Autopilot\worktrees\<task-id>` is the canonical path for new branch-scoped temporary task worktrees.
+`E:\Side_Project\Blackfire-CV-Autopilot-worktrees\<task-id>` is the canonical path for new branch-scoped temporary task worktrees.
 
 Existing legacy active worktrees may remain where they are until their task closes. Do not move dirty/active worktrees merely to normalize paths.
+
+After this migration is integrated, run normal task cleanup and confirm no relevant linked task worktrees remain before physically relocating the existing main checkout. Preserve that checkout as a whole, including ignored local state and its `.venv` junction.
 
 Git worktree topology is machine state. Repository automation must inspect `git worktree list --porcelain`; branch ownership must never be guessed from remembered paths.
 
@@ -118,7 +138,7 @@ Node invariants:
 Every active AI-assisted task uses:
 
 ```text
-docs/tasks/<task-id>/
+docs/tasks/active/<task-id>/
 ├─ SPEC.md
 ├─ task.json
 ├─ CONTEXT.md        # after Scout when used
@@ -180,8 +200,8 @@ For formal AI tasks, GitHub already contains:
 
 ```text
 origin/<approved-task-branch>
-docs/tasks/<task-id>/SPEC.md
-docs/tasks/<task-id>/task.json
+docs/tasks/active/<task-id>/SPEC.md
+docs/tasks/active/<task-id>/task.json
 ```
 
 The normal user-facing handoff is exactly the repository wrapper:
@@ -200,9 +220,9 @@ For legacy/nonstandard approved branch names:
 
 - discover and validate canonical main;
 - inspect actual worktree topology;
-- require clean attached `main`;
+- validate that canonical `main` is attached, without requiring its working tree to be clean;
 - `git fetch origin`;
-- safely fast-forward canonical main when possible;
+- resolve the fetched `origin/main` ref without changing canonical `main`;
 - validate the approved remote task branch and current-main ancestry;
 - validate remote task artifacts;
 - create or safely reuse the canonical task worktree;
@@ -211,7 +231,7 @@ For legacy/nonstandard approved branch names:
 - invoke `worktree_environment_bootstrap.ps1`;
 - return exactly one JSON result with `TASK_READY` on success.
 
-It fails closed on dirty/diverged/detached/conflicting/stale states and preserves evidence. It does not merge/rebase stale task branches, synthesize task artifacts, bootstrap Node, launch Scout/Gate, or perform cleanup.
+It fails closed on detached/conflicting/stale states and preserves evidence. Local uncommitted changes or local-only commits in canonical `main` do not block startup and are not copied into the task worktree. It does not merge/rebase stale task branches, synthesize task artifacts, bootstrap Node, launch Scout/Gate, or perform cleanup.
 
 ### Manual startup operations are recovery, not the normal path
 
@@ -231,7 +251,7 @@ Unspecified ideas live in `docs/tasks/BACKLOG.md`. When activated, they are prom
 
 ### Phase A1 — Contract framing
 
-ChatGPT checks current GitHub `main`, architecture contracts, nearby implementation/tests, and backlog context, then creates the remote task branch plus Draft `SPEC.md` and `task.json`.
+ChatGPT checks current GitHub `main`, architecture contracts, nearby implementation/tests, and backlog context, then creates the remote task branch plus Draft `SPEC.md` and `task.json`. Formal task creation must include an explicit `models.review` provider/model string; the canonical reviewer model is `opencode/big-pickle`. Missing, null, empty, array, or locally-default reviewer configuration is invalid and Gate must fail fast.
 
 ### Phase A1.5 — Workspace materialization
 
@@ -292,7 +312,7 @@ Reviewer persistence and resume follow:
 
 When formal Gate succeeds and remote ChatGPT final review is required, the canonical `reviews/*.md` and `EVIDENCE.md` must be committed and pushed to the task branch before handoff. Local-only Gate evidence is not sufficient for the GitHub-based final-review step.
 
-### Phase E — Final review, integration, cleanup
+### Phase E — Final review, integration, archive closeout, cleanup
 
 Phase E begins only after the applicable verification path is complete and the candidate/evidence required for remote review is available on GitHub.
 
@@ -301,18 +321,21 @@ Preferred closeout path:
 1. Push the current task HEAD and applicable canonical review/evidence artifacts.
 2. ChatGPT re-checks the expected task HEAD and current base on GitHub and performs final semantic/architecture review.
 3. The user explicitly authorizes integration.
-4. ChatGPT integrates through GitHub using merge-commit semantics.
-5. After integrated ancestry is confirmed in `origin/main`, local task cleanup is delegated to `task_cleanup.ps1`.
+4. ChatGPT integrates the task branch through GitHub using merge-commit semantics. The task package remains ACTIVE after this integration.
+5. Run `scripts\task_archive.ps1 -Task <task-id>`; it prepares the move in a temporary detached worktree, pushes the temporary handoff branch `origin/archive/<task-id>-<year>`, and reports `ARCHIVE_CLOSEOUT_READY`. No persistent local closeout branch is created, and this is not yet `ARCHIVED`.
+6. ChatGPT/user integrates the remote closeout branch through the existing merge authority. The resolver must then find exactly one ARCHIVED package in `origin/main`.
+7. Only after closeout merge and ARCHIVED verification may ChatGPT/user delete `origin/archive/<task-id>-<year>`. If the closeout is not merged, that remote handoff branch must not be deleted.
+8. Only after remote closeout branch deletion is local cleanup delegated to `task_cleanup.ps1`; neither `task_archive.ps1` nor `task_cleanup.ps1` deletes the closeout branch.
 
 A Gate result of `CANDIDATE_BLOCKED` (`2`) or `VERIFICATION_UNAVAILABLE` (`1`) does not advance to integration; it returns to bounded diagnosis/correction/verification.
 
-After remote integration, normal task cleanup is repository-owned:
+After archive closeout integration and ARCHIVED verification, normal task cleanup is repository-owned:
 
 ```powershell
 .\scripts\task_cleanup.ps1 -Task <task-id>
 ```
 
-Optionally, when repository/user policy calls for deleting the remote branch:
+Optionally, when repository/user policy calls for deleting the original remote task branch (not the archive closeout handoff branch):
 
 ```powershell
 .\scripts\task_cleanup.ps1 -Task <task-id> -DeleteRemoteBranch
@@ -346,7 +369,7 @@ This workflow inherits `.agents/AGENTS.md` and `.agents/skills/project-test-rule
 
 ## 11. Multi-worktree task-state invariant
 
-Task state is namespaced by task id under `docs/tasks/<task-id>/`. Do not introduce a global mutable current-task singleton. Scripts require explicit task identity.
+Task state is namespaced by task id under `docs/tasks/active/<task-id>/`. Do not introduce a global mutable current-task singleton. Scripts require explicit task identity.
 
 ## 12. OpenCode compatibility and fallback
 

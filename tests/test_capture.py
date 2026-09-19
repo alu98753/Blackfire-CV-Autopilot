@@ -4,7 +4,7 @@ import sys
 # 將專案根目錄加入 Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from capture.screen import ScreenCapturer
+from runtime.io_adapters import ForegroundScreenCapturer
 
 def main():
     if sys.platform.startswith('win'):
@@ -18,7 +18,7 @@ def main():
     print("=" * 60)
     
     target_title = "Blackfire Crusade"
-    capturer = ScreenCapturer(window_title=target_title)
+    capturer = ForegroundScreenCapturer(window_title=target_title)
     
     print(f"[*] 正在尋找視窗: '{target_title}'...")
     rect = capturer.get_window_rect()
