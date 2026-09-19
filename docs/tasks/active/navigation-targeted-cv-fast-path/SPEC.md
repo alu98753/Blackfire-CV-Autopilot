@@ -4,7 +4,7 @@ Status: Final
 
 ## Current implementation checkpoint (authoritative handoff)
 
-This section is the progress SSOT for context reconstruction. The historical phase sections below retain the original Final contract and rationale; they are not evidence that completed phases are still pending.
+This section is the progress SSOT for context reconstruction. The historical phase sections below retain the original Final contract and rationale; they are not evidence that completed phases are still pending. `CONTEXT.md` is the original Scout evidence and must not be treated as the current implementation-status SSOT.
 
 Last reviewed production anchor before this checkpoint: `87ff4eb8d588ccacab1368301d576a5d6919a7c6`.
 
@@ -394,7 +394,7 @@ Current implementation provides:
 
 ### Routing contract (implemented)
 
-The implementation must extend the existing navigation policy/table contract so that:
+The implemented navigation policy/table contract is:
 
 ```text
 current Scene = Stage
@@ -518,6 +518,9 @@ Expected production/reference surfaces include:
 - `utils/scene_snapshot.py`
 - `utils/scene_detector.py`
 - `utils/card_navigator.py`
+- `utils/navigation_catalog.py`
+- `utils/shared_card_navigator.py`
+- `utils/card_navigation_session.py`
 - `utils/dungeon_catalog.py`
 - `utils/config_helper.py`
 - `config.py`
