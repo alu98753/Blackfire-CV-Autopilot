@@ -17,11 +17,15 @@ Last reviewed production anchor before this checkpoint: `87ff4eb8d588ccacab13683
 - **Phase 10B-3: complete.** Dungeon shared fixed-target resolution and legacy compatibility resolution are explicit separate owners with their historical precedence/validation semantics preserved.
 - **Phase 10B-4: complete.** After canonical fixed Dungeon `FOUND`, the shared committed target index flows directly into target-only rescan/status/click; the canonical path no longer re-enters the legacy compatibility resolver.
 
+### In progress
+
+- **Phase 10B-5 — Lord legacy reset/search/swipe cleanup.** Survey is complete; production implementation is pending. The current shared `NEED_RESET_LEFT` recovery still mirrors its attempt/alignment state into legacy `reset_swipe_count` / `has_reset_to_left`. After the shared target/session is later cleared, that legacy sentinel can make a supported canonical Lord selection fall back to the old broad candidate scan and direct left-swipe algorithm. The bounded fix is to decouple shared recovery bookkeeping from legacy bookkeeping while preserving the explicit legacy/non-canonical compatibility path and all Lord availability/cooldown/click/start/fight behavior. See `reviews/phase10b5-lord-legacy-navigation-survey.md`.
+
 ### Remaining Phase 10 work
 
 Recommended order for a fresh conversation:
 
-1. **Lord legacy reset/search/swipe cleanup.** Survey current `has_reset_to_left`, first-card alignment, candidate scan, and direct swipe reachability. Remove only physical-navigation responsibilities proven replaced by shared navigation; preserve availability selection, cooldown OCR, bookkeeping, click/start/fight.
+1. **Finish Phase 10B-5 Lord cleanup implementation.** Decouple canonical shared reset recovery from legacy `has_reset_to_left` / `reset_swipe_count` bookkeeping. A supported target must remain shared-owned after shared reset/recovery and after later target/session clear. Keep shared bounded `align_first_card()` recovery, and keep the explicitly pre-established legacy/non-canonical compatibility path unless stronger configuration evidence proves it dead. Preserve availability selection, cooldown OCR/update, bookkeeping, click/start/fight.
 2. **Stage/Domain legacy main-card fallback audit.** Re-check whether any canonical normal-path reset-first alignment or horizontal search remains reachable. Preserve Stage sub-stage flow and Domain entry/start/explore. Compatibility/recovery paths are not automatically dead.
 3. **Cooldown/mix fallback tab-routing cleanup.** In `_switch_to_stage_or_back()` and nearby mix/daily fallback code, separate direct tab-click responsibilities already owned by declarative routing from live cooldown, scheduler, collect-only, stamina-retreat, and fallback policy. Do not delete the function as a unit.
 4. **Demon Lord incomplete-catalog fallback decision.** The legacy fallback remains KEEP until a repository-level contract proves supported configs always provide a complete canonical Demon Lord catalog, or characterization proves a narrower removable slice.
