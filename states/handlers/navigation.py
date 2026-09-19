@@ -23,7 +23,11 @@ from utils.card_navigator import CardAlignmentStatus, CardListNavigator
 from utils.sub_stage_navigator import SubStageDirection, SubStageListNavigator
 from utils.scene_detector import SceneDetector, SceneType
 from utils.dungeon_catalog import DungeonCatalog
-from utils.navigation_catalog import domain_navigation_catalog, stage_navigation_catalog
+from utils.navigation_catalog import (
+    domain_navigation_catalog,
+    dungeon_navigation_catalog,
+    stage_navigation_catalog,
+)
 from utils.shared_card_navigator import CardNavigatorState, SharedCardNavigator
 from states.navigation_routing import (
     NavigationDecisionExecutor,
@@ -236,6 +240,9 @@ class NavigationHandler(BaseStateHandler):
         self.domain_card_target_key = None
         self.domain_card_reset_attempts = 0
         self._domain_card_handoff = False
+        self.dungeon_card_navigator = None
+        self.dungeon_card_target_key = None
+        self.dungeon_card_reset_attempts = 0
 
     def _resolve_domain_navigation_templates(self):
         config = self.machine.config or {}
@@ -441,6 +448,106 @@ class NavigationHandler(BaseStateHandler):
         # CONTRADICTORY and RELOCALIZE deliberately do not swipe. The next
         # confirmed Domain frame re-enters localization on the same session.
         return True
+
+    def _clear_dungeon_card_session(self):
+        self.dungeon_card_navigator = None
+        self.dungeon_card_target_key = None
+        self.dungeon_card_reset_attempts = 0
+
+    def _resolve_fixed_dungeon_target_idx(self):
+        config = self.machine.config or {}
+        if config.get("greedy_dungeon"):
+            return None
+
+        entries = config.get("dungeon_entries")
+        names = config.get("dungeon_names")
+        if not entries or not names:
+            return None
+
+        raw_idx = config.get("tier4_dungeon_index", config.get("dungeon_index"))
+        if raw_idx is not None:
+            try:
+                parsed_idx = int(raw_idx)
+            except (ValueError, TypeError):
+                parsed_idx = None
+            if parsed_idx is not None and DungeonCatalog.is_valid_index(
+                parsed_idx, custom_names=names
+            ) and parsed_idx <= len(entries):
+                return parsed_idx
+
+        return DungeonCatalog.resolve_index_from_nav_path(
+            config.get("navigation_path", []), entries
+        )
+
+    def _handle_fixed_dungeon_navigation(self, screen_img, rect, scene):
+        """Advance fixed Dungeon card navigation without owning its status flow."""
+        config = self.machine.config or {}
+        if config.get("type") not in {"dungeon", "mix"} or "dungeon" not in scene.active_tabs:
+            self._clear_dungeon_card_session()
+            return None
+
+        target_idx = self._resolve_fixed_dungeon_target_idx()
+        if target_idx is None:
+            self._clear_dungeon_card_session()
+            return None
+
+        catalog = dungeon_navigation_catalog(
+            custom_names=config.get("dungeon_names"),
+            custom_entries=config.get("dungeon_entries"),
+        )
+        target_key = catalog[target_idx - 1].key
+        if self.dungeon_card_target_key != target_key:
+            self.dungeon_card_navigator = SharedCardNavigator(catalog, target_key)
+            self.dungeon_card_target_key = target_key
+            self.dungeon_card_reset_attempts = 0
+
+        result = self.dungeon_card_navigator.observe(screen_img, self.matcher)
+        if result.state == CardNavigatorState.FOUND:
+            self._clear_dungeon_card_session()
+            return "FOUND"
+
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self.machine.last_dungeon_scroll_time = time.time()
+            self._sleep(1.2)
+            return "HANDLED"
+
+        if result.state == CardNavigatorState.NEED_RESET_LEFT:
+            first_template = catalog[0].template
+            max_attempts = int(
+                config.get("dungeon_reset_max_attempts", self.CARD_RESET_MAX_ATTEMPTS)
+            )
+            status, attempts, confidence = CardListNavigator.align_first_card(
+                screen_img,
+                self.matcher,
+                self.mouse,
+                rect,
+                first_template,
+                self.dungeon_card_reset_attempts,
+                max_attempts=max_attempts,
+                threshold=get_template_threshold(first_template, default=ENTRY_THRESHOLD),
+                duration=0.8,
+                inertia=False,
+            )
+            self.dungeon_card_reset_attempts = attempts
+            self.card_alignment_attempts = attempts
+            if status == CardAlignmentStatus.ALIGNED:
+                self.dungeon_card_reset_attempts = 0
+                self.card_alignment_attempts = 0
+                return "HANDLED"
+            if status == CardAlignmentStatus.RETRYING:
+                self.notify_ui_progress()
+                self.machine.last_dungeon_scroll_time = time.time()
+                self._sleep(1.2)
+                return "HANDLED"
+            self._clear_dungeon_card_session()
+            self.machine.request_relaunch("dungeon_card_alignment_failed")
+            return "HANDLED"
+
+        # RELOCALIZE and contradictory evidence wait for the next confirmed
+        # Dungeon frame; neither permits a blind swipe.
+        return "HANDLED"
 
     def _handle_primary_card_alignment(self, screen_img, rect, scene):
         """Align primary-mode shared cards only after the active tab is observed."""
@@ -963,6 +1070,8 @@ class NavigationHandler(BaseStateHandler):
         dungeon_select_open = "dungeon" in scene.active_tabs
         if (self.machine.config or {}).get("type") == "domain" and "domain" not in scene.active_tabs:
             self._clear_domain_card_session()
+        if self.dungeon_card_navigator is not None and not dungeon_select_open:
+            self._clear_dungeon_card_session()
         routing = resolve_navigation_context(self.machine, scene)
         executor = NavigationDecisionExecutor(self)
         if executor.execute(routing, screen_img, rect):
@@ -1028,6 +1137,12 @@ class NavigationHandler(BaseStateHandler):
         elif config_type == "mix":
             wants_dungeon_scan = self.machine.has_available_dungeon()
         should_scan_dungeons = wants_dungeon_scan and dungeon_select_open
+        fixed_dungeon_search = False
+        if should_scan_dungeons and type(screen_img).__name__ == "ndarray":
+            fixed_result = self._handle_fixed_dungeon_navigation(screen_img, rect, scene)
+            if fixed_result == "HANDLED":
+                return
+            fixed_dungeon_search = fixed_result == "FOUND"
         
         # 為了避免在單元測試中使用 MagicMock 時 cv2 運算崩潰，僅在 screen_img 有 shape 屬性時執行 OpenCV 模板匹配
         is_dungeon_page = False
@@ -1063,7 +1178,12 @@ class NavigationHandler(BaseStateHandler):
                 raise ValueError("配置錯誤：config 未設定 'dungeon_entries'，請在 config.py 或啟動設定中指定地下城入口模板清單。")
             temp_confidences = {}
             
-            for idx, temp_name in enumerate(entry_templates, start=1):
+            scan_entries = (
+                [(self._resolve_fixed_dungeon_target_idx(), entry_templates[self._resolve_fixed_dungeon_target_idx() - 1])]
+                if fixed_dungeon_search
+                else list(enumerate(entry_templates, start=1))
+            )
+            for idx, temp_name in scan_entries:
                 if os.path.exists(os.path.join("templates", temp_name)):
                     t_img = cv2.imread(os.path.join("templates", temp_name))
                     if t_img is not None:
