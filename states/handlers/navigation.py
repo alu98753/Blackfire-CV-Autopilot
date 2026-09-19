@@ -351,7 +351,7 @@ class NavigationHandler(BaseStateHandler):
         if config.get("greedy_dungeon"):
             session.invalidate_cross_mode_action()
             return False
-        target_index = self._resolve_fixed_dungeon_target_idx()
+        target_index = self._resolve_shared_fixed_dungeon_target_idx()
         if config.get("type") not in {"dungeon", "mix"} or target_index is None:
             session.invalidate_cross_mode_action()
             return False
@@ -646,7 +646,7 @@ class NavigationHandler(BaseStateHandler):
             self._clear_dungeon_card_session()
         return True
 
-    def _resolve_fixed_dungeon_target_idx(self):
+    def _resolve_shared_fixed_dungeon_target_idx(self):
         config = self.machine.config or {}
         if config.get("greedy_dungeon"):
             return None
@@ -671,6 +671,26 @@ class NavigationHandler(BaseStateHandler):
             config.get("navigation_path", []), entries
         )
 
+    @staticmethod
+    def _resolve_legacy_compat_dungeon_target_idx(config, entry_templates):
+        """Preserve legacy navigation_path-first target resolution semantics."""
+
+        target_idx = DungeonCatalog.resolve_index_from_nav_path(
+            config.get("navigation_path", []), entry_templates
+        )
+        if target_idx is None:
+            raw_idx = config.get(
+                "tier4_dungeon_index", config.get("dungeon_index")
+            )
+            if raw_idx is not None:
+                try:
+                    parsed_idx = int(raw_idx)
+                except (ValueError, TypeError):
+                    parsed_idx = None
+                if parsed_idx is not None and 1 <= parsed_idx <= len(entry_templates):
+                    target_idx = parsed_idx
+        return target_idx
+
     def _handle_fixed_dungeon_navigation(self, screen_img, rect, scene):
         """Advance fixed Dungeon card navigation without owning its status flow."""
         config = self.machine.config or {}
@@ -678,7 +698,7 @@ class NavigationHandler(BaseStateHandler):
             self._clear_dungeon_card_session()
             return None
 
-        target_idx = self._resolve_fixed_dungeon_target_idx()
+        target_idx = self._resolve_shared_fixed_dungeon_target_idx()
         if target_idx is None:
             self._clear_dungeon_card_session()
             return None
@@ -1396,7 +1416,7 @@ class NavigationHandler(BaseStateHandler):
             temp_confidences = {}
             
             scan_entries = (
-                [(self._resolve_fixed_dungeon_target_idx(), entry_templates[self._resolve_fixed_dungeon_target_idx() - 1])]
+                [(self._resolve_shared_fixed_dungeon_target_idx(), entry_templates[self._resolve_shared_fixed_dungeon_target_idx() - 1])]
                 if fixed_dungeon_search
                 else list(enumerate(entry_templates, start=1))
             )
@@ -1524,16 +1544,10 @@ class NavigationHandler(BaseStateHandler):
                 else:
                     # 非貪婪模式（指定特定副本）：目標 index 直接從 navigation_path 中尋找
                     nav_path = self.machine.config.get("navigation_path", [])
-                    target_idx = DungeonCatalog.resolve_index_from_nav_path(nav_path, entry_templates)
-                    if target_idx is None:
-                        raw_idx = self.machine.config.get("tier4_dungeon_index", self.machine.config.get("dungeon_index"))
-                        if raw_idx is not None:
-                            try:
-                                parsed_idx = int(raw_idx)
-                                if 1 <= parsed_idx <= len(entry_templates):
-                                    target_idx = parsed_idx
-                            except (ValueError, TypeError):
-                                pass
+                    target_idx = self._resolve_legacy_compat_dungeon_target_idx(
+                        self.machine.config,
+                        entry_templates,
+                    )
                             
                     if target_idx is not None:
                         # 1. 優先檢查記憶體冷卻

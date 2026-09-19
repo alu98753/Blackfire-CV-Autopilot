@@ -10,27 +10,6 @@ from utils.scene_detector import SceneInfo, SceneType
 from utils.shared_card_navigator import CardNavigatorState, SwipeDirection
 
 
-def legacy_compat_target_idx(config):
-    """Characterize the current inline non-greedy resolver semantics."""
-
-    entries = config.get("dungeon_entries") or []
-    target_idx = DungeonCatalog.resolve_index_from_nav_path(
-        config.get("navigation_path", []), entries
-    )
-    if target_idx is None:
-        raw_idx = config.get(
-            "tier4_dungeon_index", config.get("dungeon_index")
-        )
-        if raw_idx is not None:
-            try:
-                parsed_idx = int(raw_idx)
-            except (ValueError, TypeError):
-                parsed_idx = None
-            if parsed_idx is not None and 1 <= parsed_idx <= len(entries):
-                target_idx = parsed_idx
-    return target_idx
-
-
 class TestDungeonSharedNavigationIntegration(unittest.TestCase):
     def setUp(self):
         self.machine = MagicMock()
@@ -233,8 +212,13 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
         }
         self.machine.config = {"type": "dungeon", **config}
 
-        self.assertEqual(self.handler._resolve_fixed_dungeon_target_idx(), 3)
-        self.assertEqual(legacy_compat_target_idx(config), 3)
+        self.assertEqual(self.handler._resolve_shared_fixed_dungeon_target_idx(), 3)
+        self.assertEqual(
+            self.handler._resolve_legacy_compat_dungeon_target_idx(
+                config, config["dungeon_entries"]
+            ),
+            3,
+        )
 
     def test_resolver_ownership_raw_index_precedes_navigation_path_only_shared(self):
         config = {
@@ -245,8 +229,13 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
         }
         self.machine.config = {"type": "dungeon", **config}
 
-        self.assertEqual(self.handler._resolve_fixed_dungeon_target_idx(), 3)
-        self.assertEqual(legacy_compat_target_idx(config), 2)
+        self.assertEqual(self.handler._resolve_shared_fixed_dungeon_target_idx(), 3)
+        self.assertEqual(
+            self.handler._resolve_legacy_compat_dungeon_target_idx(
+                config, config["dungeon_entries"]
+            ),
+            2,
+        )
 
     def test_resolver_ownership_short_names_reject_shared_raw_but_legacy_accepts(self):
         config = {
@@ -257,8 +246,13 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
         }
         self.machine.config = {"type": "dungeon", **config}
 
-        self.assertIsNone(self.handler._resolve_fixed_dungeon_target_idx())
-        self.assertEqual(legacy_compat_target_idx(config), 3)
+        self.assertIsNone(self.handler._resolve_shared_fixed_dungeon_target_idx())
+        self.assertEqual(
+            self.handler._resolve_legacy_compat_dungeon_target_idx(
+                config, config["dungeon_entries"]
+            ),
+            3,
+        )
 
     def test_resolver_ownership_missing_names_keeps_legacy_nav_path_compatibility(self):
         config = {
@@ -267,8 +261,13 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
         }
         self.machine.config = {"type": "dungeon", **config}
 
-        self.assertIsNone(self.handler._resolve_fixed_dungeon_target_idx())
-        self.assertEqual(legacy_compat_target_idx(config), 2)
+        self.assertIsNone(self.handler._resolve_shared_fixed_dungeon_target_idx())
+        self.assertEqual(
+            self.handler._resolve_legacy_compat_dungeon_target_idx(
+                config, config["dungeon_entries"]
+            ),
+            2,
+        )
 
     def test_resolver_ownership_invalid_raw_falls_back_to_navigation_path(self):
         config = {
@@ -279,8 +278,13 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
         }
         self.machine.config = {"type": "dungeon", **config}
 
-        self.assertEqual(self.handler._resolve_fixed_dungeon_target_idx(), 2)
-        self.assertEqual(legacy_compat_target_idx(config), 2)
+        self.assertEqual(self.handler._resolve_shared_fixed_dungeon_target_idx(), 2)
+        self.assertEqual(
+            self.handler._resolve_legacy_compat_dungeon_target_idx(
+                config, config["dungeon_entries"]
+            ),
+            2,
+        )
 
     def test_resolver_ownership_tier4_index_precedes_dungeon_index(self):
         config = {
@@ -292,13 +296,18 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
         }
         self.machine.config = {"type": "dungeon", **config}
 
-        self.assertEqual(self.handler._resolve_fixed_dungeon_target_idx(), 3)
-        self.assertEqual(legacy_compat_target_idx(config), 3)
+        self.assertEqual(self.handler._resolve_shared_fixed_dungeon_target_idx(), 3)
+        self.assertEqual(
+            self.handler._resolve_legacy_compat_dungeon_target_idx(
+                config, config["dungeon_entries"]
+            ),
+            3,
+        )
 
     def test_resolver_ownership_greedy_stays_outside_shared_fixed_path(self):
         self.machine.config["greedy_dungeon"] = True
 
-        self.assertIsNone(self.handler._resolve_fixed_dungeon_target_idx())
+        self.assertIsNone(self.handler._resolve_shared_fixed_dungeon_target_idx())
 
     @patch("states.handlers.navigation.time.sleep")
     def test_target_change_invalidates_before_old_target_match(self, _sleep):
