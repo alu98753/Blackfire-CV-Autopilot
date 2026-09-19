@@ -342,9 +342,9 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         filtered = filter_navigation_path(nav_path, active_tabs=["dungeon"])
         self.assertEqual(filtered, ["common/door.png", "dungeons/Slime_entry.png"])
 
-        # 2. 當 active_tabs 為空時 ➔ 保持原樣
+        # 2. canonical lobby tabs remain declarative-owned even without active-tab evidence
         filtered_empty = filter_navigation_path(nav_path, active_tabs=[])
-        self.assertEqual(filtered_empty, nav_path)
+        self.assertEqual(filtered_empty, ["common/door.png", "dungeons/Slime_entry.png"])
 
     def test_disabled_subflow_skipped(self):
         """測試：當子流程在 SUBFLOW_CONFIGS 被設為 enabled=False 時，pop_and_next_town_subflow 自動跳過它"""

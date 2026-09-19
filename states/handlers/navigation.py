@@ -37,6 +37,12 @@ from states.navigation_routing import (
     resolve_navigation_context,
 )
 
+CANONICAL_LOBBY_TAB_CONTROLS = frozenset({
+    "common/select_stage.png",
+    "dungeons/dungeon.png",
+    "domains/Domains_entry.png",
+})
+
 
 def filter_navigation_path(nav_path, active_tabs=None, is_lobby=False):
     """
@@ -45,7 +51,11 @@ def filter_navigation_path(nav_path, active_tabs=None, is_lobby=False):
     :param active_tabs: 已開啟頁籤名稱列表，如 ["stage"], ["dungeon"], ["domain"]
     :param is_lobby: 是否已身處活動大廳內部 (若在大廳內，剔除 common/door.png)
     """
-    skip_btns = set()
+    # Supported normal lobby-tab transitions are owned by the declarative
+    # NavigationTable route. Keep the generic path available for door,
+    # card/detail/back entries, and compatibility aliases not covered by that
+    # contract.
+    skip_btns = set(CANONICAL_LOBBY_TAB_CONTROLS)
     if is_lobby:
         skip_btns.add("common/door.png")
 
