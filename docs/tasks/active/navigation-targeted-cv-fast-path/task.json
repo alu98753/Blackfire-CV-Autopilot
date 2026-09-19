@@ -3,19 +3,31 @@
   "base_ref": "origin/main",
   "scope": [
     "states/handlers/navigation.py",
+    "states/handlers/lord_boss.py",
+    "states/handlers/demon_lords.py",
     "utils/scene_detector.py",
+    "utils/scene_types.py",
     "states/navigation_routing.py",
     "utils/card_navigator.py",
     "vision/matcher.py",
     "tests/test_dungeon_swipe_unit.py",
     "tests/test_behavior_navigation.py",
-    "tests/test_behavior_navigation_intent.py"
+    "tests/test_behavior_navigation_intent.py",
+    "tests/test_behavior_navigation_scenarios.py",
+    "tests/test_behavior_navigation_progress.py",
+    "tests/test_lord_boss_subflow.py",
+    "tests/test_lord_boss_swipe.py",
+    "tests/test_demon_lords_subflow.py"
   ],
   "focused_tests": [
     "tests/test_dungeon_swipe_unit.py",
     "tests/test_behavior_navigation.py",
     "tests/test_behavior_navigation_intent.py",
-    "tests/test_behavior_navigation_scenarios.py"
+    "tests/test_behavior_navigation_scenarios.py",
+    "tests/test_behavior_navigation_progress.py",
+    "tests/test_lord_boss_subflow.py",
+    "tests/test_lord_boss_swipe.py",
+    "tests/test_demon_lords_subflow.py"
   ],
   "models": {
     "scout": [
