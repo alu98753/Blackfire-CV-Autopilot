@@ -38,54 +38,74 @@ handler block.
 
 | Scenario | Shared fixed navigator | Legacy Dungeon block | Broad entry scan | Swipe owner | Status/downstream owner |
 |---|---|---|---|---|---|
-| canonical fixed target, target visible | Yes; returns `FOUND` | Yes, same frame | No; committed entry only | Shared navigator before handoff | Existing handler block |
-| canonical fixed target, target absent | Yes; returns `HANDLED` | No for that frame | No | Shared navigator | Next frame after handoff |
-| fixed-target tracking miss | Yes | No | No | Shared navigator, same committed direction | None until `FOUND` |
-| fixed-target miss bound / relocalize | Yes | No | No | No blind legacy swipe | None until re-localized |
-| fixed-target `NEED_RESET_LEFT` | Yes | No | No | Existing bounded alignment recovery | None until recovery |
-| fixed target `FOUND` with target status evidence | Yes then released | Yes | Target entry only | No duplicate search in the normal evidence case | Existing status/click/fight path |
-| fixed `FOUND` plus target/status evidence mismatch | Yes then released | Yes | Target entry may be absent; locked-page evidence can keep the block active | A legacy `swipe_towards_target` fallback remains reachable | Existing block |
-| fixed target cooldown | Shared target handoff may occur first; status gate remains | Yes | Target entry only when available for status | No normal search ownership | Existing cooldown policy |
-| fixed target locked/unavailable | Shared handoff does not replace status evaluation | Yes | Target entry/status evidence | Recovery/status paths remain | Existing `_check_dungeon_status` and callers |
-| greedy Dungeon | No fixed shared session until a unique target exists | Yes | Broad scan | Existing greedy/recovery primitive | Existing greedy/status policy |
-| non-`ndarray` frame | Shared fixed path is guarded out | Generic/compatibility path may remain | CV scan is guarded out | No shared fixed guarantee | Existing generic path |
-| legacy `navigation_path` config | Used as a compatibility target resolver when no explicit index is present | Existing compatibility/downstream path remains | Depends on runtime frame/evidence | Not proven dead in all configurations | Existing handler policy |
+| canonical fixed target, target visible | Yes; returns `FOUND` | Yes, same frame | Committed entry only | **No**; status scan clicks only | Existing handler block |
+| canonical fixed target, target absent | Yes; returns `HANDLED` and `handle()` returns immediately | **No** for that frame | None | **No** | Shared navigator |
+| fixed-target tracking miss | Yes | **No** | None | **No**; same-direction request is shared | None until `FOUND` |
+| fixed-target miss bound / relocalize | Yes | **No** | None | **No** blind legacy swipe | None until re-localized |
+| fixed-target `NEED_RESET_LEFT` | Yes | **No** | None | **No**; bounded alignment recovery only | None until recovery |
+| fixed `FOUND` + committed target rescan succeeds | Yes then released | Yes | Target entry only | **No** | Existing status/click/fight path |
+| fixed `FOUND` + target rescan missing + locked evidence | Yes then released | Yes | Empty target-only scan; bounded reset/recovery returns | **No** | Existing recovery path |
+| fixed `FOUND` + target rescan missing + no page evidence | Yes then released | Legacy block is not entered after `is_dungeon_page=False` | None | **No** | None |
+| fixed target cooldown/locked/unavailable | Shared handoff may occur first; status gate remains | Yes | Target entry/status evidence | **No** in canonical fixed flow | Existing status policy |
+| greedy Dungeon | No fixed shared session until a unique target exists | Yes | Broad scan | **Yes**, existing greedy search primitive | Existing greedy/status policy |
+| legacy/compatibility target accepted only by later legacy resolver | Shared resolver may return no target | Yes | Broad scan | **Yes** if target is not visible | Existing compatibility/status path |
+| non-`ndarray` frame | Shared fixed path is guarded out | Fixed CV scan is guarded out; generic path may remain | None in this block | **No** for this call site | Existing generic path |
+| runtime config refresh / target change | Session identity validation clears stale session | Handler re-evaluates current config | Depends on current config | Shared path after reacquire | Existing status/downstream path |
 | runtime config refresh / target change | Session identity validation clears stale session | Handler re-evaluates current config | Depends on current config | Shared path after reacquire | Existing status/downstream path |
 
 ## Responsibility matrix
 
 | Responsibility | Evidence | Classification | Replacement / owner |
 |---|---|---|---|
-| Fixed-target localization, direction, tracking, miss bound, relocalization | `_handle_fixed_dungeon_navigation()` and `SharedCardNavigator`; shared integration tests | **SPLIT** only where old fallback overlaps | `SharedCardNavigator` owns normal physical navigation |
+| Fixed-target localization, direction, tracking, miss bound, relocalization | `_handle_fixed_dungeon_navigation()` and `SharedCardNavigator`; shared integration tests | **KEEP** | `SharedCardNavigator` owns normal physical navigation; no canonical duplicate horizontal owner remains |
 | Fixed-target status/cooldown memory and OCR | `_check_dungeon_status()` and cooldown tests | **KEEP** | Existing Dungeon handler/status policy |
 | Locked/unavailable/light-skull evaluation | `_check_dungeon_status()` and Dungeon card tests | **KEEP** | Existing status owner |
 | Fixed-target card click and fight/start handoff | `target_idx in visible_dungeons` branch and scenario tests | **KEEP** | Existing Dungeon downstream owner |
 | Greedy broad scan and candidate priority | `is_greedy` branch, allowed indices, cooldown filtering | **KEEP** | Existing greedy policy |
 | No-visible-card reset and bounded recovery | `reset_to_left`, alignment attempts, town/collect-only fallback | **KEEP** | Existing recovery policy |
-| Fixed-target legacy `swipe_towards_target()` fallback | `navigation.py:1601-1614`; reached from the legacy block after fixed handoff when evidence keeps the page active but target location is absent | **SPLIT** | Candidate for a later narrow cleanup after a reachability characterization test |
-| `visible_dungeons` container | Used by status, greedy selection, fixed click, and recovery | **KEEP / SPLIT** | Do not delete as a whole; only isolate any proven duplicate search slice |
-| Fixed target resolution | `_resolve_fixed_dungeon_target_idx()` uses explicit index first, then `DungeonCatalog.resolve_index_from_nav_path()` | **KEEP** | Compatibility parsing plus `DungeonCatalog` index authority |
+| `CardListNavigator.swipe_towards_target()` at `navigation.py:1614` | Reachable from greedy broad scan and from a later legacy target resolver when the shared resolver rejects a malformed/legacy target; not reachable from canonical fixed-target `FOUND` flow | **KEEP** | Greedy and compatibility owners; not a canonical fixed-target duplicate |
+| `visible_dungeons` container | Used by status, greedy selection, fixed click, and bounded recovery | **KEEP** | Do not delete; it is not a second canonical fixed-target horizontal owner |
+| Fixed target resolution | `_resolve_fixed_dungeon_target_idx()` uses explicit index validation, then `DungeonCatalog.resolve_index_from_nav_path()` | **SPLIT** | Narrow future candidate: separate canonical resolution from legacy compatibility parsing; `DungeonCatalog` remains index authority |
 | Non-`ndarray` frame behavior | Type guard bypasses shared fixed navigation and CV scan | **UNKNOWN** | No repository-wide contract proves this path replaceable |
 | Legacy configuration behavior | `navigation_path` compatibility parsing and generic handler path | **UNKNOWN** | No repository-wide contract proves all legacy configurations canonical |
 
 ## Fixed-target duplicate candidates
 
-The strongest candidate is not the whole legacy Dungeon block. It is the
-specific fallback call to `CardListNavigator.swipe_towards_target()` at
-`states/handlers/navigation.py:1614`. The normal fixed-target path has already
-committed direction and performs target-only tracking through
-`SharedCardNavigator`; the legacy swipe therefore duplicates physical search
-when it is reached for a canonical fixed target.
+The previous survey incorrectly treated the post-`FOUND` status scan as a
+route to the legacy swipe. Control flow disproves that: a fixed target that is
+not `FOUND` returns `HANDLED` and `NavigationHandler.handle()` returns
+immediately. After `FOUND`, `fixed_dungeon_search` restricts `scan_entries` to
+the committed target. If that scan succeeds, status/click handling runs. If
+it fails but locked-entry evidence keeps `is_dungeon_page` true, the
+`not visible_dungeons` branch performs bounded reset/recovery and returns. If
+there is no page evidence, the later block is not entered. None of these
+canonical fixed-target outcomes reaches `swipe_towards_target()`.
 
-However, the call is not proven unreachable. After shared `FOUND`, the same
-frame performs a target-entry/status scan. If that scan does not produce the
-target location but locked-entry evidence keeps `is_dungeon_page` true, the
-legacy branch can still reach the fallback. This is an evidence-mismatch or
-recovery-like path, not proof that the whole block is dead.
+The remaining `CardListNavigator.swipe_towards_target()` ownership is the
+greedy broad scan and a compatibility/malformed configuration case where
+`_resolve_fixed_dungeon_target_idx()` returns `None` but the later legacy
+resolver can still derive a target. This is not a canonical fixed-target
+duplicate execution path.
 
 The `scan_entries` selection is also not itself a delete candidate: after
 `fixed_dungeon_search` it is target-only, but its result supplies the location
 and status input used by existing cooldown/locked/unavailable/click behavior.
+
+### Resolver asymmetry
+
+The shared resolver requires both `dungeon_names` and `dungeon_entries`. For an
+explicit raw index it requires `DungeonCatalog.is_valid_index(parsed_idx,
+custom_names=names)` and `parsed_idx <= len(entries)`. The later legacy resolver
+first tries `DungeonCatalog.resolve_index_from_nav_path(nav_path, entries)` and,
+if that fails, accepts any parsed raw index in `1..len(entries)` without
+checking the length of `dungeon_names`.
+
+Therefore a malformed configuration with more entry templates than names can
+be rejected by the shared explicit-index resolver but accepted by the later
+legacy resolver. A legacy `navigation_path` entry that matches
+`dungeon_entries` is also a compatibility input to the later broad scan. These
+are compatibility responsibilities and were not changed; they are not
+evidence that canonical fixed-target search is duplicated.
 
 ## Greedy responsibilities to keep
 
@@ -152,31 +172,40 @@ production or test modifications: one declarative tab expectation in
 `test_behavior_dungeon_scenarios.py`, and one legacy scrolling-direction
 expectation in `test_behavior_dungeon_scenarios.py`.
 
-Missing characterization evidence before deleting the fixed-target legacy
-swipe slice:
+Missing characterization evidence before any resolver/legacy-block cleanup:
 
-1. `fixed_result == "FOUND"` followed by target-only status scan with target
-   location absent and locked-entry evidence present.
-2. The same branch with cooldown/unavailable status, proving status handling
-   remains without a replacement swipe.
-3. Non-`ndarray`, legacy `navigation_path`, and runtime config-refresh reachability
-   boundaries.
+1. A direct regression proving all three post-`FOUND` rescan outcomes return
+   before `swipe_towards_target()`.
+2. Resolver asymmetry cases where names and entries have different lengths,
+   and where a legacy `navigation_path` or raw index is accepted only by the
+   later resolver.
+3. Non-`ndarray`, legacy `navigation_path`, and runtime config-refresh
+   reachability boundaries.
 
-## Recommended Phase 10B-2 implementation slice
+## Revised cleanup recommendation
 
-1. Add the smallest characterization test for the post-`FOUND` status handoff
-   and the legacy fallback reachability boundary.
-2. Remove only the canonical fixed-target fallback call to
-   `CardListNavigator.swipe_towards_target()` if the test proves the branch is
-   not required by a compatibility or recovery contract.
-3. Keep `visible_dungeons`, status evaluation, greedy selection, click/fight,
-   cooldown fallback, reset recovery, and compatibility parsing unchanged.
+The canonical fixed-target path has no reachable second horizontal-search
+owner. **Phase 10 fixed-target horizontal-search ownership is already
+deduplicated.** Do not delete `swipe_towards_target()` merely to force a Phase
+10 cleanup; its remaining ownership is greedy and compatibility.
+
+At most two narrower candidates remain:
+
+1. Separate the shared fixed-target resolver from the later compatibility
+   resolver, preserving the observed raw-index and `navigation_path`
+   asymmetry.
+2. Isolate fixed-only rescan/status handling from the mixed greedy/status block
+   only if characterization proves that the separation does not alter cooldown,
+   locked/unavailable, recovery, or downstream behavior.
+
+If those boundaries cannot be proven, there is no safe cleanup candidate for
+this slice.
 
 ## Classification counts
 
 - DELETE_CANDIDATE: **0**
-- SPLIT: **3**
-- KEEP: **6**
+- SPLIT: **1**
+- KEEP: **8**
 - UNKNOWN: **2**
 
 No production cleanup is performed by this survey.
