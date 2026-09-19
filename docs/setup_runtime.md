@@ -20,21 +20,59 @@
 - OpenCode CLI
 - AI workflow 依賴
 
+## 標準目錄結構 (Canonical Layout)
+
+本專案將虛擬環境集中於 `VenvPools` 管理，專案透過目錄聯結（Junction）引用：
+
+```text
+:\Side_Project\
+├─ Blackfire-CV-Autopilot\                 (專案目錄)
+│  └─ .venv\                               (Junction -> 指向 VenvPools)
+└─ VenvPools\                              (虛擬環境集中存放區)
+   └─ .venvs-Blackfire-CV-Autopilot\       (Python 3.11.2 實體虛擬環境)
+```
+
 ## 建立環境
 
-先確認 Python 版本：
+### 1. 確認或安裝 Python 3.11.2
+
+先確認系統是否已安裝 Python 3.11.2：
 
 ```powershell
 py -0p
 ```
 
-必須找到 Python 3.11.2。若 Python Launcher 無法以版本號選取該 patch 版本，使用 `py -0p` 顯示的 Python 3.11.2 完整路徑建立虛擬環境：
+必須找到 Python 3.11.2。若系統尚未安裝，請先下載安裝官方 Python 3.11.2 或透過 winget 安裝：
 
 ```powershell
-& "C:\Path\To\Python311\python.exe" -m venv .venv
+winget install Python.Python.3.11 --version 3.11.2
 ```
 
-確認虛擬環境版本：
+安裝完成後請重新開啟 PowerShell，確保環境變數生效。
+
+### 2. 在 VenvPools 建立虛擬環境
+
+若 `VenvPools` 尚未建立該環境實體，執行以下指令（使用 `py -0p` 顯示的 Python 3.11.2 完整路徑）：
+
+```powershell
+# 確保 VenvPools 目錄存在
+New-Item -ItemType Directory -Force -Path "..\VenvPools"
+
+# 建立實體虛擬環境
+& "C:\Path\To\Python311\python.exe" -m venv "..\VenvPools\.venvs-Blackfire-CV-Autopilot"
+```
+
+### 3. 建立專案 .venv 符號連結 (Junction)
+
+在 `Blackfire-CV-Autopilot` 專案根目錄下，建立指向 `VenvPools` 的目錄聯結：
+
+```powershell
+New-Item -ItemType Junction -Path ".\.venv" -Target "..\VenvPools\.venvs-Blackfire-CV-Autopilot"
+```
+
+### 4. 安裝遊戲依賴與驗證
+
+確認透過 Junction 存取的 Python 版本：
 
 ```powershell
 .\.venv\Scripts\python.exe --version

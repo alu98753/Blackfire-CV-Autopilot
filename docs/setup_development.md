@@ -1,25 +1,22 @@
 # 開發環境
 
-開發環境包含純遊戲執行環境，另外加入測試、Node workflow 與 OpenCode reviewer 所需工具。若只想執行遊戲，請使用 `setup_runtime.md`。
+開發環境以純遊戲執行環境為基底，額外加入測試套件（pytest）、Node workflow 與 OpenCode 結構化審查工具。
 
-開發與實機驗證前請先登入 Steam，不需要事先開啟遊戲。仍應使用一般視窗模式，按右上角最大化（不是 F11 全螢幕），解析度設定為 **1920×1080**。一般執行使用後台視窗操作，不會搶滑鼠；只有明確使用 `--foreground` 進行Demo時，才會切換到可見的前景實體滑鼠模式。
+## 前置條件：先完成 Runtime 環境建置
 
-## Python 環境
+**在開始設定開發環境前，請務必先完成 [setup_runtime.md](./setup_runtime.md) 的步驟。**因為 `setup_runtime.md` 環境是遊戲自動化腳本運作的必要項目。開發環境是在這個已經具備遊戲控制與視窗邏輯的基底上，進一步疊加測試與輔助工具。
 
-Python 版本固定為 **3.11.2**。建立虛擬環境：
+---
 
-```powershell
-& "C:\Path\To\Python311\python.exe" -m venv .venv
-```
+## 1. 測試依賴與驗證
 
-安裝遊戲執行依賴與測試工具：
+請確保已依 `setup_runtime.md` 建立好專案根目錄的 `.venv` Junction。接著在專案根目錄安裝測試工具：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pip install -r requirements-test.txt
 ```
 
-驗證：
+驗證依賴與測試搜集：
 
 ```powershell
 .\.venv\Scripts\python.exe --version
@@ -27,7 +24,9 @@ Python 版本固定為 **3.11.2**。建立虛擬環境：
 .\.venv\Scripts\python.exe -m pytest --collect-only -q
 ```
 
-## 遊戲邏輯測試
+---
+
+## 2. 遊戲邏輯測試
 
 AI workflow 測試已使用 `pytest.mark.ai_workflow` 標記。一般遊戲邏輯驗證排除這些測試：
 
@@ -49,30 +48,49 @@ $env:PYTHONUTF8 = "1"
 .\.venv\Scripts\python.exe -X utf8 -u -m pytest -v
 ```
 
-## Node workflow 環境
+---
 
-Node.js/npm 只供 AI workflow 與 OpenCode 結構化 review 工具使用，不是遊戲 runtime 的必要依賴。安裝符合 `package.json` engines 的 Node.js 後，在專案根目錄執行：
+## 3. Node workflow 環境
+
+Node.js/npm 只供 AI workflow 與 OpenCode 結構化 review 工具使用，不是遊戲 runtime 的必要依賴。
+
+### 安裝 Node.js
+依 `package.json` 規範，Node.js 版本需為 **`>=18.17`**（建議安裝 LTS 版本）：
 
 ```powershell
-node --version
-npm --version
-npm ci
+winget install OpenJS.NodeJS.LTS
 ```
 
-`npm ci` 依照 `package-lock.json` 建立 worktree 本地的 `node_modules`。不要以手動 `npm install` 取代它作為可重現的初始安裝流程。
+> **注意**：
+> 1. 安裝完成後請**重新開啟 PowerShell** 讓環境變數生效。
+> 2. 若在 PowerShell 執行 npm 時出現「因為這個系統上已停用指令碼執行，所以無法載入...」的安全性原則錯誤，請先執行以下指令放寬目前使用者權限：
+>    ```powershell
+>    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+>    ```
 
-## OpenCode CLI
+### 安裝專案 Node 依賴
+建議直接執行專案提供的安裝腳本（此腳本會自動檢查 Node 版本並透過 `npm ci` 依 `package-lock.json` 建立 `node_modules`）：
 
-OpenCode CLI 是另一個全域工具，不等同於專案的 `@opencode-ai/sdk`。依專案版本契約安裝並驗證：
+```powershell
+.\scripts\bootstrap_node_workflow_deps.ps1
+```
+
+---
+
+## 4. OpenCode CLI (選用)
+
+OpenCode CLI 是全域工具，不等同於專案的 `@opencode-ai/sdk`。依專案版本契約安裝並驗證：
 
 ```powershell
 .\scripts\bootstrap_opencode.ps1
 opencode --version
 ```
 
-若只執行遊戲，不需要執行這個步驟。
+若不需要使用 OpenCode 來進行LLM協作開發，可跳過此步驟。
 
-## 依賴檔案責任
+---
+
+## 5. 依賴檔案責任
 
 ```text
 requirements.txt        遊戲 runtime 直接依賴
