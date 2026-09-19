@@ -245,6 +245,8 @@ Before starting, log in to Steam; the game does not need to be open in advance. 
 
 For the complete installation procedures, see [runtime setup](docs/setup_runtime.md) and [development setup](docs/setup_development.md).
 
+To move user data including profile settings and progress to another computer, see [user data migration](docs/migrate_user_data.md).
+
 ### Recommended launch
 
 For normal long-running use, start from the repository root:
