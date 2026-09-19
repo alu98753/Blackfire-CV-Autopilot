@@ -211,10 +211,10 @@ The latest recorded full-suite run on `main` passed:
 
 The previous full-suite baseline was above 380 seconds. The reduction came primarily from removing real test-time waits, isolating time behind a clock seam, and converting selected blocking flows to tick-driven transitions without changing their production timing behavior.
 
-Tests can be executed with:
+The focused game-logic tests can be executed with:
 
 ```powershell
-.\.venv\Scripts\python.exe -X utf8 -m unittest discover tests
+.\.venv\Scripts\python.exe -X utf8 -u -m pytest -m "not ai_workflow" -v
 ```
 
 ---
@@ -238,6 +238,10 @@ pip install -r requirements.txt
 ```
 
 The main runtime dependencies include OpenCV, MSS, PyAutoGUI, NumPy, Pillow, and pywin32.
+
+Before starting, log in to Steam; the game does not need to be open in advance. Set the game resolution to 1920x1080 and do not use F11 fullscreen. The script normally runs in the background without taking control of the physical mouse, so you can use other programs at the same time.
+
+For the complete installation procedures, see [runtime setup](docs/setup_runtime.md) and [development setup](docs/setup_development.md).
 
 ### Recommended launch
 

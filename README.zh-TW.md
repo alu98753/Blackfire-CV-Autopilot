@@ -212,7 +212,7 @@ Production Runtime 維持原本的實際等待行為；測試則可以注入可�
 執行完整測試：
 
 ```powershell
-.\.venv\Scripts\python.exe -X utf8 -m unittest discover tests
+.\.venv\Scripts\python.exe -X utf8 -u -m pytest -m "not ai_workflow" -v
 ```
 
 ---
@@ -236,6 +236,10 @@ pip install -r requirements.txt
 ```
 
 主要 Runtime Dependency 包含 OpenCV、MSS、PyAutoGUI、NumPy、Pillow 與 pywin32。
+
+啟動前請先登入 Steam；不需要事先開啟遊戲。遊戲解析度設定為 1920×1080，不要使用 F11 全螢幕。腳本預設為後台控制不會搶實體滑鼠，因此可以同時操作電腦其他程式。
+
+完整安裝流程請參考[純遊戲執行環境](docs/setup_runtime.md)與[開發環境](docs/setup_development.md)。
 
 ### 建議啟動方式
 
