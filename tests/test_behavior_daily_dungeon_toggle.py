@@ -196,8 +196,8 @@ class TestDailyDungeonProfileFilePersistence(unittest.TestCase):
         cfg_module.set_active_profile(self.profile_name)
 
     def tearDown(self):
-        self.cfg_module.set_active_profile("native")
         self.user_data_patcher.stop()
+        self.cfg_module.set_active_profile("native")
         import shutil
         if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir, ignore_errors=True)
