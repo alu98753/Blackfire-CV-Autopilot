@@ -86,6 +86,7 @@ class SharedCardNavigator:
         )
         self.state: CardNavigatorState | None = None
         self.tracking_misses = 0
+        self._tracking_direction: SwipeDirection | None = None
         self._swipe_history: list[SwipeDirection] = []
 
     @property
@@ -103,10 +104,11 @@ class SharedCardNavigator:
         return self._localize(screen_img, matcher)
 
     def _localize(self, screen_img: Any, matcher) -> CardNavigationResult:
+        self.tracking_misses = 0
+        self._tracking_direction = None
         target_pos, target_conf = self._match(matcher, screen_img, self.target.template)
         if target_pos is not None and target_conf >= self.threshold:
             self.state = CardNavigatorState.FOUND
-            self.tracking_misses = 0
             return CardNavigationResult(
                 state=self.state,
                 target_index=self.target.index,
@@ -137,8 +139,8 @@ class SharedCardNavigator:
             else SwipeDirection.RIGHT
         )
         self.state = CardNavigatorState.TRACKING
-        self.tracking_misses = 0
-        self._swipe_history.append(direction)
+        self._tracking_direction = direction
+        self._record_swipe(direction)
         return self._result(
             visible_indices=visible_indices,
             direction=direction,
@@ -150,12 +152,30 @@ class SharedCardNavigator:
         if pos is not None and confidence >= self.threshold:
             self.state = CardNavigatorState.FOUND
             self.tracking_misses = 0
+            self._tracking_direction = None
             return self._result(visible_indices={self.target.index})
 
         self.tracking_misses += 1
         if self.tracking_misses >= self.max_tracking_misses:
             self.state = CardNavigatorState.RELOCALIZE
-        return self._result()
+            self._tracking_direction = None
+            return self._result()
+
+        # A miss is evidence that the committed target is not in the current
+        # viewport. Repeat the same committed direction; never infer an exact
+        # post-swipe index.
+        direction = self._tracking_direction
+        if direction is None:
+            self.state = CardNavigatorState.RELOCALIZE
+            return self._result()
+        self._record_swipe(direction)
+        return self._result(
+            direction=direction,
+            swipe_request=PageSwipeRequest(direction),
+        )
+
+    def _record_swipe(self, direction: SwipeDirection) -> None:
+        self._swipe_history.append(direction)
 
     def _result(
         self,

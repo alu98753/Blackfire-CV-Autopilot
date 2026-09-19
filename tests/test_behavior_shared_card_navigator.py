@@ -82,6 +82,14 @@ class TestSharedCardNavigator(unittest.TestCase):
         self.assertEqual(result.state, CardNavigatorState.FOUND)
         self.assertEqual(tracking_matcher.calls, ["cards/four.png"])
 
+        navigator = SharedCardNavigator(CATALOG, "four")
+        navigator.observe(object(), Matcher({"cards/one.png": ((1, 1), 0.9)}))
+        tracking_miss_matcher = Matcher({})
+        result = navigator.observe(object(), tracking_miss_matcher)
+        self.assertEqual(result.state, CardNavigatorState.TRACKING)
+        self.assertEqual(result.direction, SwipeDirection.LEFT)
+        self.assertEqual(tracking_miss_matcher.calls, ["cards/four.png"])
+
     def test_tracking_misses_relocalize_at_default_catalog_bound(self):
         navigator = SharedCardNavigator(CATALOG, "four")
         navigator.observe(object(), Matcher({"cards/one.png": ((1, 1), 0.9)}))
@@ -95,6 +103,17 @@ class TestSharedCardNavigator(unittest.TestCase):
             )
             self.assertEqual(result.state, expected)
             self.assertEqual(result.tracking_misses, miss)
+            if miss < len(CATALOG):
+                self.assertEqual(result.direction, SwipeDirection.LEFT)
+                self.assertIsNotNone(result.swipe_request)
+            else:
+                self.assertIsNone(result.direction)
+                self.assertIsNone(result.swipe_request)
+
+        self.assertEqual(
+            navigator.swipe_history,
+            (SwipeDirection.LEFT,) * len(CATALOG),
+        )
 
     def test_localization_without_reliable_evidence_requests_reset_left(self):
         matcher = Matcher(
