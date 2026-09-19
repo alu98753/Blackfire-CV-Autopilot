@@ -41,15 +41,17 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
     def test_config_clean_architecture_separation(self):
         """
-        測試 config.py 中的 PRIMARY_MODES 剛好只有 4 個，且 GAME_CONFIGS 完全包含 PRIMARY_MODES 與 SUBFLOW_CONFIGS。
+        測試 config.py 中的 PRIMARY_MODES 與 SUBFLOW_CONFIGS 分層架構，且 GAME_CONFIGS 完全包含兩者。
         """
-        self.assertEqual(len(PRIMARY_MODES), 6)
+        self.assertEqual(len(PRIMARY_MODES), 8)
         self.assertIn("mix", PRIMARY_MODES)
         self.assertIn("dungeon", PRIMARY_MODES)
         self.assertIn("stage", PRIMARY_MODES)
         self.assertIn("collect_only", PRIMARY_MODES)
         self.assertIn("daily", PRIMARY_MODES)
         self.assertIn("golden_empire", PRIMARY_MODES)
+        self.assertIn("abyssbeast_lair", PRIMARY_MODES)
+        self.assertIn("coldoath_citadel", PRIMARY_MODES)
 
 
 
@@ -327,6 +329,8 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 彈出 lord_boss
         sm.town_subflow_queue = ["lord_boss"]
         sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_town_subflow, "lord_boss")
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
         self.assertEqual(sm.config["type"], "lord_boss")
 
@@ -611,8 +615,10 @@ class TestSubflowAndDailyManager(unittest.TestCase):
             "type": "daily",
             "keep_colors": user_keep,
             "disassemble_colors": user_dis,
-            "sacrifice_settings": user_sac
+            "sacrifice_settings": user_sac,
+            "tier4_mode": "stage"
         }
+        sm.primary_config = sm.config.copy()
 
         # 1. 跳動至 Tier 1 (城鎮速領 blood_altar & jewelry_workshop)
         sm.town_subflow_queue = ["blood_altar", "jewelry_workshop"]

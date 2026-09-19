@@ -48,6 +48,7 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         - 若 accepted_quests 已全清，才退守至 Tier 4 指定地下城。
         """
         daily_cfg = GAME_CONFIGS["daily"].copy()
+        daily_cfg["enable_dungeon"] = True
         self.state_machine.config = daily_cfg
         self.state_machine.primary_config = daily_cfg
 
@@ -69,10 +70,19 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         self.assertEqual(self.state_machine.config["name"], "懸賞任務 - 黏糊糊的石窟 (任務: 史萊姆王的毀滅)")
         self.assertEqual(self.state_machine.config["dungeon_index"], 1)
 
-        # 2. 懸賞全清後，再次觸發調度 ➔ 斷言退守 Tier 4 Mix 指定配置
+        # 2. 懸賞全清後，日常地下城就緒 ➔ 斷言優先調度 Tier 4A 地下城 (回傳 True)
         node1.completed_count = node1.target_count
+        scheduled_dungeon = self.state_machine.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled_dungeon)
+        self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
+        self.assertTrue(self.state_machine.has_available_dungeon())
+        self.assertEqual(self.state_machine.config.get("navigation_path"), ["common/door.png", "dungeons/dungeon.png"])
+
+        # 3. 若所有地下城全數進入冷卻 ➔ 斷言進一步退守 Tier 4B 長駐掛機配置 (apply_tier4_fallback_config 回傳 False)
+        num_dungeons = len(daily_cfg.get("dungeon_entries", []))
+        self.state_machine.dungeon_cooldowns = {i + 1: time.time() + 999.0 for i in range(num_dungeons)}
         scheduled_fallback = self.state_machine.evaluate_and_schedule_daily_pipeline()
-        self.assertFalse(scheduled_fallback) # apply_tier4_fallback_config returns False
+        self.assertFalse(scheduled_fallback)
         self.assertTrue(self.state_machine.config.get("is_tier4_fallback", False))
 
     def test_dungeon_resume_executes_designated_tier4_fallback_dungeon_during_retreat(self):
@@ -82,10 +92,12 @@ class TestDailyPipelineStaminaRetreat(unittest.TestCase):
         而不是嘗試執行 accepted_quests 中的任務。
         """
         daily_cfg = GAME_CONFIGS["daily"].copy()
+        daily_cfg["enable_dungeon"] = True
         # 假設使用者 CLI 選定了 Tier 4 退守地下城 #5 (冰雪洞窟, index 4)
         tier4_cfg = {
             "name": "每日懸賞任務 - 冰雪洞窟 (關卡: default)",
             "type": "mix",
+            "enable_dungeon": True,
             "dungeon_index": 6,
             "is_tier4_fallback": True,
             "auto_resume_dungeon_on_cd": True

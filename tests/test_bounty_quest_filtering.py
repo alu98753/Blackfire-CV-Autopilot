@@ -41,12 +41,12 @@ class TestBountyQuestFiltering(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_defaults_toml_bounty_quests_config(self):
-        """驗證 config/defaults.toml 正確配置全域預設 max_stage=6, max_dungeon=7"""
+        """驗證 config/defaults.toml 正確配置全域預設 max_stage=6, max_dungeon=8"""
         defaults = get_defaults_config()
         self.assertIn("bounty_quests", defaults)
         bounty_cfg = defaults["bounty_quests"]
         self.assertEqual(bounty_cfg["max_stage"], 6)
-        self.assertEqual(bounty_cfg["max_dungeon"], 7)
+        self.assertEqual(bounty_cfg["max_dungeon"], 8)
 
     def test_profile_bounty_quests_overlay(self):
         """驗證 sandbox 與 native profile 取得獨立的 [bounty_quests] 配置"""
@@ -56,13 +56,13 @@ class TestBountyQuestFiltering(unittest.TestCase):
 
         native_cfg = get_bounty_quest_config("native")
         self.assertEqual(native_cfg["max_stage"], 6)
-        self.assertEqual(native_cfg["max_dungeon"], 7)
+        self.assertEqual(native_cfg["max_dungeon"], 8)
 
         set_active_profile("sandbox")
         self.assertEqual(get_bounty_quest_config(), {"max_stage": 4, "max_dungeon": 4})
 
         set_active_profile("native")
-        self.assertEqual(get_bounty_quest_config(), {"max_stage": 6, "max_dungeon": 7})
+        self.assertEqual(get_bounty_quest_config(), {"max_stage": 6, "max_dungeon": 8})
 
     def test_get_bounty_quest_config_isolation_across_profiles(self):
         """驗證跨 Profile 查詢時不會被當前 active profile 的覆蓋值污染"""
@@ -76,7 +76,7 @@ class TestBountyQuestFiltering(unittest.TestCase):
 
         empty_cfg = get_bounty_quest_config("empty_profile")
         self.assertEqual(empty_cfg["max_stage"], 6)
-        self.assertEqual(empty_cfg["max_dungeon"], 7)
+        self.assertEqual(empty_cfg["max_dungeon"], 8)
 
     def test_is_quest_allowed_predicate(self):
         """驗證 is_quest_allowed 純函式對關卡與地下城上限的邊界判定"""

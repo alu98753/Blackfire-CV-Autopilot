@@ -484,7 +484,8 @@ class TestMilestoneEventWiring(unittest.TestCase):
             daily_pipeline_notifier=self.coordinator,
         )
         sm.daily_manager = self.dm
-        sm.config = {"name": "Tier 4 Loop (mix)"}
+        sm.config = {"name": "Tier 4 Loop (mix)", "type": "mix"}
+        sm.primary_config = sm.config.copy()
 
         # Simulate quest scheduler complete
         mock_scheduler = MagicMock()
@@ -587,13 +588,12 @@ class TestProductionBootstrapWiring(unittest.TestCase):
     """Verify that production bootstrap explicitly injects real DailyPipelineNotifier (not Null)."""
 
     @patch("builtins.print")
-    @patch("runtime.bootstrap.ScreenCapturer")
+    @patch("runtime.io_adapters.compose_io", return_value=(MagicMock(), MagicMock()))
     @patch("runtime.bootstrap.TemplateMatcher")
-    @patch("runtime.bootstrap.MouseController")
     @patch("runtime.bootstrap.check_mode_templates", return_value=[])
     @patch("runtime.bootstrap.os.path.exists", return_value=True)
     def test_bootstrap_injects_real_daily_pipeline_notifier(
-        self, _exists, _tmpl, _mouse, _matcher, _capturer, _print
+        self, _exists, _tmpl, _matcher, _compose_io, _print
     ):
         from runtime.bootstrap import init_state_machine_system
         from states.daily_pipeline_notifier import DailyPipelineNotifier, NullDailyPipelineNotifier
