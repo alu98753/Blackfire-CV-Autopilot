@@ -33,6 +33,7 @@ Do not duplicate the AI workflow roadmap in this backlog. New workflow ideas may
 
 ## Task todo
 
+- [ ] Future work: [`concurrent-scene-validation-action-commit`](todos/concurrent-scene-validation-action-commit.md) — TRACK target-only CV 遇到使用者／外部手動改變真實 Scene 時，研究同-frame parallel Scene validation + generation-aware guarded/atomic physical-action commit。
 - [ ] 觀察 `NemesisIntervention` 是否需要與 process-external Supervisor daily restart 協作／延後重啟；本 task 先維持既有每日重啟語意，不保證 intervention hold 跨 process 持久化。
 - [ ] prompt 太長了 需要縮減(GPT給scout 的)
 - [ ] config 位置統一任務
