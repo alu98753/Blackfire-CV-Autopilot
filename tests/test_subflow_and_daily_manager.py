@@ -41,15 +41,17 @@ class TestSubflowAndDailyManager(unittest.TestCase):
 
     def test_config_clean_architecture_separation(self):
         """
-        測試 config.py 中的 PRIMARY_MODES 剛好只有 4 個，且 GAME_CONFIGS 完全包含 PRIMARY_MODES 與 SUBFLOW_CONFIGS。
+        測試 config.py 中的 PRIMARY_MODES 與 SUBFLOW_CONFIGS 分層架構，且 GAME_CONFIGS 完全包含兩者。
         """
-        self.assertEqual(len(PRIMARY_MODES), 6)
+        self.assertEqual(len(PRIMARY_MODES), 8)
         self.assertIn("mix", PRIMARY_MODES)
         self.assertIn("dungeon", PRIMARY_MODES)
         self.assertIn("stage", PRIMARY_MODES)
         self.assertIn("collect_only", PRIMARY_MODES)
         self.assertIn("daily", PRIMARY_MODES)
         self.assertIn("golden_empire", PRIMARY_MODES)
+        self.assertIn("abyssbeast_lair", PRIMARY_MODES)
+        self.assertIn("coldoath_citadel", PRIMARY_MODES)
 
 
 

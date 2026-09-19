@@ -72,7 +72,7 @@ class TestNemesisPolicyValidation(unittest.TestCase):
         }):
             policy = config.get_nemesis_policy()
         self.assertEqual(policy["intervene"], ["custom/a.png"])
-        self.assertEqual(policy["flee"], config.get_defaults_config()["nemesis"]["flee"])
+        self.assertEqual(policy["flee"], config.get_canonical_defaults()["nemesis"]["flee"])
 
 
 if __name__ == "__main__":
