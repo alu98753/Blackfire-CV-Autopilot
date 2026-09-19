@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from states.handlers.lord_boss import LordBossHandler
 from utils.navigation_catalog import lord_navigation_catalog
@@ -121,6 +121,30 @@ class TestLordSharedNavigationIntegration(unittest.TestCase):
         self._navigate_is_closed()
         self.assertIsNone(self.handler.lord_card_navigator)
         self.assertIsNone(self.handler.lord_navigation_target)
+
+    @patch("states.handlers.lord_boss.execute_lobby_tab_route", return_value=False)
+    @patch("states.handlers.lord_boss.os.path.exists", return_value=False)
+    @patch("states.handlers.lord_boss.time.sleep")
+    def test_real_handler_tracking_matches_only_committed_target(
+        self, _sleep, _exists, _route
+    ):
+        self.handler.match_mutually_exclusive_tabs = MagicMock(
+            return_value=(True, None, None, None)
+        )
+        self._evidence(["lords/boss_a.png"])
+
+        self.handler.handle(self.screen, self.rect)
+        self.assertTrue(self.handler.lord_card_session.owns_tracking)
+
+        self.machine.matcher.reset_mock()
+        self._evidence([])
+        self.handler.handle(self.screen, self.rect)
+
+        self.assertEqual(
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+            ["lords/boss_c.png"],
+        )
+        self.handler.match_mutually_exclusive_tabs.assert_called_once()
 
         self.handler.lord_navigation_target = "boss_b"
         self.handler.lord_card_navigator = object()

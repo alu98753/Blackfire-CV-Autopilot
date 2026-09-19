@@ -73,7 +73,7 @@ class VerifiedCardNavigationSession:
         active_modes = [
             mode
             for mode, scene_id in _MODE_SCENES.items()
-            if scene.scene == scene_id and mode in scene.active_tabs
+            if scene.scene in {scene_id, SceneId.LOBBY} and mode in scene.active_tabs
         ]
         if len(active_modes) != 1:
             raise ValueError("scene does not provide unique verified lobby-mode evidence")
@@ -138,7 +138,10 @@ class VerifiedCardNavigationSession:
 
         if not self.valid:
             return False
-        if scene.scene != _MODE_SCENES[self.mode] or self.mode not in scene.active_tabs:
+        if (
+            scene.scene not in {_MODE_SCENES[self.mode], SceneId.LOBBY}
+            or self.mode not in scene.active_tabs
+        ):
             self.invalidate(CardNavigationInvalidation.MODE_CHANGE)
             return False
         return True

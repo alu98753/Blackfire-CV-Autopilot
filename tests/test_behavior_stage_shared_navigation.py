@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from config import BASE_STAGE_LEVELS
 from states.handlers.navigation import NavigationHandler
@@ -175,6 +175,27 @@ class TestStageSharedNavigationIntegration(unittest.TestCase):
         self.machine.mouse.click.assert_called_once()
         legacy_alignment.assert_not_called()
         self.assertIsNone(self.handler.stage_card_navigator)
+
+    @patch("states.handlers.navigation.os.path.exists", return_value=False)
+    @patch("states.handlers.navigation.time.sleep")
+    def test_real_handler_tracking_matches_only_committed_target(self, _sleep, _exists):
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.machine.matcher
+        self.handler.scene_detector.detect.return_value = self.scene
+        self._evidence(["stages/level1_sky_plains.png"])
+
+        self.handler.handle(self.screen, self.rect)
+        self.assertTrue(self.handler.stage_card_session.owns_tracking)
+
+        self.machine.matcher.reset_mock()
+        self._evidence([])
+        self.handler.handle(self.screen, self.rect)
+
+        self.assertEqual(
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+            [self.target],
+        )
+        self.handler.scene_detector.detect.assert_called_once()
 
 
 if __name__ == "__main__":

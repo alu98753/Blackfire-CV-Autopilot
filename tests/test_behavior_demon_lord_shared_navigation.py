@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from states.handlers.demon_lords import DemonLordsHandler, DemonSubScene
 from utils.navigation_catalog import demon_lord_navigation_catalog
@@ -22,6 +22,7 @@ class TestDemonLordSharedNavigationIntegration(unittest.TestCase):
             "stone_selection": {},
         }
         self.machine.daily_manager = MagicMock()
+        self.machine.daily_manager.is_demon_lords_available.return_value = (True, "ok")
         self.machine.daily_manager.get_available_demon_lords.return_value = ["boss_c"]
         self.handler = DemonLordsHandler(self.machine)
         self.rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
@@ -140,6 +141,28 @@ class TestDemonLordSharedNavigationIntegration(unittest.TestCase):
 
         self.assertIsNone(self.handler.demon_card_navigator)
         self.assertIsNone(self.handler.demon_card_target_key)
+
+    @patch("states.handlers.demon_lords.execute_lobby_tab_route", return_value=False)
+    @patch("states.handlers.demon_lords.time.sleep")
+    def test_real_handler_tracking_matches_only_committed_target(self, _sleep, _route):
+        self.handler._handle_popup_guards = MagicMock(return_value=False)
+        self.handler.classify_subscene = MagicMock(
+            return_value=DemonSubScene.CARD_SELECTION
+        )
+        self._evidence(["demon_lords/boss_a.png"])
+
+        self.handler.handle(self.screen, self.rect)
+        self.assertTrue(self.handler.demon_card_session.owns_tracking)
+
+        self.machine.matcher.reset_mock()
+        self._evidence([])
+        self.handler.handle(self.screen, self.rect)
+
+        self.assertEqual(
+            [call.args[1] for call in self.machine.matcher.match.call_args_list],
+            ["demon_lords/boss_c.png"],
+        )
+        self.handler.classify_subscene.assert_called_once()
 
 
 if __name__ == "__main__":

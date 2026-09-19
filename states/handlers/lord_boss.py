@@ -8,7 +8,9 @@ from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardAlignmentStatus, CardListNavigator
 from utils.navigation_catalog import lord_navigation_catalog
 from utils.shared_card_navigator import CardNavigatorState, SharedCardNavigator
-from utils.scene_snapshot import TabId
+from utils.card_navigation_session import VerifiedCardNavigationSession
+from utils.scene_snapshot import SceneSnapshot, TabId
+from utils.scene_types import SceneId
 from states.navigation_routing import execute_lobby_tab_route
 
 class LordBossHandler(BaseStateHandler):
@@ -27,11 +29,14 @@ class LordBossHandler(BaseStateHandler):
         self.last_lord_scroll_time = 0.0
         self.start_verify_time = 0.0
         self.lord_card_navigator = None
+        self.lord_card_session = None
         self.lord_navigation_target = None
         self.lord_card_reset_attempts = 0
+        self._lord_card_handoff = False
 
     def _clear_lord_card_session(self, *, clear_target=True):
         self.lord_card_navigator = None
+        self.lord_card_session = None
         self.lord_card_reset_attempts = 0
         if clear_target:
             self.lord_navigation_target = None
@@ -46,6 +51,7 @@ class LordBossHandler(BaseStateHandler):
         self.last_lord_scroll_time = 0.0
         self.start_verify_time = 0.0
         self._clear_lord_card_session()
+        self._lord_card_handoff = False
 
     def _handle_lord_shared_navigation(self, screen_img, rect, is_opened, avail_bosses):
         """Navigate one policy-committed Lord target, not the candidate list."""
@@ -93,8 +99,22 @@ class LordBossHandler(BaseStateHandler):
 
         if self.lord_card_navigator is None:
             self.lord_card_navigator = SharedCardNavigator(catalog, target_key)
+        if self.lord_card_session is None or not self.lord_card_session.valid:
+            self.lord_card_session = VerifiedCardNavigationSession.acquire(
+                SceneSnapshot(
+                    frame_id=int(getattr(self.machine, "_navigation_frame_id", 0)) + 1,
+                    captured_at=time.monotonic(),
+                    scene=SceneId.LORD_SELECT,
+                    active_tabs=frozenset({TabId.LORD}),
+                ),
+                target_key=target_key,
+                target_index=next(
+                    entry.index for entry in catalog if entry.key == target_key
+                ),
+            )
 
         result = self.lord_card_navigator.observe(screen_img, self.matcher)
+        self.lord_card_session.apply_navigation_result(result)
         if result.state == CardNavigatorState.FOUND:
             # The existing single-card OCR/click owner runs immediately below.
             self._clear_lord_card_session(clear_target=False)
@@ -142,6 +162,31 @@ class LordBossHandler(BaseStateHandler):
         # RELOCALIZE and contradictory localization wait for a new frame and
         # never issue an unverified blind swipe.
         return "HANDLED"
+
+    def _handle_lord_tracking_fast_path(self, screen_img, rect):
+        session = self.lord_card_session
+        if session is None or not session.owns_tracking:
+            return False
+        navigator = self.lord_card_navigator
+        if navigator is None:
+            session.invalidate_reset_recovery()
+            self._clear_lord_card_session()
+            return True
+        result = navigator.observe(screen_img, self.matcher)
+        session.apply_navigation_result(result)
+        if result.state == CardNavigatorState.FOUND:
+            self._clear_lord_card_session(clear_target=False)
+            self._lord_card_handoff = True
+            return False
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self.last_lord_scroll_time = self._get_monotonic_time()
+            self._sleep(1.2)
+            return True
+        if not session.valid:
+            self._clear_lord_card_session()
+        return True
 
     def _check_card_cooldown_ocr(self, screen_img, pos_b, temp_path, max_allowed_seconds=7200.0):
         """
@@ -269,8 +314,23 @@ class LordBossHandler(BaseStateHandler):
             self.machine.pop_and_next_town_subflow()
             return True
 
+        for popup_btn in ["common/confirm.png", "common/ok.png"]:
+            if os.path.exists(os.path.join("templates", popup_btn)):
+                pos_popup, _ = self.matcher.match(screen_img, popup_btn, threshold=0.90)
+                if pos_popup:
+                    self.mouse.click(
+                        rect["left"] + pos_popup[0], rect["top"] + pos_popup[1]
+                    )
+                    self._sleep(0.5)
+                    return True
+
+        if self._handle_lord_tracking_fast_path(screen_img, rect):
+            return True
+        shared_lord_handoff = self._lord_card_handoff
+
         if execute_lobby_tab_route(self, screen_img, rect, TabId.LORD):
             self._clear_lord_card_session()
+            self._lord_card_handoff = False
             return True
 
         # 0. 全域最高優先防護：若畫面上出現歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防止遮罩擋住選關與大門
@@ -289,8 +349,7 @@ class LordBossHandler(BaseStateHandler):
         
         is_opened, _, _, _ = self.match_mutually_exclusive_tabs(screen_img, entry_after, entry_before, margin=0.02, threshold=0.70)
 
-        shared_lord_handoff = False
-        if is_opened and not self.current_target_boss:
+        if is_opened and not self.current_target_boss and not shared_lord_handoff:
             shared_result = self._handle_lord_shared_navigation(
                 screen_img, rect, is_opened, avail_bosses
             )
@@ -456,6 +515,7 @@ class LordBossHandler(BaseStateHandler):
                     self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                     self.current_target_boss = boss_key
                     self._clear_lord_card_session()
+                    self._lord_card_handoff = False
                     self.last_card_click_time = now
 
                     # 若畫面上已存在「開始戰鬥」按鈕 (stages/start.png)，點擊並啟動非阻塞戰鬥進場驗證閉環

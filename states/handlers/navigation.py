@@ -29,6 +29,8 @@ from utils.navigation_catalog import (
     stage_navigation_catalog,
 )
 from utils.shared_card_navigator import CardNavigatorState, SharedCardNavigator
+from utils.card_navigation_session import VerifiedCardNavigationSession
+from utils.scene_snapshot import snapshot_from_scene_info, next_navigation_frame_id, TabId
 from states.navigation_routing import (
     NavigationDecisionExecutor,
     resolve_detection_request,
@@ -233,14 +235,17 @@ class NavigationHandler(BaseStateHandler):
         self.card_alignment_attempts = 0
         self.sub_stage_scroll_attempts = 0
         self.stage_card_navigator = None
+        self.stage_card_session = None
         self.stage_card_target_key = None
         self.stage_card_reset_attempts = 0
         self._stage_card_handoff = False
         self.domain_card_navigator = None
+        self.domain_card_session = None
         self.domain_card_target_key = None
         self.domain_card_reset_attempts = 0
         self._domain_card_handoff = False
         self.dungeon_card_navigator = None
+        self.dungeon_card_session = None
         self.dungeon_card_target_key = None
         self.dungeon_card_reset_attempts = 0
 
@@ -293,8 +298,45 @@ class NavigationHandler(BaseStateHandler):
 
     def _clear_stage_card_session(self):
         self.stage_card_navigator = None
+        self.stage_card_session = None
         self.stage_card_target_key = None
         self.stage_card_reset_attempts = 0
+
+    def _verified_card_session(self, scene, *, target_key, target_index):
+        snapshot = snapshot_from_scene_info(
+            scene,
+            frame_id=next_navigation_frame_id(self.machine),
+            captured_at=time.monotonic(),
+        )
+        return VerifiedCardNavigationSession.acquire(
+            snapshot,
+            target_key=target_key,
+            target_index=target_index,
+        )
+
+    def _handle_stage_tracking_fast_path(self, screen_img, rect):
+        session = self.stage_card_session
+        if session is None or not session.owns_tracking:
+            return False
+        navigator = self.stage_card_navigator
+        if navigator is None:
+            session.invalidate_reset_recovery()
+            self._clear_stage_card_session()
+            return True
+        result = navigator.observe(screen_img, self.matcher)
+        session.apply_navigation_result(result)
+        if result.state == CardNavigatorState.FOUND:
+            self._clear_stage_card_session()
+            self._stage_card_handoff = True
+            return False
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self._sleep(1.2)
+            return True
+        if not session.valid:
+            self._clear_stage_card_session()
+        return True
 
     def _stage_shared_navigation_enabled(self, scene):
         return (
@@ -317,11 +359,27 @@ class NavigationHandler(BaseStateHandler):
             return False
 
         if self.stage_card_target_key != target_key:
+            if self.stage_card_session is not None:
+                self.stage_card_session.invalidate_target_change()
             self.stage_card_navigator = SharedCardNavigator(catalog, target_key)
             self.stage_card_target_key = target_key
             self.stage_card_reset_attempts = 0
+            self.stage_card_session = self._verified_card_session(
+                scene,
+                target_key=target_key,
+                target_index=next(
+                    entry.index for entry in catalog if entry.key == target_key
+                ),
+            )
 
+        if self.stage_card_session is None or not self.stage_card_session.valid:
+            self.stage_card_session = self._verified_card_session(
+                scene,
+                target_key=target_key,
+                target_index=next(entry.index for entry in catalog if entry.key == target_key),
+            )
         result = self.stage_card_navigator.observe(screen_img, self.matcher)
+        self.stage_card_session.apply_navigation_result(result)
         if result.state == CardNavigatorState.FOUND:
             # Release ownership immediately. The existing generic Stage card
             # click/entry loop handles the committed visible card below.
@@ -373,8 +431,33 @@ class NavigationHandler(BaseStateHandler):
 
     def _clear_domain_card_session(self):
         self.domain_card_navigator = None
+        self.domain_card_session = None
         self.domain_card_target_key = None
         self.domain_card_reset_attempts = 0
+
+    def _handle_domain_tracking_fast_path(self, screen_img, rect):
+        session = self.domain_card_session
+        if session is None or not session.owns_tracking:
+            return False
+        navigator = self.domain_card_navigator
+        if navigator is None:
+            session.invalidate_reset_recovery()
+            self._clear_domain_card_session()
+            return True
+        result = navigator.observe(screen_img, self.matcher)
+        session.apply_navigation_result(result)
+        if result.state == CardNavigatorState.FOUND:
+            self._clear_domain_card_session()
+            self._domain_card_handoff = True
+            return False
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self._sleep(1.2)
+            return True
+        if not session.valid:
+            self._clear_domain_card_session()
+        return True
 
     def _domain_shared_navigation_enabled(self, scene):
         return (
@@ -397,11 +480,27 @@ class NavigationHandler(BaseStateHandler):
             return False
 
         if self.domain_card_target_key != target_key:
+            if self.domain_card_session is not None:
+                self.domain_card_session.invalidate_target_change()
             self.domain_card_navigator = SharedCardNavigator(catalog, target_key)
             self.domain_card_target_key = target_key
             self.domain_card_reset_attempts = 0
+            self.domain_card_session = self._verified_card_session(
+                scene,
+                target_key=target_key,
+                target_index=next(
+                    entry.index for entry in catalog if entry.key == target_key
+                ),
+            )
 
+        if self.domain_card_session is None or not self.domain_card_session.valid:
+            self.domain_card_session = self._verified_card_session(
+                scene,
+                target_key=target_key,
+                target_index=next(entry.index for entry in catalog if entry.key == target_key),
+            )
         result = self.domain_card_navigator.observe(screen_img, self.matcher)
+        self.domain_card_session.apply_navigation_result(result)
         if result.state == CardNavigatorState.FOUND:
             self._clear_domain_card_session()
             self._domain_card_handoff = True
@@ -451,8 +550,33 @@ class NavigationHandler(BaseStateHandler):
 
     def _clear_dungeon_card_session(self):
         self.dungeon_card_navigator = None
+        self.dungeon_card_session = None
         self.dungeon_card_target_key = None
         self.dungeon_card_reset_attempts = 0
+
+    def _handle_dungeon_tracking_fast_path(self, screen_img, rect):
+        session = self.dungeon_card_session
+        if session is None or not session.owns_tracking:
+            return False
+        navigator = self.dungeon_card_navigator
+        if navigator is None:
+            session.invalidate_reset_recovery()
+            self._clear_dungeon_card_session()
+            return True
+        result = navigator.observe(screen_img, self.matcher)
+        session.apply_navigation_result(result)
+        if result.state == CardNavigatorState.FOUND:
+            self._clear_dungeon_card_session()
+            return False
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self.machine.last_dungeon_scroll_time = time.time()
+            self._sleep(1.2)
+            return True
+        if not session.valid:
+            self._clear_dungeon_card_session()
+        return True
 
     def _resolve_fixed_dungeon_target_idx(self):
         config = self.machine.config or {}
@@ -497,11 +621,25 @@ class NavigationHandler(BaseStateHandler):
         )
         target_key = catalog[target_idx - 1].key
         if self.dungeon_card_target_key != target_key:
+            if self.dungeon_card_session is not None:
+                self.dungeon_card_session.invalidate_target_change()
             self.dungeon_card_navigator = SharedCardNavigator(catalog, target_key)
             self.dungeon_card_target_key = target_key
             self.dungeon_card_reset_attempts = 0
+            self.dungeon_card_session = self._verified_card_session(
+                scene,
+                target_key=target_key,
+                target_index=target_idx,
+            )
 
+        if self.dungeon_card_session is None or not self.dungeon_card_session.valid:
+            self.dungeon_card_session = self._verified_card_session(
+                scene,
+                target_key=target_key,
+                target_index=target_idx,
+            )
         result = self.dungeon_card_navigator.observe(screen_img, self.matcher)
+        self.dungeon_card_session.apply_navigation_result(result)
         if result.state == CardNavigatorState.FOUND:
             self._clear_dungeon_card_session()
             return "FOUND"
@@ -977,6 +1115,16 @@ class NavigationHandler(BaseStateHandler):
 
 
         # 呼叫 SceneDetector 進行全場景與 UI 頁籤診斷
+        fast_handoff = False
+        if self._handle_stage_tracking_fast_path(screen_img, rect):
+            return
+        fast_handoff = fast_handoff or self._stage_card_handoff
+        if self._handle_domain_tracking_fast_path(screen_img, rect):
+            return
+        fast_handoff = fast_handoff or self._domain_card_handoff
+        if self._handle_dungeon_tracking_fast_path(screen_img, rect):
+            return
+
         if not hasattr(self, "scene_detector") or self.scene_detector is None or self.scene_detector.matcher != self.matcher:
             self.scene_detector = SceneDetector(self.matcher)
 
@@ -1077,12 +1225,13 @@ class NavigationHandler(BaseStateHandler):
         if executor.execute(routing, screen_img, rect):
             return
 
-        self._stage_card_handoff = False
-        self._domain_card_handoff = False
+        if not fast_handoff:
+            self._stage_card_handoff = False
+            self._domain_card_handoff = False
         self._stage_detail_evidence_checked = False
         self._stage_detail_evidence = None
         if self._domain_shared_navigation_enabled(scene):
-            if self._handle_domain_shared_navigation(screen_img, rect, scene):
+            if not fast_handoff and self._handle_domain_shared_navigation(screen_img, rect, scene):
                 return
             if not self._domain_card_handoff and self.domain_card_target_key is None:
                 if self._handle_primary_card_alignment(screen_img, rect, scene):
@@ -1094,7 +1243,7 @@ class NavigationHandler(BaseStateHandler):
                     screen_img, "stages/stage_label.png", threshold=0.70
                 )
             if self._stage_detail_evidence is None:
-                if self._handle_stage_shared_navigation(screen_img, rect, scene):
+                if not fast_handoff and self._handle_stage_shared_navigation(screen_img, rect, scene):
                     return
                 if not self._stage_card_handoff and self.stage_card_target_key is None:
                     if self._handle_primary_card_alignment(screen_img, rect, scene):
