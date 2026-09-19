@@ -12,7 +12,7 @@ SCRIPT_NAMES = ("task_archive.ps1", "task_package_resolver.ps1")
 
 class ArchiveBehavioralTests(unittest.TestCase):
     def git(self, cwd, *args, check=True, env=None):
-        return subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True, check=check, env=env)
+        return subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True, check=check, env=env, errors="replace")
 
     def fixture(self, integrated=True, integration_date=None):
         td = tempfile.TemporaryDirectory()
@@ -46,7 +46,7 @@ class ArchiveBehavioralTests(unittest.TestCase):
         command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(main / "scripts" / "task_archive.ps1"), "-Task", task]
         if fail_step:
             command += ["-_FailGitStep", fail_step]
-        return subprocess.run(command, cwd=main, text=True, capture_output=True)
+        return subprocess.run(command, cwd=main, text=True, capture_output=True, errors="replace")
 
     def test_proven_integration_and_remote_closeout(self):
         td, main, wt, task, _ = self.fixture(True)
