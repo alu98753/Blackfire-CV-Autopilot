@@ -74,8 +74,10 @@ class TestLordBossSwipeLogic(unittest.TestCase):
             return None, 0.0
 
         self.mock_matcher.match.side_effect = mock_match_first
+        self.mock_mouse.reset_mock()
         self.handler.handle(screen_img, self.rect)
-        self.assertTrue(self.handler.has_reset_to_left)
+        self.assertFalse(self.handler.has_reset_to_left)
+        self.mock_mouse.drag.assert_not_called()
 
     @patch("states.handlers.lord_boss.detect_cooldown_sign_and_time")
     @patch("os.path.exists")

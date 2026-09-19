@@ -6,6 +6,8 @@ from states.handlers.base import BaseStateHandler
 from utils.time_parser import format_seconds_to_readable
 from utils.cooldown_detector import detect_cooldown_sign_and_time
 from utils.card_navigator import CardAlignmentStatus, CardListNavigator
+from utils.navigation_catalog import lord_navigation_catalog
+from utils.shared_card_navigator import CardNavigatorState, SharedCardNavigator
 from utils.scene_snapshot import TabId
 from states.navigation_routing import execute_lobby_tab_route
 
@@ -24,6 +26,15 @@ class LordBossHandler(BaseStateHandler):
         self.reset_swipe_count = 0
         self.last_lord_scroll_time = 0.0
         self.start_verify_time = 0.0
+        self.lord_card_navigator = None
+        self.lord_navigation_target = None
+        self.lord_card_reset_attempts = 0
+
+    def _clear_lord_card_session(self, *, clear_target=True):
+        self.lord_card_navigator = None
+        self.lord_card_reset_attempts = 0
+        if clear_target:
+            self.lord_navigation_target = None
 
     def reset_state(self):
         """狀態重置與子流程生命週期初始化"""
@@ -34,6 +45,103 @@ class LordBossHandler(BaseStateHandler):
         self.reset_swipe_count = 0
         self.last_lord_scroll_time = 0.0
         self.start_verify_time = 0.0
+        self._clear_lord_card_session()
+
+    def _handle_lord_shared_navigation(self, screen_img, rect, is_opened, avail_bosses):
+        """Navigate one policy-committed Lord target, not the candidate list."""
+        if not is_opened or self.current_target_boss:
+            self._clear_lord_card_session()
+            return None
+        if not avail_bosses:
+            self._clear_lord_card_session()
+            return None
+        # A previously aligned/legacy session remains a compatibility path.
+        # Fresh Lord selection (the normal path) starts with the shared
+        # navigator; this guard prevents changing an already-established
+        # legacy session mid-flow.
+        if self.has_reset_to_left and self.lord_card_navigator is None and self.lord_navigation_target is None:
+            return None
+
+        bosses = self.machine.config.get("bosses", {})
+        catalog = lord_navigation_catalog(bosses)
+        catalog_keys = {entry.key for entry in catalog}
+        if self.lord_navigation_target not in avail_bosses:
+            # Preserve the existing candidate order during the one target
+            # selection pass.  Once committed, navigation only observes this
+            # target and never scans unrelated boss templates.
+            self.lord_navigation_target = None
+            for boss_key in avail_bosses:
+                template = bosses.get(boss_key, {}).get("template")
+                if not template:
+                    continue
+                position, confidence = self.matcher.match(
+                    screen_img, template, threshold=0.78
+                )
+                if position is not None and confidence >= 0.78:
+                    self.lord_navigation_target = boss_key
+                    break
+            if self.lord_navigation_target is None:
+                self.lord_navigation_target = avail_bosses[0]
+            self.lord_card_navigator = None
+            self.lord_card_reset_attempts = self.reset_swipe_count
+        target_key = self.lord_navigation_target
+        if target_key not in catalog_keys:
+            # Preserve the legacy path for incomplete configurations without a
+            # full declaration-order catalog.
+            self._clear_lord_card_session()
+            return None
+
+        if self.lord_card_navigator is None:
+            self.lord_card_navigator = SharedCardNavigator(catalog, target_key)
+
+        result = self.lord_card_navigator.observe(screen_img, self.matcher)
+        if result.state == CardNavigatorState.FOUND:
+            # The existing single-card OCR/click owner runs immediately below.
+            self._clear_lord_card_session(clear_target=False)
+            return "FOUND"
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self.last_lord_scroll_time = self._get_monotonic_time()
+            self._sleep(1.2)
+            return "HANDLED"
+        if result.state == CardNavigatorState.NEED_RESET_LEFT:
+            first_template = catalog[0].template
+            max_attempts = int(
+                self.machine.config.get("lord_reset_max_attempts", 7)
+            )
+            status, attempts, confidence = CardListNavigator.align_first_card(
+                screen_img,
+                self.matcher,
+                self.mouse,
+                rect,
+                first_template,
+                self.lord_card_reset_attempts,
+                max_attempts=max_attempts,
+                threshold=0.78,
+                duration=0.8,
+                inertia=False,
+            )
+            self.lord_card_reset_attempts = attempts
+            self.reset_swipe_count = attempts
+            if status == CardAlignmentStatus.ALIGNED:
+                self.lord_card_reset_attempts = 0
+                self.reset_swipe_count = 0
+                self.has_reset_to_left = True
+                return "HANDLED"
+            if status == CardAlignmentStatus.RETRYING:
+                self.notify_ui_progress()
+                self.last_lord_scroll_time = self._get_monotonic_time()
+                self._sleep(1.2)
+                return "HANDLED"
+            self._clear_lord_card_session()
+            self.reset_state()
+            self.machine.request_relaunch("lord_card_alignment_failed")
+            return "HANDLED"
+
+        # RELOCALIZE and contradictory localization wait for a new frame and
+        # never issue an unverified blind swipe.
+        return "HANDLED"
 
     def _check_card_cooldown_ocr(self, screen_img, pos_b, temp_path, max_allowed_seconds=7200.0):
         """
@@ -162,6 +270,7 @@ class LordBossHandler(BaseStateHandler):
             return True
 
         if execute_lobby_tab_route(self, screen_img, rect, TabId.LORD):
+            self._clear_lord_card_session()
             return True
 
         # 0. 全域最高優先防護：若畫面上出現歡迎/確認彈窗 (common/confirm.png, common/ok.png)，優先點擊關閉以防止遮罩擋住選關與大門
@@ -179,6 +288,17 @@ class LordBossHandler(BaseStateHandler):
         entry_before = self.machine.config.get("entry_btn", "load/Lord_entry.png")
         
         is_opened, _, _, _ = self.match_mutually_exclusive_tabs(screen_img, entry_after, entry_before, margin=0.02, threshold=0.70)
+
+        shared_lord_handoff = False
+        if is_opened and not self.current_target_boss:
+            shared_result = self._handle_lord_shared_navigation(
+                screen_img, rect, is_opened, avail_bosses
+            )
+            if shared_result == "HANDLED":
+                return True
+            shared_lord_handoff = shared_result == "FOUND"
+        elif not is_opened:
+            self._clear_lord_card_session()
 
         # 2. 若頁籤尚未開啟，進行大廳入口與頁籤點擊
         if not is_opened:
@@ -228,7 +348,12 @@ class LordBossHandler(BaseStateHandler):
             return True
 
         # 5. 特化邏輯：每次進入選關介面 (Lord_entry_after) 時，持續向右滑動拉回，直到看見「第一個 Boss (起點)」
-        if is_opened and not self.has_reset_to_left and not self.current_target_boss:
+        if (
+            is_opened
+            and not self.has_reset_to_left
+            and not self.current_target_boss
+            and not shared_lord_handoff
+        ):
             bosses_config = self.machine.config.get("bosses", {})
             first_boss_key = list(bosses_config.keys())[0] if bosses_config else None
             first_template = bosses_config.get(first_boss_key, {}).get("template") if first_boss_key else None
@@ -287,7 +412,12 @@ class LordBossHandler(BaseStateHandler):
         bosses_config = self.machine.config.get("bosses", {})
         boss_matched = False
 
-        for boss_key in avail_bosses:
+        candidate_bosses = (
+            [self.lord_navigation_target]
+            if shared_lord_handoff and self.lord_navigation_target
+            else avail_bosses
+        )
+        for boss_key in candidate_bosses:
             b_cfg = bosses_config.get(boss_key, {})
             temp_path = b_cfg.get("template")
             if temp_path and os.path.exists(os.path.join("templates", temp_path)):
@@ -314,11 +444,18 @@ class LordBossHandler(BaseStateHandler):
                         )
                         if dm and hasattr(dm, "update_boss_cooldown"):
                             dm.update_boss_cooldown(boss_key, rem_secs)
+                        if shared_lord_handoff:
+                            self._clear_lord_card_session()
+                            # Cooldown remains target-selection policy.  Let
+                            # the existing ordered candidate scan choose the
+                            # next eligible boss in this frame.
+                            shared_lord_handoff = False
                         continue  # 有木牌冷卻中：跳過點擊，續行比對佇列中下一個 Boss！
 
                     logging.info(f"🎯 [首領討伐] 確認 Boss [{b_name}] 無冷卻木牌！進行點擊選擇討伐！")
                     self.mouse.click(rect["left"] + pos_b[0], rect["top"] + pos_b[1])
                     self.current_target_boss = boss_key
+                    self._clear_lord_card_session()
                     self.last_card_click_time = now
 
                     # 若畫面上已存在「開始戰鬥」按鈕 (stages/start.png)，點擊並啟動非阻塞戰鬥進場驗證閉環
@@ -332,7 +469,7 @@ class LordBossHandler(BaseStateHandler):
                     break
 
         # 7. 若在畫面上未能匹配到當前欲尋找的 Boss 卡片，發動向左滑動翻頁
-        if is_opened and not boss_matched and not self.current_target_boss:
+        if is_opened and not boss_matched and not self.current_target_boss and not shared_lord_handoff:
             logging.info("🧭 [首領討伐] 當前畫面未發現可用 Boss 卡片，執行向左滑動翻頁搜尋...")
             CardListNavigator.swipe_left_page(self.mouse, rect, duration=0.8, inertia=False)
             self.last_lord_scroll_time = now
