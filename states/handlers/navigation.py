@@ -23,7 +23,7 @@ from utils.card_navigator import CardAlignmentStatus, CardListNavigator
 from utils.sub_stage_navigator import SubStageDirection, SubStageListNavigator
 from utils.scene_detector import SceneDetector, SceneType
 from utils.dungeon_catalog import DungeonCatalog
-from utils.navigation_catalog import stage_navigation_catalog
+from utils.navigation_catalog import domain_navigation_catalog, stage_navigation_catalog
 from utils.shared_card_navigator import CardNavigatorState, SharedCardNavigator
 from states.navigation_routing import (
     NavigationDecisionExecutor,
@@ -232,6 +232,10 @@ class NavigationHandler(BaseStateHandler):
         self.stage_card_target_key = None
         self.stage_card_reset_attempts = 0
         self._stage_card_handoff = False
+        self.domain_card_navigator = None
+        self.domain_card_target_key = None
+        self.domain_card_reset_attempts = 0
+        self._domain_card_handoff = False
 
     def _resolve_domain_navigation_templates(self):
         config = self.machine.config or {}
@@ -243,6 +247,26 @@ class NavigationHandler(BaseStateHandler):
         from config import BASE_STAGE_LEVELS
 
         return stage_navigation_catalog(BASE_STAGE_LEVELS)
+
+    def _domain_navigation_catalog(self):
+        from config import get_canonical_domain_mode_configs
+
+        return domain_navigation_catalog(get_canonical_domain_mode_configs())
+
+    def _resolve_domain_card_target_key(self, catalog):
+        config = self.machine.config or {}
+        requested = config.get("domain")
+        by_key = {entry.key: entry for entry in catalog}
+        if requested is not None and str(requested) in by_key:
+            return str(requested)
+
+        from config import get_canonical_domain_mode_configs
+
+        canonical = get_canonical_domain_mode_configs()
+        for mode_key, mode_config in canonical.items():
+            if str(mode_config.get("domain")) == str(requested):
+                return mode_key
+        return None
 
     def _resolve_stage_card_target_key(self, catalog):
         config = self.machine.config or {}
@@ -338,6 +362,84 @@ class NavigationHandler(BaseStateHandler):
 
         # CONTRADICTORY and RELOCALIZE deliberately do not swipe. The next
         # confirmed Stage frame re-enters localization on the same session.
+        return True
+
+    def _clear_domain_card_session(self):
+        self.domain_card_navigator = None
+        self.domain_card_target_key = None
+        self.domain_card_reset_attempts = 0
+
+    def _domain_shared_navigation_enabled(self, scene):
+        return (
+            (self.machine.config or {}).get("type") == "domain"
+            and "domain" in scene.active_tabs
+        )
+
+    def _handle_domain_shared_navigation(self, screen_img, rect, scene):
+        """Own only Domain main-card localization until FOUND handoff."""
+        if not self._domain_shared_navigation_enabled(scene):
+            self._clear_domain_card_session()
+            return False
+
+        catalog = self._domain_navigation_catalog()
+        target_key = self._resolve_domain_card_target_key(catalog)
+        if target_key is None:
+            # Keep legacy Domain alignment when the runtime config has no
+            # canonical Domain identity; shared navigation must not guess.
+            self._clear_domain_card_session()
+            return False
+
+        if self.domain_card_target_key != target_key:
+            self.domain_card_navigator = SharedCardNavigator(catalog, target_key)
+            self.domain_card_target_key = target_key
+            self.domain_card_reset_attempts = 0
+
+        result = self.domain_card_navigator.observe(screen_img, self.matcher)
+        if result.state == CardNavigatorState.FOUND:
+            self._clear_domain_card_session()
+            self._domain_card_handoff = True
+            return False
+
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            self._sleep(1.2)
+            return True
+
+        if result.state == CardNavigatorState.NEED_RESET_LEFT:
+            first_entry = catalog[0].template
+            max_attempts = int(
+                (self.machine.config or {}).get(
+                    "domain_reset_max_attempts",
+                    self.CARD_RESET_MAX_ATTEMPTS,
+                )
+            )
+            status, attempts, confidence = CardListNavigator.align_first_card(
+                screen_img,
+                self.matcher,
+                self.mouse,
+                rect,
+                first_entry,
+                self.domain_card_reset_attempts,
+                max_attempts=max_attempts,
+                threshold=get_template_threshold(first_entry, default=ENTRY_THRESHOLD),
+                duration=0.8,
+                inertia=False,
+            )
+            self.domain_card_reset_attempts = attempts
+            if status == CardAlignmentStatus.ALIGNED:
+                self.domain_card_reset_attempts = 0
+                return True
+            if status == CardAlignmentStatus.RETRYING:
+                self.notify_ui_progress()
+                self._sleep(1.2)
+                return True
+            self.machine.request_relaunch("domain_card_alignment_failed")
+            self._clear_domain_card_session()
+            return True
+
+        # CONTRADICTORY and RELOCALIZE deliberately do not swipe. The next
+        # confirmed Domain frame re-enters localization on the same session.
         return True
 
     def _handle_primary_card_alignment(self, screen_img, rect, scene):
@@ -832,6 +934,7 @@ class NavigationHandler(BaseStateHandler):
             pos_de, conf_de = self.matcher.match(screen_img, domain_explore_btn, threshold=0.80)
             if pos_de:
                 logging.info(f"🧭 尋路成功！偵測到領地探索按鈕 [{domain_explore_btn}] (信心度: {conf_de:.4f})，已進入領地，狀態轉移至 DOMAIN_EXPLORE。")
+                self._clear_domain_card_session()
                 self.machine.transition_to(self.machine.STATE_DOMAIN_EXPLORE)
                 return
 
@@ -858,15 +961,24 @@ class NavigationHandler(BaseStateHandler):
         # Shared intent policy owns Diamond/Bread/Start precedence.
         stage_select_open = "stage" in scene.active_tabs
         dungeon_select_open = "dungeon" in scene.active_tabs
+        if (self.machine.config or {}).get("type") == "domain" and "domain" not in scene.active_tabs:
+            self._clear_domain_card_session()
         routing = resolve_navigation_context(self.machine, scene)
         executor = NavigationDecisionExecutor(self)
         if executor.execute(routing, screen_img, rect):
             return
 
         self._stage_card_handoff = False
+        self._domain_card_handoff = False
         self._stage_detail_evidence_checked = False
         self._stage_detail_evidence = None
-        if self._stage_shared_navigation_enabled(scene):
+        if self._domain_shared_navigation_enabled(scene):
+            if self._handle_domain_shared_navigation(screen_img, rect, scene):
+                return
+            if not self._domain_card_handoff and self.domain_card_target_key is None:
+                if self._handle_primary_card_alignment(screen_img, rect, scene):
+                    return
+        elif self._stage_shared_navigation_enabled(scene):
             if os.path.exists(os.path.join("templates", "stages/stage_label.png")):
                 self._stage_detail_evidence_checked = True
                 self._stage_detail_evidence, _ = self.matcher.match(
@@ -1391,6 +1503,7 @@ class NavigationHandler(BaseStateHandler):
 
         # 逆序掃描導航路徑中可見的按鈕，點擊最深層的那個
         self._stage_card_handoff = False
+        self._domain_card_handoff = False
         active_tabs = []
         if stage_select_open:
             active_tabs.append("stage")
