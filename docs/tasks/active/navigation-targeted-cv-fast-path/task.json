@@ -1,0 +1,29 @@
+{
+  "id": "navigation-targeted-cv-fast-path",
+  "base_ref": "origin/main",
+  "scope": [
+    "states/handlers/navigation.py",
+    "utils/scene_detector.py",
+    "states/navigation_routing.py",
+    "utils/card_navigator.py",
+    "vision/matcher.py",
+    "tests/test_dungeon_swipe_unit.py",
+    "tests/test_behavior_navigation.py",
+    "tests/test_behavior_navigation_intent.py"
+  ],
+  "focused_tests": [
+    "tests/test_dungeon_swipe_unit.py",
+    "tests/test_behavior_navigation.py",
+    "tests/test_behavior_navigation_intent.py",
+    "tests/test_behavior_navigation_scenarios.py"
+  ],
+  "models": {
+    "scout": [
+      "opencode/mimo-v2.5-free",
+      "opencode/big-pickle"
+    ],
+    "review": [
+      "opencode/mimo-v2.5-free"
+    ]
+  }
+}
