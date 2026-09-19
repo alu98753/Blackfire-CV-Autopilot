@@ -1,3 +1,4 @@
+import pytest
 import json
 import os
 import shutil
@@ -6,6 +7,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+pytestmark = pytest.mark.ai_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_START_SCRIPT = ROOT / "scripts" / "task_start.ps1"
@@ -251,7 +254,7 @@ class TaskStartBehavioralTests(unittest.TestCase):
             main_after = self.run_git(f["main"], "rev-parse", "HEAD").stdout.strip()
             self.assertEqual(main_after, origin_main_now)
 
-    def test_canonical_main_dirty_fails_closed(self):
+    def test_canonical_main_dirty_does_not_block_task_start(self):
         with tempfile.TemporaryDirectory() as temp:
             f = self.create_git_fixture(temp, task_id="dirty-main-task")
             (f["main"] / "untracked.txt").write_text("dirty\n", encoding="utf-8")
@@ -262,12 +265,28 @@ class TaskStartBehavioralTests(unittest.TestCase):
                 "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
             }
             proc = self.run_task_start(task="dirty-main-task", env=env)
-            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual(proc.returncode, 0, f"stdout: {proc.stdout}\nstderr: {proc.stderr}")
             data = self.parse_result(proc)
-            self.assertFalse(data["ok"])
-            self.assertEqual(data["code"], "CANONICAL_MAIN_DIRTY")
-            # Verify no task worktree created
-            self.assertFalse((f["worktrees_root"] / "dirty-main-task").exists())
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["code"], "TASK_READY")
+            self.assertTrue((f["worktrees_root"] / "dirty-main-task").exists())
+
+    def test_canonical_main_local_commit_does_not_block_or_enter_task_worktree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            f = self.create_git_fixture(temp, task_id="local-main-task")
+            (f["main"] / "local_only.txt").write_text("local\n", encoding="utf-8")
+            self.run_git(f["main"], "add", "local_only.txt")
+            self.run_git(f["main"], "commit", "-m", "Local-only main commit")
+
+            env = {
+                "TASK_START_CANONICAL_MAIN_OVERRIDE": str(f["main"]),
+                "TASK_START_WORKTREES_ROOT_OVERRIDE": str(f["worktrees_root"]),
+                "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
+            }
+            proc = self.run_task_start(task="local-main-task", env=env)
+            self.assertEqual(proc.returncode, 0, f"stdout: {proc.stdout}\nstderr: {proc.stderr}")
+            self.assertEqual(self.parse_result(proc)["code"], "TASK_READY")
+            self.assertFalse((f["worktrees_root"] / "local-main-task" / "local_only.txt").exists())
 
     def test_canonical_main_wrong_branch_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -285,21 +304,9 @@ class TaskStartBehavioralTests(unittest.TestCase):
             self.assertFalse(data["ok"])
             self.assertEqual(data["code"], "CANONICAL_MAIN_WRONG_BRANCH")
 
-    def test_canonical_main_diverged_fails_closed(self):
+    def test_canonical_main_local_only_commit_does_not_block_task_start(self):
         with tempfile.TemporaryDirectory() as temp:
             f = self.create_git_fixture(temp, task_id="diverged-main-task")
-            # Advance remote origin/main via temporary clone
-            tmp_clone = Path(temp) / "tmp_clone"
-            self.run_git(Path(temp), "clone", str(f["origin"]), str(tmp_clone))
-            self.run_git(tmp_clone, "config", "user.name", "Test User")
-            self.run_git(tmp_clone, "config", "user.email", "test@example.com")
-            self.run_git(tmp_clone, "checkout", "main")
-            (tmp_clone / "remote_change.txt").write_text("remote\n", encoding="utf-8")
-            self.run_git(tmp_clone, "add", "remote_change.txt")
-            self.run_git(tmp_clone, "commit", "-m", "Remote commit on main")
-            self.run_git(tmp_clone, "push", "origin", "main")
-
-            # Create local unpushed commit on canonical main
             (f["main"] / "local_change.txt").write_text("local\n", encoding="utf-8")
             self.run_git(f["main"], "add", "local_change.txt")
             self.run_git(f["main"], "commit", "-m", "Local unpushed commit on main")
@@ -310,10 +317,10 @@ class TaskStartBehavioralTests(unittest.TestCase):
                 "TASK_START_PYTHON_HELPER": str(f["fake_helper"]),
             }
             proc = self.run_task_start(task="diverged-main-task", env=env)
-            self.assertNotEqual(proc.returncode, 0)
+            self.assertEqual(proc.returncode, 0, f"stdout: {proc.stdout}\nstderr: {proc.stderr}")
             data = self.parse_result(proc)
-            self.assertFalse(data["ok"])
-            self.assertEqual(data["code"], "CANONICAL_MAIN_DIVERGED")
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["code"], "TASK_READY")
 
     def test_missing_remote_task_branch_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:

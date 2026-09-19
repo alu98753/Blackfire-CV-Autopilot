@@ -220,9 +220,9 @@ For legacy/nonstandard approved branch names:
 
 - discover and validate canonical main;
 - inspect actual worktree topology;
-- require clean attached `main`;
+- validate that canonical `main` is attached, without requiring its working tree to be clean;
 - `git fetch origin`;
-- safely fast-forward canonical main when possible;
+- resolve the fetched `origin/main` ref without changing canonical `main`;
 - validate the approved remote task branch and current-main ancestry;
 - validate remote task artifacts;
 - create or safely reuse the canonical task worktree;
@@ -231,7 +231,7 @@ For legacy/nonstandard approved branch names:
 - invoke `worktree_environment_bootstrap.ps1`;
 - return exactly one JSON result with `TASK_READY` on success.
 
-It fails closed on dirty/diverged/detached/conflicting/stale states and preserves evidence. It does not merge/rebase stale task branches, synthesize task artifacts, bootstrap Node, launch Scout/Gate, or perform cleanup.
+It fails closed on detached/conflicting/stale states and preserves evidence. Local uncommitted changes or local-only commits in canonical `main` do not block startup and are not copied into the task worktree. It does not merge/rebase stale task branches, synthesize task artifacts, bootstrap Node, launch Scout/Gate, or perform cleanup.
 
 ### Manual startup operations are recovery, not the normal path
 

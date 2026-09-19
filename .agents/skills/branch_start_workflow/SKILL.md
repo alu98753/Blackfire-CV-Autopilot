@@ -52,9 +52,9 @@ For formal AI tasks, the wrapper owns the mechanical startup sequence:
 
 - discovers/validates the canonical permanent main worktree;
 - inspects actual Git worktree topology;
-- requires canonical main to be attached to `main` and clean;
+- requires canonical main to be attached to `main`; canonical main local changes are not part of task startup;
 - fetches `origin`;
-- safely fast-forwards canonical main when possible;
+- resolves `origin/main` without changing canonical main;
 - validates that the approved remote task branch exists;
 - validates that current `origin/main` is an ancestor of that remote task branch;
 - validates remote `SPEC.md` and `task.json` and matching task id;
@@ -156,7 +156,7 @@ The user-facing handoff should therefore normally be one command, not a copied l
 
 Typical blockers include:
 
-- canonical main dirty, detached, wrong branch, or diverged;
+- canonical main detached or wrong branch;
 - remote task branch missing;
 - task branch stale relative to current `origin/main`;
 - required task artifacts missing/malformed;
@@ -296,4 +296,4 @@ Do not ask the user to repeat the internal worktree/bootstrap checks after a suc
 
 # One-line principle
 
-> Formal AI task startup is one repository command; low-level Git/worktree/environment commands are recovery tools, not routine user choreography.
+> Formal AI task startup is one repository command; low-level Git/worktree/environment commands are recovery tools, not routine user choreography. Canonical main may contain unrelated local state: startup fetches remote refs and materializes the task worktree from the approved remote branch without copying or modifying canonical main state.
