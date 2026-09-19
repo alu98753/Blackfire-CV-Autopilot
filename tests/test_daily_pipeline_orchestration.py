@@ -80,6 +80,8 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertTrue(scheduled)
         # 斷言優先發起 lord_boss 流水線並切換至 STATE_LORD_BOSS
         self.assertEqual(sm.town_subflow_queue, [])
+        self.assertEqual(sm.current_town_subflow, "lord_boss")
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
     def test_lord_boss_preemptive_interruption_during_quests(self):
@@ -101,6 +103,8 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
+        self.assertEqual(sm.current_town_subflow, "lord_boss")
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
 
@@ -237,7 +241,10 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.daily_mgr.update_boss_cooldown("lord_spider", 0.0, now_ts=now_ts)
 
         # 戰鬥結束回到大廳重新評估
-        sm.evaluate_and_schedule_daily_pipeline()
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled)
+        self.assertEqual(sm.current_town_subflow, "lord_boss")
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
     def test_tier4_fallback_mix_mode_and_repreemption_by_tier2(self):
@@ -643,6 +650,8 @@ class TestTierConfigMatrix(unittest.TestCase):
         sm.daily_manager = self.daily_mgr
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertTrue(scheduled)
+        self.assertEqual(sm.current_town_subflow, "lord_boss")
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
         self.assertEqual(sm.config["type"], "lord_boss")
 

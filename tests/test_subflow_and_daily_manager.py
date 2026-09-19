@@ -329,6 +329,8 @@ class TestSubflowAndDailyManager(unittest.TestCase):
         # 彈出 lord_boss
         sm.town_subflow_queue = ["lord_boss"]
         sm.pop_and_next_town_subflow()
+        self.assertEqual(sm.current_town_subflow, "lord_boss")
+        sm.dispatch_current_town_subflow()
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
         self.assertEqual(sm.config["type"], "lord_boss")
 
