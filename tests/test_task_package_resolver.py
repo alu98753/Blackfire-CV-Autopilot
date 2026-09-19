@@ -1,7 +1,10 @@
+import pytest
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+
+pytestmark = pytest.mark.ai_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
 RESOLVER = ROOT / "scripts" / "task_package_resolver.ps1"

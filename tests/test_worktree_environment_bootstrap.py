@@ -1,3 +1,4 @@
+import pytest
 import json
 import os
 import shutil
@@ -6,6 +7,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+pytestmark = pytest.mark.ai_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP_SCRIPT = ROOT / "scripts" / "worktree_environment_bootstrap.ps1"

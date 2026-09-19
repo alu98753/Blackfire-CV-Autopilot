@@ -243,6 +243,18 @@ Example user-only full suite command：
 cmd.exe /d /s /c "chcp 65001 >nul && .venv\Scripts\python.exe -X utf8 -m unittest discover tests > test_run.log 2>&1"
 ```
 
+Current pytest test entrypoints use the Python 3.11.2 clean environment:
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -u -m pytest -m "not ai_workflow" -v
+```
+
+AI workflow, OpenCode, task orchestration, and worktree contract modules are marked `pytest.mark.ai_workflow`. The normal game-logic suite excludes them with `-m "not ai_workflow"`; test files should not be moved only to separate these domains. The complete suite is user-only and includes AI workflow tests:
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -u -m pytest -v
+```
+
 若 task/main tests 競爭 game process、`user_data/`、固定 screenshot/log 等 shared resource，序列執行。
 
 ### 8. Markdown 文檔客觀寫作規範 📄

@@ -1,9 +1,12 @@
+import pytest
 import json
 import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+
+pytestmark = pytest.mark.ai_workflow
 
 
 class WorkflowScriptContractTests(unittest.TestCase):
