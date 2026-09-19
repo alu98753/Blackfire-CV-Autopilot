@@ -309,6 +309,55 @@ class TestDungeonSharedNavigationIntegration(unittest.TestCase):
 
         self.assertIsNone(self.handler._resolve_shared_fixed_dungeon_target_idx())
 
+    def test_canonical_found_handoff_uses_committed_target_for_status_and_click(self):
+        screen = np.zeros((800, 1000, 3), dtype=np.uint8)
+        self.machine.matcher.match.return_value = (None, 0.0)
+        self.handler.scene_detector = MagicMock()
+        self.handler.scene_detector.matcher = self.machine.matcher
+        self.handler.scene_detector.detect.return_value = self.scene
+
+        with (
+            patch.object(
+                self.handler,
+                "_handle_fixed_dungeon_navigation",
+                return_value="FOUND",
+            ),
+            patch.object(
+                self.handler,
+                "_resolve_legacy_compat_dungeon_target_idx",
+                wraps=self.handler._resolve_legacy_compat_dungeon_target_idx,
+            ) as legacy_resolver,
+            patch.object(self.handler, "_check_dungeon_status", return_value=False),
+            patch.object(
+                self.handler, "_handle_primary_card_alignment", return_value=False
+            ),
+            patch(
+                "states.handlers.navigation.NavigationDecisionExecutor.execute",
+                return_value=False,
+            ),
+            patch("states.handlers.navigation.os.path.exists", return_value=True),
+            patch("states.handlers.navigation.cv2.imread", return_value=np.ones((41, 238, 3))),
+            patch(
+                "states.handlers.navigation.cv2.resize",
+                side_effect=lambda image, _size: image,
+            ),
+            patch(
+                "states.handlers.navigation.cv2.matchTemplate",
+                return_value=np.array([[0.95]], dtype=np.float32),
+            ),
+            patch(
+                "states.handlers.navigation.cv2.minMaxLoc",
+                return_value=(0.0, 0.95, (0, 0), (100, 200)),
+            ),
+            patch("states.handlers.navigation.time.sleep"),
+        ):
+            self.handler.handle(screen, self.rect)
+
+        self.assertEqual(legacy_resolver.call_count, 1)
+        self.assertEqual(self.machine.current_dungeon_index, 3)
+        self.assertTrue(self.machine.is_in_dungeon)
+        self.machine.mouse.click.assert_called_once_with(161, 210)
+
     @patch("states.handlers.navigation.time.sleep")
     def test_target_change_invalidates_before_old_target_match(self, _sleep):
         self._evidence(["dungeons/a.png"])
