@@ -106,7 +106,7 @@ class NavigationProgress:
             return ProgressStatus.IDLE
         if scene.frame_id <= action.source_frame_id:
             return ProgressStatus.WAITING
-        if self._postcondition_met(action.expected, scene):
+        if self._postcondition_met(action.expected, scene, action.expected_tab):
             self.in_flight = None
             self._failure_counts.pop(action.intent_id, None)
             return ProgressStatus.PROGRESSED
@@ -179,7 +179,7 @@ class NavigationProgress:
         return False
 
     @staticmethod
-    def _postcondition_met(expected, scene):
+    def _postcondition_met(expected, scene, expected_tab=None):
         if expected == PostconditionId.DIAMOND_WINDOW:
             return scene.scene == SceneId.DIAMOND_WINDOW
         if expected == PostconditionId.BREAD_WINDOW:
@@ -194,4 +194,6 @@ class NavigationProgress:
             from utils.scene_snapshot import ElementId
 
             return not scene.has(ElementId.CLOSE_OVERLAY)
+        if expected == PostconditionId.LOBBY_TAB_ACTIVE:
+            return expected_tab is not None and expected_tab in scene.active_tabs
         return False

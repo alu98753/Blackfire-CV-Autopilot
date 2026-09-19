@@ -22,6 +22,11 @@ class ElementId(str, Enum):
     TOWN_SUBFLOW_ENTRY = "town_subflow_entry"
     TOWN_SUBFLOW_RED_DOT = "town_subflow_red_dot"
     TOWN_CLEAR_ANCHOR = "town_clear_anchor"
+    TAB_STAGE = "tab_stage"
+    TAB_DUNGEON = "tab_dungeon"
+    TAB_DOMAIN = "tab_domain"
+    TAB_LORD = "tab_lord"
+    TAB_DEMON_LORD = "tab_demon_lord"
 
 
 class OverlayId(str, Enum):
@@ -124,6 +129,16 @@ _ELEMENT_TEMPLATE_MAP = {
     "common/quit.png": ElementId.CLOSE_OVERLAY,
     "domains/common/exit_to_lobby.png": ElementId.EXIT_TO_LOBBY,
     "domains/common/explore_btn.png": ElementId.DOMAIN_EXPLORE_BTN,
+    "common/select_stage.png": ElementId.TAB_STAGE,
+    "common/select_stage_after.png": ElementId.TAB_STAGE,
+    "dungeons/dungeon.png": ElementId.TAB_DUNGEON,
+    "dungeons/dungeon_after.png": ElementId.TAB_DUNGEON,
+    "domains/Domains_entry.png": ElementId.TAB_DOMAIN,
+    "domains/Domains_entry_after.png": ElementId.TAB_DOMAIN,
+    "load/Lord_entry.png": ElementId.TAB_LORD,
+    "load/Lord_entry_after.png": ElementId.TAB_LORD,
+    "demon_lords/demon_lords_entry.png": ElementId.TAB_DEMON_LORD,
+    "demon_lords/demon_lords_entry_after.png": ElementId.TAB_DEMON_LORD,
 }
 
 
@@ -133,6 +148,7 @@ def snapshot_from_scene_info(
     frame_id: int,
     captured_at: float,
     start_template: str | None = None,
+    tab_templates: Mapping[str, tuple[str, str]] | None = None,
 ) -> SceneSnapshot:
     """Adapt legacy SceneInfo without giving it decision responsibilities."""
     scene_val = getattr(scene_info, "scene_type", None)
@@ -145,6 +161,21 @@ def snapshot_from_scene_info(
     template_map = dict(_ELEMENT_TEMPLATE_MAP)
     if start_template:
         template_map[start_template] = ElementId.START
+    if tab_templates:
+        tab_element_map = {
+            TabId.STAGE: ElementId.TAB_STAGE,
+            TabId.DUNGEON: ElementId.TAB_DUNGEON,
+            TabId.DOMAIN: ElementId.TAB_DOMAIN,
+            TabId.LORD: ElementId.TAB_LORD,
+            TabId.DEMON_LORD: ElementId.TAB_DEMON_LORD,
+        }
+        for tab, templates in tab_templates.items():
+            try:
+                element_id = tab_element_map[TabId(tab)]
+            except (KeyError, ValueError):
+                continue
+            for template_name in templates:
+                template_map[template_name] = element_id
 
     elements = {}
     confidences = []

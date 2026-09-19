@@ -10,7 +10,7 @@ from states.navigation_progress import (
     ProgressStatus,
 )
 from states.state_machine import GameStateMachine
-from utils.scene_snapshot import SceneId, SceneSnapshot
+from utils.scene_snapshot import SceneId, SceneSnapshot, TabId
 
 
 class TestBehaviorNavigationProgress(unittest.TestCase):
@@ -187,7 +187,6 @@ class TestBehaviorNavigationProgress(unittest.TestCase):
         self.assertTrue(machine.need_bread_collection)
 
     def test_in_flight_action_preserves_expected_tab(self):
-        from utils.scene_snapshot import TabId
         action = self.progress.begin(
             IntentId.PRIMARY_NAVIGATION,
             ActionId.CONTINUE_PRIMARY,
@@ -201,6 +200,44 @@ class TestBehaviorNavigationProgress(unittest.TestCase):
         self.assertEqual(self.progress.in_flight.expected_tab, TabId.DUNGEON)
 
         self.progress.clear(IntentId.PRIMARY_NAVIGATION)
+        self.assertIsNone(self.progress.in_flight)
+
+    def test_tab_click_does_not_complete_until_expected_tab_is_scene_confirmed(self):
+        self.progress.begin(
+            IntentId.PRIMARY_NAVIGATION,
+            ActionId.SWITCH_LOBBY_TAB,
+            PostconditionId.LOBBY_TAB_ACTIVE,
+            frame_id=1,
+            now=10.0,
+            expected_tab=TabId.DUNGEON,
+        )
+
+        self.assertEqual(
+            self.progress.observe(
+                SceneSnapshot(
+                    2,
+                    11.0,
+                    SceneId.STAGE_SELECT,
+                    active_tabs=frozenset({TabId.STAGE}),
+                ),
+                11.0,
+            ),
+            ProgressStatus.WAITING,
+        )
+        self.assertIsNotNone(self.progress.in_flight)
+
+        self.assertEqual(
+            self.progress.observe(
+                SceneSnapshot(
+                    3,
+                    12.0,
+                    SceneId.DUNGEON_SELECT,
+                    active_tabs=frozenset({TabId.DUNGEON}),
+                ),
+                12.0,
+            ),
+            ProgressStatus.PROGRESSED,
+        )
         self.assertIsNone(self.progress.in_flight)
 
 

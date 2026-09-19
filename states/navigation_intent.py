@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from utils.scene_snapshot import ElementId, SceneId, SceneSnapshot
+from utils.scene_snapshot import ElementId, SceneId, SceneSnapshot, TabId
 
 
 class IntentId(str, Enum):
@@ -34,6 +34,7 @@ class ActionId(str, Enum):
     DISPATCH_TOWN_SUBFLOW = "dispatch_town_subflow"
     DEFER_TOWN_SUBFLOW = "defer_town_subflow"
     COMPLETE_TOWN_SUBFLOW = "complete_town_subflow"
+    SWITCH_LOBBY_TAB = "switch_lobby_tab"
 
 
 class PostconditionId(str, Enum):
@@ -46,6 +47,7 @@ class PostconditionId(str, Enum):
     LOADING_OR_BATTLE = "loading_or_battle"
     PRIMARY_ROUTE_PROGRESS = "primary_route_progress"
     OVERLAY_CLOSED = "overlay_closed"
+    LOBBY_TAB_ACTIVE = "lobby_tab_active"
 
 
 class ReasonCode(str, Enum):
@@ -69,6 +71,7 @@ class ReasonCode(str, Enum):
     TOWN_SUBFLOW_EXIT_DOMAIN = "town_subflow_exit_domain"
     TOWN_SUBFLOW_READY = "town_subflow_ready"
     TOWN_SUBFLOW_NO_RED_DOT = "town_subflow_no_red_dot"
+    PRIMARY_SWITCH_LOBBY_TAB = "primary_switch_lobby_tab"
 
 
 @dataclass(frozen=True)
@@ -116,10 +119,11 @@ class ActionDecision:
     action: ActionId | None = None
     expected: PostconditionId | None = None
     element: ElementId | None = None
+    expected_tab: TabId | None = None
 
     @classmethod
-    def click(cls, reason, action, expected, element):
-        return cls(DecisionKind.CLICK, reason, action, expected, element)
+    def click(cls, reason, action, expected, element, expected_tab=None):
+        return cls(DecisionKind.CLICK, reason, action, expected, element, expected_tab)
 
     @classmethod
     def delegate(cls, reason, action, expected):
@@ -144,6 +148,19 @@ class NavigationIntentPolicy:
     def resolve(self, scene: SceneSnapshot, intent: ActiveIntent) -> ActionDecision:
         from states.navigation_table import NavigationTable
 
+        target_tab = self._target_tab(intent)
+        tab_edge = None
+        if intent.intent_id in {IntentId.PRIMARY_NAVIGATION, IntentId.TOWN_SUBFLOW} and target_tab is not None:
+            tab_edge = NavigationTable().next_tab_edge(scene, target_tab)
+        if tab_edge is not None:
+            return ActionDecision.click(
+                tab_edge.reason,
+                tab_edge.action,
+                tab_edge.postcondition,
+                tab_edge.required_element,
+                expected_tab=tab_edge.target_tab,
+            )
+
         edge = NavigationTable().next_edge(scene, intent.intent_id)
         if edge is not None:
             if self._should_delegate_primary_overlay(edge, intent, scene):
@@ -159,6 +176,22 @@ class NavigationIntentPolicy:
         if intent.intent_id == IntentId.COLLECT_BREAD:
             return self._resolve_bread(scene)
         return self._resolve_primary(scene)
+
+    @staticmethod
+    def _target_tab(intent: ActiveIntent) -> TabId | None:
+        payload = intent.primary_payload
+        if payload is None:
+            return None
+        values = {
+            "stage": TabId.STAGE,
+            "dungeon": TabId.DUNGEON,
+            "domain": TabId.DOMAIN,
+            "lord": TabId.LORD,
+            "demon_lord": TabId.DEMON_LORD,
+            "lord_boss": TabId.LORD,
+            "demon_lords": TabId.DEMON_LORD,
+        }
+        return values.get(payload.mode)
 
     @staticmethod
     def _should_delegate_primary_overlay(

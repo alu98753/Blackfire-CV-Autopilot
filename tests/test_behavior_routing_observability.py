@@ -22,7 +22,7 @@ from states.navigation_routing import (
 )
 from states.state_machine import GameStateMachine
 from utils.scene_detector import SceneInfo, SceneType
-from utils.scene_snapshot import SceneId, SceneSnapshot
+from utils.scene_snapshot import SceneId, SceneSnapshot, TabId
 
 
 class FakeClock:
@@ -184,6 +184,33 @@ class TestBehaviorRoutingObservability(unittest.TestCase):
         log = "\n".join(captured.output)
         expected_log = context.to_diagnostic().format_log_message(100.0)
         self.assertIn(expected_log, log)
+
+    def test_normal_primary_route_uses_declarative_tab_switch_and_records_expected_tab(self):
+        self.machine.config = {"type": "dungeon"}
+        context = resolve_navigation_context(
+            self.machine,
+            SceneInfo(
+                scene_type=SceneId.STAGE_SELECT,
+                active_tabs=["stage"],
+                matched_elements={
+                    "dungeons/dungeon.png": ((300, 400), 0.95),
+                },
+            ),
+        )
+
+        self.assertEqual(context.decision.action, ActionId.SWITCH_LOBBY_TAB)
+        self.assertEqual(context.decision.expected_tab, TabId.DUNGEON)
+
+        handler = MagicMock()
+        handler.machine = self.machine
+        handler.mouse = MagicMock()
+        rect = {"left": 0, "top": 0}
+        self.assertTrue(NavigationDecisionExecutor(handler).execute(context, None, rect))
+        handler.mouse.click.assert_called_once_with(300, 400)
+        self.assertEqual(
+            self.machine.navigation_progress.in_flight.expected_tab,
+            TabId.DUNGEON,
+        )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,13 @@ import logging
 from enum import Enum
 from states.handlers.base import BaseStateHandler
 from utils.card_navigator import CardAlignmentStatus, CardListNavigator
+from utils.navigation_catalog import demon_lord_navigation_catalog
+from utils.shared_card_navigator import CardNavigatorState, SharedCardNavigator
+from utils.card_navigation_session import VerifiedCardNavigationSession
+from utils.scene_snapshot import SceneSnapshot, TabId
+from utils.scene_types import SceneId
+from utils.scene_snapshot import TabId
+from states.navigation_routing import execute_lobby_tab_route
 from utils.debug_artifacts import write_debug_image
 
 class DemonSubScene(str, Enum):
@@ -29,6 +36,59 @@ class DemonLordsHandler(BaseStateHandler):
         self.launch_started_at = None
         self.card_alignment_complete = False
         self.card_reset_attempts = 0
+        self.demon_card_navigator = None
+        self.demon_card_session = None
+        self.demon_card_target_key = None
+        self.demon_card_reset_attempts = 0
+        self._demon_card_handoff = False
+
+    def _clear_card_navigation_session(self, *, clear_target=True):
+        self.demon_card_navigator = None
+        self.demon_card_session = None
+        if clear_target:
+            self.demon_card_target_key = None
+        self.demon_card_reset_attempts = 0
+        self._demon_card_handoff = False
+
+    def _current_policy_target(self):
+        targets = self._get_configured_targets()
+        dm = getattr(self.machine, "daily_manager", None)
+        if dm and hasattr(dm, "get_available_demon_lords"):
+            available = dm.get_available_demon_lords(targets)
+        else:
+            available = targets
+        return available[0] if available else None
+
+    def _handle_demon_tracking_fast_path(self, screen_img, rect):
+        session = self.demon_card_session
+        if session is None or not session.owns_tracking:
+            return False
+        policy_target = self._current_policy_target()
+        if policy_target != session.target_key:
+            session.invalidate_target_change()
+            self._clear_card_navigation_session()
+            return False
+        navigator = self.demon_card_navigator
+        if navigator is None:
+            session.invalidate_reset_recovery()
+            self._clear_card_navigation_session()
+            return True
+        result = navigator.observe(screen_img, self.matcher)
+        session.apply_navigation_result(result)
+        if result.state == CardNavigatorState.FOUND:
+            target_key = self.demon_card_target_key
+            self._clear_card_navigation_session(clear_target=False)
+            self._demon_card_handoff = True
+            self._handoff_demon_card(screen_img, rect, target_key)
+            return False
+        if result.swipe_request is not None:
+            result.swipe_request.execute(self.mouse, rect)
+            self.notify_ui_progress()
+            time.sleep(1.2)
+            return True
+        if not session.valid:
+            self._clear_card_navigation_session()
+        return True
 
     def reset_state(self):
         self.current_target_boss = None
@@ -39,6 +99,7 @@ class DemonLordsHandler(BaseStateHandler):
         self.launch_started_at = None
         self.card_alignment_complete = False
         self.card_reset_attempts = 0
+        self._clear_card_navigation_session()
 
     def _get_configured_targets(self):
         cfg = self.machine.config or {}
@@ -63,16 +124,35 @@ class DemonLordsHandler(BaseStateHandler):
         if self.launch_pending:
             return self._observe_launch_outcome(screen_img)
 
+        if self._handle_demon_tracking_fast_path(screen_img, rect):
+            return True
+
+        if execute_lobby_tab_route(self, screen_img, rect, TabId.DEMON_LORD):
+            self._clear_card_navigation_session()
+            return True
+
         subscene = self.classify_subscene(screen_img)
+        if subscene != DemonSubScene.CARD_SELECTION:
+            self._clear_card_navigation_session()
         dispatch = {
             DemonSubScene.TOWN: self._step_enter_lobby,
             DemonSubScene.LOBBY_OTHER_TAB: self._step_switch_to_demon_tab,
-            DemonSubScene.CARD_SELECTION: self._step_select_boss_card,
+            DemonSubScene.CARD_SELECTION: lambda image, area: self._step_select_boss_card(
+                image, area, verified_scene=self._demon_card_scene_snapshot()
+            ),
             DemonSubScene.PREPARE_MODAL: self._step_handle_prepare_modal,
             DemonSubScene.STONE_DIALOG: self._step_handle_stone_dialog,
         }
         fn = dispatch.get(subscene)
         return fn(screen_img, rect) if fn else False
+
+    def _demon_card_scene_snapshot(self):
+        return SceneSnapshot(
+            frame_id=int(getattr(self.machine, "_navigation_frame_id", 0)) + 1,
+            captured_at=time.monotonic(),
+            scene=SceneId.DEMON_LORD_SELECT,
+            active_tabs=frozenset({TabId.DEMON_LORD}),
+        )
 
     def classify_subscene(self, screen_img) -> DemonSubScene:
         """純感知分類器：宏觀錨點優先，無點擊副作用"""
@@ -121,13 +201,130 @@ class DemonLordsHandler(BaseStateHandler):
             return True
         return False
 
-    def _step_select_boss_card(self, screen_img, rect):
+    def _handoff_demon_card(self, screen_img, rect, target_key):
+        bosses = self.machine.config.get("bosses", {})
+        boss_cfg = bosses.get(target_key, {})
+        card_template = boss_cfg.get("template", f"demon_lords/{target_key}.png")
+        if not os.path.exists(os.path.join("templates", card_template)):
+            return False
+        pos_card, conf = self.matcher.match(
+            screen_img,
+            card_template,
+            threshold=self.BOSS_CARD_THRESHOLD,
+            quiet=True,
+        )
+        if not pos_card:
+            return False
+        self.card_alignment_complete = True
+        self.card_reset_attempts = 0
+        boss_name = boss_cfg.get("name", target_key)
+        logging.info(
+            f"? [瘛望殿擳?] 暺?擳??∠? [{boss_name}] ({conf:.4f}) ?脣皞?隞..."
+        )
+        self.mouse.click(rect["left"] + pos_card[0], rect["top"] + pos_card[1])
+        self.current_target_boss = target_key
+        self.pending_stone_queue = self._build_stone_plan_queue()
+        self.stone_insert_completed = False
+        self.slot_no_reaction_count = 0
+        logging.info(f"?? [瘛望殿擳?] ???撋??? {self.pending_stone_queue}")
+        self.notify_ui_progress()
+        time.sleep(0.6)
+        self._clear_card_navigation_session()
+        self._demon_card_handoff = True
+        return True
+
+    def _step_select_boss_card(self, screen_img, rect, *, verified_scene=None):
         targets = self._get_configured_targets()
         dm = getattr(self.machine, "daily_manager", None)
         avail = dm.get_available_demon_lords(targets) if dm and hasattr(dm, "get_available_demon_lords") else targets
         target_key = avail[0] if avail else targets[0]
 
-        boss_cfg = self.machine.config.get("bosses", {}).get(target_key, {})
+        bosses = self.machine.config.get("bosses", {})
+        catalog = demon_lord_navigation_catalog(bosses)
+        catalog_keys = {entry.key for entry in catalog}
+        if target_key not in catalog_keys:
+            # Preserve the legacy target-first path for incomplete/legacy
+            # configurations that cannot provide a catalog identity.
+            self._clear_card_navigation_session()
+            return self._step_select_boss_card_legacy(screen_img, rect, target_key)
+
+        if self.demon_card_target_key != target_key:
+            initial_reset_attempts = (
+                self.card_reset_attempts
+                if self.demon_card_target_key is None
+                else 0
+            )
+            self.demon_card_navigator = SharedCardNavigator(catalog, target_key)
+            self.demon_card_target_key = target_key
+            self.demon_card_reset_attempts = initial_reset_attempts
+            if verified_scene is not None:
+                self.demon_card_session = VerifiedCardNavigationSession.acquire(
+                    verified_scene,
+                    target_key=target_key,
+                    target_index=next(
+                        entry.index for entry in catalog if entry.key == target_key
+                    ),
+                )
+
+        if (
+            verified_scene is not None
+            and (self.demon_card_session is None or not self.demon_card_session.valid)
+        ):
+            self.demon_card_session = VerifiedCardNavigationSession.acquire(
+                verified_scene,
+                target_key=target_key,
+                target_index=next(
+                    entry.index for entry in catalog if entry.key == target_key
+                ),
+            )
+        result = self.demon_card_navigator.observe(screen_img, self.matcher)
+        if self.demon_card_session is not None:
+            self.demon_card_session.apply_navigation_result(result)
+        if result.state != CardNavigatorState.FOUND:
+            if result.swipe_request is not None:
+                result.swipe_request.execute(self.mouse, rect)
+                self.notify_ui_progress()
+                time.sleep(1.2)
+                return True
+            if result.state == CardNavigatorState.NEED_RESET_LEFT:
+                first_template = catalog[0].template
+                max_attempts = int(
+                    self.machine.config.get("demon_lord_reset_max_attempts", 7)
+                )
+                status, attempts, confidence = CardListNavigator.align_first_card(
+                    screen_img,
+                    self.matcher,
+                    self.mouse,
+                    rect,
+                    first_template,
+                    self.demon_card_reset_attempts,
+                    max_attempts=max_attempts,
+                    threshold=self.BOSS_CARD_THRESHOLD,
+                    duration=0.8,
+                    inertia=False,
+                    match_options={"quiet": True},
+                )
+                self.demon_card_reset_attempts = attempts
+                self.card_reset_attempts = attempts
+                if status == CardAlignmentStatus.RETRYING:
+                    self.notify_ui_progress()
+                    time.sleep(1.2)
+                    return True
+                if status == CardAlignmentStatus.EXHAUSTED:
+                    self._clear_card_navigation_session()
+                    self.reset_state()
+                    self.machine.request_relaunch("demon_lord_card_alignment_failed")
+                    return True
+                self.demon_card_reset_attempts = 0
+                self.card_reset_attempts = 0
+                return True
+            # RELOCALIZE and contradictory localization deliberately wait for
+            # the next CARD_SELECTION observation without blind movement.
+            return True
+
+        self._clear_card_navigation_session()
+        self._demon_card_handoff = True
+        boss_cfg = bosses.get(target_key, {})
         card_template = boss_cfg.get("template", f"demon_lords/{target_key}.png")
         if os.path.exists(os.path.join("templates", card_template)):
             pos_card, conf = self.matcher.match(screen_img, card_template, threshold=self.BOSS_CARD_THRESHOLD, quiet=True)
@@ -142,6 +339,27 @@ class DemonLordsHandler(BaseStateHandler):
                 self.stone_insert_completed = False
                 self.slot_no_reaction_count = 0
                 logging.info(f"📋 [深淵魔王] 初始化鑲嵌計畫: {self.pending_stone_queue}")
+                self.notify_ui_progress()
+                time.sleep(0.6)
+                return True
+
+        return False
+
+    def _step_select_boss_card_legacy(self, screen_img, rect, target_key):
+        boss_cfg = self.machine.config.get("bosses", {}).get(target_key, {})
+        card_template = boss_cfg.get("template", f"demon_lords/{target_key}.png")
+        if os.path.exists(os.path.join("templates", card_template)):
+            pos_card, conf = self.matcher.match(screen_img, card_template, threshold=self.BOSS_CARD_THRESHOLD, quiet=True)
+            if pos_card:
+                self.card_alignment_complete = True
+                self.card_reset_attempts = 0
+                boss_name = boss_cfg.get("name", target_key)
+                logging.info(f"🎯 [深淵魔王] 點擊魔王卡片 [{boss_name}] ({conf:.4f}) 進入準備介面...")
+                self.mouse.click(rect["left"] + pos_card[0], rect["top"] + pos_card[1])
+                self.current_target_boss = target_key
+                self.pending_stone_queue = self._build_stone_plan_queue()
+                self.stone_insert_completed = False
+                self.slot_no_reaction_count = 0
                 self.notify_ui_progress()
                 time.sleep(0.6)
                 return True

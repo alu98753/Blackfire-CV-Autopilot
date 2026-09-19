@@ -895,22 +895,23 @@ class TestBehaviorNavigation(unittest.TestCase):
         finally:
             logging.getLogger().setLevel(prev_level)
 
-    def test_filter_navigation_path_excludes_door_in_lobby(self):
+    def test_filter_navigation_path_excludes_door_and_canonical_lobby_tabs(self):
         """驗證在大廳環境下 (is_lobby=True)，導航路徑自動剔除 common/door.png，非大廳則保留。"""
         raw_path = ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"]
         
         # 1. 大廳中：應剔除 common/door.png
         filtered_lobby = filter_navigation_path(raw_path, is_lobby=True)
-        self.assertEqual(filtered_lobby, ["dungeons/dungeon.png", "dungeons/slime.png"])
+        self.assertEqual(filtered_lobby, ["dungeons/slime.png"])
         self.assertNotIn("common/door.png", filtered_lobby)
+        self.assertNotIn("dungeons/dungeon.png", filtered_lobby)
 
         # 2. 城鎮或非大廳：應保留 common/door.png
         filtered_town = filter_navigation_path(raw_path, is_lobby=False)
-        self.assertEqual(filtered_town, ["common/door.png", "dungeons/dungeon.png", "dungeons/slime.png"])
+        self.assertEqual(filtered_town, ["common/door.png", "dungeons/slime.png"])
         self.assertIn("common/door.png", filtered_town)
 
-    def test_filter_navigation_path_keeps_domain_tab_when_inactive(self):
-        """Domain tab remains an eligible navigation step until observed active."""
+    def test_filter_navigation_path_removes_canonical_domain_tab_when_inactive(self):
+        """Declarative routing owns the canonical Domain lobby tab click."""
         nav_path = [
             "common/door.png",
             "domains/Domains_entry.png",
@@ -919,8 +920,16 @@ class TestBehaviorNavigation(unittest.TestCase):
 
         filtered = filter_navigation_path(nav_path, active_tabs=[])
 
-        self.assertEqual(filtered, nav_path)
-        self.assertIn("domains/Domains_entry.png", filtered)
+        self.assertEqual(filtered, ["common/door.png", "domains/golden_empire/entry.png"])
+        self.assertNotIn("domains/Domains_entry.png", filtered)
+
+    def test_filter_navigation_path_retains_legacy_lobby_tab_aliases(self):
+        """Aliases outside the declarative contract remain compatibility steps."""
+        nav_path = ["select_stage.png", "dungeon.png", "domains/Domains_entry.png"]
+
+        filtered = filter_navigation_path(nav_path, active_tabs=[])
+
+        self.assertEqual(filtered, ["select_stage.png", "dungeon.png"])
 
     @patch("os.path.exists", return_value=True)
     def test_navigation_does_not_adopt_domain_scene_without_domain_identity(self, _mock_exists):

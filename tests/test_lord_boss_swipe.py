@@ -5,6 +5,8 @@ import time
 from unittest.mock import MagicMock, patch
 from states.handlers.lord_boss import LordBossHandler
 from config import GAME_CONFIGS
+from states.navigation_progress import NavigationProgress, NavigationProgressSettings
+from utils.scene_snapshot import TabId
 from tests.support.fake_clock import FakeClock
 
 class TestLordBossSwipeLogic(unittest.TestCase):
@@ -49,12 +51,19 @@ class TestLordBossSwipeLogic(unittest.TestCase):
 
         self.rect = {"left": 100, "top": 50, "width": 1000, "height": 800}
 
+    def _use_noncanonical_legacy_config(self):
+        """Keep these alignment assertions on the explicit compatibility path."""
+        self.mock_machine.get_available_selected_lord_bosses.return_value = [
+            "legacy_boss"
+        ]
+
     @patch("states.handlers.lord_boss.detect_cooldown_sign_and_time")
     @patch("os.path.exists")
     def test_lord_boss_first_entry_resets_to_left(self, mock_exists, mock_detect_cd):
         """[Lord Boss 滑動測試 1] 首次進入選關介面，優先發動拉至最左側 (reset_to_left)"""
         mock_exists.return_value = True
         mock_detect_cd.return_value = (False, None, "")
+        self._use_noncanonical_legacy_config()
 
         screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
         # 第一次呼叫 handle：第一個 Boss 未出現，執行向右拖曳拉回第 1 次
@@ -72,8 +81,14 @@ class TestLordBossSwipeLogic(unittest.TestCase):
             return None, 0.0
 
         self.mock_matcher.match.side_effect = mock_match_first
+        self.mock_mouse.reset_mock()
+        self.mock_machine.get_available_selected_lord_bosses.return_value = [
+            "lila_spider",
+            "ancient_spirit",
+        ]
         self.handler.handle(screen_img, self.rect)
-        self.assertTrue(self.handler.has_reset_to_left)
+        self.assertFalse(self.handler.has_reset_to_left)
+        self.mock_mouse.drag.assert_not_called()
 
     @patch("states.handlers.lord_boss.detect_cooldown_sign_and_time")
     @patch("os.path.exists")
@@ -114,6 +129,50 @@ class TestLordBossSwipeLogic(unittest.TestCase):
         # 驗證發動向左滑動: 100 + 600 = 700 -> 100 + 400 = 500, duration=0.8, inertia=False
         self.mock_mouse.drag.assert_called_once_with(700, 450, 500, 450, duration=0.8, inertia=False)
 
+    @patch("os.path.exists", return_value=True)
+    def test_lord_subflow_uses_declarative_tab_route_and_waits_for_scene(self, _mock_exists):
+        """The real Lord handler path commits the tab action and requires later evidence."""
+        self.mock_machine.current_town_subflow = "lord_boss"
+        self.mock_machine.need_diamond_collection = False
+        self.mock_machine.enable_bread = False
+        self.mock_machine.need_bread_collection = False
+        self.mock_machine.diamond_window_opened = False
+        self.mock_machine.bread_window_opened = False
+        self.mock_machine.navigation_progress = NavigationProgress(
+            NavigationProgressSettings(5.0, 2, 60.0, 2)
+        )
+        self.mock_matcher.match.side_effect = lambda _img, template, **_kwargs: (
+            ((333, 444), 0.95)
+            if template == "load/Lord_entry.png"
+            else (None, 0.0)
+        )
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False, False, 0.10, 0.10
+        )
+        screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
+
+        self.handler.handle(screen_img, self.rect)
+
+        self.mock_mouse.click.assert_called_once()
+        self.assertEqual(
+            self.mock_machine.navigation_progress.in_flight.expected_tab,
+            TabId.LORD,
+        )
+
+        # The click itself is not success; only the next frame's active-tab evidence clears it.
+        self.mock_mouse.reset_mock()
+        self.mock_matcher.match.side_effect = lambda _img, template, **_kwargs: (
+            ((333, 444), 0.95)
+            if template == "load/Lord_entry_after.png"
+            else (None, 0.0)
+        )
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False, False, 0.10, 0.10
+        )
+        self.handler.has_reset_to_left = True
+        self.handler.handle(screen_img, self.rect)
+        self.assertIsNone(self.mock_machine.navigation_progress.in_flight)
+
     @patch("states.handlers.lord_boss.time.sleep")
     @patch("states.handlers.lord_boss.detect_cooldown_sign_and_time")
     @patch("os.path.exists", return_value=True)
@@ -121,6 +180,7 @@ class TestLordBossSwipeLogic(unittest.TestCase):
         self, _mock_exists, mock_detect_cd, _mock_sleep
     ):
         mock_detect_cd.return_value = (False, None, "")
+        self._use_noncanonical_legacy_config()
         self.handler.reset_swipe_count = 7
 
         self.handler.handle(np.zeros((800, 1000, 3), dtype=np.uint8), self.rect)

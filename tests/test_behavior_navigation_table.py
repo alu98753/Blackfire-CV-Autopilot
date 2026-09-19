@@ -1,8 +1,24 @@
 import unittest
 
-from states.navigation_intent import ActionId, IntentId, PostconditionId, ReasonCode
+from states.navigation_intent import (
+    ActionId,
+    ActiveIntent,
+    IntentId,
+    NavigationIntentPolicy,
+    PostconditionId,
+    PrimaryPayload,
+    ReasonCode,
+)
 from states.navigation_table import NavigationTable, V1_NAVIGATION_EDGES
-from utils.scene_snapshot import ElementId, ElementMatch, SceneId, SceneSnapshot
+from utils.scene_snapshot import (
+    ElementId,
+    ElementMatch,
+    SceneId,
+    SceneSnapshot,
+    TabId,
+    snapshot_from_scene_info,
+)
+from utils.scene_types import LOBBY_TAB_BY_NAME, SceneInfo
 
 
 class TestBehaviorNavigationTable(unittest.TestCase):
@@ -143,6 +159,105 @@ class TestBehaviorNavigationTable(unittest.TestCase):
         self.assertIsNone(
             NavigationTable().next_edge(scene, IntentId.PRIMARY_NAVIGATION)
         )
+
+    def test_scene_evidence_exposes_semantic_click_element_for_each_lobby_tab(self):
+        expected_elements = {
+            TabId.STAGE: ElementId.TAB_STAGE,
+            TabId.DUNGEON: ElementId.TAB_DUNGEON,
+            TabId.DOMAIN: ElementId.TAB_DOMAIN,
+            TabId.LORD: ElementId.TAB_LORD,
+            TabId.DEMON_LORD: ElementId.TAB_DEMON_LORD,
+        }
+        for tab, element in expected_elements.items():
+            definition = LOBBY_TAB_BY_NAME[tab.value]
+            scene = snapshot_from_scene_info(
+                SceneInfo(
+                    scene_type=SceneId.LOBBY,
+                    matched_elements={
+                        definition.inactive_template: ((10, 20), 0.95)
+                    },
+                ),
+                frame_id=1,
+                captured_at=1.0,
+            )
+            self.assertTrue(scene.has(element), tab)
+            self.assertEqual(
+                scene.elements[element].template_name,
+                definition.inactive_template,
+            )
+
+    def test_declarative_tab_routes_cover_required_mode_switches(self):
+        tab_scenes = {
+            TabId.STAGE: SceneId.STAGE_SELECT,
+            TabId.DUNGEON: SceneId.DUNGEON_SELECT,
+            TabId.DOMAIN: SceneId.DOMAIN_SELECT,
+            TabId.LORD: SceneId.LORD_SELECT,
+            TabId.DEMON_LORD: SceneId.DEMON_LORD_SELECT,
+        }
+        tab_elements = {
+            TabId.STAGE: ElementId.TAB_STAGE,
+            TabId.DUNGEON: ElementId.TAB_DUNGEON,
+            TabId.DOMAIN: ElementId.TAB_DOMAIN,
+            TabId.LORD: ElementId.TAB_LORD,
+            TabId.DEMON_LORD: ElementId.TAB_DEMON_LORD,
+        }
+        policy = NavigationIntentPolicy()
+        for source_tab, source_scene in tab_scenes.items():
+            for target_tab, target_element in tab_elements.items():
+                if source_tab == target_tab:
+                    continue
+                scene = SceneSnapshot(
+                    1,
+                    1.0,
+                    source_scene,
+                    elements=self._element(target_element),
+                    active_tabs=frozenset({source_tab}),
+                )
+                decision = policy.resolve(
+                    scene,
+                    ActiveIntent(
+                        IntentId.PRIMARY_NAVIGATION,
+                        PrimaryPayload(target_tab.value),
+                    ),
+                )
+                self.assertEqual(decision.action, ActionId.SWITCH_LOBBY_TAB)
+                self.assertEqual(decision.expected, PostconditionId.LOBBY_TAB_ACTIVE)
+                self.assertEqual(decision.element, target_element)
+                self.assertEqual(decision.expected_tab, target_tab)
+
+        generic_scene = SceneSnapshot(
+            1,
+            1.0,
+            SceneId.LOBBY,
+            elements=self._element(ElementId.TAB_DOMAIN),
+        )
+        generic_decision = policy.resolve(
+            generic_scene,
+            ActiveIntent(
+                IntentId.PRIMARY_NAVIGATION,
+                PrimaryPayload("domain"),
+            ),
+        )
+        self.assertEqual(generic_decision.action, ActionId.SWITCH_LOBBY_TAB)
+        self.assertEqual(generic_decision.expected_tab, TabId.DOMAIN)
+
+    def test_tab_route_precedes_legacy_continue_primary_fallback(self):
+        scene = SceneSnapshot(
+            1,
+            1.0,
+            SceneId.STAGE_SELECT,
+            elements=self._element(ElementId.TAB_DUNGEON),
+            active_tabs=frozenset({TabId.STAGE}),
+        )
+        decision = NavigationIntentPolicy().resolve(
+            scene,
+            ActiveIntent(
+                IntentId.PRIMARY_NAVIGATION,
+                PrimaryPayload("dungeon"),
+            ),
+        )
+        self.assertEqual(decision.action, ActionId.SWITCH_LOBBY_TAB)
+        self.assertNotEqual(decision.action, ActionId.CONTINUE_PRIMARY)
 
     def test_primary_stage_select_with_close_overlay_does_not_dismiss(self):
         """
@@ -390,7 +505,6 @@ class TestBehaviorNavigationTable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
 
 

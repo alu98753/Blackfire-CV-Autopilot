@@ -10,6 +10,7 @@ from states.handlers.battle import BattleHandler
 from states.handlers.result import ResultHandler
 from utils.daily_manager import DailyManager
 from config import GAME_CONFIGS
+from utils.scene_snapshot import TabId
 
 class TestDemonLordsSubflow(unittest.TestCase):
     def setUp(self):
@@ -94,6 +95,46 @@ class TestDemonLordsSubflow(unittest.TestCase):
         ret = handler.handle(dummy_screen, rect)
         self.assertTrue(ret)
         self.mock_mouse.click.assert_called_with(600, 400)
+
+    @patch("states.handlers.demon_lords.time.sleep")
+    @patch("os.path.exists", return_value=True)
+    def test_demon_subflow_uses_declarative_tab_route_and_waits_for_scene(
+        self, _mock_exists, _mock_sleep
+    ):
+        """The real Demon Lord handler path commits and observes the declarative tab route."""
+        self.state_machine.current_town_subflow = "demon_lords"
+        handler = DemonLordsHandler(self.state_machine)
+        screen_img = np.zeros((800, 1000, 3), dtype=np.uint8)
+        rect = {"left": 0, "top": 0, "width": 1000, "height": 800}
+
+        self.mock_matcher.match.side_effect = lambda _img, template, **_kwargs: (
+            ((333, 444), 0.95)
+            if template == "demon_lords/demon_lords_entry.png"
+            else (None, 0.0)
+        )
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False, False, 0.10, 0.10
+        )
+        handler.handle(screen_img, rect)
+
+        self.mock_mouse.click.assert_called_once()
+        self.assertEqual(
+            self.state_machine.navigation_progress.in_flight.expected_tab,
+            TabId.DEMON_LORD,
+        )
+
+        self.mock_mouse.reset_mock()
+        self.mock_matcher.match.side_effect = lambda _img, template, **_kwargs: (
+            ((333, 444), 0.95)
+            if template == "demon_lords/demon_lords_entry_after.png"
+            else (None, 0.0)
+        )
+        self.mock_matcher.match_mutually_exclusive_tabs.return_value = (
+            False, False, 0.10, 0.10
+        )
+        handler.card_alignment_complete = True
+        handler.handle(screen_img, rect)
+        self.assertIsNone(self.state_machine.navigation_progress.in_flight)
 
     @patch("os.path.exists", return_value=True)
     def test_select_boss_card(self, _mock_exists):
