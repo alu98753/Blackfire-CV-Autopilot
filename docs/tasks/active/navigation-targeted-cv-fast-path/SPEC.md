@@ -4,9 +4,7 @@ Status: Final
 
 ## Goal
 
-Reduce unnecessary CV/template matching during lobby navigation after the destination mode and target are known, without weakening visual postcondition verification.
-
-The scoped lobby modes are:
+Unify lobby card navigation for these five modes:
 
 - `stage`
 - `domain`
@@ -14,334 +12,541 @@ The scoped lobby modes are:
 - `lord`
 - `demon_lord`
 
-The task covers only:
+The task changes only the process used to:
 
-1. cross-mode switching among these lobby modes; and
-2. same-mode card/list navigation after the target mode has been visually confirmed.
+1. reach the correct lobby mode;
+2. localize the currently visible card position;
+3. scroll toward the committed card target;
+4. find the target card with CV.
 
-This is a navigation-perception optimization, not a general CV optimization.
+Once the target card has been found and control is handed back to the existing mode-specific entry logic, this task stops.
 
-## Core contract
+## Explicit non-regression boundary
 
-Broad CV is permitted for scene/postcondition verification and initial in-mode localization.
+Do not change logic after the target card is selected/opened.
 
-Once all of the following are true:
+Examples that are explicitly out of scope:
 
-1. the target mode is confirmed by current-frame visual Scene evidence;
-2. a same-mode anchor/current card has been positively observed where the mode actually requires card localization;
-3. the navigation target is committed;
+- Stage: sub-stage scrolling/search after opening a main Stage card.
+- Dungeon: existing target status/cooldown/locked checks, fight/start flow, dungeon entry, exploration, combat.
+- Domain: start/explore behavior after selecting the Domain entry.
+- Lord: cooldown OCR, start/fight behavior after selecting the Lord card.
+- Demon Lord: stone insertion/selection, prepare modal, start/fight behavior after selecting the Demon Lord card.
 
-navigation may enter a target-tracking fast path and should not keep reclassifying unrelated card identities on every swipe.
+The shared navigator may return a target match/position to the existing owner, but it must not take ownership of these downstream behaviors.
 
-Cross-mode transitions invalidate all retained card-position knowledge.
+## Core behavioral model
 
-Action history, requested mode, navigation state, previous mode, or previous card position must never satisfy a Scene postcondition.
-
-### Scene is the only postcondition authority
-
-Example:
-
-```text
-Stage active
--> click Dungeon tab
--> Dungeon postcondition is NOT satisfied yet
--> only current-frame Scene evidence may confirm Dungeon active
-```
-
-Therefore:
+All five modes must use the same card-navigation lifecycle.
 
 ```text
-action issued != postcondition satisfied
-navigation state != scene truth
-requested mode != observed mode
-previous card index != current-mode localization
+desired mode + desired card target
+        |
+        v
+Is current Scene already the desired mode?
+        |
+   +----+----+
+   | no      | yes
+   v         v
+navigation_table
+switch mode
+   |
+   v
+Scene proves target-mode postcondition
+             |
+             v
+INITIAL LOCALIZATION
+  1. match target card first
+  2. if target found -> hand off immediately
+  3. otherwise inspect this mode's ordered card catalog
+     and establish visible index evidence
+  4. if no usable card evidence -> reset-to-left fallback
+             |
+             v
+derive direction from verified index relation
+             |
+             v
+TARGET TRACKING
+  match target card only
+  -> found: hand off to existing mode-specific entry logic
+  -> missed: common directional swipe, then target-only match again
+             |
+             v
+bounded miss exhaustion
+             |
+             v
+invalidate route knowledge and re-localize
+             |
+             v
+if localization still cannot establish usable card evidence
+-> reset-to-left fallback
 ```
 
-## Architecture boundary
+## Scene/postcondition contract
 
-`NavigationIntentPolicy` remains the owner of intent/routing semantics.
+Scene/current-frame visual evidence remains the sole authority for proving a lobby mode transition.
 
-Scene/perception remains evidence-producing.
-
-This task must not create another routing policy inside CV code.
-
-The fast path may retain only evidence-derived navigation facts such as:
+Examples:
 
 ```text
-verified_mode = dungeon
-last_verified_anchor = dungeon_2
-committed_target = dungeon_7
-search_direction = right
-target_miss_count = 1
+click Dungeon tab != Dungeon postcondition satisfied
+navigation state == Dungeon target != Dungeon postcondition satisfied
+previous Stage index == 7 != Dungeon current index == 7
 ```
 
-It must not manufacture an exact current position from swipe history:
+Cross-mode transitions invalidate all retained card/index knowledge.
+
+However, once:
+
+1. the desired mode has been visually verified;
+2. no mode-changing action has occurred;
+3. the card-search session has not been invalidated;
+
+steady-state card tracking must not re-run Stage/Domain/Dungeon/Lord/Demon-Lord active/inactive tab CV on every search frame.
+
+During the target-tracking phase, the CV budget is exactly the committed target card template for that search observation.
+
+Broader Scene/tab/card CV is re-enabled only when the tracking session is invalidated or bounded tracking misses are exhausted.
+
+## Initial localization contract
+
+The current behavior of immediately dragging to the leftmost/first card before checking the current viewport is not the desired default.
+
+The required order is:
+
+1. target mode is already Scene-confirmed;
+2. match the committed target template first;
+3. if the target is already visible, return FOUND immediately with no reset drag;
+4. if the target is absent, perform one localization pass over the mode's ordered card catalog;
+5. derive visible card index evidence from actual CV matches;
+6. use the observed index relation to choose swipe direction;
+7. only when localization cannot establish usable card evidence may the existing reset-to-left behavior be used as fallback.
+
+This specifically prevents:
 
 ```text
-after one swipe -> current_position = dungeon_4
+target is already visible
+-> blindly reset list to first card
+-> scroll back toward target
 ```
 
-unless that card was actually observed.
+## Ordered card index contract
 
-## Actual mode ownership
-
-The five modes do not share one implementation shape.
-
-| Mode | Navigation/card owner | Observed structure |
-|---|---|---|
-| Stage | `NavigationHandler` | target template search plus bounded horizontal scroll; no full stage-card iteration in the target-search block |
-| Domain | `NavigationHandler` | one configured domain entry target; no domain card-index list / horizontal target-index loop found |
-| Dungeon | `NavigationHandler` | full configured dungeon-entry scan builds `visible_dungeons` before target selection/progress |
-| Lord | `LordBossHandler` | first-card alignment, then scans available selected boss templates; swipes and repeats that candidate loop |
-| Demon Lord | `DemonLordsHandler` | selected target template is already matched directly; first-card alignment is fallback/acquisition |
-
-Implementation must respect these differences. Do not force a shared broad-scan/fast-path mechanism onto modes that do not have the same problem.
-
-## In-scope case A — cross-mode switching
-
-Representative transitions include:
+All five modes need one normalized 1-based ordered card catalog:
 
 ```text
-domain -> stage
-domain -> dungeon
-stage -> dungeon
-dungeon -> stage
-stage -> lord
-stage -> demon_lord
-lord -> stage
-demon_lord -> stage
+[(1, card_key, template), (2, card_key, template), ...]
 ```
 
-Required behavior:
-
-1. Clicking a target tab/mode is only an action.
-2. The target mode postcondition must be proven by current-frame visual evidence.
-3. Position/card state from the previous mode must be invalidated before establishing target-mode route knowledge.
-4. Expected-tab perception may remain narrow when the existing Scene contract allows it.
-5. If expected-tab evidence is ambiguous or contradictory, existing broader relocalization behavior remains available.
-
-Example:
-
-```text
-Stage 7 visible
--> click Dungeon
--> screen happens to show Dungeon 6/7/8
-```
-
-No Stage->Dungeon positional relationship may be inferred.
-
-## In-scope case B — same-mode navigation
+The normalized catalog is navigation metadata only. It does not own cooldown, availability, combat, or downstream business semantics.
 
 ### Stage
 
-Current code already matches the committed stage target directly rather than iterating every stage card in the main target-search block.
+Index authority must come from `BASE_STAGE_LEVELS` / `base_stage_levels` numeric level identity and each level's `entry` template.
 
-Required behavior:
+Do not derive Stage semantic indices from raw `catalog.stage_templates` list positions because that list contains compatibility/alias templates such as multiple Level 2 templates.
 
-- preserve Scene-confirmed Stage postcondition;
-- preserve target-specific matching;
-- do not add a broad Stage-card scan merely to implement this task;
-- if same-mode anchor information is introduced or reused, it may guide direction but must remain evidence-derived;
-- do not treat `horizontal_scroll_count` as proof of an exact Stage index;
-- existing sub-stage candidate scanning is outside the primary top-level Stage-card optimization unless directly required to preserve behavior.
-
-Stage should receive no architectural rewrite if the existing target-only behavior already satisfies the contract.
-
-### Domain
-
-Current Domain navigation has one configured `domain_entry_btn` per primary mode and no verified domain horizontal card-index loop.
-
-Required behavior:
-
-- preserve Scene-confirmed Domain postcondition;
-- preserve direct target matching;
-- do not invent a multi-card localization/tracking abstraction for Domain;
-- only remove duplicate CV if the same semantic evidence is demonstrably matched more than once in the scoped navigation flow.
+Existing Stage config helpers may be extended/reused to expose this ordered navigation catalog.
 
 ### Dungeon
 
-Dungeon is the primary optimization target.
+`DungeonCatalog` is already the 1-based index authority.
 
-Current fixed-target flow can know the configured target index before progress, but currently scans all configured `dungeon_entries` to construct `visible_dungeons` on each eligible frame.
+Reuse it rather than creating a second Dungeon index implementation.
 
-Required two-phase behavior for a committed fixed target:
+### Domain
 
-#### Acquisition / relocalization
+`config/defaults.toml` is already the canonical Domain existence authority.
 
-After Dungeon Scene/tab is visually confirmed:
+`get_canonical_domain_mode_configs()` / `get_domain_mode_configs()` already enumerate canonical declared Domain configs and expose each `domain_entry_btn`.
 
-- broad Dungeon-card matching is allowed to establish one same-mode anchor/current visible card;
-- the target card may be detected during this acquisition;
-- locked/unavailable/safety evidence required for correct target handling must remain available;
-- no card-position state may be inherited from another mode.
+This task must add/establish one explicit ordered Domain card helper for navigation.
 
-#### Target tracking
+The canonical order declared in repository defaults is the left-to-right Domain card order contract. Profile overrides may alter effective values but may not inject/reorder Domain identities.
 
-Once a same-mode Dungeon anchor and committed target are known:
-
-- derive only the search direction from the verified anchor-to-target relation;
-- after each directional swipe, steady-state CV should match the committed target rather than all unrelated dungeon entry templates;
-- do not estimate intermediate exact dungeon indices from swipe count/history;
-- target found -> run the existing target-specific availability/status checks before click;
-- target miss -> continue bounded directional search;
-- bounded miss exhaustion, contradictory Scene evidence, loss of Dungeon postcondition, target change, or other invalidation -> return to acquisition/relocalization.
-
-Greedy Dungeon behavior may retain broader perception while target selection itself still depends on comparing multiple eligible dungeons. Do not change greedy selection semantics. Target-only tracking is required only after a concrete target is committed and doing so preserves cooldown/locked semantics.
+If real UI order differs, canonical defaults order must be corrected; runtime heuristics must not invent a different order.
 
 ### Lord
 
-Lord card navigation is owned by `LordBossHandler`.
+The ordered `config["bosses"]` declaration is already implicitly treated as card order because the current Lord alignment uses the first declared boss as the first/leftmost card.
 
-Current behavior:
+The shared catalog helper must formalize that existing ordering into 1-based navigation indices.
 
-- visually confirms Lord tab;
-- aligns to the first configured boss;
-- obtains `avail_bosses`;
-- scans available selected boss templates in order;
-- if none matches, swipes left and repeats the candidate loop.
-
-Required behavior:
-
-- preserve Lord Scene/tab postcondition verification;
-- preserve availability/cooldown semantics;
-- once a specific boss target is committed, subsequent card-search frames should not scan unrelated available boss templates solely to rediscover the target;
-- if the business rule still allows several bosses to be chosen interchangeably because no single target is committed, the candidate scan remains valid and is not to be removed;
-- target-only tracking may begin only after one target is committed;
-- cross-mode/tab loss or target change invalidates target-specific tracking;
-- no exact intermediate boss position may be inferred from swipe history.
+Availability/cooldown filtering must not change the catalog's physical indices.
 
 ### Demon Lord
 
-Demon Lord already matches one selected target template directly in `_step_select_boss_card()`.
+The ordered `config["bosses"]` declaration is likewise the navigation card order.
 
-Required behavior:
+The current implementation already uses the first declared boss as the first-card alignment anchor.
 
-- preserve this target-only behavior;
-- preserve visual subscene/tab confirmation;
-- preserve first-card alignment as acquisition/fallback;
-- do not introduce a broader candidate scan;
-- only change this path if necessary to share invalidation/postcondition behavior required by this SPEC.
+The shared catalog helper must expose all declared Demon Lord cards by stable 1-based index so future additional bosses automatically use the same scrolling algorithm.
 
-## Directional swipe contract
+## Localization result
 
-A larger swipe amplitude is allowed only if implementation evidence shows it reduces search steps without breaking the existing bounded recovery contract.
+Localization may observe more than one card in the same viewport.
 
-The implementation must not assume that one swipe equals one card/index.
+A valid localization result should retain factual observed indices, for example:
 
-Any enlarged swipe must remain:
+```text
+visible_indices = {2, 3, 4}
+target_idx = 7
+=> direction = RIGHT
+```
 
-- directional, derived from verified same-mode anchor vs committed target;
-- bounded by an explicit retry/miss limit;
-- followed by current-frame target verification;
-- followed by relocalization/fallback when the bound is exhausted or evidence becomes contradictory.
+or:
 
-The exact pixel/percentage amplitude and retry limit are implementation details and must be justified by existing UI geometry/tests rather than guessed in the SPEC.
+```text
+visible_indices = {6, 7, 8}
+target_idx = 2
+=> direction = LEFT
+```
+
+Target matching must be attempted first so an already-visible target short-circuits before scanning unrelated card templates.
+
+If the target is absent:
+
+- `target_idx > max(visible_indices)` -> move toward higher indices;
+- `target_idx < min(visible_indices)` -> move toward lower indices;
+- target index lying inside the observed range while its own template did not match is contradictory localization evidence and must not trigger blind directional movement.
+
+Contradictory evidence invalidates localization and enters bounded relocalization/fallback.
+
+## Shared directional swipe contract
+
+Stage, Domain, Dungeon, Lord and Demon Lord must use the same shared horizontal page-swipe primitives.
+
+The default directional mechanics should come from `CardListNavigator`:
+
+- target at higher index -> `swipe_left_page()`;
+- target at lower index -> `swipe_right_page()`.
+
+Do not retain separate Stage-only/Lord-only/Dungeon-only horizontal search algorithms when they represent the same card-list operation.
+
+A swipe does not prove the new exact card index.
+
+Therefore this is allowed:
+
+```text
+verified anchor 2
+target 7
+=> direction higher
+=> swipe
+=> only match target 7
+```
+
+This is forbidden:
+
+```text
+verified anchor 2
+one swipe
+=> assume current index is 3 or 4
+```
+
+The implementation may tune one common page-swipe amplitude if tests/UI evidence support it, but all five modes must consume the same primitive.
+
+## Target-only tracking contract
+
+After localization has established a direction:
+
+```text
+mode_verified = true
+target_idx known
+direction known
+```
+
+each steady-state search observation must:
+
+1. match only the committed target card template;
+2. if found, return the match to the existing mode owner;
+3. if not found, perform the shared directional page swipe;
+4. increment the shared target-miss/search-attempt state;
+5. on the next eligible observation, match only the same target again.
+
+No unrelated card templates, active/inactive mode tab templates, first-card anchors, door templates, start buttons, or other Scene templates may be matched inside this steady target-tracking branch.
+
+The existing owner may resume its normal CV after target FOUND because card navigation ownership has ended.
+
+## Bounded target-search definition
+
+"Target not found for too long" is not defined by elapsed seconds in this task.
+
+It is defined by completed target-only search observations after directional card-search progress.
+
+A target miss means:
+
+- the mode had already been verified;
+- localization had established a search direction;
+- the committed target template was matched on the stable search frame;
+- the target was absent.
+
+Use one shared deterministic miss/search bound for the common navigator.
+
+The default bound is derived from the ordered catalog size:
+
+```text
+max_target_tracking_misses = number_of_cards_in_current_mode
+```
+
+On exhaustion:
+
+1. do not declare the target impossible;
+2. invalidate the current localization/direction;
+3. re-run Scene verification and initial localization;
+4. only use reset-to-left if useful card localization still cannot be established.
+
+This is separate from existing reset-to-left retry counters.
+
+## Reset-to-left contract
+
+The existing `CardListNavigator.reset_to_left()` behavior must remain.
+
+It changes role:
+
+### Old common pattern
+
+```text
+enter card mode
+-> reset to first card
+-> then search target
+```
+
+### Required role
+
+```text
+enter/verify mode
+-> target-first localization
+-> use observed card indices if available
+-> target tracking
+-> relocalize if tracking exhausted
+-> reset-to-left only when reliable localization cannot otherwise be established
+```
+
+Reset-to-left remains a bounded recovery primitive, never a successful localization by itself.
+
+Its postcondition still requires visual evidence of the first card.
+
+## Lobby mode routing through NavigationTable
+
+The shared card algorithm starts only after the desired lobby mode is Scene-confirmed.
+
+If current Scene is not the desired mode, switching among Stage/Domain/Dungeon/Lord/Demon-Lord must be owned by declarative navigation routing rather than each handler's legacy custom path.
+
+### Survey-confirmed infrastructure gap
+
+Current `navigation_table.py` does not yet provide target-aware cross-mode routing among the five lobby select scenes.
+
+Current limitations:
+
+- `NavigationTable.next_edge(scene, intent_id)` does not receive the desired target tab/mode;
+- `SceneSnapshot` exposes `active_tabs` but no semantic click element for each target lobby tab;
+- inactive target-tab matches found by Scene detection are not currently exposed as a navigation-table click element;
+- `NavigationProgress.InFlightAction` already has `expected_tab`, but current postcondition handling does not use it to prove a generic expected-tab-active transition.
+
+### Required routing result
+
+The implementation must extend the existing navigation policy/table contract so that:
+
+```text
+current Scene = Stage
+desired Tab = Dungeon
+-> NavigationTable/NavigationIntentPolicy returns declarative switch-to-Dungeon action
+-> executor clicks Scene-derived Dungeon tab evidence
+-> in-flight action records expected_tab = Dungeon
+-> later Scene evidence reports Dungeon active
+-> postcondition succeeds
+-> card localization begins
+```
+
+The same mechanism must support all pairwise transitions needed among the five scoped lobby modes and generic `LOBBY` where target-tab evidence exists.
+
+The exact table representation may be a target-aware edge type or an extension of the existing edge resolver, but routing ownership must remain in `NavigationIntentPolicy` / `NavigationTable`.
+
+Do not reintroduce tab-switch policy inside card navigation.
+
+## Shared component boundary
+
+There must be one shared implementation of the card-search algorithm consumed by all five modes.
+
+The shared component owns only:
+
+- ordered navigation card metadata;
+- initial target-first localization;
+- observed index set/anchor relation;
+- direction selection;
+- common page swipe;
+- target-only tracking miss count;
+- localization invalidation;
+- reset-to-left fallback orchestration.
+
+It must not own:
+
+- which task/mode should run;
+- cooldown eligibility;
+- boss availability policy;
+- battle/start behavior;
+- sub-stage behavior;
+- Domain exploration behavior;
+- Demon Lord stones.
+
+The implementation may extend `CardListNavigator` and add a narrowly scoped catalog/session helper, or add one dedicated shared lobby-card navigator. Do not duplicate the same lifecycle independently in five handlers.
+
+## Mode-specific handoff
+
+When the shared navigator returns FOUND, each existing owner resumes from its existing target-card action boundary.
+
+### Stage
+
+FOUND main Stage card -> existing Stage card click/entry path -> existing sub-stage logic unchanged.
+
+### Domain
+
+FOUND Domain entry -> existing Domain entry click -> existing start/explore logic unchanged.
+
+### Dungeon
+
+FOUND target Dungeon card -> existing target-specific cooldown/locked/unavailable checks -> existing click/fight/start path unchanged.
+
+For greedy Dungeon, broader target selection may occur before a single target is committed. Once a concrete Dungeon target index is committed, shared card navigation applies.
+
+### Lord
+
+Existing availability/cooldown policy may decide which Lord is the committed target.
+
+After a unique target boss is chosen, the shared navigator locates that boss.
+
+FOUND -> existing cooldown OCR/click/start/battle logic unchanged.
+
+Do not scan multiple available Lord templates on every scroll frame after one target has been committed.
+
+### Demon Lord
+
+Existing policy chooses the committed Demon Lord target.
+
+The shared navigator localizes/scrolls to that target.
+
+FOUND -> existing card click -> stone/prepare/start logic unchanged.
 
 ## Invalidation conditions
 
-Target-tracking state must be invalidated when any of the following occurs:
+The shared card-search session is invalidated by:
 
-- target mode/tab Scene postcondition is lost;
-- active mode changes;
-- committed target changes;
-- handler/subflow resets;
-- bounded target misses are exhausted;
-- contradictory visual evidence appears;
-- recovery/relaunch path begins;
-- battle/detail/preparation transition leaves the card-selection surface.
+- desired mode changes;
+- committed card target changes;
+- any cross-mode action;
+- Scene/postcondition revalidation failure;
+- bounded target-tracking miss exhaustion;
+- contradictory localization evidence;
+- handler/subflow reset;
+- recovery/relaunch;
+- target card FOUND and ownership handed off;
+- leaving the card-selection surface for detail/preparation/battle/loading.
 
-Mode-specific existing reset semantics must continue to apply.
+## Survey findings that constrain implementation
 
-## Scope
+1. Dungeon already has `DungeonCatalog`; reuse it.
+2. Stage has numeric `base_stage_levels`; use those as semantic indices, not raw `stage_templates` list positions.
+3. Domain has canonical discovery helpers but lacks an explicit ordered navigation index helper.
+4. Lord and Demon Lord already rely on declaration order to identify their first card, so that order can be formalized as navigation order.
+5. Stage/Dungeon/Domain currently call `_handle_primary_card_alignment()` before normal target search; this is the reset-first behavior that must be removed from the normal path.
+6. Lord likewise aligns to first card before its candidate scan.
+7. Demon Lord already checks its selected target before reset-to-left, but does not yet share the common index/directional-search lifecycle.
+8. Existing `NavigationTable` does not currently own target lobby-tab switching and must be extended before legacy mode-switch paths can be removed from this scope.
+9. `NavigationProgress` already carries `expected_tab`, providing an existing place to bind visual tab-transition postconditions.
 
-Primary production surfaces:
+## Production scope
+
+Expected production/reference surfaces include:
 
 - `states/handlers/navigation.py`
 - `states/handlers/lord_boss.py`
 - `states/handlers/demon_lords.py`
-- `utils/scene_detector.py`
-- `utils/scene_types.py`
+- `states/navigation_intent.py`
+- `states/navigation_progress.py`
 - `states/navigation_routing.py`
+- `states/navigation_table.py`
+- `utils/scene_snapshot.py`
+- `utils/scene_detector.py`
 - `utils/card_navigator.py`
-- `vision/matcher.py`
-
-Configuration may be read to resolve target/template ordering but should not be redesigned.
+- `utils/dungeon_catalog.py`
+- `utils/config_helper.py`
+- `config.py`
+- `config/defaults.toml`
+- one narrowly scoped new shared catalog/navigation helper if needed
 
 ## Acceptance criteria
 
-1. Scene/current-frame visual evidence remains the only authority for Stage/Domain/Dungeon/Lord/Demon-Lord mode postconditions.
-2. Cross-mode switching invalidates retained same-mode card/route knowledge.
-3. No implementation infers exact card/index position from action/swipe history alone.
-4. Fixed-target Dungeon:
-   - initial localization may inspect multiple Dungeon cards;
-   - after one same-mode anchor and target are known, post-swipe steady-state matching does not scan every unrelated `dungeon_entries` template;
-   - target-specific cooldown/locked/unavailable checks remain correct;
-   - bounded target misses return to relocalization/fallback.
-5. Stage preserves its existing target-specific top-level stage search and does not gain an unnecessary full Stage-card scan.
-6. Domain remains direct-target navigation unless concrete duplicate matching is removed; no synthetic multi-card abstraction is added.
-7. Lord:
-   - candidate scanning remains when no unique boss target is committed;
-   - once a unique target is committed, subsequent search frames do not scan unrelated boss templates merely to find that target;
-   - existing availability/cooldown semantics remain unchanged.
-8. Demon Lord preserves its existing selected-target-only card match and acquisition fallback.
-9. Any changed horizontal swipe behavior is directional, bounded, followed by target verification, and does not assume fixed index displacement.
-10. Matcher/template scope is tested deterministically using fake/mock matcher call assertions or equivalent; wall-clock timing is not an acceptance criterion.
-11. Existing recovery, relaunch, cooldown, locked-entry, battle-entry, and task-priority semantics remain behaviorally unchanged.
-12. No production behavior outside the scoped lobby navigation/card-selection flows is changed.
+1. All five modes consume one shared card-navigation lifecycle.
+2. Entering a verified mode no longer resets to the first card before checking whether the target is already visible.
+3. Initial localization always matches the target first.
+4. If target is visible initially, no horizontal drag occurs before mode-specific handoff.
+5. If target is absent, localization derives real visible index evidence from the mode's ordered catalog.
+6. Direction is based only on verified observed index relation to target index.
+7. During steady tracking, exactly the committed target card template is matched per card-search observation.
+8. Steady tracking does not re-run lobby active/inactive tab matching.
+9. Cross-mode transitions invalidate card/index knowledge.
+10. Cross-mode target-tab switching is resolved through `NavigationIntentPolicy` / `NavigationTable` using Scene-derived click evidence and a visual expected-tab postcondition.
+11. Stage indices come from `base_stage_levels`, not raw alias-bearing `stage_templates` positions.
+12. Dungeon index handling continues to use `DungeonCatalog`.
+13. Domain has a tested ordered navigation catalog derived from canonical Domain declarations.
+14. Lord and Demon Lord have tested ordered catalogs derived from declared boss order.
+15. A target miss bound is shared and deterministic; default is current catalog size.
+16. Exhausting target tracking triggers relocalization, not immediate blind reset or target failure.
+17. Reset-to-left remains available and bounded only as localization fallback.
+18. A reset is considered successful only after first-card visual evidence.
+19. Stage post-main-card sub-stage logic is behaviorally unchanged.
+20. Dungeon target status/fight/start/explore logic after FOUND is behaviorally unchanged.
+21. Domain start/explore logic after FOUND is behaviorally unchanged.
+22. Lord cooldown/start/fight logic after FOUND is behaviorally unchanged.
+23. Demon Lord stone/prepare/start logic after FOUND is behaviorally unchanged.
+24. Existing scheduler/task-priority/cooldown business semantics remain unchanged.
+25. No `time.sleep()`, debounce, polling interval, or animation-wait optimization is part of this task.
 
-## Focused tests
+## Deterministic tests required
 
-At minimum run:
+Add focused tests for:
 
-- `tests/test_dungeon_swipe_unit.py`
+- target visible on initial localization -> zero reset drag;
+- target visible on initial localization -> zero unrelated card scans after target hit;
+- target absent + observed lower index -> common higher-index swipe;
+- target absent + observed higher index -> common lower-index swipe;
+- steady tracking matcher calls contain only target template;
+- target-tracking miss bound -> relocalization;
+- relocalization failure -> reset-to-left fallback;
+- cross-mode switch clears card-search session;
+- Stage/Dungeon/Domain/Lord/Demon-Lord catalog target-index resolution;
+- Stage alias template does not shift semantic level indices;
+- target-aware NavigationTable transitions among lobby modes;
+- tab switch postcondition succeeds only after Scene reports expected tab active;
+- mode-specific handoff preserves existing downstream logic.
+
+Run existing nearby tests at minimum:
+
 - `tests/test_behavior_navigation.py`
 - `tests/test_behavior_navigation_intent.py`
-- `tests/test_behavior_navigation_scenarios.py`
 - `tests/test_behavior_navigation_progress.py`
+- `tests/test_behavior_navigation_scenarios.py`
+- `tests/test_behavior_navigation_table.py`
+- `tests/test_dungeon_swipe_unit.py`
+- `tests/test_dungeon_catalog.py`
+- `tests/test_domain_common_behavior.py`
 - `tests/test_lord_boss_subflow.py`
 - `tests/test_lord_boss_swipe.py`
 - `tests/test_demon_lords_subflow.py`
 
-Add focused tests proving:
-
-- fixed-target Dungeon target-only post-swipe matcher scope;
-- Dungeon relocalization after bounded miss/invalidation;
-- cross-mode position-state invalidation;
-- Lord candidate-scan vs committed-target distinction;
-- Demon Lord remains single-target rather than broadened;
-- Stage does not regress from target-only matching into full-card scans.
-
 ## Non-goals
 
-- Dungeon exploration/combat after entering the dungeon.
-- Domain exploration after entering the domain.
-- Demon Lord stone-selection logic.
-- Lord/Demon Lord battle execution after card selection.
-- Battle/result/collection/backpack/town-building/login flows.
-- Scheduler/task-priority redesign.
-- Dungeon greedy selection semantics redesign.
-- Cooldown policy redesign.
-- General SceneDetector optimization outside the scoped lobby-mode postcondition needs.
-- General OpenCV/TemplateMatcher performance work.
-- `time.sleep()`, debounce, animation-wait, polling-frequency, or timeout tuning.
-- Blind fixed-coordinate navigation.
+- Any post-card Stage sub-stage algorithm change.
+- Dungeon exploration/combat algorithm changes.
+- Dungeon cooldown/locked/unavailable business-rule changes.
+- Domain exploration/start algorithm changes.
+- Lord cooldown/OCR/start/battle changes.
+- Demon Lord stone/preparation/start changes.
+- Scheduler/task-priority changes.
+- Greedy Dungeon target-selection policy redesign.
+- General OpenCV/TemplateMatcher optimization.
+- General SceneDetector redesign outside target-mode routing/postcondition support.
+- Blind coordinate-based card selection.
+- Swipe-history position inference.
 - Cross-mode position priors.
-- Using navigation state or action history as Scene evidence.
-
-## Evidence notes
-
-Scout evidence established the Dungeon full-entry scan and existing expected-tab Scene fast path.
-
-A bounded follow-up survey plus code spot-check established:
-
-- Stage already uses target-specific top-level stage matching after alignment and does not iterate all Stage cards in that block.
-- Domain has one configured domain entry target and no verified horizontal card-index loop.
-- Lord card selection is owned by `LordBossHandler`, which scans the currently available selected boss set until a match.
-- Demon Lord card selection is owned by `DemonLordsHandler`, which already matches the selected target template directly.
-- Lord and Demon Lord therefore must not be modeled as copies of the Dungeon implementation.
-
-## Remaining implementation uncertainty
-
-- The smallest ownership surface for shared target-tracking metadata is intentionally not prescribed. Implementation may keep state local to each existing owner or introduce a narrowly scoped shared value object, but must not create a second routing policy.
-- Exact Dungeon/Lord swipe amplitude and miss bounds are not prescribed; tests and existing UI contracts must justify them.
-- Greedy Dungeon may legitimately require broader perception before a concrete target is committed.
+- Timing/sleep/debounce/polling optimization.
