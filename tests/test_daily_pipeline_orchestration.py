@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from utils.daily_manager import DailyManager, DEFAULT_DAILY_STATUS
 from states.state_machine import GameStateMachine
 from utils.quest_scheduler import QuestScheduler
+from config import GAME_CONFIGS
 
 class TestDailyPipelineOrchestration(unittest.TestCase):
     def setUp(self):
@@ -103,7 +104,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
 
     def test_tier4_fallback_mix_mode_when_all_daily_completed(self):
-        """驗證當速領、Boss (已滿5次) 與 8 個懸賞全完成時，退守 mix 模式 (冰雪洞窟 + 關卡 6-1)"""
+        """驗證當速領、Boss (已滿5次) 與 8 個懸賞全完成時，退守關卡模式 (冰凍峽谷 6-1)"""
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
@@ -119,6 +120,14 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
+        primary_cfg = GAME_CONFIGS["daily"].copy()
+        primary_cfg.update({
+            "tier4_mode": "stage",
+            "tier4_stage_level": 6,
+            "tier4_sub_stage": "first",
+        })
+        sm.primary_config = primary_cfg
+
         scheduler = self.daily_mgr.load_quest_scheduler()
         sm.attach_quest_scheduler(scheduler)
 
@@ -129,10 +138,11 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertFalse(scheduled)
         self.assertIsNone(sm.quest_scheduler)
-        self.assertEqual(sm.config["type"], "mix")
+        self.assertEqual(sm.config["type"], "stage")
+        self.assertTrue(sm.config.get("is_tier4_fallback", False))
         self.assertEqual(sm.config["stage_name"], "冰凍峽谷 (first)")
 
-        self.assertIn("Ice_entry.png", sm.config["navigation_path"][-1])
+        self.assertIn("stages/first_stage.png", sm.config["navigation_path"][-1])
 
     def test_dungeon_cooldown_reschedules_in_daily_mode(self):
         """驗證當在 daily 模式下地下城 #4 冷卻時，不會原地等待，而是跳過冷卻地下城切換至下一個未冷卻懸賞任務"""
@@ -230,7 +240,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
 
     def test_tier4_fallback_mix_mode_and_repreemption_by_tier2(self):
-        """[Tier 4 檢驗] 驗證懸賞全清且 Boss 滿次時退守 Mix 模式，當 Boss 次數未滿且 CD 到時可再次插隊"""
+        """[Tier 4 檢驗] 驗證懸賞全清且 Boss 滿次時退守 Tier 4 模式，當 Boss 次數未滿且 CD 到時可再次插隊"""
         self.daily_mgr.record_subflow_completed("chest")
         self.daily_mgr.record_subflow_completed("hero_draw")
         self.daily_mgr.record_subflow_completed("blood_altar")
@@ -252,17 +262,20 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
+        sm.primary_config = GAME_CONFIGS["daily"].copy()
         # 無懸賞任務
         sm.quest_scheduler = None
 
-        # 評估應落入 Tier 4 Mix 退守
-        sm.evaluate_and_schedule_daily_pipeline()
-        self.assertEqual(sm.config["name"], "混合模式")
+        # 評估應落入 Tier 4 退守
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertFalse(scheduled)
+        self.assertTrue(sm.config.get("is_tier4_fallback", False))
 
         # 模擬 7201 秒後惡靈冷卻時間結束，再次評估時應被 Tier 2 搶占插隊打 Boss！
         bosses["lord_spectre"]["last_fight_timestamp"] = now_ts - 7201.0
-        sm.evaluate_and_schedule_daily_pipeline()
-        self.assertEqual(sm.current_state, sm.STATE_LORD_BOSS)
+        scheduled = sm.evaluate_and_schedule_daily_pipeline()
+        self.assertTrue(scheduled)
+        self.assertEqual(sm.current_town_subflow, "lord_boss")
 
     def test_tier4_does_not_trigger_should_exit_battle_due_to_quest_batch_completed(self):
         """[Tier 4 離場防呆測試] 驗證處於 Tier 4 退守模式時，即使懸賞全完成，也不會將常規關卡戰鬥誤判為離場場次"""
@@ -390,6 +403,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
+        sm.primary_config = GAME_CONFIGS["daily"].copy()
         
         # 建立僅含有破除森林的枷鎖 (Dungeon 3, index 2) 的排程器
         from utils.quest_scheduler import QuestScheduler
@@ -400,10 +414,10 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
         now_ts = time.time()
         sm.dungeon_cooldowns[3] = now_ts + 600.0
 
-        # 評估 daily pipeline，因任務冷卻，應回傳 False 並自動載入 Tier 4 退守模式 (Mix/Stage)
+        # 評估 daily pipeline，因任務冷卻，應回傳 False 並自動載入 Tier 4 退守模式
         scheduled = sm.evaluate_and_schedule_daily_pipeline()
         self.assertFalse(scheduled)
-        self.assertIn("模式", sm.config.get("name", ""))
+        self.assertTrue(sm.config.get("is_tier4_fallback", False))
 
     def test_tier4_running_repreempted_when_tier3_cooldown_expires(self):
         """[Tier 4 執行中 Tier 3 解凍搶佔測試] 驗證當處於 Tier 4 退守模式時，只要 Tier 3 懸賞地下城冷卻到期，能夠搶佔離場並切回 Tier 3"""
@@ -419,6 +433,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
+        sm.primary_config = GAME_CONFIGS["daily"].copy()
         
         from utils.quest_scheduler import QuestScheduler
         scheduler = QuestScheduler.from_daily_status(["破除森林的枷鎖"])
@@ -504,6 +519,7 @@ class TestDailyPipelineOrchestration(unittest.TestCase):
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
+        sm.primary_config = GAME_CONFIGS["daily"].copy()
         
         from utils.quest_scheduler import QuestScheduler
         scheduler = QuestScheduler.from_daily_status(["清除野豬"])

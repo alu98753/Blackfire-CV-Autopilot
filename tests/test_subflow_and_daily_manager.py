@@ -613,8 +613,10 @@ class TestSubflowAndDailyManager(unittest.TestCase):
             "type": "daily",
             "keep_colors": user_keep,
             "disassemble_colors": user_dis,
-            "sacrifice_settings": user_sac
+            "sacrifice_settings": user_sac,
+            "tier4_mode": "stage"
         }
+        sm.primary_config = sm.config.copy()
 
         # 1. 跳動至 Tier 1 (城鎮速領 blood_altar & jewelry_workshop)
         sm.town_subflow_queue = ["blood_altar", "jewelry_workshop"]

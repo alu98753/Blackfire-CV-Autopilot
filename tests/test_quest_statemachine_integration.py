@@ -8,7 +8,7 @@ from utils.quest_scheduler import QuestScheduler
 from utils.daily_manager import DailyManager, DEFAULT_DAILY_STATUS
 from states.state_machine import GameStateMachine
 
-from config import QUEST_TARGET_COUNT, PRIMARY_MODES
+from config import QUEST_TARGET_COUNT, PRIMARY_MODES, GAME_CONFIGS
 
 class TestQuestStateMachineIntegration(unittest.TestCase):
     def setUp(self):
@@ -288,6 +288,9 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
 
         sm = GameStateMachine(capturer=MagicMock(), matcher=MagicMock(), mouse=MagicMock())
         sm.daily_manager = self.daily_mgr
+        primary_cfg = GAME_CONFIGS["daily"].copy()
+        primary_cfg.update({"tier4_mode": "stage"})
+        sm.primary_config = primary_cfg
         scheduler = self.daily_mgr.load_quest_scheduler()
 
         sm.attach_quest_scheduler(scheduler)
@@ -307,8 +310,13 @@ class TestQuestStateMachineIntegration(unittest.TestCase):
         self.assertTrue(sm.config.get("is_tier4_fallback", False))
         # The pipeline refreshes the effective runtime profile before building the fallback.
         from config import get_runtime_game_config
-        expected_sub = get_runtime_game_config("daily").get("tier4_sub_stage", "final")
-        self.assertEqual(sm.config["stage_name"], f"冰凍峽谷 ({expected_sub})")
+        from utils.config_helper import get_stage_configs
+        runtime_daily = get_runtime_game_config("daily")
+        expected_sub = runtime_daily.get("tier4_sub_stage", "final")
+        expected_lvl = str(runtime_daily.get("tier4_stage_level", "6"))
+        expected_stage = get_stage_configs().get(expected_lvl, {})
+        expected_stage_name = f"{expected_stage.get('name', '冰凍峽谷')} ({expected_sub})"
+        self.assertEqual(sm.config["stage_name"], expected_stage_name)
 
     def test_result_handler_batch_exit_on_fourth_run(self):
         """驗證當普通關卡任務 (batch_size=4) 戰鬥勝利至第 4 場時，ResultHandler 自動累加 completed_count 並觸發批次離場」"""
