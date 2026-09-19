@@ -9,7 +9,7 @@ from states.navigation_intent import (
     PostconditionId,
     ReasonCode,
 )
-from utils.scene_snapshot import ElementId, SceneId
+from utils.scene_snapshot import ElementId, SceneId, TabId
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,47 @@ class GoalNavigationEdge:
     action: ActionId
     postcondition: PostconditionId
     reason: ReasonCode
+
+
+@dataclass(frozen=True)
+class LobbyTabNavigationEdge:
+    source: SceneId
+    target_tab: TabId
+    required_element: ElementId
+    action: ActionId
+    postcondition: PostconditionId
+    reason: ReasonCode
+
+
+_TAB_SCENES = {
+    TabId.STAGE: SceneId.STAGE_SELECT,
+    TabId.DUNGEON: SceneId.DUNGEON_SELECT,
+    TabId.DOMAIN: SceneId.DOMAIN_SELECT,
+    TabId.LORD: SceneId.LORD_SELECT,
+    TabId.DEMON_LORD: SceneId.DEMON_LORD_SELECT,
+}
+
+_TAB_ELEMENTS = {
+    TabId.STAGE: ElementId.TAB_STAGE,
+    TabId.DUNGEON: ElementId.TAB_DUNGEON,
+    TabId.DOMAIN: ElementId.TAB_DOMAIN,
+    TabId.LORD: ElementId.TAB_LORD,
+    TabId.DEMON_LORD: ElementId.TAB_DEMON_LORD,
+}
+
+LOBBY_TAB_NAVIGATION_EDGES = tuple(
+    LobbyTabNavigationEdge(
+        source=source,
+        target_tab=target,
+        required_element=_TAB_ELEMENTS[target],
+        action=ActionId.SWITCH_LOBBY_TAB,
+        postcondition=PostconditionId.LOBBY_TAB_ACTIVE,
+        reason=ReasonCode.PRIMARY_SWITCH_LOBBY_TAB,
+    )
+    for source in (SceneId.LOBBY, *_TAB_SCENES.values())
+    for target in TabId
+    if source != _TAB_SCENES[target]
+)
 
 
 V1_NAVIGATION_EDGES = (
@@ -232,9 +273,25 @@ REACH_TOWN_EDGES = (
 class NavigationTable:
     """Return the first declared edge satisfied by one immutable snapshot."""
 
-    def __init__(self, edges=V1_NAVIGATION_EDGES, goal_edges=REACH_TOWN_EDGES):
+    def __init__(
+        self,
+        edges=V1_NAVIGATION_EDGES,
+        goal_edges=REACH_TOWN_EDGES,
+        tab_edges=LOBBY_TAB_NAVIGATION_EDGES,
+    ):
         self.edges = tuple(edges)
         self.goal_edges = tuple(goal_edges)
+        self.tab_edges = tuple(tab_edges)
+
+    def next_tab_edge(self, scene, target_tab):
+        for edge in self.tab_edges:
+            if (
+                edge.source == scene.scene
+                and edge.target_tab == target_tab
+                and scene.has(edge.required_element)
+            ):
+                return edge
+        return None
 
     def next_edge(self, scene, intent_id):
         for edge in self.edges:

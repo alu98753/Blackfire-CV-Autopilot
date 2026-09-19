@@ -30,6 +30,7 @@ from utils.scene_snapshot import (
     next_navigation_frame_id,
     snapshot_from_scene_info,
 )
+from utils.scene_types import LOBBY_TAB_BY_NAME
 from utils.scene_types import SceneId
 
 
@@ -227,6 +228,7 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
         frame_id=next_navigation_frame_id(machine),
         captured_at=now,
         start_template=start_template,
+        tab_templates=_resolve_tab_templates(machine),
     )
     intent_snapshot = build_intent_snapshot(machine)
     policy = NavigationIntentPolicy()
@@ -281,6 +283,20 @@ def resolve_navigation_context(machine, scene_info) -> NavigationRoutingContext:
         progress_status,
         observed_action,
     )
+
+
+def _resolve_tab_templates(machine):
+    config = getattr(machine, "config", None) or {}
+    result = {}
+    for tab_name, definition in LOBBY_TAB_BY_NAME.items():
+        active = definition.active_template
+        inactive = definition.inactive_template
+        if definition.config_active_key:
+            active = config.get(definition.config_active_key) or active
+        if definition.config_inactive_key:
+            inactive = config.get(definition.config_inactive_key) or inactive
+        result[TabId(tab_name)] = (active, inactive)
+    return result
 
 
 def _select_available_intent(policy, snapshot, progress, now):
@@ -385,6 +401,8 @@ class NavigationDecisionExecutor:
         ):
             return
         expected_tab = resolve_expected_tab_from_machine(self.machine)
+        if decision.expected_tab is not None:
+            expected_tab = decision.expected_tab
         progress.begin(
             context.active_intent.intent_id,
             decision.action,
