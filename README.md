@@ -231,10 +231,12 @@ Clone the repository and create a virtual environment:
 git clone https://github.com/alu98753/Blackfire-CV-Autopilot.git
 cd Blackfire-CV-Autopilot
 
-python -m venv .venv
-.\.venv\Scripts\activate
+py -0p
+# Confirm that Python 3.11.2 is installed, then use its full path if needed:
+& "C:\Path\To\Python311\python.exe" -m venv .venv
 
-pip install -r requirements.txt
+.\.venv\Scripts\python.exe --version
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 The main runtime dependencies include OpenCV, MSS, PyAutoGUI, NumPy, Pillow, and pywin32.
